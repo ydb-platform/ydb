@@ -14,6 +14,9 @@ namespace NKeyValue {
 };
 
 namespace TEvKeyValue {
+    inline constexpr char RequestInFlightLimitReached[] =
+        "KeyValue request in-flight limit reached";
+
     enum EEv {
         EvRequest = EventSpaceBegin(TKikimrEvents::ES_KEYVALUE),
         EvIntermediate,
@@ -44,6 +47,7 @@ namespace TEvKeyValue {
 
         EvAdvanceMoveDataResult = EvResponse + 512,
         EvBlobCopied,
+        EvCheckTrash,
 
         EvEnd
     };
@@ -295,22 +299,28 @@ namespace TEvKeyValue {
             COPY_BLOB,
             YIELD,
             REPEAT,
-            FINISH,
+            CHECK_TRASH,
+            WAIT_FOR_GC,
+            SUCCESS,
+            NOT_ENOUGH_SPACE,
+            ERROR,
         };
         EResult Result;
         const TLogoBlobID BlobId;
+        ui64 RequestUid = 0;
 
         explicit TEvAdvanceMoveDataResult(EResult result)
             : Result(result)
         {}
 
-        explicit TEvAdvanceMoveDataResult(const TLogoBlobID& blobId)
+        explicit TEvAdvanceMoveDataResult(const TLogoBlobID& blobId, ui64 requestUid)
             : Result(EResult::COPY_BLOB)
             , BlobId(blobId)
+            , RequestUid(requestUid)
         {}
 
-        static std::unique_ptr<TEvAdvanceMoveDataResult> CopyBlob(const TLogoBlobID& blobId) {
-            return std::make_unique<TEvAdvanceMoveDataResult>(blobId);
+        static std::unique_ptr<TEvAdvanceMoveDataResult> CopyBlob(const TLogoBlobID& blobId, ui64 requestUid) {
+            return std::make_unique<TEvAdvanceMoveDataResult>(blobId, requestUid);
         }
 
         static std::unique_ptr<TEvAdvanceMoveDataResult> Yield() {
@@ -321,20 +331,57 @@ namespace TEvKeyValue {
             return std::make_unique<TEvAdvanceMoveDataResult>(EResult::REPEAT);
         }
 
-        static std::unique_ptr<TEvAdvanceMoveDataResult> Finish() {
-            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::FINISH);
+        static std::unique_ptr<TEvAdvanceMoveDataResult> CheckTrash() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::CHECK_TRASH);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> WaitForGC() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::WAIT_FOR_GC);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Success() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::SUCCESS);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> NotEnoughSpace() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::NOT_ENOUGH_SPACE);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Error() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::ERROR);
         }
     };
 
     struct TEvBlobCopied : public TEventLocal<TEvBlobCopied, EvBlobCopied> {
+        enum class EResult {
+            OK,
+            NODATA,
+            YELLOW_STOP,
+            ERROR,
+        };
+        EResult Result;
         const TLogoBlobID BlobId;
         const TLogoBlobID NewBlobId;
+        const ui64 RequestUid;
+        const TVector<ui32> YellowMoveChannels;
+        const TVector<ui32> YellowStopChannels;
 
-        TEvBlobCopied(const TLogoBlobID& blobId, const TLogoBlobID& newBlobId)
-            : BlobId(blobId)
+        TEvBlobCopied(EResult result,
+                const TLogoBlobID& blobId,
+                const TLogoBlobID& newBlobId,
+                ui64 requestUid,
+                TVector<ui32>&& yellowMoveChannels,
+                TVector<ui32>&& yellowStopChannels)
+            : Result(result)
+            , BlobId(blobId)
             , NewBlobId(newBlobId)
+            , RequestUid(requestUid)
+            , YellowMoveChannels(std::move(yellowMoveChannels))
+            , YellowStopChannels(std::move(yellowStopChannels))
         {}
     };
+
+    struct TEvCheckTrash : public TEventLocal<TEvCheckTrash, EvCheckTrash> {};
 }
 
 } // NKikimr

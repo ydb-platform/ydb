@@ -1,5 +1,6 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
+#include "yql_pq_pushdown.h"
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
@@ -54,35 +55,11 @@ const TTypeAnnotationNode* BuildPqMetaFieldExprType(const TMetaFieldDescriptor& 
     }
 }
 
-struct TWatermarkPushdownSettings: public NPushdown::TSettings {
+struct TWatermarkPushdownSettings: public NPq::TCommonPushdownSettings {
     TWatermarkPushdownSettings()
-        : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
     {
         using EFlag = NPushdown::TSettings::EFeatureFlag;
         Enable(
-            // Type features
-            EFlag::DateTimeTypes |
-            EFlag::DecimalType |
-            EFlag::StringTypes |
-            EFlag::TimestampCtor |
-            EFlag::IntervalCtor |
-            EFlag::DateCtor |
-            EFlag::ImplicitConversionToInt64 |
-            EFlag::DoNotCheckCompareArgumentsTypes |
-
-            // Expr features
-            EFlag::ArithmeticalExpressions |
-            EFlag::CastExpression |
-            EFlag::DivisionExpressions |
-            EFlag::ExpressionAsPredicate |
-            EFlag::JustPassthroughOperators |
-            EFlag::UnaryOperators |
-            EFlag::MinMax |
-            EFlag::IsDistinctOperator |
-            EFlag::ToBytesFromStringExpressions |
-            EFlag::ToStringFromStringExpressions |
-            EFlag::FlatMapOverOptionals |
-            EFlag::StructOperators |
             EFlag::NonDeterministic
         );
     }
@@ -765,9 +742,13 @@ public:
                     << "Pq Meta Field Descriptor was not found"));
                 return TStatus::Error;
             }
-            if (requireMetadataColumns && !inputStructType->FindItem(metadataColumnName)) {
+            const auto watermarkColumnName = GetWatermarkColumnName(*descriptor);
+            if (requireMetadataColumns
+                && !inputStructType->FindItem(metadataColumnName)
+                && !inputStructType->FindItem(watermarkColumnName)) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataColumn->Pos()), TStringBuilder()
                     << "Required PQ metadata column " << metadataColumnName
+                    << " or " << watermarkColumnName
                     << " is missing from " << input->Content() << " input"));
                 return TStatus::Error;
             }
@@ -776,8 +757,17 @@ public:
             }
         }
 
-        const auto* lambdaInputItemType = inputStructType;
-        const TTypeAnnotationNode* lambdaInputPayloadType = lambdaInputItemType;
+        const TTypeAnnotationNode* lambdaInputPayloadType = inputStructType;
+        if (HasWatermarkColumnPrefix(*inputStructType)) {
+            TVector<const TItemExprType*> lambdaInputItems;
+            lambdaInputItems.reserve(inputStructType->GetSize());
+            for (const auto* item : inputStructType->GetItems()) {
+                if (!item->GetName().StartsWith(WatermarkColumnPrefix)) {
+                    lambdaInputItems.push_back(item);
+                }
+            }
+            lambdaInputPayloadType = ctx.MakeType<TStructExprType>(lambdaInputItems);
+        }
         if (isInputItemOptional) {
             lambdaInputPayloadType = ctx.MakeType<TOptionalExprType>(lambdaInputPayloadType);
         }

@@ -9,7 +9,10 @@ from typing import (
     Iterable,
     Optional,
     TYPE_CHECKING,
+    TypeVar,
     Union,
+    Callable,
+    cast,
     overload,
 )
 
@@ -17,7 +20,7 @@ from .. import (
     _apis,
     issues,
 )
-from ..opentelemetry.tracing import SpanName, create_ydb_span, span_finish_callback
+from ..observability.tracing import SpanName, create_ydb_span, span_finish_callback
 from .._grpc.grpcwrapper import ydb_topic as _ydb_topic
 from .._grpc.grpcwrapper import ydb_query as _ydb_query
 from ..connection import _RpcState as RpcState
@@ -32,6 +35,7 @@ if TYPE_CHECKING:
     from ..aio.driver import Driver as AsyncDriver
 
 logger = logging.getLogger(__name__)
+CallableT = TypeVar("CallableT", bound=Callable[..., Any])
 
 
 class QueryTxStateEnum(enum.Enum):
@@ -77,7 +81,7 @@ class QueryTxStateHelper(abc.ABC):
         return len(cls._VALID_TRANSITIONS[state]) == 0
 
 
-def reset_tx_id_handler(func):
+def reset_tx_id_handler(func: CallableT) -> CallableT:
     @functools.wraps(func)
     def decorator(rpc_state, response_pb, session: "BaseQuerySession", tx_state: "QueryTxState", *args, **kwargs):
         try:
@@ -87,7 +91,7 @@ def reset_tx_id_handler(func):
             tx_state.tx_id = None
             raise
 
-    return decorator
+    return cast(CallableT, decorator)
 
 
 class QueryTxState:
@@ -384,6 +388,7 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings],
         concurrent_result_sets: Optional[bool],
         settings: Optional[BaseRequestSettings],
+        pool_id: Optional[str],
     ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]: ...
 
     @overload
@@ -400,6 +405,7 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings],
         concurrent_result_sets: Optional[bool],
         settings: Optional[BaseRequestSettings],
+        pool_id: Optional[str],
     ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]: ...
 
     def _execute_call(
@@ -415,6 +421,7 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings],
         concurrent_result_sets: Optional[bool],
         settings: Optional[BaseRequestSettings],
+        pool_id: Optional[str],
     ) -> Union[
         Iterable[_apis.ydb_query.ExecuteQueryResponsePart],
         Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]],
@@ -441,6 +448,7 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
             result_set_format=result_set_format,
             arrow_format_settings=arrow_format_settings,
             concurrent_result_sets=concurrent_result_sets,
+            pool_id=pool_id,
         )
 
         return self._driver(
@@ -616,6 +624,7 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
         schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
         result_set_format: Optional[base.QueryResultSetFormat] = None,
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> base.SyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -644,6 +653,7 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
          1) QueryResultSetFormat.VALUE, which is default;
          2) QueryResultSetFormat.ARROW.
         :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
+        :param pool_id: Optional resource pool ID for routing the query to a specific compute pool.
 
         :return: Iterator with result sets
         """
@@ -669,6 +679,7 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
                 parameters=parameters,
                 concurrent_result_sets=concurrent_result_sets,
                 settings=settings,
+                pool_id=pool_id,
             )
         self._prev_stream = base.SyncResponseContextIterator(
             stream_it,

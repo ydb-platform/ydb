@@ -179,7 +179,7 @@ void TTokenizer::ExpectListIndex(TSourceLocation location) const
     const auto& token = GetLiteralValue();
     if (!IsSpecialListKey(token) && !TryFromString(token, index)) {
         THROW_ERROR_EXCEPTION("Expected special list key or integer for repeated field index, %Qv found", token)
-            << TErrorAttribute("ypath", GetPrefixPlusToken());
+            .With("ypath", GetPrefixPlusToken());
     }
 }
 

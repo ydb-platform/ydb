@@ -25,7 +25,7 @@ if SELF_TEST is defined.  You can use this free for any purpose.  It's in
 the public domain.  It has no warranty.
 
 You probably want to use hashlittle().  hashlittle() and hashbig()
-hash byte arrays.  hashlittle() is is faster than hashbig() on
+hash byte arrays.  hashlittle() is faster than hashbig() on
 little-endian machines.  Intel and AMD are little-endian machines.
 On second thought, you probably want hashlittle2(), which is identical to
 hashlittle() except it returns two 32-bit hashes for the price of one.
@@ -496,8 +496,8 @@ static uint32_t hashlittle( const void *key, size_t length, uint32_t initval)
  * the key.  *pc is better mixed than *pb, so use *pc first.  If you want
  * a 64-bit value do something like "*pc + (((uint64_t)*pb)<<32)".
  */
-/* AddressSanitizer hates this implementation, even though it's innocuous */
-AWS_SUPPRESS_ASAN static void hashlittle2(
+/* AddressSanitizer and HWAddressSanitizer hate this implementation, even though it's innocuous */
+AWS_SUPPRESS_ASAN AWS_SUPPRESS_HWASAN static void hashlittle2(
   const void *key,       /* the key to hash */
   size_t      length,    /* length of the key */
   uint32_t   *pc,        /* IN: primary initval, OUT: primary hash */

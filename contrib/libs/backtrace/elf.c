@@ -566,6 +566,26 @@ elf_nosyms (struct backtrace_state *state ATTRIBUTE_UNUSED,
   error_callback (data, "no symbol table in ELF executable", -1);
 }
 
+/* Variant of backtrace_syminfo_to_full_callback that handles the exta
+   wrapping of moredata.  */
+
+static void
+backtrace_syminfo_to_full_callback_moredata (void *data, uintptr_t pc,
+					     const char *symname,
+					     uintptr_t symval ATTRIBUTE_UNUSED,
+					     uintptr_t symsize ATTRIBUTE_UNUSED)
+{
+  struct backtrace_moredata *md = (struct backtrace_moredata *) data;
+  struct backtrace_call_full *bdata;
+  struct backtrace_moredata callback_md;
+
+  bdata = (struct backtrace_call_full *) md->backtrace_data;
+  memset (&callback_md, 0, sizeof callback_md);
+  callback_md.backtrace_version = BACKTRACE_MOREDATA_VERSION;
+  callback_md.backtrace_data = bdata->full_data;
+  bdata->ret = bdata->full_callback (&callback_md, pc, NULL, 0, symname);
+}
+
 /* A callback function used when we can't find any debug info.  */
 
 static int
@@ -584,8 +604,14 @@ elf_nodebug (struct backtrace_state *state, uintptr_t pc,
       bdata.full_error_callback = error_callback;
       bdata.full_data = data;
       bdata.ret = 0;
-      state->syminfo_fn (state, pc, backtrace_syminfo_to_full_callback,
-			 backtrace_syminfo_to_full_error_callback, &bdata);
+      if (state->moredata)
+	state->syminfo_fn (state, pc,
+			   backtrace_syminfo_to_full_callback_moredata,
+			   backtrace_syminfo_to_full_error_callback,
+			   &bdata);
+      else
+	state->syminfo_fn (state, pc, backtrace_syminfo_to_full_callback,
+			   backtrace_syminfo_to_full_error_callback, &bdata);
       return bdata.ret;
     }
 
@@ -767,6 +793,8 @@ elf_syminfo (struct backtrace_state *state, uintptr_t addr,
 {
   struct elf_syminfo_data *edata;
   struct elf_symbol *sym = NULL;
+  void *mdata;
+  struct backtrace_moredata md;
 
   if (!state->threaded)
     {
@@ -802,10 +830,20 @@ elf_syminfo (struct backtrace_state *state, uintptr_t addr,
 	}
     }
 
-  if (sym == NULL)
-    callback (data, addr, NULL, 0, 0);
+  if (!state->moredata)
+    mdata = data;
   else
-    callback (data, addr, sym->name, sym->address, sym->size);
+    {
+      memset (&md, 0, sizeof md);
+      md.backtrace_version = BACKTRACE_MOREDATA_VERSION;
+      md.backtrace_data = data;
+      mdata = (void *) &md;
+    }
+
+  if (sym == NULL)
+    callback (mdata, addr, NULL, 0, 0);
+  else
+    callback (mdata, addr, sym->name, sym->address, sym->size);
 }
 
 /* Return whether FILENAME is a symlink.  */

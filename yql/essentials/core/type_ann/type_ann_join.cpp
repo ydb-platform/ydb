@@ -73,6 +73,7 @@ namespace NYql::NTypeAnnImpl {
             auto structType = leftItemType->Cast<TStructExprType>();
             if (AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) {
                 output = ctx.Expr.ChangeChild(*input, 0,
+                    // clang-format off
                     ctx.Expr.Builder(input->Child(0)->Pos())
                         .Callable("RemovePrefixMembers")
                             .Add(0, input->ChildPtr(0))
@@ -82,6 +83,7 @@ namespace NYql::NTypeAnnImpl {
                         .Seal()
                         .Build()
                     );
+                    // clang-format on
                 return IGraphTransformer::TStatus::Repeat;
             }
         }
@@ -91,6 +93,7 @@ namespace NYql::NTypeAnnImpl {
             auto structType = rightItemType->Cast<TStructExprType>();
             if (AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) {
                 output = ctx.Expr.ChangeChild(*input, 1,
+                    // clang-format off
                     ctx.Expr.Builder(input->Child(1)->Pos())
                         .Callable("RemovePrefixMembers")
                             .Add(0, input->ChildPtr(1))
@@ -100,6 +103,7 @@ namespace NYql::NTypeAnnImpl {
                         .Seal()
                         .Build()
                     );
+                    // clang-format on
                 return IGraphTransformer::TStatus::Repeat;
             }
         }
@@ -194,17 +198,18 @@ namespace NYql::NTypeAnnImpl {
 
             bool hasUnknown = false;
             input->Tail().ForEachChild([&](const TExprNode& flag) {
-                if (const auto& content = flag.Content(); content == "LeftUnique")
+                if (const auto& content = flag.Content(); content == "LeftUnique") {
                     leftUnique = true;
-                else if (content == "RightUnique")
+                } else if (content == "RightUnique") {
                     rightUnique = true;
-                else {
+                } else {
                     hasUnknown = true;
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(flag.Pos()), TStringBuilder() << "Unknown flag " << content));
                 }
             });
-            if (hasUnknown)
+            if (hasUnknown) {
                 return IGraphTransformer::TStatus::Error;
+            }
         }
 
         const auto keyType = left.GetTypeAnn()->Cast<TDictExprType>()->GetKeyType();
@@ -470,10 +475,11 @@ namespace NYql::NTypeAnnImpl {
 
         const auto outputSize = (leftRenames.ChildrenSize() + rightRenames.ChildrenSize()) >> 1U;
         std::conditional_t<ByStruct, TVector<const TItemExprType*>, TVector<const TTypeAnnotationNode*>> resultItems;
-        if constexpr (ByStruct)
+        if constexpr (ByStruct) {
             resultItems.reserve(outputSize);
-        else
+        } else {
             resultItems.resize(outputSize);
+        }
 
         THashSet<TStringBuf> outputColumns;
         outputColumns.reserve(outputSize);
@@ -499,9 +505,9 @@ namespace NYql::NTypeAnnImpl {
 
             const auto columnType = GetFieldType(leftItemType, *oldPos);
 
-            if constexpr (ByStruct)
+            if constexpr (ByStruct) {
                 resultItems.emplace_back(ctx.Expr.MakeType<TItemExprType>(newName->Content(), columnType));
-            else {
+            } else {
                 if (ui32 index; !TryFromString(newName->Content(), index) || index >= resultItems.size()) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), TStringBuilder() << "Invalid output field index: " << newName->Content()));
                     return IGraphTransformer::TStatus::Error;
@@ -542,9 +548,9 @@ namespace NYql::NTypeAnnImpl {
                     columnType = ctx.Expr.MakeType<TOptionalExprType>(columnType);
                 }
 
-                if constexpr (ByStruct)
+                if constexpr (ByStruct) {
                     resultItems.emplace_back(ctx.Expr.MakeType<TItemExprType>(newName->Content(), columnType));
-                else {
+                } else {
                     if (ui32 index; !TryFromString(newName->Content(), index) || index >= resultItems.size()) {
                         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(newName->Pos()), TStringBuilder() << "Invalid output field index: " << newName->Content()));
                         return IGraphTransformer::TStatus::Error;
@@ -1079,10 +1085,11 @@ namespace NYql::NTypeAnnImpl {
                 inputColumnType = inputColumnType->template Cast<TOptionalExprType>()->GetItemType();
             }
 
-            if constexpr (ByStruct)
+            if constexpr (ByStruct) {
                 resultItems.emplace_back(ctx.Expr.MakeType<TItemExprType>(child->Content(), inputColumnType));
-            else
+            } else {
                 resultItems.emplace_back(inputColumnType);
+            }
         }
 
         for (const auto& child : input->Child(3)->Children()) {
@@ -1092,10 +1099,11 @@ namespace NYql::NTypeAnnImpl {
                 inputColumnType = inputColumnType->template Cast<TOptionalExprType>()->GetItemType();
             }
 
-            if constexpr (ByStruct)
+            if constexpr (ByStruct) {
                 resultItems.emplace_back(ctx.Expr.MakeType<TItemExprType>(child->Content(), inputColumnType));
-            else
+            } else {
                 resultItems.emplace_back(inputColumnType);
+            }
         }
 
         const auto resultItemType = ctx.Expr.MakeType<TInputType>(resultItems);
@@ -1186,11 +1194,13 @@ namespace NYql::NTypeAnnImpl {
         }
 
         auto typeString = TStringBuf(resourceTag.data() + BlockStorageResourcePrefix.size(), resourceTag.size() - BlockStorageResourcePrefix.size());
+        // clang-format off
         auto typeNode = ctx.Expr.Builder(resource->Pos())
             .Callable("ParseType")
                 .Atom(0, typeString)
             .Seal()
             .Build();
+        // clang-format on
 
         auto status = ParseTypeWrapper(typeNode, typeNode, ctx);
         if (status == IGraphTransformer::TStatus::Error) {
@@ -1322,11 +1332,13 @@ namespace NYql::NTypeAnnImpl {
         Split(resourceIdentifier, BlockMapJoinIndexResourceSeparator, typeString, keyColumnsString);
         Split(keyColumnsString, ",", keyColumns);
 
+        // clang-format off
         auto resourceTypeNode = ctx.Expr.Builder(resource->Pos())
             .Callable("ParseType")
                 .Atom(0, typeString)
             .Seal()
             .Build();
+        // clang-format on
 
         auto status = ParseTypeWrapper(resourceTypeNode, resourceTypeNode, ctx);
         if (status == IGraphTransformer::TStatus::Error) {

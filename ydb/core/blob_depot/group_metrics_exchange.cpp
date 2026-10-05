@@ -112,11 +112,18 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        BytesRead += record.GetBytesRead();
-        BytesWritten += record.GetBytesWritten();
-        if (Config.HasVirtualGroupId()) {
+        if (record.HasBytesRead()) {
+            BytesRead += record.GetBytesRead();
+        }
+
+        if (record.HasBytesWritten()) {
+            BytesWritten += record.GetBytesWritten();
+        }
+
+        if (Config.HasVirtualGroupId() && (record.HasBytesRead() || record.HasBytesWritten())) {
             MetricsQ.emplace_back(TActivationContext::Monotonic(), BytesRead, BytesWritten);
         }
+
         UpdateThroughputs(false);
     }
 
@@ -151,9 +158,24 @@ namespace NKikimr::NBlobDepot {
         }
 
         if (reschedule) {
+            UpdateAgentsBlockingGC();
             TActivationContext::Schedule(Window, new IEventHandle(TEvPrivate::EvUpdateThroughputs, 0,
                 SelfId(), {}, nullptr, 0));
         }
+    }
+
+    // Disconnected agents with outstanding blob sequence ranges can pin GetLeastExpectedBlobId and delay trash
+    // collection. TEvPrivate::EvCheckExpiredAgents periodically reclaims those ranges after ExpirationTimeout if
+    // the agent supports id range expiry; otherwise the ranges remain reserved. Count all disconnected agents
+    // with outstanding ranges, including those still waiting for expiration.
+    void TBlobDepot::UpdateAgentsBlockingGC() {
+        ui64 count = 0;
+        for (const auto& [nodeId, agent] : Agents) {
+            if (!agent.Connection && agent.HasGivenIdRanges()) {
+                ++count;
+            }
+        }
+        TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_AGENTS_BLOCKING_GC] = count;
     }
 
 } // NKikimr::NBlobDepot

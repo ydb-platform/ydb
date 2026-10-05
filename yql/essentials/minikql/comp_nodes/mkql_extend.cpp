@@ -8,8 +8,7 @@
 #include <util/string/cast.h>
 #include <queue>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -60,25 +59,25 @@ public:
 class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState>> {
 private:
     using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
-    llvm::IntegerType* const IndexType;
+    llvm::IntegerType* const IndexType_;
 
 protected:
-    using TBase::Context;
+    using TBase::GetContext;
 
 public:
     std::vector<llvm::Type*> GetFieldsArray() {
         auto result = TBase::GetFields();
-        result.emplace_back(IndexType);
+        result.emplace_back(IndexType_);
         return result;
     }
 
     llvm::Constant* GetIndex() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount());
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount());
     }
 
-    TLLVMFieldsStructureState(llvm::LLVMContext& context)
+    explicit TLLVMFieldsStructureState(llvm::LLVMContext& context)
         : TBase(context)
-        , IndexType(Type::getInt64Ty(Context))
+        , IndexType_(Type::getInt64Ty(context))
     {
     }
 };
@@ -118,7 +117,7 @@ public:
         return EFetchResult::Finish;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -244,19 +243,19 @@ private:
 };
 
 class TExtendFlowWrapper: public TStatefulFlowCodegeneratorNode<TExtendFlowWrapper> {
-    typedef TStatefulFlowCodegeneratorNode<TExtendFlowWrapper> TBaseComputation;
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TExtendFlowWrapper>;
 
 public:
     TExtendFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, TComputationNodePtrVector&& flows)
         : TBaseComputation(mutables, this, kind, EValueRepresentation::Boxed)
-        , Flows(flows)
+        , Flows_(flows)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         auto& s = GetState(state, ctx);
         while (s.Index >= 0) {
-            auto item = Flows[s.Index]->GetValue(ctx);
+            auto item = Flows_[s.Index]->GetValue(ctx);
             if (item.IsYield()) {
                 if (!s.NextFlow()) {
                     return item.Release();
@@ -271,7 +270,7 @@ public:
         return NUdf::TUnboxedValuePod::MakeFinish();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -312,18 +311,18 @@ public:
         const auto index = new LoadInst(indexType, indexPtr, "index", block);
 
         const auto result = PHINode::Create(valueType, 3U, "result", done);
-        const auto selectFlow = PHINode::Create(valueType, Flows.size(), "select", selc);
+        const auto selectFlow = PHINode::Create(valueType, Flows_.size(), "select", selc);
 
-        const auto select = SwitchInst::Create(index, done, Flows.size(), block);
+        const auto select = SwitchInst::Create(index, done, Flows_.size(), block);
         result->addIncoming(GetFinish(context), block);
 
-        for (auto i = 0U; i < Flows.size(); ++i) {
+        for (auto i = 0U; i < Flows_.size(); ++i) {
             const auto flow = BasicBlock::Create(context, (TString("flow_") += ToString(i)).c_str(), ctx.Func);
 
             select->addCase(ConstantInt::get(indexType, i), flow);
 
             block = flow;
-            const auto item = GetNodeValue(Flows[i], ctx, block);
+            const auto item = GetNodeValue(Flows_[i], ctx, block);
             selectFlow->addIncoming(item, block);
             const auto way = SwitchInst::Create(item, selc, 2U, block);
             way->addCase(GetFinish(context), over);
@@ -357,7 +356,7 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        state = ctx.HolderFactory.Create<TState>(Flows.size());
+        state = ctx.HolderFactory.Create<TState>(Flows_.size());
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
@@ -368,10 +367,10 @@ private:
     }
 
     void RegisterDependencies() const final {
-        std::for_each(Flows.cbegin(), Flows.cend(), std::bind(&TExtendFlowWrapper::FlowDependsOn, this, std::placeholders::_1));
+        std::for_each(Flows_.cbegin(), Flows_.cend(), std::bind(&TExtendFlowWrapper::FlowDependsOn, this, std::placeholders::_1));
     }
 
-    const TComputationNodePtrVector Flows;
+    const TComputationNodePtrVector Flows_;
 };
 
 class TOrderedExtendWideFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TOrderedExtendWideFlowWrapper> {
@@ -399,7 +398,7 @@ public:
         return EFetchResult::Finish;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -512,7 +511,7 @@ public:
         return NUdf::TUnboxedValuePod::MakeFinish();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -571,32 +570,32 @@ class TOrderedExtendWrapper: public TMutableCodegeneratorNode<TOrderedExtendWrap
 public:
     TOrderedExtendWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& lists)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , Lists(std::move(lists))
+        , Lists_(std::move(lists))
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         TUnboxedValueVector values;
-        values.reserve(Lists.size());
-        std::transform(Lists.cbegin(), Lists.cend(), std::back_inserter(values),
+        values.reserve(Lists_.size());
+        std::transform(Lists_.cbegin(), Lists_.cend(), std::back_inserter(values),
                        std::bind(&IComputationNode::GetValue, std::placeholders::_1, std::ref(ctx)));
 
         return IsStream ? ctx.HolderFactory.ExtendStream(values.data(), values.size()) : ctx.HolderFactory.ExtendList<false>(values.data(), values.size());
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
         const auto sizeType = Type::getInt64Ty(context);
-        const auto size = ConstantInt::get(sizeType, Lists.size());
+        const auto size = ConstantInt::get(sizeType, Lists_.size());
 
-        const auto arrayType = ArrayType::get(valueType, Lists.size());
+        const auto arrayType = ArrayType::get(valueType, Lists_.size());
         const auto array = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()) : new AllocaInst(arrayType, 0U, "array", block);
 
-        for (size_t i = 0U; i < Lists.size(); ++i) {
+        for (size_t i = 0U; i < Lists_.size(); ++i) {
             const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, array, {ConstantInt::get(sizeType, 0), ConstantInt::get(sizeType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
-            GetNodeValue(ptr, Lists[i], ctx, block);
+            GetNodeValue(ptr, Lists_[i], ctx, block);
         }
 
         const auto factory = ctx.GetFactory();
@@ -605,10 +604,10 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        std::for_each(Lists.cbegin(), Lists.cend(), std::bind(&TOrderedExtendWrapper::DependsOn, this, std::placeholders::_1));
+        std::for_each(Lists_.cbegin(), Lists_.cend(), std::bind(&TOrderedExtendWrapper::DependsOn, this, std::placeholders::_1));
     }
 
-    const TComputationNodePtrVector Lists;
+    const TComputationNodePtrVector Lists_;
 };
 
 template <bool Ordered>
@@ -661,5 +660,4 @@ IComputationNode* WrapOrderedExtend(TCallable& callable, const TComputationNodeF
     return WrapExtendT<true>(callable, ctx);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

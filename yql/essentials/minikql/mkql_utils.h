@@ -48,7 +48,6 @@ private:
     {
     }
 
-private:
     TString Error_;
 };
 

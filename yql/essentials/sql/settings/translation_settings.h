@@ -21,7 +21,9 @@ class IAutoParamBuilderFactory;
 } // namespace NYql
 
 namespace NSQLTranslation {
+
 constexpr const size_t SQL_MAX_PARSER_ERRORS = 100;
+constexpr const size_t SQL_MAX_PARSE_TREE_DEPTH = 4096;
 
 enum class ESqlMode {
     QUERY = 0,
@@ -112,6 +114,7 @@ struct TTranslationSettings {
     TString File;
     bool EnableGenericUdfs;
     ui16 SyntaxVersion;
+    TMaybe<TString> Syntax;
     bool AnsiLexer;
     bool Antlr4Parser; // TODO(YQL-19017): remove.
     bool PgParser;
@@ -121,6 +124,7 @@ struct TTranslationSettings {
     bool PGDisable;
     bool WarnOnV0;
     bool TestAntlr4; // TODO(YQL-19017): remove.
+    TMaybe<size_t> MaxParseTreeDepth;
     ISqlFeaturePolicy::TPtr V0WarnAsError;
     ISqlFeaturePolicy::TPtr DqDefaultAuto;
     ISqlFeaturePolicy::TPtr BlockDefaultAuto;
@@ -147,6 +151,8 @@ struct TTranslationSettings {
     bool ValidateViewStatement = true;
 
     TVector<TString> ExtraSystemColumnPrefixes;
+
+    bool StrictConfigValidation = false;
 };
 
 struct TParsedSettings {
@@ -154,6 +160,7 @@ struct TParsedSettings {
     bool HasSyntaxV1 = false;
     bool HasAnsiLexer = false;
     bool HasPgParser = false;
+    TMaybe<TString> Syntax;
 
     bool ApplyTo(TTranslationSettings& settings, NYql::TIssues& issues) const;
 };

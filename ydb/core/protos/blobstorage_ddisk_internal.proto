@@ -2,31 +2,71 @@ syntax = "proto3";
 
 package NKikimrBlobStorage.NDDisk.NInternal;
 
-// SignatureDDiskChunkMap; when it is an entrypoint, it contains a full snapshot; otherwise just increments
+// SignatureDDiskChunkMap; when it is an entrypoint, it contains a full snapshot; otherwise just
+// increments. Log-order invariants:
+//  - a durable TIncrement always references a fully formatted IntegrityExtent (and, when it
+//    carries an IntegrityChunk, a fully formatted IntegrityChunk);
+//  - an IntegrityChunk record is logged no later than the first TIncrement that references it
+//    (piggybacked on that increment).
 
 message TChunkMapLogRecord {
+    // Location of the IntegrityExtent that covers one data chunk.
+    message TExtentRef {
+        uint32 IntegrityChunkIdx = 1; // in local PDisk coordinates
+        uint32 ExtentSlot = 2; // slot within the integrity chunk
+        uint64 VChunkGeneration = 3; // bumps on allocate/free/allocate (lost-write protection)
+    }
+
     message TTabletRecord {
         message TChunkRef {
             uint64 VChunkIndex = 1; // in tablet's namespace
             uint32 ChunkIdx = 2; // in local PDisk coordinates
+            TExtentRef ExtentRef = 3;
         }
 
         uint64 TabletId = 1;
         repeated TChunkRef ChunkRefs = 2;
     }
 
-    message TSnapshot {
-        repeated TTabletRecord TabletRecords = 1;
+    // A chunk owned by the DDisk for integrity metadata.
+    message TIntegrityChunkRecord {
+        uint32 ChunkIdx = 1;
+        uint64 Generation = 2; // bumps when the chunk is reinitialized/reused
     }
 
-    message TIncrement {
+    message TSnapshot {
+        repeated TTabletRecord TabletRecords = 1;
+        repeated TIntegrityChunkRecord IntegrityChunks = 2;
+        // High watermark of the generation counter (VChunkGeneration and IntegrityChunkGeneration
+        // values are drawn from one monotonic per-DDisk counter). Restored as the maximum of this
+        // field and every generation seen in the restored records, so allocate/free/allocate
+        // cycles keep bumping generations across restarts even when the freed entity no longer
+        // appears in any record.
+        uint64 GenerationCounter = 3;
+    }
+
+    message TDataChunkIncrement {
         uint64 TabletId = 1;
         uint64 VChunkIndex = 2;
         uint32 ChunkIdx = 3;
+        TExtentRef ExtentRef = 4;
     }
 
-    TSnapshot Snapshot = 1;
-    TIncrement Increment = 2;
+    // One allocation's log record. IntegrityChunk is set when this allocation also took the
+    // extent's integrity chunk from the reserve; replay applies it before DataChunk.
+    message TIncrement {
+        optional TIntegrityChunkRecord IntegrityChunk = 1;
+        TDataChunkIncrement DataChunk = 2;
+    }
+
+    oneof Record {
+        TSnapshot Snapshot = 1;
+        TIncrement Increment = 2;
+    }
+
+    // Set on records produced with DDisk integrity checksums disabled. Kept outside
+    // the oneof so snapshots and increments carry the same irreversible format marker.
+    bool ChecksumsDisabled = 3;
 }
 
 // SignaturePersistentBufferChunkMap; always contains full snapshot

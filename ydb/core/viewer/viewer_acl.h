@@ -214,6 +214,11 @@ public:
     {}
 
     void Bootstrap() override {
+        if (Event->Get()->Request.GetMethod() == HTTP_METHOD_GET
+            && (PostData.Has("AddAccess") || PostData.Has("RemoveAccess") || PostData.Has("ChangeOwnership")))
+        {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "ACL changes are not allowed in GET requests; use POST"));
+        }
         if (NeedToRedirect()) {
             return;
         }
@@ -287,8 +292,9 @@ public:
             }
         }
         aceObj.SetAccessRight(accessRights);
-        ui32 inheritanceType = NACLib::EInheritanceType::InheritObject + NACLib::EInheritanceType::InheritContainer;
+        ui32 inheritanceType;
         if (ace.Has("InheritanceType")) {
+            inheritanceType = NACLib::EInheritanceType::InheritNone;
             const auto& jsonInheritanceType = ace["InheritanceType"].GetArraySafe();
             for (const auto& inherit : jsonInheritanceType) {
                 auto inheritance = Dialect->AccessMap.find(inherit.GetStringRobust());
@@ -298,6 +304,8 @@ public:
                     throw yexception() << "Invalid inheritance type \"" << inherit.GetStringRobust() << "\"";
                 }
             }
+        } else {
+            inheritanceType = NACLib::EInheritanceType::InheritObject + NACLib::EInheritanceType::InheritContainer;
         }
         aceObj.SetInheritanceType(inheritanceType);
         return aceObj;

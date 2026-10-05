@@ -9,7 +9,6 @@
 #include "scheduler_queue.h"
 #include <memory>
 #include <ydb/library/actors/actor_type/indexes.h>
-#include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -45,6 +44,7 @@ namespace NActors {
         std::vector<TPoolShortInfo> PoolInfos;
         TStackVec<TPoolThreadRange, 8> PoolThreadRanges;
         TStackVec<i16, 8> PriorityOrder;
+        std::vector<i16> AdjacentOwnerByPool;
 
         TPoolManager(const std::vector<TPoolShortInfo> &poolInfos);
     };
@@ -96,6 +96,21 @@ namespace NActors {
         alignas(64) std::atomic<ui64> SpinningTimeUs;
         alignas(64) NThreading::TPadded<std::atomic<ui64>> ThreadsState;
         alignas(64) std::atomic<bool> StopFlag;
+
+        // Set during pool registration, before any executor thread starts.
+        bool HasWakerPools = false;
+        // Only the shared waker changes sleep decisions and their accounting.
+        alignas(PLATFORM_CACHE_LINE) std::atomic<i16> SharedSleepingCount = 0;
+        alignas(PLATFORM_CACHE_LINE) std::vector<bool> SleepingWorkers;
+        static constexpr i16 InvalidWakerWorkerId = -1;
+        alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
+        std::atomic<i16> WakerWorkerId = InvalidWakerWorkerId;
+
+        void RequestWaker(i16 workerId = InvalidWakerWorkerId);
+        void RunWaker(TWorkerId workerId);
+        void WakerLoop(TWorkerId workerId, EThreadState* resumeState);
+        void SetSleeping(TWorkerId workerId, bool sleeping);
+        TMailbox* GetReadyActivationWaker(ui64 revolvingCounter);
 
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
@@ -164,6 +179,7 @@ namespace NActors {
         i16 GetSharedThreadCount() const override;
 
         bool WakeUpLocalThreads(i16 poolId);
+        bool WakeUpAdjacentOwner(i16 poolId);
         bool WakeUpGlobalThreads(i16 poolId);
 
         void FillForeignThreadsAllowed(std::vector<i16>& foreignThreadsAllowed) const override;

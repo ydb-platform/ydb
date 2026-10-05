@@ -24,6 +24,28 @@ and adds the `experimental` (alias `exp`) command tree on top of it. The rest
 of the behaviour (authentication options, profiles, output formats, etc.)
 largely matches the official `ydb` client.
 
+### Deferred topic publication
+
+Under `experimental topic`:
+
+```bash
+./ydb/apps/ydb/experimental/ydb/ydb experimental topic deferred-publication --help
+./ydb/apps/ydb/experimental/ydb/ydb experimental topic write --help
+```
+
+Typical flow:
+
+```bash
+INT_ID=$(ydb experimental topic deferred-publication begin --ext-publication-id order-42)
+echo "payload" | ydb experimental topic write /Root/my-topic --deferred-int-publication-id "$INT_ID"
+ydb experimental topic deferred-publication publish --int-publication-id "$INT_ID"
+```
+
+Commands: `begin`, `publish`, `cancel`, `list`, `describe`.
+`write` accepts `--deferred-int-publication-id` and optional `--deferred-ext-publication-id`.
+Run `publish` / `cancel` only after `write` exits successfully; they do not wait
+for in-flight writes from another process.
+
 ## Building
 
 ```bash

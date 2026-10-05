@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_facade_run.cpp
@@ -45,7 +45,7 @@ PEERDIR(
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
     yql/essentials/sql
     yql/essentials/public/langver
     yql/essentials/core/langver
@@ -59,7 +59,5 @@ PEERDIR(
 
     contrib/libs/protobuf
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

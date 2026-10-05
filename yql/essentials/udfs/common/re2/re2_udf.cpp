@@ -240,7 +240,7 @@ private:
                 case CAPTURE: {
                     const int count = Regexp_->NumberOfCapturingGroups() + 1;
                     TUnboxedValue* items = nullptr;
-                    const auto result = valueBuilder->NewArray(RegexpGroups_.Names.size(), items);
+                    auto result = valueBuilder->NewArray(RegexpGroups_.Names.size(), items);
                     if (Regexp_->Match(piece, 0, input.size(), anchor, Captured_.get(), count)) {
                         for (int i = 0; i < count; ++i) {
                             if (!Captured_[i].empty()) {

@@ -17,7 +17,7 @@ namespace NKikimr::NStorage {
         , const std::unordered_map<ui32, ui32>& selfHealNodesState
         , TBridgePileId pileId
         , std::unordered_set<ui32>& usedNodes
-        , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig
+        , const NKikimrConfig::TStateStorageConfig& oldConfig
         , ui32 overrideReplicasInRingCount
         , ui32 overrideRingsCount
         , ui32 replicasSpecificVolume
@@ -70,13 +70,23 @@ namespace NKikimr::NStorage {
                 RingsInGroupCount = minNodesInGroup < 8 ? minNodesInGroup : 8;
             if (RingsInGroupCount > minNodesInGroup) {
                 RingsInGroupCount = minNodesInGroup;
+                if (OverrideRingsCount > 0) {
+                    EnoughNodesForOverride = false;
+                }
             }
             NToSelect = RingsInGroupCount < 3 ? 1 : (RingsInGroupCount < 5 ? 3 : 5);
             ReplicasInRingCount = OverrideReplicasInRingCount > 0 ? OverrideReplicasInRingCount : (1 + minNodesInGroup / ReplicasSpecificVolume);
         } else {
             if (OverrideRingsCount == 3 || OverrideRingsCount == 9) {
                 RingsInGroupCount = OverrideRingsCount / 3;
+                if (RingsInGroupCount > minNodesInGroup) {
+                    RingsInGroupCount = minNodesInGroup < 3 ? 1 : 3;
+                    EnoughNodesForOverride = false;
+                }
             } else {
+                // any other value (including 0, meaning "no override") is not applicable to the
+                // multi-group (3-DC) topology and is silently ignored - this is not an insufficient
+                // nodes condition, just a non-applicable override
                 RingsInGroupCount = minNodesInGroup < 3 ? 1 : 3;
             }
             NToSelect = RingsInGroupCount < 3 ? 3 : 9;
@@ -87,11 +97,17 @@ namespace NKikimr::NStorage {
             ReplicasInRingCount = OverrideReplicasInRingCount > 0 ? OverrideReplicasInRingCount : (1 + nodesCnt / ReplicasSpecificVolume);
         }
         if (ReplicasInRingCount * RingsInGroupCount > minNodesInGroup) {
+            if (OverrideReplicasInRingCount > 1) {
+                EnoughNodesForOverride = false;
+            }
             ReplicasInRingCount = 1;
         }
     }
 
     bool TStateStoragePerPileGenerator::IsGoodConfig() const {
+         if (!EnoughNodesForOverride) {
+             return false;
+         }
          for (auto &nodes : Rings) {
             for (auto nodeId : nodes) {
                 if (CalcNodeState(nodeId, false) > 1) {
@@ -102,9 +118,13 @@ namespace NKikimr::NStorage {
          return true;
     }
 
-    void TStateStoragePerPileGenerator::AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss) {
+    bool TStateStoragePerPileGenerator::IsEnoughNodesForOverride() const {
+        return EnoughNodesForOverride;
+    }
+
+    void TStateStoragePerPileGenerator::AddRingGroup(NKikimrConfig::TStateStorageConfig *ss) {
         auto *rg = ss->AddRingGroups();
-        PileId.CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
+        PileId.CopyToProto(rg, &NKikimrConfig::TStateStorageConfig::TRing::SetBridgePileId);
         rg->SetNToSelect(NToSelect);
         for (auto &nodes : Rings) {
             std::ranges::sort(nodes, [&](const auto& x, const auto& y) {
@@ -177,7 +197,7 @@ namespace NKikimr::NStorage {
         }
         ui32 ringGroupIdx = 0;
         for (ui32 i : xrange(OldConfig.RingGroupsSize())) {
-            if (PileId == TBridgePileId::FromProto(&OldConfig.GetRingGroups(i), &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId)) {
+            if (PileId == TBridgePileId::FromProto(&OldConfig.GetRingGroups(i), &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId)) {
                 ringGroupIdx = i;
                 break;
             }

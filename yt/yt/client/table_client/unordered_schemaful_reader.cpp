@@ -246,7 +246,7 @@ private:
     void OnCanceled(const TError& error)
     {
         DoGetReadyEvent().TrySet(TError(NYT::EErrorCode::Canceled, "Table reader canceled")
-            << error);
+            .With(error));
         CancelableContext_->Cancel(error);
     }
 };

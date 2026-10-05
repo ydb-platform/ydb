@@ -59,8 +59,9 @@ auto RunFutureHandler(F&& functor, As&&... args) noexcept -> decltype(functor(st
 
 inline TError WrapIntoCancelationError(const TError& error)
 {
+    // Cancel may be passed an OK error.
     return TError(NYT::EErrorCode::Canceled, "Operation canceled")
-        << error;
+        .WithIf(!error.IsOK(), error);
 }
 
 inline TError TryExtractCancelationError()
@@ -74,7 +75,8 @@ inline TError TryExtractCancelationError()
         // rely on their cancelation error to never be wrapped
         // into anything with a different error code.
         const auto& tokenError = GetCancelationError(currentToken);
-        return TError(tokenError.GetCode(), "Promise abandoned") << tokenError;
+        return TError(tokenError.GetCode(), "Promise abandoned")
+            .WithIf(!tokenError.IsOK(), tokenError);
     }
 
     return TError(NYT::EErrorCode::Canceled, "Promise abandoned");
@@ -934,14 +936,14 @@ TFuture<T> ApplyTimeoutHelper(
             } else {
                 error = TError(NYT::EErrorCode::Timeout, "Operation timed out");
                 if constexpr (std::is_same_v<D, TDuration>) {
-                    error = error << TErrorAttribute("timeout", timeoutOrDeadline);
+                    error = error.With("timeout", timeoutOrDeadline);
                 }
                 if constexpr (std::is_same_v<D, TInstant>) {
-                    error = error << TErrorAttribute("deadline", timeoutOrDeadline);
+                    error = error.With("deadline", timeoutOrDeadline);
                 }
             }
             if (!options.Error.IsOK()) {
-                error = options.Error << std::move(error);
+                error = options.Error.With(std::move(error));
             }
             promise.TrySet(error);
             cancelable.Cancel(error);
@@ -1668,6 +1670,12 @@ TPromiseBase<T>::operator TFuture<T>() const
 }
 
 template <class T>
+TPromiseBase<T>::operator TUniqueFuture<T>() const
+{
+    return TFuture<T>(Impl_).AsUnique();
+}
+
+template <class T>
 TPromiseBase<T>::TPromiseBase(TIntrusivePtr<NYT::NDetail::TPromiseState<T>> impl)
     : Impl_(std::move(impl))
 { }
@@ -1771,8 +1779,9 @@ template <class R, class... TArgs>
 struct TAsyncViaHelper<R(TArgs...)>
 {
     using TUnderlying = typename TFutureTraits<R>::TUnderlying;
+    using TWrapped = typename TFutureTraits<R>::TWrapped;
     using TSourceCallback = TExtendedCallback<R(TArgs...)>;
-    using TTargetCallback = TExtendedCallback<TFuture<TUnderlying>(TArgs...)>;
+    using TTargetCallback = TExtendedCallback<TWrapped(TArgs...)>;
 
     static void Inner(
         const TSourceCallback& this_,
@@ -1794,7 +1803,7 @@ struct TAsyncViaHelper<R(TArgs...)>
         NYT::NDetail::TPromiseSetter<TUnderlying, R(TArgs...)>::Do(promise, this_, std::forward<TArgs>(args)...);
     }
 
-    static TFuture<TUnderlying> Outer(
+    static TWrapped Outer(
         TSourceCallback this_,
         const IInvokerPtr& invoker,
         TArgs... args)
@@ -1822,10 +1831,10 @@ struct TAsyncViaHelper<R(TArgs...)>
             BIND_NO_PROPAGATE([promise] {
                 promise.Set(TryExtractCancelationError());
             })));
-        return promise;
+        return TWrapped(promise);
     }
 
-    static TFuture<TUnderlying> OuterGuarded(
+    static TWrapped OuterGuarded(
         TSourceCallback this_,
         const IInvokerPtr& invoker,
         TError cancellationError,
@@ -1851,7 +1860,7 @@ struct TAsyncViaHelper<R(TArgs...)>
             BIND_NO_PROPAGATE([promise, cancellationError = std::move(cancellationError)] {
                 promise.Set(std::move(cancellationError));
             })));
-        return promise;
+        return TWrapped(promise);
     }
 
     static TTargetCallback Do(
@@ -2264,7 +2273,7 @@ private:
         auto combinerError = TError(
             NYT::EErrorCode::FutureCombinerFailure,
             "Any-of combiner failure: all responses have failed")
-            << Errors_;
+            .With(Errors_);
 
         guard.Release();
 
@@ -2332,9 +2341,9 @@ private:
 
     void OnFutureSet(int index, const TErrorOr<T>& result) noexcept
     {
+        // NB: Relaxed ordering is sufficient since this flag is only a best-effort fast path;
+        // SpinLock_ synchronizes access to Results_ and ResponseCount_.
         if (ResultObtained_.load(std::memory_order::relaxed)) {
-            // NB: Relaxed ordering is sufficient since this flag is only a best-effort fast path;
-            // ResultsLock_ synchronizes access to Results_ and ResponseCount_.
             return;
         }
 
@@ -2436,7 +2445,7 @@ private:
                 this->CancelFutures(TError(
                     NYT::EErrorCode::FutureCombinerShortcut,
                     "All-of combiner shortcut: some response failed")
-                    << error);
+                    .With(error));
             }
 
             return;
@@ -2596,7 +2605,7 @@ private:
             N_,
             failedCount,
             totalCount)
-            << Errors_;
+            .With(Errors_);
 
         guard.Release();
 
@@ -2610,7 +2619,7 @@ private:
             this->CancelFutures(TError(
                 NYT::EErrorCode::FutureCombinerShortcut,
                 "Any-N-of combiner shortcut: one of responses failed")
-                << error);
+                .With(error));
         }
     }
 };
@@ -2906,7 +2915,7 @@ private:
     void OnCanceled(const TError& error)
     {
         auto wrappedError = TError(NYT::EErrorCode::Canceled, "Canceled")
-            << error;
+            .With(error);
 
         OnError(wrappedError);
     }

@@ -4,6 +4,9 @@
 #include "scheme.h"
 #include "types.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+
 namespace NKikimr::NBsController {
 
     template<typename Traits>
@@ -87,6 +90,17 @@ namespace NKikimr::NBsController {
         template<typename T>
         void Append(const T& x) {
             yexception::Append(x);
+        }
+    };
+
+    struct TExGroupLayoutIncorrect : TExError {
+        explicit TExGroupLayoutIncorrect(ui32 groupId) {
+            *this << "Group layout is incorrect" << TErrorParams::GroupId(groupId)
+                  << "; set IgnoreGroupLayoutChecks to allow this reassignment";
+        }
+
+        NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
+            return NKikimrBlobStorage::TConfigResponse::TStatus::kGroupLayoutIncorrect;
         }
     };
 

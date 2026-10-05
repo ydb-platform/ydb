@@ -25,7 +25,7 @@ namespace openshift
   <p>
   This metric is retrieved from the @code Status.Total.Hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -75,7 +75,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaCpuLimitHard(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code Status.Total.Used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -125,7 +125,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaCpuLimitUsed(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code Status.Total.Hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -175,7 +175,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaCpuRequestHard(metrics::Meter *meter
   <p>
   This metric is retrieved from the @code Status.Total.Used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -225,7 +225,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaCpuRequestUsed(metrics::Meter *meter
   <p>
   This metric is retrieved from the @code Status.Total.Hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -277,7 +277,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaEphemeralStorageLimitHard(metrics::M
   <p>
   This metric is retrieved from the @code Status.Total.Used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -329,7 +329,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaEphemeralStorageLimitUsed(metrics::M
   <p>
   This metric is retrieved from the @code Status.Total.Hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -383,7 +383,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaEphemeralStorageRequestHard(metrics:
   <p>
   This metric is retrieved from the @code Status.Total.Used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -437,7 +437,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaEphemeralStorageRequestUsed(metrics:
   <p>
   This metric is retrieved from the @code Status.Total.Hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -490,7 +490,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaHugepageCountRequestHard(metrics::Me
   <p>
   This metric is retrieved from the @code Status.Total.Used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -543,7 +543,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaHugepageCountRequestUsed(metrics::Me
   <p>
   This metric is retrieved from the @code Status.Total.Hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -593,7 +593,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaMemoryLimitHard(metrics::Meter *mete
   <p>
   This metric is retrieved from the @code Status.Total.Used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -643,7 +643,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaMemoryLimitUsed(metrics::Meter *mete
   <p>
   This metric is retrieved from the @code Status.Total.Hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -695,7 +695,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaMemoryRequestHard(metrics::Meter *me
   <p>
   This metric is retrieved from the @code Status.Total.Used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -747,7 +747,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaMemoryRequestUsed(metrics::Meter *me
   <p>
   This metric is retrieved from the @code Status.Total.Hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -797,7 +797,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaObjectCountHard(metrics::Meter *mete
   <p>
   This metric is retrieved from the @code Status.Total.Used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -847,7 +847,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaObjectCountUsed(metrics::Meter *mete
   <p>
   This metric is retrieved from the @code Status.Total.Hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -903,7 +903,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaPersistentvolumeclaimCountHard(metri
   <p>
   This metric is retrieved from the @code Status.Total.Used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -959,7 +959,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaPersistentvolumeclaimCountUsed(metri
   <p>
   This metric is retrieved from the @code Status.Total.Hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>
@@ -1012,7 +1012,7 @@ CreateAsyncDoubleMetricOpenshiftClusterquotaStorageRequestHard(metrics::Meter *m
   <p>
   This metric is retrieved from the @code Status.Total.Used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a> of the <a
   href="https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/schedule_and_quota_apis/clusterresourcequota-quota-openshift-io-v1#status-total">ClusterResourceQuota</a>.
   <p>

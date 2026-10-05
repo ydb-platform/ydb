@@ -3,14 +3,13 @@
 #include <yql/essentials/minikql/computation/presort.h>
 #include <util/thread/singleton.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 struct TStringDescEncoder: public TPresortEncoder {
     TStringDescEncoder() {
-        AddType(NUdf::EDataSlot::String, false, true);
+        AddType(NUdf::EDataSlot::String, /*isOptional=*/false, /*isDesc=*/true);
     }
 };
 
@@ -76,5 +75,4 @@ void RegisterInverseString(IBuiltinFunctionRegistry& registry) {
     RegisterFunction<NUdf::TDataType<char*>, NUdf::TDataType<char*>, TInverseString, TUnaryArgs>(registry, name);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

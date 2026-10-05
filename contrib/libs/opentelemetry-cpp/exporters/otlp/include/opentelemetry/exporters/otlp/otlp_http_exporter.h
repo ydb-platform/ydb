@@ -9,6 +9,7 @@
 #include "opentelemetry/exporters/otlp/otlp_http_client.h"
 #include "opentelemetry/exporters/otlp/otlp_http_exporter_options.h"
 #include "opentelemetry/exporters/otlp/otlp_http_exporter_runtime_options.h"
+#include "opentelemetry/ext/http/client/http_client_factory.h"
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/sdk/common/exporter_utils.h"
 #include "opentelemetry/sdk/trace/exporter.h"
@@ -42,6 +43,42 @@ public:
    */
   OtlpHttpExporter(const OtlpHttpExporterOptions &options,
                    const OtlpHttpExporterRuntimeOptions &runtime_options);
+
+  /**
+   * Create an OtlpHttpExporter using the given options and HTTP client factory.
+   * @param options the exporter options
+   * @param factory the HTTP client factory used to create the underlying HTTP client
+   */
+  OtlpHttpExporter(const OtlpHttpExporterOptions &options,
+                   const std::shared_ptr<ext::http::client::HttpClientFactory> &factory);
+
+  /**
+   * Create an OtlpHttpExporter using the given options, runtime options, and HTTP client factory.
+   * @param options the exporter options
+   * @param runtime_options the runtime options (e.g. thread instrumentation)
+   * @param factory the HTTP client factory used to create the underlying HTTP client
+   */
+  OtlpHttpExporter(const OtlpHttpExporterOptions &options,
+                   const OtlpHttpExporterRuntimeOptions &runtime_options,
+                   const std::shared_ptr<ext::http::client::HttpClientFactory> &factory);
+
+  /**
+   * Create an OtlpHttpExporter using the given options and HTTP client.
+   * @param options the exporter options
+   * @param http_client the HTTP client to be used for exporting
+   */
+  OtlpHttpExporter(const OtlpHttpExporterOptions &options,
+                   std::shared_ptr<ext::http::client::HttpClient> http_client);
+
+  /**
+   * Create an OtlpHttpExporter using the given options, runtime options, and HTTP client.
+   * @param options the exporter options
+   * @param runtime_options the runtime options (e.g. thread instrumentation)
+   * @param http_client the HTTP client to be used for exporting
+   */
+  OtlpHttpExporter(const OtlpHttpExporterOptions &options,
+                   const OtlpHttpExporterRuntimeOptions &runtime_options,
+                   std::shared_ptr<ext::http::client::HttpClient> http_client);
 
   /**
    * Create a span recordable.
@@ -84,6 +121,7 @@ private:
   std::unique_ptr<OtlpHttpClient> http_client_;
   // For testing
   friend class OtlpHttpExporterTestPeer;
+  friend class OtlpHttpExporterCustomClientTestPeer;
   /**
    * Create an OtlpHttpExporter using the specified http client.
    * Only tests can call this constructor directly.

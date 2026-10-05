@@ -87,8 +87,8 @@ std::vector<TStructField> MergeStructTypes(
             THROW_ERROR_EXCEPTION(
                 "Struct member name mismatch in %Qv",
                 firstDescriptor.GetDescription())
-                << TErrorAttribute("first_name", firstName)
-                << TErrorAttribute("second_name", secondName);
+                .With("first_name", firstName)
+                .With("second_name", secondName);
         }
 
         const auto& firstFieldDescriptor = firstDescriptor.Field(fieldIndex);
@@ -108,7 +108,7 @@ std::vector<TStructField> MergeStructTypes(
             THROW_ERROR_EXCEPTION(
                 "Struct member type mismatch in %Qv",
                 firstDescriptor.GetDescription())
-                << ex;
+                .With(ex);
         }
     }
 
@@ -227,8 +227,8 @@ TLogicalTypePtr MergeTypes(const TLogicalTypePtr& firstType, const TLogicalTypeP
                 "Type of fields %Qv and %Qv cannot be merged",
                 firstDescriptor.GetDescription(),
                 secondDescriptor.GetDescription())
-                << TErrorAttribute("first_type", ToString(*firstDescriptor.GetType()))
-                << TErrorAttribute("second_type", ToString(*secondDescriptor.GetType()));
+                .With("first_type", ToString(*firstDescriptor.GetType()))
+                .With("second_type", ToString(*secondDescriptor.GetType()));
         }
 
         auto mergedType = MergeTypes(UnwrapOptionalType(firstType),UnwrapOptionalType(secondType));
@@ -239,8 +239,8 @@ TLogicalTypePtr MergeTypes(const TLogicalTypePtr& firstType, const TLogicalTypeP
         THROW_ERROR_EXCEPTION(
             "Type of %Qv field cannot be merged: metatypes are incompatible",
             firstDescriptor.GetDescription())
-            << TErrorAttribute("first_type", ToString(*firstDescriptor.GetType()))
-            << TErrorAttribute("second_type", ToString(*secondDescriptor.GetType()));
+            .With("first_type", ToString(*firstDescriptor.GetType()))
+            .With("second_type", ToString(*secondDescriptor.GetType()));
     }
 
     auto areTypesCompatible = [] (const TLogicalTypePtr& lhs, const TLogicalTypePtr& rhs) {
@@ -265,8 +265,8 @@ TLogicalTypePtr MergeTypes(const TLogicalTypePtr& firstType, const TLogicalTypeP
                 "Type of fields %Qv and %Qv cannot be merged",
                 firstDescriptor.GetDescription(),
                 secondDescriptor.GetDescription())
-                << TErrorAttribute("first_type", ToString(*firstDescriptor.GetType()))
-                << TErrorAttribute("second_type", ToString(*secondDescriptor.GetType()));
+                .With("first_type", ToString(*firstDescriptor.GetType()))
+                .With("second_type", ToString(*secondDescriptor.GetType()));
 
         }
         case ELogicalMetatype::List: {
@@ -299,6 +299,7 @@ TLogicalTypePtr MergeTypes(const TLogicalTypePtr& firstType, const TLogicalTypeP
         case ELogicalMetatype::Dict: {
             return MergeDictTypes(firstDescriptor, secondDescriptor);
         }
+        case ELogicalMetatype::AggregateState:
         case ELogicalMetatype::Decimal: {
             if (*firstDescriptor.GetType() == *secondDescriptor.GetType()) {
                 return firstType;
@@ -307,8 +308,8 @@ TLogicalTypePtr MergeTypes(const TLogicalTypePtr& firstType, const TLogicalTypeP
                     "Type of fields %Qv and %Qv cannot be merged",
                     firstDescriptor.GetDescription(),
                     secondDescriptor.GetDescription())
-                    << TErrorAttribute("first_type", ToString(*firstDescriptor.GetType()))
-                    << TErrorAttribute("second_type", ToString(*secondDescriptor.GetType()));
+                    .With("first_type", ToString(*firstDescriptor.GetType()))
+                    .With("second_type", ToString(*secondDescriptor.GetType()));
             }
         }
         case ELogicalMetatype::Optional:

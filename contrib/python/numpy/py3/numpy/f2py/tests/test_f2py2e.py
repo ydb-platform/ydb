@@ -1,16 +1,35 @@
-import textwrap, re, sys, subprocess, shlex
-from pathlib import Path
-from collections import namedtuple
 import platform
+import re
+import shlex
+import subprocess
+import sys
+import textwrap
+from collections import namedtuple
+from pathlib import Path
 
 import pytest
 
-from . import util
 from numpy.f2py.f2py2e import main as f2pycli
+from numpy.testing._private.utils import NOGIL_BUILD
+
+from . import util
+
+#######################
+# F2PY Test utilities #
+######################
+
+# Tests for CLI commands which call meson will fail if no compilers are present, these are to be skipped
+
+def compiler_check_f2pycli():
+    if not util.has_fortran_compiler():
+        pytest.skip("CLI command needs a Fortran compiler")
+    else:
+        f2pycli()
 
 #########################
 # CLI utils and classes #
 #########################
+
 
 PPaths = namedtuple("PPaths", "finp, f90inp, pyf, wrap77, wrap90, cmodf")
 
@@ -49,9 +68,9 @@ def get_io_paths(fname_inp, mname="untitled"):
     )
 
 
-##############
-# CLI Fixtures and Tests #
-#############
+################
+# CLI Fixtures #
+################
 
 
 @pytest.fixture(scope="session")
@@ -109,6 +128,9 @@ def f2cmap_f90(tmpdir_factory):
     fmap.write_text(f2cmap, encoding="ascii")
     return fn
 
+#########
+# Tests #
+#########
 
 def test_gh22819_cli(capfd, gh22819_cli, monkeypatch):
     """Check that module names are handled correctly
@@ -123,11 +145,10 @@ def test_gh22819_cli(capfd, gh22819_cli, monkeypatch):
     with util.switchdir(ipath.parent):
         f2pycli()
         gen_paths = [item.name for item in ipath.parent.rglob("*") if item.is_file()]
-        assert "blahmodule.c" not in gen_paths # shouldn't be generated
+        assert "blahmodule.c" not in gen_paths  # shouldn't be generated
         assert "blah-f2pywrappers.f" not in gen_paths
         assert "test_22819-f2pywrappers.f" in gen_paths
         assert "test_22819module.c" in gen_paths
-        assert "Ignoring blah"
 
 
 def test_gh22819_many_pyf(capfd, gh22819_cli, monkeypatch):
@@ -198,8 +219,7 @@ def test_gen_pyf_no_overwrite(capfd, hello_world_f90, monkeypatch):
             assert "Use --overwrite-signature to overwrite" in err
 
 
-@pytest.mark.skipif((platform.system() != 'Linux') or (sys.version_info <= (3, 12)),
-                    reason='Compiler and 3.12 required')
+@pytest.mark.skipif(sys.version_info <= (3, 12), reason="Python 3.12 required")
 def test_untitled_cli(capfd, hello_world_f90, monkeypatch):
     """Check that modules are named correctly
 
@@ -208,7 +228,7 @@ def test_untitled_cli(capfd, hello_world_f90, monkeypatch):
     ipath = Path(hello_world_f90)
     monkeypatch.setattr(sys, "argv", f"f2py --backend meson -c {ipath}".split())
     with util.switchdir(ipath.parent):
-        f2pycli()
+        compiler_check_f2pycli()
         out, _ = capfd.readouterr()
         assert "untitledmodule.c" in out
 
@@ -225,17 +245,17 @@ def test_no_py312_distutils_fcompiler(capfd, hello_world_f90, monkeypatch):
         sys, "argv", f"f2py {ipath} -c --fcompiler=gfortran -m {MNAME}".split()
     )
     with util.switchdir(ipath.parent):
-        f2pycli()
+        compiler_check_f2pycli()
         out, _ = capfd.readouterr()
         assert "--fcompiler cannot be used with meson" in out
     monkeypatch.setattr(
-        sys, "argv", f"f2py --help-link".split()
+        sys, "argv", ["f2py", "--help-link"]
     )
     with util.switchdir(ipath.parent):
         f2pycli()
         out, _ = capfd.readouterr()
         assert "Use --dep for meson builds" in out
-    MNAME = "hi2" # Needs to be different for a new -c
+    MNAME = "hi2"  # Needs to be different for a new -c
     monkeypatch.setattr(
         sys, "argv", f"f2py {ipath} -c -m {MNAME} --backend distutils".split()
     )
@@ -560,7 +580,7 @@ def test_debugcapi(capfd, hello_world_f90, monkeypatch):
             assert r"#define DEBUGCFUNCS" in ocmod.read()
 
 
-@pytest.mark.xfail(reason="Consistently fails on CI.")
+@pytest.mark.skip(reason="Consistently fails on CI; noisy so skip not xfail.")
 def test_debugcapi_bld(hello_world_f90, monkeypatch):
     """Ensures that debugging wrappers work
 
@@ -573,7 +593,7 @@ def test_debugcapi_bld(hello_world_f90, monkeypatch):
 
     with util.switchdir(ipath.parent):
         f2pycli()
-        cmd_run = shlex.split("python3 -c \"import blah; blah.hi()\"")
+        cmd_run = shlex.split(f"{sys.executable} -c \"import blah; blah.hi()\"")
         rout = subprocess.run(cmd_run, capture_output=True, encoding='UTF-8')
         eout = ' Hello World\n'
         eerr = textwrap.dedent("""\
@@ -723,7 +743,7 @@ def test_version(capfd, monkeypatch):
 
     CLI :: -v
     """
-    monkeypatch.setattr(sys, "argv", 'f2py -v'.split())
+    monkeypatch.setattr(sys, "argv", ["f2py", "-v"])
     # TODO: f2py2e should not call sys.exit() after printing the version
     with pytest.raises(SystemExit):
         f2pycli()
@@ -732,7 +752,7 @@ def test_version(capfd, monkeypatch):
         assert np.__version__ == out.strip()
 
 
-@pytest.mark.xfail(reason="Consistently fails on CI.")
+@pytest.mark.skip(reason="Consistently fails on CI; noisy so skip not xfail.")
 def test_npdistop(hello_world_f90, monkeypatch):
     """
     CLI :: -c
@@ -742,15 +762,63 @@ def test_npdistop(hello_world_f90, monkeypatch):
 
     with util.switchdir(ipath.parent):
         f2pycli()
-        cmd_run = shlex.split("python -c \"import blah; blah.hi()\"")
+        cmd_run = shlex.split(f"{sys.executable} -c \"import blah; blah.hi()\"")
         rout = subprocess.run(cmd_run, capture_output=True, encoding='UTF-8')
         eout = ' Hello World\n'
         assert rout.stdout == eout
 
 
+@pytest.mark.skipif((platform.system() != 'Linux') or sys.version_info <= (3, 12),
+                    reason='Compiler and Python 3.12 or newer required')
+def test_no_freethreading_compatible(hello_world_f90, monkeypatch):
+    """
+    CLI :: --no-freethreading-compatible
+    """
+    ipath = Path(hello_world_f90)
+    monkeypatch.setattr(sys, "argv", f'f2py -m blah {ipath} -c --no-freethreading-compatible'.split())
+
+    with util.switchdir(ipath.parent):
+        compiler_check_f2pycli()
+        cmd = f"{sys.executable} -c \"import blah; blah.hi();"
+        if NOGIL_BUILD:
+            cmd += "import sys; assert sys._is_gil_enabled() is True\""
+        else:
+            cmd += "\""
+        cmd_run = shlex.split(cmd)
+        rout = subprocess.run(cmd_run, capture_output=True, encoding='UTF-8')
+        eout = ' Hello World\n'
+        assert rout.stdout == eout
+        if NOGIL_BUILD:
+            assert "The global interpreter lock (GIL) has been enabled to load module 'blah'" in rout.stderr
+        assert rout.returncode == 0
+
+
+@pytest.mark.skipif((platform.system() != 'Linux') or sys.version_info <= (3, 12),
+                    reason='Compiler and Python 3.12 or newer required')
+def test_freethreading_compatible(hello_world_f90, monkeypatch):
+    """
+    CLI :: --freethreading_compatible
+    """
+    ipath = Path(hello_world_f90)
+    monkeypatch.setattr(sys, "argv", f'f2py -m blah {ipath} -c --freethreading-compatible'.split())
+
+    with util.switchdir(ipath.parent):
+        compiler_check_f2pycli()
+        cmd = f"{sys.executable} -c \"import blah; blah.hi();"
+        if NOGIL_BUILD:
+            cmd += "import sys; assert sys._is_gil_enabled() is False\""
+        else:
+            cmd += "\""
+        cmd_run = shlex.split(cmd)
+        rout = subprocess.run(cmd_run, capture_output=True, encoding='UTF-8')
+        eout = ' Hello World\n'
+        assert rout.stdout == eout
+        assert rout.stderr == ""
+        assert rout.returncode == 0
+
+
 # Numpy distutils flags
 # TODO: These should be tested separately
-
 
 def test_npd_fcompiler():
     """

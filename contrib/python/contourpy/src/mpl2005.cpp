@@ -65,6 +65,11 @@ py::tuple Mpl2005ContourGenerator::get_chunk_size() const
     return py::make_tuple(_site->j_chunk_size, _site->i_chunk_size);
 }
 
+const char* Mpl2005ContourGenerator::get_name() const
+{
+    return "mpl2005";
+}
+
 py::sequence Mpl2005ContourGenerator::lines(double level)
 {
     double levels[2] = {level, 0.0};

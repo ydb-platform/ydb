@@ -2,8 +2,8 @@
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 
-#include <yql/essentials/sql/v1/context.h>
-#include <yql/essentials/sql/v1/sql_translation.h>
+#include <yql/essentials/sql/v1/translation/context.h>
+#include <yql/essentials/sql/v1/translation/sql_translation.h>
 #include <yql/essentials/sql/v1/reflect/sql_reflect.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -125,11 +125,6 @@ private:
             }
             case TRule_table_hint::kAltTableHint4: {
                 const auto& alt = msg.GetAlt_table_hint4();
-                Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
-                break;
-            }
-            case TRule_table_hint::kAltTableHint5: {
-                const auto& alt = msg.GetAlt_table_hint5();
                 Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
                 break;
             }
@@ -434,15 +429,16 @@ using TSql2YqlResult = TTuple<
     /*IsOk=*/bool,
     /*Issues=*/TListType<char*>>;
 
-SIMPLE_UDF(TSql2Yql, TSql2YqlResult(
-                         TAutoMap<char*> /* query */,
-                         TAutoMap<char*> /* langversion */,
-                         TAutoMap<char*> /* gateways */))
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TSql2Yql, TSql2YqlResult(TAutoMap<char*>,
+                                                       TAutoMap<char*>,
+                                                       TAutoMap<char*>,
+                                                       TOptional<char*>), 1)
 try {
     NYqlLangModule::TSql2YqlInput input = {
         .Query = TString(args[0].AsStringRef()),
         .LangVersion = TString(args[1].AsStringRef()),
         .GatewaysCfg = TString(args[2].AsStringRef()),
+        .GatewaysCfgPatch = args[3] ? TString(args[3].AsStringRef()) : TString(),
     };
 
     NYqlLangModule::TSql2YqlOutput output = NYqlLangModule::Sql2Yql(input);

@@ -124,6 +124,9 @@ class ParallelWorkloadTestBase:
 
             logging.debug(f"Deploy finished with {preparation_result}")
 
+            # PRE-NEMESIS: one-time data import and other setup steps
+            stress_executor.run_pre_nemesis_commands(workload_params, preparation_result['deployed_nodes'])
+
             # PHASE 2: EXECUTION (run workloads in parallel)
             execution_result = stress_executor.execute_stress_runs(
                 stress_deployer,
@@ -142,6 +145,9 @@ class ParallelWorkloadTestBase:
                     workload_params,
                     preparation_result)
                 execution_result['overall_result'].recoverability_result = recoverability_result['overall_result']
+
+            # POST-NEMESIS: one-time cleanup steps
+            stress_executor.run_post_nemesis_commands(workload_params, preparation_result['deployed_nodes'])
 
             # PHASE 3: RESULTS (collect diagnostics and finalize)
             self._finalize_workload_results(
@@ -365,6 +371,13 @@ class ParallelWorkloadTestBase:
                 violations_count = len(check.violations)
                 affected = ', '.join(sorted(check.affected_hosts)) if check.affected_hosts else '—'
                 summary = f"{name} [{check.status}] violations={violations_count} hosts={affected}"
+                if check.violations:
+                    summary = summary + ": " + "; ".join(str(v) for v in check.violations)
+                else:
+                    details = check.details if isinstance(check.details, dict) else {}
+                    error_message = details.get("error_message")
+                    if error_message:
+                        summary = summary + ": " + str(error_message)
                 if check.is_violation():
                     warden_violations.append(summary)
                 else:

@@ -121,7 +121,7 @@ void ValidateOrderedTabletReplicationProgress(const TReplicationProgress& progre
 {
     if (!IsOrderedTabletReplicationProgress(progress)) {
         THROW_ERROR_EXCEPTION("Invalid replication progress for ordered table tablet")
-            << TErrorAttribute("replication_progress", progress);
+            .With("replication_progress", progress);
     }
 }
 
@@ -129,8 +129,8 @@ void ValidateOrderedTableReplicationProgress(const TReplicationProgress& progres
 {
     if (!IsOrderedTableReplicationProgress(progress, tabletCount)) {
         THROW_ERROR_EXCEPTION("Invalid replication progress for ordered table")
-            << TErrorAttribute("replication_progress", progress)
-            << TErrorAttribute("tablet_count", tabletCount);
+            .With("replication_progress", progress)
+            .With("tablet_count", tabletCount);
     }
 }
 

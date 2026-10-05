@@ -77,8 +77,8 @@ public:
         return Resolver.get();
     }
 
-    ui64 GetConveyorProcessId() const {
-        return ConveyorProcessGuard.GetInternalProcessId();
+    bool SendTaskToExecute(const std::shared_ptr<NConveyorComposite::ITask>& task) const {
+        return ConveyorProcessGuard.SendTaskToExecute(task);
     }
 
     template <class T>
@@ -160,7 +160,8 @@ public:
         const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NColumnShard::TConcreteScanCounters& counters,
         const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
         const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
-        const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit);
+        const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit, ui64 txId = 0,
+        const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool = std::nullopt);
 };
 
 class IDataReader {

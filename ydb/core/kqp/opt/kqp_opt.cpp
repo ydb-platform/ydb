@@ -54,8 +54,13 @@ TKqpOptimizeContext::TKqpOptimizeContext(const TString& cluster, const TIntrusiv
     , UserRequestContext(userRequestContext)
     , UsePessimisticLocks(usePessimisticLocks)
 {
+    YQL_ENSURE(Config);
     YQL_ENSURE(QueryCtx);
     YQL_ENSURE(Tables);
+}
+
+bool TKqpOptimizeContext::NeedPessimisticLocks() const {
+    return UsePessimisticLocks && !Config->KqpDisablePessimisticLocks.Get().GetOrElse(false);
 }
 
 std::shared_ptr<NJson::TJsonValue> TKqpOptimizeContext::GetOverrideStatistics() {
@@ -95,8 +100,8 @@ bool TKqpOptimizeContext::IsGenericQuery() const {
     return QueryCtx->Type == NYql::EKikimrQueryType::Query || QueryCtx->Type == NYql::EKikimrQueryType::Script;
 }
 
-bool IsKqpPureLambda(const TCoLambda& lambda) {
-    return !FindNode(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) {
+bool IsKqpPureExpr(const TExprBase& expr, bool checkDqSources, bool checkIndexReads) {
+    return !FindNode(expr.Ptr(), [checkDqSources, checkIndexReads](const TExprNode::TPtr& node) {
         if (TMaybeNode<TKqlReadTableBase>(node)) {
             return true;
         }
@@ -113,8 +118,22 @@ bool IsKqpPureLambda(const TCoLambda& lambda) {
             return true;
         }
 
+        if (checkDqSources && (TCoDataSource::Match(node.Get()) || TDqSource::Match(node.Get())
+            || TDqReadWrapBase::Match(node.Get()))) {
+            return true;
+        }
+
+        if (checkIndexReads && (TKqlReadTableFullTextIndex::Match(node.Get())
+            || TKqpReadTableFullTextIndex::Match(node.Get()) || TKqlReadTableVectorIndex::Match(node.Get()))) {
+            return true;
+        }
+
         return false;
     });
+}
+
+bool IsKqpPureLambda(const TCoLambda& lambda) {
+    return IsKqpPureExpr(lambda.Body());
 }
 
 bool IsKqpPureInputs(const TExprList& inputs) {

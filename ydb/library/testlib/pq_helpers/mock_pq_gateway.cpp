@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/testlib/common/test_utils.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
@@ -48,10 +49,10 @@ private:
 
 class TMockPqReadSession final : private TMockSessionBase, public IMockPqReadSession, public NYdb::NTopic::IReadSession {
     struct TMockPartitionSession final : public NYdb::NTopic::TPartitionSessionControl {
-        TMockPartitionSession(const TString& topicPath, ui64 partitionId) {
+        TMockPartitionSession(TString topicPath, const ui64 partitionId) {
             PartitionSessionId = 0;
-            TopicPath = topicPath;
-            ReadSessionId = TStringBuilder() << "mock-session-to-" << topicPath << "-p" << partitionId;
+            TopicPath = std::move(topicPath);
+            ReadSessionId = TStringBuilder() << "mock-session-to-" << TopicPath << "-p" << partitionId;
             PartitionId = partitionId;
         }
 
@@ -73,8 +74,9 @@ class TMockPqReadSession final : private TMockSessionBase, public IMockPqReadSes
     };
 
 public:
-    TMockPqReadSession(const TString& topicPath, ui64 partitionId)
-        : PartitionSession(MakeIntrusive<TMockPartitionSession>(topicPath, partitionId))
+    TMockPqReadSession(TString topicPath, const ui64 partitionId, const TDuration operationTimeout)
+        : PartitionSession(MakeIntrusive<TMockPartitionSession>(std::move(topicPath), partitionId))
+        , OperationTimeout(operationTimeout)
     {}
 
     ~TMockPqReadSession() {
@@ -141,6 +143,7 @@ public:
     }
 
     bool Close(TDuration /*timeout*/) final {
+        Closed = true;
         FillPromise();
         return true;
     }
@@ -159,6 +162,12 @@ public:
 
     NYdb::NTopic::TPartitionSession::TPtr GetPartitionSession() const final {
         return PartitionSession;
+    }
+
+    ui64 GetInflightEventsCount() const final {
+        const auto lock = Guard();
+
+        return Events.size();
     }
 
     void SetEventProvider(TEvGen evGen) final {
@@ -180,12 +189,12 @@ public:
         AddEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(PartitionSession, 0, endOffset));
     }
 
-    void AddDataReceivedEvent(ui64 offset, const TString& data) final {
-        AddDataReceivedEvent({{.Offset = offset, .Data = data}});
+    void AddDataReceivedEvent(ui64 offset, TString data) final {
+        AddDataReceivedEvent({{.Offset = offset, .Data = std::move(data)}});
     }
 
-    void AddDataReceivedEvent(ui64 offset, const TString& data, TInstant messageTime) final {
-        AddDataReceivedEvent({{.Offset = offset, .Data = data, .MessageTime = messageTime}});
+    void AddDataReceivedEvent(ui64 offset, TString data, TInstant messageTime) final {
+        AddDataReceivedEvent({{.Offset = offset, .Data = std::move(data), .MessageTime = messageTime}});
     }
 
     void AddDataReceivedEvent(const std::vector<TMessage>& messages) final {
@@ -220,20 +229,33 @@ public:
         AddEvent(NYdb::NTopic::TSessionClosedEvent(status, std::move(issues)));
     }
 
+    void ExpectSessionClosed(std::optional<TDuration> timeout) final {
+        WaitFor(timeout.value_or(OperationTimeout), "close read session", [this]() {
+            return Closed.load();
+        });
+    }
+
 private:
     const NYdb::NTopic::TPartitionSession::TPtr PartitionSession;
+    const TDuration OperationTimeout;
     TEvGen EvGen;
     size_t MaxEventsBatchSize = std::numeric_limits<size_t>::max();
     std::queue<NYdb::NTopic::TReadSessionEvent::TEvent> Events;
+    std::atomic<bool> Closed = false;
 };
 
 class TMockPqWriteSession final : private TMockSessionBase, private NYdb::NTopic::TContinuationTokenIssuer, public IMockPqWriteSession, public NYdb::NTopic::IWriteSession {
 public:
-    explicit TMockPqWriteSession(TDuration operationTimeout)
+    using TPtr = std::shared_ptr<TMockPqWriteSession>;
+
+    TMockPqWriteSession(const bool lockFromStart, const TDuration operationTimeout)
         : OperationTimeout(operationTimeout)
     {
-        Events.emplace(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent(std::move(IssueContinuationToken())));
-        FillPromise();
+        if (lockFromStart) {
+            Lock();
+        }
+
+        AddEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent(std::move(IssueContinuationToken())));
     }
 
     //// IReadSession interface implementation
@@ -282,35 +304,38 @@ public:
     }
 
     void Write(NYdb::NTopic::TContinuationToken&& continuationToken, NYdb::NTopic::TWriteMessage&& message, NYdb::TTransactionBase* /*tx*/) final {
-        Write(std::move(continuationToken), message.Data, message.SeqNo_, message.CreateTimestamp_);
-    }
+        AddAck(message.SeqNo_ ? *message.SeqNo_ : 0);
+        AddEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent(std::move(continuationToken)));
 
-    void Write(NYdb::NTopic::TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> /*createTimestamp*/) final {
         const auto lock = Guard();
 
-        Events.emplace(NYdb::NTopic::TWriteSessionEvent::TAcksEvent{.Acks = {NYdb::NTopic::TWriteSessionEvent::TWriteAck{
-            .SeqNo = seqNo ? *seqNo : 0,
-            .State = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN,
-        }}});
-
-        Events.emplace(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent(std::move(continuationToken)));
-
-        if (!Locked) {
-            FillPromise();
+        if (const auto& publication = message.DeferredPublication_) {
+            UnpublishedData[publication->IntPublicationId].emplace_back(message.Data);
+        } else {
+            Data.emplace_back(message.Data);
         }
+    }
 
-        Data.emplace_back(data);
+    void Write(NYdb::NTopic::TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) final {
+        NYdb::NTopic::TWriteMessage message(data);
+        message.SeqNo(seqNo);
+        message.CreateTimestamp(createTimestamp);
+        Write(std::move(continuationToken), std::move(message), /* tx */ nullptr);
     }
 
     void WriteEncoded(NYdb::NTopic::TContinuationToken&& continuationToken, NYdb::NTopic::TWriteMessage&& params, NYdb::TTransactionBase* tx) final {
         Write(std::move(continuationToken), std::move(params), tx);
     }
 
-    void WriteEncoded(NYdb::NTopic::TContinuationToken&& continuationToken, std::string_view data, NYdb::NTopic::ECodec /*codec*/, uint32_t /*originalSize*/, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) final {
-        Write(std::move(continuationToken), data, seqNo, createTimestamp);
+    void WriteEncoded(NYdb::NTopic::TContinuationToken&& continuationToken, std::string_view data, NYdb::NTopic::ECodec codec, uint32_t originalSize, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) final {
+        auto message = NYdb::NTopic::TWriteMessage::CompressedMessage(data, codec, originalSize);
+        message.SeqNo(seqNo);
+        message.CreateTimestamp(createTimestamp);
+        Write(std::move(continuationToken), std::move(message), /* tx */ nullptr);
     }
 
     bool Close(TDuration /*closeTimeout*/) final {
+        Closed = true;
         return true;
     }
 
@@ -319,6 +344,10 @@ public:
     }
 
     //// Mock API implementation
+
+    void AddCloseSessionEvent(NYdb::EStatus status, NYdb::NIssue::TIssues issues) final {
+        AddEvent(NYdb::NTopic::TSessionClosedEvent(status, std::move(issues)));
+    }
 
     std::vector<TString> ExtractData() final {
         const auto lock = Guard();
@@ -362,11 +391,43 @@ public:
         }
     }
 
+    void ExpectSessionClosed() final {
+        WaitFor(OperationTimeout, "close write session", [this]() {
+            return Closed.load();
+        });
+    }
+
+    void EnsureEmpty() final {
+        const auto lock = Guard();
+        UNIT_ASSERT_VALUES_EQUAL(Data.size(), 0);
+    }
+
     void Lock() final {
         const auto lock = Guard();
 
         Locked = true;
         ClearPromise();
+    }
+
+    void LockAcks() final {
+        const auto lock = Guard();
+
+        if (!std::exchange(AcksLocked, true)) {
+            std::queue<NYdb::NTopic::TWriteSessionEvent::TEvent> newEvents;
+
+            while (!Events.empty()) {
+                auto event = std::move(Events.front());
+                Events.pop();
+
+                if (std::holds_alternative<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(event)) {
+                    DeferredAcks.emplace_back(std::move(std::get<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(event)));
+                } else {
+                    newEvents.push(std::move(event));
+                }
+            }
+
+            Events = std::move(newEvents);
+        }
     }
 
     void Unlock() final {
@@ -378,67 +439,169 @@ public:
         }
     }
 
+    void UnlockAcks(const NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState status) final {
+        const auto lock = Guard();
+
+        AcksLocked = false;
+
+        while (!DeferredAcks.empty()) {
+            auto event = std::move(DeferredAcks.front());
+            DeferredAcks.pop_front();
+
+            for (auto& ack : event.Acks) {
+                ack.State = status;
+            }
+
+            AddEvent(std::move(event));
+        }
+    }
+
+    void WaitAcks(const ui64 count) final {
+        WaitFor(OperationTimeout, "wait acks", [this, count](TString& error) {
+            const auto lock = Guard();
+            UNIT_ASSERT_C(AcksLocked, "Acks not locked");
+
+            ui64 acksSCount = 0;
+            for (const auto& event : DeferredAcks) {
+                acksSCount += event.Acks.size();
+            }
+
+            error = TStringBuilder() << acksSCount << " / " << count << " acks";
+            return acksSCount >= count;
+        });
+    }
+
+    //// Internal API
+
+    void CommitDeferredPublication(const ui64 publicationIntId) {
+        const auto lock = Guard();
+
+        const auto it = UnpublishedData.find(publicationIntId);
+        if (it == UnpublishedData.end()) {
+            return;
+        }
+
+        Data.insert(Data.end(), it->second.begin(), it->second.end());
+        UnpublishedData.erase(it);
+    }
+
+    void CancelDeferredPublication(const ui64 publicationIntId) {
+        const auto lock = Guard();
+        UnpublishedData.erase(publicationIntId);
+    }
+
 private:
+    void AddAck(const ui64 seqNo) {
+        auto ack = NYdb::NTopic::TWriteSessionEvent::TWriteAck{
+            .SeqNo = seqNo,
+            .State = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN,
+        };
+
+        const auto lock = Guard();
+
+        if (AcksLocked) {
+            if (DeferredAcks.empty()) {
+                DeferredAcks.emplace_back();
+            }
+
+            DeferredAcks.back().Acks.emplace_back(std::move(ack));
+        } else {
+            AddEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent{.Acks = {std::move(ack)}});
+        }
+    }
+
+    void AddEvent(NYdb::NTopic::TWriteSessionEvent::TEvent&& ev) {
+        const auto lock = Guard();
+
+        Events.emplace(std::move(ev));
+
+        if (!Locked) {
+            FillPromise();
+        }
+    }
+
     const TDuration OperationTimeout;
     std::vector<TString> Data;
+    std::unordered_map<ui64, std::vector<TString>> UnpublishedData;
     bool Locked = false;
+    bool AcksLocked = false;
     std::queue<NYdb::NTopic::TWriteSessionEvent::TEvent> Events;
+    std::deque<NYdb::NTopic::TWriteSessionEvent::TAcksEvent> DeferredAcks;
+    std::atomic<bool> Closed = false;
 };
 
 class TMockPqGateway final : public IMockPqGateway {
-    class TMockTopicClient final : public NYql::ITopicClient {
+    class TMockTopicClient final : public NFq::IMessageStreamClient {
     public:
-        explicit TMockTopicClient(TMockPqGateway* self)
-            : Self(self)
-        {}
-
-        NYdb::TAsyncStatus CreateTopic(const TString& /*path*/, const NYdb::NTopic::TCreateTopicSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
+        TMockTopicClient(const TString& stream, TMockPqGateway* const self)
+            : Stream(stream)
+            , Gateway(self)
+        {
+            if (Stream.empty()) {
+                ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::InvalidArgument) << "Stream name must be nonempty";
+            }
         }
 
-        NYdb::TAsyncStatus AlterTopic(const TString& /*path*/, const NYdb::NTopic::TAlterTopicSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
+        const TString& GetStream() const override {
+            return Stream;
         }
 
-        NYdb::TAsyncStatus DropTopic(const TString& /*path*/, const NYdb::NTopic::TDropTopicSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
+        NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamDescription>> DescribeStream() override {
+            auto settings = Gateway->Settings.DefaultTopicSettings;
+            if (const auto it = Gateway->Settings.Topics.find(Stream); it != Gateway->Settings.Topics.end()) {
+                settings = it->second;
+            }
+
+            NFq::TMessageStreamDescription description;
+            description.Consumers.emplace();
+            for (const auto& consumer : settings.Consumers) {
+                description.Consumers->push_back({.Name = consumer});
+            }
+            for (ui64 id = 0; id < settings.PartitionCount; ++id) {
+                description.Partitions.push_back({.PartitionId = {id}});
+            }
+            return NThreading::MakeFuture(NFq::TMessageStreamResult<NFq::TMessageStreamDescription>::Success(std::move(description)));
         }
 
-        NYdb::NTopic::TAsyncDescribeTopicResult DescribeTopic(const TString& /*path*/, const NYdb::NTopic::TDescribeTopicSettings& /*settings*/) final {
-            Ydb::Topic::DescribeTopicResult describe;
-            describe.add_partitions();
-            return NThreading::MakeFuture(NYdb::NTopic::TDescribeTopicResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(describe)));
+        NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> DescribeConsumer(
+            const TString&, const NFq::TMessageStreamDescribeConsumerSettings&) override
+        {
+            return Unsupported<NFq::TMessageStreamConsumerDescription>("DescribeConsumer");
         }
 
-        NYdb::NTopic::TAsyncDescribeConsumerResult DescribeConsumer(const TString& /*path*/, const TString& /*consumer*/, const NYdb::NTopic::TDescribeConsumerSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
+        NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(NFq::TMessageStreamPartitionId) override {
+            return Unsupported<NFq::TMessageStreamPartitionDescription>("DescribePartition");
         }
 
-        NYdb::NTopic::TAsyncDescribePartitionResult DescribePartition(const TString& /*path*/, i64 /*partitionId*/, const NYdb::NTopic::TDescribePartitionSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
+        std::shared_ptr<NFq::IMessageStreamReadSession> CreateReadSession(const NFq::TMessageStreamReadSessionSettings& settings) override {
+            settings.Validate();
+            if (settings.OffsetResetPolicy != NFq::EMessageStreamOffsetResetPolicy::Earliest) {
+                ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::Unsupported)
+                    << "Mock supports only Earliest offset reset policy";
+            }
+            if (settings.PartitionIds.size() != 1) {
+                ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::Unsupported)
+                    << "Mock stream " << Stream << " requires exactly one explicitly assigned partition";
+            }
+            return NYql::WrapYdbReadSession(Gateway->CreateReadSession(Stream, settings.PartitionIds.front().Value));
         }
 
-        std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) final {
-            Y_ENSURE(settings.Topics_.size() == 1, "Expected only one topic to read, but got " << settings.Topics_.size());
-            const auto& topic = settings.Topics_.front();
-            Y_ENSURE(topic.PartitionIds_.size() == 1, "Expected only one partition to read, but got " << topic.PartitionIds_.size());
-            return Self->CreateReadSession(topic.Path_, topic.PartitionIds_.front());
-        }
-
-        std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const NYdb::NTopic::TWriteSessionSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
-        }
-
-        std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NTopic::TWriteSessionSettings& settings) final {
-            return Self->CreateWriteSession(settings.Path_);
-        }
-
-        NYdb::TAsyncStatus CommitOffset(const TString& /*path*/, ui64 /*partitionId*/, const TString& /*consumerName*/, ui64 /*offset*/, const NYdb::NTopic::TCommitOffsetSettings& /*settings*/) final {
-            Y_ENSURE(false, "Not implemented");
+        NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> CommitPosition(
+            NFq::TMessageStreamPartitionId, const TString&, ui64) override
+        {
+            return Unsupported<NFq::TMessageStreamConsumerPosition>("CommitPosition");
         }
 
     private:
-        TMockPqGateway* Self;
+        template <class TValue>
+        NThreading::TFuture<NFq::TMessageStreamResult<TValue>> Unsupported(const TString& operation) const {
+            return NThreading::MakeFuture(NFq::TMessageStreamResult<TValue>::Failure(NFq::EMessageStreamStatus::Unsupported,
+                {NYql::TIssue(TStringBuilder() << operation << " is not implemented for mock stream " << Stream)}));
+        }
+
+        const TString Stream;
+        // The gateway does not retain clients, so this ownership has no cycle.
+        const TIntrusivePtr<TMockPqGateway> Gateway;
     };
 
     class TMockFederatedTopicClient final : public NYql::IFederatedTopicClient {
@@ -470,13 +633,256 @@ class TMockPqGateway final : public IMockPqGateway {
         }
 
     private:
-        TMockPqGateway* Self;
+        const TIntrusivePtr<TMockPqGateway> Self;
+    };
+
+    class TMockDeferredPublishClient final : public IMockPqDeferredPublishClient, public NYql::IDeferredPublishClient {
+        struct TPublicationInfo {
+            const std::string ExtPublicationId;
+            const std::optional<std::string> WriterIdentity;
+        };
+
+    public:
+        using TPtr = TIntrusivePtr<TMockDeferredPublishClient>;
+
+        explicit TMockDeferredPublishClient(const TMockPqGateway* const self)
+            : OperationTimeout(self->Settings.OperationTimeout)
+        {}
+
+        //// IDeferredPublishClient interface implementation
+
+        NYdb::NTopic::TAsyncBeginPublicationResult BeginPublication(const TString& extPublicationId, const NYdb::NTopic::TBeginPublicationSettings& settings) final {
+            if (const auto handler = GetRequestHandler()) {
+                ui64 intId = 0;
+                with_lock (Mutex) {
+                    intId = ++PublicationIntId;
+                }
+                return DispatchRequest<NYdb::NTopic::TBeginPublicationResult>(handler, {
+                    .Method = EMethod::Begin,
+                    .PublicationId = intId,
+                    .ExternalId = extPublicationId,
+                    .WriterIdentity = settings.WriterIdentity_,
+                }, [intId, extPublicationId](NYdb::EStatus status, std::vector<NYdb::NTopic::TPublicationSummary>) {
+                    return NYdb::NTopic::TBeginPublicationResult(NYdb::TStatus(status, {}), NYdb::NTopic::TDeferredPublication(intId, extPublicationId));
+                });
+            }
+
+            ui64 intId = 0;
+            with_lock (Mutex) {
+                intId = ++PublicationIntId;
+                Y_ENSURE(CreatedExtPublicationIds.emplace(extPublicationId).second, "Publication " << extPublicationId << " already created");
+                Y_ENSURE(OpenedPublications.emplace(intId, TPublicationInfo{.ExtPublicationId = extPublicationId, .WriterIdentity = settings.WriterIdentity_}).second, "Publication #" << intId << " already opened");
+            }
+
+            return NThreading::MakeFuture<NYdb::NTopic::TBeginPublicationResult>(NYdb::NTopic::TBeginPublicationResult(
+                NYdb::TStatus(NYdb::EStatus::SUCCESS, {}),
+                NYdb::NTopic::TDeferredPublication(intId, extPublicationId)
+            ));
+        }
+
+        NYdb::NTopic::TAsyncPublishResult Publish(const NYdb::NTopic::TDeferredPublication& publication, const NYdb::NTopic::TPublishSettings& settings) final {
+            Y_UNUSED(settings);
+
+            if (const auto handler = GetRequestHandler()) {
+                return DispatchRequest<NYdb::NTopic::TPublishResult>(handler, {
+                    .Method = EMethod::Publish,
+                    .PublicationId = publication.IntPublicationId,
+                    .ExternalId = publication.ExtPublicationId ? TString(*publication.ExtPublicationId) : TString(),
+                }, [](NYdb::EStatus status, std::vector<NYdb::NTopic::TPublicationSummary>) {
+                    return NYdb::NTopic::TPublishResult(NYdb::TStatus(status, {}));
+                });
+            }
+
+            const ui64 intId = publication.IntPublicationId;
+
+            with_lock (Mutex) {
+                if (CommitsLocked) {
+                    auto promise = NThreading::NewPromise<NYdb::NTopic::TPublishResult>();
+                    DeferredCommits.emplace_back(promise, intId);
+                    return promise.GetFuture();
+                }
+
+                return NThreading::MakeFuture<NYdb::NTopic::TPublishResult>(DoCommitDeferredPublication(intId));
+            }
+        }
+
+        NYdb::NTopic::TAsyncCancelPublicationResult CancelPublication(const NYdb::NTopic::TDeferredPublication& publication, const NYdb::NTopic::TCancelPublicationSettings& /*settings*/) final {
+            if (const auto handler = GetRequestHandler()) {
+                return DispatchRequest<NYdb::NTopic::TCancelPublicationResult>(handler, {
+                    .Method = EMethod::Cancel,
+                    .PublicationId = publication.IntPublicationId,
+                    .ExternalId = publication.ExtPublicationId ? TString(*publication.ExtPublicationId) : TString(),
+                }, [](NYdb::EStatus status, std::vector<NYdb::NTopic::TPublicationSummary>) {
+                    return NYdb::NTopic::TCancelPublicationResult(NYdb::TStatus(status, {}));
+                });
+            }
+
+            with_lock (Mutex) {
+                const auto it = OpenedPublications.find(publication.IntPublicationId);
+                if (it == OpenedPublications.end()) {
+                    return NThreading::MakeFuture(NYdb::NTopic::TCancelPublicationResult(NYdb::TStatus(NYdb::EStatus::NOT_FOUND, {})));
+                }
+
+                CreatedExtPublicationIds.erase(TString(it->second.ExtPublicationId));
+                OpenedPublications.erase(it);
+                for (const auto& writeSession : WriteSessions) {
+                    writeSession->CancelDeferredPublication(publication.IntPublicationId);
+                }
+            }
+            return NThreading::MakeFuture(NYdb::NTopic::TCancelPublicationResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+        }
+
+        NYdb::NTopic::TAsyncListPublicationsResult ListPublications(const NYdb::NTopic::TListPublicationsSettings& settings) final {
+            if (const auto handler = GetRequestHandler()) {
+                return DispatchRequest<NYdb::NTopic::TListPublicationsResult>(handler, {
+                    .Method = EMethod::List,
+                    .WriterIdentity = settings.WriterIdentity_,
+                }, [](NYdb::EStatus status, std::vector<NYdb::NTopic::TPublicationSummary> publications) {
+                    return NYdb::NTopic::TListPublicationsResult(NYdb::TStatus(status, {}), std::move(publications));
+                });
+            }
+
+            std::vector<NYdb::NTopic::TPublicationSummary> publications;
+            with_lock (Mutex) {
+                for (const auto& [intId, info] : OpenedPublications) {
+                    if (!settings.WriterIdentity_ || settings.WriterIdentity_ == info.WriterIdentity) {
+                        publications.push_back({
+                            .IntPublicationId = intId,
+                            .ExtPublicationId = info.ExtPublicationId,
+                            .WriterIdentity = info.WriterIdentity,
+                        });
+                    }
+                }
+            }
+            return NThreading::MakeFuture(NYdb::NTopic::TListPublicationsResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(publications)));
+        }
+
+        //// Mock API implementation
+
+        void SetRequestHandler(TRequestHandler handler) final {
+            with_lock (Mutex) {
+                RequestHandler = std::move(handler);
+            }
+        }
+
+        void EnsureOpenedPublications(ui64 count, const TString& nameSubstring) final {
+            with_lock (Mutex) {
+                UNIT_ASSERT_VALUES_EQUAL(OpenedPublications.size(), count);
+                for (const auto& [intId, info] : OpenedPublications) {
+                    UNIT_ASSERT_STRING_CONTAINS_C(info.ExtPublicationId, nameSubstring, intId);
+                    UNIT_ASSERT_C(info.WriterIdentity, intId);
+                    UNIT_ASSERT_STRING_CONTAINS_C(*info.WriterIdentity, nameSubstring, intId);
+                }
+            }
+        }
+
+        void LockCommits() final {
+            with_lock (Mutex) {
+                CommitsLocked = true;
+            }
+        }
+
+        void UnlockCommits() final {
+            with_lock (Mutex) {
+                CommitsLocked = false;
+
+                for (auto& [promise, intId] : DeferredCommits) {
+                    promise.SetValue(DoCommitDeferredPublication(intId));
+                }
+                DeferredCommits.clear();
+            }
+        }
+
+        void WaitCommits(ui64 count) final {
+            WaitFor(OperationTimeout, TStringBuilder() << "wait #" << count << " commits", [this, count](TString& errorString) {
+                ui64 commitsCount = 0;
+                with_lock (Mutex) {
+                    UNIT_ASSERT_C(CommitsLocked, "Commits are not locked");
+                    commitsCount = DeferredCommits.size();
+                }
+
+                UNIT_ASSERT_C(commitsCount <= count, TStringBuilder() << "expected " << count << " commits, got " << commitsCount);
+
+                errorString = TStringBuilder() << "received " << commitsCount << " / " << count << " commits";
+                return commitsCount >= count;
+            });
+        }
+
+        void ClearCommits() final {
+            with_lock (Mutex) {
+                UNIT_ASSERT_C(CommitsLocked, "Commits are not locked");
+
+                DeferredCommits.clear();
+            }
+        }
+
+        void AcceptCommits(NYdb::EStatus status, NYdb::NIssue::TIssues issues) final {
+            with_lock (Mutex) {
+                UNIT_ASSERT_C(CommitsLocked, "Commits are not locked");
+
+                const auto result = NYdb::NTopic::TPublishResult(NYdb::TStatus(status, std::move(issues)));
+                for (auto& [promise, intId] : DeferredCommits) {
+                    if (status == NYdb::EStatus::SUCCESS) {
+                        DoCommitDeferredPublication(intId);
+                    }
+
+                    promise.SetValue(result);
+                }
+
+                DeferredCommits.clear();
+            }
+        }
+
+        //// Internal API
+
+        void RegisterWriteSession(TMockPqWriteSession::TPtr writeSession) {
+            with_lock (Mutex) {
+                WriteSessions.emplace_back(std::move(writeSession));
+            }
+        }
+
+    private:
+        TRequestHandler GetRequestHandler() {
+            with_lock (Mutex) {
+                return RequestHandler;
+            }
+        }
+
+        template <typename TResult, typename TMakeResult>
+        static NThreading::TFuture<TResult> DispatchRequest(const TRequestHandler& handler, TRequest request, TMakeResult makeResult) {
+            auto promise = NThreading::NewPromise<TResult>();
+            request.Reply = [promise, makeResult = std::move(makeResult)](NYdb::EStatus status, std::vector<NYdb::NTopic::TPublicationSummary> publications) mutable {
+                promise.SetValue(makeResult(status, std::move(publications)));
+            };
+            handler(std::move(request));
+            return promise.GetFuture();
+        }
+
+        NYdb::NTopic::TPublishResult DoCommitDeferredPublication(ui64 intId) {
+            Y_ENSURE(OpenedPublications.erase(intId) == 1, "Publication #" << intId << " is not opened");
+
+            for (const auto& writeSession : WriteSessions) {
+                writeSession->CommitDeferredPublication(intId);
+            }
+
+            return NYdb::NTopic::TPublishResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}));
+        }
+
+        const TDuration OperationTimeout;
+        TMutex Mutex;
+        TRequestHandler RequestHandler;
+        ui64 PublicationIntId = 0;
+        std::unordered_set<TString> CreatedExtPublicationIds;
+        std::unordered_map<ui64, TPublicationInfo> OpenedPublications;
+        std::vector<TMockPqWriteSession::TPtr> WriteSessions;
+        bool CommitsLocked = false;
+        std::vector<std::pair<NThreading::TPromise<NYdb::NTopic::TPublishResult>, ui64>> DeferredCommits;
     };
 
     struct TTopicInfo {
         std::unordered_map<ui64, IMockPqReadSession::TPtr> ReadSessionsByPartition;
-        ui64 LastCreatedPartitionId = 0;
-        IMockPqWriteSession::TPtr WriteSession;
+        std::queue<ui64> CreatedPartitionIds;
+        TMockPqWriteSession::TPtr WriteSession;
     };
 
 public:
@@ -519,9 +925,15 @@ public:
         return NThreading::MakeFuture<TListStreams>(std::move(streams));
     }
 
-    IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& /*sessionId*/, const TString& /*cluster*/, const TString& /*database*/, const TString& /*path*/, const TString& /*token*/) final {
+    IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& /*sessionId*/, const TString& /*cluster*/, const TString& /*database*/, const TString& path, const TString& /*token*/) final {
+        auto topicSettings = Settings.DefaultTopicSettings;
+        if (const auto it = Settings.Topics.find(path); it != Settings.Topics.end()) {
+            topicSettings = it->second;
+        }
+
         return NThreading::MakeFuture<TDescribeFederatedTopicResult>(IPqGateway::TDescribeFederatedTopicResult{{
-            .PartitionsCount = 1,
+            .PartitionsCount = topicSettings.PartitionCount,
+            .Consumers = {topicSettings.Consumers.begin(), topicSettings.Consumers.end()},
         }});
     }
 
@@ -531,12 +943,17 @@ public:
     void UpdateClusterConfigs(const NYql::TPqGatewayConfigPtr& /*config*/) final {
     }
 
-    NYql::ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& /*driver*/, const NYdb::NTopic::TTopicClientSettings& /*settings*/) final {
-        return MakeIntrusive<TMockTopicClient>(this);
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const TString& stream, const NYdb::TDriver& /*driver*/, const NYdb::NTopic::TTopicClientSettings& /*settings*/) final {
+        return std::make_shared<TMockTopicClient>(stream, this);
     }
 
     NYql::IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& /*driver*/, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& /*settings*/) final {
         return MakeIntrusive<TMockFederatedTopicClient>(this);
+    }
+
+    NYql::IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver& /*driver*/, const NYdb::TCommonClientSettings& /*settings*/) final {
+        SetupDeferredPublishClient();
+        return DeferredPublishClient;
     }
 
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const final {
@@ -556,12 +973,16 @@ public:
         IMockPqReadSession::TPtr session;
         with_lock (Mutex) {
             auto& info = Topics[topic];
-            auto it = info.ReadSessionsByPartition.find(info.LastCreatedPartitionId);
-            if (it != info.ReadSessionsByPartition.end()) {
-                session = std::move(it->second);
-                info.ReadSessionsByPartition.erase(it);
+            if (info.CreatedPartitionIds.empty()) {
+                return session;
             }
+
+            const auto it = info.ReadSessionsByPartition.find(info.CreatedPartitionIds.front());
+            Y_ENSURE(it != info.ReadSessionsByPartition.end());
+            info.CreatedPartitionIds.pop();
+            session = it->second;
         }
+
         return session;
     }
 
@@ -597,6 +1018,11 @@ public:
         });
     }
 
+    IMockPqDeferredPublishClient& GetDeferredPublishClientController() final {
+        SetupDeferredPublishClient();
+        return *DeferredPublishClient;
+    }
+
 private:
     TTopicInfo& GetTopicInfo(const TString& topic) {
         with_lock (Mutex) {
@@ -606,12 +1032,12 @@ private:
 
     std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const std::string& topic, ui64 partitionId) {
         const TString path(topic);
-        auto session = std::make_shared<TMockPqReadSession>(path, partitionId);
+        auto session = std::make_shared<TMockPqReadSession>(path, partitionId, Settings.OperationTimeout);
 
         with_lock (Mutex) {
             auto& info = Topics[path];
             info.ReadSessionsByPartition[partitionId] = session;
-            info.LastCreatedPartitionId = partitionId;
+            info.CreatedPartitionIds.emplace(partitionId);
         }
 
         if (Settings.Runtime && Settings.Notifier) {
@@ -623,15 +1049,14 @@ private:
 
     std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const std::string& topic) {
         auto& info = GetTopicInfo(TString(topic));
-        auto session = std::make_shared<TMockPqWriteSession>(Settings.OperationTimeout);
-
-        if (Settings.LockWritingByDefault) {
-            session->Lock();
-        }
+        auto session = std::make_shared<TMockPqWriteSession>(Settings.LockWritingByDefault, Settings.OperationTimeout);
 
         with_lock (Mutex) {
             info.WriteSession = session;
         }
+
+        SetupDeferredPublishClient();
+        DeferredPublishClient->RegisterWriteSession(session);
 
         return session;
     }
@@ -651,9 +1076,18 @@ private:
         return session;
     }
 
+    void SetupDeferredPublishClient() {
+        with_lock (Mutex) {
+            if (!DeferredPublishClient) {
+                DeferredPublishClient = MakeIntrusive<TMockDeferredPublishClient>(this);
+            }
+        }
+    }
+
 private:
     TMockPqGatewaySettings Settings;
     TMutex Mutex;
+    TMockDeferredPublishClient::TPtr DeferredPublishClient;
     std::unordered_set<TString> Sessions;
     std::unordered_map<TString, TTopicInfo> Topics;
 };

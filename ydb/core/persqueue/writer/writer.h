@@ -17,7 +17,7 @@ namespace NKikimr::NPQ {
 
 struct TDeferredPublishWriterOpts {
     ui64 IntPublicationId = 0;
-    TString ExtPublicationId;
+    TMaybe<TString> ExtPublicationId;
 };
 
 struct TEvPartitionWriter {
@@ -257,8 +257,8 @@ struct TPartitionWriterOpts {
     TPartitionWriterOpts& WithKafkaProducerInstanceId(const std::optional<NKafka::TProducerInstanceId>& value) { KafkaProducerInstanceId = value; return *this; }
     TPartitionWriterOpts& WithKafkaTransactionalId(const std::optional<TString>& value) { KafkaTransactionalId = value; return *this; }
     TPartitionWriterOpts& WithTrackProducerId(bool value) { TrackProducerId = value; return *this; }
-    TPartitionWriterOpts& WithDeferredPublish(ui64 intPublicationId, const TString& extPublicationId) {
-        DeferredPublish = TDeferredPublishWriterOpts{intPublicationId, extPublicationId};
+    TPartitionWriterOpts& WithDeferredPublish(ui64 intPublicationId, TMaybe<TString> extPublicationId = Nothing()) {
+        DeferredPublish = TDeferredPublishWriterOpts{intPublicationId, std::move(extPublicationId)};
         return *this;
     }
 };

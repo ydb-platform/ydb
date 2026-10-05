@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_generic_cluster_config.cpp
@@ -28,8 +28,6 @@ SRCS(
     yql_generic_utils.cpp
 )
 
-YQL_LAST_ABI_VERSION()
-
 PEERDIR(
     contrib/libs/fmt
     library/cpp/json
@@ -55,6 +53,7 @@ PEERDIR(
     yql/essentials/providers/common/transform
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/providers/dq/mkql
     ydb/library/yql/providers/generic/expr_nodes
     ydb/library/yql/providers/generic/proto
     yql/essentials/providers/common/proto

@@ -12,7 +12,7 @@ import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/s3_settings.proto";
 import "ydb/core/protos/schemeshard/operations.proto";
 import "ydb/core/protos/subdomains.proto";
-import "ydb/core/protos/sys_view_types.proto";
+import "ydb/core/protos/table_metrics_settings.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/test_shard_control.proto";
@@ -100,6 +100,12 @@ message TColumnCompression {
     optional int64 Level = 2;
 }
 
+message TDefaultExpressionColumnDescription {
+    optional string ExprText = 1;
+    repeated string DependencyColumnNames = 2;
+    optional bool Stored = 3 [default = false];
+}
+
 message TColumnDescription {
     optional string Name = 1;
     optional string Type = 2;
@@ -112,6 +118,7 @@ message TColumnDescription {
         string DefaultFromSequence = 7; // Path to sequence for default values
         Ydb.TypedValue DefaultFromLiteral = 10; // Literal default value
         google.protobuf.NullValue EmptyDefault = 12; // Drop default case
+        TDefaultExpressionColumnDescription DefaultFromExpression = 15; // GENERATED ALWAYS AS (<expr>)
     }
     optional bool NotNull = 8;
     // flag that indicates that column is currently under the build
@@ -257,6 +264,7 @@ message TTTLSettings {
 
     message TEvictionToExternalStorageSettings {
         optional string Storage = 1;
+        optional string ObjectKeyPrefix = 2;
     }
 
     message TTier {
@@ -284,69 +292,6 @@ message TTTLSettings {
     }
 
     reserved 3;
-}
-
-/**
- * The parameters for the detailed metrics for the given table.
- */
-message TTableDetailedMetricsSettings {
-    /**
-     * The level at which detailed metrics are aggregated and reported.
-     */
-    enum EMetricsLevel {
-        /**
-         * The detailed metrics level is not specified.
-         */
-        MetricsLevelUnspecified = 0;
-
-        /**
-         * All detailed metrics are disabled for the given table.
-         */
-        MetricsLevelDisabled = 1;
-
-        /**
-         * Detailed metrics are aggregated and reported for the entire table.
-         */
-        MetricsLevelTable = 2;
-
-        /**
-         * Detailed metrics are aggregated and reported for individual partitions.
-         */
-        MetricsLevelPartition = 3;
-    }
-
-    /**
-     * The container for the detailed metrics settings, which are explicitly configured.
-     */
-    message TConfigured {
-        /**
-         * The level at which detailed metrics are aggregated and reported.
-         */
-        optional EMetricsLevel MetricsLevel = 1;
-    }
-
-    /**
-     * The container for the detailed metrics settings, which are explicitly removed.
-     */
-    message TNotConfigured {
-    }
-
-    oneof Status {
-        /**
-         * Set, if the detailed metrics settings are explicitly configured.
-         */
-        TConfigured Configured = 1;
-
-        /**
-         * Set, if the detailed metrics settings are explicitly removed.
-         *
-         * @note This is used in ALTER TABLE requests to remove the detailed metrics settings,
-         *       which are currently configured for the given table. If the detailed metrics
-         *       settings are not configured, the corresponding DetailedMetricsSettings field
-         *       in the table description will not be set.
-         */
-        TNotConfigured NotConfigured = 2;
-    }
 }
 
 message TTableReplicationConfig {
@@ -478,6 +423,10 @@ message TTableDescription {
     // Multi-column statistics.
     repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 53;
     repeated string DropMultiColumnStatistics = 54;
+
+    // Actual number of table partitions (shards), always filled in describe
+    // results, so clients don't need to request the TablePartitions list.
+    optional uint64 PartitionCount = 55;
 }
 
 message TCompressionOptions {
@@ -666,6 +615,7 @@ message TOlapIndexDescription {
 enum EMultiColumnStatisticsType {
     MULTI_COLUMN_STATISTICS_UNSPECIFIED = 0;
     COUNT_MIN_SKETCH = 1;
+    EQ_HEIGHT_HISTOGRAM = 2;
 }
 
 // Multi-column table statistics
@@ -808,6 +758,8 @@ message TColumnTableSchemeOptions {
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
+    optional bool DeduplicationEnabled = 7;
+    optional bool CacheBlobsAfterWrite = 8 [default = false];
 }
 
 message TColumnTableSchema {
@@ -854,6 +806,8 @@ message TColumnTableRequestedOptions {
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
+    optional bool DeduplicationEnabled = 7;
+    optional bool CacheBlobsAfterWrite = 8 [default = false];
 }
 
 message TAlterColumnTableSchema {
@@ -1469,6 +1423,7 @@ message TIndexAlteringConfig {
         TBloomNGrammFilter BloomNGrammFilterDescription = 9;
     }
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
+    repeated string DataColumnNames = 10;
 }
 
 message TIndexedTableCreationConfig {
@@ -1862,6 +1817,12 @@ message TSplitMergeTablePartitions {
     optional uint64 SchemeshardId = 6;          // Only needed if TableId is used instead of path
     optional uint64 TableOwnerId = 7;
     optional bool AllowOneToOneSplitMerge = 8;  // Allow a special 1-to-1 split/merge for emergencies
+    // Internal, set by the auto-split path only. Answers one predicate for the partition
+    // lineage signal: "does this op count toward the by-load split lineage?" true = split
+    // proposed by the by-load path; false/absent = by-size split, manual split, merge, or
+    // one-to-one (none of which deepen LoadSplitLineageDepth). Split-vs-merge is NOT
+    // encoded here: it is derived from the op shape (src/dst counts) at completion.
+    optional bool LoadSplitLineage = 9;
 }
 
 message TUserAttribute {
@@ -1961,6 +1922,10 @@ message TUpgradeSubDomain {
 message TIndexBuildConfig {
     optional string Table = 1;
     optional TIndexCreationConfig Index = 2;
+    optional bool IsRebuild = 3 [ default = false ];
+    optional string RebuildIndexName = 4;
+    // Internal replica index creation: data comes from source CDC, without destination backfill.
+    optional bool ForReplication = 5 [default = false];
 }
 
 message TIndexBuildControl {
@@ -1969,6 +1934,7 @@ message TIndexBuildControl {
     optional uint64 SnapshotTxId = 3;
     optional uint64 BuildIndexId = 4;
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 5;
+    optional bool ForReplication = 6 [default = false];
 }
 
 message TLockConfig {
@@ -2474,7 +2440,7 @@ message TExternalTableDescription {
     optional string Location = 6;
     repeated TColumnDescription Columns = 7;
     optional bytes Content = 8;
-    optional bool ReplaceIfExists = 9; // Only applicable for `create external table` operation
+    reserved 9; // ReplaceIfExists
 }
 
 // Access without authorization
@@ -2547,7 +2513,7 @@ message TExternalDataSourceDescription {
     optional string Installation = 6;
     optional TAuth Auth = 7;
     optional TExternalDataSourceProperties Properties = 8;
-    optional bool ReplaceIfExists = 9;
+    reserved 9; // ReplaceIfExists
     optional TExternalTableReferences References = 10;
 }
 
@@ -2645,7 +2611,8 @@ message TExportMetadata {
 
 message TSysViewDescription {
     optional string Name = 1;
-    optional NKikimrSysView.ESysViewType Type = 2;
+    // Numeric ESysViewType
+    optional int32 Type = 2 [default = 1];
     optional NKikimrProto.TPathID SourceObject = 3;
 }
 
@@ -2696,4 +2663,5 @@ message TStreamingQueryProperties {
 message TStreamingQueryDescription {
     optional string Name = 1;
     optional TStreamingQueryProperties Properties = 2;
+    optional NActorsProto.TActorId OperationOwnerActorId = 3;
 }

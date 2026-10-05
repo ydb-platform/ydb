@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -23,6 +24,8 @@ namespace configuration
 class OtlpGrpcLogRecordExporterConfiguration : public LogRecordExporterConfiguration
 {
 public:
+  static constexpr std::size_t kDefaultTimeoutMs = 10000;
+
   void Accept(LogRecordExporterConfigurationVisitor *visitor) const override
   {
     visitor->VisitOtlpGrpc(this);
@@ -33,7 +36,7 @@ public:
   std::unique_ptr<HeadersConfiguration> headers;
   std::string headers_list;
   std::string compression;
-  std::size_t timeout{0};
+  std::size_t timeout{kDefaultTimeoutMs};
 };
 
 }  // namespace configuration

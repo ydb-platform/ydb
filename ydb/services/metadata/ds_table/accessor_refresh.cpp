@@ -1,5 +1,7 @@
 #include "accessor_refresh.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NMetadata::NProvider {
 
 void TDSAccessorRefresher::OnBootstrap() {
@@ -20,7 +22,8 @@ void TDSAccessorRefresher::OnNewEnrichedSnapshot(NFetcher::ISnapshot::TPtr snaps
 void TDSAccessorRefresher::OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& qResult, NFetcher::ISnapshot::TPtr snapshot) {
     *ProposedProto.mutable_result_sets() = std::move(*qResult.mutable_result_sets());
     if (!CurrentSnapshot || CurrentSelection.SerializeAsString() != ProposedProto.SerializeAsString()) {
-        ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "New refresher data: " << ProposedProto.DebugString();
+        YDB_LOG_INFO("New refresher",
+            {"data", ProposedProto.DebugString()});
         SnapshotConstructor->EnrichSnapshotData(snapshot, InternalController);
     } else {
         FetchingRequestIsRunning = false;

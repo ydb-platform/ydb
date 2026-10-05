@@ -18,6 +18,9 @@ struct TInput {
     TMaybe<TColumnOrder> Order;
     EInputPriority Priority = External;
     TSet<TString> UsedExternalColumns;
+    bool CaseSensitive = false;
+
+    TMaybe<ui32> FindColumn(TStringBuf name, bool* isVirtual = nullptr) const;
 };
 
 using TInputs = TVector<TInput>;
@@ -41,6 +44,14 @@ const TItemExprType* RemoveAlias(const TItemExprType* item, TExprContext& ctx);
 ////////////////////////////////////////////////////////////////////////////////
 
 TMap<TString, ui32> ExtractExternalColumns(const TExprNode& select);
+
+////////////////////////////////////////////////////////////////////////////////
+
+IGraphTransformer::TStatus AddSqlSelectWarning(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TExprContext& ctx,
+    TStringBuf name);
 
 ////////////////////////////////////////////////////////////////////////////////
 

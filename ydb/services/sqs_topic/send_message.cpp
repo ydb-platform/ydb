@@ -37,15 +37,17 @@
 
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
-#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 
 #include <ydb/services/sqs_topic/billing.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
 
+#include <ydb/library/actors/core/log.h>
+
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/openssl/crypto/sha.h>
 #include <util/generic/guid.h>
+#include <util/string/hex.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -76,17 +78,15 @@ namespace NKikimr::NSqsTopic::V1 {
     }
 
     template <class TDerived, class TServiceRequest>
-    class TSendMessageActorBase: public TQueueUrlHolder, public TGrpcActorBase<TSendMessageActorBase<TDerived, TServiceRequest>, TServiceRequest>, private NPQ::TRlHelpers {
+    class TSendMessageActorBase: public TQueueUrlHolder, public TGrpcActorBase<TSendMessageActorBase<TDerived, TServiceRequest>, TServiceRequest> {
     protected:
         using TBase = TGrpcActorBase<TSendMessageActorBase, TServiceRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
-        using EWakeupTag = NPQ::TRlHelpers::EWakeupTag;
 
     public:
         TSendMessageActorBase(NKikimr::NGRpcService::IRequestOpCtx* request)
             : TQueueUrlHolder(ParseQueueUrlFromRequest<TProtoRequest>(request))
             , TBase(request, GetTopicPath().value_or(""))
-            , NPQ::TRlHelpers({}, request, NBilling::WRITE_BLOCK_SIZE, false)
         {
         }
 
@@ -95,7 +95,6 @@ namespace NKikimr::NSqsTopic::V1 {
         void Bootstrap(const NActors::TActorContext& ctx) {
             TBase::CheckAccessWithWriteTopicPermission = true;
             TBase::Bootstrap(ctx);
-            NPQ::TRlHelpers::Bootstrap(this->SelfId(), ctx);
 
             if (this->Request().queue_url().empty()) {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::MISSING_PARAMETER, "No QueueUrl parameter."));
@@ -104,12 +103,12 @@ namespace NKikimr::NSqsTopic::V1 {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
-            NACLib::TUserToken token(this->Request_->GetSerializedToken());
-            ShouldBeCharged_ = FindPtr(AppData(ctx)->PQConfig.GetNonChargeableUser(), token.GetUserSID()) == nullptr;
-
             PrepareWrite();
+            if (TBase::IsDead) {
+                return;
+            }
 
-            this->SendDescribeProposeRequest(ctx);
+            this->DescribeTopic(NACLib::UpdateRow);
             this->Become(&TSendMessageActorBase::StateWork);
         }
 
@@ -135,7 +134,10 @@ namespace NKikimr::NSqsTopic::V1 {
                         .Index = item.BatchIndex,
                         .MessageBody = std::move(item.MessageBody),
                         .MessageGroupId = toOptional(std::move(item.MessageGroupId)),
-                        .MessageDeduplicationId = toOptional(std::move(item.MessageDeduplicationId)),
+                        // MessageDeduplicationId is supported for FIFO queues only.
+                        .MessageDeduplicationId = QueueUrl_->Fifo
+                            ? toOptional(std::move(item.MessageDeduplicationId))
+                            : std::nullopt,
                         .Attributes = std::move(item.Attributes),
                         .Delay = TDuration::Seconds(item.DelaySeconds),
                     });
@@ -180,7 +182,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void Handle(NPQ::NMLP::TEvWriteResponse::TPtr& ev) {
             WriterActor_ = {};
 
-            if (ev->Get()->DescribeStatus != NPQ::NDescriber::EStatus::SUCCESS) {
+            if (ev->Get()->DescribeStatus != NPQ::NDescriber::EStatus::Success) {
                 auto describerStatus = MapDescriberStatus(FullTopicPath_, ev->Get()->DescribeStatus);
                 this->ReplyWithError(*describerStatus.Error);
                 return;
@@ -222,24 +224,9 @@ namespace NKikimr::NSqsTopic::V1 {
             static_cast<TDerived*>(this)->ReplyAndDie(TlsActivationContext->AsActorContext());
         }
 
-        void Handle(TEvents::TEvWakeup::TPtr& ev) {
-            switch (static_cast<EWakeupTag>(ev->Get()->Tag)) {
-                case EWakeupTag::RlAllowed:
-                    CreateWriter();
-                    return;
-                case EWakeupTag::RlNoResource:
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::THROTTLING_EXCEPTION, "Request was throttled by the rate limiter"));
-                default:
-                    OnWakeup(static_cast<EWakeupTag>(ev->Get()->Tag));
-                    return;
-            }
-        }
-
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NPQ::NMLP::TEvWriteResponse, Handle);
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
-                hFunc(TEvents::TEvWakeup, Handle);
                 default:
                     TBase::StateWork(ev);
             }
@@ -274,52 +261,62 @@ namespace NKikimr::NSqsTopic::V1 {
             return true;
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            // Second navigate: resolve the rate-limiter path from the database
-            // serverless attributes, then proceed with the write.
-            if (TBase::IsRlPathNavigateResponse(ev)) {
-                if (auto rlContext = this->ExtractRlContext(ev)) {
-                    SetRlContext(*rlContext);
-                    if (IsQuotaRequired()) {
-                        const ui64 ru = NBilling::CalcRu(CalcRuConsumption(PayloadSize_), NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, Fifo_, false);
-                        Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()));
-                        return;
-                    }
-                }
-                CreateWriter();
+        void ApplyContentBasedDeduplication(bool enabled) {
+            if (!Fifo_ || !WriterSettings_) {
                 return;
             }
 
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
-            const auto& response = result->ResultSet.front();
-            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION, TStringBuilder() << "Writing to the Changefeed is not supported"));
+            TVector<NPQ::NMLP::TWriterSettings::TMessage> validMessages(Reserve(WriterSettings_->Messages.size()));
+            for (auto& message : WriterSettings_->Messages) {
+                if (!message.MessageDeduplicationId.has_value()) {
+                    if (enabled) {
+                        const auto digest = NOpenSsl::NSha256::Calc(message.MessageBody);
+                        message.MessageDeduplicationId = HexEncode(TStringBuf(
+                            reinterpret_cast<const char*>(digest.data()),
+                            digest.size()));
+                    } else {
+                        Items[message.Index].ValidationError = MakeError(
+                            NSQS::NErrors::MISSING_PARAMETER,
+                            "No MessageDeduplicationId parameter.");
+                        continue;
+                    }
                 }
-                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
-                }
-                // ok
-            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
-                return this->ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
-            } else {
-                return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
+                validMessages.push_back(std::move(message));
             }
+            WriterSettings_->Messages = std::move(validMessages);
+        }
 
-            if (ShouldBeCharged_) {
-                // Always put in request units metering mode
-                SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
-                Fifo_ = QueueUrl_->Fifo;
-
-                // RU-metered topics need the rate-limiter path, which is not carried
-                // by DoLocalRpc requests. Resolve it from the database attributes
-                // before writing so the charge in Handle(TEvWriteResponse) can fire.
-                this->SendRlPathNavigate();
-            } else {
-                CreateWriter();
+        void CreateWriterOrReply() {
+            if (!WriterSettings_ || WriterSettings_->Messages.empty()) {
+                static_cast<TDerived*>(this)->ReplyAndDie(TlsActivationContext->AsActorContext());
+                return;
             }
+            CreateWriter();
+        }
+
+        TTopicDescribePolicy GetTopicDescribePolicy() const {
+            return ExistingQueuePolicy(TString("Writing to the Changefeed is not supported"));
+        }
+
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
+            AFL_ENSURE(topicInfo.Info)("path", FullTopicPath_);
+            Fifo_ = QueueUrl_->Fifo;
+            ApplyContentBasedDeduplication(
+                Fifo_ && topicInfo.Info->Description.GetPQTabletConfig().GetContentBasedDeduplication());
+
+            this->ChargeRequestUnits(TlsActivationContext->AsActorContext());
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::CalcRu(
+                NBilling::PayloadBlocks(PayloadSize_, NBilling::WRITE_BLOCK_SIZE),
+                NBilling::WRITE_BASE_COST,
+                NBilling::WRITE_COST_PER_BLOCK,
+                Fifo_);
+        }
+
+        void OnRequestUnitsCharged(const NActors::TActorContext&) {
+            CreateWriterOrReply();
         }
 
         void Die(const TActorContext& ctx) override {
@@ -329,7 +326,6 @@ namespace NKikimr::NSqsTopic::V1 {
             if (WriterActor_) {
                 ctx.Send(WriterActor_, new TEvents::TEvPoison);
             }
-            NPQ::TRlHelpers::PassAway(this->SelfId());
             this->TBase::Die(ctx);
         }
 
@@ -365,7 +361,6 @@ namespace NKikimr::NSqsTopic::V1 {
 
     private:
         TActorId DescriptorActorId_;
-        bool ShouldBeCharged_{};
         TActorId WriterActor_;
         ui64 PayloadSize_{};
         bool Fifo_{};

@@ -47,7 +47,7 @@ public:
 
         if (ZSTD_isError(size)) {
             THROW_ERROR_EXCEPTION("ZSTD_compressCCtx() failed")
-                << TErrorAttribute("zstd_error", ZSTD_getErrorName(size));
+                .With("zstd_error", ZSTD_getErrorName(size));
         }
         output->Advance(size);
     }

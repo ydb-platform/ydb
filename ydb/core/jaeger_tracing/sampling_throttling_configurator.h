@@ -5,8 +5,6 @@
 #include "throttler.h"
 #include "settings.h"
 
-#include <ydb/core/protos/config.pb.h>
-
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 

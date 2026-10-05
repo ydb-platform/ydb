@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
     {
         Init();
 
-        const TBlockRange64 range = TBlockRange64::WithLength(10, 1000);
+        const TBlockRange16 range = TBlockRange16::WithLength(10, 1000);
         ExpectedRange = range;
 
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
@@ -26,9 +26,9 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
             std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
                 .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
                 .RequestId = 1,
-                .Range = range});
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
 
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap->MakeReadHint(range);
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
             LogTitle,
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
     {
         Init();
 
-        const TBlockRange64 range = TBlockRange64::WithLength(10, 1000);
+        const TBlockRange16 range = TBlockRange16::WithLength(10, 1000);
         ExpectedRange = range;
 
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
@@ -63,15 +63,17 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
             std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
                 .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
                 .RequestId = 1,
-                .Range = range});
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
 
-        DirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(20, 10));
-        DirtyMap.WriteFinished(
-            100,
-            TBlockRange64::WithLength(20, 10),
+        DirtyMap->RegisterInflightWrite(
+            MakeKey(100),
+            TBlockRange16::WithLength(20, 10));
+        DirtyMap->WriteFinished(
+            MakeKey(100),
+            TBlockRange16::WithLength(20, 10),
             VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers());
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap->MakeReadHint(range);
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
             LogTitle,
@@ -98,16 +100,16 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
     {
         Init();
 
-        const TBlockRange64 range = TBlockRange64::WithLength(10, 10);
+        const TBlockRange16 range = TBlockRange16::WithLength(10, 10);
         ExpectedRange = range;
 
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap->MakeReadHint(range);
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
         auto originalRequest =
             std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
                 .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
                 .RequestId = 1,
-                .Range = range});
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
 
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
@@ -132,25 +134,29 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
     {
         Init();
 
-        DirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(20, 10));
-        DirtyMap.WriteFinished(
-            100,
-            TBlockRange64::WithLength(20, 10),
+        DirtyMap->RegisterInflightWrite(
+            MakeKey(100),
+            TBlockRange16::WithLength(20, 10));
+        DirtyMap->WriteFinished(
+            MakeKey(100),
+            TBlockRange16::WithLength(20, 10),
             VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers());
 
-        DirtyMap.RegisterInflightWrite(200, TBlockRange64::WithLength(40, 10));
-        DirtyMap.WriteFinished(
-            200,
-            TBlockRange64::WithLength(40, 10),
+        DirtyMap->RegisterInflightWrite(
+            MakeKey(200),
+            TBlockRange16::WithLength(40, 10));
+        DirtyMap->WriteFinished(
+            MakeKey(200),
+            TBlockRange16::WithLength(40, 10),
             VChunkConfig.GetDesiredPBuffers(),
             VChunkConfig.GetDesiredPBuffers());
 
-        const TBlockRange64 range = TBlockRange64::WithLength(10, 100);
+        const TBlockRange16 range = TBlockRange16::WithLength(10, 100);
         ExpectedRange = range;
         RangeData = GenerateRandomString(ExpectedRange.Size() * BlockSize);
 
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap->MakeReadHint(range);
         UNIT_ASSERT_VALUES_EQUAL(5, readHint.RangeHints.size());
 
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
@@ -158,7 +164,7 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
             std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
                 .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
                 .RequestId = 1,
-                .Range = range});
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
         TSgList sglist;
         TString readBuffer(RangeData.size(), '\0');
         sglist.push_back(TBlockDataRef{readBuffer.data(), readBuffer.size()});
@@ -192,16 +198,16 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         DirectBlockGroup->Oracle.ReadHedgingDelay = TDuration::Seconds(1);
         DirectBlockGroup->Oracle.ReadRequestTimeout = TDuration::Seconds(10);
 
-        const TBlockRange64 range = TBlockRange64::WithLength(10, 10);
+        const TBlockRange16 range = TBlockRange16::WithLength(10, 10);
         ExpectedRange = range;
 
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap->MakeReadHint(range);
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
         auto originalRequest =
             std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
                 .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
                 .RequestId = 1,
-                .Range = range});
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
 
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),
@@ -257,16 +263,16 @@ Y_UNIT_TEST_SUITE(TReadRequestTest)
         DirectBlockGroup->Oracle.ReadHedgingDelay = TDuration::Seconds(1);
         DirectBlockGroup->Oracle.ReadRequestTimeout = TDuration::Seconds(10);
 
-        const TBlockRange64 range = TBlockRange64::WithLength(10, 10);
+        const TBlockRange16 range = TBlockRange16::WithLength(10, 10);
         ExpectedRange = range;
 
-        auto readHint = DirtyMap.MakeReadHint(range);
+        auto readHint = DirtyMap->MakeReadHint(range);
         auto callContext = MakeIntrusive<TCallContext>(static_cast<ui64>(0));
         auto originalRequest =
             std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
                 .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
                 .RequestId = 1,
-                .Range = range});
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
 
         auto readRequest = CreateReadRequestExecutor(
             Runtime->GetActorSystem(0),

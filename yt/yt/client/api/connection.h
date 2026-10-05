@@ -3,6 +3,8 @@
 #include "public.h"
 #include "options.h"
 
+#include <library/cpp/yt/logging/tag.h>
+
 #include <yt/yt/client/chunk_client/public.h>
 
 #include <yt/yt/client/object_client/public.h>
@@ -51,7 +53,7 @@ struct IConnection
     using TConnectionOptions = NApi::TConnectionOptions;
 
     virtual TClusterTag GetClusterTag() const = 0;
-    virtual const std::string& GetLoggingTag() const = 0;
+    virtual const NLogging::TLoggingTagList& GetLoggingTags() const = 0;
     virtual const std::string& GetClusterId() const = 0;
     virtual const std::optional<std::string>& GetClusterName() const = 0;
     virtual const std::optional<NAuth::TTvmId>& GetTvmId() const = 0;

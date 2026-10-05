@@ -55,9 +55,11 @@ public:
 
     void AddCluster(const NYql::TPqClusterConfig& cluster) final;
 
-    ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) final;
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const TString& stream, const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) final;
 
     IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) final;
+
+    IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver& driver, const NYdb::TCommonClientSettings& settings) final;
 
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const final;
 

@@ -22,7 +22,7 @@ TCommandTestShardInit::TCommandTestShardInit()
 
 void TCommandTestShardInit::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("channels", "Storage pool names for tablet channels (comma-separated, optional - uses database storage pools if not specified)")
+    config.Opts->AddLongOption("channels", "Storage pool kinds for tablet channels (comma-separated, optional - uses database storage pools if not specified)")
         .Optional().RequiredArgument("POOLS").Handler([this](const TString& value) {
             Channels = StringSplitter(value).Split(',').ToList<TString>();
         });
@@ -99,4 +99,3 @@ int TCommandTestShardClean::Run(TConfig& config) {
 }
 
 } // namespace NYdb::NConsoleClient
-

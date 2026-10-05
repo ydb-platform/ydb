@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <util/generic/queue.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::INTERCONNECT_SPEED_TEST
+
 namespace NInterconnect {
     using namespace NActors;
 
@@ -190,6 +192,7 @@ namespace NInterconnect {
             Become(&TLoadActor::StateFunc);
             NextMessageTimestamp = ctx.Monotonic();
             MeasurementStartTime = NextMessageTimestamp + Params.DelayBeforeMeasurements;
+            LastRttSample = MeasurementStartTime;
             ResetThroughput(NextMessageTimestamp, *Traffic);
             GenerateMessages(ctx);
             ctx.Schedule(Params.Duration, new TEvents::TEvPoisonPill);
@@ -252,10 +255,15 @@ namespace NInterconnect {
             auto it = InFly.find(record.GetId());
             if (it != InFly.end()) {
                 const TMonotonic now = ctx.Monotonic();
-                if (IsMeasuring(now)) {
+                if (IsMeasuring(it->second.SendTimestamp)) {
                     // record message rtt
                     const TDuration rtt = now - it->second.SendTimestamp;
                     UpdateHistogram(now, rtt);
+                    if (const TDuration gap = now - LastRttSample; MaxRttGap < gap) {
+                        MaxRttGap = gap;
+                    }
+                    LastRttSample = now;
+                    ++TotalRttSamples;
 
                     // update throughput
                     UpdateThroughput(ev->Get()->CalculateSerializedSizeCached());
@@ -275,6 +283,9 @@ namespace NInterconnect {
 
         const TDuration AggregationPeriod = TDuration::Seconds(20);
         TDeque<std::pair<TMonotonic, TDuration>> Histogram;
+        TMonotonic LastRttSample = TMonotonic::Zero();
+        TDuration MaxRttGap;
+        ui64 TotalRttSamples = 0;
 
         void UpdateHistogram(TMonotonic when, TDuration rtt) {
             Histogram.emplace_back(when, rtt);
@@ -364,12 +375,13 @@ namespace NInterconnect {
 
             msg << " Throughput# ";
             const TDuration duration = now - ThroughputFirstSample;
+            const ui64 durationUs = duration.MicroSeconds();
             const ui64 traffic = *Traffic;
             msg << "{window# " << duration
                 << " bytes# " << ThroughputBytes
                 << " samples# " << ThroughputSamples
-                << " b/s# " << ui64(ThroughputBytes * 1000000 / duration.MicroSeconds())
-                << " common# " << ui64((traffic - TrafficAtBegin) * 1000000 / duration.MicroSeconds())
+                << " b/s# " << (durationUs ? ui64(ThroughputBytes * 1000000 / durationUs) : ui64(0))
+                << " common# " << (durationUs ? ui64((traffic - TrafficAtBegin) * 1000000 / durationUs) : ui64(0))
                 << "}";
 
             if (RunFirstSample == TMonotonic::Zero()) {
@@ -405,7 +417,7 @@ namespace NInterconnect {
                 msg << " final";
             }
 
-            LOG_NOTICE(ctx, NActorsServices::INTERCONNECT_SPEED_TEST, "%s", msg.Str().data());
+            YDB_LOG_NOTICE_CTX(ctx, msg.Str());
 
             if (schedule) {
                 SchedulePublishResults(ctx);
@@ -445,6 +457,13 @@ namespace NInterconnect {
                 }
             }
 
+            stats.TotalRttSamples = TotalRttSamples;
+            if (now > MeasurementStartTime) {
+                stats.MaxRttGap = MaxRttGap;
+                if (const TDuration finalGap = now - LastRttSample; stats.MaxRttGap < finalGap) {
+                    stats.MaxRttGap = finalGap;
+                }
+            }
             stats.NumDropped = NumDropped;
 
             return stats;
@@ -478,6 +497,7 @@ namespace NInterconnect {
 
         TString RenderHTML(bool finished, const TActorContext& ctx) {
             const auto duration = ctx.Monotonic() - ThroughputFirstSample;
+            const ui64 durationUs = duration.MicroSeconds();
 
             TStringStream msg;
 
@@ -498,8 +518,8 @@ namespace NInterconnect {
                             TABLED() { str << duration; }
                             TABLED() { str << ThroughputBytes; }
                             TABLED() { str << ThroughputSamples; }
-                            TABLED() { str << ui64(ThroughputBytes * 1000000 / duration.MicroSeconds()); }
-                            TABLED() { str << ui64((*Traffic - TrafficAtBegin) * 1000000 / duration.MicroSeconds()); }
+                            TABLED() { str << (durationUs ? ui64(ThroughputBytes * 1000000 / durationUs) : ui64(0)); }
+                            TABLED() { str << (durationUs ? ui64((*Traffic - TrafficAtBegin) * 1000000 / durationUs) : ui64(0)); }
                         }
                     }
                 }

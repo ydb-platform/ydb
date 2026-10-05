@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging
+import os
 import time
 import threading
 
@@ -11,7 +12,13 @@ from ydb.tests.library.common.types import Erasure
 
 from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
-from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, STOP_NODE_PARAMS, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
+from ydb.tests.library.sqs.test_base import (
+    KikimrSqsTestBase,
+    STOP_NODE_PARAMS,
+    IS_FIFO_PARAMS,
+    TABLES_FORMAT_PARAMS,
+    SQS_MIGRATION_STAGES,
+)
 
 
 class TestSqsMultinodeCluster(KikimrSqsTestBase):
@@ -59,7 +66,8 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**STOP_NODE_PARAMS)
     @pytest.mark.skipif(
-        KikimrSqsTestBase._is_topic_migration_stage(),
+        # topic_creation also reports MessagesCount via PQ read balancer since #45354
+        os.environ.get('YDB_SQS_MIGRATION_STAGE') in SQS_MIGRATION_STAGES,
         reason='MessagesCount counters use different semantics on topic path',
     )
     def test_has_messages_counters(self, is_fifo, stop_node):

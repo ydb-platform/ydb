@@ -1,7 +1,8 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     blob_checker.cpp
+    blob_checker_actors.cpp
     blob_checker_events.cpp
     blob_checker_planner.cpp
     bsc.cpp
@@ -26,7 +27,10 @@ SRCS(
     config.h
     console_interaction.h
     console_interaction.cpp
+    database_space.cpp
+    database_space.h
     ddisk.cpp
+    ddisk_info.cpp
     defs.h
     diff.h
     disk_metrics.cpp
@@ -69,6 +73,7 @@ SRCS(
     sys_view.cpp
     sys_view.h
     table_merger.h
+    types.cpp
     types.h
     update_group_latencies.cpp
     update_last_seen_ready.cpp

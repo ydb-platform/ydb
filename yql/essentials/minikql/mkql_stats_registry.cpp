@@ -46,7 +46,6 @@ private:
         }
     }
 
-private:
     TVector<i64> Values_;
 };
 

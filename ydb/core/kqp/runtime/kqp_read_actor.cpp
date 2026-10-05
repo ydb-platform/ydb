@@ -1,5 +1,8 @@
 #include "kqp_read_actor.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_shard_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_task_rendering.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -23,6 +26,8 @@
 
 #include <util/generic/intrlist.h>
 #include <util/string/vector.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
 
 namespace {
 
@@ -69,6 +74,7 @@ public:
     struct TShardState : public TIntrusiveListItem<TShardState> {
 
         TOwnedCellVec LastKey;
+        TMaybe<NKikimrTxDataShard::TReadSamplingContinuation> SamplingContinuation;
         TMaybe<ui32> FirstUnprocessedRequest;
         TMaybe<ui32> ReadId;
         ui64 TabletId;
@@ -87,6 +93,10 @@ public:
         TShardState(ui64 tabletId)
             : TabletId(tabletId)
         {
+        }
+
+        bool ResumeInclusive() const {
+            return SamplingContinuation && SamplingContinuation->GetLastProcessedKeyInclusive();
         }
 
         TTableRange GetBounds(bool reverse) {
@@ -121,7 +131,7 @@ public:
                             Ranges.back().To.GetCells(), Ranges.back().ToInclusive);
                     } else {
                         return TTableRange(
-                            LastKey, false,
+                            LastKey, ResumeInclusive(),
                             Ranges.back().To.GetCells(), Ranges.back().ToInclusive);
                     }
                 }
@@ -211,7 +221,7 @@ public:
                 if (!lastKeyEmpty) {
                     // It is range, where read was interrupted. Restart operation from last read key.
                     result.emplace_back(std::move(TSerializedTableRange(
-                        TSerializedCellVec::Serialize(LastKey), rangeIt->To.GetBuffer(), false, rangeIt->ToInclusive
+                        TSerializedCellVec::Serialize(LastKey), rangeIt->To.GetBuffer(), ResumeInclusive(), rangeIt->ToInclusive
                         )));
                     ++rangeIt;
                 }
@@ -236,6 +246,16 @@ public:
                 FillUnprocessedPoints(ev.Keys, reversed);
             } else {
                 FillUnprocessedRanges(ev.Ranges, keyTypes, reversed);
+                if (ev.Record.HasSampling()) {
+                    // Subsequent tokens index the ranges of this request, not
+                    // the original request before any checkpoint handovers.
+                    Ranges = ev.Ranges;
+                    LastKey = {};
+                    FirstUnprocessedRequest.Clear();
+                    if (SamplingContinuation) {
+                        *ev.Record.MutableSampling()->MutableContinuation() = *SamplingContinuation;
+                    }
+                }
                 for (auto& range : ev.Ranges) {
                     MakePrefixRange(range, keyTypes.size());
                 }
@@ -283,6 +303,10 @@ public:
             Points.push_back(std::move(point));
         }
 
+        void ReservePoints(size_t count) {
+            Points.reserve(count);
+        }
+
     private:
         TSmallVec<TSerializedTableRange> Ranges;
         TSmallVec<TSerializedCellVec> Points;
@@ -294,6 +318,7 @@ public:
         TShardState* Shard = nullptr;
         bool Finished = false;
         ui64 LastSeqNo;
+        bool SamplingCheckpoint = false;
         TMaybe<TString> SerializedContinuationToken;
 
         void RegisterMessage(const TEvDataShard::TEvReadResult& result) {
@@ -344,9 +369,11 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NWilson::TTraceId& traceId,
-        TIntrusivePtr<TKqpCounters> counters)
+        TIntrusivePtr<TKqpCounters> counters,
+        TVector<TSerializedCellVec> keyPoints)
         : Settings(settings)
         , Arena(arena)
+        , DirectKeyPoints(std::move(keyPoints))
         , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
         , ComputeActorId(computeActorId)
         , InputIndex(inputIndex)
@@ -356,7 +383,7 @@ public:
         , Counters(counters)
         , UseFollowers(false)
         , PipeCacheId(MainPipeCacheId)
-        , ReadActorSpan(TWilsonKqp::ReadActor, NWilson::TTraceId(traceId), "ReadActor")
+        , ReadActorSpan(TWilsonKqp::ReadActor, NWilson::TTraceId(traceId), "Read table")
     {
         Y_ABORT_UNLESS(Arena);
         Y_ABORT_UNLESS(settings->GetArena() == Arena->Get());
@@ -431,7 +458,16 @@ public:
         PendingShards.PushBack(stateHolder.Get());
         auto& state = *stateHolder.Release();
 
-        if (Settings->HasFullRange()) {
+        if (!DirectKeyPoints.empty()) {
+            // Points handed over pre-parsed by an in-process parent actor; consume
+            // them as-is instead of copying and re-parsing the settings' KeyPoints.
+            YQL_ENSURE(!Settings->HasFullRange() && !Settings->HasRanges());
+            state.ReservePoints(DirectKeyPoints.size());
+            for (auto& point : DirectKeyPoints) {
+                state.AddPoint(std::move(point));
+            }
+            DirectKeyPoints.clear();
+        } else if (Settings->HasFullRange()) {
             state.AddRange(TSerializedTableRange(Settings->GetFullRange()));
         } else {
             YQL_ENSURE(Settings->HasRanges());
@@ -442,13 +478,16 @@ public:
                 }
             } else {
                 YQL_ENSURE(Settings->GetRanges().KeyPointsSize() > 0);
+                state.ReservePoints(Settings->GetRanges().KeyPointsSize());
                 for (const auto& point : Settings->GetRanges().GetKeyPoints()) {
                     state.AddPoint(TSerializedCellVec(point));
                 }
             }
         }
 
-        CA_LOG_D("Shards State: " << state.ToString(KeyColumnTypes));
+        YDB_LOG_DEBUG("Started table scan with initial shard state",
+            {"logPrefix", this->LogPrefix},
+            {"state", state.ToString(KeyColumnTypes)});
 
         if (!Settings->HasShardIdHint()) {
             state.IsFake = true;
@@ -462,11 +501,18 @@ public:
 
     bool StartShards() {
         const ui32 maxAllowedInFlight = Settings->GetSorted() || Settings->GetIsBatch() ? 1 : MaxInFlight;
-        CA_LOG_D("effective maxinflight " << maxAllowedInFlight << " sorted " << Settings->GetSorted());
+        YDB_LOG_DEBUG("Computed effective max in-flight shard count",
+            {"logPrefix", this->LogPrefix},
+            {"maxAllowedInFlight", maxAllowedInFlight},
+            {"sorted", Settings->GetSorted()});
         bool isFirst = true;
         while (!PendingShards.Empty() && RunningReads() + 1 <= maxAllowedInFlight) {
             if (isFirst) {
-                CA_LOG_D("BEFORE: " << PendingShards.Size() << "." << RunningReads());
+                YDB_LOG_DEBUG("Starting next batch of shard reads",
+                    {"logPrefix", this->LogPrefix},
+                    {"event", "startShardsBefore"},
+                    {"pendingShardsBefore", PendingShards.Size()},
+                    {"runningReads", RunningReads()});
                 isFirst = false;
             }
             if (Settings->GetReverse()) {
@@ -480,11 +526,17 @@ public:
             }
         }
         if (!isFirst) {
-            CA_LOG_D("AFTER: " << PendingShards.Size() << "." << RunningReads());
+            YDB_LOG_DEBUG("Finished starting batch of shard reads",
+                {"logPrefix", this->LogPrefix},
+                {"event", "startShardsAfter"},
+                {"pendingShardsAfter", PendingShards.Size()},
+                {"runningReads", RunningReads()});
         }
 
-        CA_LOG_D("Scheduled table scans, in flight: " << RunningReads() << " shards. "
-            << "pending shards to read: " << PendingShards.Size() << ", ");
+        YDB_LOG_DEBUG("Scheduled table scans across shards",
+            {"logPrefix", this->LogPrefix},
+            {"runningReads", RunningReads()},
+            {"pendingShards", PendingShards.Size()});
 
         return RunningReads() > 0 || !PendingShards.Empty();
     }
@@ -513,9 +565,11 @@ public:
         auto keyDesc = MakeHolder<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Read,
             KeyColumnTypes, columns);
 
-        CA_LOG_D("Sending TEvResolveKeySet update for table '" << Settings->GetTable().GetTablePath() << "'"
-            << ", range: " << DebugPrintRange(KeyColumnTypes, range, *AppData()->TypeRegistry)
-            << ", attempt #" << state->ResolveAttempt);
+        YDB_LOG_DEBUG("Sending TEvResolveKeySet to scheme cache",
+            {"logPrefix", this->LogPrefix},
+            {"tablePath", Settings->GetTable().GetTablePath()},
+            {"range", DebugPrintRange(KeyColumnTypes, range, *AppData()->TypeRegistry)},
+            {"resolveAttempt", state->ResolveAttempt});
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Settings->GetDatabase();
@@ -526,13 +580,15 @@ public:
         ResolveShardId += 1;
 
         ReadActorStateSpan = NWilson::TSpan(TWilsonKqp::ReadActorShardsResolve, ReadActorSpan.GetTraceId(),
-            "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+            "Locate shards", NWilson::EFlags::AUTO_END);
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request), 0, 0, ReadActorStateSpan.GetTraceId());
     }
 
     void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        CA_LOG_D("Received TEvResolveKeySetResult update for table '" << Settings->GetTable().GetTablePath() << "'");
+        YDB_LOG_DEBUG("Received TEvResolveKeySetResult from scheme cache",
+            {"logPrefix", this->LogPrefix},
+            {"tablePath", Settings->GetTable().GetTablePath()});
 
         auto* request = ev->Get()->Request.Get();
         THolder<TShardState> state;
@@ -544,7 +600,10 @@ public:
         }
 
         if (request->ErrorCount > 0 || !state) {
-            CA_LOG_E("Resolve request failed for table '" << Settings->GetTable().GetTablePath() << "', ErrorCount# " << request->ErrorCount);
+            YDB_LOG_ERROR("Shard resolve request failed",
+                {"logPrefix", this->LogPrefix},
+                {"tablePath", Settings->GetTable().GetTablePath()},
+                {"errorCount", request->ErrorCount});
 
             auto statusCode = NDqProto::StatusIds::UNAVAILABLE;
             TString error;
@@ -583,7 +642,9 @@ public:
 
         if (keyDesc->GetPartitions().empty()) {
             TString error = TStringBuilder() << "No partitions to read from '" << Settings->GetTable().GetTablePath() << "'";
-            CA_LOG_E(error);
+            YDB_LOG_ERROR("No partitions found for resolved table",
+                {"logPrefix", this->LogPrefix},
+                {"error", error});
             return RuntimeError(error, NDqProto::StatusIds::SCHEME_ERROR);
         } else if (keyDesc->GetPartitions().size() == 1) {
             auto& partition = keyDesc->GetPartitions()[0];
@@ -637,28 +698,42 @@ public:
                 keyDesc->GetPartitions()[idx].Range->IsInclusive
             };
 
-            CA_LOG_D("Processing resolved ShardId# " << partition.ShardId
-                << ", partition range: " << DebugPrintRange(KeyColumnTypes, partitionRange, tr)
-                << ", i: " << rangeIndex << ", state ranges: " << ranges.size()
-                << ", points: " << points.size());
+            YDB_LOG_DEBUG("Processing resolved partition for shard split",
+                {"logPrefix", this->LogPrefix},
+                {"shardId", partition.ShardId},
+                {"range", DebugPrintRange(KeyColumnTypes, partitionRange, tr)},
+                {"rangeIndex", rangeIndex},
+                {"rangesCount", ranges.size()},
+                {"pointsCount", points.size()});
 
             auto newShard = MakeHolder<TShardState>(partition.ShardId);
 
             if (state->HasRanges()) {
                 for (ui64 j = rangeIndex; j < ranges.size(); ++j) {
                     auto comparison = CompareRanges(partitionRange, ranges[j].ToTableRange(), KeyColumnTypes);
-                    CA_LOG_D("Compare range #" << j << " " << DebugPrintRange(KeyColumnTypes, ranges[j].ToTableRange(), tr)
-                        << " with partition range " << DebugPrintRange(KeyColumnTypes, partitionRange, tr)
-                        << " : " << comparison);
+                    YDB_LOG_DEBUG("Comparing read range with partition range",
+                        {"logPrefix", this->LogPrefix},
+                        {"rangeIndex", j},
+                        {"range", DebugPrintRange(KeyColumnTypes, ranges[j].ToTableRange(), tr)},
+                        {"partitionRange", DebugPrintRange(KeyColumnTypes, partitionRange, tr)},
+                        {"comparison", comparison});
 
                     if (comparison > 0) {
                         continue;
                     } else if (comparison == 0) {
                         auto intersection = Intersect(KeyColumnTypes, partitionRange, ranges[j].ToTableRange());
-                        CA_LOG_D("Add range to new shardId: " << partition.ShardId
-                            << ", range: " << DebugPrintRange(KeyColumnTypes, intersection, tr));
+                        YDB_LOG_DEBUG("Adding intersected range to new shard",
+                            {"logPrefix", this->LogPrefix},
+                            {"shardId", partition.ShardId},
+                            {"range", DebugPrintRange(KeyColumnTypes, intersection, tr)});
 
                         newShard->AddRange(TSerializedTableRange(intersection));
+                        if (j == 0 && state->SamplingContinuation) {
+                            // Only the first remaining range inherits the pending
+                            // selection. DataShard clips it to the child's range.
+                            newShard->SamplingContinuation = state->SamplingContinuation;
+                            newShard->SamplingContinuation->SetLastProcessedKeyInclusive(intersection.InclusiveFrom);
+                        }
                     } else {
                         break;
                     }
@@ -678,7 +753,9 @@ public:
 
                     if (intersection == 0) {
                         newShard->AddPoint(std::move(points[pointIndex]));
-                        CA_LOG_D("Add point to new shardId: " << partition.ShardId);
+                        YDB_LOG_DEBUG("Adding point to new shard",
+                            {"logPrefix", this->LogPrefix},
+                            {"shardId", partition.ShardId});
                     } else {
                         YQL_ENSURE(intersection > 0, "Missed intersection of point and partition ranges.");
                         break;
@@ -727,7 +804,10 @@ public:
                     sb << st.ToString(KeyColumnTypes) << "; ";
                 }
             }
-            CA_LOG_D(sb);
+            YDB_LOG_DEBUG("Shard queue state after resolve",
+                {"logPrefix", this->LogPrefix},
+                {"event", "shardQueueAfterResolve"},
+                {"shardStates", sb});
         }
         StartShards();
     }
@@ -757,6 +837,9 @@ public:
         if (!Reads[id] || Reads[id].Finished) {
             return;
         }
+        if (Settings->HasSampling() && !Reads[id].SamplingCheckpoint) {
+            return RuntimeError("Sampled reader lost without a sampling checkpoint", NDqProto::StatusIds::ABORTED);
+        }
 
         auto* state = Reads[id].Shard;
 
@@ -769,6 +852,7 @@ public:
             ++TotalRetries;
 
             if (CheckShardRetriesExceeded(id)) {
+                ShardReadTrace.Retry(ReadActorSpan, state->TabletId, id);
                 ResetRead(id);
                 return ResolveShard(state);
             }
@@ -782,7 +866,10 @@ public:
             return DoRetryRead(id);
         }
 
-        CA_LOG_D("schedule retry #" << id << " after " << delay);
+        YDB_LOG_DEBUG("Scheduled read retry after delay",
+            {"logPrefix", this->LogPrefix},
+            {"readId", id},
+            {"delay", delay});
         TlsActivationContext->Schedule(delay, new IEventHandle(SelfId(), SelfId(), new TEvRetryShard(id, Reads[id].LastSeqNo)));
     }
 
@@ -790,10 +877,16 @@ public:
         if (!Reads[id] || Reads[id].Finished) {
             return;
         }
+        if (Settings->HasSampling() && !Reads[id].SamplingCheckpoint) {
+            return RuntimeError("Sampled reader lost without a sampling checkpoint", NDqProto::StatusIds::ABORTED);
+        }
 
         auto state = Reads[id].Shard;
-        CA_LOG_D("Retrying read #" << id);
+        YDB_LOG_DEBUG("Retrying read",
+            {"logPrefix", this->LogPrefix},
+            {"readId", id});
 
+        ShardReadTrace.Retry(ReadActorSpan, state->TabletId, id);
         ResetRead(id);
 
         if (Reads[id].SerializedContinuationToken) {
@@ -823,6 +916,13 @@ public:
 
         auto ev = GetDefaultReadSettings();
         auto& record = ev->Record;
+
+        if (Settings->HasSampling()) {
+            *record.MutableSampling() = Settings->GetSampling();
+            if (!state->HasRanges()) {
+                return RuntimeError("Sampling does not support key lookups", NDqProto::StatusIds::BAD_REQUEST);
+            }
+        }
 
         state->FillEvRead(*ev, KeyColumnTypes, Settings->GetReverse());
 
@@ -903,14 +1003,19 @@ public:
             record.SetPoolId(Settings->GetPoolId());
         }
 
-        CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings->GetTable().GetTablePath()
-            << ", ranges: " << DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)
-            << ", limit: " << limit
-            << ", readId = " << id
-            << ", reverse = " << record.GetReverse()
-            << ", snapshot = (txid=" << Settings->GetSnapshot().GetTxId() << ",step=" << Settings->GetSnapshot().GetStep() << ")"
-            << ", lockTxId = " << Settings->GetLockTxId()
-            << ", lockNodeId = " << Settings->GetLockNodeId());
+        YDB_LOG_DEBUG("Sending TEvRead to data shard",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", state->TabletId},
+            {"tablePath", Settings->GetTable().GetTablePath()},
+            {"ranges", DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)},
+            {"limit", limit},
+            {"readId", id},
+            {"reverse", record.GetReverse()},
+            {"snapshotTxId", Settings->GetSnapshot().GetTxId()},
+            {"snapshotStep", Settings->GetSnapshot().GetStep()},
+            {"lockTxId", Settings->GetLockTxId()},
+            {"lockNodeId", Settings->GetLockNodeId()},
+            {"lockMode", Settings->GetLockMode()});
 
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
@@ -920,7 +1025,7 @@ public:
             ev.Release(), state->TabletId, TEvPipeCache::TEvForwardOptions{
                 .AutoConnect = newPipe,
                 .Subscribe = newPipe}),
-            IEventHandle::FlagTrackDelivery, 0, ReadActorSpan.GetTraceId());
+            IEventHandle::FlagTrackDelivery, 0, ShardReadTrace.Start(ReadActorSpan, state->TabletId, id));
 
         if (!FirstShardStarted) {
             state->IsFirst = true;
@@ -950,9 +1055,10 @@ public:
     }
 
     void ReportNullValue(const THolder<TEventHandle<TEvDataShard::TEvReadResult>>& result, size_t columnIndex) {
-        CA_LOG_D(TStringBuilder() << "validation failed, "
-            << " seqno = " << result->Get()->Record.GetSeqNo()
-            << " finished = " << result->Get()->Record.GetFinished());
+        YDB_LOG_DEBUG("Read validation failed: NULL value in NOT NULL column",
+            {"logPrefix", this->LogPrefix},
+            {"seqNo", result->Get()->Record.GetSeqNo()},
+            {"finished", result->Get()->Record.GetFinished()});
         NYql::TIssue issue;
         issue.SetCode(NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, NYql::TSeverityIds::S_FATAL);
         issue.SetMessage(TStringBuilder()
@@ -971,25 +1077,27 @@ public:
             return;
         }
 
-        CA_LOG_D("Recv TEvReadResult from ShardID=" << Reads[id].Shard->TabletId
-            << ", ReadId=" << id
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
-            << ", Finished=" << record.GetFinished()
-            << ", RowCount=" << record.GetRowCount()
-            << ", TxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
-            << ", BrokenTxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetBrokenTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }());
+        ShardReadTrace.ReadResult(ReadActorSpan, Reads[id].Shard->TabletId,
+            ev->Sender.NodeId(), id, msg.GetRowsCount(), record.GetStatus().GetCode(), record.GetFinished());
+
+        TStringBuilder txLocks;
+        for (const auto& lock : record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+        TStringBuilder brokenTxlocks;
+        for (const auto& lock : record.GetBrokenTxLocks()) {
+            brokenTxlocks << lock.ShortDebugString();
+        }
+
+        YDB_LOG_DEBUG("Received TEvReadResult from data shard",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", Reads[id].Shard->TabletId},
+            {"readId", id},
+            {"status", Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())},
+            {"finished", record.GetFinished()},
+            {"rowCount", record.GetRowCount()},
+            {"txLocks", txLocks},
+            {"brokenTxLocks", brokenTxlocks});
 
         if (!record.HasNodeId()) {
             Counters->ReadActorAbsentNodeId->Inc();
@@ -997,14 +1105,20 @@ public:
             auto* state = Reads[id].Shard;
             if (!state->NodeId) {
                 state->NodeId = record.GetNodeId();
-                CA_LOG_D("Node mismatch for tablet " << state->TabletId << " " << *state->NodeId << " != SelfId: " << SelfId().NodeId());
+                YDB_LOG_DEBUG("Detected node mismatch for tablet read",
+                    {"logPrefix", this->LogPrefix},
+                    {"tabletId", state->TabletId},
+                    {"nodeId", *state->NodeId},
+                    {"selfNodeId", SelfId().NodeId()});
                 if (state->IsFirst) {
                     Counters->ReadActorRemoteFirstFetch->Inc();
                 }
                 Counters->ReadActorRemoteFetch->Inc();
             }
         } else {
-            CA_LOG_T("Node match for tablet " << Reads[id].Shard->TabletId);
+            YDB_LOG_TRACE("Node matches local node for tablet read",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", Reads[id].Shard->TabletId});
         }
 
         Counters->DataShardIteratorMessages->Inc();
@@ -1013,7 +1127,10 @@ public:
         }
 
         for (auto& issue : record.GetStatus().GetIssues()) {
-            CA_LOG_D("read id #" << id << " got issue " << issue.Getmessage());
+            YDB_LOG_DEBUG("Read result contains issue",
+                {"logPrefix", this->LogPrefix},
+                {"readId", id},
+                {"issueMessage", issue.Getmessage()});
             Reads[id].Shard->Issues.push_back(issue);
         }
 
@@ -1022,6 +1139,40 @@ public:
             NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
             return RuntimeError(message, status, issues);
         };
+
+        // Preserve schema errors so the session can invalidate a stale query plan.
+        if (Settings->HasSampling() && record.GetStatus().GetCode() != Ydb::StatusIds::SCHEME_ERROR) {
+            const auto status = record.GetStatus().GetCode();
+            NKikimrTxDataShard::TReadContinuationToken token;
+            const bool hasSamplingState = record.HasContinuationToken()
+                && token.ParseFromString(record.GetContinuationToken()) && token.HasSampling();
+            if (record.GetSeqNo() != Reads[id].LastSeqNo + 1) {
+                return replyError("Sampled reader lost a result before its sampling checkpoint", NDqProto::StatusIds::ABORTED);
+            }
+            if (status == Ydb::StatusIds::SUCCESS) {
+                // Older shards may ignore Sampling and finish a full read in
+                // one response, without ever returning a continuation token.
+                if (!record.HasSamplingStats()) {
+                    return replyError("DataShard did not confirm sampling support", NDqProto::StatusIds::ABORTED);
+                }
+                if (!record.GetFinished() && !hasSamplingState) {
+                    return replyError("Sampled read returned no sampling continuation", NDqProto::StatusIds::ABORTED);
+                }
+            } else {
+                // Only a terminal checkpoint from the reader proves that no
+                // unpublished decision remains. An earlier successful result
+                // is not sufficient to restart a lost reader.
+                if (!hasSamplingState || (status != Ydb::StatusIds::OVERLOADED && status != Ydb::StatusIds::NOT_FOUND)) {
+                    return replyError("Sampled reader lost without a sampling checkpoint", NDqProto::StatusIds::ABORTED);
+                }
+                Reads[id].SamplingCheckpoint = true;
+                Reads[id].SerializedContinuationToken = record.GetContinuationToken();
+                auto* shard = Reads[id].Shard;
+                shard->FirstUnprocessedRequest = token.GetFirstUnprocessedQuery();
+                shard->LastKey = TOwnedCellVec(TSerializedCellVec(token.GetLastProcessedKey()).GetCells());
+                shard->SamplingContinuation = token.GetSampling();
+            }
+        }
 
         if (UseFollowers && record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS && Reads[id].Shard->SuccessBatches > 0) {
             // read from follower is interrupted with error after several successful responses.
@@ -1060,8 +1211,13 @@ public:
                         NYql::NDqProto::StatusIds::UNAVAILABLE);
                 }
                 auto shard = Reads[id].Shard;
+                ShardReadTrace.Retry(ReadActorSpan, shard->TabletId, id);
                 ResetRead(id);
                 return ResolveShard(shard);
+            }
+            case Ydb::StatusIds::SCHEME_ERROR: {
+                // Let the session invalidate cached query plans before retrying a schema change.
+                return replyError("Read schema error", NYql::NDqProto::StatusIds::SCHEME_ERROR);
             }
             default: {
                 return replyError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED);
@@ -1097,7 +1253,9 @@ public:
             YQL_ENSURE(Locks.empty());
         }
 
-        CA_LOG_D("Taken " << Locks.size() << " locks");
+        YDB_LOG_DEBUG("Collected transaction locks from read result",
+            {"logPrefix", this->LogPrefix},
+            {"locksCount", Locks.size()});
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
         ui64 seqNo = record.GetSeqNo();
@@ -1110,10 +1268,16 @@ public:
 
         ReceivedRowCount += msg.GetRowsCount();
 
-        CA_LOG_D(TStringBuilder() << "new data for read #" << id
-            << " seqno = " << seqNo
-            << " finished = " << record.GetFinished());
-        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(&msg) << " continuation token " << DebugPrintContinuationToken(record.GetContinuationToken()));
+        YDB_LOG_DEBUG("Queued new read result batch",
+            {"logPrefix", this->LogPrefix},
+            {"readId", id},
+            {"seqNo", seqNo},
+            {"finished", record.GetFinished()});
+        YDB_LOG_TRACE("Read result pushed with continuation token",
+            {"logPrefix", this->LogPrefix},
+            {"readId", id},
+            {"cells", DebugPrintCells(&msg)},
+            {"continuationToken", DebugPrintContinuationToken(record.GetContinuationToken())});
 
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), id, seqNo});
         NotifyCA();
@@ -1125,7 +1289,10 @@ public:
         HasEstablishedPipe.erase(msg.TabletId);
         TVector<ui32> reads;
         reads = ReadIdByTabletId[msg.TabletId];
-        CA_LOG_W("Got EvDeliveryProblem, TabletId: " << msg.TabletId << ", NotDelivered: " << msg.NotDelivered);
+        YDB_LOG_WARN("Received TEvDeliveryProblem from pipe cache",
+            {"logPrefix", this->LogPrefix},
+            {"tabletId", msg.TabletId},
+            {"notDelivered", msg.NotDelivered});
         for (auto read : reads) {
             if (Reads[read]) {
                 Counters->IteratorDeliveryProblems->Inc();
@@ -1139,6 +1306,7 @@ public:
     }
 
     void ResetRead(size_t id) {
+        ShardReadTrace.Stop(id);
         if (Reads[id]) {
             Counters->SentIteratorCancels->Inc();
             auto* state = Reads[id].Shard;
@@ -1251,7 +1419,7 @@ public:
         TVector<NScheme::TTypeInfo> types;
         for (auto& column : Settings->GetColumns()) {
             if (!IsSystemColumn(column.GetId())) {
-                types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
+                types.push_back(MakeTypeInfo(column));
             }
         }
 
@@ -1266,11 +1434,12 @@ public:
         auto& [shardId, result, batch, processedRows, packed, readId, seqNo] = handle;
         NMiniKQL::TBytesStatistics stats;
         batch->reserve(batch->size());
-        CA_LOG_D(TStringBuilder() << "enter pack cells method "
-            << " shardId: " << shardId
-            << " processedRows: " << processedRows
-            << " packed rows: " << packed
-            << " freeSpace: " << freeSpace);
+        YDB_LOG_DEBUG("Entering PackCells for read result",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", shardId},
+            {"processedRows", processedRows},
+            {"packedRows", packed},
+            {"freeSpace", freeSpace});
 
         for (size_t rowIndex = packed; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
             const auto& row = result->Get()->GetCells(rowIndex);
@@ -1313,11 +1482,12 @@ public:
             }
         }
 
-        CA_LOG_D(TStringBuilder() << "exit pack cells method "
-            << " shardId: " << shardId
-            << " processedRows: " << processedRows
-            << " packed rows: " << packed
-            << " freeSpace: " << freeSpace);
+        YDB_LOG_DEBUG("Exiting PackCells for read result",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", shardId},
+            {"processedRows", processedRows},
+            {"packedRows", packed},
+            {"freeSpace", freeSpace});
         return stats;
     }
 
@@ -1339,8 +1509,10 @@ public:
 
         YQL_ENSURE(!resultBatch.IsWide(), "Wide stream is not supported");
 
-        CA_LOG_D(TStringBuilder() << " enter getasyncinputdata results size " << Results.size()
-            << ", freeSpace " << freeSpace);
+        YDB_LOG_DEBUG("Entering GetAsyncInputData",
+            {"logPrefix", this->LogPrefix},
+            {"resultsCount", Results.size()},
+            {"freeSpace", freeSpace});
 
         ui64 bytes = 0;
         while (!Results.empty()) {
@@ -1375,16 +1547,20 @@ public:
                 bytes += rowSize.AllocatedBytes;
                 if (ProcessedRowCount == Settings->GetItemsLimit()) {
                     finished = true;
-                    CA_LOG_D(TStringBuilder() << " returned async data because limit reached");
+                    YDB_LOG_DEBUG("Returned async data because limit reached",
+                        {"logPrefix", this->LogPrefix});
                     return bytes;
                 }
             }
-            CA_LOG_D(TStringBuilder() << "returned " << resultBatch.RowCount() << " rows; processed " << ProcessedRowCount << " rows");
+            YDB_LOG_DEBUG("Returned rows from result batch",
+                {"logPrefix", this->LogPrefix},
+                {"resultBatchRowCount", resultBatch.RowCount()},
+                {"processedRowCount", ProcessedRowCount});
 
             size_t rowCount = result.ReadResult.Get()->Get()->GetRowsCount();
             if (rowCount == result.ProcessedRows) {
                 auto& record = msg.Record;
-                if (!Reads[id].Finished) {
+                if (!Reads[id].Finished && (!Settings->HasSampling() || !Reads[id].SamplingCheckpoint)) {
                     TMaybe<ui64> limit;
                     if (Settings->GetItemsLimit()) {
                         limit = Settings->GetItemsLimit() - Min(Settings->GetItemsLimit(), ReceivedRowCount);
@@ -1399,7 +1575,11 @@ public:
                             request->Record.SetMaxRows(*limit);
                         }
                         Counters->SentIteratorAcks->Inc();
-                        CA_LOG_D("sending ack for read #" << id << " limit " << limit << " seqno = " << record.GetSeqNo());
+                        YDB_LOG_DEBUG("Sending TEvReadAck to data shard",
+                            {"logPrefix", this->LogPrefix},
+                            {"readId", id},
+                            {"limit", limit},
+                            {"seqNo", record.GetSeqNo()});
                         bool newPipe = HasEstablishedPipe.insert(Reads[id].Shard->TabletId).second;
                         Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), Reads[id].Shard->TabletId, TEvPipeCache::TEvForwardOptions{
                             .AutoConnect = newPipe,
@@ -1419,7 +1599,9 @@ public:
                 }
 
                 Results.pop();
-                CA_LOG_D("dropping batch for read #" << id);
+                YDB_LOG_DEBUG("Dropped processed read result batch",
+                    {"logPrefix", this->LogPrefix},
+                    {"readId", id});
 
                 if (LimitReached()) {
                     finished = true;
@@ -1436,20 +1618,22 @@ public:
             finished = true;
         }
 
-        CA_LOG_D(TStringBuilder() << "returned async data"
-            << " processed rows " << ProcessedRowCount
-            << " left freeSpace " << freeSpace
-            << " received rows " << ReceivedRowCount
-            << " running reads " << RunningReads()
-            << " pending shards " << PendingShards.Size()
-            << " finished = " << finished
-            << " has limit " << (Settings->GetItemsLimit() != 0)
-            << " limit reached " << LimitReached());
+        YDB_LOG_DEBUG("Returning async input data to compute actor",
+            {"logPrefix", this->LogPrefix},
+            {"processedRowCount", ProcessedRowCount},
+            {"freeSpace", freeSpace},
+            {"receivedRowCount", ReceivedRowCount},
+            {"runningReads", RunningReads()},
+            {"pendingShardsCount", PendingShards.Size()},
+            {"finished", finished},
+            {"hasItemsLimit", (Settings->GetItemsLimit() != 0)},
+            {"limitReached", LimitReached()});
 
         return bytes;
     }
 
     void FillExtraStats(NDqProto::TDqTaskStats* stats, bool last, const NYql::NDq::TDqMeteringStats* mstats) override {
+        AddReadTraceStats(ReadActorSpan, *stats, TotalRetries);
         if (last) {
             NDqProto::TDqTableStats* tableStats = nullptr;
             for (size_t i = 0; i < stats->TablesSize(); ++i) {
@@ -1502,6 +1686,7 @@ public:
     void LoadState(const NYql::NDq::TSourceState&) override {}
 
     void PassAway() override {
+        ShardReadTrace.Finish(ReadActorSpan);
         Counters->ReadActorsCount->Dec();
         {
             auto guard = BindAllocator();
@@ -1514,9 +1699,11 @@ public:
                 Send(::FollowersPipeCacheId, new TEvPipeCache::TEvUnlink(0));
             }
         }
+        if (ReadActorSpan) {
+            AddReadTraceAttributes(ReadActorSpan, Settings->GetTable().GetTablePath(), ReceivedRowCount, TotalRetries);
+            ReadActorSpan.End();
+        }
         TBase::PassAway();
-
-        ReadActorSpan.End();
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
@@ -1528,7 +1715,9 @@ public:
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
 
+        ShardReadTrace.Finish(ReadActorSpan);
         if (ReadActorSpan) {
+            AddReadTraceAttributes(ReadActorSpan, Settings->GetTable().GetTablePath(), ReceivedRowCount, TotalRetries);
             ReadActorSpan.EndError(issues.ToOneLineString());
         }
 
@@ -1600,6 +1789,9 @@ private:
 
     const NKikimrTxDataShard::TKqpReadRangesSourceSettings* Settings;
     TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
+    // Pre-parsed point lookups passed in-process (see CreateKqpReadActor); moved
+    // into the initial shard state by StartTableScan, empty afterwards.
+    TVector<TSerializedCellVec> DirectKeyPoints;
 
     TVector<TResultColumn> ResultColumns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -1655,6 +1847,7 @@ private:
 
     bool FirstShardStarted = false;
 
+    TShardReadTrace ShardReadTrace;
     NWilson::TSpan ReadActorSpan;
     NWilson::TSpan ReadActorStateSpan;
 
@@ -1681,8 +1874,9 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpReadActor(con
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const NWilson::TTraceId& traceId,
-    TIntrusivePtr<TKqpCounters> counters) {
-    auto* actor = new TKqpReadActor(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
+    TIntrusivePtr<TKqpCounters> counters,
+    TVector<TSerializedCellVec> keyPoints) {
+    auto* actor = new TKqpReadActor(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters, std::move(keyPoints));
     return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
 }
 

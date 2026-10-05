@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/raw_socket)
 SIZE(small)
 SRCS(
     buffered_writer_ut.cpp
+    sock_listener_ut.cpp
 )
 
 PEERDIR(

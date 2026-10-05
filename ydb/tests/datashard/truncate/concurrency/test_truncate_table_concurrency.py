@@ -14,7 +14,6 @@ class TestTruncateTableConcurrency(TestBase):
     @classmethod
     def get_extra_feature_flags(cls):
         return [
-            "enable_truncate_table",
             "enable_fulltext_index",
         ]
 

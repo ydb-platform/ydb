@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     import numpy
 
-from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
+from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef, _TypeArgs
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.driver import options
 from clickhouse_connect.driver.ctypes import data_conv
@@ -47,6 +47,7 @@ class QBit(ClickHouseType):
     _BIT_SHIFTS = [1 << i for i in range(8)]
     _ELEMENT_BITS = {"BFloat16": 16, "Float32": 32, "Float64": 64}
     _numpy_warned = False
+    _type_args = _TypeArgs(2, 2, nested=(0,), integer_bounds=((1, 1, None),))
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
@@ -159,13 +160,13 @@ class QBit(ClickHouseType):
             bit_pos = self._bits_per_element - 1 - bit_idx
             mask = 1 << bit_pos
 
-            # Iterate Bytes in Plane
-            for byte_idx, byte_val in enumerate(bit_plane_bytes):
+            # Server stores plane bytes reversed (elements 0-7 in the last byte), so iterate in reverse
+            for byte_idx, byte_val in enumerate(reversed(bit_plane_bytes)):
                 # if byte is 0, skip processing 8 bits
                 if byte_val == 0:
                     continue
 
-                base_elem_idx = byte_idx << 3  # Each byte encodes 8 elements
+                base_elem_idx = byte_idx << 3
 
                 # Extract set bits from this byte
                 for bit_in_byte in range(8):
@@ -182,6 +183,8 @@ class QBit(ClickHouseType):
         total_bytes = b"".join(bit_planes)
         planes_uint8 = options.np.frombuffer(total_bytes, dtype=options.np.uint8)
         planes_uint8 = planes_uint8.reshape(self._bits_per_element, -1)
+        # Server stores plane bytes in reverse order: elements 0-7 in the last byte
+        planes_uint8 = planes_uint8[:, ::-1]
 
         # 2. Unpack bits to get the boolean/integer matrix
         bits_matrix = options.np.unpackbits(planes_uint8, axis=1, bitorder="little")
@@ -248,6 +251,8 @@ class QBit(ClickHouseType):
                 if word & mask:
                     plane[elem_idx >> 3] |= bit_shifts[elem_idx & 7]
 
+            # Server stores plane bytes reversed: elements 0-7 in the last byte
+            plane.reverse()
             bit_planes.append(bytes(plane))
 
         return tuple(bit_planes)
@@ -280,4 +285,5 @@ class QBit(ClickHouseType):
 
         packed = options.np.packbits(bits_extracted.view(options.np.uint8), axis=1, bitorder="little")
 
-        return tuple(row.tobytes() for row in packed)
+        # Server stores plane bytes in reverse order: elements 0-7 in the last byte
+        return tuple(row[::-1].tobytes() for row in packed)

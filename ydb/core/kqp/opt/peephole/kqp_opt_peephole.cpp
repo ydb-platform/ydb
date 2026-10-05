@@ -2,6 +2,7 @@
 #include "kqp_opt_peephole_rules.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/host/kqp_transform.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
@@ -300,68 +301,6 @@ private:
     const TKikimrConfiguration::TPtr Config;
     const bool WithFinalStageRules;
 };
-
-// Validate that infinite sources handled only by supported functions
-bool ValidateStreamingConstraintsInternal(const TExprNode::TPtr& node, TNodeMap<bool>& visitedNodes, bool& hasErrors, TExprContext& ctx) {
-    if (const auto [it, inserted] = visitedNodes.emplace(node.Get(), false); !inserted || hasErrors) {
-        return it->second;
-    }
-
-    bool isStreaming = node->GetConstraint<TStreamingConstraintNode>();
-
-    // Validate that all sub-nodes are not streaming
-    for (const auto& child : node->Children()) {
-        if (ValidateStreamingConstraintsInternal(child, visitedNodes, hasErrors, ctx)) {
-            isStreaming = true;
-        }
-        if (hasErrors) {
-            break;
-        }
-    }
-
-    if (node->IsCallable() && !node->GetConstraint<TStreamingConstraintNode>() && isStreaming && !hasErrors) {
-        hasErrors = true;
-        YQL_CLOG(WARN, ProviderKqp) << "Found invalid streaming processing node: " << KqpExprToPrettyString(*node, ctx);
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Unsupported callable for streaming processing: '" << node->Content() << "'"));
-    }
-
-    return visitedNodes[node.Get()] = isStreaming;
-}
-
-bool ValidateStreamingConstraints(ui64 txIdx, const TKqpPhysicalTx& tx, THashSet<std::pair<ui64, ui64>>& streamingTxResults, TExprContext& ctx) {
-    TNodeMap<bool> visitedNodes;
-    bool hasErrors = false;
-    ValidateStreamingConstraintsInternal(tx.Stages().Ptr(), visitedNodes, hasErrors, ctx);
-    ValidateStreamingConstraintsInternal(tx.Results().Ptr(), visitedNodes, hasErrors, ctx);
-
-    if (hasErrors) {
-        return false;
-    }
-
-    for (size_t i = 0; i < tx.Results().Size(); ++i) {
-        const auto it = visitedNodes.find(tx.Results().Item(i).Raw());
-        YQL_ENSURE(it != visitedNodes.end(), "Result " << i << " of tx " << txIdx << " is not visited during streaming constraints validation");
-        if (it->second) {
-            YQL_ENSURE(streamingTxResults.emplace(txIdx, i).second);
-        }
-    }
-
-    // Validate that streaming result bindings are not materializing into tx precomputes
-    for (const auto& binding : tx.ParamBindings()) {
-        const auto maybeTxBinding = binding.Binding().Maybe<TKqpTxResultBinding>();
-        if (!maybeTxBinding) {
-            continue;
-        }
-
-        const auto txBinding = maybeTxBinding.Cast();
-        if (streamingTxResults.contains(std::make_pair(FromString<ui64>(txBinding.TxIndex().Value()), FromString<ui64>(txBinding.ResultIndex().Value())))) {
-            ctx.AddError(TIssue(ctx.GetPosition(binding.Pos()), TStringBuilder() << "Streaming result binding " << binding.Name().Value() << " is materializing into tx precompute for transaction " << txIdx));
-            return false;
-        }
-    }
-
-    return true;
-}
 
 // Sort stages in topological order by their inputs, so that we optimize the ones without inputs first.
 TVector<TDqPhyStage> TopSortStages(const TDqPhyStageList& stages) {
@@ -677,8 +616,9 @@ private:
 
 class TKqpTxsPeepholeTransformer : public TSyncTransformerBase {
 public:
-    TKqpTxsPeepholeTransformer(TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config)
-        : ValidateConstraints(config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false) && config->OptValidateStreamingConstraints.Get().GetOrElse(true))
+    TKqpTxsPeepholeTransformer(TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
+        : KqpCtx(kqpCtx)
+        , ValidateConstraints(config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false) && config->OptValidateStreamingConstraints.Get().GetOrElse(true))
     {
         TxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
@@ -730,25 +670,26 @@ private:
         TxTransformer->Rewind();
 
         auto expr = tx.Ptr();
+        for (IGraphTransformer::TStatus status = TStatus::Repeat; status != TStatus::Ok;) {
+            status = InstantTransform(*TxTransformer, expr, ctx);
 
-        while (true) {
-            auto status = InstantTransform(*TxTransformer, expr, ctx);
+            if (ValidateConstraints && status == TStatus::Ok) {
+                status = KqpBuildStreamingFlow(txIdx, TKqpPhysicalTx(expr), expr, streamingTxResults, *KqpCtx->Config, *KqpCtx->Tables, KqpCtx->Cluster, KqpCtx->UserRequestContext.Get(), ctx);
+
+                if (status == TStatus::Repeat) {
+                    TxTransformer->Rewind();
+                }
+            }
+
             if (status == TStatus::Error) {
                 return {};
             }
-            if (status == TStatus::Ok) {
-                break;
-            }
         }
 
-        TKqpPhysicalTx physicalTx(expr);
-        if (ValidateConstraints && !ValidateStreamingConstraints(txIdx, physicalTx, streamingTxResults, ctx)) {
-            return {};
-        }
-
-        return physicalTx;
+        return TKqpPhysicalTx(expr);
     }
 
+    const TIntrusivePtr<TKqpOptimizeContext> KqpCtx;
     TAutoPtr<IGraphTransformer> TxTransformer;
     const bool ValidateConstraints = false;
 };
@@ -794,10 +735,13 @@ TAutoPtr<IGraphTransformer> CreateKqpTxPeepholeTransformer(
 
 TAutoPtr<IGraphTransformer> CreateKqpTxsPeepholeTransformer(
     TTypeAnnotationContext& typesCtx,
-    const TKikimrConfiguration::TPtr& config
+    const TKikimrConfiguration::TPtr& config,
+    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx
 )
 {
-    return new TKqpTxsPeepholeTransformer(typesCtx, config);
+    YQL_ENSURE(kqpCtx);
+    YQL_ENSURE(config);
+    return new TKqpTxsPeepholeTransformer(typesCtx, config, kqpCtx);
 }
 
 } // namespace NKikimr::NKqp::NOpt

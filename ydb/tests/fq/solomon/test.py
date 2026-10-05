@@ -39,7 +39,7 @@ def pytest_generate_tests(metafunc):
     return pytest_generate_tests_for_run(metafunc, suites=['solomon'], data_path=DATA_PATH)
 
 
-def test(suite, case, cfg, solomon):
+def test(suite, case, cfg, solomon_emulator):
     config = get_config(suite, case, cfg, data_path=DATA_PATH)
 
     prov = 'solomon'

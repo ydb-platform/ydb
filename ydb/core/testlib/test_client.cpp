@@ -1,6 +1,7 @@
 #include "test_client.h"
 
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/services/scheme_secret/service.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
@@ -31,6 +32,7 @@
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
+#include <ydb/services/ydb/ydb_udf.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
 #include <ydb/services/ydb/ydb_logstore.h>
@@ -76,6 +78,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
+#include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -121,7 +124,9 @@
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/statistics/service/service.h>
+#include <ydb/services/udf_store/compile_controller/compile_controller.h>
 #include <ydb/core/keyvalue/keyvalue.h>
+#include <ydb/core/blob_depot/blob_depot.h>
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
@@ -134,10 +139,12 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
+#include <ydb/core/tx/priorities/service/service.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
@@ -466,6 +473,11 @@ namespace Tests {
                                                     Settings->UseRealThreads);
         }
 
+        // read only while the runtime is initialized, so it has to be set here even for init = false
+        if (Settings->UseRealInterconnect) {
+            Runtime->SetUseRealInterconnect();
+        }
+
         if (init) {
             Initialize();
         }
@@ -541,6 +553,11 @@ namespace Tests {
 
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
             Y_UNUSED(nodeIdx);
+
+            const auto& pathMapping = Settings->AppConfig->GetResourcePathPrefixMapping();
+            if (pathMapping.RulesSize()) {
+                appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping);
+            }
 
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
 #define MERGE_CFG_FROM_APP_CFG(cfg) MERGE_APP_CFG_FROM(cfg, Settings->AppConfig->Get ## cfg())
@@ -680,9 +697,7 @@ namespace Tests {
         }
 
         TCpuManagerConfig cpuManager;
-        for (int poolId = 0; poolId < actorSystemConfig.GetExecutor().size(); poolId++) {
-            NActorSystemConfigHelpers::AddExecutorPool(cpuManager, actorSystemConfig.GetExecutor(poolId), actorSystemConfig, poolId, nullptr);
-        }
+        NActorSystemConfigHelpers::AddExecutorPools(cpuManager, actorSystemConfig, nullptr);
 
         const NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(actorSystemConfig, useAutoConfig);
 
@@ -692,7 +707,8 @@ namespace Tests {
             .MonitorStuckActors = actorSystemConfig.GetMonitorStuckActors()
         }, TTestActorRuntime::TActorSystemPools{
             pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
-            NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig)
+            NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig),
+            NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(actorSystemConfig)
         });
     }
 
@@ -722,7 +738,9 @@ namespace Tests {
 
         auto& appData = Runtime->GetAppData(grpcServiceNodeId);
         for (size_t i = 0; i < proxyCount; ++i) {
-            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig);
+            auto grpcRequestProxy = Settings->AppConfig->GetGRpcConfig().GetSkipSchemeCheck()
+                ? NGRpcService::CreateGRpcRequestProxySimple(*Settings->AppConfig)
+                : NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig);
             auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled, appData.UserPoolId);
             system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
             grpcRequestProxies.push_back(grpcRequestProxyId);
@@ -824,6 +842,7 @@ namespace Tests {
         grpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcReplicationService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcViewService(system, counters, grpcRequestProxies[0], true));
+        grpcServer->AddService(new NGRpcService::TGRpcYdbUdfService(system, counters, grpcRequestProxies[0], true));
         grpcServer->Start();
     }
 
@@ -1154,6 +1173,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateKeyValueFlat, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::BlobDepot] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, appData.UserPoolId,
+                TMailboxType::ReadAsFilled, appData.SystemPoolId));
         localConfig.TabletClassInfo[TTabletTypes::TestShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NKikimr::NTestShard::CreateTestShard, TMailboxType::Revolving, appData.UserPoolId,
@@ -1206,6 +1229,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NStat::CreateStatisticsAggregator, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::WasmCompileController] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NUdfStore::CreateWasmCompileController, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
     }
 
     void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) {
@@ -1215,7 +1242,19 @@ namespace Tests {
 
         TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig);
         tenantPoolConfig->AddStaticSlot(domainName);
-        appData.TenantName = CanonizePath(domainName);
+
+        // When SetupLocalService is called again it does not stop all old services,
+        // it just replaces them; if those services touch AppData it will bring races.
+        // TenantName is one such field — it must stay set-once per node's AppData.
+        const TString canonicalTenantName = CanonizePath(domainName);
+
+        if (appData.TenantName != canonicalTenantName) {
+            Y_ABORT_UNLESS(appData.TenantName.empty(),
+                "test harness reused node %u for a different tenant (%s -> %s); "
+                "would race with actors in the AppData from previous Run()",
+                nodeIdx, appData.TenantName.c_str(), canonicalTenantName.c_str());
+            appData.TenantName = canonicalTenantName;
+        }
 
         auto poolId = Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeIdx, appData.SystemPoolId,
                                         TMailboxType::Revolving, 0);
@@ -1267,24 +1306,37 @@ namespace Tests {
             Runtime->RegisterService(NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NPrioritiesQueue::TCompServiceOperator::CreateService(NPrioritiesQueue::TConfig(), appData.Counters);
+            auto* actor = NPrioritiesQueue::CreateService<NPrioritiesQueue::TCompConveyorPolicy>(NPrioritiesQueue::TConfig(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NPrioritiesQueue::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyor::TScanServiceOperator::CreateService(NConveyor::TConfig(), appData.Counters);
+            auto* actor = NConveyor::CreateService<NConveyor::TScanConveyorPolicy>(NConveyor::TConfig(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyor::TScanServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyorComposite::TServiceOperator::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), appData.Counters);
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+            const auto registerService = [&](const ui32 poolId, const bool useBatchPool) {
+                auto counters = appData.Counters->GetSubgroup("actor_system_pool_id", ::ToString(poolId));
+                auto* actor = NConveyorComposite::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), counters);
+                const auto aid = Runtime->Register(actor, nodeIdx, poolId, TMailboxType::Revolving, 0);
+                Runtime->RegisterService(
+                    NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx), useBatchPool), aid, nodeIdx);
+            };
+
+            registerService(appData.UserPoolId, false);
+            registerService(appData.BatchPoolId, true);
         }
         {
             auto actor = NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(appData.Counters);
             const auto aid = Runtime->Register(actor.release(), nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(), aid, nodeIdx);
+        }
+        {
+            auto countersGroup = NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::BuildCountersGroup(appData.Counters);
+            auto actor = NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::CreateService(countersGroup);
+            const auto aid = Runtime->Register(actor.release(), nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
@@ -1352,6 +1404,14 @@ namespace Tests {
             TActorId describeSchemaSecretsServiceId = Runtime->Register(describeSchemaSecretsService, nodeIdx, userPoolId);
             Runtime->RegisterService(NSecret::MakeDescribeSchemaSecretServiceId(Runtime->GetNodeId(nodeIdx)), describeSchemaSecretsServiceId, nodeIdx);
         }
+
+        {
+            const auto& appData = Runtime->GetAppData(nodeIdx);
+            IActor* workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData.Counters));
+            TActorId workloadManagerId = Runtime->Register(workloadManager, nodeIdx, userPoolId, TMailboxType::HTSwap, 0);
+            Runtime->RegisterService(NWorkloadManager::MakeServiceId(Runtime->GetNodeId(nodeIdx)), workloadManagerId, nodeIdx);
+        }
+
         {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
@@ -1408,6 +1468,7 @@ namespace Tests {
 
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
+                FederatedQuerySetupActorSystems_.push_back(actorSystemPtr);
 
                 if (FederatedQuerySetupDriver_) {
                     FederatedQuerySetupDriver_.reset();
@@ -1420,6 +1481,9 @@ namespace Tests {
                     .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
                 });
 
+                auto s3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3());
+                s3ReadActorFactoryConfig.EnableScheduling = Settings->AppConfig->GetFeatureFlags().GetEnableS3Scheduling();
+
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
                     connectorClient,
@@ -1431,7 +1495,7 @@ namespace Tests {
                     Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
                     queryServiceConfig.GetSolomon(),
                     Settings->ComputationFactory,
-                    NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
+                    s3ReadActorFactoryConfig,
                     Settings->DqTaskTransformFactory,
                     NYql::TPqGatewayConfig{},
                     Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,
@@ -1444,9 +1508,8 @@ namespace Tests {
                         });
             }
 
-            const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
             for (const auto& source : Settings->AppConfig->GetQueryServiceConfig().GetAvailableExternalDataSources()) {
-                if (!allExternalSourcesTypes.contains(source)) {
+                if (!NYql::IsValidAvailableExternalDataSourceType(source)) {
                     ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
                 }
             }
@@ -1606,7 +1669,8 @@ namespace Tests {
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
         }
 
-        {
+        // the runtime has one: replacing it races with the interconnect sessions, a lookup may then find none
+        if (!Runtime->GetLocalServiceId(MakePollerActorId(), nodeIdx)) {
             IActor* actor = CreatePollerActor();
             TActorId actorId = Runtime->Register(actor, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId);
             Runtime->RegisterService(MakePollerActorId(), actorId, nodeIdx);
@@ -1622,6 +1686,7 @@ namespace Tests {
 
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();
+            settings.Address = Settings->AppConfig->GetKafkaProxyConfig().GetListeningAddress();
             bool ssl = false;
             if (Settings->AppConfig->GetKafkaProxyConfig().HasSslCertificate()) {
                 ssl = true;
@@ -1890,6 +1955,13 @@ namespace Tests {
         if (Settings->FederatedQuerySetupFactory) {
             Settings->FederatedQuerySetupFactory->Cleanup();
         }
+
+        for (const auto& actorSystem : FederatedQuerySetupActorSystems_) {
+            if (actorSystem) {
+                actorSystem->store(nullptr, std::memory_order_release);
+            }
+        }
+        FederatedQuerySetupActorSystems_.clear();
 
         if (Runtime) {
             WaitFinalization();

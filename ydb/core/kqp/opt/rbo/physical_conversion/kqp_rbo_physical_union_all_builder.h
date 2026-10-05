@@ -6,17 +6,17 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-class TPhysicalUnionAllBuilder: public TPhysicalBinaryOpBuilder {
+class TPhysicalUnionAllBuilder: public TPhysicalVariadicOpBuilder {
 public:
-    TPhysicalUnionAllBuilder(TIntrusivePtr<TOpUnionAll> unionAll, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalBinaryOpBuilder(ctx, pos)
+    TPhysicalUnionAllBuilder(TOpUnionAll& unionAll, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalVariadicOpBuilder(ctx, pos, names)
         , UnionAll(unionAll) {
     }
 
-    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) override;
+    TExprNode::TPtr BuildPhysicalOp(const TVector<TExprNode::TPtr>& inputs) override;
 
 private:
     TExprNode::TPtr ProjectInput(TExprNode::TPtr input, ui32 childIndex) const;
 
-    TIntrusivePtr<TOpUnionAll> UnionAll;
+    TOpUnionAll& UnionAll;
 };

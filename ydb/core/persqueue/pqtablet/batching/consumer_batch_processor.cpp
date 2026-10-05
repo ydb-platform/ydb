@@ -7,6 +7,10 @@
 
 #include <utility>
 
+#include <util/generic/strbuf.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NBatching {
 
 namespace {
@@ -22,18 +26,78 @@ namespace {
         }
         return key;
     }
+
+    void LogKafkaBatchUserError(
+        TStringBuf message,
+        const TStructuredMessage& logPrefix,
+        ui32 partition,
+        ui64 offset,
+        const TString& error,
+        TStringBuf user = {})
+    {
+        YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, message,
+            logPrefix,
+            {"errorType", "user"},
+            {"user", user},
+            {"partition", partition},
+            {"offset", offset},
+            {"error", error});
+    }
+
+    TVector<TReadResult> CutOrKeepOriginal(
+        const IBatchCutter& cutter,
+        const TBatchCutterData& data,
+        ui64 readStartOffset,
+        const TStructuredMessage& logPrefix,
+        const TString& user,
+        ui32 partition)
+    {
+        auto outcome = cutter.Cut(data, readStartOffset);
+        if (!outcome) {
+            LogKafkaBatchUserError(
+                "Failed to cut kafka batch, keeping original result",
+                logPrefix,
+                partition,
+                data.ReadResult.GetOffset(),
+                outcome.error(),
+                user);
+            return {data.ReadResult};
+        }
+        return *std::move(outcome);
+    }
+
+    THashMap<TString, ui64> GetKeysOrEmpty(
+        const IBatchCutter& cutter,
+        const TBatchCutterData& data,
+        ui64 readStartOffset,
+        const TStructuredMessage& logPrefix,
+        ui32 partition)
+    {
+        auto outcome = cutter.GetKeys(data, readStartOffset);
+        if (!outcome) {
+            LogKafkaBatchUserError(
+                "Failed to get keys from kafka batch",
+                logPrefix,
+                partition,
+                data.ReadResult.GetOffset(),
+                outcome.error());
+            return {};
+        }
+        return *std::move(outcome);
+    }
 }
 
 TConsumerBatchProcessor::TConsumerBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId, TString user)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
     , User(std::move(user))
-    , LogPrefix(TStringBuilder() << "ConsumerBatchProcessor " << TabletId << " [" << User << "]: ")
+    , LogPrefix_(YDB_LOG_CREATE_MESSAGE(
+        {"consumer", User}))
 {
     BatchCutters.emplace(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1, MakeHolder<TKafkaBatchCutter>());
 }
 
-const TString& TConsumerBatchProcessor::GetLogPrefix() const {
-    return LogPrefix;
+const TStructuredMessage& TConsumerBatchProcessor::GetLogPrefix() const {
+    return LogPrefix_;
 }
 
 void TConsumerBatchProcessor::Bootstrap(const NActors::TActorContext& ctx) {
@@ -63,8 +127,9 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
 
     TVector<TReadResult> originalResults;
     originalResults.reserve(results->size());
-    for (const auto& result : *results) {
-        originalResults.push_back(result);
+    for (int i = 0; i < results->size(); ++i) {
+        originalResults.emplace_back();
+        originalResults.back().Swap(results->Mutable(i));
     }
     results->Clear();
 
@@ -75,9 +140,6 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
         }
         if (context.LastOffset != 0 && result.GetOffset() >= context.LastOffset) {
             return false;
-        }
-        if (resultsCount >= context.Count && context.Count > 0) {
-            return true;
         }
 
         resultsCount += result.GetLogicalMessageCount();
@@ -104,8 +166,13 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
         }
 
         TBatchCutterData data(originalResult, std::move(dataChunk));
-
-        auto cutResults = it->second->Cut(data, context.Offset);
+        auto cutResults = CutOrKeepOriginal(
+            *it->second,
+            data,
+            context.Offset,
+            GetLogPrefix(),
+            User,
+            context.PartitionId);
         for (auto& cutResult : cutResults) {
             if (addResult(cutResult)) {
                 break;
@@ -145,7 +212,12 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActor
         auto it = BatchCutters.find(dataChunk.GetCodec());
         if (it != BatchCutters.end()) {
             TBatchCutterData data(result, std::move(dataChunk));
-            auto batchKeys = it->second->GetKeys(data, result.GetOffset());
+            auto batchKeys = GetKeysOrEmpty(
+                *it->second,
+                data,
+                result.GetOffset(),
+                GetLogPrefix(),
+                context.PartitionId);
             for (auto& [key, offset] : batchKeys) {
                 offsetToKey[offset] = std::move(key);
             }
@@ -157,9 +229,7 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActor
 
 void TConsumerBatchProcessor::FlushCPUUsageMetrics(const NActors::TActorContext& ctx, bool scheduleNext) {
     for (auto& [partitionId, cpuUsage] : CPUUsageMetricByPartition) {
-        if (cpuUsage) {
-            ctx.Send(TabletActorId, new TEvPQ::TEvConsumerBatchProcessorMetrics(partitionId, User, cpuUsage));
-        }
+        ctx.Send(TabletActorId, new TEvPQ::TEvConsumerBatchProcessorMetrics(partitionId, User, cpuUsage));
     }
     CPUUsageMetricByPartition.clear();
 
@@ -190,7 +260,11 @@ STFUNC(TConsumerBatchProcessor::StateWork) {
             HFunc(NActors::TEvents::TEvWakeup, Handle);
             HFunc(NActors::TEvents::TEvPoisonPill, Handle);
         default:
-            LOG_W("Unexpected event in TConsumerBatchProcessor for user " << User << ": " << ev->GetTypeRewrite());
+            LOG_W(
+                "Unexpected event in TConsumerBatchProcessor",
+                {"user", User},
+                {"eventType", ev->GetTypeRewrite()}
+            );
             break;
         }
     }

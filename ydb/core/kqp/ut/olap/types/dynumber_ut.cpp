@@ -1,24 +1,7 @@
-#include "bool_test_enums.h"
-
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/kqp/ut/common/columnshard.h>
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/testlib/common_helper.h>
-#include <ydb/core/testlib/cs_helper.h>
-#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include "column_type_scenarios.h"
+#include "column_type_test_base.h"
 
 #include <yql/essentials/types/dynumber/dynumber.h>
-
-#include <library/cpp/threading/local_executor/local_executor.h>
-#include <util/generic/serialized_enum.h>
-#include <util/string/printf.h>
-#include <ydb/core/kqp/ut/common/arrow_builders.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -29,11 +12,51 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
     namespace {
 
-    struct TRow {
-        i32 Id;
-        i64 IntVal;
-        std::optional<TString> Dyn;
+    struct TDyNumberTraits {
+        using TValue = TString;
+        static constexpr const char* ColumnName = "dyn";
+        static constexpr const char* SqlTypeName = "DyNumber";
+
+        static TKikimrSettings CreateSettings() {
+            return CreateColumnshardSettings([](auto& f) { f.SetEnableColumnshardDyNumber(true); });
+        }
+
+        static auto GetTypeId() { return NScheme::NTypeIds::DyNumber; }
+
+        static void AppendYdbValue(TValueBuilder& builder, const std::optional<TString>& val) {
+            if (val.has_value()) {
+                builder.BeginOptional().DyNumber(*val).EndOptional();
+            } else {
+                builder.EmptyOptional(EPrimitiveType::DyNumber);
+            }
+        }
+
+        static void AppendCsvValue(TStringBuilder& builder, const std::optional<TString>& val) {
+            if (val.has_value()) {
+                builder << *val;
+            }
+        }
+
+        static std::shared_ptr<arrow::Array> MakeArrowArray(const TVector<TTypedRow<TString>>& rows) {
+            arrow::BinaryBuilder dynBuilder;
+            for (auto&& r : rows) {
+                if (r.TypedVal.has_value()) {
+                    Y_ABORT_UNLESS(dynBuilder.Append(r.TypedVal->data(), r.TypedVal->size()).ok());
+                } else {
+                    Y_ABORT_UNLESS(dynBuilder.AppendNull().ok());
+                }
+            }
+            std::shared_ptr<arrow::Array> arr;
+            Y_ABORT_UNLESS(dynBuilder.Finish(&arr).ok());
+            return arr;
+        }
+
+        static std::shared_ptr<arrow::DataType> ArrowType() { return arrow::binary(); }
+
+        static void LoadPkTable(TTestHelper& helper, ELoadKind load, const TString& tableName, TTestHelper::TColumnTable& table);
     };
+
+    COLUMN_TYPE_TEST_USING(TDyNumberTraits);
 
     static TString MakeDyNumber(const TStringBuf& str) {
         auto result = NDyNumber::ParseDyNumberString(str);
@@ -41,166 +64,238 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         return TString(str);
     }
 
-    TKikimrSettings CreateKikimrSettingsWithDyNumberSupport() {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableColumnshardDyNumber(true);
-        return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
-    }
-
     static void AppendDyNumber(arrow::BinaryBuilder& builder, const TStringBuf& str) {
         Y_ABORT_UNLESS(builder.Append(str.data(), str.size()).ok());
     }
 
-    void CreateDataShardTable(TTestHelper& helper, const TString& name) {
-        auto& session = helper.GetSession();
-        auto res = session
-                       .ExecuteSchemeQuery(TStringBuilder() << R"(
-                CREATE TABLE `)" << name << R"(` (
-                    id Int32 NOT NULL,
-                    int Int64,
-                    dyn DyNumber,
-                    PRIMARY KEY (id)
-                );
-            )")
-                       .ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SUCCESS);
-    }
-
-    void BulkUpsertRowTableYdbValue(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
-        TValueBuilder builder;
-        builder.BeginList();
-        for (auto&& r : rows) {
-            builder.AddListItem().BeginStruct()
-                .AddMember("id").Int32(r.Id)
-                .AddMember("int").Int64(r.IntVal)
-                .AddMember("dyn");
-            if (r.Dyn.has_value()) {
-                builder.BeginOptional().DyNumber(*r.Dyn).EndOptional();
-            } else {
-                builder.EmptyOptional(EPrimitiveType::DyNumber);
-            }
-
-            builder.EndStruct();
-        }
-
-        builder.EndList();
-        auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, builder.Build()).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    void BulkUpsertRowTableCSV(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
-        TStringBuilder builder;
-        for (auto&& r : rows) {
-            builder << r.Id << "," << r.IntVal << ",";
-            if (r.Dyn.has_value()) {
-                builder << *r.Dyn;
-            }
-
-            builder << '\n';
-        }
-
-        auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, EDataFormat::CSV, builder).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    std::shared_ptr<arrow::RecordBatch> MakeArrowBatch(const TVector<TRow>& rows) {
-        using namespace NKikimr::NKqp::NTestArrow;
-        std::vector<int32_t> ids;
-        std::vector<int64_t> vals;
-        ids.reserve(rows.size());
-        vals.reserve(rows.size());
-        for (auto&& r : rows) {
-            ids.push_back(r.Id);
-            vals.push_back(r.IntVal);
-        }
-
-        auto idArr = MakeInt32Array(ids);
-        auto intArr = MakeInt64Array(vals);
-
-        arrow::BinaryBuilder dynBuilder;
-        for (auto&& r : rows) {
-            if (r.Dyn.has_value()) {
-                Y_ABORT_UNLESS(dynBuilder.Append(r.Dyn->data(), r.Dyn->size()).ok());
-            } else {
-                Y_ABORT_UNLESS(dynBuilder.AppendNull().ok());
-            }
-        }
-
-        std::shared_ptr<arrow::Array> dynArr;
-        Y_ABORT_UNLESS(dynBuilder.Finish(&dynArr).ok());
-
-        auto schema = arrow::schema({
-            arrow::field("id", arrow::int32(), /*nullable*/ false),
-            arrow::field("int", arrow::int64()),
-            arrow::field("dyn", arrow::binary())
-        });
-
-        return arrow::RecordBatch::Make(schema, rows.size(), { idArr, intArr, dynArr });
-    }
-
-    void BulkUpsertRowTableArrow(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
-        auto batch = MakeArrowBatch(rows);
-        TString strBatch = NArrow::SerializeBatchNoCompression(batch);
-        TString strSchema = NArrow::SerializeSchema(*batch->schema());
-        auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
-    void LoadData(TTestHelper& helper, ETableKind table, ELoadKind load, const TString& name, const TVector<TRow>& rows,
-        TTestHelper::TColumnTable* col = nullptr, const TVector<TTestHelper::TColumnSchema>* schema = nullptr) {
-        switch (table) {
-            case ETableKind::COLUMNSHARD: {
-                Y_ABORT_UNLESS(col && schema);
-                if (load == ELoadKind::ARROW) {
-                    auto batch = MakeArrowBatch(rows);
-                    helper.BulkUpsert(*col, batch);
-                } else if (load == ELoadKind::YDB_VALUE) {
-                    BulkUpsertRowTableYdbValue(helper, name, rows);
-                } else {
-                    BulkUpsertRowTableCSV(helper, name, rows);
-                }
-
-                break;
-            }
-            case ETableKind::DATASHARD: {
-                if (load == ELoadKind::ARROW) {
-                    BulkUpsertRowTableArrow(helper, name, rows);
-                } else if (load == ELoadKind::YDB_VALUE) {
-                    BulkUpsertRowTableYdbValue(helper, name, rows);
-                } else {
-                    BulkUpsertRowTableCSV(helper, name, rows);
-                }
-
-                break;
-            }
-        }
-    }
-
-    void CheckOrExec(TTestHelper& helper, const TString& query, const TString& expected, EQueryMode scanMode) {
-        if (scanMode == EQueryMode::SCAN_QUERY) {
-            helper.ReadData(query, expected);
+    void TDyNumberTraits::LoadPkTable(TTestHelper& helper, ELoadKind load, const TString& tableName, TTestHelper::TColumnTable& table) {
+        if (load == ELoadKind::ARROW) {
+            arrow::BinaryBuilder dynB;
+            arrow::Int64Builder valB;
+            AppendDyNumber(dynB, "-100"); Y_ABORT_UNLESS(valB.Append(1).ok());
+            AppendDyNumber(dynB, "0"); Y_ABORT_UNLESS(valB.Append(2).ok());
+            AppendDyNumber(dynB, "3.14"); Y_ABORT_UNLESS(valB.Append(3).ok());
+            AppendDyNumber(dynB, "100"); Y_ABORT_UNLESS(valB.Append(4).ok());
+            AppendDyNumber(dynB, "999"); Y_ABORT_UNLESS(valB.Append(5).ok());
+            std::shared_ptr<arrow::Array> dynArr;
+            std::shared_ptr<arrow::Array> valArr;
+            Y_ABORT_UNLESS(dynB.Finish(&dynArr).ok());
+            Y_ABORT_UNLESS(valB.Finish(&valArr).ok());
+            auto aSchema = arrow::schema({
+                arrow::field("dyn", arrow::binary(), false),
+                arrow::field("val", arrow::int64())
+            });
+            auto batch = arrow::RecordBatch::Make(aSchema, 5, { dynArr, valArr });
+            helper.BulkUpsert(table, batch);
+        } else if (load == ELoadKind::YDB_VALUE) {
+            TValueBuilder builder;
+            builder.BeginList();
+            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("-100").AddMember("val").BeginOptional().Int64(1).EndOptional().EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("0").AddMember("val").BeginOptional().Int64(2).EndOptional().EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("3.14").AddMember("val").BeginOptional().Int64(3).EndOptional().EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("100").AddMember("val").BeginOptional().Int64(4).EndOptional().EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("999").AddMember("val").BeginOptional().Int64(5).EndOptional().EndStruct();
+            builder.EndList();
+            auto res = helper.GetKikimr().GetTableClient().BulkUpsert(tableName, builder.Build()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         } else {
-            helper.ReadDataExecQuery(query, expected);
+            TStringBuilder csv;
+            csv << "-.1e3,1\n.0,2\n.314e1,3\n.1e3,4\n.999e3,5\n";
+            auto res = helper.GetKikimr().GetTableClient().BulkUpsert(tableName, EDataFormat::CSV, csv).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
     }
 
-    void PrepareBase(TTestHelper& helper, ETableKind tableKind, const TString& tableName, TTestHelper::TColumnTable* colTableOut,
-        TVector<TTestHelper::TColumnSchema>* schemaOut) {
-        if (tableKind == ETableKind::COLUMNSHARD) {
-            TVector<TTestHelper::TColumnSchema> schema = {
-                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
-                TTestHelper::TColumnSchema().SetName("dyn").SetType(NScheme::NTypeIds::DyNumber),
-            };
+    TScenario<TString> FilterEqualScenario() {
+        const TString tableName = "/Root/ColumnTableTest";
+        return {
+            tableName,
+            {
+                { 1, 10, MakeDyNumber("1") },
+                { 2, 20, MakeDyNumber("2") },
+                { 3, 30, MakeDyNumber("3.14") },
+                { 4, 40, MakeDyNumber("100") },
+            },
+            {
+                { "SELECT id FROM `" + tableName + "` WHERE dyn = CAST(\"3.14\" AS DyNumber)", "[[3]]" },
+                { "SELECT id FROM `" + tableName + "` WHERE dyn = CAST(\"1\" AS DyNumber)", "[[1]]" },
+                { "SELECT id FROM `" + tableName + "` WHERE dyn != CAST(\"3.14\" AS DyNumber) ORDER BY id", "[[1];[2];[4]]" },
+                { "SELECT id FROM `" + tableName + "` WHERE dyn != CAST(\"100\" AS DyNumber) ORDER BY id", "[[1];[2];[3]]" },
+            },
+        };
+    }
 
-            *schemaOut = schema;
-            TTestHelper::TColumnTable col;
-            col.SetName(tableName).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
-            helper.CreateTable(col);
-            *colTableOut = col;
-        } else {
-            CreateDataShardTable(helper, tableName);
-        }
+    TScenario<TString> FilterNullsScenario() {
+        const TString tableName = "/Root/ColumnTableTest";
+        return {
+            tableName,
+            {
+                { 1, 10, MakeDyNumber("1") },
+                { 2, 20, std::nullopt },
+                { 3, 30, MakeDyNumber("3") },
+                { 4, 40, std::nullopt },
+                { 5, 50, MakeDyNumber("0") },
+            },
+            {
+                { "SELECT id FROM `" + tableName + "` WHERE dyn IS NULL ORDER BY id", "[[2];[4]]" },
+                { "SELECT id FROM `" + tableName + "` WHERE dyn IS NOT NULL ORDER BY id", "[[1];[3];[5]]" },
+            },
+        };
+    }
+
+    TScenario<TString> FilterCompareScenario() {
+        const TString tableName = "/Root/ColumnTableTest";
+        return {
+            tableName,
+            {
+                { 1, 10, MakeDyNumber("-10") },
+                { 2, 20, MakeDyNumber("0") },
+                { 3, 30, MakeDyNumber("5") },
+                { 4, 40, MakeDyNumber("10") },
+                { 5, 50, MakeDyNumber("100") },
+            },
+            {
+                { "SELECT id FROM `" + tableName + "` WHERE dyn < CAST(\"5\" AS DyNumber) ORDER BY id", "[[1];[2]]" },
+                { "SELECT id FROM `" + tableName + "` WHERE dyn > CAST(\"5\" AS DyNumber) ORDER BY id", "[[4];[5]]" },
+                { "SELECT id FROM `" + tableName + "` WHERE dyn <= CAST(\"5\" AS DyNumber) ORDER BY id", "[[1];[2];[3]]" },
+                { "SELECT id FROM `" + tableName + "` WHERE dyn >= CAST(\"10\" AS DyNumber) ORDER BY id", "[[4];[5]]" },
+                { "SELECT id FROM `" + tableName + "` WHERE dyn > CAST(\"-10\" AS DyNumber) ORDER BY id", "[[2];[3];[4];[5]]" },
+                { "SELECT id FROM `" + tableName + "` WHERE dyn >= CAST(\"0\" AS DyNumber) AND dyn <= CAST(\"10\" AS DyNumber) ORDER BY id", "[[2];[3];[4]]" },
+            },
+        };
+    }
+
+    TScenario<TString> OrderByScenario() {
+        const TString tableName = "/Root/ColumnTableTest";
+        return {
+            tableName,
+            {
+                { 1, 10, MakeDyNumber("100") },
+                { 2, 20, MakeDyNumber("-50") },
+                { 3, 30, MakeDyNumber("0") },
+                { 4, 40, MakeDyNumber("3.14") },
+                { 5, 50, MakeDyNumber("-1") },
+            },
+            {
+                { "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn", "[[2;[\"-.5e2\"]];[5;[\"-.1e1\"]];[3;[\"0\"]];[4;[\".314e1\"]];[1;[\".1e3\"]]]" },
+                { "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn DESC", "[[1;[\".1e3\"]];[4;[\".314e1\"]];[3;[\"0\"]];[5;[\"-.1e1\"]];[2;[\"-.5e2\"]]]" },
+            },
+        };
+    }
+
+    TScenario<TString> GroupByScenario() {
+        const TString tableName = "/Root/ColumnTableTest";
+        return {
+            tableName,
+            {
+                { 1, 10, MakeDyNumber("1") },
+                { 2, 20, MakeDyNumber("2") },
+                { 3, 30, MakeDyNumber("1") },
+                { 4, 40, MakeDyNumber("2") },
+                { 5, 50, MakeDyNumber("3") },
+            },
+            {
+                { "SELECT dyn, count(*) AS cnt FROM `" + tableName + "` GROUP BY dyn ORDER BY dyn",
+                    "[[[\".1e1\"];2u];[[\".2e1\"];2u];[[\".3e1\"];1u]]" },
+            },
+        };
+    }
+
+    TScenario<TString> AggregationScenario() {
+        const TString tableName = "/Root/ColumnTableTest";
+        return {
+            tableName,
+            {
+                { 1, 10, MakeDyNumber("-5") },
+                { 2, 20, MakeDyNumber("10") },
+                { 3, 30, MakeDyNumber("99") },
+                { 4, 40, std::nullopt },
+                { 5, 50, MakeDyNumber("0") },
+            },
+            {
+                { "SELECT min(dyn) FROM `" + tableName + "`", "[[[\"-.5e1\"]]]" },
+                { "SELECT max(dyn) FROM `" + tableName + "`", "[[[\".99e2\"]]]" },
+                { "SELECT count(dyn) FROM `" + tableName + "`", "[[4u]]" },
+                { "SELECT count(*) FROM `" + tableName + "`", "[[5u]]" },
+            },
+        };
+    }
+
+    TJoinScenario<TString> JoinByDyNumberScenario() {
+        const TString t1 = "/Root/Table1";
+        const TString t2 = "/Root/Table2";
+        return {
+            t1,
+            t2,
+            {
+                { 1, 10, MakeDyNumber("10") },
+                { 2, 20, MakeDyNumber("20") },
+                { 3, 30, MakeDyNumber("30") },
+            },
+            {
+                { 10, 100, MakeDyNumber("10") },
+                { 20, 200, MakeDyNumber("30") },
+                { 30, 300, MakeDyNumber("50") },
+            },
+            {
+                { "SELECT t1.id, t2.id, t1.dyn FROM `" + t1 + "` AS t1 "
+                  "JOIN `" + t2 + "` AS t2 ON t1.dyn = t2.dyn "
+                  "ORDER BY t1.id, t2.id",
+                  "[[1;10;[\".1e2\"]];[3;20;[\".3e2\"]]]" },
+            },
+        };
+    }
+
+    TScenario<TString> OrderByWithLimitScenario() {
+        const TString tableName = "/Root/ColumnTableTest";
+        return {
+            tableName,
+            {
+                { 1, 10, MakeDyNumber("-100") },
+                { 2, 20, MakeDyNumber("-1") },
+                { 3, 30, MakeDyNumber("0") },
+                { 4, 40, MakeDyNumber("5") },
+                { 5, 50, MakeDyNumber("42") },
+                { 6, 60, MakeDyNumber("999") },
+            },
+            {
+                { "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn LIMIT 3", "[[1;[\"-.1e3\"]];[2;[\"-.1e1\"]];[3;[\"0\"]]]" },
+                { "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn DESC LIMIT 2", "[[6;[\".999e3\"]];[5;[\".42e2\"]]]" },
+                { "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn LIMIT 2 OFFSET 2", "[[3;[\"0\"]];[4;[\".5e1\"]]]" },
+            },
+        };
+    }
+
+    TScenario<TString> GroupByWithNullsScenario() {
+        const TString tableName = "/Root/ColumnTableTest";
+        return {
+            tableName,
+            {
+                { 1, 10, MakeDyNumber("10") },
+                { 2, 20, std::nullopt },
+                { 3, 30, MakeDyNumber("10") },
+                { 4, 40, std::nullopt },
+                { 5, 50, MakeDyNumber("20") },
+                { 6, 60, std::nullopt },
+            },
+            {
+                { "SELECT dyn, count(*) AS cnt FROM `" + tableName + "` GROUP BY dyn ORDER BY dyn",
+                    "[[#;3u];[[\".1e2\"];2u];[[\".2e2\"];1u]]" },
+                { "SELECT count(dyn), count(*) FROM `" + tableName + "`", "[[3u;6u]]" },
+            },
+        };
+    }
+
+    TPkLookupScenario PkLookupScenario() {
+        const TString tableName = "/Root/ColumnTableTest";
+        return {
+            tableName,
+            {
+                { "SELECT val FROM `" + tableName + "` WHERE dyn = CAST(\".1e3\" AS DyNumber)", "[[[4]]]" },
+                { "SELECT val FROM `" + tableName + "` WHERE dyn = CAST(\"0\" AS DyNumber)", "[[[2]]]" },
+                { "SELECT val FROM `" + tableName + "` WHERE dyn = CAST(\"3.14\" AS DyNumber)", "[[[3]]]" },
+            },
+        };
     }
 
     }   // namespace
@@ -211,11 +306,11 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         const auto Load = Arg<2>();
 
         const TString tableName = "/Root/ColumnTableTest";
-        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
+        TTestHelper helper(TDyNumberTraits::CreateSettings());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, {
+        Base::PrepareBase(helper, Table, tableName, &col, &schema);
+        Base::LoadData(helper, Table, Load, tableName, {
             { 1, 10, MakeDyNumber("3.14") },
             { 2, 20, MakeDyNumber("-100") },
             { 3, 30, std::nullopt },
@@ -238,186 +333,19 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         CheckOrExec(helper, "SELECT dyn FROM `" + tableName + "` WHERE id=6", "[[[\"-.5e1\"]]]", Scan);
     }
 
-    Y_UNIT_TEST(TestFilterEqual, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/ColumnTableTest";
-        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, {
-            { 1, 10, MakeDyNumber("1") },
-            { 2, 20, MakeDyNumber("2") },
-            { 3, 30, MakeDyNumber("3.14") },
-            { 4, 40, MakeDyNumber("100") }
-        }, &col, &schema);
-
-        CheckOrExec(helper,
-            "SELECT id FROM `" + tableName + "` WHERE dyn = CAST(\"3.14\" AS DyNumber)",
-            "[[3]]", Scan);
-
-        CheckOrExec(helper,
-            "SELECT id FROM `" + tableName + "` WHERE dyn = CAST(\"1\" AS DyNumber)",
-            "[[1]]", Scan);
-
-        CheckOrExec(helper,
-            "SELECT id FROM `" + tableName + "` WHERE dyn != CAST(\"3.14\" AS DyNumber) ORDER BY id",
-            "[[1];[2];[4]]", Scan);
-
-        CheckOrExec(helper,
-            "SELECT id FROM `" + tableName + "` WHERE dyn != CAST(\"100\" AS DyNumber) ORDER BY id",
-            "[[1];[2];[3]]", Scan);
-    }
-
-    Y_UNIT_TEST(TestFilterNulls, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/ColumnTableTest";
-        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, {
-            { 1, 10, MakeDyNumber("1") },
-            { 2, 20, std::nullopt },
-            { 3, 30, MakeDyNumber("3") },
-            { 4, 40, std::nullopt },
-            { 5, 50, MakeDyNumber("0") }
-        }, &col, &schema);
-
-        CheckOrExec(helper, "SELECT id FROM `" + tableName + "` WHERE dyn IS NULL ORDER BY id",
-            "[[2];[4]]", Scan);
-        CheckOrExec(helper, "SELECT id FROM `" + tableName + "` WHERE dyn IS NOT NULL ORDER BY id",
-            "[[1];[3];[5]]", Scan);
-    }
-
-    Y_UNIT_TEST(TestFilterCompare, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/ColumnTableTest";
-        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, {
-            { 1, 10, MakeDyNumber("-10") },
-            { 2, 20, MakeDyNumber("0") },
-            { 3, 30, MakeDyNumber("5") },
-            { 4, 40, MakeDyNumber("10") },
-            { 5, 50, MakeDyNumber("100") }
-        }, &col, &schema);
-
-        CheckOrExec(helper,
-            "SELECT id FROM `" + tableName + "` WHERE dyn < CAST(\"5\" AS DyNumber) ORDER BY id",
-            "[[1];[2]]", Scan);
-
-        CheckOrExec(helper,
-            "SELECT id FROM `" + tableName + "` WHERE dyn > CAST(\"5\" AS DyNumber) ORDER BY id",
-            "[[4];[5]]", Scan);
-
-        CheckOrExec(helper,
-            "SELECT id FROM `" + tableName + "` WHERE dyn <= CAST(\"5\" AS DyNumber) ORDER BY id",
-            "[[1];[2];[3]]", Scan);
-
-        CheckOrExec(helper,
-            "SELECT id FROM `" + tableName + "` WHERE dyn >= CAST(\"10\" AS DyNumber) ORDER BY id",
-            "[[4];[5]]", Scan);
-
-        CheckOrExec(helper,
-            "SELECT id FROM `" + tableName + "` WHERE dyn > CAST(\"-10\" AS DyNumber) ORDER BY id",
-            "[[2];[3];[4];[5]]", Scan);
-
-        CheckOrExec(helper,
-            "SELECT id FROM `" + tableName + "` WHERE dyn >= CAST(\"0\" AS DyNumber) AND dyn <= CAST(\"10\" AS DyNumber) ORDER BY id",
-            "[[2];[3];[4]]", Scan);
-    }
-
-    Y_UNIT_TEST(TestOrderBy, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/ColumnTableTest";
-        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, {
-            { 1, 10, MakeDyNumber("100") },
-            { 2, 20, MakeDyNumber("-50") },
-            { 3, 30, MakeDyNumber("0") },
-            { 4, 40, MakeDyNumber("3.14") },
-            { 5, 50, MakeDyNumber("-1") }
-        }, &col, &schema);
-
-        CheckOrExec(helper,
-            "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn",
-            "[[2;[\"-.5e2\"]];[5;[\"-.1e1\"]];[3;[\"0\"]];[4;[\".314e1\"]];[1;[\".1e3\"]]]", Scan);
-
-        CheckOrExec(helper,
-            "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn DESC",
-            "[[1;[\".1e3\"]];[4;[\".314e1\"]];[3;[\"0\"]];[5;[\"-.1e1\"]];[2;[\"-.5e2\"]]]", Scan);
-    }
-
-    Y_UNIT_TEST(TestGroupBy, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/ColumnTableTest";
-        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, {
-            { 1, 10, MakeDyNumber("1") },
-            { 2, 20, MakeDyNumber("2") },
-            { 3, 30, MakeDyNumber("1") },
-            { 4, 40, MakeDyNumber("2") },
-            { 5, 50, MakeDyNumber("3") }
-        }, &col, &schema);
-
-        CheckOrExec(helper, "SELECT dyn, count(*) AS cnt FROM `" + tableName + "` GROUP BY dyn ORDER BY dyn",
-            "[[[\".1e1\"];2u];[[\".2e1\"];2u];[[\".3e1\"];1u]]", Scan);
-    }
-
-    Y_UNIT_TEST(TestAggregation, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/ColumnTableTest";
-        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, {
-            { 1, 10, MakeDyNumber("-5") },
-            { 2, 20, MakeDyNumber("10") },
-            { 3, 30, MakeDyNumber("99") },
-            { 4, 40, std::nullopt },
-            { 5, 50, MakeDyNumber("0") }
-        }, &col, &schema);
-
-        CheckOrExec(helper, "SELECT min(dyn) FROM `" + tableName + "`", "[[[\"-.5e1\"]]]", Scan);
-        CheckOrExec(helper, "SELECT max(dyn) FROM `" + tableName + "`", "[[[\".99e2\"]]]", Scan);
-        CheckOrExec(helper, "SELECT count(dyn) FROM `" + tableName + "`", "[[4u]]", Scan);
-        CheckOrExec(helper, "SELECT count(*) FROM `" + tableName + "`", "[[5u]]", Scan);
-    }
+    Y_UNIT_TEST_SCENARIO(TestFilterEqual, FilterEqualScenario);
+    Y_UNIT_TEST_SCENARIO(TestFilterNulls, FilterNullsScenario);
+    Y_UNIT_TEST_SCENARIO(TestFilterCompare, FilterCompareScenario);
+    Y_UNIT_TEST_SCENARIO(TestOrderBy, OrderByScenario);
+    Y_UNIT_TEST_SCENARIO(TestGroupBy, GroupByScenario);
+    Y_UNIT_TEST_SCENARIO(TestAggregation, AggregationScenario);
 
     Y_UNIT_TEST(TestJoinById, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
+        TTestHelper helper(TDyNumberTraits::CreateSettings());
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
@@ -444,7 +372,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
             col2.SetName(t2).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s2);
             helper.CreateTable(col2);
         } else {
-            CreateDataShardTable(helper, t1);
+            Base::CreateDataShardTable(helper, t1);
             {
                 auto& session = helper.GetSession();
                 auto res = session
@@ -461,7 +389,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
             }
         }
 
-        LoadData(helper, Table, Load, t1, {
+        Base::LoadData(helper, Table, Load, t1, {
             { 1, 10, MakeDyNumber("3.14") },
             { 2, 20, MakeDyNumber("100") }
         }, &col1, &s1);
@@ -546,189 +474,23 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
             "[[1;[\".314e1\"];[\".5e2\"]];[1;[\".314e1\"];[\".6e2\"]];[2;[\".1e3\"];[\".7e2\"]]]", Scan);
     }
 
-    Y_UNIT_TEST(TestJoinByDyNumber, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
-
-        const TString t1 = "/Root/Table1";
-        const TString t2 = "/Root/Table2";
-
-        TTestHelper::TColumnTable col1, col2;
-        TVector<TTestHelper::TColumnSchema> s1, s2;
-
-        if (Table == ETableKind::COLUMNSHARD) {
-            s1 = {
-                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
-                TTestHelper::TColumnSchema().SetName("dyn").SetType(NScheme::NTypeIds::DyNumber),
-            };
-
-            col1.SetName(t1).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s1);
-            helper.CreateTable(col1);
-
-            s2 = {
-                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
-                TTestHelper::TColumnSchema().SetName("dyn").SetType(NScheme::NTypeIds::DyNumber),
-            };
-
-            col2.SetName(t2).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s2);
-            helper.CreateTable(col2);
-        } else {
-            CreateDataShardTable(helper, t1);
-            CreateDataShardTable(helper, t2);
-        }
-
-        LoadData(helper, Table, Load, t1, {
-            { 1, 10, MakeDyNumber("10") },
-            { 2, 20, MakeDyNumber("20") },
-            { 3, 30, MakeDyNumber("30") }
-        }, &col1, &s1);
-
-        LoadData(helper, Table, Load, t2, {
-            { 10, 100, MakeDyNumber("10") },
-            { 20, 200, MakeDyNumber("30") },
-            { 30, 300, MakeDyNumber("50") }
-        }, &col2, &s2);
-
-        CheckOrExec(helper,
-            "SELECT t1.id, t2.id, t1.dyn FROM `" + t1 + "` AS t1 "
-            "JOIN `" + t2 + "` AS t2 ON t1.dyn = t2.dyn "
-            "ORDER BY t1.id, t2.id",
-            "[[1;10;[\".1e2\"]];[3;20;[\".3e2\"]]]", Scan);
-    }
-
-    Y_UNIT_TEST(TestOrderByWithLimit, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/ColumnTableTest";
-        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, {
-            { 1, 10, MakeDyNumber("-100") },
-            { 2, 20, MakeDyNumber("-1") },
-            { 3, 30, MakeDyNumber("0") },
-            { 4, 40, MakeDyNumber("5") },
-            { 5, 50, MakeDyNumber("42") },
-            { 6, 60, MakeDyNumber("999") }
-        }, &col, &schema);
-
-        CheckOrExec(helper,
-            "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn LIMIT 3",
-            "[[1;[\"-.1e3\"]];[2;[\"-.1e1\"]];[3;[\"0\"]]]", Scan);
-
-        CheckOrExec(helper,
-            "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn DESC LIMIT 2",
-            "[[6;[\".999e3\"]];[5;[\".42e2\"]]]", Scan);
-
-        CheckOrExec(helper,
-            "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn LIMIT 2 OFFSET 2",
-            "[[3;[\"0\"]];[4;[\".5e1\"]]]", Scan);
-    }
-
-    Y_UNIT_TEST(TestGroupByWithNulls, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Table = Arg<1>();
-        const auto Load = Arg<2>();
-
-        const TString tableName = "/Root/ColumnTableTest";
-        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
-        TTestHelper::TColumnTable col;
-        TVector<TTestHelper::TColumnSchema> schema;
-        PrepareBase(helper, Table, tableName, &col, &schema);
-        LoadData(helper, Table, Load, tableName, {
-            { 1, 10, MakeDyNumber("10") },
-            { 2, 20, std::nullopt },
-            { 3, 30, MakeDyNumber("10") },
-            { 4, 40, std::nullopt },
-            { 5, 50, MakeDyNumber("20") },
-            { 6, 60, std::nullopt }
-        }, &col, &schema);
-
-        CheckOrExec(helper,
-            "SELECT dyn, count(*) AS cnt FROM `" + tableName + "` GROUP BY dyn ORDER BY dyn",
-            "[[#;3u];[[\".1e2\"];2u];[[\".2e2\"];1u]]", Scan);
-
-        CheckOrExec(helper,
-            "SELECT count(dyn), count(*) FROM `" + tableName + "`",
-            "[[3u;6u]]", Scan);
-    }
-
-    Y_UNIT_TEST(TestDyNumberAsPrimaryKey, EQueryMode, ELoadKind) {
-        const auto Scan = Arg<0>();
-        const auto Load = Arg<1>();
-
-        TTestHelper helper(CreateKikimrSettingsWithDyNumberSupport());
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("dyn").SetType(NScheme::NTypeIds::DyNumber).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetType(NScheme::NTypeIds::Int64)
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"dyn"}).SetSharding({"dyn"}).SetSchema(schema);
-        helper.CreateTable(testTable);
-
-        if (Load == ELoadKind::ARROW) {
-            arrow::BinaryBuilder dynB;
-            arrow::Int64Builder valB;
-            AppendDyNumber(dynB, "-100"); Y_ABORT_UNLESS(valB.Append(1).ok());
-            AppendDyNumber(dynB, "0"); Y_ABORT_UNLESS(valB.Append(2).ok());
-            AppendDyNumber(dynB, "3.14"); Y_ABORT_UNLESS(valB.Append(3).ok());
-            AppendDyNumber(dynB, "100"); Y_ABORT_UNLESS(valB.Append(4).ok());
-            AppendDyNumber(dynB, "999"); Y_ABORT_UNLESS(valB.Append(5).ok());
-            std::shared_ptr<arrow::Array> dynArr, valArr;
-            Y_ABORT_UNLESS(dynB.Finish(&dynArr).ok());
-            Y_ABORT_UNLESS(valB.Finish(&valArr).ok());
-            auto aSchema = arrow::schema({
-                arrow::field("dyn", arrow::binary(), false),
-                arrow::field("val", arrow::int64())
-            });
-
-            auto batch = arrow::RecordBatch::Make(aSchema, 5, { dynArr, valArr });
-            helper.BulkUpsert(testTable, batch);
-        } else if (Load == ELoadKind::YDB_VALUE) {
-            TValueBuilder builder;
-            builder.BeginList();
-            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("-100").AddMember("val").BeginOptional().Int64(1).EndOptional().EndStruct();
-            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("0").AddMember("val").BeginOptional().Int64(2).EndOptional().EndStruct();
-            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("3.14").AddMember("val").BeginOptional().Int64(3).EndOptional().EndStruct();
-            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("100").AddMember("val").BeginOptional().Int64(4).EndOptional().EndStruct();
-            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("999").AddMember("val").BeginOptional().Int64(5).EndOptional().EndStruct();
-            builder.EndList();
-            auto res = helper.GetKikimr().GetTableClient().BulkUpsert("/Root/ColumnTableTest", builder.Build()).GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-        } else {
-            TStringBuilder csv;
-            csv << "-.1e3,1\n.0,2\n.314e1,3\n.1e3,4\n.999e3,5\n";
-            auto res = helper.GetKikimr().GetTableClient().BulkUpsert("/Root/ColumnTableTest", EDataFormat::CSV, csv).GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-        }
-
-        CheckOrExec(helper, "SELECT val FROM `/Root/ColumnTableTest` WHERE dyn = CAST(\".1e3\" AS DyNumber)", "[[[4]]]", Scan);
-        CheckOrExec(helper, "SELECT val FROM `/Root/ColumnTableTest` WHERE dyn = CAST(\"0\" AS DyNumber)", "[[[2]]]", Scan);
-        CheckOrExec(helper, "SELECT val FROM `/Root/ColumnTableTest` WHERE dyn = CAST(\"3.14\" AS DyNumber)", "[[[3]]]", Scan);
-    }
+    Y_UNIT_TEST_JOIN_SCENARIO(TestJoinByDyNumber, JoinByDyNumberScenario);
+    Y_UNIT_TEST_SCENARIO(TestOrderByWithLimit, OrderByWithLimitScenario);
+    Y_UNIT_TEST_SCENARIO(TestGroupByWithNulls, GroupByWithNullsScenario);
+    Y_UNIT_TEST_PK_SCENARIO(TestDyNumberAsPrimaryKey, PkLookupScenario);
 
     Y_UNIT_TEST(TestDmlParityAndCTAS, EQueryMode, ELoadKind) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        auto runnerSettings = CreateKikimrSettingsWithDyNumberSupport();
+        auto runnerSettings = TDyNumberTraits::CreateSettings();
         runnerSettings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         TTestHelper helper(runnerSettings);
 
         const TString ds = "/Root/RowSrc";
         const TString cs = "/Root/ColSrc";
 
-        CreateDataShardTable(helper, ds);
+        Base::CreateDataShardTable(helper, ds);
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
@@ -746,19 +508,19 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
             "(2, 200, CAST(\"20\" AS DyNumber))");
 
         if (Load == ELoadKind::ARROW) {
-            auto batch = MakeArrowBatch({
+            auto batch = Base::MakeArrowBatch({
                 { 1, 100, MakeDyNumber("10") },
                 { 2, 200, MakeDyNumber("20") }
             });
 
             helper.BulkUpsert(col, batch);
         } else if (Load == ELoadKind::YDB_VALUE) {
-            BulkUpsertRowTableYdbValue(helper, cs, {
+            Base::BulkUpsertRowTableYdbValue(helper, cs, {
                 { 1, 100, MakeDyNumber("10") },
                 { 2, 200, MakeDyNumber("20") }
             });
         } else {
-            BulkUpsertRowTableCSV(helper, cs, {
+            Base::BulkUpsertRowTableCSV(helper, cs, {
                 { 1, 100, MakeDyNumber("10") },
                 { 2, 200, MakeDyNumber("20") }
             });

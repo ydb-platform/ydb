@@ -36,6 +36,10 @@ namespace {
 using TAccessServiceMock = TTicketParserAccessServiceMock;
 using TAccessServiceMockV2 = TTicketParserAccessServiceMockV2;
 using TNebiusAccessServiceMock = TTicketParserNebiusAccessServiceMock;
+using TEvAuthorizeTicket = TEvTicketParser::TEvAuthorizeTicket;
+
+const TString PEER_NAME = "192.168.0.101";
+const TString REQUEST_ID = "ticket-parser-test-request-id";
 
 // Precomputed argon2id + SCRAM-SHA-256 hashes from scram_ut.cpp
 // Password: "password1"
@@ -161,6 +165,58 @@ public:
         return now + TDuration::Hours(1);
     }
 
+    static TString RenderTokenRecordInfoForMonitoring(const TString& requestId) {
+        TTokenRecord record("ticket", PEER_NAME, requestId);
+        TStringBuilder html;
+        TBase::WriteTokenRecordInfo(html, record);
+        return html;
+    }
+
+    static TString RenderTokenRecordValuesForMonitoring(const TString& requestId) {
+        TTokenRecord record("ticket", PEER_NAME, requestId);
+        TStringBuilder html;
+        TBase::WriteTokenRecordValues(html, "key", record);
+        return html;
+    }
+
+private:
+    THashMap<TString, TTokenRecord> UserTokens;
+
+    THashMap<TString, TTokenRecord>& GetUserTokens() {
+        return UserTokens;
+    }
+};
+
+// Parser with UseAccessServiceAuthenticationOnly() enabled. Used to verify that with this flag
+// the parser asks Access Service for authentication even when the request comes with permissions.
+class TTicketParserAuthenticationOnly : public TTicketParserImpl<TTicketParserAuthenticationOnly> {
+    using TBase = TTicketParserImpl<TTicketParserAuthenticationOnly>;
+    using TBase::TBase;
+    friend TBase;
+
+public:
+    enum class ETokenType {
+        Unknown,
+        Unsupported,
+        AccessService,
+        NebiusAccessService,
+        Builtin,
+        Login,
+        ApiKey,
+        Certificate,
+        ExternalIdp,
+    };
+
+    using TTokenRecord = TBase::TTokenRecordBase;
+
+    bool UseAccessServiceAuthenticationOnly() const {
+        return true;
+    }
+
+    static TString GetCacheKey(TEvTicketParser::TEvAuthorizeTicket* request) {
+        return GetKey(request);
+    }
+
 private:
     THashMap<TString, TTokenRecord> UserTokens;
 
@@ -176,6 +232,16 @@ private:
 namespace NKikimr::NCertTestUtils {
 
 Y_UNIT_TEST_SUITE(TTicketParserTest) {
+
+    Y_UNIT_TEST(MonitoringPageIncludesRequestId) {
+        const TString requestId = "monitoring-request-id";
+        const TString infoHtml = TTicketParserWithCustomExpireTime::RenderTokenRecordInfoForMonitoring(requestId);
+        const TString valuesHtml = TTicketParserWithCustomExpireTime::RenderTokenRecordValuesForMonitoring(requestId);
+
+        UNIT_ASSERT_STRING_CONTAINS(infoHtml, "Request ID");
+        UNIT_ASSERT_STRING_CONTAINS(infoHtml, requestId);
+        UNIT_ASSERT_STRING_CONTAINS(valuesHtml, requestId);
+    }
 
     Y_UNIT_TEST(LoginGood) {
         using namespace Tests;
@@ -208,7 +274,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         provider.CreateUser(MakeCreateUserRequest("user1"));
         auto loginResponse = provider.LoginUser(MakeLoginUserRequest("user1"));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -255,7 +324,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -304,7 +376,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
             // Send token without type
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({.Ticket = loginResponse.Token, .Database = "/Root/Db1"})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = loginResponse.Token,
+                .Database = "/Root/Db1",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            })), 0);
             Sleep(TDuration::Seconds(1));
             // Send update security state in 1 second after send TEvAuthorizeTicket
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(loginProviderDb1.GetSecurityState())), 0);
@@ -335,7 +411,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
             // Send token with type Login
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({.Ticket = "Login " + loginResponse.Token, .Database = "/Root/Db2"})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = "Login " + loginResponse.Token,
+                .Database = "/Root/Db2",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            })), 0);
             Sleep(TDuration::Seconds(1));
             // Send update security state in 1 second after send TEvAuthorizeTicket
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(loginProviderDb2.GetSecurityState())), 0);
@@ -387,7 +467,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
         // Send token without type
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({.Ticket = loginResponse.Token, .Database = "/Root/Db1"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .Database = "/Root/Db1",
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
         // Do no send update security state
         // runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(loginProviderDb1.GetSecurityState())), 0);
 
@@ -429,7 +513,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("Login bad-token")), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+            .Ticket = "Login bad-token",
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -476,7 +563,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -493,7 +583,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         Sleep(TDuration::Seconds(10));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -511,7 +604,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         Sleep(TDuration::Seconds(10));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -565,7 +661,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -579,7 +678,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
         Sleep(TDuration::Seconds(7));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -628,7 +730,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -645,7 +750,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         Sleep(TDuration::Seconds(10));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -686,7 +794,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TString emptyUserToken = "";
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(emptyUserToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = emptyUserToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -723,7 +834,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -762,7 +876,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -813,7 +930,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -866,7 +986,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -917,7 +1040,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -961,7 +1087,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1005,7 +1134,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1050,7 +1182,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1087,6 +1222,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
 
         TString userToken = "user1";
+        TString requestId = "authenticate-request-id";
 
         // Access Server Mock
         TAccessServiceMock accessServiceMock;
@@ -1094,7 +1230,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket("Bearer " + userToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = "Bearer " + userToken,
+            .TraceContext = {PEER_NAME, requestId},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1103,6 +1242,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Ticket, userToken);
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), userToken + "@as");
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.CapturedXUserIP, PEER_NAME);
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.CapturedRequestId, requestId);
     }
 
     Y_UNIT_TEST(AccessServiceAuthenticationOk) {
@@ -1115,6 +1256,151 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(NebiusAccessServiceAuthenticationOk) {
         AccessServiceAuthenticationOk<NKikimr::TNebiusAccessServiceMock>();
+    }
+
+    Y_UNIT_TEST(AccessServiceAuthenticationOnlyIgnoresAuthorizeEntries) {
+        using namespace Tests;
+
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 accessServicePort = tp.GetPort(4284);
+        TString accessServiceEndpoint = "localhost:" + ToString(accessServicePort);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        SetUseAccessService<NKikimr::TAccessServiceMockV2>(authConfig);
+        authConfig.SetUseAccessServiceTLS(false);
+        authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
+        authConfig.SetUseStaff(false);
+        auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceV2Interface(true);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = [](const TTicketParserSettings& s) -> IActor* {
+            return new TTicketParserAuthenticationOnly(s);
+        };
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        TClient client(settings);
+        client.InitRootScheme();
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        NKikimr::TAccessServiceMockV2 accessServiceMock;
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
+        std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
+
+        TActorId sender = runtime->AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+        const TString userToken = "user1";
+        const TVector<std::pair<TString, TString>> dbAttrs = {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}};
+        const TVector<std::pair<TString, TString>> gizmoAttrs = {{"gizmo_id", "gizmo"}};
+
+        auto request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(
+            TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+                .Ticket = "Bearer " + userToken,
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = {
+                    {TEvAuthorizeTicket::ToPermissions({"ydb.databases.connect"}), dbAttrs},
+                    {TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get"}), gizmoAttrs},
+                },
+            }
+        );
+        const TString key = TTicketParserAuthenticationOnly::GetCacheKey(request.Get());
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, request.Release()), 0);
+
+        TEvTicketParser::TEvAuthorizeTicketResult* result =
+            runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT_C(!result->HasError(), result->Error);
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), userToken + "@as");
+        UNIT_ASSERT_C(!result->Token->IsExist("ydb.databases.connect@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->Token->IsExist("ydb.databases.connect-bbbb4554@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->Token->IsExist("ydb.developerApi.get-gizmo@as"), result->Token->ShortDebugString());
+
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvRefreshTicket(key)), 0);
+        NActors::TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return accessServiceMock.AuthenticateCount.load() >= 2;
+        };
+        runtime->DispatchEvents(options, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
+    }
+
+    Y_UNIT_TEST(CacheHitTraceContextIsUsedForAccessServiceRefresh) {
+        using namespace Tests;
+
+        TPortManager tp;
+        const ui16 port = tp.GetPort(2134);
+        const ui16 grpcPort = tp.GetPort(2135);
+        const ui16 servicePort = tp.GetPort(4284);
+        const TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
+
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        SetUseAccessService<NKikimr::TAccessServiceMock>(authConfig);
+        authConfig.SetUseAccessServiceTLS(false);
+        authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
+        authConfig.SetUseStaff(false);
+        authConfig.SetRefreshPeriod("1h");
+        authConfig.SetRefreshTime("1h");
+
+        auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceV2Interface(false);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = NKikimr::CreateTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+
+        NKikimr::TAccessServiceMock accessServiceMock;
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
+        std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        const TActorId sender = runtime->AllocateEdgeActor();
+        const TString ticket = "Bearer user1";
+
+        const auto authorize = [&](const TString& peerName, const TString& requestId) {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = ticket,
+                .TraceContext = {peerName, requestId},
+            })), 0);
+
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT_C(!result->HasError(), result->Error);
+        };
+
+        authorize("192.168.0.1", "initial-request-id");
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
+
+        const TString latestPeerName = "192.168.0.2";
+        const TString latestRequestId = "latest-request-id";
+        authorize(latestPeerName, latestRequestId);
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
+
+        runtime->Send(new IEventHandle(
+            MakeTicketParserID(),
+            sender,
+            new TEvTicketParser::TEvRefreshTicket(ticket + ":")), 0);
+
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (accessServiceMock.AuthenticateCount.load() < 2 && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(20));
+        }
+        UNIT_ASSERT_C(accessServiceMock.AuthenticateCount.load() >= 2, "AccessService refresh request did not arrive");
+
+        with_lock (accessServiceMock.MetadataMutex) {
+            UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.CapturedXUserIP, latestPeerName);
+            UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.CapturedRequestId, latestRequestId);
+        }
     }
 
     template <typename TAccessServiceMock>
@@ -1158,7 +1444,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(userToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1227,7 +1516,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(userToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
@@ -1281,7 +1573,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.UnavailableTokens.insert(userToken);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(userToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
         UNIT_ASSERT(result->Error.Retryable);
@@ -1347,9 +1642,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(signature),
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1")), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+                .Ticket = "user1",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            })), 0);
         }
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -1361,9 +1662,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         Sleep(TDuration::Seconds(10));
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", {})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(retrySignature),
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1")), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+                .Ticket = "user1",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            })), 0);
         }
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
@@ -1430,9 +1737,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(signature),
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TString("user1"))), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = TString("user1"),
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            })), 0);
         }
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -1442,9 +1755,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         Sleep(TDuration::Seconds(2));
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", {})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(retrySignature),
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TString("user1"))), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = TString("user1"),
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            })), 0);
         }
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
@@ -1466,7 +1785,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthenticationRetryErrorImmediately<NKikimr::TNebiusAccessServiceMock>();
     }
 
-    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    template <typename TAccessServiceMock>
     void AuthorizationRetryError() {
         using namespace Tests;
 
@@ -1483,7 +1802,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseStaff(false);
         authConfig.SetMinErrorRefreshTime("300ms");
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
@@ -1511,15 +1829,25 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
 
-        const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
-                                                                        TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}),
-                                                                        {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
-                                                                    }};
+        const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {
+            {
+                TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+            }
+        };
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(signature),
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = entries,
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+                .Ticket = "user1",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = entries,
+            })), 0);
         }
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1532,9 +1860,17 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         Sleep(TDuration::Seconds(10));
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(retrySignature),
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = entries,
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+                .Ticket = "user1",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = entries,
+            })), 0);
         }
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1545,27 +1881,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
     }
 
-    Y_UNIT_TEST(AuthorizationRetryError) {
-        AuthorizationRetryError<NKikimr::TAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(AuthorizationRetryErrorV2Interface) {
-        AuthorizationRetryError<NKikimr::TAccessServiceMockV2>();
-    }
-
     Y_UNIT_TEST(BulkAuthorizationRetryError) {
-        AuthorizationRetryError<NKikimr::TAccessServiceMockV2, true>();
+        AuthorizationRetryError<NKikimr::TAccessServiceMockV2>();
     }
 
     Y_UNIT_TEST(NebiusAuthorizationRetryError) {
         AuthorizationRetryError<NKikimr::TNebiusAccessServiceMock>();
     }
 
-    Y_UNIT_TEST(NebiusAuthorizationWithBulkRetryError) {
-        AuthorizationRetryError<NKikimr::TNebiusAccessServiceMock, true>();
-    }
-
-    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    template <typename TAccessServiceMock>
     void AuthorizationRetryErrorImmediately() {
         using namespace Tests;
 
@@ -1582,7 +1906,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseStaff(false);
         authConfig.SetRefreshPeriod("5s");
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
@@ -1610,15 +1933,25 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
 
-        const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
-                                                                        TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}),
-                                                                        {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
-                                                                    }};
+        const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {
+            {
+                TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+            }
+        };
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(signature),
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = entries,
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+                .Ticket = "user1",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = entries,
+            })), 0);
         }
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1629,9 +1962,17 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         Sleep(TDuration::Seconds(2));
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(retrySignature),
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = entries,
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+                .Ticket = "user1",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = entries,
+            })), 0);
         }
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1642,24 +1983,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
     }
 
-    Y_UNIT_TEST(AuthorizationRetryErrorImmediately) {
-        AuthorizationRetryErrorImmediately<NKikimr::TAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(AuthorizationRetryErrorImmediatelyV2Interface) {
-        AuthorizationRetryErrorImmediately<NKikimr::TAccessServiceMockV2>();
-    }
-
     Y_UNIT_TEST(BulkAuthorizationRetryErrorImmediately) {
-        AuthorizationRetryErrorImmediately<NKikimr::TAccessServiceMockV2, true>();
+        AuthorizationRetryErrorImmediately<NKikimr::TAccessServiceMockV2>();
     }
 
     Y_UNIT_TEST(NebiusAuthorizationRetryErrorImmediately) {
         AuthorizationRetryErrorImmediately<NKikimr::TNebiusAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(NebiusAuthorizationWithBulkRetryErrorImmediately) {
-        AuthorizationRetryErrorImmediately<NKikimr::TNebiusAccessServiceMock, true>();
     }
 
     Y_UNIT_TEST(AuthenticationUnsupported) {
@@ -1701,7 +2030,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.UnavailableTokens.insert(userToken);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(userToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
         UNIT_ASSERT(!result->Error.Retryable);
@@ -1747,7 +2079,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Signature = std::move(signature),
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -1793,14 +2128,17 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.UnavailableTokens.insert(userToken);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(userToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
         UNIT_ASSERT(!result->Error.Retryable);
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Unknown token");
     }
 
-    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    template <typename TAccessServiceMock>
     void Authorization() {
         using namespace Tests;
 
@@ -1817,7 +2155,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
@@ -1847,10 +2184,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         }
 
         // Authorization successful.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           attrs,
-                                           {"something.read"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    attrs
+                }
+            },
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->HasError(), result->Error);
         UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
@@ -1858,10 +2201,18 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(!result->Token->IsExist("something.write-bbbb4554@as"), result->Token->ShortDebugString());
 
         accessServiceMock.AllowedUserPermissions.insert("user1-something.connect");
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           attrs,
-                                           {"something.read", "something.connect", "something.list", "something.update"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions(
+                        {"something.read", "something.connect", "something.list", "something.update"}
+                    ),
+                    attrs
+                }
+            },
+        })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->HasError(), result->Error);
         UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
@@ -1872,10 +2223,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         // Authorization ApiKey successful.
         if constexpr (IsApiKeySupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                            "ApiKey ApiKey-value-valid",
-                                            attrs,
-                                            {"something.read"})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+                .Ticket = "ApiKey ApiKey-value-valid",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = {
+                    {
+                        TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                        attrs
+                    }
+                },
+            })), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(!result->HasError(), result->Error);
             UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
@@ -1886,10 +2243,18 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
             // check wrong container
             accessServiceMock.ContainerId = "other_container";
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           attrs,
-                                           {"something.read", "read.something", "something.connect", "something.list", "something.update"})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = userToken,
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = {
+                    {
+                        TEvAuthorizeTicket::ToPermissions(
+                            {"something.read", "read.something", "something.connect", "something.list", "something.update"}
+                        ),
+                        attrs
+                    }
+                },
+            })), 0);
             TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(result->HasError(), result->Token->ShortDebugString());
 
@@ -1898,20 +2263,32 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         }
 
         // Authorization failure with not enough permissions.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           {"something.write"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {{
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.write"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                },
+            }},
+        })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access Denied");
         UNIT_ASSERT(!result->Error.Retryable);
 
         // Authorization successful.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           {"something.read"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {{
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                },
+            }},
+        })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->HasError(), result->Error);
         UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
@@ -1919,20 +2296,32 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(!result->Token->IsExist("something.write-bbbb4554@as"), result->Token->ShortDebugString());
 
         // Authorization failure with invalid token.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           "invalid",
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           {"something.read"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+            .Ticket = "invalid",
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
+        })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
         UNIT_ASSERT(!result->Error.Retryable);
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access Denied");
 
         // Authorization failure with access denied token.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           "invalid-token1",
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           {"something.read"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+            .Ticket = "invalid-token1",
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
+        })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
         UNIT_ASSERT(!result->Error.Retryable);
@@ -1940,10 +2329,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         // Authorization failure with wrong folder_id.
         accessServiceMock.AllowedResourceIds.emplace("cccc1234");
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "XXXXXXXX"}, {"database_id", "XXXXXXXX"}},
-                                           {"something.read"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "XXXXXXXX"}, {"database_id", "XXXXXXXX"}}
+                }
+            },
+        })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
         UNIT_ASSERT(!result->Error.Retryable);
@@ -1954,10 +2349,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         }
         accessServiceMock.AllowedResourceIds.clear();
         accessServiceMock.AllowedResourceIds.emplace("aaaa1234");
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "XXXXXXXX"}},
-                                           {"something.read"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "XXXXXXXX"}}
+                }
+            },
+        })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->HasError(), result->Error);
         UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
@@ -1971,10 +2372,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         // Authorization successful with right database_id.
         accessServiceMock.AllowedResourceIds.emplace("bbbb4554");
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "XXXXXXXX"}, {"database_id", "bbbb4554"}},
-                                           {"something.read"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "XXXXXXXX"}, {"database_id", "bbbb4554"}}
+                }
+            },
+        })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->HasError(), result->Error);
         UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
@@ -1984,10 +2391,13 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             // Authorization successful for gizmo resource
             accessServiceMock.AllowedResourceIds.clear();
             accessServiceMock.AllowedResourceIds.emplace("gizmo");
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                            userToken,
-                                            {{"gizmo_id", "gizmo"}, },
-                                            {"monitoring.view"})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = userToken,
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = {
+                    { TEvAuthorizeTicket::ToPermissions({"monitoring.view"}), {{"gizmo_id", "gizmo"}} }
+                },
+            })), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(!result->HasError(), result->Error);
             UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
@@ -2000,10 +2410,13 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             // Authorization successful for cluster resource
             accessServiceMock.AllowedResourceIds.clear();
             accessServiceMock.AllowedResourceIds.emplace("folder");
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                            userToken,
-                                            {{"folder_id", "folder"}, },
-                                            {"monitoring.view"})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = userToken,
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = {
+                    { TEvAuthorizeTicket::ToPermissions({"monitoring.view"}), {{"folder_id", "folder"}} }
+                },
+            })), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(!result->HasError(), result->Error);
             UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
@@ -2028,10 +2441,13 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             accessServiceMock.AllowedResourceIds.emplace("folder");
             TVector<std::pair<TString, TString>> serviceAttrs = {{"folder_id", "folder"}, {"database_id", "123"}};
 
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                            serviceToken,
-                                            serviceAttrs,
-                                            {"something.write"})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = serviceToken,
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = {
+                    { TEvAuthorizeTicket::ToPermissions({"something.write"}), serviceAttrs }
+                },
+            })), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(!result->HasError(), result->Error);
             UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_SERVICE);
@@ -2044,10 +2460,13 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                     .ServiceAccount("srv");
 
                 serviceToken = "service2";
-                runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                            serviceToken,
-                                            serviceAttrs,
-                                            {"something.write"})), 0);
+                runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                    .Ticket = serviceToken,
+                    .TraceContext = {PEER_NAME, REQUEST_ID},
+                    .Entries = {
+                        { TEvAuthorizeTicket::ToPermissions({"something.write"}), serviceAttrs }
+                    },
+                })), 0);
                 result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
                 UNIT_ASSERT_C(!result->HasError(), result->Error);
                 UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_SERVICE);
@@ -2063,10 +2482,13 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                     .ServiceAccount("srv3");
 
                 serviceToken = "service3";
-                runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                            serviceToken,
-                                            serviceAttrs,
-                                            {"something.write"})), 0);
+                runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                    .Ticket = serviceToken,
+                    .TraceContext = {PEER_NAME, REQUEST_ID},
+                    .Entries = {
+                        { TEvAuthorizeTicket::ToPermissions({"something.write"}), serviceAttrs }
+                    },
+                })), 0);
                 result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
                 UNIT_ASSERT_C(!result->HasError(), result->Error);
                 UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_SERVICE_IMPERSONATED_FROM_USER);
@@ -2075,27 +2497,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         }
     }
 
-    Y_UNIT_TEST(Authorization) {
-        Authorization<NKikimr::TAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(AuthorizationV2Interface) {
-        Authorization<NKikimr::TAccessServiceMockV2>();
-    }
-
     Y_UNIT_TEST(BulkAuthorization) {
-        Authorization<NKikimr::TAccessServiceMockV2, true>();
+        Authorization<NKikimr::TAccessServiceMockV2>();
     }
 
     Y_UNIT_TEST(NebiusAuthorization) {
         Authorization<NKikimr::TNebiusAccessServiceMock>();
     }
 
-    Y_UNIT_TEST(NebiusAuthorizationWithBulk) {
-        Authorization<NKikimr::TNebiusAccessServiceMock, true>();
-    }
-
-    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    template <typename TAccessServiceMock>
     void AuthorizationWithRequiredPermissions() {
         using namespace Tests;
 
@@ -2111,7 +2521,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
@@ -2138,49 +2547,65 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        // Authorization successful.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           TVector<TEvTicketParser::TEvAuthorizeTicket::TPermission>{TEvTicketParser::TEvAuthorizeTicket::Optional("something.read"), TEvTicketParser::TEvAuthorizeTicket::Optional("something.write")})), 0);
-        TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+        {
+            // Authorization successful.
+            const TVector<TEvTicketParser::TEvAuthorizeTicket::TPermission> permissions{
+                TEvTicketParser::TEvAuthorizeTicket::Optional("something.read"),
+                TEvTicketParser::TEvAuthorizeTicket::Optional("something.write"),
+            };
+            const TVector<std::pair<TString, TString>> attributes{
+                {"folder_id", "aaaa1234"},
+                {"database_id", "bbbb4554"},
+            };
+            runtime->Send(new IEventHandle(
+                MakeTicketParserID(), sender,
+                new TEvTicketParser::TEvAuthorizeTicket({
+                    .Ticket = userToken,
+                    .TraceContext = {PEER_NAME, REQUEST_ID},
+                    .Entries = {{permissions, attributes}},
+                })
+            ));
+            auto* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT(!result->HasError());
+            UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
+            UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+        }
 
-        // Authorization failure with not enough permissions.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           TVector<TEvTicketParser::TEvAuthorizeTicket::TPermission>{TEvTicketParser::TEvAuthorizeTicket::Optional("something.read"), TEvTicketParser::TEvAuthorizeTicket::Required("something.write")})), 0);
-        result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(!result->Error.Retryable);
-        UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "something.write for ");
-        UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "aaaa1234");
-    }
-
-    Y_UNIT_TEST(AuthorizationWithRequiredPermissions) {
-        AuthorizationWithRequiredPermissions<NKikimr::TAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(AuthorizationWithRequiredPermissionsV2Interface) {
-        AuthorizationWithRequiredPermissions<NKikimr::TAccessServiceMockV2>();
+        {
+            // Authorization failure with not enough permissions.
+            const TVector<TEvTicketParser::TEvAuthorizeTicket::TPermission> permissions{
+                TEvTicketParser::TEvAuthorizeTicket::Optional("something.read"),
+                TEvTicketParser::TEvAuthorizeTicket::Required("something.write"),
+            };
+            const TVector<std::pair<TString, TString>> attributes{
+                {"folder_id", "aaaa1234"},
+                {"database_id", "bbbb4554"},
+            };
+            runtime->Send(new IEventHandle(
+                MakeTicketParserID(), sender,
+                new TEvTicketParser::TEvAuthorizeTicket({
+                    .Ticket = userToken,
+                    .TraceContext = {PEER_NAME, REQUEST_ID},
+                    .Entries = {{permissions, attributes}},
+                })
+            ));
+            auto* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT(result->HasError());
+            UNIT_ASSERT(!result->Error.Retryable);
+            UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "something.write for ");
+            UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "aaaa1234");
+        }
     }
 
     Y_UNIT_TEST(BulkAuthorizationWithRequiredPermissions) {
-        AuthorizationWithRequiredPermissions<NKikimr::TAccessServiceMockV2, true>();
+        AuthorizationWithRequiredPermissions<NKikimr::TAccessServiceMockV2>();
     }
 
     Y_UNIT_TEST(NebiusAuthorizationWithRequiredPermissions) {
         AuthorizationWithRequiredPermissions<NKikimr::TNebiusAccessServiceMock>();
     }
 
-    Y_UNIT_TEST(NebiusAuthorizationWithRequiredPermissionsWithBulk) {
-        AuthorizationWithRequiredPermissions<NKikimr::TNebiusAccessServiceMock, true>();
-    }
-
-    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    template <typename TAccessServiceMock>
     void AuthorizationWithUserAccount() {
         using namespace Tests;
 
@@ -2198,11 +2623,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseUserAccountService(true);
         authConfig.SetUseUserAccountServiceTLS(false);
         authConfig.SetUserAccountServiceEndpoint(userAccountServiceEndpoint);
-        // placemark1
-        authConfig.SetCacheAccessServiceAuthorization(false);
-        //
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
@@ -2235,10 +2656,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         // Authorization successful.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           {"something.read"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
         UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
@@ -2246,20 +2673,32 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
 
         // Authorization failure with not enough permissions.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           {"something.write"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.write"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
+        })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
         UNIT_ASSERT(!result->Error.Retryable);
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access Denied");
 
         // Authorization successful.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           {"something.read"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
+        })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
         UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
@@ -2269,27 +2708,28 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         accessServiceMock.AllowedUserPermissions.insert("user1-something.write");
 
         // Authorization successful - 2
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           TVector<TString>{"something.read", "something.write"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions(TVector<TString>{"something.read", "something.write"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
+        })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
         UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        // placemark 1
         UNIT_ASSERT(result->Token->IsExist("something.write-bbbb4554@as"));
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
     }
 
-    Y_UNIT_TEST(AuthorizationWithUserAccount) {
-        AuthorizationWithUserAccount<NKikimr::TAccessServiceMock>();
-    }
-
     Y_UNIT_TEST(BulkAuthorizationWithUserAccount) {
-        AuthorizationWithUserAccount<NKikimr::TAccessServiceMockV2, true>();
+        AuthorizationWithUserAccount<NKikimr::TAccessServiceMockV2>();
     }
 
-    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    template <typename TAccessServiceMock>
     void AuthorizationWithUserAccount2() {
         using namespace Tests;
 
@@ -2308,7 +2748,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseUserAccountServiceTLS(false);
         authConfig.SetUserAccountServiceEndpoint(userAccountServiceEndpoint);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
@@ -2345,10 +2784,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         accessServiceMock.AllowedUserPermissions.erase("user1-something.read");
 
         // Authorization successful - 2
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           {"something.list", "something.read", "something.write", "something.eat", "somewhere.sleep"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.list", "something.read", "something.write", "something.eat", "somewhere.sleep"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
         UNIT_ASSERT(!result->Token->IsExist("something.read-bbbb4554@as"));
@@ -2357,19 +2802,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
     }
 
-    Y_UNIT_TEST(AuthorizationWithUserAccount2) {
-        AuthorizationWithUserAccount2<NKikimr::TAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(AuthorizationWithUserAccount2V2Interface) {
+    Y_UNIT_TEST(BulkAuthorizationWithUserAccount2) {
         AuthorizationWithUserAccount2<NKikimr::TAccessServiceMockV2>();
     }
 
-    Y_UNIT_TEST(BulkAuthorizationWithUserAccount2) {
-        AuthorizationWithUserAccount2<NKikimr::TAccessServiceMockV2, true>();
-    }
-
-    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    template <typename TAccessServiceMock>
     void AuthorizationUnavailable() {
         using namespace Tests;
 
@@ -2385,7 +2822,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
@@ -2412,37 +2848,31 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         accessServiceMock.UnavailableUserPermissions.insert(userToken + "-something.write");
 
         // Authorization unsuccessfull.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           TVector<TString>{"something.read", "something.write"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions(TVector<TString>{"something.read", "something.write"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
         UNIT_ASSERT(result->Error.Retryable);
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Service Unavailable");
     }
 
-    Y_UNIT_TEST(AuthorizationUnavailable) {
-        AuthorizationUnavailable<NKikimr::TAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(AuthorizationUnavailableV2Interface) {
-        AuthorizationUnavailable<NKikimr::TAccessServiceMockV2>();
-    }
-
     Y_UNIT_TEST(BulkAuthorizationUnavailable) {
-        AuthorizationUnavailable<NKikimr::TAccessServiceMockV2, true>();
+        AuthorizationUnavailable<NKikimr::TAccessServiceMockV2>();
     }
 
     Y_UNIT_TEST(NebiusAuthorizationUnavailable) {
         AuthorizationUnavailable<NKikimr::TNebiusAccessServiceMock>();
     }
 
-    Y_UNIT_TEST(NebiusAuthorizationWithBulkUnavailable) {
-        AuthorizationUnavailable<NKikimr::TNebiusAccessServiceMock, true>();
-    }
-
-    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    template <typename TAccessServiceMock>
     void AuthorizationModify() {
         using namespace Tests;
 
@@ -2458,7 +2888,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
@@ -2483,10 +2912,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         // Authorization successful.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           {"something.read"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
         UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
@@ -2496,34 +2931,28 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvDiscardTicket(userToken)), 0);
 
         // Authorization successful with new permissions.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           TVector<TString>{"something.read", "something.write"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions(TVector<TString>{"something.read", "something.write"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
+        })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
         UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
         UNIT_ASSERT(result->Token->IsExist("something.write-bbbb4554@as"));
     }
 
-    Y_UNIT_TEST(AuthorizationModify) {
-        AuthorizationModify<NKikimr::TAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(AuthorizationModifyV2Interface) {
-        AuthorizationModify<NKikimr::TAccessServiceMockV2>();
-    }
-
     Y_UNIT_TEST(BulkAuthorizationModify) {
-        AuthorizationModify<NKikimr::TAccessServiceMockV2, true>();
+        AuthorizationModify<NKikimr::TAccessServiceMockV2>();
     }
 
     Y_UNIT_TEST(NebiusAuthorizationModify) {
         AuthorizationModify<NKikimr::TNebiusAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(NebiusAuthorizationWithBulkModify) {
-        AuthorizationModify<NKikimr::TNebiusAccessServiceMock, true>();
     }
 
     Y_UNIT_TEST(CanProperHandleErrorWithEmptyMessage) {
@@ -2541,7 +2970,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceBulkAuthorization(true);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -2568,10 +2996,16 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         // Authorization unsuccessfull.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           TVector<TString>{"something.read", "something.write"})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions(TVector<TString>{"something.read", "something.write"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->HasError(), result->Error.Message);
         UNIT_ASSERT_STRINGS_EQUAL_C(result->Error.Message, "", result->Error.Message);
@@ -2611,7 +3045,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender,
-            new TEvTicketParser::TEvAuthorizeTicket("user@builtin")), 0);
+            new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+                .Ticket = "user@builtin",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            })), 0);
 
         TEvTicketParser::TEvAuthorizeTicketResult* result =
             runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -2623,7 +3060,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             "Token expire time was not taken from the parser subclass override");
     }
 
-    template <typename TAccessServiceMock, bool EnableBulkAuthorization = false>
+    template <typename TAccessServiceMock>
     void AuthorizationWithPeerName() {
         using namespace Tests;
 
@@ -2640,7 +3077,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceBulkAuthorization(EnableBulkAuthorization);
         settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
@@ -2654,6 +3090,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TString userToken = "user1";
         TString testPeerName = "192.168.1.100";
+        TString testRequestId = "request-id-12345";
 
         // Access Server Mock
         TAccessServiceMock accessServiceMock;
@@ -2676,7 +3113,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(
             MakeTicketParserID(),
             sender,
-            new TEvTicketParser::TEvAuthorizeTicket(userToken, testPeerName, entries)
+            new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = userToken,
+                .TraceContext = {testPeerName, testRequestId},
+                .Entries = entries,
+            })
         ), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
@@ -2688,17 +3129,26 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(accessServiceMock.CapturedXUserIP, testPeerName,
                                    "Expected x-user-ip header to be '" << testPeerName
                                    << "' but got '" << accessServiceMock.CapturedXUserIP << "'");
+        UNIT_ASSERT_VALUES_EQUAL_C(accessServiceMock.CapturedRequestId, testRequestId,
+                                   "Expected x-request-id header to be '" << testRequestId
+                                   << "' but got '" << accessServiceMock.CapturedRequestId << "'");
 
         accessServiceMock.CapturedXUserIP.clear();
+        accessServiceMock.CapturedRequestId.clear();
 
         // Authorization failure with not enough permissions.
+        const TString failedRequestId = "authorization-failure-request-id";
         entries = {
             {{"something.write"}, {{"folder_id", "test_folder"}, {"database_id", "test_db"}}}
         };
         runtime->Send(new IEventHandle(
             MakeTicketParserID(),
             sender,
-            new TEvTicketParser::TEvAuthorizeTicket(userToken, testPeerName, entries)
+            new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = userToken,
+                .TraceContext = {testPeerName, failedRequestId},
+                .Entries = entries,
+            })
         ), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -2709,26 +3159,17 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(accessServiceMock.CapturedXUserIP, testPeerName,
                                    "Expected x-user-ip header to be '" << testPeerName
                                    << "' but got '" << accessServiceMock.CapturedXUserIP << "'");
-    }
-
-    Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserAuthorization) {
-        AuthorizationWithPeerName<NKikimr::TAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserAuthorizationV2Interface) {
-        AuthorizationWithPeerName<NKikimr::TAccessServiceMockV2>();
+        UNIT_ASSERT_VALUES_EQUAL_C(accessServiceMock.CapturedRequestId, failedRequestId,
+                                   "Expected x-request-id header to be '" << failedRequestId
+                                   << "' but got '" << accessServiceMock.CapturedRequestId << "'");
     }
 
     Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserBulkAuthorization) {
-        AuthorizationWithPeerName<NKikimr::TAccessServiceMockV2, true>();
+        AuthorizationWithPeerName<NKikimr::TAccessServiceMockV2>();
     }
 
     Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserNebiusAuthorization) {
         AuthorizationWithPeerName<NKikimr::TNebiusAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserNebiusAuthorizationWithBulk) {
-        AuthorizationWithPeerName<NKikimr::TNebiusAccessServiceMock, true>();
     }
 
     THolder<TEvTicketParser::TEvAuthorizeTicketResult> RunPeernameQuery(
@@ -2739,10 +3180,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(
             MakeTicketParserID(),
             sender,
-            new TEvTicketParser::TEvAuthorizeTicket({
+            new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
                 .Ticket = "user@builtin",
                 .Database = "",
-                .PeerName = peername,
+                .TraceContext = {peername, REQUEST_ID},
                 .Entries = {},
             })
         ), 0);
@@ -3212,7 +3653,6 @@ Y_UNIT_TEST(CanAuthorizeYdbInAccessService) {
     });
 
     auto settings = TServerSettings(port, authConfig);
-    settings.SetEnableAccessServiceBulkAuthorization(true);
     settings.SetDomainName("Root");
     settings.CreateTicketParser = NKikimr::CreateTicketParser;
 
@@ -3241,18 +3681,24 @@ Y_UNIT_TEST(CanAuthorizeYdbInAccessService) {
     TVector<std::pair<TString, TString>> attrs = {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}};
 
     // Authorization successful.
-    runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket(
-                                                                                userToken,
-                                                                                attrs,
-                                                                                {"something.read"})));
+    runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
+        .Ticket = userToken,
+        .TraceContext = {PEER_NAME, REQUEST_ID},
+        .Entries = {
+            { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+        },
+    })));
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
     // waiting for ticket parser get success token for access service from service token manager
     while (authorizeTicketResultEv->Error.Retryable && authorizeTicketResultEv->Error.Message == "Unauthenticated service") {
-        runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket(
-                                        userToken,
-                                        attrs,
-                                        {"something.read"})));
+        runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+            },
+        })));
         authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
     }
     UNIT_ASSERT_C(!authorizeTicketResultEv->HasError(), authorizeTicketResultEv->Error);
@@ -3293,7 +3739,6 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
     });
 
     auto settings = TServerSettings(port, authConfig);
-    settings.SetEnableAccessServiceBulkAuthorization(true);
     settings.SetDomainName("Root");
     settings.CreateTicketParser = NKikimr::CreateTicketParser;
 
@@ -3325,17 +3770,23 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
     // Authorization successful.
     {
         TString userToken = "Bearer user1";
-        runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket(
-                                            userToken,
-                                            attrs,
-                                            {"something.read"})));
+        runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+            },
+        })));
         TEvTicketParser::TEvAuthorizeTicketResult* authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         // waiting for ticket parser get success token for access service from service token manager
         while (authorizeTicketResultEv->Error.Retryable && authorizeTicketResultEv->Error.Message == "Unauthenticated service") {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket(
-                                            userToken,
-                                            attrs,
-                                            {"something.read"})));
+            runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = userToken,
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = {
+                    { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+                },
+            })));
             authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         }
         UNIT_ASSERT_C(!authorizeTicketResultEv->HasError(), authorizeTicketResultEv->Error);
@@ -3358,17 +3809,23 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
     // Authorization successful.
     {
         TString userToken = "Bearer user2";
-        runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket(
-                                            userToken,
-                                            attrs,
-                                            {"something.read"})));
+        runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
+            .Entries = {
+                { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+            },
+        })));
         TEvTicketParser::TEvAuthorizeTicketResult* authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         // waiting for ticket parser get success token for access service from service token manager
         while (authorizeTicketResultEv->Error.Retryable && authorizeTicketResultEv->Error.Message == "Unauthenticated service") {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket(
-                                            userToken,
-                                            attrs,
-                                            {"something.read"})));
+            runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = userToken,
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+                .Entries = {
+                    { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+                },
+            })));
             authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         }
         UNIT_ASSERT_C(!authorizeTicketResultEv->HasError(), authorizeTicketResultEv->Error);
@@ -3543,12 +4000,11 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         // Send authorize request
         TActorId sender = runtime->AllocateEdgeActor();
         runtime->Send(
-            new IEventHandle(MakeTicketParserID(), sender,
-                new TEvTicketParser::TEvAuthorizeTicket(
-                    TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
-                        .Ticket = bearerToken,
-                        .Database = "/Root",
-                    }))
+            new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = bearerToken,
+                .Database = "/Root",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            }))
         );
 
         TEvTicketParser::TEvAuthorizeTicketResult* result =
@@ -3640,11 +4096,11 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
 
         TActorId sender = runtime->AllocateEdgeActor();
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender,
-            new TEvTicketParser::TEvAuthorizeTicket(
-                TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
-                    .Ticket = bearerToken,
-                    .Database = "/Root",
-                }))
+            new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = bearerToken,
+                .Database = "/Root",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            }))
         );
 
         TEvTicketParser::TEvAuthorizeTicketResult* result =
@@ -3656,11 +4112,11 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         Sleep(TDuration::MilliSeconds(300));
 
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender,
-            new TEvTicketParser::TEvAuthorizeTicket(
-                TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
-                    .Ticket = bearerToken,
-                    .Database = "/Root",
-                })), 0);
+            new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = bearerToken,
+                .Database = "/Root",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->HasError(), result->Error);
         UNIT_ASSERT(result->Token != nullptr);
@@ -3752,11 +4208,11 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
 
         TActorId sender = runtime->AllocateEdgeActor();
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender,
-            new TEvTicketParser::TEvAuthorizeTicket(
-                TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
-                    .Ticket = bearerToken,
-                    .Database = "/Root",
-                }))
+            new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = bearerToken,
+                .Database = "/Root",
+                .TraceContext = {PEER_NAME, REQUEST_ID},
+            }))
         );
 
         TEvTicketParser::TEvAuthorizeTicketResult* result =

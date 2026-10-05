@@ -5,13 +5,12 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TDictItemsWrapper: public TCustomValueCodegeneratorNode<TDictItemsWrapper> {
-    typedef TCustomValueCodegeneratorNode<TDictItemsWrapper> TBaseComputation;
+    using TBaseComputation = TCustomValueCodegeneratorNode<TDictItemsWrapper>;
 
 public:
     using TSelf = TDictItemsWrapper;
@@ -23,32 +22,32 @@ public:
 
         TCodegenValue(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& dict)
             : TComputationValue<TCodegenValue>(memInfo)
-            , NextFunc(next)
-            , Ctx(ctx)
-            , Dict(std::move(dict))
+            , NextFunc_(next)
+            , Ctx_(ctx)
+            , Dict_(std::move(dict))
         {
         }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
-            return Ctx->HolderFactory.Create<TCodegenIterator>(NextFunc, Ctx, Dict.GetDictIterator());
+            return Ctx_->HolderFactory.Create<TCodegenIterator>(NextFunc_, Ctx_, Dict_.GetDictIterator());
         }
 
         ui64 GetListLength() const final {
-            return Dict.GetDictLength();
+            return Dict_.GetDictLength();
         }
 
         bool HasListItems() const final {
-            return Dict.HasDictItems();
+            return Dict_.HasDictItems();
         }
 
         bool HasFastListLength() const final {
             return true;
         }
 
-        const TNextPtr NextFunc;
-        TComputationContext* const Ctx;
-        const NUdf::TUnboxedValue Dict;
+        const TNextPtr NextFunc_;
+        TComputationContext* const Ctx_;
+        const NUdf::TUnboxedValue Dict_;
     };
 #endif
 
@@ -59,33 +58,34 @@ public:
             TIterator(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& inner,
                       TComputationContext& compCtx, const TSelf* self)
                 : TComputationValue<TIterator>(memInfo)
-                , Inner(std::move(inner))
-                , CompCtx(compCtx)
-                , Self(self)
+                , Inner_(std::move(inner))
+                , CompCtx_(compCtx)
+                , Self_(self)
             {
             }
 
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
-                NUdf::TUnboxedValue key, payload;
-                if (!Inner.NextPair(key, payload)) {
+                NUdf::TUnboxedValue key;
+                NUdf::TUnboxedValue payload;
+                if (!Inner_.NextPair(key, payload)) {
                     return false;
                 }
 
                 NUdf::TUnboxedValue* items = nullptr;
-                value = Self->ResPair.NewArray(CompCtx, 2, items);
+                value = Self_->ResPair_.NewArray(CompCtx_, 2, items);
                 items[0] = std::move(key);
                 items[1] = std::move(payload);
                 return true;
             }
 
             bool Skip() override {
-                return Inner.Skip();
+                return Inner_.Skip();
             }
 
-            const NUdf::TUnboxedValue Inner;
-            TComputationContext& CompCtx;
-            const TSelf* const Self;
+            const NUdf::TUnboxedValue Inner_;
+            TComputationContext& CompCtx_;
+            const TSelf* const Self_;
         };
 
         TValue(
@@ -93,19 +93,19 @@ public:
             const NUdf::TUnboxedValue&& dict,
             TComputationContext& compCtx, const TSelf* self)
             : TComputationValue<TValue>(memInfo)
-            , Dict(std::move(dict))
-            , CompCtx(compCtx)
-            , Self(self)
+            , Dict_(dict)
+            , CompCtx_(compCtx)
+            , Self_(self)
         {
         }
 
     private:
         ui64 GetListLength() const final {
-            return Dict.GetDictLength();
+            return Dict_.GetDictLength();
         }
 
         bool HasListItems() const final {
-            return Dict.HasDictItems();
+            return Dict_.HasDictItems();
         }
 
         bool HasFastListLength() const final {
@@ -113,44 +113,44 @@ public:
         }
 
         NUdf::TUnboxedValue GetListIterator() const final {
-            return CompCtx.HolderFactory.Create<TIterator>(Dict.GetDictIterator(), CompCtx, Self);
+            return CompCtx_.HolderFactory.Create<TIterator>(Dict_.GetDictIterator(), CompCtx_, Self_);
         }
 
-        const NUdf::TUnboxedValue Dict;
-        TComputationContext& CompCtx;
-        const TSelf* const Self;
+        const NUdf::TUnboxedValue Dict_;
+        TComputationContext& CompCtx_;
+        const TSelf* const Self_;
     };
 
     TDictItemsWrapper(TComputationMutables& mutables, IComputationNode* dict)
         : TBaseComputation(mutables)
-        , Dict(dict)
-        , ResPair(mutables)
+        , Dict_(dict)
+        , ResPair_(mutables)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
-        if (ctx.ExecuteLLVM && Next) {
-            return ctx.HolderFactory.Create<TCodegenValue>(Next, &ctx, Dict->GetValue(ctx));
+        if (ctx.ExecuteLLVM && Next_) {
+            return ctx.HolderFactory.Create<TCodegenValue>(Next_, &ctx, Dict_->GetValue(ctx));
         }
 #endif
-        return ctx.HolderFactory.Create<TValue>(Dict->GetValue(ctx), ctx, this);
+        return ctx.HolderFactory.Create<TValue>(Dict_->GetValue(ctx), ctx, this);
     }
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Dict);
+        DependsOn(Dict_);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        NextFunc = GenerateNext(codegen);
-        codegen.ExportSymbol(NextFunc);
+        NextFunc_ = GenerateNext(codegen);
+        codegen.ExportSymbol(NextFunc_);
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (NextFunc) {
-            Next = reinterpret_cast<TNextPtr>(codegen.GetPointerToFunction(NextFunc));
+        if (NextFunc_) {
+            Next_ = reinterpret_cast<TNextPtr>(codegen.GetPointerToFunction(NextFunc_));
         }
     }
 
@@ -169,7 +169,7 @@ private:
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt1Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
+        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -205,7 +205,7 @@ private:
 
         const auto itemsType = PointerType::getUnqual(pairType);
         const auto itemsPtr = new AllocaInst(itemsType, 0U, "items_ptr", block);
-        const auto output = ResPair.GenNewArray(2U, itemsPtr, ctx, block);
+        const auto output = ResPair_.GenNewArray(2U, itemsPtr, ctx, block);
         AddRefBoxed(output, ctx, block);
         const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
         const auto pair = new LoadInst(pairType, pairPtr, "pair", block);
@@ -220,18 +220,18 @@ private:
 
     using TNextPtr = typename TCodegenIterator::TNextPtr;
 
-    Function* NextFunc = nullptr;
+    Function* NextFunc_ = nullptr;
 
-    TNextPtr Next = nullptr;
+    TNextPtr Next_ = nullptr;
 #endif
 
-    IComputationNode* const Dict;
-    const TContainerCacheOnContext ResPair;
+    IComputationNode* const Dict_;
+    const TContainerCacheOnContext ResPair_;
 };
 
 template <bool KeysOrPayloads>
 class TDictHalfsWrapper: public TMutableComputationNode<TDictHalfsWrapper<KeysOrPayloads>> {
-    typedef TMutableComputationNode<TDictHalfsWrapper<KeysOrPayloads>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TDictHalfsWrapper<KeysOrPayloads>>;
 
 public:
     using TSelf = TDictHalfsWrapper<KeysOrPayloads>;
@@ -243,17 +243,17 @@ public:
             const NUdf::TUnboxedValue&& dict,
             TComputationContext&, const TSelf*)
             : TComputationValue<TValue>(memInfo)
-            , Dict(std::move(dict))
+            , Dict_(dict)
         {
         }
 
     private:
         ui64 GetListLength() const final {
-            return Dict.GetDictLength();
+            return Dict_.GetDictLength();
         }
 
         bool HasListItems() const final {
-            return Dict.HasDictItems();
+            return Dict_.HasDictItems();
         }
 
         bool HasFastListLength() const final {
@@ -261,28 +261,28 @@ public:
         }
 
         NUdf::TUnboxedValue GetListIterator() const final {
-            return KeysOrPayloads ? Dict.GetKeysIterator() : Dict.GetPayloadsIterator();
+            return KeysOrPayloads ? Dict_.GetKeysIterator() : Dict_.GetPayloadsIterator();
         }
 
-        const NUdf::TUnboxedValue Dict;
+        const NUdf::TUnboxedValue Dict_;
     };
 
     TDictHalfsWrapper(TComputationMutables& mutables, IComputationNode* dict)
         : TBaseComputation(mutables)
-        , Dict(dict)
+        , Dict_(dict)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TValue>(Dict->GetValue(ctx), ctx, this);
+        return ctx.HolderFactory.Create<TValue>(Dict_->GetValue(ctx), ctx, this);
     }
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Dict);
+        this->DependsOn(Dict_);
     }
 
-    IComputationNode* const Dict;
+    IComputationNode* const Dict_;
 };
 
 } // namespace
@@ -305,5 +305,4 @@ IComputationNode* WrapDictPayloads(TCallable& callable, const TComputationNodeFa
     return new TDictHalfsWrapper<false>(ctx.Mutables, node);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

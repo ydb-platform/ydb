@@ -483,6 +483,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"Div", &TProgramBuilder::Div},
         {"Mod", &TProgramBuilder::Mod},
 
+        {"DecimalIntegralAdd", &TProgramBuilder::DecimalIntegralAdd},
+        {"DecimalIntegralSub", &TProgramBuilder::DecimalIntegralSub},
         {"DecimalMul", &TProgramBuilder::DecimalMul},
         {"DecimalDiv", &TProgramBuilder::DecimalDiv},
         {"DecimalMod", &TProgramBuilder::DecimalMod},
@@ -1028,6 +1030,13 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockVariantItem(blockVariantValue);
     });
 
+    AddCallable("BlockDynamicVariant", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto varType = ctx.BuildType(*node.Child(2), *node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+        const auto item = MkqlBuildExpr(node.Head(), ctx);
+        const auto index = MkqlBuildExpr(*node.Child(1), ctx);
+        return ctx.ProgramBuilder.BlockDynamicVariant(item, index, varType);
+    });
+
     AddCallable("Visit", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto variantObj = MkqlBuildExpr(node.Head(), ctx);
         const auto type = node.Head().GetTypeAnn()->Cast<TVariantExprType>();
@@ -1482,6 +1491,16 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto type = ctx.BuildType(node.Head(), *node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         const auto serialized = MkqlBuildExpr(node.Tail(), ctx);
         return ctx.ProgramBuilder.Unpickle(type, serialized);
+    });
+
+    AddCallable("AsErased", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        return ctx.ProgramBuilder.AsErased(MkqlBuildExpr(node.Head(), ctx));
+    });
+
+    AddCallable("PeekErased", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto resource = MkqlBuildExpr(node.Head(), ctx);
+        auto expectedType = ctx.BuildType(node.Tail(), *node.Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+        return ctx.ProgramBuilder.PeekErased(resource, expectedType);
     });
 
     AddCallable("Optional", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2072,10 +2091,14 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         if (NNodes::TCoMultiHoppingCore::idx_LatePolicy < node.ChildrenSize()) {
             latePolicy = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_LatePolicy), ctx);
         }
+        bool checkMinWindowStart = false;
+        if (NNodes::TCoMultiHoppingCore::idx_CheckMinWindowStart < node.ChildrenSize()) {
+            checkMinWindowStart = FromString<bool>(*node.Child(NNodes::TCoMultiHoppingCore::idx_CheckMinWindowStart), NUdf::EDataSlot::Bool);
+        }
         return ctx.ProgramBuilder.MultiHoppingCore(
             stream, keyExtractor, timeExtractor, init, update, save, load, merge, finish,
             hop, interval, delay, dataWatermarks, watermarksMode,
-            sizeLimit, timeLimit, earlyPolicy, latePolicy);
+            sizeLimit, timeLimit, earlyPolicy, latePolicy, checkMinWindowStart);
     });
 
     AddCallable("ToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -3216,7 +3239,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         auto extend = ctx.ProgramBuilder.Extend(args);
 
         if (auto sortConstr = node.GetConstraint<TSortedConstraintNode>()) {
-            const auto input = MkqlBuildExpr(node.Head(), ctx);
             const auto& content = sortConstr->GetContent();
             std::vector<TRuntimeNode> ascending;
             ascending.reserve(content.size());

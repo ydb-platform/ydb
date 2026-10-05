@@ -64,6 +64,16 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         TEvJobStop(const Yql::DqsProto::JobStopRequest& request);
     };
 
+    struct TEvJobStopResponse
+        : NActors::TEventPB<
+            TEvJobStopResponse,
+            NYql::NDqProto::TEvJobStopResponse,
+            TDqResManEvents::ES_JOB_STOP_RESPONSE> {
+
+        TEvJobStopResponse() = default;
+        explicit TEvJobStopResponse(const TString& error, bool retryable = false);
+    };
+
     struct TEvOperationStop
         : NActors::TEventPB<TEvOperationStop, NYql::NDqProto::TEvOperationStop, TDqResManEvents::ES_OPERATION_STOP> {
 
@@ -154,6 +164,12 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
 
     inline NActors::TActorId MakeWorkerManagerActorID(ui32 nodeId) {
         char x[12] = {'r', 'e', 's', 'm', 'a', 'n'};
+        memcpy(x + 7, &nodeId, sizeof(ui32));
+        return NActors::TActorId(nodeId, TStringBuf(x, 12));
+    }
+
+    inline NActors::TActorId MakeGlobalWorkerManagerActorID(ui32 nodeId) {
+        char x[12] = {'g', 'l', 'o', 'b', 'm', 'a', 'n'};
         memcpy(x + 7, &nodeId, sizeof(ui32));
         return NActors::TActorId(nodeId, TStringBuf(x, 12));
     }

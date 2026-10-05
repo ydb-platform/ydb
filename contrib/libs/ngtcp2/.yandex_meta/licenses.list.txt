@@ -9,18 +9,9 @@
  * express or implied.  See your chosen license for details.
 
 
-====================BSD-3-Clause====================
- * // Use of this source code is governed by a BSD-style license that can be
- * // found in the LICENSE file.
-
-
 ====================COPYRIGHT====================
    Copyright (C) 1994-1996, 1999-2002, 2004-2017, 2020-2021 Free
 Software Foundation, Inc.
-
-
-====================COPYRIGHT====================
- * // Copyright (c) 2016 The Chromium Authors. All rights reserved.
 
 
 ====================COPYRIGHT====================
@@ -77,6 +68,10 @@ Software Foundation, Inc.
 ====================COPYRIGHT====================
  * Copyright (c) 2025 ngtcp2 contributors
  * Copyright (c) 2023 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2026 ngtcp2 contributors
 
 
 ====================COPYRIGHT====================
@@ -154,6 +149,7 @@ Stefan Eissing
 Tal Regev
 Tatsuhiro Tsujikawa
 Tim Gates
+Tim Perry
 Tomas Mraz
 Toni Uhlig
 Valère Plantevin

@@ -17,10 +17,12 @@ SRCS(
     assimilation.cpp
     backpressure.cpp
     block_race.cpp
+    blob_checker.cpp
     bsc_cache.cpp
     cancellation.cpp
     counting_events.cpp
     corrupted_reads.cpp
+    database_space.cpp
     deadlines.cpp
     decommit_3dc.cpp
     defrag.cpp
@@ -33,6 +35,7 @@ SRCS(
     get.cpp
     get_block.cpp
     group_mapping.cpp
+    heap_allocator.cpp
     incorrect_queries.cpp
     index_restore_get.cpp
     main.cpp
@@ -50,11 +53,14 @@ SRCS(
     shred.cpp
     snapshots.cpp
     space_check.cpp
+    space_data_kind.cpp
     sync.cpp
     validation.cpp
     vdisk_malfunction.cpp
+    virtual_group.cpp
     group_size_in_units.cpp
     pdisk_status_flags.cpp
+    retro_tracing.cpp
 )
 
 PEERDIR(
@@ -65,6 +71,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/scrub
     ydb/core/blobstorage/vdisk/synclog
+    ydb/core/mind/bscontroller
 )
 
 END()
@@ -96,5 +103,6 @@ RECURSE_FOR_TESTS(
     ut_cluster_balancing
     ut_move_pdisk
     ut_vdisk_internals
+    ut_checksumming
     ut_oos
 )

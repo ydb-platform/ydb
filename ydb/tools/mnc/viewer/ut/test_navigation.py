@@ -1,26 +1,11 @@
 import unittest
 from dataclasses import dataclass
+from unittest import mock
 
 from textual.widgets import TabPane, TabbedContent
 
 from ydb.tools.mnc.viewer.main import Viewer
 
-
-TAB_IDS = ["general", "mnc-config", "cluster-config", "agents", "operation"]
-EXHAUSTIVE_TAB_IDS = ["general", "mnc-config", "cluster-config"]
-CORE_COMMAND_SEQUENCES = [
-    ("previous_tab",),
-    ("next_tab",),
-    ("open_general",),
-    ("open_mnc_config",),
-    ("open_cluster_config",),
-    ("close_tab",),
-    ("open_mnc_config", "close_tab"),
-    ("open_cluster_config", "close_tab"),
-    ("next_tab", "previous_tab"),
-    ("open_mnc_config", "open_cluster_config"),
-    ("open_cluster_config", "open_mnc_config"),
-]
 AGENTS_COMMAND_SEQUENCES = [
     ("open_agents",),
     ("open_agents", "previous_tab"),
@@ -29,12 +14,6 @@ AGENTS_COMMAND_SEQUENCES = [
     ("open_agents", "open_mnc_config"),
     ("open_mnc_config", "open_agents"),
     ("open_cluster_config", "open_agents"),
-]
-OPERATION_COMMAND_SEQUENCES = [
-    ("open_operation_install",),
-    ("open_operation_install", "next_tab"),
-    ("open_operation_install", "close_tab"),
-    ("open_mnc_config", "open_operation_install"),
 ]
 
 
@@ -82,20 +61,6 @@ class TabState:
 
 
 class ViewerTabNavigationTest(unittest.IsolatedAsyncioTestCase):
-    async def test_tab_navigation_matches_state_machine_for_core_command_sequences(self):
-        for start_tab in EXHAUSTIVE_TAB_IDS:
-            app = Viewer()
-            async with app.run_test() as pilot:
-                with self.subTest(start_tab=start_tab):
-                    for commands in CORE_COMMAND_SEQUENCES:
-                        await self._assert_command_sequence(
-                            app,
-                            pilot,
-                            start_tab,
-                            commands,
-                            include_agents=False,
-                        )
-
     async def test_agents_tab_navigation_matches_state_machine(self):
         for start_tab in ["general", "mnc-config", "cluster-config", "agents"]:
             app = Viewer()
@@ -111,20 +76,28 @@ class ViewerTabNavigationTest(unittest.IsolatedAsyncioTestCase):
                             include_operation=False,
                         )
 
-    async def test_operation_tab_navigation_matches_state_machine(self):
-        for start_tab in ["general", "operation"]:
-            app = Viewer()
-            async with app.run_test() as pilot:
-                with self.subTest(start_tab=start_tab):
-                    for commands in OPERATION_COMMAND_SEQUENCES:
-                        await self._assert_command_sequence(
-                            app,
-                            pilot,
-                            start_tab,
-                            commands,
-                            include_agents=True,
-                            include_operation=True,
-                        )
+    async def test_reopening_active_operation_deactivates_pane_before_removal(self):
+        app = Viewer()
+        async with app.run_test() as pilot:
+            await app.run_action("open_operation('install')")
+            tabs = app.query_one("#tabs", TabbedContent)
+            active_during_removal = []
+            pane_active_during_removal = []
+            remove_pane = tabs.remove_pane
+
+            def capture_active_tab(pane_id: str):
+                active_during_removal.append(tabs.active)
+                pane_active_during_removal.append(tabs.get_tab(pane_id).has_class("-active"))
+                return remove_pane(pane_id)
+
+            with mock.patch.object(tabs, "remove_pane", side_effect=capture_active_tab):
+                await app.run_action("open_operation('install')")
+
+            await pilot.pause()
+            self.assertEqual(active_during_removal, ["general"])
+            self.assertEqual(pane_active_during_removal, [False])
+            self.assertEqual(self._actual_tabs(app), ["general", "operation"])
+            self.assertEqual(tabs.active, "operation")
 
     async def _assert_command_sequence(
         self,

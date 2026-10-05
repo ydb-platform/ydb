@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/compaction_info.h>
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/portions_index.h>
 
 namespace NKikimr::NOlap {
 
@@ -16,6 +17,7 @@ private:
 protected:
     std::vector<TPortionInfo::TConstPtr> SwitchedPortions;   // Portions that would be replaced by new ones
     std::shared_ptr<TGranuleMeta> GranuleMeta;
+    NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot PortionsIndexSnapshot;
 
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
 

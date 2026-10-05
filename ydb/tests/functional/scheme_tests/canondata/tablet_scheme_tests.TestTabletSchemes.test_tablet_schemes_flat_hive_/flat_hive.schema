@@ -143,6 +143,16 @@
                 "ColumnType": "String"
             },
             {
+                "ColumnId": 126,
+                "ColumnName": "IsBackup",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 127,
+                "ColumnName": "ConfirmedStorageVersion",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 11,
                 "ColumnName": "ActorToNotify",
                 "ColumnType": "ActorID"
@@ -213,6 +223,8 @@
                     7,
                     124,
                     125,
+                    126,
+                    127,
                     11,
                     13,
                     17,

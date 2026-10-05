@@ -1498,6 +1498,7 @@ public:
             auto streamReaderResult = arrow::ipc::RecordBatchStreamReader::Open(InputStream_.get());
             if (!streamReaderResult.ok() && InputStream_->EOSReached() && InputStream_->Tell().ValueOrDie() == 0) {
                 // Workaround for YT-23495
+                // TODO(dagorokhov): remove the 0-byte workaround (YT-28650)
                 return false;
             }
             StreamReader_ = ARROW_RESULT(streamReaderResult);
@@ -1527,6 +1528,10 @@ public:
 
             // InputStream EOS hasn't reached yet - next Arrow IPC stream must be present
             StreamReader_.reset();
+            return ReadNext();
+        }
+
+        if (batch->num_rows() == 0) {
             return ReadNext();
         }
 
@@ -2050,6 +2055,15 @@ public:
     {
         Fields_ = GetFields(Specs_.Outputs[tableIndex].RowType, columns);
         NativeYtTypeFlags_ = Specs_.Outputs[tableIndex].NativeYtTypeFlags;
+
+        if (!(NativeYtTypeFlags_ & NTCF_COMPLEX)) {
+            // Backward compatibility with old optional singulars behavior
+            for (TField& field : Fields_) {
+                if (field.Optional && (field.Type->IsVoid() || field.Type->IsNull())) {
+                    field.Optional = false;
+                }
+            }
+        }
     }
 
 protected:
@@ -2251,7 +2265,7 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>
     Specs_ = &specs;
     JobStats_ = specs.JobStats_;
 
-#ifndef MKQL_DISABLE_CODEGEN
+#if !defined(MKQL_DISABLE_CODEGEN) && !defined(__aarch64__) && !defined(_win_)
     THashMap<TStructType*, std::pair<llvm::Function*, llvm::Function*>> llvmFunctions;
     if (Specs_->UseSkiff_ && Specs_->OptLLVM_ != "OFF" && NCodegen::ICodegen::IsCodegenAvailable()) {
         for (size_t i: xrange(Specs_->Outputs.size())) {
@@ -2301,7 +2315,7 @@ void TMkqlWriterImpl::SetSpecs(const TMkqlIOSpecs& specs, const TVector<TString>
                 YQL_ENSURE(columns.empty());
                 Encoders_.emplace_back(new TSkiffEmptySchemaEncoder(out->Buf_, *Specs_));
             }
-#ifndef MKQL_DISABLE_CODEGEN
+#if !defined(MKQL_DISABLE_CODEGEN) && !defined(__aarch64__) && !defined(_win_)
             else if (auto p = llvmFunctions.FindPtr(Specs_->Outputs[i].RowType)) {
                 Encoders_.emplace_back(new TSkiffLLVMEncoder(out->Buf_, *Specs_,
                     (TSkiffLLVMEncoder::TRowWriter)Codegen_->GetPointerToFunction(p->first),

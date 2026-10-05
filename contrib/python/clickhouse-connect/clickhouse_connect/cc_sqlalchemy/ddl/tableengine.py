@@ -1,30 +1,66 @@
 import logging
+import threading
 from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import Column
+from sqlalchemy.engine.default import DefaultDialect
 from sqlalchemy.exc import ArgumentError, SQLAlchemyError
-from sqlalchemy.sql.elements import TextClause
+from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.sql.elements import ClauseElement, ColumnElement, TextClause
 from sqlalchemy.sql.schema import SchemaItem
 
 from clickhouse_connect.cc_sqlalchemy.sql.sqlparse import split_top_level, walk_sql
-from clickhouse_connect.driver.binding import format_str, quote_identifier
+from clickhouse_connect.driver.binding import _decode_ch_string_literal, format_str, quote_identifier
 from clickhouse_connect.driver.parser import parse_callable
 
 logger = logging.getLogger(__name__)
 
 engine_map: dict[str, type["TableEngine"]] = {}
-EngineExpr = str | TextClause | Column
+EngineExpr = str | TextClause | ColumnElement | InstrumentedAttribute
 EngineParam = EngineExpr | Sequence[EngineExpr] | None
 ENGINE_CLAUSES = ("ORDER BY", "PARTITION BY", "PRIMARY KEY", "SAMPLE BY", "TTL", "SETTINGS")
 
+_engine_render_dialect: DefaultDialect | None = None
+_engine_render_lock = threading.Lock()
+
+
+def _get_engine_render_dialect() -> DefaultDialect:
+    global _engine_render_dialect
+    with _engine_render_lock:
+        if _engine_render_dialect is None:
+            from clickhouse_connect.cc_sqlalchemy.dialect import ClickHouseDialect  # local import avoids cycle
+
+            _engine_render_dialect = ClickHouseDialect()
+        return _engine_render_dialect
+
+
+def _compile_engine_clause(value: ColumnElement) -> str:
+    dialect = _get_engine_render_dialect()
+    from clickhouse_connect.cc_sqlalchemy.sql.compiler import EngineExprCompiler  # local import avoids cycle
+
+    compiler = EngineExprCompiler(dialect, None)
+    return compiler.process(value, include_table=False, literal_binds=True)
+
+
+def _coerce_clause_element(value: Any) -> Any:
+    """Resolve ORM-mapped attributes and other column-like objects to their clause element."""
+    if not isinstance(value, ClauseElement) and hasattr(value, "__clause_element__"):
+        return value.__clause_element__()
+    return value
+
 
 def _render_engine_expr(value: EngineExpr) -> str:
+    value = _coerce_clause_element(value)
+    if isinstance(value, str):
+        return value
     if isinstance(value, TextClause):
         return value.text
     if isinstance(value, Column):
         return quote_identifier(value.name)
-    return value
+    if isinstance(value, ColumnElement):
+        return _compile_engine_clause(value)
+    raise ArgumentError(None, f"Engine clause expression must be a column or scalar expression, got {type(value).__name__}")
 
 
 def _render_setting_value(value: Any) -> str:
@@ -51,6 +87,7 @@ def tuple_expr(expr_name: str, value: EngineParam) -> str:
 
 
 def repr_engine_value(value: Any) -> str:
+    value = _coerce_clause_element(value)
     if isinstance(value, str):
         return repr(value)
     if isinstance(value, TextClause):
@@ -64,6 +101,8 @@ def repr_engine_value(value: Any) -> str:
         return f"({items})"
     if isinstance(value, list):
         return f"[{', '.join(repr_engine_value(item) for item in value)}]"
+    if isinstance(value, ColumnElement):
+        return f"sa.text({_compile_engine_clause(value)!r})"
     return repr(value)
 
 
@@ -487,24 +526,6 @@ def _find_clause_markers(sql: str) -> list[tuple[int, str]]:
                 markers.append((i, clause))
                 break
     return markers
-
-
-_CH_STRING_ESCAPES = {"\\": "\\", "'": "'", '"': '"', "`": "`", "n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "0": "\0"}
-
-
-def _decode_ch_string_literal(literal: str) -> str:
-    inner = literal[1:-1].replace("''", "'")
-    out: list[str] = []
-    i = 0
-    while i < len(inner):
-        ch = inner[i]
-        if ch == "\\" and i + 1 < len(inner):
-            out.append(_CH_STRING_ESCAPES.get(inner[i + 1], inner[i + 1]))
-            i += 2
-        else:
-            out.append(ch)
-            i += 1
-    return "".join(out)
 
 
 def _parse_settings_clause(raw_settings: str) -> dict[str, Any]:

@@ -43,12 +43,22 @@ POSSIBILITY OF SUCH DAMAGE.  */
    other routines.  */
 
 struct backtrace_state *
-backtrace_create_state (const char *filename, int threaded,
+backtrace_create_state (const char *filename, int flags,
 			backtrace_error_callback error_callback,
 			void *data)
 {
+  int threaded;
+  int moredata;
   struct backtrace_state init_state;
   struct backtrace_state *state;
+
+  threaded = (flags & 1) != 0;
+  moredata = (flags & 2) != 0;
+  if ((flags & ~3) != 0)
+    {
+      error_callback (data, "backtrace_create_state: unsupported flag", 0);
+      return NULL;
+    }
 
 #ifndef HAVE_SYNC_FUNCTIONS
   if (threaded)
@@ -61,6 +71,7 @@ backtrace_create_state (const char *filename, int threaded,
   memset (&init_state, 0, sizeof init_state);
   init_state.filename = filename;
   init_state.threaded = threaded;
+  init_state.moredata = moredata;
 
   state = ((struct backtrace_state *)
 	   backtrace_alloc (&init_state, sizeof *state, error_callback, data));

@@ -217,7 +217,7 @@ private:
 
     virtual void DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& context) override;
     virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override;
-    virtual void DoOnDataCollected(NReader::NCommon::TFetchingResultContext& context) override;
+    virtual TConclusionStatus DoOnDataCollected(NReader::NCommon::TFetchingResultContext& context) override;
 
 public:
     TIndexFetcherLogic(const THashSet<NRequest::TOriginalDataAddress>& dataAddress, const std::shared_ptr<IIndexMeta>& indexMeta,

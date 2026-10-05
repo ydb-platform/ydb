@@ -37,15 +37,15 @@ public:
 
     TFuture<IConnectionPtr> Run()
     {
-        YT_LOG_DEBUG("Dial started (Address: %v)",
-            RemoteAddress_);
+        YT_TLOG_DEBUG("Dial started")
+            .With("Address", RemoteAddress_);
 
         Session_->Dial();
 
         Promise_.OnCanceled(BIND([this, this_ = MakeStrong(this)] (const TError& error) {
             Promise_.TrySet(TError(NYT::EErrorCode::Canceled, "Dial canceled")
-                << TErrorAttribute("remote_address", ToString(RemoteAddress_))
-                << error);
+                .With("remote_address", ToString(RemoteAddress_))
+                .With(error));
         }));
 
         return Promise_.ToFuture();
@@ -62,15 +62,15 @@ private:
     {
         if (!fdOrError.IsOK()) {
             Promise_.TrySet(TError("Dial failed")
-                << TErrorAttribute("remote_address", ToString(RemoteAddress_))
-                << fdOrError);
+                .With("remote_address", ToString(RemoteAddress_))
+                .With(fdOrError));
             return;
         }
 
         auto socket = fdOrError.Value();
-        YT_LOG_DEBUG("Dial completed (Address: %v, FD: %v)",
-            RemoteAddress_,
-            socket);
+        YT_TLOG_DEBUG("Dial completed")
+            .With("Address", RemoteAddress_)
+            .With("FD", socket);
 
         Promise_.TrySet(CreateConnectionFromFD(
             socket,
@@ -145,7 +145,7 @@ public:
         , Address_(address)
         , OnFinished_(std::move(onFinished))
         , Id_(TGuid::Create())
-        , Logger(logger.WithTag("AsyncDialerSession: %v", Id_))
+        , Logger(logger.WithTag("AsyncDialerSessionId", Id_))
         , ReconnectTimeout_(Config_->MinRto * GetRandomVariation())
     { }
 
@@ -175,12 +175,14 @@ private:
     public:
         TPollable(TAsyncDialerSession* owner, TGuid id, SOCKET socket)
             : Owner_(MakeWeak(owner))
-            , LoggingTag_(Format("AsyncDialerSession{%v:%v}", id, socket))
+            , LoggingTags_(NLogging::TLoggingTagList()
+                .With("AsyncDialerSessionId", id)
+                .With("Socket", socket))
         { }
 
-        const std::string& GetLoggingTag() const override
+        const NLogging::TLoggingTagList& GetLoggingTags() const override
         {
-            return LoggingTag_;
+            return LoggingTags_;
         }
 
         void OnEvent(EPollControl /*control*/) override
@@ -200,7 +202,7 @@ private:
     private:
         const NLogging::TLogger Logger;
         const TWeakPtr<TAsyncDialerSession> Owner_;
-        const std::string LoggingTag_;
+        const NLogging::TLoggingTagList LoggingTags_;
     };
 
     using TPollablePtr = TIntrusivePtr<TPollable>;
@@ -273,10 +275,10 @@ private:
             } else {
                 Socket_ = CreateTcpClientSocket(family);
                 if (Config_->EnableNoDelay && !TrySetSocketNoDelay(Socket_)) {
-                    YT_LOG_DEBUG("Failed to set socket no delay option");
+                    YT_TLOG_DEBUG("Failed to set socket no delay option");
                 }
                 if (!TrySetSocketKeepAlive(Socket_)) {
-                    YT_LOG_DEBUG("Failed to set socket keep alive option");
+                    YT_TLOG_DEBUG("Failed to set socket keep alive option");
                 }
             }
 
@@ -333,7 +335,7 @@ private:
             OnFinished_(socket);
         } else {
             auto error = TError(NRpc::EErrorCode::TransportError, "Connect error")
-                << TError::FromSystem(socketError);
+                .With(TError::FromSystem(socketError));
             CloseSocket();
             guard.Release();
             OnFinished_(error);
@@ -377,16 +379,17 @@ private:
 
         if (TInstant::Now() >= Deadline_) {
             auto error = TError(NRpc::EErrorCode::TransportError, "Connect timeout")
-                << TErrorAttribute("timeout", Config_->ConnectTimeout);
-            YT_LOG_ERROR(error);
+                .With("timeout", Config_->ConnectTimeout);
+            YT_TLOG_ERROR("Dialer session timed out")
+                .With(error);
             Finished_ = true;
             guard.Release();
             OnFinished_(error);
             return;
         }
 
-        YT_LOG_DEBUG("Connect timeout; trying to reconnect (ReconnectTimeout: %v)",
-            ReconnectTimeout_);
+        YT_TLOG_DEBUG("Connect timeout; trying to reconnect")
+            .With("ReconnectTimeout", ReconnectTimeout_);
 
         Connect(guard);
     }

@@ -1,5 +1,7 @@
 #include "runtime_settings_configuration.h"
 
+#include <library/cpp/hyperloglog/hyperloglog.h>
+
 namespace NYql {
 
 namespace {
@@ -56,6 +58,13 @@ TRuntimeSettingsConfiguration::TRuntimeSettingsConfiguration(const TRuntimeSetti
         .Parser(MakeDatumValidationModeParser())
         .Serializer(MakeDatumValidationModeSerializer());
     REGISTER_RUNTIME_SETTING(TestHostSetting);
+    REGISTER_RUNTIME_SETTING(UdfProfileEnable);
+    REGISTER_RUNTIME_SETTING(UdfProfileMinTimeUs);
+    REGISTER_RUNTIME_SETTING(UdfProfileGraceCount);
+    REGISTER_RUNTIME_SETTING(UdfProfileExcludeModules);
+    REGISTER_RUNTIME_SETTING(UdfProfileHLLPrecision)
+        .Lower(THyperLogLogBase::PRECISION_MIN)
+        .Upper(THyperLogLogBase::PRECISION_MAX);
 }
 
 } // namespace NYql

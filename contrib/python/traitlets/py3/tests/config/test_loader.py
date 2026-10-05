@@ -210,7 +210,7 @@ class MyLoader2(ArgParseConfigLoader):
 class TestArgParseCL(TestCase):
     def test_basic(self):
         cl = MyLoader1()
-        config = cl.load_config("-f hi -b 10 -n wow".split())
+        config = cl.load_config(["-f", "hi", "-b", "10", "-n", "wow"])
         self.assertEqual(config.Global.foo, "hi")
         self.assertEqual(config.MyClass.bar, 10)
         self.assertEqual(config.n, True)
@@ -222,15 +222,15 @@ class TestArgParseCL(TestCase):
 
     def test_add_arguments(self):
         cl = MyLoader2()
-        config = cl.load_config("2 frobble".split())
+        config = cl.load_config(["2", "frobble"])
         self.assertEqual(config.subparser_name, "2")
         self.assertEqual(config.y, "frobble")
-        config = cl.load_config("1 -x frobble".split())
+        config = cl.load_config(["1", "-x", "frobble"])
         self.assertEqual(config.subparser_name, "1")
         self.assertEqual(config.Global.x, "frobble")
 
     def test_argv(self):
-        cl = MyLoader1(argv="-f hi -b 10 -n wow".split())
+        cl = MyLoader1(argv=["-f", "hi", "-b", "10", "-n", "wow"])
         config = cl.load_config()
         self.assertEqual(config.Global.foo, "hi")
         self.assertEqual(config.MyClass.bar, 10)
@@ -239,7 +239,7 @@ class TestArgParseCL(TestCase):
 
     def test_list_args(self):
         cl = MyLoader1()
-        config = cl.load_config("--list1 1 wow --list2 1 2 3 --list1 B".split())
+        config = cl.load_config(["--list1", "1", "wow", "--list2", "1", "2", "3", "--list1", "B"])
         self.assertEqual(list(config.Global.keys()), ["bam"])
         self.assertEqual(config.Global.bam, "wow")
         self.assertEqual(config.list1, [1, "B"])
@@ -273,7 +273,7 @@ class TestKeyValueCL(TestCase):
     def test_eval(self):
         cl = self.klass(log=log)
         config = cl.load_config(
-            '--C.str_trait=all --C.int_trait=5 --C.list_trait=["hello",5]'.split()
+            ["--C.str_trait=all", "--C.int_trait=5", '--C.list_trait=["hello",5]']
         )
         c = C(config=config)
         assert c.str_trait == "all"
@@ -412,10 +412,30 @@ class TestArgParseKVCL(TestKeyValueCL):
     def test_seq_traits(self):
         cl = self.klass(log=log, classes=(CBase, CSub))  # type:ignore
         aliases = {"a3": "CBase.c", "a5": "CSub.e"}
-        argv = (
-            "--CBase.a A --CBase.a 2 --CBase.b 1 --CBase.b 3 --a3 AA --CBase.c BB "
-            "--CSub.d 1 --CSub.d BBB --CSub.e 1 --CSub.e=bcd a b c "
-        ).split()
+        argv = [
+            "--CBase.a",
+            "A",
+            "--CBase.a",
+            "2",
+            "--CBase.b",
+            "1",
+            "--CBase.b",
+            "3",
+            "--a3",
+            "AA",
+            "--CBase.c",
+            "BB",
+            "--CSub.d",
+            "1",
+            "--CSub.d",
+            "BBB",
+            "--CSub.e",
+            "1",
+            "--CSub.e=bcd",
+            "a",
+            "b",
+            "c",
+        ]
         config = cl.load_config(argv, aliases=aliases)
         assert cl.extra_args == ["a", "b", "c"]
         assert config.CBase.a == ["A", "2"]

@@ -358,6 +358,77 @@ protected:
     size_t AccumulatorCount;
 };
 
+// time-aware exponential moving average
+template <typename ValueType>
+class TExponentialMovingAverageValue {
+public:
+    using TType = ValueType;
+
+    // halfLifeTime is the time period after which the weight of the accumulated average
+    // decreases two times: e.g. with halfLifeTime = 10s the average accumulated by some moment
+    // contributes half of the result 10 seconds later, a quarter 20 seconds later, etc.
+    // The smaller it is, the faster the average follows the input; the larger it is, the smoother the average.
+    explicit TExponentialMovingAverageValue(TDuration halfLifeTime)
+        : AverageValue()
+        , LastUpdate()
+    {
+        SetHalfLifeTime(halfLifeTime);
+    }
+
+    TExponentialMovingAverageValue(const TExponentialMovingAverageValue&) = default;
+
+    TExponentialMovingAverageValue& operator=(const TExponentialMovingAverageValue&) = default;
+
+    void SetHalfLifeTime(TDuration halfLifeTime) {
+        // precalculated so that Push multiplies instead of dividing
+        // zero half-life yields -inf here, making the weight of the accumulated average zero:
+        // the average degenerates to the last pushed value, i.e. no smoothing
+        NegativeInverseHalfLifeTime = -1.0 / halfLifeTime.GetValue();
+    }
+
+    void Set(ValueType value, TInstant time = TInstant::Now()) {
+        AverageValue = value;
+        LastUpdate = time;
+    }
+
+    void Push(ValueType value, TInstant time = TInstant::Now()) {
+        if (LastUpdate == TInstant()) {
+            AverageValue = value;
+            LastUpdate = time;
+            return;
+        }
+        if (time <= LastUpdate) {
+            return;
+        }
+        // the weight of the accumulated average decays exponentially with the time elapsed
+        // since the last push: 2^(-elapsed / halfLifeTime), i.e. after exactly one half-life
+        // it equals 1/2, after two half-lives 1/4, etc.
+        const double oldValueWeight = std::exp2(double((time - LastUpdate).GetValue()) * NegativeInverseHalfLifeTime);
+        // convex combination: the new value takes the weight the old average has lost,
+        // so the result does not depend on how often values are pushed, only on their timing
+        AverageValue = AverageValue * oldValueWeight + value * (1 - oldValueWeight);
+        LastUpdate = time;
+    }
+
+    ValueType GetValue() const {
+        return AverageValue;
+    }
+
+    bool IsValueReady() const {
+        return LastUpdate != TInstant();
+    }
+
+    void Clear() {
+        AverageValue = ValueType();
+        LastUpdate = TInstant();
+    }
+
+protected:
+    double NegativeInverseHalfLifeTime;
+    ValueType AverageValue;
+    TInstant LastUpdate;
+};
+
 template <TTimeBase<TInstant>::TValue DurationToStore = DurationPerDay, size_t BucketCount = 24>
 class TMaximumValueUI64 : public NKikimrMetricsProto::TMaximumValueUI64 {
 public:

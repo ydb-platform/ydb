@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/testlib/common_helper.h>
@@ -852,73 +853,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             // using followers resolver.
             UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] > 0);
         }
-    }
-
-    Y_UNIT_TEST(ExecuteQueryWithWorkloadManager) {
-        TKikimrSettings serverSettings = TKikimrSettings().SetEnableResourcePools(true);
-        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableResourcePools(true);
-        auto kikimr = TKikimrRunner(serverSettings);
-        auto db = kikimr.GetQueryClient();
-
-        TExecuteQuerySettings settings;
-
-        {  // Existing pool
-            settings.ResourcePool("default");
-
-            const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
-            auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-            CheckQueryResult(result);
-        }
-
-        {  // Not existing pool (check workload manager enabled)
-            settings.ResourcePool("another_pool_id");
-
-            const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
-            auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool another_pool_id not found");
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to resolve pool id another_pool");
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Query failed during adding/waiting in workload pool");
-        }
-    }
-
-    Y_UNIT_TEST(ExecuteQueryWithResourcePoolClassifier) {
-        NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableResourcePools(true);
-
-        auto kikimr = TKikimrRunner(TKikimrSettings(config).SetEnableResourcePools(true));
-        auto db = kikimr.GetQueryClient();
-
-        const TString userSID = TStringBuilder() << "test@" << BUILTIN_ACL_DOMAIN;
-        const TString schemeSql = TStringBuilder() << R"(
-            CREATE RESOURCE POOL MyPool WITH (
-                CONCURRENT_QUERY_LIMIT=0
-            );
-            CREATE RESOURCE POOL CLASSIFIER MyPoolClassifier WITH (
-                RESOURCE_POOL="MyPool",
-                MEMBER_NAME=")" << userSID << R"("
-            );
-            GRANT ALL ON `/Root` TO `)" << userSID << R"(`;
-        )";
-        auto schemeResult = db.ExecuteQuery(schemeSql, TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS, schemeResult.GetIssues().ToString());
-
-        auto testUserClient = kikimr.GetQueryClient(TClientSettings().AuthToken(userSID));
-        const TDuration timeout = TDuration::Seconds(5);
-        const TInstant start = TInstant::Now();
-        while (TInstant::Now() - start <= timeout) {
-            const TString query = "SELECT 42;";
-            auto result = testUserClient.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            if (!result.IsSuccess()) {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool MyPool was disabled due to zero concurrent query limit");
-                return;
-            }
-
-            Cerr << "Wait resource pool classifier " << TInstant::Now() - start << ": status = " << result.GetStatus() << ", issues = " << result.GetIssues().ToOneLineString() << "\n";
-            Sleep(TDuration::Seconds(1));
-        }
-        UNIT_ASSERT_C(false, "Waiting resource pool classifier timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout);
     }
 
     std::pair<ui32, ui32> CalcRowsAndBatches(TExecuteQueryIterator& it) {
@@ -6263,6 +6197,83 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(R"([[240000u]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST_TWIN(ExecuteQueryOnlyComments, PerStatementExecution) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableAstCache(true);
+        app.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(PerStatementExecution);
+        auto kikimr = DefaultKikimrRunner({}, app);
+        auto db = kikimr.GetQueryClient();
+
+        const TVector<TString> queries = {
+            "-- Only a comment",
+            "/* Multi-line\n   comment */",
+            "-- First comment\n-- Second comment\n-- Third comment",
+            "-- Single-line\n/* Multi-line */\n-- Another single-line",
+            "   -- comment\n  ",
+            "   \n\t  ",
+            ";; /* SELECT 1 */;",
+        };
+        const TVector<NYdb::NQuery::TTxControl> txControls = {
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+        };
+        for (const auto& txControl : txControls) {
+            for (const auto& query : queries) {
+                auto result = db.ExecuteQuery(query, txControl).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetResultSets().empty());
+            }
+        }
+
+        for (const auto& query : {"/* Unterminated comment", "-- comment\nSELECT FROM;"}) {
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+        }
+
+        auto emptyResult = db.ExecuteQuery("", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(emptyResult.GetStatus(), EStatus::BAD_REQUEST, emptyResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExecuteDataQueryOnlyCommentsRejected) {
+        auto kikimr = DefaultKikimrRunner();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        for (const auto& query : {"-- empty query", "/* Multi-line\n   comment */"}) {
+            auto result = session.ExecuteDataQuery(query,
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::YQL_NO_STATEMENTS),
+                query << ": " << result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ParseStatementsPreservesSyntaxErrors) {
+        const TVector<TString> queries = {
+            "/* Unterminated comment",
+            "-- comment\nSELECT (1 + );",
+            "SELECT 1;\n/* Unterminated comment",
+        };
+        for (const auto& query : queries) {
+            TKqpTranslationSettingsBuilder settingsBuilder(NYql::EKikimrQueryType::Query, "cluster", query,
+                NSQLTranslation::EBindingsMode::DISABLED, {});
+            const auto wholeQuery = ParseStatements(query, /*syntax=*/{}, /*isSql=*/true,
+                settingsBuilder, /*perStatementExecution=*/false);
+            const auto perStatement = ParseStatements(query, /*syntax=*/{}, /*isSql=*/true,
+                settingsBuilder, /*perStatementExecution=*/true);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(wholeQuery.size(), 1, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(perStatement.size(), 1, query);
+            const auto& expected = *wholeQuery.front().Ast;
+            const auto& actual = *perStatement.front().Ast;
+            UNIT_ASSERT_C(!expected.IsOk(), query << ": " << expected.Issues.ToString());
+            UNIT_ASSERT_C(!actual.IsOk(), query << ": " << actual.Issues.ToString());
+            UNIT_ASSERT_C(!expected.Issues.Empty(), query);
+            // The formatted issues include positions, severity, codes and nested diagnostics.
+            UNIT_ASSERT_VALUES_EQUAL_C(actual.Issues.ToString(), expected.Issues.ToString(), query);
+        }
+    }
+
 }
 
 } // namespace NKqp

@@ -1,6 +1,6 @@
 #include "sql_complete.h"
-#include <yql/essentials/sql/v1/ide/completion/syntax/grammar.h>
 
+#include <yql/essentials/sql/v1/ide/completion/syntax/grammar.h>
 #include <yql/essentials/sql/v1/ide/completion/name/cache/local/cache.h>
 #include <yql/essentials/sql/v1/ide/completion/name/cluster/static/discovery.h>
 #include <yql/essentials/sql/v1/ide/completion/name/object/simple/schema.h>
@@ -15,17 +15,26 @@
 #include <yql/essentials/sql/v1/ide/completion/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/ide/completion/name/service/union/name_service.h>
 
+#include <yql/essentials/sql/v1/ide/pure_ast/parser.h>
+
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
+
+#include <yql/essentials/utils/string/trim_indent.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/iterator/iterate_keys.h>
 #include <library/cpp/iterator/functools.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/unicode/utf8_char/utf8_char.h>
+#include <library/cpp/unicode/utf8_iter/utf8_iter.h>
 
 #include <util/charset/utf8.h>
+#include <util/thread/pool.h>
+
+#include <thread>
 
 using namespace NSQLComplete;
 
@@ -56,6 +65,7 @@ using ECandidateKind::PragmaName;
 using ECandidateKind::TableName;
 using ECandidateKind::TypeName;
 using ECandidateKind::UnknownName;
+using ECandidateKind::ViewName;
 
 TLexerSupplier MakePureLexerSupplier() {
     NSQLTranslationV1::TLexers lexers;
@@ -102,6 +112,8 @@ ISqlCompletionEngine::TPtr MakeSqlCompletionEngineUT() {
                     "meta": { "type": "Table", "columns": {} }
                 }},
                 "prod": { "type": "Folder", "entries": {
+                    "events": { "type": "Table", "columns": {} },
+                    "recent_events": { "type": "View" }
                 }},
                 ".sys": { "type": "Folder", "entries": {
                     "status": { "type": "Table", "columns": {} }
@@ -206,6 +218,7 @@ Y_UNIT_TEST(Beginning) {
         {.Kind = Keyword, .Content = "IF"},
         {.Kind = Keyword, .Content = "IMPORT"},
         {.Kind = Keyword, .Content = "INSERT"},
+        {.Kind = Keyword, .Content = "KILL SESSION"},
         {.Kind = Keyword, .Content = "MATERIALIZE"},
         {.Kind = Keyword, .Content = "PARALLEL"},
         {.Kind = Keyword, .Content = "PRAGMA"},
@@ -324,6 +337,7 @@ Y_UNIT_TEST(Create) {
         {.Kind = Keyword, .Content = "RESOURCE POOL"},
         {.Kind = Keyword, .Content = "SECRET"},
         {.Kind = Keyword, .Content = "STREAMING QUERY"},
+        {.Kind = Keyword, .Content = "SYMLINK"},
         {.Kind = Keyword, .Content = "TABLE"},
         {.Kind = Keyword, .Content = "TABLESTORE"},
         {.Kind = Keyword, .Content = "TEMP TABLE"},
@@ -380,6 +394,7 @@ Y_UNIT_TEST(Drop) {
         {.Kind = Keyword, .Content = "RESOURCE POOL"},
         {.Kind = Keyword, .Content = "SECRET"},
         {.Kind = Keyword, .Content = "STREAMING QUERY"},
+        {.Kind = Keyword, .Content = "SYMLINK"},
         {.Kind = Keyword, .Content = "TABLE"},
         {.Kind = Keyword, .Content = "TABLESTORE"},
         {.Kind = Keyword, .Content = "TOPIC"},
@@ -406,6 +421,22 @@ Y_UNIT_TEST(DropObject) {
     auto engine = MakeSqlCompletionEngineUT();
     UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "DROP TABLE "), expected);
     UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "DROP VIEW "), expected);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        Complete(engine, "DROP TABLE `prod/#`"),
+        (TVector<TCandidate>{{.Kind = TableName, .Content = "events"}}));
+    UNIT_ASSERT_VALUES_EQUAL(
+        Complete(engine, "DROP VIEW `prod/#`"),
+        (TVector<TCandidate>{{.Kind = ViewName, .Content = "recent_events"}}));
+    UNIT_ASSERT_VALUES_EQUAL(
+        Complete(engine, "DROP VIEW IF EXISTS `prod/#`"),
+        (TVector<TCandidate>{{.Kind = ViewName, .Content = "recent_events"}}));
+    UNIT_ASSERT_VALUES_EQUAL(
+        Complete(engine, "SELECT * FROM `prod/#`"),
+        (TVector<TCandidate>{
+            {.Kind = TableName, .Content = "events"},
+            {.Kind = ViewName, .Content = "recent_events"},
+        }));
 }
 
 Y_UNIT_TEST(Explain) {
@@ -431,6 +462,7 @@ Y_UNIT_TEST(Explain) {
         {.Kind = Keyword, .Content = "IF"},
         {.Kind = Keyword, .Content = "IMPORT"},
         {.Kind = Keyword, .Content = "INSERT"},
+        {.Kind = Keyword, .Content = "KILL SESSION"},
         {.Kind = Keyword, .Content = "MATERIALIZE"},
         {.Kind = Keyword, .Content = "PARALLEL"},
         {.Kind = Keyword, .Content = "PRAGMA"},
@@ -498,35 +530,35 @@ Y_UNIT_TEST(Pragma) {
             {.Kind = PragmaName, .Content = "yson.CastToString"},
             {.Kind = PragmaName, .Content = "yt.RuntimeCluster"},
             {.Kind = PragmaName, .Content = "yt.RuntimeClusterSelection"}};
-        auto completion = engine->Complete({.Text = "PRAGMA "}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "PRAGMA "}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "");
     }
     {
         TVector<TCandidate> expected = {
             {.Kind = PragmaName, .Content = "yson.CastToString"}};
-        auto completion = engine->Complete({.Text = "PRAGMA ys"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "PRAGMA ys"}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "ys");
     }
     {
         TVector<TCandidate> expected = {
             {.Kind = PragmaName, .Content = "yson.CastToString"}};
-        auto completion = engine->Complete({.Text = "PRAGMA yson"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "PRAGMA yson"}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "yson");
     }
     {
         TVector<TCandidate> expected = {
             {.Kind = PragmaName, .Content = "CastToString"}};
-        auto completion = engine->Complete({.Text = "PRAGMA yson."}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "PRAGMA yson."}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "");
     }
     {
         TVector<TCandidate> expected = {
             {.Kind = PragmaName, .Content = "CastToString"}};
-        auto completion = engine->Complete({.Text = "PRAGMA yson.cast"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "PRAGMA yson.cast"}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "cast");
     }
@@ -989,7 +1021,7 @@ Y_UNIT_TEST(FunctionName) {
         TVector<TCandidate> expected = {
             {.Kind = FunctionName, .Content = "DateTime::Split()", .CursorShift = 1},
         };
-        auto completion = engine->Complete({.Text = "SELECT Date"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "SELECT Date"}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "Date");
     }
@@ -997,14 +1029,14 @@ Y_UNIT_TEST(FunctionName) {
         TVector<TCandidate> expected = {
             {.Kind = FunctionName, .Content = "Split()", .CursorShift = 1},
         };
-        auto completion = engine->Complete({.Text = "SELECT DateTime:"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "SELECT DateTime:"}}).GetValueSync();
         UNIT_ASSERT(completion.Candidates.empty());
     }
     {
         TVector<TCandidate> expected = {
             {.Kind = FunctionName, .Content = "Split()", .CursorShift = 1},
         };
-        auto completion = engine->Complete({.Text = "SELECT DateTime::"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "SELECT DateTime::"}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "");
     }
@@ -1012,7 +1044,7 @@ Y_UNIT_TEST(FunctionName) {
         TVector<TCandidate> expected = {
             {.Kind = FunctionName, .Content = "Split()", .CursorShift = 1},
         };
-        auto completion = engine->Complete({.Text = "SELECT DateTime::s"}).GetValueSync();
+        auto completion = engine->Complete({{.Text = "SELECT DateTime::s"}}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(completion.Candidates, expected);
         UNIT_ASSERT_VALUES_EQUAL(completion.CompletedToken.Content, "s");
     }
@@ -1044,7 +1076,7 @@ Y_UNIT_TEST(SelectTableHintName) {
         TVector<TCandidate> expected = {
             {.Kind = Keyword, .Content = "COLUMNS"},
             {.Kind = Keyword, .Content = "SCHEMA"},
-            {.Kind = Keyword, .Content = "WATERMARK"},
+            {.Kind = Keyword, .Content = "WATERMARK ="},
             {.Kind = HintName, .Content = "XLOCK"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "REDUCE my_table WITH "), expected);
@@ -1053,7 +1085,7 @@ Y_UNIT_TEST(SelectTableHintName) {
         TVector<TCandidate> expected = {
             {.Kind = Keyword, .Content = "COLUMNS"},
             {.Kind = Keyword, .Content = "SCHEMA"},
-            {.Kind = Keyword, .Content = "WATERMARK"},
+            {.Kind = Keyword, .Content = "WATERMARK ="},
             {.Kind = HintName, .Content = "XLOCK"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT key FROM my_table WITH "), expected);
@@ -1066,7 +1098,7 @@ Y_UNIT_TEST(InsertTableHintName) {
         {.Kind = HintName, .Content = "EXPIRATION"},
         {.Kind = Keyword, .Content = "RECURSIVE"},
         {.Kind = Keyword, .Content = "SCHEMA"},
-        {.Kind = Keyword, .Content = "WATERMARK"},
+        {.Kind = Keyword, .Content = "WATERMARK ="},
     };
 
     auto engine = MakeSqlCompletionEngineUT();
@@ -1489,6 +1521,226 @@ Y_UNIT_TEST(ColumnsAtSubquery) {
             {.Kind = ColumnName, .Content = "ep.time"},
             {.Kind = ColumnName, .Content = "x.Age"},
             {.Kind = ColumnName, .Content = "x.Name"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+}
+
+Y_UNIT_TEST(QualifiedColumnFromSubquery) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT *
+            FROM (SELECT 1 AS a, 2 AS xb) AS x
+            JOIN (SELECT 1 AS a, 2 AS yb) AS y ON 1 = 1
+            JOIN (SELECT 1 AS a, 2 AS yb) AS z ON x.a = z.#
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "yb"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT *
+            FROM (SELECT 1 AS a, 2 AS xb) AS x
+            JOIN (SELECT 1 AS a, 2 AS yb) AS y ON 1 = 1
+            JOIN (SELECT 1 AS a, 2 AS yb) AS z ON x.a = x.#
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "xb"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query), expected);
+    }
+}
+
+Y_UNIT_TEST(DuplicateColumnsFromNamedSubqueries) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS xb) AS x
+            JOIN (SELECT 1 AS a, 2 AS yb) AS y ON 1 = 1
+            JOIN (SELECT 1 AS a, 2 AS yb) AS z ON 1 = 1
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "xb"},
+            {.Kind = ColumnName, .Content = "x.a"},
+            {.Kind = ColumnName, .Content = "x.xb"},
+            {.Kind = ColumnName, .Content = "y.a"},
+            {.Kind = ColumnName, .Content = "y.yb"},
+            {.Kind = ColumnName, .Content = "z.a"},
+            {.Kind = ColumnName, .Content = "z.yb"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+}
+
+Y_UNIT_TEST(DuplicateColumnsFromNamedAndUnnamedSources) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b)
+            JOIN (SELECT 1 AS a, 3 AS c) AS x ON 1 = 1
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "x.a"},
+            {.Kind = ColumnName, .Content = "x.c"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b) AS x
+            JOIN (SELECT 1 AS a, 3 AS c) ON 1 = 1
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "x.a"},
+            {.Kind = ColumnName, .Content = "x.b"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+}
+
+Y_UNIT_TEST(DuplicateColumnsFromUnnamedSubqueries) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b)
+            JOIN (SELECT 1 AS a, 3 AS c) ON 1 = 1
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+}
+
+Y_UNIT_TEST(DuplicateJoinUnion) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT *
+                FROM (SELECT 1 AS a, 2 AS b)
+                JOIN (SELECT 1 AS a, 3 AS c) ON 1 = 1
+            UNION
+                SELECT *
+                FROM (SELECT 1 AS a, 2 AS b)
+                JOIN (SELECT 1 AS a, 3 AS c) ON 1 = 1
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                    SELECT *
+                    FROM (SELECT 1 AS a, 2 AS b) AS t1
+                    JOIN (SELECT 1 AS a, 3 AS c) AS t2 ON 1 = 1
+                UNION
+                    SELECT *
+                    FROM (SELECT 1 AS a, 2 AS b) AS t3
+                    JOIN (SELECT 1 AS a, 3 AS c) AS t4 ON 1 = 1
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT * FROM (
+                    SELECT #
+                    FROM (SELECT 1 AS a, 2 AS b) AS t1
+                    JOIN (SELECT 1 AS a, 3 AS c) AS t2 ON 1 = 1
+                UNION
+                    SELECT *
+                    FROM (SELECT 1 AS a, 2 AS b) AS t3
+                    JOIN (SELECT 1 AS a, 3 AS c) AS t4 ON 1 = 1
+            )
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "t1.a"},
+            {.Kind = ColumnName, .Content = "t1.b"},
+            {.Kind = ColumnName, .Content = "t2.a"},
+            {.Kind = ColumnName, .Content = "t2.c"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+}
+
+Y_UNIT_TEST(DuplicateTableAlias) {
+    auto engine = MakeSqlCompletionEngineUT();
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b) AS x
+            JOIN (SELECT 1 AS c, 3 AS d) AS x ON 1 = 1
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "c"},
+            {.Kind = ColumnName, .Content = "d"},
+            {.Kind = ColumnName, .Content = "x.a"},
+            {.Kind = ColumnName, .Content = "x.b"},
+            {.Kind = ColumnName, .Content = "x.c"},
+            {.Kind = ColumnName, .Content = "x.d"},
+            {.Kind = Keyword, .Content = "ALL"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b) AS x
+            JOIN (SELECT 1 AS a, 3 AS b) AS x ON 1 = 1
+        )sql";
+
+        TVector<TCandidate> expected = {
+            {.Kind = ColumnName, .Content = "a"},
+            {.Kind = ColumnName, .Content = "b"},
+            {.Kind = ColumnName, .Content = "x.a"},
+            {.Kind = ColumnName, .Content = "x.b"},
             {.Kind = Keyword, .Content = "ALL"},
         };
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
@@ -2088,53 +2340,69 @@ Y_UNIT_TEST(NoBindingAtQuoted) {
 }
 
 Y_UNIT_TEST(Typing) {
-    const auto queryUtf16 = TUtf16String::FromUtf8(
-        "SELECT \n"
-        "  123467, \"Hello, {name}! 编码\"}, \n"
-        "  (1 + (5 * 1 / 0)), MIN(identifier), \n"
-        "  Bool(field), Math::Sin(var) \n"
-        "FROM `local/test/space/table` JOIN test;");
+    TString input = NYql::TrimIndent(R"sql(
+        SELECT
+          123467, \"Hello, {name}! 编码\"},
+          (1 + (5 * 1 / 0)), MIN(identifier),
+          Bool(field), Math::Sin(var)
+        FROM `local/test/space/table` JOIN test;
+    )sql");
 
     auto engine = MakeSqlCompletionEngineUT();
 
-    for (std::size_t size = 0; size <= queryUtf16.size(); ++size) {
-        const TWtringBuf prefixUtf16(queryUtf16, 0, size);
-        TCompletion completion = engine->Complete({.Text = TString::FromUtf16(prefixUtf16)}).GetValueSync();
+    const auto check = [&](TStringBuf prefix) {
+        TCompletionInput input = {{.Text = prefix}};
+        TCompletion completion = engine->Complete(input).GetValueSync();
         Y_DO_NOT_OPTIMIZE_AWAY(completion);
+    };
+
+    TString prefix(Reserve(input.size()));
+    for (wchar32 c : TUtfIterCode(input)) {
+        check(prefix);
+        prefix += TUtf8Char(c);
     }
+    check(prefix);
 }
 
 Y_UNIT_TEST(Tabbing) {
-    TString query = R"(
-USE example;
+    TString query = NYql::TrimIndent(R"sql(
+        USE example;
 
-SELECT
-    123467, \"Hello, {name}! 编码\"},
-    (1 + (5 * 1 / 0)), MIN(identifier),
-    Bool(field), Math::Sin(var)
-FROM `local/test/space/table`
-JOIN yt:$cluster_name.test;
-)";
-
+        SELECT
+            123467, \"Hello, {name}! 编码\"},
+            (1 + (5 * 1 / 0)), MIN(identifier),
+            Bool(field), Math::Sin(var)
+        FROM `local/test/space/table`
+        JOIN yt:$cluster_name.test;
+    )sql");
     query += query + ";";
     query += query + ";";
+
+    auto parser = NSQLPureAST::MakeParser();
+    auto tree = parser->Parse(query);
 
     auto engine = MakeSqlCompletionEngineUT();
 
-    const auto* begin = reinterpret_cast<const unsigned char*>(query.c_str());
-    const auto* end = reinterpret_cast<const unsigned char*>(begin + query.size());
-    const auto* ptr = begin;
+    const auto check = [&](size_t position) {
+        TCompletion treeless =
+            engine
+                ->Complete({{.Text = query, .CursorPosition = position}, nullptr})
+                .GetValueSync();
 
-    wchar32 rune;
-    while (ptr < end) {
-        Y_ENSURE(ReadUTF8CharAndAdvance(rune, ptr, end) == RECODE_OK);
-        TCompletionInput input = {
-            .Text = query,
-            .CursorPosition = static_cast<size_t>(std::distance(begin, ptr)),
-        };
-        TCompletion completion = engine->Complete(input).GetValueSync();
-        Y_DO_NOT_OPTIMIZE_AWAY(completion);
+        TCompletion treefull =
+            engine
+                ->Complete({{.Text = query, .CursorPosition = position}, tree})
+                .GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(treeless.Candidates, treefull.Candidates);
+    };
+
+    size_t position = 0;
+    for (wchar32 c : TUtfIterCode(query)) {
+        check(position);
+        position += TUtf8Char(c).length();
     }
+    check(position);
 }
 
 Y_UNIT_TEST(CaseInsensitivity) {
@@ -2164,15 +2432,15 @@ Y_UNIT_TEST(InvalidStatementsRecovery) {
 Y_UNIT_TEST(InvalidCursorPosition) {
     auto engine = MakeSqlCompletionEngineUT();
 
-    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({"", 0}).GetValueSync());
-    UNIT_ASSERT_EXCEPTION(engine->Complete({"", 1}).GetValueSync(), yexception);
+    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({{"", 0}}).GetValueSync());
+    UNIT_ASSERT_EXCEPTION(engine->Complete({{"", 1}}).GetValueSync(), yexception);
 
-    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({"s", 0}).GetValueSync());
-    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({"s", 1}).GetValueSync());
+    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({{"s", 0}}).GetValueSync());
+    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({{"s", 1}}).GetValueSync());
 
-    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({"ы", 0}).GetValueSync());
-    UNIT_ASSERT_EXCEPTION(engine->Complete({"ы", 1}).GetValueSync(), yexception);
-    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({"ы", 2}).GetValueSync());
+    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({{"ы", 0}}).GetValueSync());
+    UNIT_ASSERT_EXCEPTION(engine->Complete({{"ы", 1}}).GetValueSync(), yexception);
+    UNIT_ASSERT_NO_EXCEPTION(engine->Complete({{"ы", 2}}).GetValueSync());
 }
 
 Y_UNIT_TEST(DefaultNameService) {
@@ -2398,6 +2666,53 @@ Y_UNIT_TEST(CachedSchema) {
         // Updates in backround
         UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT a# FROM alice"), aliceExpected);
         UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT p# FROM petya"), petyaExpected);
+    }
+}
+
+Y_UNIT_TEST(NoStackOverflowOnDeeplyNestedSubquery) {
+    constexpr size_t Depth = 4 * 1024;
+
+    auto engine = MakeSqlCompletionEngineUT();
+
+    TStringBuilder query;
+    query << '#';
+    for (size_t i = 0; i < Depth; ++i) {
+        query << "SELECT * FROM (";
+    }
+    query << "SELECT 1";
+    for (size_t i = 0; i < Depth; ++i) {
+        query << ")";
+    }
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        Complete(engine, query), std::exception, "Maximum parse tree depth exceeded");
+}
+
+Y_UNIT_TEST(ThreadSafetyStressTyping) {
+    const size_t concurrency = std::max<size_t>(4, std::thread::hardware_concurrency());
+
+    TString input = NYql::TrimIndent(R"sql(
+        SELECT
+          123467, \"Hello, {name}! 编码\"},
+          (1 + (5 * 1 / 0)), MIN(identifier),
+          Bool(field), Math::Sin(var)
+        FROM `local/test/space/table` JOIN test;
+    )sql");
+
+    auto engine = MakeSqlCompletionEngineUT();
+
+    auto pool = CreateThreadPool(/*threadCount=*/concurrency);
+    for (size_t i = 0; i < concurrency; ++i) {
+        pool->SafeAddFunc([&] {
+            TString prefix(Reserve(input.size()));
+            for (wchar32 c : TUtfIterCode(input)) {
+                TCompletionInput input = {{.Text = prefix}};
+                TCompletion completion = engine->Complete(input).GetValueSync();
+                Y_DO_NOT_OPTIMIZE_AWAY(completion);
+
+                prefix += TUtf8Char(c);
+            }
+        });
     }
 }
 

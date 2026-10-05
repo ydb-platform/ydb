@@ -111,7 +111,7 @@ public:
         Y_ENSURE(tableInfo, "Table info must be initialized by Drop or Create action");
 
         TDataShardLocksDb locksDb(DataShard, txc);
-        DataShard.AddUserTable(pathId, tableInfo, &locksDb);
+        DataShard.ReplaceUserTable(pathId, tableInfo, locksDb);
 
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(pathId, schemaVersion, op->GetStep(), op->GetTxId(), txc, ctx);

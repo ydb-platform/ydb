@@ -315,7 +315,11 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
             self._expect_error(
                 kikimr,
                 'INSERT INTO `non_existent_source`.`my_topic` SELECT "Data";',
-                ["Cannot find table", "/Root/non_existent_source", "my_topic", "because it does not exist or you do not have access permissions"],
+                [
+                    "Cannot find table",
+                    f"{kikimr.endpoint.database}/non_existent_source.[my_topic]",
+                    "because it does not exist or you do not have access permissions",
+                ],
             )
 
         # Write into an unavailable external source (valid metadata, unreachable location).
@@ -336,10 +340,8 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
             )
 
         try:
-            external_client = YdbClient(endpoint.endpoint, endpoint.database)
-            test_client = YdbClient(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
-            external_client.wait_connection()
-            test_client.wait_connection()
+            external_client = YdbClient.from_driver_config(endpoint.endpoint, endpoint.database)
+            test_client = YdbClient.from_driver_config(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
 
             test_secret_name = entity_name("test_secret")
             test_source_name = entity_name("test_target_source")
@@ -373,7 +375,11 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
                 self._expect_error(
                     kikimr,
                     f'INSERT INTO `{unavailable_source}`.my_topic SELECT "Data";',
-                    ["Cannot find table", "/Root/unavailable_source", "my_topic", "because it does not exist or you do not have access permissions."],
+                    [
+                        "Cannot find table",
+                        f"{kikimr.endpoint.database}/{unavailable_source}.[my_topic]",
+                        "because it does not exist or you do not have access permissions.",
+                    ],
                     client=test_client,
                 )
         finally:

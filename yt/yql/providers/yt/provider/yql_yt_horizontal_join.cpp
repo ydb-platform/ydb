@@ -923,7 +923,7 @@ void THorizontalJoinOptimizer::AddToGroups(TYtMap map, size_t s, size_t p, const
     if (good) {
         TNodeSet deps;
         for (auto path: map.Input().Item(0).Paths()) {
-            yamr = path.Table().Maybe<TYtTable>().RowSpec().Maybe<TCoVoid>().IsValid();
+            yamr = yamr || path.Table().Maybe<TYtTable>().RowSpec().Maybe<TCoVoid>().IsValid();
             if (auto setting = path.Table().Maybe<TYtTable>().Settings()) {
                 qb2 = qb2 || NYql::HasSetting(setting.Ref(), EYtSettingType::WithQB);
             }
@@ -1400,7 +1400,7 @@ IGraphTransformer::TStatus TMultiHorizontalJoinOptimizer::Optimize(TExprNode::TP
                 bool qb2 = false;
                 TNodeSet deps;
                 for (auto path: map.Input().Item(0).Paths()) {
-                    yamr = path.Table().Maybe<TYtTable>().RowSpec().Maybe<TCoVoid>().IsValid();
+                    yamr = yamr || path.Table().Maybe<TYtTable>().RowSpec().Maybe<TCoVoid>().IsValid();
                     if (auto setting = path.Table().Maybe<TYtTable>().Settings()) {
                         qb2 = qb2 || NYql::HasSetting(setting.Ref(), EYtSettingType::WithQB);
                     }

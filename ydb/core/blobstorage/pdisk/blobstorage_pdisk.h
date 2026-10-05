@@ -1,9 +1,11 @@
 #pragma once
+#include "blobstorage_pdisk_allocation.h"
 #include "defs.h"
 
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_params.h"
 #include "blobstorage_pdisk_config.h"
+#include "blobstorage_pdisk_util_space_color.h"
 
 #include <ydb/core/base/blobstorage_write_source.h>
 #include <ydb/core/blobstorage/base/vdisk_lsn.h>
@@ -12,10 +14,11 @@
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/pdisk_io/device_io_sample.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/map.h>
-#include <util/system/file.h>
-#include <util/system/fhandle.h>
+
+#include <memory>
 
 
 namespace NKikimr {
@@ -27,6 +30,7 @@ struct TPDiskMon;
 namespace NPDisk {
 
 struct TDiskFormat;
+class IUringRouterClient;
 
 using TDiskFormatPtr = std::unique_ptr<TDiskFormat, void(*)(TDiskFormat*)>;
 
@@ -147,7 +151,9 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
     TActorId WhiteboardProxyId;
     ui32 SlotId;
     ui32 GroupSizeInUnits;
-    bool GetDiskFd = false; // if true, response will contain a duplicated file descriptor for direct disk access
+    bool GetUringRouterClient = false; // if true, PDisk creates/shares an IUringRouterClient
+    ui32 UringIdleSpinUs = 10; // used if this request creates the shared router
+    bool UringDevNullMode = false; // all DDisk slots sharing this router must agree
 
     TEvYardInit(
             TOwnerRound ownerRound,
@@ -157,7 +163,9 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
             const TActorId& whiteboardProxyId = {},
             ui32 slotId = Max<ui32>(),
             ui32 groupSizeInUnits = 0,
-            bool getDiskFd = false
+            bool getUringRouterClient = false,
+            ui32 uringIdleSpinUs = 10,
+            bool uringDevNullMode = false
         )
         : OwnerRound(ownerRound)
         , VDisk(vdisk)
@@ -166,7 +174,9 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
         , WhiteboardProxyId(whiteboardProxyId)
         , SlotId(slotId)
         , GroupSizeInUnits(groupSizeInUnits)
-        , GetDiskFd(getDiskFd)
+        , GetUringRouterClient(getUringRouterClient)
+        , UringIdleSpinUs(uringIdleSpinUs)
+        , UringDevNullMode(uringDevNullMode)
     {}
 
     TString ToString() const {
@@ -182,7 +192,9 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
         str << " WhiteboardProxyId# " << record.WhiteboardProxyId;
         str << " SlotId# " << record.SlotId;
         str << " GroupSizeInUnits# " << record.GroupSizeInUnits;
-        str << " GetDiskFd# " << record.GetDiskFd;
+        str << " GetUringRouterClient# " << record.GetUringRouterClient;
+        str << " UringIdleSpinUs# " << record.UringIdleSpinUs;
+        str << " UringDevNullMode# " << record.UringDevNullMode;
         str << "}";
         return str.Str();
     }
@@ -195,8 +207,10 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TIntrusivePtr<TPDiskParams> PDiskParams;
     TVector<TChunkIdx> OwnedChunks;  // Sorted vector of owned chunk identifiers.
     TString ErrorReason;
-    TFileHandle DiskFd; // A duplicated fd for direct disk access
     TDiskFormatPtr DiskFormat{nullptr, nullptr}; // On-device format for direct disk access offset calculations
+#if defined(__linux__)
+    std::shared_ptr<IUringRouterClient> UringRouter; // Copied only on the PDisk thread
+#endif
 
     TEvYardInitResult(const NKikimrProto::EReplyStatus status, TString errorReason)
         : Status(status)
@@ -262,8 +276,10 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
             str << record.OwnedChunks[i];
         }
         str << "}";
-        str << " DiskFd# " << static_cast<FHANDLE>(record.DiskFd);
         str << " DiskFormat# " << (record.DiskFormat ? "set" : "null");
+#if defined(__linux__)
+        str << " UringRouter# " << (record.UringRouter ? "set" : "null");
+#endif
         str << "}";
         return str.Str();
     }
@@ -325,13 +341,95 @@ struct TEvYardResizeResult : TEventLocal<TEvYardResizeResult, TEvBlobStorage::Ev
     }
 };
 
+////////////////////////////////////////////////////////////////////////////
+// PLANNED LEVEL COMPACTION (EnableVDiskPlannedCompaction)
+// While the shared chunk pool is short of space, PDisk lets one level compaction run at a time. It asks every
+// registered bidder -- a level-index actor of a VDisk, one per database -- what it would compact, and leases the
+// disk to the one that frees the most chunks. See TCompactionArbiter.
+////////////////////////////////////////////////////////////////////////////
+struct TEvCompactionBidder : TEventLocal<TEvCompactionBidder, TEvBlobStorage::EvCompactionBidder> {
+    enum class EKind {
+        Register,   // the sender takes part; replaces its earlier registration
+        Bid,        // the answer to TEvCompactionArbiter::CallForBids
+        Dirty,      // after a bid of nothing: the sender may have something to compact now
+        Release,    // the lease is no longer needed
+    };
+
+    EKind Kind;
+    TOwner Owner;
+    TOwnerRound OwnerRound;
+    ui32 BidderId; // tells apart the bidders of one owner
+    ui64 RoundId = 0; // Bid only
+    bool HasCandidate = false; // Bid only
+    ui32 NeedChunks = 0; // Bid only: chunks the candidate is expected to write
+    ui32 FreeChunks = 0; // Bid only: chunks it is expected to give back
+
+    TEvCompactionBidder(EKind kind, TOwner owner, TOwnerRound ownerRound, ui32 bidderId)
+        : Kind(kind)
+        , Owner(owner)
+        , OwnerRound(ownerRound)
+        , BidderId(bidderId)
+    {}
+
+    TString ToString() const {
+        return ToString(*this);
+    }
+
+    static TString ToString(const TEvCompactionBidder &record) {
+        TStringStream str;
+        str << "{EvCompactionBidder Kind# " << static_cast<int>(record.Kind);
+        str << " Owner# " << record.Owner;
+        str << " OwnerRound# " << record.OwnerRound;
+        str << " BidderId# " << record.BidderId;
+        str << " RoundId# " << record.RoundId;
+        str << " HasCandidate# " << record.HasCandidate;
+        str << " NeedChunks# " << record.NeedChunks;
+        str << " FreeChunks# " << record.FreeChunks;
+        str << "}";
+        return str.Str();
+    }
+};
+
+struct TEvCompactionArbiter : TEventLocal<TEvCompactionArbiter, TEvBlobStorage::EvCompactionArbiter> {
+    enum class EKind {
+        Pressure,       // whether leases are in force; sent on registration and whenever it changes
+        CallForBids,    // opens round RoundId; answer with a Bid for it
+        Lease,          // the recipient may run one level compaction; send Release when done
+    };
+
+    EKind Kind;
+    bool Pressure = false; // Pressure only
+    ui64 RoundId = 0; // CallForBids and Lease
+
+    TEvCompactionArbiter(EKind kind, bool pressure, ui64 roundId)
+        : Kind(kind)
+        , Pressure(pressure)
+        , RoundId(roundId)
+    {}
+
+    TString ToString() const {
+        return ToString(*this);
+    }
+
+    static TString ToString(const TEvCompactionArbiter &record) {
+        TStringStream str;
+        str << "{EvCompactionArbiter Kind# " << static_cast<int>(record.Kind);
+        str << " Pressure# " << record.Pressure;
+        str << " RoundId# " << record.RoundId;
+        str << "}";
+        return str.Str();
+    }
+};
+
 struct TEvChangeExpectedSlotCount : TEventLocal<TEvChangeExpectedSlotCount, TEvBlobStorage::EvChangeExpectedSlotCount> {
     ui32 ExpectedSlotCount;
     ui32 SlotSizeInUnits;
+    ui64 ExpectedSlotSize;
 
-    TEvChangeExpectedSlotCount(ui32 expectedSlotCount, ui32 slotSizeInUnits)
+    TEvChangeExpectedSlotCount(ui32 expectedSlotCount, ui32 slotSizeInUnits, ui64 expectedSlotSize = 0)
         : ExpectedSlotCount(expectedSlotCount)
         , SlotSizeInUnits(slotSizeInUnits)
+        , ExpectedSlotSize(expectedSlotSize)
     {}
 
     TString ToString() const {
@@ -344,6 +442,7 @@ struct TEvChangeExpectedSlotCount : TEventLocal<TEvChangeExpectedSlotCount, TEvB
         str << "EvChangeExpectedSlotCount ";
         str << " ExpectedSlotCount# " << record.ExpectedSlotCount;
         str << " SlotSizeInUnits# " << record.SlotSizeInUnits;
+        str << " ExpectedSlotSize# " << record.ExpectedSlotSize;
         str << "}";
         return str.Str();
     }
@@ -536,6 +635,7 @@ struct TEvLogResult : TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResult> {
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
         str << " LogChunkCount# " << record.LogChunkCount;
+        str << " Headroom# " << record.Headroom.ToString();
         for (auto it = record.Results.begin(); it != record.Results.end(); ++it) {
             str << "{Lsn# " << it->Lsn << " Cookie# " << (ui64)it->Cookie << "}";
         }
@@ -550,6 +650,7 @@ struct TEvLogResult : TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResult> {
     TStatusFlags StatusFlags;
     TString ErrorReason;
     i64 LogChunkCount = 0;
+    TSpaceHeadroom Headroom;
 
     TEvLogResult(NKikimrProto::EReplyStatus status,
             TStatusFlags statusFlags,
@@ -852,11 +953,31 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
     TOwner Owner;
     TOwnerRound OwnerRound;
     ui32 SizeChunks;
+    // Output of a compaction, rather than a place to put newly accepted data. Such a
+    // reservation is not held back by the static group reserve: on a full disk the
+    // compaction is the only thing that can free anything, so refusing it leaves the
+    // owner stuck for good. It still stops at black.
+    bool ForHousekeeping;
+    EAllocationPurpose Purpose;
+    // DDisk waits for a terminal reply even when PDisk stops with this request queued.
+    bool IsDDisk = false;
+    // Refuse the reservation unless the owner's colour after it stays strictly better
+    // than this, the same sense TSpaceHeadroom::ToPreOrange and GetHeadroomBelow() use.
+    // BLACK, the default, is the historical rule: refused only when it would black out
+    // the disk. A caller funding newly accepted data names a stricter bound so PDisk
+    // decides under StateMutex, instead of the caller reserving and then discovering
+    // from the reply that it has already moved the colour.
+    NKikimrBlobStorage::TPDiskSpaceColor::E RefuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK;
 
-    TEvChunkReserve(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks)
+    TEvChunkReserve(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks, bool forHousekeeping = false,
+            NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK,
+            EAllocationPurpose purpose = EAllocationPurpose::Recovery)
         : Owner(owner)
         , OwnerRound(ownerRound)
         , SizeChunks(sizeChunks)
+        , ForHousekeeping(forHousekeeping)
+        , Purpose(forHousekeeping ? EAllocationPurpose::Maintenance : purpose)
+        , RefuseAtColor(refuseAtColor)
     {}
 
     TString ToString() const {
@@ -868,6 +989,9 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
         str << "{EvChunkReserve ownerId# " << (ui32)record.Owner;
         str << " ownerRound# " << record.OwnerRound;
         str << " SizeChunks# " << record.SizeChunks;
+        str << " ForHousekeeping# " << record.ForHousekeeping;
+        str << " Purpose# " << AllocationPurposeName(record.Purpose);
+        str << " RefuseAtColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(record.RefuseAtColor);
         str << "}";
         return str.Str();
     }
@@ -878,6 +1002,11 @@ struct TEvChunkReserveResult : TEventLocal<TEvChunkReserveResult, TEvBlobStorage
     TVector<TChunkIdx> ChunkIds;
     TStatusFlags StatusFlags;
     TString ErrorReason;
+    TSpaceHeadroom Headroom;
+    // Colour the owner would be in once these chunks are taken, which is what
+    // RefuseAtColor was compared against. Reported on refusal too, so a caller that
+    // named a bound can tell how far past it the disk already is.
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimatedColor = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
     TEvChunkReserveResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags)
         : Status(status)
@@ -899,6 +1028,8 @@ struct TEvChunkReserveResult : TEventLocal<TEvChunkReserveResult, TEvBlobStorage
         str << "{EvChunkReserveResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
+        str << " Headroom# " << record.Headroom.ToString();
+        str << " EstimatedColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(record.EstimatedColor);
         str << "}";
         return str.Str();
     }
@@ -911,6 +1042,8 @@ struct TEvChunkForget : TEventLocal<TEvChunkForget, TEvBlobStorage::EvChunkForge
     TOwner Owner;
     TOwnerRound OwnerRound;
     TVector<TChunkIdx> ForgetChunks;
+    // Opt in to DDisk lifecycle replies, execution-time session validation, and cookies.
+    bool IsDDisk = false;
 
     TEvChunkForget(TOwner owner, TOwnerRound ownerRound)
         : Owner(owner)
@@ -942,6 +1075,7 @@ struct TEvChunkForgetResult : TEventLocal<TEvChunkForgetResult, TEvBlobStorage::
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
     TString ErrorReason;
+    TSpaceHeadroom Headroom;
 
     TEvChunkForgetResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags)
         : Status(status)
@@ -963,6 +1097,7 @@ struct TEvChunkForgetResult : TEventLocal<TEvChunkForgetResult, TEvBlobStorage::
         str << "{EvChunkForgetResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
+        str << " Headroom# " << record.Headroom.ToString();
         str << "}";
         return str.Str();
     }
@@ -1266,6 +1401,7 @@ struct TEvChunkWriteResult : TEventLocal<TEvChunkWriteResult, TEvBlobStorage::Ev
     void *Cookie;
     TStatusFlags StatusFlags;
     TString ErrorReason;
+    TSpaceHeadroom Headroom;
 
     mutable NLWTrace::TOrbit Orbit;
 
@@ -1300,6 +1436,7 @@ struct TEvChunkWriteResult : TEventLocal<TEvChunkWriteResult, TEvBlobStorage::Ev
         str << " chunkIdx# " << record.ChunkIdx;
         str << " Cookie# " << (ui64)record.Cookie;
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
+        str << " Headroom# " << record.Headroom.ToString();
         str << "}";
         return str.Str();
     }
@@ -1531,13 +1668,35 @@ struct TEvCheckSpace : TEventLocal<TEvCheckSpace, TEvBlobStorage::EvCheckSpace> 
     }
 };
 
+////////////////////////////////////////////////////////////////////////////
+// Device overestimation sample transport: sent by a DDisk / PersistentBuffer
+// actor (an IO_URING source) to the PDisk actor that owns the same physical
+// device, so PDisk can merge these raw samples with its own block-device
+// samples into one completion-ordered stream. See
+// blobstorage_pdisk_device_overestimation.h for the aggregation model.
+////////////////////////////////////////////////////////////////////////////
+struct TEvDeviceOverestimationSamples
+    : TEventLocal<TEvDeviceOverestimationSamples, TEvBlobStorage::EvDeviceOverestimationSamples> {
+    TVector<NPDisk::TDeviceIoSample> Samples;
+
+    explicit TEvDeviceOverestimationSamples(TVector<NPDisk::TDeviceIoSample> samples)
+        : Samples(std::move(samples))
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{TEvDeviceOverestimationSamples SamplesCount# " << Samples.size() << "}";
+        return str.Str();
+    }
+};
+
 struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::EvCheckSpaceResult> {
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
     ui32 FreeChunks; // contains SharedQuota.Free
     ui32 TotalChunks; // contains OwnerQuota.HardLimit(owner), Total != Free + Used
     ui32 UsedChunks; // equals OwnerQuota.Used(owner) - a number of chunks allocated by requesting owner
-    ui32 NumSlots; // number of VDisks over PDisk, not their weight
+    ui32 NumOwners; // number of registered PDisk owners (including VDisks and DDisks), not their weight
     ui32 NumActiveSlots; // sum of VDisks weights - $ \sum_i{ceil(VSlot[i].GroupSizeInUnits / PDisk.SlotSizeInUnits)} $
     double NormalizedOccupancy = 0;
     double VDiskSlotUsage = 0;  // 100.0 * Owner.Used / Owner.LightYellowLimit
@@ -1546,6 +1705,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
     ui32 ExpectedSlotCount = 0; // maximum number of VDisks over PDisk
     TString ErrorReason;
     TStatusFlags LogStatusFlags;
+    TSpaceHeadroom Headroom; // chunk budget left before each write-gating boundary
 
     TEvCheckSpaceResult(
             NKikimrProto::EReplyStatus status,
@@ -1553,7 +1713,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
             ui32 freeChunks,
             ui32 totalChunks,
             ui32 usedChunks,
-            ui32 numSlots,
+            ui32 numOwners,
             ui32 numActiveSlots,
             ui32 expectedSlotCount,
             TString errorReason,
@@ -1563,7 +1723,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         , FreeChunks(freeChunks)
         , TotalChunks(totalChunks)
         , UsedChunks(usedChunks)
-        , NumSlots(numSlots)
+        , NumOwners(numOwners)
         , NumActiveSlots(numActiveSlots)
         , ExpectedSlotCount(expectedSlotCount)
         , ErrorReason(std::move(errorReason))
@@ -1577,11 +1737,12 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         str << " FreeChunks# " << FreeChunks;
         str << " TotalChunks# " << TotalChunks;
         str << " UsedChunks# " << UsedChunks;
-        str << " NumSlots# " << NumSlots;
+        str << " NumOwners# " << NumOwners;
         str << " NumActiveSlots# " << NumActiveSlots;
         str << " ExpectedSlotCount# " << ExpectedSlotCount;
         str << " ErrorReason# \"" << ErrorReason << "\"";
         str << " LogStatusFlags# " << StatusFlagsToString(LogStatusFlags);
+        str << " Headroom# " << Headroom.ToString();
         str << "}";
         return str.Str();
     }
@@ -1769,7 +1930,7 @@ struct TEvReadMetadataResult : TEventLocal<TEvReadMetadataResult, TEvBlobStorage
     {}
 
     TEvReadMetadataResult(TRcBuf&& metadata, std::optional<ui64> pdiskGuid)
-        : Outcome(EPDiskMetadataOutcome::OK)
+        : Outcome(metadata.size() ? EPDiskMetadataOutcome::OK : EPDiskMetadataOutcome::NO_METADATA)
         , Metadata(std::move(metadata))
         , PDiskGuid(pdiskGuid)
     {}
@@ -1778,6 +1939,7 @@ struct TEvReadMetadataResult : TEventLocal<TEvReadMetadataResult, TEvBlobStorage
 struct TEvWriteMetadata : TEventLocal<TEvWriteMetadata, TEvBlobStorage::EvWriteMetadata> {
     TRcBuf Metadata;
 
+    // An empty payload clears metadata; subsequent reads return NO_METADATA.
     TEvWriteMetadata(TRcBuf&& metadata)
         : Metadata(std::move(metadata))
     {}

@@ -1,14 +1,19 @@
 #include <yt/yt/client/chaos_client/replication_card.h>
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
+#include <yt/yt/client/transaction_client/ts_literal.h>
+
 #include <yt/yt/core/test_framework/framework.h>
 
 namespace NYT::NChaosClient {
 namespace {
 
 using namespace NTabletClient;
+using namespace NTransactionClient;
 using namespace NYTree;
 using namespace NYson;
+
+using NTransactionClient::operator""_ts;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -26,7 +31,6 @@ TEST_P(TReplicationCardFetchOptionsContainsTest, Contains)
     auto self = std::get<0>(params);
     auto& other = std::get<1>(params);
     auto expected = std::get<2>(params);
-
 
     EXPECT_EQ(self.Contains(other), expected)
         << "progress: " << std::get<0>(params) << std::endl
@@ -96,7 +100,6 @@ INSTANTIATE_TEST_SUITE_P(
             },
             false)));
 
-
 class TReplicationCardFetchOptionsOrTest
     : public ::testing::Test
     , public ::testing::WithParamInterface<std::tuple<
@@ -111,7 +114,6 @@ TEST_P(TReplicationCardFetchOptionsOrTest, Or)
     auto self = std::get<0>(params);
     auto& other = std::get<1>(params);
     auto expected = std::get<2>(params);
-
 
     EXPECT_EQ(self |= other, expected)
         << "progress: " << std::get<0>(params) << std::endl
@@ -225,7 +227,7 @@ INSTANTIATE_TEST_SUITE_P(
             std::vector<TReplicaHistoryItem>{
                 TReplicaHistoryItem{
                     .Era = 0,
-                    .Timestamp = 0,
+                    .Timestamp = NullTimestamp,
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -237,13 +239,13 @@ INSTANTIATE_TEST_SUITE_P(
             std::vector<TReplicaHistoryItem>{
                 TReplicaHistoryItem{
                     .Era = 0,
-                    .Timestamp = 0,
+                    .Timestamp = NullTimestamp,
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Disabled,
                 },
                 TReplicaHistoryItem{
                     .Era = 1,
-                    .Timestamp = 1,
+                    .Timestamp = 2_ts,
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -255,7 +257,7 @@ INSTANTIATE_TEST_SUITE_P(
             std::vector<TReplicaHistoryItem>{
                 TReplicaHistoryItem{
                     .Era = 0,
-                    .Timestamp = 0,
+                    .Timestamp = 1_ts,
                     .Mode = ETableReplicaMode::Async,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -267,11 +269,16 @@ INSTANTIATE_TEST_SUITE_P(
             std::vector<TReplicaHistoryItem>{
                 TReplicaHistoryItem{
                     .Era = 0,
-                    .Timestamp = 0,
+                    .Timestamp = 1_ts,
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Disabled,
                 }
             },
+            false),
+        std::tuple(
+            ETableReplicaMode::SyncToAsync,
+            ETableReplicaState::Disabled,
+            std::vector<TReplicaHistoryItem>(),
             false),
         std::tuple(
             ETableReplicaMode::Async,
@@ -303,7 +310,7 @@ public:
             .History = {
                 TReplicaHistoryItem{
                     .Era = 1,
-                    .Timestamp = 10ull << 30,
+                    .Timestamp = NYT::NTransactionClient::TTimestamp(10ull << 30),
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -319,7 +326,7 @@ public:
             .History = {
                 TReplicaHistoryItem{
                     .Era = 1,
-                    .Timestamp = 10ull << 30,
+                    .Timestamp = NYT::NTransactionClient::TTimestamp(10ull << 30),
                     .Mode = ETableReplicaMode::Async,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -350,13 +357,13 @@ public:
             .History = {
                 TReplicaHistoryItem{
                     .Era = 1,
-                    .Timestamp = 10ull << 30,
+                    .Timestamp = NYT::NTransactionClient::TTimestamp(10ull << 30),
                     .Mode = ETableReplicaMode::Async,
                     .State = ETableReplicaState::Enabled,
                 },
                 TReplicaHistoryItem{
                     .Era = 2,
-                    .Timestamp = 30ull << 30,
+                    .Timestamp = NYT::NTransactionClient::TTimestamp(30ull << 30),
                     .Mode = ETableReplicaMode::Async,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -372,7 +379,7 @@ public:
             .History = {
                 TReplicaHistoryItem{
                     .Era = 1,
-                    .Timestamp = 10ull << 30,
+                    .Timestamp = NYT::NTransactionClient::TTimestamp(10ull << 30),
                     .Mode = ETableReplicaMode::Async,
                     .State = ETableReplicaState::Enabled,
                 }

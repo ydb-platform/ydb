@@ -256,6 +256,9 @@ public:
         }
         Self->ProcessVDiskStatus(record.GetVDiskStatus());
 
+        // the node resubscribes to database space state after every registration
+        Self->DatabaseSpace.UnsubscribeNode(nodeId);
+
         Response = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
 
         TSet<TGroupId> groupIDsToRead;
@@ -459,7 +462,16 @@ void TBlobStorageController::ReadGroups(TSet<TGroupId>& groupIDsToRead, bool dis
                 groupProto->SetGroupID(groupId.GetRawId());
                 groupProto->SetEntityStatus(NKikimrBlobStorage::DESTROY);
             } else if (group->Listable()) {
-                SerializeGroupInfo(groupProto, *group, StoragePools);
+                const TStoragePoolInfo& info = StoragePools.at(group->StoragePoolId);
+
+                TMaybe<TKikimrScopeId> scopeId;
+                if (info.SchemeshardId && info.PathItemId) {
+                    scopeId.ConstructInPlace(*info.SchemeshardId, *info.PathItemId);
+                } else {
+                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
+                }
+
+                SerializeGroupInfo(groupProto, *group, info, scopeId);
             } else if (nodeId) {
                 // group is not listable, so we have to postpone the request from NW
                 group->WaitingNodes.insert(nodeId);
@@ -529,6 +541,9 @@ void TBlobStorageController::ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::
         const TStoragePoolInfo& info = StoragePools.at(group->StoragePoolId);
         vDisk->SetStoragePoolName(info.Name);
         vDisk->SetGroupSizeInUnits(group->GroupSizeInUnits);
+        if (info.VDiskHeapAllocatorNumLeadingDisks) {
+            vDisk->SetVDiskHeapAllocatorNumLeadingDisks(*info.VDiskHeapAllocatorNumLeadingDisks);
+        }
 
         const TVSlotFinder vslotFinder{[this](TVSlotId vslotId, auto&& callback) {
             if (const TVSlotInfo *vslot = FindVSlot(vslotId)) {
@@ -601,6 +616,12 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
         SysViewChangedPDisks.insert(it->first);
     }
 
+    // the warden (possibly restarted) numbers its metrics reports anew
+    const TVSlotId startingId(nodeId, Min<Schema::VSlot::PDiskID::Type>(), Min<Schema::VSlot::VSlotID::Type>());
+    for (auto it = VSlots.lower_bound(startingId); it != VSlots.end() && it->first.NodeId == nodeId; ++it) {
+        it->second->LastMetricsSequence = 0;
+    }
+
     node.LastConnectTimestamp = TInstant::Now();
     node.DisconnectedTimestampMono = TMonotonic::Max();
 
@@ -615,6 +636,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     node.ConnectedServerId = {};
     node.InterconnectSessionId = {};
     node.Registered = false;
+    DatabaseSpace.UnsubscribeNode(nodeId);
 
     for (const TGroupId groupId : std::exchange(node.WaitingForGroups, {})) {
         if (TGroupInfo *group = FindGroup(groupId)) {

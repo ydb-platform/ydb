@@ -498,6 +498,9 @@ public:
             if (Tenant->IsGraphShardEnabled) {
                 subdomain.SetGraphShard(true);
             }
+            if (Tenant->IsWasmCompileControllerEnabled) {
+                subdomain.SetExternalWasmCompileController(true);
+            }
         }
 
         if (SharedTenant) {
@@ -528,6 +531,9 @@ public:
             }
             if (Tenant->IsGraphShardEnabled) {
                 subdomain.SetGraphShard(true);
+            }
+            if (Tenant->IsWasmCompileControllerEnabled) {
+                subdomain.SetExternalWasmCompileController(true);
             }
         }
         if (tablets) {
@@ -4136,7 +4142,7 @@ void TTenantsManager::Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr &ev, const 
         return;
     }
     auto pool = poolIt->second;
-    if (pool->State != TStoragePool::EState::SHRINKING) {
+    if (pool->State != TStoragePool::EState::SHRINKING && pool->State != TStoragePool::EState::NOT_UPDATED) {
         return;
     }
 

@@ -8,9 +8,9 @@
 
 #include <yt/yt/core/ytree/public.h>
 
-#include <yt/yt/core/misc/property.h>
-
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <library/cpp/yt/string/format.h>
 

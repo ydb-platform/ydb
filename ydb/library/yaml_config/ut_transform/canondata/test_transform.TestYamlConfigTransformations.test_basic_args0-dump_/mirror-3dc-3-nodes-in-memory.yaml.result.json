@@ -1500,9 +1500,5 @@
   "GRpcConfig":
     {
       "Port":2135
-    },
-  "TableServiceConfig":
-    {
-      "SqlVersion":1
     }
 }

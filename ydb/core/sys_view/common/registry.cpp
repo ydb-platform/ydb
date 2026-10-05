@@ -18,6 +18,7 @@ const TVector<SysViewsRegistryRecord> SysViewsRegistry::SysViews = {
 
     {"query_sessions", ESysViewType::EQuerySessions, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QuerySessions>},
     {"query_metrics_one_minute", ESysViewType::EQueryMetricsOneMinute, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryMetrics>},
+    {"query_metrics_one_hour", ESysViewType::EQueryMetricsOneHour, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryMetrics>},
     {"compile_cache_queries", ESysViewType::ECompileCacheQueries, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::CompileCacheQueries>},
 
     {"ds_pdisks", ESysViewType::EPDisks, {ESource::Domain},  &FillSchema<Schema::PDisks>},
@@ -55,6 +56,7 @@ const TVector<SysViewsRegistryRecord> SysViewsRegistry::SysViews = {
     {"primary_index_optimizer_stats", ESysViewType::ETablePrimaryIndexOptimizerStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexOptimizerStats>},
 
     {"streaming_queries", ESysViewType::EStreamingQueries, {ESource::Domain, ESource::SubDomain}, &FillSchema<Schema::StreamingQueries>},
+    {"udf_modules", ESysViewType::EUdfModules, {ESource::Domain, ESource::SubDomain}, &FillSchema<Schema::UdfModules>},
 };
 
 const TVector<SysViewsRegistryRecord> SysViewsRegistry::RewrittenSysViews = {

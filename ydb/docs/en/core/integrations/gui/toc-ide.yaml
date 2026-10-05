@@ -3,6 +3,8 @@ items:
   href: dbeaver.md
 - name: DBeaver Plugin
   href: dbeaver-plugin.md
+- name: VS Code
+  href: vscode-plugin.md
 - name: DataGrip
   href: datagrip.md
 - name: Jupyter Notebook

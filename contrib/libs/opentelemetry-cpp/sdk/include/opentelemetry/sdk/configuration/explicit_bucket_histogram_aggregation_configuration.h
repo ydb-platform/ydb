@@ -20,13 +20,16 @@ namespace configuration
 class ExplicitBucketHistogramAggregationConfiguration : public AggregationConfiguration
 {
 public:
+  // empty boundaries means use the SDK spec default ([0, 5, 10, ...])
+  static constexpr bool kDefaultRecordMinMax = true;
+
   void Accept(AggregationConfigurationVisitor *visitor) const override
   {
     visitor->VisitExplicitBucketHistogram(this);
   }
 
   std::vector<double> boundaries;
-  bool record_min_max{false};
+  bool record_min_max{kDefaultRecordMinMax};
 };
 
 }  // namespace configuration

@@ -1,3 +1,4 @@
+#include "counters.h"
 #include "optimizer.h"
 
 #include <ydb/core/protos/config.pb.h>
@@ -36,6 +37,41 @@ IOptimizerPlanner::TModificationGuard& IOptimizerPlanner::TModificationGuard::Ad
 IOptimizerPlanner::TModificationGuard& IOptimizerPlanner::TModificationGuard::RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
     RemovePortions.emplace_back(portion);
     return *this;
+}
+
+ui64 IOptimizerPlanner::GetNodePortionsCountLimit() const {
+    if (RuntimeSettings) {
+        if (const auto& nodePortionsCountLimit = RuntimeSettings->GetNodePortionsCountLimit()) {
+            return *nodePortionsCountLimit;
+        }
+    }
+    return NodePortionsCountLimit.value_or(DynamicPortionsCountLimit.load());
+}
+
+void TOptimizerRuntimeSettings::RefreshNodePortionsCountLimitCounter() const {
+    const ui64 nodePortionsCountLimit = NodePortionsCountLimit.value_or(IOptimizerPlanner::GetDefaultNodePortionsCountLimit());
+    TGlobalCounters::GetNodePortionsCountLimit()->Set(nodePortionsCountLimit);
+    const ui64 configuredBadPortionsLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetBadPortionsLimit() : 0;
+    TGlobalCounters::GetNodeBadPortionsCountLimit()->Set(configuredBadPortionsLimit ? configuredBadPortionsLimit : 2 * nodePortionsCountLimit);
+}
+
+void TOptimizerRuntimeSettings::LoadFromAppData() {
+    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasNodePortionsCountLimit() &&
+        AppDataVerified().ColumnShardConfig.GetNodePortionsCountLimit() > 0) {
+        SetNodePortionsCountLimit(AppDataVerified().ColumnShardConfig.GetNodePortionsCountLimit());
+    } else {
+        SetNodePortionsCountLimit(std::nullopt);
+    }
+    RefreshNodePortionsCountLimitCounter();
+}
+
+void TOptimizerRuntimeSettings::ApplyFromConfig(const NKikimrConfig::TColumnShardConfig& config) {
+    if (config.HasNodePortionsCountLimit() && config.GetNodePortionsCountLimit() > 0) {
+        SetNodePortionsCountLimit(config.GetNodePortionsCountLimit());
+    } else {
+        SetNodePortionsCountLimit(std::nullopt);
+    }
+    RefreshNodePortionsCountLimitCounter();
 }
 
 ui64 IOptimizerPlanner::GetBadPortionsLimit() const {

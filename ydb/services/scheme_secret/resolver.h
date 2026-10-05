@@ -29,6 +29,8 @@ NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecr
     TDescribeSecretSettings settings = {}
 );
 
+bool IsSchemeSecret(const TString& secretName);
+
 bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TVector<TString>& secretNames);
 bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TString& secretName);
 

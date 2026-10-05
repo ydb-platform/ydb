@@ -4,8 +4,9 @@
 #include "actors/direct_read_actor.h"
 
 #include <ydb/core/client/server/grpc_base.h>
-#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
+#include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -24,7 +25,9 @@ namespace V1 {
 IActor* CreatePQReadService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
                             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
 
-class TPQReadService : public NActors::TActorBootstrapped<TPQReadService> {
+class TPQReadService : public NPQ::TBaseActor<TPQReadService>
+                     , public NPQ::TConstantLogPrefix {
+    using TBase = NPQ::TBaseActor<TPQReadService>;
 public:
     TPQReadService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
                    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
@@ -89,9 +92,9 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // template methods implementation
 
-template <bool UseMigrationProtocol>
+template <EProtocol Protocol>
 auto FillReadResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
-    using ServerMessage = typename std::conditional<UseMigrationProtocol,
+    using ServerMessage = typename std::conditional<Protocol == EProtocol::PQv1,
                                                     PersQueue::V1::MigrationStreamingReadServerMessage,
                                                     Topic::StreamReadMessage::FromServer>::type;
     ServerMessage res;
@@ -105,36 +108,36 @@ Topic::StreamDirectReadMessage::FromServer FillDirectReadResponse(const TString&
 
 template <typename ReadRequest>
 void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, const TActorContext& ctx) {
-    constexpr bool UseMigrationProtocol = std::is_same_v<ReadRequest, NGRpcService::TEvStreamPQMigrationReadRequest>;
+    constexpr EProtocol Protocol = std::is_same_v<ReadRequest, NGRpcService::TEvStreamPQMigrationReadRequest> ? EProtocol::PQv1 : EProtocol::Topic;
 
-    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New grpc connection");
+    LOG_D("New grpc connection");
 
     if (TooMuchSessions()) {
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New grpc connection failed - too much sessions");
+        LOG_I("New grpc connection failed - too much sessions");
         ev->Get()->Attach(ctx.SelfID);
         ev->Get()->WriteAndFinish(
-            FillReadResponse<UseMigrationProtocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), Ydb::StatusIds::OVERLOADED); //CANCELLED
+            FillReadResponse<Protocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), Ydb::StatusIds::OVERLOADED); //CANCELLED
         return;
     }
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New grpc connection failed - cluster is not known yet");
+        LOG_I("New grpc connection failed - cluster is not known yet");
 
         ev->Get()->Attach(ctx.SelfID);
         ev->Get()->WriteAndFinish(
-            FillReadResponse<UseMigrationProtocol>("cluster initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
+            FillReadResponse<Protocol>("cluster initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
         // TODO: Inc SLI Errors
         return;
     } else {
 
-        Y_ABORT_UNLESS(TopicsHandler != nullptr);
+        AFL_ENSURE(TopicsHandler != nullptr)("local_cluster", LocalCluster)("have_clusters", HaveClusters);
         const ui64 cookie = NextCookie();
 
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New session created cookie",
+        LOG_D("New session created cookie",
             {"cookie", cookie});
 
         auto ip = ev->Get()->GetPeerName();
 
-        TActorId worker = ctx.Register(new TReadSessionActor<UseMigrationProtocol>(
+        TActorId worker = ctx.Register(new TReadSessionActor<Protocol>(
                 ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters,
                 DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
                 *TopicsHandler

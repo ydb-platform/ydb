@@ -512,6 +512,40 @@ namespace NAsyncTest {
                 "returning", "finished");
         }
 
+
+        Y_UNIT_TEST(ConcreteParameterCallback) {
+            TVector<TString> sequence;
+
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                Y_DEFER { sequence.push_back("finished"); };
+
+                int value = co_await WithTaskGroup<int>([&](TTaskGroup<int>& g) -> async<int> {
+                    g.Add([&]() -> async<int> {
+                        sequence.push_back("task");
+                        co_return 42;
+                    });
+                    co_return co_await g.Next();
+                });
+                UNIT_ASSERT_VALUES_EQUAL(value, 42);
+
+                co_await WithTaskGroup([&](TTaskGroup<void>& g) -> async<void> {
+                    g.Add([&]() -> async<void> {
+                        sequence.push_back("void task");
+                        co_return;
+                    });
+                    co_await g.Next();
+                });
+
+                sequence.push_back("returning");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence, "task", "void task", "returning", "finished");
+            UNIT_ASSERT(!state.Destroyed);
+        }
+
     } // Y_UNIT_TEST_SUITE(TaskGroup)
 
 } // namespace NAsyncTest

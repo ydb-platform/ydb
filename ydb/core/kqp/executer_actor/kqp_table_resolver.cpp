@@ -1,10 +1,14 @@
 #include "kqp_table_resolver.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
 namespace NKikimr::NKqp {
 
@@ -14,11 +18,6 @@ using namespace NYql::NDq;
 
 namespace {
 
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-
 class TKqpTableResolver : public TActorBootstrapped<TKqpTableResolver> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -27,12 +26,13 @@ public:
 
     TKqpTableResolver(const TActorId& owner, ui64 txId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TKqpTasksGraph& tasksGraph, bool skipUnresolvedNames)
+        TKqpTasksGraph& tasksGraph, bool skipUnresolvedNames, NWilson::TTraceId traceId)
         : Owner(owner)
         , TxId(txId)
         , UserToken(userToken)
         , SkipUnresolvedNames(skipUnresolvedNames)
-        , TasksGraph(tasksGraph) {}
+        , TasksGraph(tasksGraph)
+        , TraceId(std::move(traceId)) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -45,7 +45,9 @@ private:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveNames);
             hFunc(TEvents::TEvPoison, HandleResolveNames);
             default: {
-                LOG_C("ResolveKeysState: unexpected event " << ev->GetTypeRewrite());
+                YDB_LOG_CRIT("ResolveNamesState: unexpected event",
+                    {"txId", TxId},
+                    {"eventType", ev->GetTypeRewrite()});
                 GotUnexpectedEvent = ev->GetTypeRewrite();
             }
         }
@@ -57,7 +59,9 @@ private:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveKeys);
             hFunc(TEvents::TEvPoison, HandleResolveKeys);
             default: {
-                LOG_C("ResolveKeysState: unexpected event " << ev->GetTypeRewrite());
+                YDB_LOG_CRIT("ResolveKeysState: unexpected event",
+                    {"txId", TxId},
+                    {"eventType", ev->GetTypeRewrite()});
                 GotUnexpectedEvent = ev->GetTypeRewrite();
             }
         }
@@ -73,7 +77,9 @@ private:
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TIssue(TStringBuilder() << "navigation problems for tables"));
             return;
         }
-        LOG_D("Navigated key sets: " << results.size());
+        YDB_LOG_DEBUG("Navigated key",
+            {"txId", TxId},
+            {"sets", results.size()});
         for (auto& entry : results) {
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
@@ -220,6 +226,7 @@ private:
             }
         }
 
+        EndQueryTraceSpan(MetadataSpan, Ydb::StatusIds::SUCCESS);
         ResolvingNamesFinished = true;
         ResolveKeys();
     }
@@ -235,7 +242,9 @@ private:
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TIssue(TStringBuilder() << "navigation problems for tables"));
             return;
         }
-        LOG_D("Navigated key sets: " << results.size());
+        YDB_LOG_DEBUG("Navigated key",
+            {"txId", TxId},
+            {"sets", results.size()});
         for (auto& entry : results) {
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
@@ -260,6 +269,7 @@ private:
             }
         }
 
+        EndQueryTraceSpan(MetadataSpan, Ydb::StatusIds::SUCCESS);
         NavigationFinished = true;
         TryFinish();
     }
@@ -280,11 +290,15 @@ private:
         auto timer = std::make_unique<NCpuTime::TCpuTimer>(CpuTime);
 
         auto& results = ev->Get()->Request->ResultSet;
-        LOG_D("Resolved key sets: " << results.size());
+        YDB_LOG_DEBUG("Resolved key",
+            {"txId", TxId},
+            {"sets", results.size()});
 
         for (auto& entry : results) {
             if (entry.Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
-                LOG_E("Error resolving keys for entry: " << entry.ToString(*AppData()->TypeRegistry));
+                YDB_LOG_ERROR("Error resolving keys",
+                    {"txId", TxId},
+                    {"entry", entry.ToString(*AppData()->TypeRegistry)});
 
                 TStringBuilder path;
                 if (auto it = TablePathsById.find(entry.KeyDescription->TableId); it != TablePathsById.end()) {
@@ -304,7 +318,9 @@ private:
                 AFL_ENSURE(partition.Range);
             }
 
-            LOG_D("Resolved key: " << entry.ToString(*AppData()->TypeRegistry));
+            YDB_LOG_DEBUG("Resolved",
+                {"txId", TxId},
+                {"key", entry.ToString(*AppData()->TypeRegistry)});
 
             auto& stageInfo = DecodeStageInfo(entry.UserData);
 
@@ -322,6 +338,7 @@ private:
         }
 
         timer.reset();
+        EndQueryTraceSpan(PartitioningSpan, Ydb::StatusIds::SUCCESS);
         ResolvingFinished = true;
         TryFinish();
     }
@@ -447,6 +464,16 @@ private:
 
                         TablePathsById.emplace(stageInfo.Meta.TableId, stageInfo.Meta.TablePath);
 
+                        if (stageInfo.Meta.TableKind == ETableKind::Olap) {
+                            if (TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
+                                auto& navEntry = requestNavigate->ResultSet.emplace_back();
+                                navEntry.TableId = stageInfo.Meta.TableId;
+                                navEntry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+                                navEntry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
+                            }
+                            TableRequestIds[stageInfo.Meta.TableId].emplace_back(pair.first);
+                        }
+
                         auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
                         entry.UserData = EncodeStageInfo(stageInfo);
                         AFL_ENSURE(operation == TKeyDesc::ERowOperation::Update); // CTAS is Update operation
@@ -457,17 +484,44 @@ private:
         }
 
         if (!ResolvingNamesFinished) {
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
+            MetadataSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+                NWilson::TTraceId(TraceId), {
+                    .Name = "Metadata",
+                    .Phase = "ResolveMetadata",
+                    .ActorType = "TKqpTableResolver",
+                    .Component = "KqpExecuter.Prepare",
+                    .PeerActorType = "SchemeCache",
+                }, NWilson::EFlags::AUTO_END);
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
+                0, 0, MetadataSpan.GetTraceId());
             Become(&TKqpTableResolver::ResolveNamesState);
             return;
         }
 
         if (requestNavigate->ResultSet.size()) {
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
+            MetadataSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+                NWilson::TTraceId(TraceId), {
+                    .Name = "Metadata",
+                    .Phase = "ResolveMetadata",
+                    .ActorType = "TKqpTableResolver",
+                    .Component = "KqpExecuter.Prepare",
+                    .PeerActorType = "SchemeCache",
+                }, NWilson::EFlags::AUTO_END);
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
+                0, 0, MetadataSpan.GetTraceId());
         } else {
             NavigationFinished = true;
         }
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        PartitioningSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+            NWilson::TTraceId(TraceId), {
+                .Name = "Partitioning",
+                .Phase = "ResolvePartitioning",
+                .ActorType = "TKqpTableResolver",
+                .Component = "KqpExecuter.Prepare",
+                .PeerActorType = "SchemeCache",
+            }, NWilson::EFlags::AUTO_END);
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request),
+            0, 0, PartitioningSpan.GetTraceId());
         Become(&TKqpTableResolver::ResolveKeysState);
     }
 
@@ -494,12 +548,18 @@ private:
 
 private:
     void UnexpectedEvent(const TString& state, ui32 eventType) {
-        LOG_C("TKqpTableResolver, unexpected event: " << eventType << ", at state:" << state << ", self: " << SelfId());
+        YDB_LOG_CRIT("TKqpTableResolver received unexpected event",
+            {"txId", TxId},
+            {"eventType", eventType},
+            {"state", state},
+            {"selfId", SelfId()});
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, std::move(issue));
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, TIssue&& issue) {
+        EndQueryTraceSpan(MetadataSpan, status);
+        EndQueryTraceSpan(PartitioningSpan, status);
         auto replyEv = std::make_unique<TEvKqpExecuter::TEvTableResolveStatus>();
         replyEv->Status = status;
         replyEv->Issues.AddIssue(std::move(issue));
@@ -520,6 +580,8 @@ private:
     }
 
 private:
+    NWilson::TSpan MetadataSpan;
+    NWilson::TSpan PartitioningSpan;
     const TActorId Owner;
     const ui64 TxId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -533,6 +595,7 @@ private:
 
     // TODO: TableResolver should not populate TasksGraph as it's not related to its job (bad API).
     TKqpTasksGraph& TasksGraph;
+    NWilson::TTraceId TraceId;
 
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;
@@ -542,8 +605,8 @@ private:
 } // anonymous namespace
 
 NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph, bool skipUnknownNames) {
-    return new TKqpTableResolver(owner, txId, userToken, tasksGraph, skipUnknownNames);
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph, bool skipUnknownNames, NWilson::TTraceId traceId) {
+    return new TKqpTableResolver(owner, txId, userToken, tasksGraph, skipUnknownNames, std::move(traceId));
 }
 
 } // namespace NKikimr::NKqp

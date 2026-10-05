@@ -34,6 +34,8 @@ class NoopLogger final : public Logger
 public:
   const nostd::string_view GetName() noexcept override { return "noop logger"; }
 
+  using Logger::CreateLogRecord;
+
   nostd::unique_ptr<LogRecord> CreateLogRecord() noexcept override
   {
     /*

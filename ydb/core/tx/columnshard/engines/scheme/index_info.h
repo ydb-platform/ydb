@@ -108,6 +108,8 @@ private:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     std::optional<TString> ScanReaderPolicyName;
+    std::optional<bool> DeduplicationEnabled;
+    bool CacheBlobsAfterWrite = false;
     TInsertOptionsPolicy InsertOptions;
 
     TPresetId PresetId;
@@ -249,6 +251,14 @@ public:
 
     const std::optional<TString>& GetScanReaderPolicyName() const {
         return ScanReaderPolicyName;
+    }
+
+    const std::optional<bool>& GetDeduplicationEnabled() const {
+        return DeduplicationEnabled;
+    }
+
+    bool GetCacheBlobsAfterWrite() const {
+        return CacheBlobsAfterWrite;
     }
 
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {

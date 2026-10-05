@@ -8,14 +8,7 @@ namespace NYT::NErasure {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int ICodec::GetTotalPartCount() const
-{
-    return GetDataPartCount() + GetParityPartCount();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-ICodec* GetCodec(ECodec id)
+ICodec* GetCodecOrThrow(ECodec id)
 {
     if (auto* codec = FindCodec(id)) {
         return codec;
@@ -61,7 +54,7 @@ const std::vector<ECodec>& GetSupportedCodecIds()
 {
     static const std::vector<ECodec> supportedCodecIds = [] {
         std::vector<ECodec> codecIds;
-        for (auto codecId : TEnumTraits<ECodec>::GetDomainValues()) {
+        for (auto codecId : TEnumTraits<ECodec>::GetUniqueDomainValues()) {
             if (FindCodec(codecId)) {
                 codecIds.push_back(codecId);
             }
@@ -78,4 +71,3 @@ const std::vector<ECodec>& GetSupportedCodecIds()
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NErasure
-

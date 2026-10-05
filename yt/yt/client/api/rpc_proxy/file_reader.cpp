@@ -13,6 +13,8 @@ using namespace NObjectClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
 class TFileReader
     : public IFileReader
 {
@@ -49,13 +51,13 @@ private:
     const NHydra::TRevision Revision_;
 };
 
-TFuture<IFileReaderPtr> CreateFileReader(
-    TApiServiceProxy::TReqReadFilePtr request)
+template <class TMeta, class TRequestPtr>
+TFuture<IFileReaderPtr> DoCreateFileReader(TRequestPtr request)
 {
     return NRpc::CreateRpcClientInputStream(std::move(request))
-        .Apply(BIND([=] (const IAsyncZeroCopyInputStreamPtr& inputStream) {
+        .Apply(BIND([] (const IAsyncZeroCopyInputStreamPtr& inputStream) {
             return inputStream->Read().Apply(BIND([=] (const TSharedRef& metaRef) {
-                NApi::NRpcProxy::NProto::TReadFileMeta meta;
+                TMeta meta;
                 if (!TryDeserializeProto(&meta, metaRef)) {
                     THROW_ERROR_EXCEPTION("Failed to deserialize file stream header");
                 }
@@ -64,8 +66,24 @@ TFuture<IFileReaderPtr> CreateFileReader(
                     inputStream,
                     FromProto<TObjectId>(meta.id()),
                     FromProto<NHydra::TRevision>(meta.revision()));
-            })).As<IFileReaderPtr>();
+            })).template As<IFileReaderPtr>();
         }));
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+TFuture<IFileReaderPtr> CreateFileReader(
+    TApiServiceProxy::TReqReadFilePtr request)
+{
+    return DoCreateFileReader<NApi::NRpcProxy::NProto::TReadFileMeta>(std::move(request));
+}
+
+TFuture<IFileReaderPtr> CreateFilePartitionReader(
+    TApiServiceProxy::TReqReadFilePartitionPtr request)
+{
+    return DoCreateFileReader<NApi::NRpcProxy::NProto::TRspReadFilePartitionMeta>(std::move(request));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

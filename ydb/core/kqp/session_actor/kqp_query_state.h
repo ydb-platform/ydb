@@ -1,6 +1,9 @@
 #pragma once
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+
 #include "kqp_query_stats.h"
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -12,6 +15,7 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
+#include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
@@ -26,11 +30,13 @@
 #include <map>
 #include <memory>
 
-namespace NKikimr::NKqp {
+namespace NKikimr {
 
-namespace NWorkload {
+namespace NWorkloadManager {
 class IQueryClassifier;
-} // namespace NWorkload
+} // namespace NWorkloadManager
+
+namespace NKqp {
 
 class TKqpQueryCache;
 
@@ -49,6 +55,9 @@ public:
 
         void SetValue(const TTxId& id);
         TTxId GetValue();
+        bool HasValue() const {
+            return Id.Defined();
+        }
 
         void Reset();
 
@@ -68,11 +77,11 @@ public:
         , ProxyRequestId(ev->Cookie)
         , ParametersSize(ev->Get()->GetParametersSize())
         , QueryPhysicalGraph(ev->Get()->GetQueryPhysicalGraph())
-        , Generation(ev->Get()->GetGeneration())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
         , StartTime(TInstant::Now())
+        , RuntimeStats(startedAt, ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval)
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
         , UserTraceId((ev->Get()->GetUserCtx() != nullptr && ev->Get()->GetUserCtx()->GetUserTraceId()) ? ev->Get()->GetUserCtx()->GetUserTraceId().Clone() : NWilson::TTraceId())
@@ -105,9 +114,15 @@ public:
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
-            "Session.query." + NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
-        if (KqpSessionSpan && AppData()) {
-            KqpSessionSpan.Attribute("database", AppData()->TenantName);
+            QueryTraceSpanName(QueryAction), NWilson::EFlags::AUTO_END);
+        AddQueryTraceAttributes(KqpSessionSpan, QueryType, QueryAction,
+            Database ? Database : AppData()->TenantName, RequestEv->GetQuery());
+        AddQuerySessionTraceAttributes(KqpSessionSpan, sessionId,
+            RequestEv->HasTxControl() ? &RequestEv->GetTxControl() : nullptr);
+        KqpSessionSpan.Attribute("ydb.actor.type", TString("TKqpSessionActor"));
+        if (KqpSessionSpan) {
+            const auto fallback = FallbackQueryTraceName(QueryType, QueryAction);
+            TraceDescription = {fallback, fallback};
         }
         if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             if (KqpSessionSpan) {
@@ -126,6 +141,7 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
+        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType());
         QueryClassifier = RequestEv->GetWmQueryClassifier();
 
         if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
@@ -149,9 +165,10 @@ public:
     TActorId Sender;
     ui64 ProxyRequestId = 0;
     std::unique_ptr<TEvKqp::TEvQueryRequest> RequestEv;
-    std::shared_ptr<NWorkload::IQueryClassifier> QueryClassifier;
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
+    TString QueryTextForLogging;
     TKqpCompileResult::TConstPtr CompileResult;
     TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;
@@ -161,7 +178,6 @@ public:
     NKikimrKqp::EQueryType QueryType;
     bool SaveQueryPhysicalGraph = false;
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
-    const i64 Generation = 0;
 
     TActorId RequestActorId;
 
@@ -174,6 +190,7 @@ public:
     TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
+    TCurrentQueryStatsPublisher RuntimeStats;
     TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -186,11 +203,16 @@ public:
 
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
+    NWilson::TSpan AdmissionSpan;
+    NWilson::TSpan AcquireSnapshotSpan;
+    TQueryTraceDescription TraceDescription;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx
     bool Commit = false;
     bool Commited = false;
+
+    std::optional<TCommitTimestamp> CommitTimestamp;
 
     NTopic::TTopicOperations TopicOperations;
     TDuration CpuTime;
@@ -249,6 +271,10 @@ public:
 
     const TString& GetQuery() const {
         return RequestEv->GetQuery();
+    }
+
+    bool UsedNewRbo() const {
+        return CompileResult && CompileResult->UsedNewRbo;
     }
 
     const TString& GetPreparedQuery() const {
@@ -411,7 +437,7 @@ public:
         }
     }
 
-    void FillViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& views);
+    void FiilTablesAndViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& infos);
 
     bool NeedCheckTableVersions() const {
         return CompileStats.FromCache;
@@ -653,6 +679,13 @@ public:
         return cStats;
     }
 
+    bool GetCollectAffectedRows() const {
+        // Ignore the flag when stats are not collected at all: shards would
+        // pay the extra precharge/RowExists overhead for a discarded result.
+        return RequestEv->GetCollectAffectedRows()
+            && GetStatsMode() != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+    }
+
     bool ReportStats() const {
         return GetStatsMode() != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE
             // always report stats for scripting subrequests
@@ -712,5 +745,6 @@ public:
 
 };
 
+} //namespace NKqp
 
-}
+} //namespace NKikimr

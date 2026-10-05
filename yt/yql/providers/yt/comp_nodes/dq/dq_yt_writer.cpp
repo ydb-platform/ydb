@@ -124,6 +124,7 @@ public:
         const TRichYPath& path,
         const NYT::TNode& outSpec,
         const NYT::TNode& writerOptions,
+        const std::string_view& optLLVM,
         THolder<NCommon::TCodecContext>&& codecCtx
     )
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded, EValueRepresentation::Boxed)
@@ -134,6 +135,7 @@ public:
         , Path(path)
         , OutSpec(outSpec)
         , WriterOptions(writerOptions)
+        , OptLLVM(optLLVM)
         , CodecCtx(std::move(codecCtx))
         , Logger(mutables)
         , LogComponent(mutables)
@@ -267,7 +269,7 @@ private:
             auto client = NYT::CreateClient(ClusterName, createOpts);
             auto transaction = client->AttachTransaction(Path.TransactionId_.GetRef());
             auto specs = MakeHolder<TMkqlIOSpecs>();
-            specs->SetUseSkiff("");
+            specs->SetUseSkiff(OptLLVM);
             specs->Init(*CodecCtx, OutSpec);
             auto path = Path;
             path.TransactionId_.Clear();
@@ -314,6 +316,7 @@ private:
     const TRichYPath Path;
     const NYT::TNode OutSpec;
     const NYT::TNode WriterOptions;
+    const TString OptLLVM;
     const THolder<NCommon::TCodecContext> CodecCtx;
     const TMutableDataOnContext<NUdf::TLoggerPtr> Logger;
     const TMutableDataOnContext<NUdf::TLogComponentId> LogComponent;
@@ -325,7 +328,7 @@ private:
 }
 
 IComputationNode* WrapYtDqRowsWideWrite(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    YQL_ENSURE(callable.GetInputsCount() == 6, "Expected six args.");
+    YQL_ENSURE(callable.GetInputsCount() == 7, "Expected seven args.");
 
     const auto& clusterName = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().AsStringRef();
     const auto& token = AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().AsStringRef();
@@ -335,6 +338,7 @@ IComputationNode* WrapYtDqRowsWideWrite(TCallable& callable, const TComputationN
 
     const NYT::TNode outSpec(NYT::NodeFromYsonString((AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().AsStringRef())));
     const NYT::TNode writerOptions(NYT::NodeFromYsonString((AS_VALUE(TDataLiteral, callable.GetInput(5))->AsValue().AsStringRef())));
+    const TString optLLVM(AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().AsStringRef());
     const auto node = LocateNode(ctx.NodeLocator, callable, 0);
 
     std::vector<EValueRepresentation> representations;
@@ -345,7 +349,7 @@ IComputationNode* WrapYtDqRowsWideWrite(TCallable& callable, const TComputationN
     }
 
     auto codecCtx = MakeHolder<NCommon::TCodecContext>(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory);
-    return new TYtDqWideWriteWrapper(ctx.Mutables, static_cast<IComputationWideFlowNode*>(node), std::move(representations), clusterName, token, richYPath, outSpec, writerOptions, std::move(codecCtx));
+    return new TYtDqWideWriteWrapper(ctx.Mutables, static_cast<IComputationWideFlowNode*>(node), std::move(representations), clusterName, token, richYPath, outSpec, writerOptions, optLLVM, std::move(codecCtx));
 }
 
 } // NYql

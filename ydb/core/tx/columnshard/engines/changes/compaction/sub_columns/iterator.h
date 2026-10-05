@@ -24,18 +24,19 @@ private:
     TRemapColumns& Remapper;
     const ui32 SourceIdx;
 
+    std::shared_ptr<TSubColumnsArray> MaterializeSubColumnsArray(const std::shared_ptr<IChunkedArray>& array) const {
+        if (array->GetType() == IChunkedArray::EType::SubColumnsArray) {
+            return std::static_pointer_cast<TSubColumnsArray>(array);
+        }
+        return std::static_pointer_cast<TSubColumnsArray>(
+            Loader->GetAccessorConstructor()->Construct(array, Loader->BuildAccessorContext(array->GetRecordsCount())).DetachResult());
+    }
+
     void InitArraysImpl(const ui32 position) {
         if (OriginalArray) {
             CurrentChunk = OriginalArray->GetArray(CurrentChunk, position, OriginalArray);
             CurrentChunkStartPosition = CurrentChunk->GetAddress().GetGlobalStartPosition();
-            if (CurrentChunk->GetArray()->GetType() == IChunkedArray::EType::SubColumnsArray) {
-                CurrentSubColumnsArray = std::static_pointer_cast<TSubColumnsArray>(CurrentChunk->GetArray());
-            } else {
-                CurrentSubColumnsArray = std::static_pointer_cast<TSubColumnsArray>(
-                    Loader->GetAccessorConstructor()
-                        ->Construct(CurrentChunk->GetArray(), Loader->BuildAccessorContext(CurrentChunk->GetArray()->GetRecordsCount()))
-                        .DetachResult());
-            }
+            CurrentSubColumnsArray = MaterializeSubColumnsArray(CurrentChunk->GetArray());
         }
     }
 
@@ -63,6 +64,21 @@ public:
 
     void Start() {
         InitArray(0);
+    }
+
+    std::vector<std::shared_ptr<TSubColumnsArray>> MaterializePerChunkArrays() const {
+        std::vector<std::shared_ptr<TSubColumnsArray>> result;
+        if (!OriginalArray) {
+            return result;
+        }
+        std::optional<IChunkedArray::TFullChunkedArrayAddress> chunk;
+        ui32 position = 0;
+        while (position < OriginalArray->GetRecordsCount()) {
+            chunk = OriginalArray->GetArray(chunk, position, OriginalArray);
+            result.emplace_back(MaterializeSubColumnsArray(chunk->GetArray()));
+            position = chunk->GetAddress().GetGlobalStartPosition() + chunk->GetArray()->GetRecordsCount();
+        }
+        return result;
     }
 
     template <class TStartRecordActor, class TKVActor, class TFinishRecordActor>

@@ -4,7 +4,7 @@
 #include "mkql_mem_info.h"
 
 #include <yql/essentials/core/pg_settings/guc_settings.h>
-#include <yql/essentials/public/udf/sanitizer_utils.h>
+#include <yql/essentials/public/udf/sanitizer_utils/sanitizer_utils.h>
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
 #include <yql/essentials/public/udf/udf_allocator.h>
 #include <yql/essentials/public/udf/udf_value.h>
@@ -341,7 +341,6 @@ public:
 private:
     void* AllocSlow(size_t sz, EMemorySubPool pagePool);
 
-private:
     TAlignedPagePool* PagePool_;
     TAllocState::TCurrentPages CurrentPages_ = TAllocState::EmptyCurrentPages;
 };
@@ -410,7 +409,7 @@ inline void* MKQLAllocFastWithSizeImpl(size_t sz, TAllocState* state, const EMem
     }
 
     auto currPage = state->CurrentPages[(TMemorySubPoolIdx)mPool];
-    if (Y_LIKELY(currPage->Offset + sz <= currPage->Capacity)) {
+    if (Y_LIKELY(currPage->Offset + sz < currPage->Capacity)) {
         void* ret = (char*)currPage + currPage->Offset;
         currPage->Offset = AlignUp(currPage->Offset + sz, MKQL_ALIGNMENT);
         ++currPage->UseCount;
@@ -502,7 +501,7 @@ inline void MKQLFreeFastWithSizeImpl(const void* mem, size_t sz, TAllocState* st
 inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state, const EMemorySubPool mPool) noexcept {
     mem = NYql::NUdf::UnwrapPointerWithRedZones(mem, sz);
     sz = NYql::NUdf::GetSizeToAlloc(sz);
-    return MKQLFreeFastWithSizeImpl(mem, sz, state, mPool);
+    MKQLFreeFastWithSizeImpl(mem, sz, state, mPool);
 }
 
 inline void* MKQLAllocDeprecated(size_t sz, const EMemorySubPool mPool) {

@@ -180,37 +180,37 @@ struct TProtoResponseEvent
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define BLOCKSTORE_DECLARE_EVENT_IDS(name, ...) \
+#define BLOCKSTORE_DECLARE_EVENT_IDS(name, ...)                                \
     Ev##name##Request, Ev##name##Response,   // BLOCKSTORE_DECLARE_EVENT_IDS
 
-#define BLOCKSTORE_DECLARE_REQUEST(name, ...)      \
-    struct T##name##Method                         \
-    {                                              \
-        static constexpr const char* Name = #name; \
-                                                   \
-        using TRequest = TEv##name##Request;       \
-        using TResponse = TEv##name##Response;     \
-    };                                             \
+#define BLOCKSTORE_DECLARE_REQUEST(name, ...)                                  \
+    struct T##name##Method                                                     \
+    {                                                                          \
+        static constexpr const char* Name = #name;                             \
+                                                                               \
+        using TRequest = TEv##name##Request;                                   \
+        using TResponse = TEv##name##Response;                                 \
+    };                                                                         \
     // BLOCKSTORE_DECLARE_REQUEST
 
-#define BLOCKSTORE_DECLARE_EVENTS(name, ...)                                \
-    using TEv##name##Request =                                              \
-        NBlockStore::TRequestEvent<T##name##Request, Ev##name##Request>;    \
-                                                                            \
-    using TEv##name##Response =                                             \
-        NBlockStore::TResponseEvent<T##name##Response, Ev##name##Response>; \
-                                                                            \
-    BLOCKSTORE_DECLARE_REQUEST(name, __VA_ARGS__)                           \
+#define BLOCKSTORE_DECLARE_EVENTS(name, ...)                                   \
+    using TEv##name##Request =                                                 \
+        NBlockStore::TRequestEvent<T##name##Request, Ev##name##Request>;       \
+                                                                               \
+    using TEv##name##Response =                                                \
+        NBlockStore::TResponseEvent<T##name##Response, Ev##name##Response>;    \
+                                                                               \
+    BLOCKSTORE_DECLARE_REQUEST(name, __VA_ARGS__)                              \
     // BLOCKSTORE_DECLARE_EVENTS
 
-#define BLOCKSTORE_DECLARE_PROTO_EVENTS(name, ...)                          \
-    using TEv##name##Request =                                              \
-        TProtoRequestEvent<NProto::T##name##Request, Ev##name##Request>;    \
-                                                                            \
-    using TEv##name##Response =                                             \
-        TProtoResponseEvent<NProto::T##name##Response, Ev##name##Response>; \
-                                                                            \
-    BLOCKSTORE_DECLARE_REQUEST(name, __VA_ARGS__)                           \
+#define BLOCKSTORE_DECLARE_PROTO_EVENTS(name, ...)                             \
+    using TEv##name##Request =                                                 \
+        TProtoRequestEvent<NProto::T##name##Request, Ev##name##Request>;       \
+                                                                               \
+    using TEv##name##Response =                                                \
+        TProtoResponseEvent<NProto::T##name##Response, Ev##name##Response>;    \
+                                                                               \
+    BLOCKSTORE_DECLARE_REQUEST(name, __VA_ARGS__)                              \
     // BLOCKSTORE_DECLARE_PROTO_EVENTS
 
 }   // namespace NYdb::NBS::NBlockStore

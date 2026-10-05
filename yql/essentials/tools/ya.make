@@ -11,11 +11,15 @@ RECURSE(
     sql_formatter
     sql_functions_dump
     types_dump
+    udf_bridge
     udf_dep_stub
     udf_probe
     udf_resolver
+    udf_resolver/impl
     yql_complete
     yql_facade_run
     yql_highlight
+    yql_language_server
     yql_linter
+    ysondiff
 )

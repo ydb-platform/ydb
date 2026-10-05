@@ -1,6 +1,7 @@
 #pragma once
 
 #include "query.h"
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp.pb.h>
@@ -18,12 +19,32 @@
 namespace NKikimr::NKqp {
 
 struct TEvKqp {
+    struct TEvCurrentQueryStats : public TEventLocal<TEvCurrentQueryStats, TKqpEvents::EvCurrentQueryStats> {
+        TString SessionId;
+        ui64 RequestId;
+        ui64 SequenceNo;
+        TCurrentQueryStats::TPublishedSnapshot Stats;
+
+        TEvCurrentQueryStats(TString sessionId, ui64 requestId, ui64 sequenceNo, TCurrentQueryStats::TPublishedSnapshot stats)
+            : SessionId(std::move(sessionId))
+            , RequestId(requestId)
+            , SequenceNo(sequenceNo)
+            , Stats(stats)
+        {}
+    };
+
     using TEvQueryRequestRemote = NPrivateEvents::TEvQueryRequestRemote;
 
     using TEvQueryRequest = NPrivateEvents::TEvQueryRequest;
 
     struct TEvCloseSessionRequest : public TEventPB<TEvCloseSessionRequest,
         NKikimrKqp::TEvCloseSessionRequest, TKqpEvents::EvCloseSessionRequest> {};
+
+    struct TEvKillSessionRequest : public TEventPB<TEvKillSessionRequest,
+        NKikimrKqp::TEvKillSessionRequest, TKqpEvents::EvKillSessionRequest> {};
+
+    struct TEvKillSessionResponse : public TEventPB<TEvKillSessionResponse,
+        NKikimrKqp::TEvKillSessionResponse, TKqpEvents::EvKillSessionResponse> {};
 
     struct TEvCreateSessionRequest : public TEventPB<TEvCreateSessionRequest,
         NKikimrKqp::TEvCreateSessionRequest, TKqpEvents::EvCreateSessionRequest> {};
@@ -137,6 +158,7 @@ struct TEvKqp {
         bool SaveQueryPhysicalGraph = false;
         std::optional<NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
         std::optional<TString> ExecutionId;
+        TString StreamingQueryOperationId;
         bool DisableDefaultTimeout = false;
         i64 Generation = 1;
         TString CheckpointId;
@@ -144,6 +166,7 @@ struct TEvKqp {
         TString CustomerSuppliedId;
         TString WatermarkLateEventsPolicy;
         std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
+        std::optional<TDuration> CheckpointInterval;
     };
 
     struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {

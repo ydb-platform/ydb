@@ -17,6 +17,9 @@ namespace NYql {
 class TYtGatewayConfig;
 using TYtGatewayConfigPtr = std::shared_ptr<TYtGatewayConfig>;
 
+class TYtStaticGatewayConfig;
+using TYtStaticGatewayConfigPtr = std::shared_ptr<TYtStaticGatewayConfig>;
+
 struct TYtBaseServices: public TThrRefBase {
     using TPtr = TIntrusivePtr<TYtBaseServices>;
 
@@ -24,6 +27,7 @@ struct TYtBaseServices: public TThrRefBase {
 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     TYtGatewayConfigPtr Config;
+    TYtStaticGatewayConfigPtr StaticConfig;
     bool NeedToTransformTmpTablePaths = true;
     bool CheckSpecDoesntUseNativeYtTypes = true;
     TFileStoragePtr FileStorage;
@@ -123,6 +127,7 @@ public:
     IYtGateway::TPtr Gateway;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_ = nullptr;
     TYtGatewayConfigPtr Config_;
+    TYtStaticGatewayConfigPtr StaticConfig_;
     TConfigClusters::TPtr Clusters_;
     TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> MkqlCompiler_;
     TString YtServer_;

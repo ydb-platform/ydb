@@ -1,12 +1,17 @@
 #pragma once
 
+#include <ydb/library/testlib/service_mocks/common.h>
 #include <ydb/public/api/client/yc_private/iam/service_account_service.grpc.pb.h>
+
+#include <util/system/mutex.h>
 
 class TServiceAccountServiceMock : public yandex::cloud::priv::iam::v1::ServiceAccountService::Service {
 public:
     THashMap<TString, yandex::cloud::priv::iam::v1::ServiceAccount> ServiceAccountData;
     THashMap<TString, yandex::cloud::priv::iam::v1::IamToken> IamTokens;
     TString Identity;
+    TMutex MetadataMutex;
+    TString CapturedUserAgent;
 
     TMaybe<grpc::Status> CheckAuthorization(grpc::ServerContext* context) {
         if (!Identity.empty()) {
@@ -27,6 +32,10 @@ public:
                              const yandex::cloud::priv::iam::v1::GetServiceAccountRequest* request,
                              yandex::cloud::priv::iam::v1::ServiceAccount* response) override
     {
+        with_lock (MetadataMutex) {
+            CapturedUserAgent = NTestUtils::CaptureUserAgent(context);
+        }
+
         auto status = CheckAuthorization(context);
         if (status.Defined()) {
             return *status;
@@ -46,6 +55,10 @@ public:
                              const yandex::cloud::priv::iam::v1::IssueTokenRequest* request,
                              yandex::cloud::priv::iam::v1::IamToken* response) override
     {
+        with_lock (MetadataMutex) {
+            CapturedUserAgent = NTestUtils::CaptureUserAgent(context);
+        }
+
         auto status = CheckAuthorization(context);
         if (status.Defined()) {
             return *status;
@@ -62,4 +75,3 @@ public:
     }
 
 };
-

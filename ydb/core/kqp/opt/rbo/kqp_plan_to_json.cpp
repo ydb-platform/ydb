@@ -11,27 +11,28 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-void AddOptimizerEstimates(NJson::TJsonValue& json, const TIntrusivePtr<IOperator>& op) {
+void AddOptimizerEstimates(NJson::TJsonValue& json, IOperator* op) {
     json["E-Rows"] = TStringBuilder() << op->Props.Statistics->ERows;
     json["E-Size"] = TStringBuilder() << op->Props.Statistics->EBytes;
     json["E-Cost"] = TStringBuilder() << *op->Props.Cost;
 }
 
-NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 explainFlags) {
-    auto res = op->ToJson(explainFlags);
+NJson::TJsonValue MakeJson(IOperator* op, ui32 explainFlags, const TInfoUnitRegistry& registry) {
+    auto res = op->ToJson(explainFlags, registry);
 
     AddOptimizerEstimates(res, op);
     return res;
 }
 
-NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 operatorId, ui32 explainFlags) {
-    auto res = MakeJson(op, explainFlags);
+NJson::TJsonValue MakeJson(IOperator* op, ui32 operatorId, ui32 explainFlags, const TInfoUnitRegistry& registry) {
+    auto res = MakeJson(op, explainFlags, registry);
     res["OperatorId"] = operatorId;
     return res;
 }
 
 struct TExplainJsonContext {
     const TStageGraph& StageGraph;
+    const TInfoUnitRegistry& Registry;
     ui64& NodeCounter;
     const THashMap<IOperator*, ui32>& OperatorIds;
     ui32 ExplainFlags;
@@ -41,12 +42,12 @@ struct TExplainJsonContext {
     }
 };
 
-TIntrusivePtr<TConnection> GetChildStageConnection(const TIntrusivePtr<IOperator>& op, ui32 childIndex, const TStageGraph& graph) {
-    if (!op->Props.StageId || childIndex >= op->Children.size()) {
+TIntrusivePtr<TConnection> GetChildStageConnection(IOperator* op, ui32 childIndex, const TStageGraph& graph) {
+    if (!op->Props.StageId || childIndex >= op->GetChildren().size()) {
         return {};
     }
 
-    const auto& child = op->Children[childIndex];
+    const auto& child = op->GetChildren()[childIndex];
     if (!child->Props.StageId || *op->Props.StageId == *child->Props.StageId) {
         return {};
     }
@@ -57,7 +58,7 @@ TIntrusivePtr<TConnection> GetChildStageConnection(const TIntrusivePtr<IOperator
     // Operator children are wired to stage inputs in the same order as TStageGraph::Connect calls.
     ui32 childStageOccurrence = 0;
     for (ui32 i = 0; i < childIndex; ++i) {
-        const auto& sibling = op->Children[i];
+        const auto& sibling = op->GetChildren()[i];
         if (sibling->Props.StageId && *sibling->Props.StageId != *op->Props.StageId
             && static_cast<ui32>(*sibling->Props.StageId) == childStageId)
         {
@@ -68,14 +69,27 @@ TIntrusivePtr<TConnection> GetChildStageConnection(const TIntrusivePtr<IOperator
     return graph.TryGetConnection(childStageId, parentStageId, childStageOccurrence);
 }
 
-NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, TExplainJsonContext& ctx) {
+bool IsReplicateOperator(const IOperator& op) {
+    return op.Kind == EOperator::Replicate;
+}
+
+// Replicate ports only rebind IDs; explain shows the shared producer under each consumer.
+IOperator* SkipReplicatePorts(IOperator* op) {
+    while (op->Kind == EOperator::Replicate) {
+        op = CastOperator<TOpReplicate>(*op).GetReplicate().GetInput().Get();
+    }
+    return op;
+}
+
+NJson::TJsonValue GetExplainJsonRec(IOperator* op, TExplainJsonContext& ctx) {
+    op = SkipReplicatePorts(op);
     NJson::TJsonValue result;
     result["PlanNodeId"] = ctx.NextNodeId();
     result["Node Type"] = op->GetExplainName();
     NJson::TJsonValue operatorList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    auto operatorJson = MakeJson(op, ctx.ExplainFlags);
+    auto operatorJson = MakeJson(op, ctx.ExplainFlags, ctx.Registry);
     // Synthetic operators that are absent from the execution plan cannot be correlated with runtime stats.
-    if (auto operatorId = ctx.OperatorIds.find(op.Get()); operatorId != ctx.OperatorIds.end()) {
+    if (auto operatorId = ctx.OperatorIds.find(op); operatorId != ctx.OperatorIds.end()) {
         operatorJson["OperatorId"] = operatorId->second;
     }
     operatorList.AppendValue(std::move(operatorJson));
@@ -87,7 +101,7 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, TExplain
         // Explicitly show all connections except TMapConnection
         const auto connection = GetChildStageConnection(op, childIndex, ctx.StageGraph);
         if (connection && !IsConnection<TMapConnection>(connection)) {
-            auto connectionJson = connection->ToJson();
+            auto connectionJson = connection->ToJson(ctx.Registry);
             connectionJson["PlanNodeId"] = ctx.NextNodeId();
 
             NJson::TJsonValue plans(NJson::EJsonValueType::JSON_ARRAY);
@@ -100,10 +114,10 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, TExplain
         return childJson;
     };
 
-    if (op->Children.size()){
+    if (op->GetChildren().size()){
         NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-        for (ui32 i = 0; i < op->Children.size(); ++ i) {
-            plans.AppendValue(getChildJson(op->Children[i], i));
+        for (ui32 i = 0; i < op->GetChildren().size(); ++ i) {
+            plans.AppendValue(getChildJson(op->GetChildren()[i], i));
         }
         result["Plans"] = plans;
     }
@@ -111,95 +125,84 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, TExplain
     return result;
 }
 
-void FindPlanNodes(const NJson::TJsonValue& node, const TString& key, std::vector<NJson::TJsonValue>& results) {
-    if (node.IsArray()) {
-        for (const auto& item: node.GetArray()) {
-            FindPlanNodes(item, key, results);
+struct TOperatorLocation {
+    NJson::TJsonValue* Stage = nullptr;
+    NJson::TJsonValue* Operator = nullptr;
+    int OperatorIndex = 0;
+};
+
+struct TConnectionInfo {
+    bool FromBroadcast = false;
+    int ParentTaskCount = 0;
+};
+
+struct TPlanLookupIndex {
+    THashMap<i64, TOperatorLocation> Operators;
+    THashMap<TString, TConnectionInfo> Connections;
+    TVector<i64> OperatorOrder;
+};
+
+enum class EPlanIndexKind {
+    Execution,
+    Simplified,
+};
+
+void BuildPlanLookupIndex(
+    NJson::TJsonValue& planNode,
+    TPlanLookupIndex& index,
+    EPlanIndexKind kind)
+{
+    if (planNode.IsArray()) {
+        for (auto& item: planNode.GetArraySafe()) {
+            BuildPlanLookupIndex(item, index, kind);
         }
         return;
     }
 
-    if (!node.IsMap()) {
+    if (!planNode.IsMap()) {
         return;
     }
 
-    if (auto* valueNode = node.GetValueByPath(key)) {
-        results.push_back(*valueNode);
-    }
-
-    for (const auto& [_, value]: node.GetMap()) {
-        FindPlanNodes(value, key, results);
-    }
-}
-
-bool FindStageAndOpByOpId(NJson::TJsonValue& planNode, int opId, NJson::TJsonValue*& stage, NJson::TJsonValue*& op, int& operatorIdx) {
-
-    if (planNode.IsArray()) {
-        for (auto& item: planNode.GetArraySafe()) {
-            if (FindStageAndOpByOpId(item, opId, stage, op, operatorIdx)) {
-                return true;
-            }
-        }
-        return false;
-    } else if (planNode.IsMap()) {
-        if (planNode.GetMapSafe().contains("Operators")) {
-            auto& operatorArray = planNode.GetMapSafe().at("Operators").GetArraySafe();
-            for (size_t i=0; i<operatorArray.size(); i++) {
-                auto& item = operatorArray.at(i);
-                auto& itemMap = item.GetMapSafe();
-                auto itemId = itemMap.find("OperatorId");
-                if (itemId != itemMap.end() && itemId->second.GetInteger() == opId) {
-                    operatorIdx = i;
-                    stage = &planNode;
-                    op = &item;
-                    return true;
+    auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        auto& operatorArray = operators->second.GetArraySafe();
+        for (size_t i = 0; i < operatorArray.size(); ++i) {
+            auto& item = operatorArray.at(i);
+            auto& itemMap = item.GetMapSafe();
+            if (auto itemId = itemMap.find("OperatorId"); itemId != itemMap.end()) {
+                const i64 id = itemId->second.GetIntegerSafe();
+                if (kind == EPlanIndexKind::Simplified) {
+                    index.OperatorOrder.push_back(id);
                 }
+                index.Operators.try_emplace(
+                    id,
+                    TOperatorLocation{&planNode, &item, static_cast<int>(i)}
+                );
             }
-        }
-        if (planNode.GetMapSafe().contains("Plans")) {
-            for (auto& item: planNode.GetMapSafe().at("Plans").GetArraySafe()) {
-                if (FindStageAndOpByOpId(item, opId, stage, op, operatorIdx)) {
-                    return true;
-                }
-            }
-            return false;
         }
     }
 
-    return false;
-}
-
-bool FindConnection(NJson::TJsonValue& planNode, const TString& stageGuid, bool& fromBroadcast, int& parentTaskCount) {
-    if (planNode.IsArray()) {
-        for (auto& item: planNode.GetArraySafe()) {
-            if (FindConnection(item, stageGuid, fromBroadcast, parentTaskCount)) {
-                return true;
+    if (kind == EPlanIndexKind::Execution) {
+        if (planMap.contains("PlanNodeType") && planMap.at("PlanNodeType") == "Connection"
+            && !planMap.contains("CTE Name")) {
+            auto& subplan = planMap.at("Plans").GetArraySafe().at(0);
+            TConnectionInfo connectionInfo;
+            connectionInfo.FromBroadcast = planMap.at("Node Type") == "Broadcast";
+            if (planMap.contains("Stats") && planMap.at("Stats").GetMapSafe().contains("Tasks")) {
+                connectionInfo.ParentTaskCount = planMap.at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
             }
-        }
-        return false;
-    } else if (planNode.IsMap()) {
-        const auto& planMap = planNode.GetMapSafe();
-        if (planMap.contains("PlanNodeType") && planMap.at("PlanNodeType") == "Connection") {
-            const auto& subplan = planMap.at("Plans").GetArraySafe().at(0);
-            if (subplan.GetMapSafe().at("StageGuid") == stageGuid) {
-                fromBroadcast = planMap.at("Node Type") == "Broadcast";
-                if (planMap.contains("Stats") && planMap.at("Stats").GetMapSafe().contains("Tasks")) {
-                    parentTaskCount = planMap.at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
-                }
-                return true;
-            }
-        }
-        if (planNode.GetMapSafe().contains("Plans")) {
-            for (auto& item: planNode.GetMapSafe().at("Plans").GetArraySafe()) {
-                if (FindConnection(item, stageGuid, fromBroadcast, parentTaskCount)) {
-                    return true;
-                }
-            }
-            return false;
+            index.Connections.try_emplace(
+                subplan.GetMapSafe().at("StageGuid").GetStringSafe(),
+                connectionInfo
+            );
         }
     }
 
-    return false;
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (auto& item: plans->second.GetArraySafe()) {
+            BuildPlanLookupIndex(item, index, kind);
+        }
+    }
 }
 
 double ComputeCpuTimes(NJson::TJsonValue& plan) {
@@ -236,21 +239,23 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
     auto& simplifiedPlan = txPlan.GetMapSafe().at("SimplifiedPlan");
     auto& execPlan = txPlan.GetMapSafe().at("Plans")[0];
 
-    // Extract all operator ids from SimplifiedPlan and look up stages and operators
-    // in the execution plan
-    std::vector<NJson::TJsonValue> opIds;
-    FindPlanNodes(simplifiedPlan, "OperatorId", opIds);
+    TPlanLookupIndex execPlanIndex;
+    TPlanLookupIndex simplifiedPlanIndex;
+    BuildPlanLookupIndex(simplifiedPlan, simplifiedPlanIndex, EPlanIndexKind::Simplified);
+    execPlanIndex.Operators.reserve(simplifiedPlanIndex.OperatorOrder.size());
+    execPlanIndex.Connections.reserve(simplifiedPlanIndex.OperatorOrder.size());
+    BuildPlanLookupIndex(execPlan, execPlanIndex, EPlanIndexKind::Execution);
 
-    for (auto & idNode : opIds) {
-        int execOperatorIdx;
-        int explainOperatorIdx;
-        NJson::TJsonValue* execPlanStage;
-        NJson::TJsonValue* execPlanOp;
-        NJson::TJsonValue* explainPlanStage;
-        NJson::TJsonValue* explainPlanOp;
+    for (const auto opId : simplifiedPlanIndex.OperatorOrder) {
+        const auto execLocation = execPlanIndex.Operators.find(opId);
+        const auto explainLocation = simplifiedPlanIndex.Operators.find(opId);
+        Y_ENSURE(execLocation != execPlanIndex.Operators.end());
+        Y_ENSURE(explainLocation != simplifiedPlanIndex.Operators.end());
 
-        Y_ENSURE(FindStageAndOpByOpId(execPlan, idNode.GetIntegerSafe(), execPlanStage, execPlanOp, execOperatorIdx));
-        Y_ENSURE(FindStageAndOpByOpId(simplifiedPlan, idNode.GetIntegerSafe(), explainPlanStage, explainPlanOp, explainOperatorIdx));
+        auto* execPlanStage = execLocation->second.Stage;
+        auto* execPlanOp = execLocation->second.Operator;
+        const int execOperatorIdx = execLocation->second.OperatorIndex;
+        auto* explainPlanOp = explainLocation->second.Operator;
 
         if(!execPlanStage->GetMapSafe().contains("Stats")) {
             continue;
@@ -324,15 +329,15 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
 
         if (execOperatorIdx == 0 && !explainPlanOp->GetMapSafe().contains("A-Rows")) {
             // Find enclosing connection to process broadcast correctly
-            bool fromBroadcast = false;
-            int parentTaskCount = 0;
-            TString stageGuid = execPlanStage->GetMapSafe().at("StageGuid").GetStringSafe();
-            FindConnection(execPlan, stageGuid, fromBroadcast, parentTaskCount);
+            const TString stageGuid = execPlanStage->GetMapSafe().at("StageGuid").GetStringSafe();
+            const auto connection = execPlanIndex.Connections.find(stageGuid);
+            const bool fromBroadcast = connection != execPlanIndex.Connections.end() && connection->second.FromBroadcast;
+            const int parentTaskCount = connection == execPlanIndex.Connections.end() ? 0 : connection->second.ParentTaskCount;
             // top level rows/size have to match stage output
             if (!operatorRows && stats.contains("OutputRows")) {
                 auto outputRows = stats.at("OutputRows");
                 int aRows = outputRows.IsMap() ? outputRows.GetMapSafe().at("Sum").GetIntegerSafe() : outputRows.GetIntegerSafe();
-    
+
                 if (fromBroadcast && parentTaskCount && (aRows % parentTaskCount == 0)) {
                     aRows /= parentTaskCount;
                 }
@@ -346,7 +351,9 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
                 }
                 explainPlanOp->InsertValue("A-Size", aSize);
             }
+        }
 
+        if (execOperatorIdx == 0) {
             // cpu usage available for stage only, so assign it to top level operator
             if (stats.contains("CpuTimeUs")) {
                 double opCpuTime;
@@ -366,9 +373,24 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
     ComputeCpuTimes(simplifiedPlan);
 }
 
+void RemoveOperatorIds(NJson::TJsonValue& planNode) {
+    auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (auto& op : operators->second.GetArraySafe()) {
+            op.EraseValue("OperatorId");
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (auto& child : plans->second.GetArraySafe()) {
+            RemoveOperatorIds(child);
+        }
+    }
+}
+
 } // anonymous namespace
 
-NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
+NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
     Y_UNUSED(explainFlags);
 
     // First construct the ResultSet
@@ -386,9 +408,8 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
     // We first build a map of stage_id -> operator list
     // Then iterate through stage ids and output a plan node for each stage
 
-    THashMap<int, TVector<TIntrusivePtr<IOperator>>> stageOpMap;
+    THashMap<int, TVector<IOperator*>> stageOpMap;
     std::set<int> stages;
-    ui32 operatorId = 0;
 
     for (const auto& it : *this) {
         auto & currOp = it.Current;
@@ -399,9 +420,9 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
 
         auto & stageOps = stageOpMap.at(stageId);
 
-        if (currOp->Kind != EOperator::EmptySource) {
+        if (currOp->Kind != EOperator::EmptySource && !IsReplicateOperator(*currOp)) {
             // This map defines which operators can be correlated across execution and simplified plans.
-            operatorIds.insert({currOp.Get(), operatorId++});
+            operatorIds.insert({currOp, operatorIdx++});
 
             YQL_CLOG(TRACE, CoreDq) << "Adding operator to explain json: " << currOp->GetExplainName() << ", stageId: " << stageId;
 
@@ -411,7 +432,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
         stages.insert(stageId);
     }
 
-    THashMap<std::pair<int, int>, NJson::TJsonValue> processedStages;
+    THashMap<std::pair<int, int>, TVector<NJson::TJsonValue>> processedStages;
 
     // Iterate though stages in acsending order, this guarantees that we will build a tree in the right order
     for (int stageId : stages) {
@@ -427,14 +448,16 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
                 stageName = stageName + "-" + op->GetExplainName();
             }
 
-            operatorList.AppendValue(MakeJson(op, operatorIds.at(op.Get()), explainFlags));
+            operatorList.AppendValue(MakeJson(op, operatorIds.at(op), explainFlags, PlanProps.InfoUnitRegistry));
         }
 
         // Build a list of subplans - these are connection objects of input stages
         auto planList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
         const auto & stageInputs = PlanProps.StageGraph.StageInputs.at(stageId);
+        THashMap<int, size_t> inputOccurrences;
         for (auto inputId : stageInputs) {
-            planList.AppendValue( processedStages.at(std::make_pair(inputId, stageId)));
+            planList.AppendValue(processedStages.at(std::make_pair(inputId, stageId))
+                .at(inputOccurrences[inputId]++));
         }
 
         const auto & stageOutputs = PlanProps.StageGraph.StageOutputs.at(stageId);
@@ -451,34 +474,42 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
             }
         }
 
-        // Otherwise, construct a new plan object for each outgoing connection of the stage
-        // and include the stage in each connection
+        // A stage with multiple outputs is rendered once. Other connections refer to it as a CTE.
         else {
+            THashMap<int, size_t> outputOccurrences;
+            TString cteName;
             for (int outputStageId : stageOutputs) {
                 const auto& conns = PlanProps.StageGraph.GetConnections(stageId, outputStageId);
-                Y_ASSERT(conns.size() == 1);
-                const auto& conn = conns[0];
+                // Replicate ports can connect the same two stages more than once.
+                const auto& conn = conns.at(outputOccurrences[outputStageId]++);
 
-                auto connJson = conn->ToJson();
+                auto connJson = conn->ToJson(PlanProps.InfoUnitRegistry);
                 connJson["PlanNodeId"] = nodeCounter++;
 
-                auto stage = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
-                stage["Node Type"] = stageName;
-                stage["StageGuid"] = PlanProps.StageGraph.StageGUIDs.at(stageId);
+                if (!cteName.empty()) {
+                    connJson["CTE Name"] = cteName;
+                } else {
+                    auto stage = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+                    stage["Node Type"] = stageName;
+                    stage["StageGuid"] = PlanProps.StageGraph.StageGUIDs.at(stageId);
 
-                if (ops.size()) {
-                    stage["Operators"] = operatorList;
+                    if (ops.size()) {
+                        stage["Operators"] = operatorList;
+                    }
+                    if (stageInputs.size()) {
+                        stage["Plans"] = planList;
+                    }
+                    if (stageOutputs.size() > 1) {
+                        cteName = TStringBuilder() << stageName << "_" << stageId;
+                        stage["Parent Relationship"] = "InitPlan";
+                        stage["Subplan Name"] = "CTE " + cteName;
+                    }
+                    stage["PlanNodeId"] = nodeCounter++;
+
+                    connJson["Plans"].AppendValue(std::move(stage));
                 }
-                if (stageInputs.size()) {
-                    stage["Plans"] = planList;
-                }
-                stage["PlanNodeId"] = nodeCounter++;
 
-                auto connPlans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-                connPlans.AppendValue(stage);
-                connJson["Plans"] = connPlans;
-
-                processedStages.insert({std::make_pair(stageId, outputStageId), connJson});
+                processedStages[std::make_pair(stageId, outputStageId)].push_back(std::move(connJson));
             }
         }
     }
@@ -497,8 +528,8 @@ NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOpe
     result["Node Type"] = "ResultSet";
 
     NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    TExplainJsonContext ctx{PlanProps.StageGraph, nodeCounter, operatorIds, explainFlags};
-    plans.AppendValue(GetExplainJsonRec(GetInput(), ctx));
+    TExplainJsonContext ctx{PlanProps.StageGraph, PlanProps.InfoUnitRegistry, nodeCounter, operatorIds, explainFlags};
+    plans.AppendValue(GetExplainJsonRec(GetInput().Get(), ctx));
     result["Plans"] = plans;
 
     return result;
@@ -512,6 +543,12 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
     meta["type"] = "query";
 
     queryPlan["meta"] = meta;
+
+    //OperatorId is needed while correlating ANALYZE stats, but has no meaning in a published plan.
+    RemoveOperatorIds(txPlan["SimplifiedPlan"]);
+    for (auto& plan : txPlan["Plans"].GetArraySafe()) {
+        RemoveOperatorIds(plan);
+    }
 
     queryPlan["SimplifiedPlan"] = txPlan.GetMapSafe().at("SimplifiedPlan");
     txPlan.EraseValue("SimplifiedPlan");
@@ -532,7 +569,15 @@ TString SerializeRBOExplainPlan(NJson::TJsonValue txPlan) {
 TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKqpProto::TKqpStatsQuery& queryStats, const TString& poolId = "") {
     Y_UNUSED(queryStats);
     Y_UNUSED(poolId);
-    auto txPlan = txPlans.at(txPlans.size()-1);
+
+    YQL_CLOG(TRACE, CoreDq) << "Serialize analyze plan";
+
+
+    if (txPlans.empty()) {
+        return "";
+    }
+
+    auto txPlan = txPlans.back();
     NJson::TJsonValue txPlanJson;
     NJson::ReadJsonTree(txPlan, &txPlanJson, true);
 

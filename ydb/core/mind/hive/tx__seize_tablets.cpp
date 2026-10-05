@@ -89,8 +89,12 @@ public:
                 ActorIdToProto(tablet.LockedToActor, tabletInfo.MutableLockedToActor());
                 tabletInfo.SetLockedReconnectTimeout(tablet.LockedReconnectTimeout.MilliSeconds());
                 tabletInfo.SetTabletStorageVersion(tablet.TabletStorageInfo->Version);
+                tabletInfo.SetConfirmedStorageVersion(tablet.ConfirmedStorageVersion);
                 tabletInfo.SetTabletBootMode(tablet.BootMode);
                 tablet.GetResourceValues().ToProto(tabletInfo.MutableResourceUsage());
+                if (tablet.IsBackup) {
+                    tabletInfo.SetIsBackup(true);
+                }
 
                 TSubDomainKey objectDomain = TSubDomainKey(tabletRowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
                 tabletInfo.MutableObjectDomain()->CopyFrom(objectDomain);
@@ -165,7 +169,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxSeizeTablets::Complete",
             {"logPrefix", GetLogPrefix()},
             {"requestRecord", Request->Get()->Record});
-        txc.Send(Request->Sender, Response.Release());
+        txc.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
     }
 };
 

@@ -24,6 +24,26 @@ public:
             .WithSchema(Schema)
             .Build();
     }
+
+    ESchemaChangeResult ParseSchemaChange(const NChangeExchange::IChangeRecord& record,
+            NKikimrReplication::TSchemaChange& schema, TString& error) const override
+    {
+        const auto& jsonRecord = static_cast<const TChangeRecord&>(record);
+
+        if (!jsonRecord.IsValidJson(error)) {
+            return ESchemaChangeResult::Error;
+        }
+
+        if (jsonRecord.GetKind() != NChangeExchange::IChangeRecord::EKind::CdcSchemaChange) {
+            return ESchemaChangeResult::NotSchemaChange;
+        }
+
+        if (!jsonRecord.TryGetSchemaChange(schema, error)) {
+            return ESchemaChangeResult::Error;
+        }
+
+        return ESchemaChangeResult::SchemaChange;
+    }
 };
 
 class TSerializer: public IChangeRecordSerializer {
@@ -76,12 +96,12 @@ private:
     const NKikimr::TKeyDesc& KeyDesc;
 };
 
-IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePathId, EWriteMode mode) {
+IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePathId, EWriteMode mode, const NKikimrReplication::TLocalTableWriterSettings* settings) {
     auto createResolverFn = [](const NKikimr::TKeyDesc& keyDesc) {
         return new TPartitionResolver(keyDesc);
     };
 
-    return CreateLocalTableWriter(database, tablePathId, MakeHolder<TParser>(), MakeHolder<TSerializer>(), createResolverFn, mode);
+    return CreateLocalTableWriter(database, tablePathId, MakeHolder<TParser>(), MakeHolder<TSerializer>(), createResolverFn, mode, settings);
 }
 
 } // namespace NKikimr::NReplication::NService

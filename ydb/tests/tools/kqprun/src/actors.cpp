@@ -4,7 +4,7 @@
 
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/kqp/workload_service/actors/actors.h>
+#include <ydb/services/workload_manager/actors/actors.h>
 
 using namespace NKikimrRun;
 
@@ -180,7 +180,7 @@ public:
         }
     }
 
-    void Handle(NKikimr::NKqp::NWorkload::TEvFetchDatabaseResponse::TPtr& ev) {
+    void Handle(NKikimr::NWorkloadManager::TEvFetchDatabaseResponse::TPtr& ev) {
         const auto status = ev->Get()->Status;
         if (status == Ydb::StatusIds::SUCCESS) {
             HealthCheckStage_ = EHealthCheck::ScriptRequest;
@@ -203,7 +203,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         sFunc(NActors::TEvents::TEvWakeup, DoHealthCheck);
-        hFunc(NKikimr::NKqp::NWorkload::TEvFetchDatabaseResponse, Handle);
+        hFunc(NKikimr::NWorkloadManager::TEvFetchDatabaseResponse, Handle);
         hFunc(NKikimr::NKqp::TEvKqp::TEvScriptResponse, Handle);
     )
 
@@ -229,7 +229,7 @@ private:
     }
 
     void FetchDatabase() {
-        Register(NKikimr::NKqp::NWorkload::CreateDatabaseFetcherActor(SelfId(), Settings_.Database));
+        Register(NKikimr::NWorkloadManager::CreateDatabaseFetcherActor(SelfId(), Settings_.Database));
     }
 
     void StartScriptQuery() {

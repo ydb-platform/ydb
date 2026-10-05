@@ -11,7 +11,6 @@ from typing import (
     Any,
     Callable,
     ForwardRef,
-    Union,
     cast,
     final,
     get_args,
@@ -50,21 +49,9 @@ elif sys.version_info >= (3, 13):
 else:
 
     def evaluate_forwardref(forwardref: ForwardRef, memo: TypeCheckMemo) -> Any:
-        try:
-            return forwardref._evaluate(
-                memo.globals, memo.locals, recursive_guard=frozenset()
-            )
-        except NameError:
-            if sys.version_info < (3, 10):
-                # Try again, with the type substitutions (list -> List etc.) in place
-                new_globals = memo.globals.copy()
-                new_globals.setdefault("Union", Union)
-
-                return forwardref._evaluate(
-                    new_globals, memo.locals or new_globals, recursive_guard=frozenset()
-                )
-
-            raise
+        return forwardref._evaluate(
+            memo.globals, memo.locals, recursive_guard=frozenset()
+        )
 
 
 def get_type_name(type_: Any) -> str:

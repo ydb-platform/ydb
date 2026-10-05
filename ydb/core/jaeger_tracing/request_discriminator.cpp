@@ -89,6 +89,7 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Topic.StreamDirectRead.StartDirectReadPartitionSession", ERequestType::TOPIC_STREAMDIRECTREAD_START_DIRECT_READ_PARTITION_SESSION},
     {"Topic.StreamDirectRead.UpdateToken", ERequestType::TOPIC_STREAMDIRECTREAD_UPDATE_TOKEN},
     {"Topic.CommitOffset", ERequestType::TOPIC_COMMITOFFSET},
+    {"Topic.ResetOffset", ERequestType::TOPIC_RESETOFFSET},
     {"Topic.UpdateOffsetsInTransaction", ERequestType::TOPIC_UPDATEOFFSETSINTRANSACTION},
     {"Topic.CreateTopic", ERequestType::TOPIC_CREATETOPIC},
     {"Topic.DescribeTopic", ERequestType::TOPIC_DESCRIBETOPIC},
@@ -100,6 +101,9 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
 
     {"Bridge.GetClusterState", ERequestType::BRIDGE_GETCLUSTERSTATE},
     {"Bridge.UpdateClusterState", ERequestType::BRIDGE_UPDATECLUSTERSTATE},
+
+    {"DistributedStorage.StreamStorageState", ERequestType::DISTRIBUTED_STORAGE_STREAMSTORAGESTATE},
+    {"DistributedStorage.ReassignVDisk", ERequestType::DISTRIBUTED_STORAGE_REASSIGNVDISK},
 };
 
 extern const THashSet<ERequestType> NoDefaultSamplingRequestTypes = {

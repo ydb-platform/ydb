@@ -1,6 +1,9 @@
-#include "kqp_executer_stats.h"
 #include "kqp_planner.h"
+
+#include "kqp_executer_stats.h"
 #include "kqp_planner_strategy.h"
+
+#include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
@@ -12,16 +15,11 @@
 #include <ydb/core/kqp/common/control.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
+
 using namespace NActors;
 
 namespace NKikimr::NKqp {
-
-#define LOG_T(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 
 static std::atomic<ui64> MaxTaskSize = 48_MB;
 
@@ -41,7 +39,12 @@ template <class TCollection>
 std::unique_ptr<TEvKqp::TEvAbortExecution> CheckTaskSize(ui64 TxId, const TIntrusivePtr<TUserRequestContext>& UserRequestContext, const TCollection& tasks) {
     for (const auto& task : tasks) {
         if (ui32 size = task.ByteSize(); size > GetMaxTaskSize()) {
-            LOG_E("Abort execution. Task #" << task.GetId() << " size is too big: " << size << " > " << GetMaxTaskSize());
+            YDB_LOG_ERROR("Abort execution: task size exceeds limit",
+                {"txId", TxId},
+                {"ctx", *UserRequestContext},
+                {"taskId", task.GetId()},
+                {"taskSize", size},
+                {"maxTaskSize", GetMaxTaskSize()});
             return std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::LIMIT_EXCEEDED,
                 TStringBuilder() << "Datashard program size limit exceeded (" << size << " > " << GetMaxTaskSize() << ")");
         }
@@ -91,6 +94,24 @@ bool LimitCPU(TIntrusivePtr<TUserRequestContext> ctx) {
 
 }
 
+TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext& context, TDuration progressStatsPeriod) {
+    TKqpStatsReportingSettings settings;
+    settings.CollectCurrentQueryStats = context.CurrentQueryStatsInterval != TDuration::Zero();
+    settings.WithProgressStats = progressStatsPeriod != TDuration::Zero();
+
+    if (context.IsStreamingQuery) {
+        settings.RemoteReportStatsSettings = NYql::NDq::TReportStatsSettings{
+            TDuration::Seconds(1), TDuration::Seconds(5)};
+    }
+    if (settings.CollectCurrentQueryStats) {
+        const auto interval = context.CurrentQueryStatsInterval;
+        // Remote tasks already send periodic stats. Only local tasks need an extra timer.
+        const auto minInterval = progressStatsPeriod ? Min(progressStatsPeriod, interval) : interval;
+        settings.LocalReportStatsSettings = NYql::NDq::TReportStatsSettings{minInterval, interval};
+    }
+    return settings;
+}
+
 bool TKqpPlanner::UseMockEmptyPlanner = false;
 
 // Task can allocate extra memory during execution.
@@ -104,10 +125,11 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , UserToken(args.UserToken)
     , Deadline(args.Deadline)
     , StatsMode(args.StatsMode)
-    , WithProgressStats(args.WithProgressStats)
+    , StatsReportingSettings(args.StatsReportingSettings)
     , RlPath(args.RlPath)
     , ResourcesSnapshot(std::move(args.ResourcesSnapshot))
     , ExecuterSpan(args.ExecuterSpan)
+    , Trace(args.Trace)
     , ExecuterRetriesConfig(args.ExecuterRetriesConfig)
     , TasksGraph(args.TasksGraph)
     , MkqlMemoryLimit(args.MkqlMemoryLimit)
@@ -124,6 +146,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , Query(args.Query)
     , CheckpointCoordinatorId(args.CheckpointCoordinator)
     , EnableWatermarks(args.EnableWatermarks)
+    , StreamingQueryNodesManagerId(args.StreamingQueryNodesManager)
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -176,7 +199,10 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
     if (isShutdown) {
         requestData.RetryNumber = ExecuterRetriesConfig.GetMaxRetryNumber();
         YQL_ENSURE(requestData.NodeId != target.NodeId());
-        LOG_D("Try to retry after NODE_SHUTTING_DOWN, run tasks locally, requestId: " << requestId);
+        YDB_LOG_DEBUG("Try to retry after NODE_SHUTTING_DOWN, run tasks locally",
+            {"txId", TxId},
+            {"ctx", *UserRequestContext},
+            {"requestId", requestId});
         requestData.NodeId = target.NodeId();
         TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(target, ExecuterId, ev.release(),
             CalcSendMessageFlagsForNode(target.NodeId()), requestId, nullptr, ExecuterSpan.GetTraceId()));
@@ -184,7 +210,10 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
     }
 
     if (requestData.RetryNumber == ExecuterRetriesConfig.GetMaxRetryNumber()) {
-        LOG_E("Retry failed by retries limit, requestId: " << requestId);
+        YDB_LOG_ERROR("Retry failed by retries limit",
+            {"txId", TxId},
+            {"ctx", *UserRequestContext},
+            {"requestId", requestId});
         TMaybe<ui32> targetNode;
         for (size_t i = 0; i < ResourcesSnapshot.size(); ++i) {
             if (!TrackingNodes.contains(ResourcesSnapshot[i].GetNodeId())) {
@@ -193,7 +222,11 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
             }
         }
         if (targetNode) {
-            LOG_D("Try to retry to another node, nodeId: " << *targetNode << ", requestId: " << requestId);
+            YDB_LOG_DEBUG("Try to retry to another node",
+                {"txId", TxId},
+                {"ctx", *UserRequestContext},
+                {"nodeId", *targetNode},
+                {"requestId", requestId});
             auto anotherTarget = MakeKqpNodeServiceID(*targetNode);
             requestData.NodeId = *targetNode;
             TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(anotherTarget, ExecuterId, ev.release(),
@@ -201,12 +234,19 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
             requestData.RetryNumber++;
             return true;
         }
-        LOG_E("Retry failed because all nodes are busy, requestId: " << requestId);
+        YDB_LOG_ERROR("Retry failed because all nodes are busy",
+            {"txId", TxId},
+            {"ctx", *UserRequestContext},
+            {"requestId", requestId});
         return false;
     }
 
     if (requestData.RetryNumber >= 1) {
-        LOG_D("Try to retry by ActorUnknown reason, nodeId: " << target.NodeId() << ", requestId: " << requestId);
+        YDB_LOG_DEBUG("Try to retry by ActorUnknown reason",
+            {"txId", TxId},
+            {"ctx", *UserRequestContext},
+            {"nodeId", target.NodeId()},
+            {"requestId", requestId});
     }
 
     requestData.RetryNumber++;
@@ -240,7 +280,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
-        auto* serializedTask = TasksGraph.ArenaSerializeTaskToProto(task, true);
+        auto* serializedTask = SerializeTaskForExecution(task);
         if (ArrayBufferMinFillPercentage) {
             serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
         }
@@ -252,7 +292,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     }
 
     request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
-    request.MutableRuntimeSettings()->SetWithProgressStats(WithProgressStats);
+    request.MutableRuntimeSettings()->SetWithProgressStats(StatsReportingSettings.WithProgressStats);
     request.SetStartAllOrFail(true);
     request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::DATA);
     request.MutableRuntimeSettings()->SetUseSpilling(TasksGraph.GetMeta().AllowWithSpilling);
@@ -282,15 +322,16 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetDatabase(Database);
     request.SetDatabaseId(UserRequestContext->DatabaseId);
     request.SetPoolId(UserRequestContext->PoolId);
+    request.SetUseBatchPool(UserRequestContext->UseBatchPool);
 
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode);
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
 
-    if (UserRequestContext->IsStreamingQuery) {
-        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(1000);
-        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(5000);
+    if (StatsReportingSettings.RemoteReportStatsSettings) {
+        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(StatsReportingSettings.RemoteReportStatsSettings->MinInterval.MilliSeconds());
+        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(StatsReportingSettings.RemoteReportStatsSettings->MaxInterval.MilliSeconds());
     }
 
     if (UserToken) {
@@ -389,7 +430,9 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
             return nullptr;
         }
 
-        LOG_E("Not enough resources to execute query locally and no information about other nodes");
+        YDB_LOG_ERROR("Not enough resources to execute query locally and no information about other nodes",
+            {"txId", TxId},
+            {"ctx", *UserRequestContext});
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             "Not enough resources to execute query locally and no information about other nodes (estimation: "
             + ToString(LocalRunMemoryEst) + ";" + GetEstimationsInfo() + ")");
@@ -436,10 +479,16 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
     auto ctx = TlsActivationContext->AsActorContext();
     if (ctx.LoggerSettings() && ctx.LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER)) {
-        planner->SetLogFunc([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
+        planner->SetLogFunc([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_DEBUG("Planner debug message",
+                                                                                                          {"txId", TxId},
+                                                                                                          {"ctx", *UserRequestContext},
+                                                                                                          {"msg", msg}); });
     }
 
-    LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
+    LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_DEBUG("Memory statistics before task planning",
+                                                                                                      {"txId", TxId},
+                                                                                                      {"ctx", *UserRequestContext},
+                                                                                                      {"msg", msg}); });
 
     ui64 selfNodeId = ExecuterId.NodeId();
     TString selfNodeDC;
@@ -474,7 +523,10 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
     }
 
     if (plan.empty()) {
-        LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_E(msg); });
+        LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_ERROR("Memory statistics after failed task planning",
+                                                                                                          {"txId", TxId},
+                                                                                                          {"ctx", *UserRequestContext},
+                                                                                                          {"msg", msg}); });
 
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             TStringBuilder() << "Not enough resources to execute query. " << "TraceId: " << UserRequestContext->TraceId);
@@ -504,21 +556,29 @@ const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
     return TasksGraph.GetMeta().Snapshot;
 }
 
+NYql::NDqProto::TDqTask* TKqpPlanner::SerializeTaskForExecution(const TTask& task) {
+    auto* result = TasksGraph.ArenaSerializeTaskToProto(task, true);
+    if (Trace) {
+        Trace->AnnotateTask({task.StageId.TxId, task.StageId.StageId}, *result);
+    }
+    return result;
+}
+
 // optimizeProtoForLocalExecution - if we want to execute compute actor locally and don't want to serialize & then deserialize proto message
 // instead we just give ptr to proto message and after that we swap/copy it
 TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
     auto& task = TasksGraph.GetTask(taskId);
-    auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(task, true);
+    auto* taskDesc = SerializeTaskForExecution(task);
 
-    if (!TxInfo) {
+    if (!QueryQuotaManager) {
         double memoryPoolPercent = 100;
         if (UserRequestContext->PoolConfig.has_value()) {
             memoryPoolPercent = UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode;
         }
 
-        TxInfo = MakeIntrusive<NRm::TTxState>(
+        QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(
             ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, memoryPoolPercent, Database,
-            CaFactory_->GetVerboseMemoryLimitException());
+            CaFactory_->GetVerboseMemoryLimitException()));
     }
 
     if (ArrayBufferMinFillPercentage) {
@@ -533,8 +593,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 
     auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
 
-    auto rmResult = ResourceManager_->AllocateResources(
-        *TxInfo, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialMemoryLimit});
+    // the task starts with it and returns it when its compute actor terminates
+    auto rmResult = QueryQuotaManager->AllocateTasks(1, initialMemoryLimit);
 
     if (!rmResult) {
         return rmResult.GetFailReason();
@@ -547,10 +607,10 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .LockNodeId = TasksGraph.GetMeta().LockNodeId,
         .LockMode = TasksGraph.GetMeta().LockMode,
         .Task = taskDesc,
-        .TxInfo = TxInfo,
-        .TaskQuotaManager = CreateTaskQuotaManager(ResourceManager_, TxInfo, taskId, initialMemoryLimit),
+        .TxInfo = QueryQuotaManager->GetTx(),
+        .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, initialMemoryLimit),
         .ChannelQuotaManager = nullptr,
-        .ReportStatsSettings = Nothing(),
+        .ReportStatsSettings = StatsReportingSettings.LocalReportStatsSettings,
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),
         .SerializedGUCSettings = SerializedGUCSettings,
@@ -558,7 +618,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .OutputChunkMaxSize = OutputChunkMaxSize,
         .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
         .StatsMode = GetDqStatsMode(StatsMode),
-        .WithProgressStats = WithProgressStats,
+        .WithProgressStats = StatsReportingSettings.WithProgressStats,
         // Compute actor should not arm a timeout timer: in case of timeout it will receive
         // TEvAbortExecution from the executer (driven by gRPC client deadline / cancel ->
         // session actor -> executer). Matches the remote path in kqp_query_control_plane.cpp.
@@ -566,9 +626,12 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
         .BlockTrackingMode = BlockTrackingMode,
+        .QueryQuotaManager = QueryQuotaManager,
+        .InitialMemoryLimit = initialMemoryLimit,
         .UserToken = UserToken,
         .Database = Database,
         .Query = Query,
+        .UseBatchPool = UserRequestContext->UseBatchPool,
     });
 
     Y_ABORT_UNLESS(AcknowledgeCA(taskId, actorId, nullptr));
@@ -595,11 +658,17 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 
     const auto scanTasksCount = TasksGraph.GetTasks().size() - UnassignedTasks.size();
 
-    LOG_D("Total tasks: " << TasksGraph.GetTasks().size() << ", readonly: true"  // TODO ???
-        << ", " << scanTasksCount << " scan tasks on " << TasksPerNode.size() << " nodes"
-        << ", localComputeTasks: " << TasksGraph.GetMeta().LocalComputeTasks
-        << ", MayRunTasksLocally " << TasksGraph.GetMeta().MayRunTasksLocally
-        << ", snapshot: {" << GetSnapshot().TxId << ", " << GetSnapshot().Step << "}");
+    YDB_LOG_DEBUG("Task placement snapshot after planning",
+        {"txId", TxId},
+        {"ctx", *UserRequestContext},
+        {"tasks", TasksGraph.GetTasks().size()},
+        {"readOnly", true},
+        {"scanTasksCount", scanTasksCount},
+        {"tasksPerNodeCount", TasksPerNode.size()},
+        {"localComputeTasks", TasksGraph.GetMeta().LocalComputeTasks},
+        {"mayRunTasksLocally", TasksGraph.GetMeta().MayRunTasksLocally},
+        {"snapshotTxId", GetSnapshot().TxId},
+        {"snapshotStep", GetSnapshot().Step});
 
     PrepareCheckpoints();
 
@@ -672,18 +741,24 @@ void TKqpPlanner::PrepareCheckpoints() {
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
-        bool isIngress = TasksGraph.IsIngress(dqTask);
+        const bool enabledCheckpoints = NDq::GetTaskCheckpointingMode(settings) != NDqProto::CHECKPOINTING_MODE_DISABLED;
+        const bool isIngress = NDq::IsIngress(settings);
         if (enabledCheckpoints && isIngress) {
             hasStreamingIngress = true;
             break;
         }
     }
-    LOG_D("PrepareCheckpoints: has streaming ingress: " << hasStreamingIngress);
+
+    YDB_LOG_DEBUG("PrepareCheckpoints: checked streaming ingress",
+        {"txId", TxId},
+        {"ctx", *UserRequestContext},
+        {"hasStreamingIngress", hasStreamingIngress});
+
     if (!hasStreamingIngress) {
         CheckpointCoordinatorId = TActorId{};
         return;
     }
+
     TasksGraph.GetMeta().CreateSuspended = hasStreamingIngress;
 }
 
@@ -709,6 +784,7 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
     auto& task = TasksGraph.GetTask(taskId);
     if (!task.ComputeActorId) {
         task.ComputeActorId = computeActor;
+        AllComputeActors.emplace(computeActor);
         PendingComputeTasks.erase(taskId);
         auto [it, success] = PendingComputeActors.try_emplace(computeActor);
         YQL_ENSURE(success);
@@ -716,8 +792,8 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
             it->second.Set(state->GetStats());
         }
 
-        if (PendingComputeTasks.empty() && CheckpointCoordinatorId) {
-            SendReadyStateToCheckpointCoordinator();
+        if (PendingComputeTasks.empty() && (CheckpointCoordinatorId || StreamingQueryNodesManagerId)) {
+            SendReadyState();
         }
         return true;
     }
@@ -748,7 +824,10 @@ bool TKqpPlanner::CompletedCA(ui64 taskId, TActorId computeActor) {
     LastStats.emplace_back(std::move(it->second));
     PendingComputeActors.erase(it);
 
-    LOG_I("Compute actor has finished execution: " << computeActor.ToString());
+    YDB_LOG_INFO("Compute actor has finished",
+        {"txId", TxId},
+        {"ctx", *UserRequestContext},
+        {"execution", computeActor});
 
     return true;
 }
@@ -801,11 +880,15 @@ void TKqpPlanner::ShiftConsumption() {
     }
 }
 
-const THashMap<TActorId, TProgressStat>& TKqpPlanner::GetPendingComputeActors() {
+const THashSet<TActorId>& TKqpPlanner::GetAllComputeActors() const {
+    return AllComputeActors;
+}
+
+const THashMap<TActorId, TProgressStat>& TKqpPlanner::GetPendingComputeActors() const {
     return PendingComputeActors;
 }
 
-const THashSet<ui64>& TKqpPlanner::GetPendingComputeTasks() {
+const THashSet<ui64>& TKqpPlanner::GetPendingComputeTasks() const {
     return PendingComputeTasks;
 }
 
@@ -856,7 +939,11 @@ void TKqpPlanner::PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui6
             TasksGraph.FillChannelDesc(*record.AddUpdate(), TasksGraph.GetChannel(channelId), TasksGraph.GetMeta().ChannelTransportVersion, false);
         }
 
-        LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
+        YDB_LOG_DEBUG("Sending channels info to compute",
+            {"txId", TxId},
+            {"ctx", *UserRequestContext},
+            {"actor", computeActorId},
+            {"channels", channelIds.size()});
         TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(computeActorId, ExecuterId, channelsInfoEv.Release()));
     }
 }
@@ -864,7 +951,11 @@ void TKqpPlanner::PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui6
 void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& task, THashMap<TActorId, THashSet<ui64>>& updates) {
     YQL_ENSURE(task.ComputeActorId);
 
-    LOG_T("Collect channels updates for task: " << task.Id << " at actor " << task.ComputeActorId);
+    YDB_LOG_DEBUG("Collecting channel updates for compute actor",
+        {"txId", TxId},
+        {"ctx", *UserRequestContext},
+        {"taskId", task.Id},
+        {"computeActorId", task.ComputeActorId});
 
     auto& selfUpdates = updates[task.ComputeActorId];
 
@@ -880,8 +971,13 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
                 selfUpdates.emplace(channelId);
             }
 
-            LOG_T("Task: " << task.Id << ", input channelId: " << channelId << ", src task: " << channel.SrcTask
-                << ", at actor " << srcTask.ComputeActorId);
+            YDB_LOG_DEBUG("Collecting input channel update for compute actor",
+                {"txId", TxId},
+                {"ctx", *UserRequestContext},
+                {"taskId", task.Id},
+                {"channelId", channelId},
+                {"srcTaskId", channel.SrcTask},
+                {"srcComputeActorId", srcTask.ComputeActorId});
         }
     }
 
@@ -899,42 +995,60 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
                     updates[dstTask.ComputeActorId].emplace(channelId);
                 }
 
-                LOG_T("Task: " << task.Id << ", output channelId: " << channelId << ", dst task: " << channel.DstTask
-                    << ", at actor " << dstTask.ComputeActorId);
+                YDB_LOG_DEBUG("Collecting output channel update for compute actor",
+                    {"txId", TxId},
+                    {"ctx", *UserRequestContext},
+                    {"taskId", task.Id},
+                    {"channelId", channelId},
+                    {"dstTaskId", channel.DstTask},
+                    {"dstComputeActorId", dstTask.ComputeActorId});
             }
         }
     }
 }
 
-void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
-    if (CheckpointsReadyStateSent) {
+void TKqpPlanner::SendReadyState() {
+    if (ReadyStateSent) {
         return;
     }
 
     auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         if (!dqTask.ComputeActorId) {
-            LOG_W("Skip sending TEvReadyState to checkpoint coordinator"
-                << ": task " << dqTask.Id << " has no ComputeActorId (node disconnected / task not started)");
+            YDB_LOG_WARN("Skip sending TEvReadyState: task has no compute actor id (node disconnected or task not started)",
+                {"txId", TxId},
+                {"ctx", *UserRequestContext},
+                {"taskId", dqTask.Id});
             return;
         }
+
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
-        bool isIngress = TasksGraph.IsIngress(dqTask);
         auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
-            dqTask.Id,
-            enabledCheckpoints,
-            isIngress,
-            TasksGraph.IsEgressTask(dqTask),
-            NYql::NDq::HasState(settings),
-            dqTask.ComputeActorId
+            .Id = dqTask.Id,
+            .IsCheckpointingEnabled = NDq::GetTaskCheckpointingMode(settings) != NDqProto::CHECKPOINTING_MODE_DISABLED,
+            .IsIngress = NDq::IsIngress(settings),
+            .IsEgress = NDq::IsEgress(settings),
+            .HasState = NDq::HasState(settings),
+            .ActorId = dqTask.ComputeActorId,
         };
         event->Tasks.emplace_back(std::move(task));
     }
-    LOG_I("Sending TEvReadyState to checkpoint coordinator (" << CheckpointCoordinatorId << ")");
-    TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
-    CheckpointsReadyStateSent = true;
+
+    YDB_LOG_INFO("Sending TEvReadyState",
+        {"txId", TxId},
+        {"ctx", *UserRequestContext},
+        {"checkpointCoordinatorId", CheckpointCoordinatorId},
+        {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId});
+    if (StreamingQueryNodesManagerId) {
+        auto managerEvent = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+        managerEvent->Tasks = event->Tasks;
+        TlsActivationContext->Send(std::make_unique<IEventHandle>(StreamingQueryNodesManagerId, ExecuterId, managerEvent.release()));
+    }
+    if (CheckpointCoordinatorId) {
+        TlsActivationContext->Send(std::make_unique<IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
+    }
+    ReadyStateSent = true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -1,6 +1,6 @@
 #pragma once
 #include "columns_storage.h"
-#include "types.h"
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 #include "others_storage.h"
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
@@ -13,29 +13,30 @@ private:
     ui32 RecordIndex = 0;
     ui32 KeyIndex = 0;
     bool IsValidFlag = false;
-    bool HasValueFlag = false;
     bool IsColumnKeyFlag = false;
     EValueType ValueType = EValueType::BinaryJson;
-    // Current value as (array, local index); the reader interprets it per ValueType.
-    const arrow::Array* CurrentArray = nullptr;
-    i64 LocalIndex = 0;
+    std::optional<TJsonValueView> CurrentValue;
 
     void InitFromIterator(const TColumnsData::TIterator& iterator) {
         RecordIndex = iterator.GetCurrentRecordIndex();
         KeyIndex = RemappedKey.value_or(iterator.GetKeyIndex());
         IsValidFlag = true;
-        HasValueFlag = iterator.HasValue();
-        CurrentArray = &iterator.GetArray();
-        LocalIndex = iterator.GetLocalIndex();
+        if (iterator.HasValue()) {
+            CurrentValue.emplace(iterator.GetValue());
+        } else {
+            CurrentValue.reset();
+        }
     }
 
     void InitFromIterator(const TOthersData::TIterator& iterator) {
         RecordIndex = iterator.GetRecordIndex();
         KeyIndex = RemapKeys.size() ? RemapKeys[iterator.GetKeyIndex()] : iterator.GetKeyIndex();
         IsValidFlag = true;
-        HasValueFlag = iterator.HasValue();
-        CurrentArray = &iterator.GetArray();
-        LocalIndex = iterator.GetLocalIndex();
+        if (iterator.HasValue()) {
+            CurrentValue.emplace(iterator.GetValue());
+        } else {
+            CurrentValue.reset();
+        }
     }
 
     bool Initialize() {
@@ -75,9 +76,11 @@ public:
         , ValueType(valueType) {
         Initialize();
     }
+
     TGeneralIterator(TOthersData::TIterator&& iterator, const std::vector<ui32>& remapKeys = {})
         : Iterator(iterator)
-        , RemapKeys(remapKeys) {
+        , RemapKeys(remapKeys)
+        , ValueType(EValueType::BinaryJson) {
         Initialize();
     }
     bool IsColumnKey() const {
@@ -159,35 +162,29 @@ public:
     // Re-encode the current value to BinaryJson.
     NBinaryJson::TBinaryJson GetValueAsBinaryJson() const {
         AFL_VERIFY(IsValidFlag);
-        return ArrayElementToBinaryJson(*CurrentArray, LocalIndex, ValueType);
+        AFL_VERIFY(CurrentValue);
+        return CurrentValue->ToBinaryJson();
     }
 
     EValueType GetValueType() const {
         return ValueType;
     }
-    const arrow::Array& GetArray() const {
+    const TJsonValueView& GetValueView() const {
         AFL_VERIFY(IsValidFlag);
-        return *CurrentArray;
-    }
-    i64 GetLocalIndex() const {
-        return LocalIndex;
+        AFL_VERIFY(CurrentValue);
+        return *CurrentValue;
     }
     ui32 GetValueSize() const {
         AFL_VERIFY(IsValidFlag);
-        return ArrayElementSize(*CurrentArray, LocalIndex, ValueType);
-    }
-    TStringBuf GetStorageView() const {
-        AFL_VERIFY(IsValidFlag);
-        AFL_VERIFY(ValueType == EValueType::String || ValueType == EValueType::BinaryJson)("value_type", (ui32)ValueType);
-        const auto view = static_cast<const arrow::BinaryArray&>(*CurrentArray).GetView(LocalIndex);
-        return TStringBuf(view.data(), view.size());
+        AFL_VERIFY(CurrentValue);
+        return CurrentValue->GetValueSize();
     }
 
     NJson::TJsonValue GetValue() const;
 
     bool HasValue() const {
         AFL_VERIFY(IsValidFlag);
-        return HasValueFlag;
+        return CurrentValue.has_value();
     }
     bool operator<(const TGeneralIterator& item) const {
         return std::tie(item.RecordIndex, item.KeyIndex) < std::tie(RecordIndex, KeyIndex);
@@ -354,7 +351,9 @@ public:
             while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
-                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn, itColumn.IsColumnKey());
+                if (itColumn.HasValue()) {
+                    kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn, itColumn.IsColumnKey());
+                }
                 if (!itColumn.Next()) {
                     SortedIterators.pop_back();
                 } else {

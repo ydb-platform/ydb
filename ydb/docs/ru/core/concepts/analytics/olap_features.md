@@ -84,13 +84,13 @@
 
 ### Управление производительностью
 
-  - [Анализ планов запросов (EXPLAIN)](../../dev/query-execution-optimization/query-plans-optimization.md): как понять план выполнения запроса и найти узкие места.
+  - [Анализ планов выполнения запросов (EXPLAIN)](../../dev/optimization/index.md): как понять план выполнения запроса и найти узкие места.
   - [Управление нагрузкой (Resource Pools)](../../dev/resource-consumption-management.md): изоляция ресурсов CPU для разных команд или нагрузок.
   - [Стоимостной оптимизатор](../query_execution/optimizer.md): обзор принципов работы планировщика запросов.
 
 ### Мониторинг и диагностика
 
-  - [Встроенный UI](../../reference/embedded-ui/index.md): веб-интерфейс для мониторинга состояния и диагностики кластера.
+  - [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md): веб-интерфейс для мониторинга состояния и диагностики кластера.
   - [Справочник по метрикам](../../reference/observability/metrics/index.md): полный список метрик для систем мониторинга.
   - [Готовые дашборды для Grafana](../../reference/observability/metrics/grafana-dashboards.md): шаблоны для быстрой настройки мониторинга.
 

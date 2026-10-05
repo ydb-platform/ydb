@@ -1,8 +1,12 @@
 #pragma once
 
+#include <library/cpp/json/writer/json_value.h>
+#include <yql/essentials/types/binary_json/format.h>
+
 #include <util/generic/string.h>
 
 #include <optional>
+#include <utility>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -22,6 +26,38 @@ public:
     // So result will be different for a native scalar and the same scalar wrapped in BinaryJson.
     // Expected to be used only for containers, but no checks enforce that.
     std::optional<TStringBuf> GetBinaryJsonBlobOptional() const;
+
+    NJson::TJsonValue ToJsonValue() const;
+    NBinaryJson::TBinaryJson ToBinaryJson() const;
+
+    ui32 GetValueSize() const {
+        switch (Kind) {
+            case EKind::BinaryJson:
+            case EKind::String:
+                return Bytes.size();
+            case EKind::Number:
+                return sizeof(Number);
+            case EKind::Bool:
+                return 1;
+        }
+    }
+
+    template <class TVisitor>
+    void Visit(TVisitor&& visitor) const {
+        switch (Kind) {
+            case EKind::BinaryJson:
+            case EKind::String:
+                std::forward<TVisitor>(visitor)(Bytes);
+                return;
+            case EKind::Number:
+                std::forward<TVisitor>(visitor)(Number);
+                return;
+            case EKind::Bool:
+                std::forward<TVisitor>(visitor)(Bool);
+                return;
+        }
+    }
+
 private:
     static std::optional<TString> JsonNumberToString(double jsonNumber);
 
@@ -50,5 +86,8 @@ private:
     // For numbers, need to store string representation somewhere so that we can return a TStringBuf over it.
     mutable TString ScalarHolder;
 };
+
+// Serialize a JSON value to text with round-trip-safe number formatting.
+TString WriteJsonRoundTripSafe(const NJson::TJsonValue& json);
 
 } // namespace NKikimr::NArrow::NAccessor

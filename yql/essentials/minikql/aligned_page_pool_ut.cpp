@@ -1,7 +1,9 @@
 #include "aligned_page_pool.h"
+#include "fake_mmap.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/scope.h>
 #include <util/system/info.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
 
@@ -22,11 +24,11 @@ public:
 
     explicit TScopedMemoryMapper(bool aligned) {
         Aligned_ = aligned;
-        TFakeMmap::OnMunmap = [this](void* addr, size_t s) {
+        TFakeMmap::GetInstance().OnMunmap = [this](void* addr, size_t s) {
             Munmaps_.push_back({addr, s});
         };
 
-        TFakeMmap::OnMmap = [this](size_t size) -> void* {
+        TFakeMmap::GetInstance().OnMmap = [this](size_t size) -> void* {
             // Allocate more memory to ensure we have enough space for alignment
             Storage_ = THolder<char, TDeleteArray>(new char[AlignUp(size + EXTRA_SPACE_FOR_UNALIGNMENT, TAlignedPagePool::POOL_PAGE_SIZE)]);
             UNIT_ASSERT(Storage_.Get());
@@ -44,8 +46,8 @@ public:
     }
 
     ~TScopedMemoryMapper() {
-        TFakeMmap::OnMunmap = {};
-        TFakeMmap::OnMmap = {};
+        TFakeMmap::GetInstance().OnMunmap = {};
+        TFakeMmap::GetInstance().OnMmap = {};
         Storage_.Reset();
     }
 
@@ -70,6 +72,28 @@ private:
 }; // namespace
 
 Y_UNIT_TEST_SUITE(TAlignedPagePoolTest) {
+
+Y_UNIT_TEST(AlignedMmapKeepsExtraPage) {
+    TAlignedPagePoolImpl<TFakeMmap>::ResetGlobalsUT();
+    TScopedMemoryMapper mapper(/*aligned=*/true);
+    Y_DEFER {
+        TAlignedPagePoolImpl<TFakeMmap>::DoCleanupGlobalFreeList(0);
+    };
+
+    const auto releasePage = [](void* address) {
+        ReleaseAlignedPage<TFakeMmap>(address);
+    };
+    const auto pageSize = TAlignedPagePool::POOL_PAGE_SIZE;
+    auto firstPage = std::shared_ptr<void>(GetAlignedPage<TFakeMmap>(), releasePage);
+    UNIT_ASSERT_VALUES_EQUAL(firstPage.get(), mapper.PointerToAlignedMemory());
+    UNIT_ASSERT_VALUES_EQUAL(TAlignedPagePoolImpl<TFakeMmap>::GetGlobalPagePoolSize(), pageSize);
+
+    auto secondPage = std::shared_ptr<void>(GetAlignedPage<TFakeMmap>(), releasePage);
+    UNIT_ASSERT_VALUES_EQUAL(secondPage.get(), static_cast<char*>(firstPage.get()) + pageSize);
+    UNIT_ASSERT_VALUES_EQUAL(firstPage.get(), mapper.PointerToAlignedMemory());
+    UNIT_ASSERT_VALUES_EQUAL(TAlignedPagePoolImpl<TFakeMmap>::GetGlobalPagePoolSize(), 0U);
+    UNIT_ASSERT_VALUES_EQUAL(mapper.MunmapsSize(), 0U);
+}
 
 Y_UNIT_TEST(AlignedMmapPageSize) {
     TAlignedPagePoolImpl<TFakeMmap>::ResetGlobalsUT();

@@ -42,7 +42,8 @@ int main(int argc, char* argv[])
         busConfig->SetUnrecognizedStrategy(EUnrecognizedStrategy::ThrowRecursive);
         Deserialize(*busConfig, ConvertToNode(configText));
 
-        YT_LOG_INFO("Config: %v", ConvertToYsonString(busConfig, EYsonFormat::Text));
+        YT_TLOG_INFO("Loaded config")
+            .With("Config", ConvertToYsonString(busConfig, EYsonFormat::Text));
 
         auto busServer = CreateBusServer(busConfig);
         auto server = CreateBusServer(busServer);

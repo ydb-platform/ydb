@@ -162,7 +162,6 @@ private:
         AddColumn(items, ctx, YqlVirtualPrefix + name, type);
     }
 
-private:
     TPgState::TPtr State_;
 };
 

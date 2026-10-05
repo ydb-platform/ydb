@@ -439,13 +439,13 @@ void TBaseCloudAuthRequestProxy::Authorize() {
         signature.SignedAt = AccessKeySignature_->SignedAt;
         request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithSignature{
             .Signature = std::move(signature),
-            .PeerName = SourceAddress_,
+            .TraceContext = {SourceAddress_, RequestId_},
             .Entries = entries,
         });
     } else {
         request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
             .Ticket = IamToken_,
-            .PeerName = SourceAddress_,
+            .TraceContext = {SourceAddress_, RequestId_},
             .Entries = entries,
         });
     }
@@ -482,7 +482,7 @@ void TBaseCloudAuthRequestProxy::RequestFolderService() {
     Send(MakeSqsFolderServiceID(), std::move(request));
 }
 
-void TBaseCloudAuthRequestProxy::RetrieveCachedFolderId() {
+void TBaseCloudAuthRequestProxy::RequestQueueFolderId() {
     Become(&TThis::ProcessAuthorization);
 
     Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvGetQueueFolderIdAndCustomName(RequestId_, CloudId_, ResourceId_));
@@ -516,7 +516,7 @@ void TBaseCloudAuthRequestProxy::Bootstrap() {
                 return;
             }
             case EActionClass::QueueSpecified: {
-                RetrieveCachedFolderId();
+                RequestQueueFolderId();
                 return;
             }
             case EActionClass::CustomUIBatch: {
@@ -527,6 +527,8 @@ void TBaseCloudAuthRequestProxy::Bootstrap() {
         }
     } else if (FolderId_) {
         GetCloudIdAndAuthorize();
+    } else if (ActionClass_ == EActionClass::QueueSpecified) {
+        RequestQueueFolderId();
     } else {
         AuthenticateIamToken_ = true;
         Become(&TThis::ProcessAuthentication);
@@ -545,12 +547,12 @@ void TCloudAuthRequestProxy::DoReply() {
 void TCloudAuthRequestProxy::SetError(const TErrorClass& errorClass, const TString& message) {
     auto* error = MakeMutableError();
     ::NKikimr::NSQS::MakeError(error, errorClass, Sprintf("%s Request id to report: %s.", message.c_str(), RequestId_.c_str()));
-    if (Callback_) {
-        Callback_->OnIamAuthError();
-    }
 }
 
 void TCloudAuthRequestProxy::OnSuccessfulAuth() {
+    if (Callback_) {
+        Callback_->OnIamAuthSuccess();
+    }
 #define SQS_REQUEST_CASE(action) \
     ProposeStaticCreds(*RequestHolder_->Y_CAT(Mutable, action)());
 

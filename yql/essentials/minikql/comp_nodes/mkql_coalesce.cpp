@@ -3,14 +3,13 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool Unpack>
 class TCoalesceWrapper: public TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> {
-    typedef TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> TBaseComputation;
+    using TBaseComputation = TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>>;
 
 public:
     TCoalesceWrapper(IComputationNode* left, IComputationNode* right, EValueRepresentation kind)
@@ -27,7 +26,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto left = GetNodeValue(this->Left_, ctx, block);
@@ -82,5 +81,4 @@ IComputationNode* WrapCoalesce(TCallable& callable, const TComputationNodeFactor
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

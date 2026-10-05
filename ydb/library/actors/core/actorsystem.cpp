@@ -1,4 +1,6 @@
 #include "defs.h"
+#include "subsystems/allocation_cache.h"
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include "debug.h"
 #include "activity_guard.h"
 #include "actorsystem.h"
@@ -27,13 +29,25 @@
 
 namespace NActors {
 
+
     namespace {
         template<class TCallback>
-        void ForEachSubSystem(std::vector<std::unique_ptr<ISubSystem>>& subsystems, TCallback&& callback) {
-            for (const auto& subsystem : subsystems) {
-                if (subsystem) {
-                    callback(*subsystem);
-                }
+        void ForEachSubSystem(
+                TSubSystems& subsystems,
+                const std::vector<size_t>& order,
+                TCallback&& callback) {
+            for (const size_t index : order) {
+                callback(*subsystems[index]);
+            }
+        }
+
+        template<class TCallback>
+        void ForEachSubSystemReverse(
+                TSubSystems& subsystems,
+                const std::vector<size_t>& order,
+                TCallback&& callback) {
+            for (auto it = order.rbegin(); it != order.rend(); ++it) {
+                callback(*subsystems[*it]);
             }
         }
     }
@@ -166,8 +180,17 @@ namespace NActors {
     {
         ServiceMap.Reset(new TServiceMap());
         SubSystems = std::move(SystemSetup->SubSystems);
+        if (!GetSubSystem<TAllocationCacheSubSystem>()) {
+            RegisterSubSystem(std::unique_ptr<TAllocationCacheSubSystem>(new TAllocationCacheSubSystem));
+        }
+        if (!GetSubSystem<TAsyncFrameCache>()) {
+            RegisterSubSystem(std::make_unique<TAsyncFrameCache>());
+        }
         if (!GetSubSystem<TActorSystemStatsSubSystem>()) {
             RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));
+        }
+        for (auto& callback : SystemSetup->OnActorSystemCreated) {
+            callback(this);
         }
     }
 
@@ -278,6 +301,32 @@ namespace NActors {
         if (Y_UNLIKELY(!ev))
             return false;
 
+        if (Y_UNLIKELY(ev->Flags & IEventHandle::FlagSystemMessage)) {
+            switch (ev->Type) {
+                case TEvents::TSystem::CheckActorLiveness: {
+                    const TActorId recipient = ev->GetRecipientRewrite();
+                    const ui32 recipientNodeId = recipient.NodeId();
+                    if (recipientNodeId != NodeId && recipientNodeId != 0) {
+                        // TODO: Support distributed actor liveness checks
+                        // through interconnect. Liveness events are local-only
+                        // for now.
+                        return Send(std::make_unique<IEventHandle>(
+                            TEvents::TSystem::ActorLivenessUnsure,
+                            0,
+                            ev->Sender,
+                            recipient,
+                            nullptr,
+                            ev->Cookie,
+                            nullptr,
+                            std::move(ev->TraceId)));
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SEND, false> activityGuard;
 #ifdef USE_ACTOR_CALLSTACK
         ev->Callstack.TraceIfEmpty();
@@ -299,6 +348,7 @@ namespace NActors {
                 "Event rewrite from " << ev->Recipient << " to " << recipient << " would be lost via interconnect");
             recipient = InterconnectProxy(recpNodeId);
             if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
+                const TActorId originalRecipient = ev->Recipient;
                 const TActorId sender = ev->Sender;
                 const ui64 cookie = ev->Cookie;
                 const ui32 flags = ev->Flags & ~IEventHandle::FlagSubscribeOnSession;
@@ -315,9 +365,10 @@ namespace NActors {
                 const TString stackTrace = collectTrace
                     ? ExtractCurrentStackTrace()
                     : TString();
-                auto wrapped = std::make_unique<IEventHandle>(recipient, sender,
+                auto wrapped = std::make_unique<IEventHandle>(originalRecipient, sender,
                     new TEvForwardSubscribeSession(ev.release(), activityIndex, eventTypeName, stackTrace),
                     flags, cookie, forwardOnNondelivery, std::move(traceId));
+                wrapped->Rewrite(TEvForwardSubscribeSession::EventType, recipient);
                 ev = std::move(wrapped);
             } else {
                 ev->Rewrite(TEvInterconnect::EvForward, recipient);
@@ -471,7 +522,12 @@ namespace NActors {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start");
         Y_ABORT_UNLESS(!StartExecuted.exchange(true));
 
-        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+        auto subSystemOrder = ResolveSubSystemDependencies(SubSystems);
+        Y_ABORT_UNLESS(subSystemOrder.has_value(),
+            "cyclic actor subsystem dependency detected");
+        SubSystemOrder = std::move(*subSystemOrder);
+
+        ForEachSubSystem(SubSystems, SubSystemOrder, [this](ISubSystem& subsystem) {
             subsystem.OnBeforeStart(*this);
         });
 
@@ -510,11 +566,12 @@ namespace NActors {
         }
 
         Scheduler->PrepareStart();
+        ExecutorThreadsPrepared = true;
         CpuManager->Start();
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
         Scheduler->Start();
 
-        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+        ForEachSubSystem(SubSystems, SubSystemOrder, [this](ISubSystem& subsystem) {
             subsystem.OnAfterStart(*this);
         });
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: started");
@@ -527,7 +584,7 @@ namespace NActors {
             return;
         }
 
-        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+        ForEachSubSystemReverse(SubSystems, SubSystemOrder, [this](ISubSystem& subsystem) {
             subsystem.OnBeforeStop(*this);
         });
 
@@ -540,7 +597,7 @@ namespace NActors {
         Scheduler->Stop();
         CpuManager->Shutdown();
 
-        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+        ForEachSubSystemReverse(SubSystems, SubSystemOrder, [this](ISubSystem& subsystem) {
             subsystem.OnAfterStop(*this);
         });
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: stopped");
@@ -562,8 +619,31 @@ namespace NActors {
         return CpuManager->GetExecutorPool(poolId)->GetMaxThreadCount();
     }
 
+    std::optional<TCpuMask> TActorSystem::GetExecutorPoolAffinity(ui32 poolId) const {
+        return CpuManager->GetExecutorPoolAffinity(poolId);
+    }
+
     TVector<IExecutorPool*> TActorSystem::GetBasicExecutorPools() const {
         return CpuManager->GetBasicExecutorPools();
+    }
+
+    void TActorSystem::PrepareExecutorThread(TThreadContext* context) {
+        Y_ABORT_UNLESS(!ExecutorThreadsPrepared, "executor contexts must be prepared before threads start");
+        ForEachSubSystem(SubSystems, SubSystemOrder, [context](ISubSystem& subsystem) {
+            subsystem.OnExecutorThreadPrepare(context);
+        });
+    }
+
+    void TActorSystem::InitializeExecutorThread(TThreadContext* context) {
+        ForEachSubSystem(SubSystems, SubSystemOrder, [context](ISubSystem& subsystem) {
+            subsystem.OnExecutorThreadStart(context);
+        });
+    }
+
+    void TActorSystem::CleanupExecutorThread(TThreadContext* context) {
+        ForEachSubSystemReverse(SubSystems, SubSystemOrder, [context](ISubSystem& subsystem) {
+            subsystem.OnExecutorThreadStop(context);
+        });
     }
 
 }

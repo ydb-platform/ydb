@@ -22,7 +22,6 @@ private:
         return reinterpret_cast<TMersenne<ui64>&>(Rnd_);
     }
 
-private:
     std::aligned_storage<sizeof(TMersenne<ui64>), alignof(TMersenne<ui64>)>::type Rnd_;
 
     static TAtomic Counter;

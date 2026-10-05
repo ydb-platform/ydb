@@ -650,8 +650,8 @@ void THttpRawBatchRequest::FillParameterList(size_t maxSize, TNode* result, TIns
     maxSize = Min(maxSize, BatchItemList_.size());
     *result = TNode::CreateList();
     for (size_t i = 0; i < maxSize; ++i) {
-        YT_LOG_DEBUG("ExecuteBatch preparing: %v",
-            RequestInfo(BatchItemList_[i].Parameters));
+        YT_TLOG_DEBUG("Preparing batch subrequest")
+            .With("Request", RequestInfo(BatchItemList_[i].Parameters));
 
         result->Add(BatchItemList_[i].Parameters);
         if (BatchItemList_[i].NextTry > *nextTry) {
@@ -697,16 +697,14 @@ void THttpRawBatchRequest::ParseResponse(
                 } else {
                     TErrorResponse error(TYtError(errorIt->second), requestId);
                     if (auto curInterval = IsRetriable(error) ? retryPolicy->OnRetriableError(error) : Nothing()) {
-                        YT_LOG_INFO(
-                            "Batch subrequest (%s) failed, will retry, error: %s",
-                            RequestInfo(BatchItemList_[i].Parameters),
-                            error.what());
+                        YT_TLOG_INFO("Batch subrequest failed; will retry")
+                            .With("Request", RequestInfo(BatchItemList_[i].Parameters))
+                            .With("Error", error.what());
                         AddRequest(TBatchItem(BatchItemList_[i], now + *curInterval));
                     } else {
-                        YT_LOG_ERROR(
-                            "Batch subrequest (%s) failed, error: %s",
-                            RequestInfo(BatchItemList_[i].Parameters),
-                            error.what());
+                        YT_TLOG_ERROR("Batch subrequest failed")
+                            .With("Request", RequestInfo(BatchItemList_[i].Parameters))
+                            .With("Error", error.what());
                         BatchItemList_[i].ResponseParser->SetException(std::make_exception_ptr(error));
                     }
                 }

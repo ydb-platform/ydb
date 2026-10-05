@@ -8,6 +8,8 @@
 
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPILE_COMPUTATION_PATTERN_SERVICE
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -40,7 +42,7 @@ private:
     }
 
     void HandleWakeup(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_COMPUTATION_PATTERN_SERVICE, "Received wakeup");
+        YDB_LOG_DEBUG_CTX(ctx, "Received wakeup");
         auto patternCache = GetKqpResourceManager()->GetPatternCache();
         if (!patternCache) {
             ScheduleWakeup(ctx);
@@ -55,7 +57,9 @@ private:
         size_t patternsToCompileSize = PatternsToCompile.size();
         for (; PatternToCompileIndex < patternsToCompileSize && compilationIntervalMs > 0; ++PatternToCompileIndex) {
             auto& patternToCompile = PatternsToCompile[PatternToCompileIndex];
-            if (!patternToCompile.Entry->IsInCache.load() || patternToCompile.Entry->Pattern->IsCompiled()) {
+            if (!patternToCompile.Entry->IsInCache.load() ||
+                patternToCompile.Entry->Pattern->GetCompileStatus() != NMiniKQL::ECompileStatus::NoCompilationStarted)
+            {
                 continue;
             }
 

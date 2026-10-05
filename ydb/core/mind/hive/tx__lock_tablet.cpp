@@ -107,9 +107,7 @@ public:
             }
             tablet->InitiateStop(SideEffects);
             db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::LeaderNode>(0);
-            if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
-                tablet->BecomeUnknown(tablet->Hive.FindNode(tablet->LockedToActor.NodeId()));
-            }
+            tablet->RestoreLockedTabletMetrics();
         }
         if (tablet->LockedToActor == OwnerActor && tablet->PendingUnlockSeqNo == 0) {
             // Lock is still valid, watch for node disconnections
@@ -132,7 +130,7 @@ public:
                 {"tabletId", TabletId},
                 {"sideEffects", SideEffects});
         }
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 
 private:

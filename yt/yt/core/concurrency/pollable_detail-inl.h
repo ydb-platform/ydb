@@ -9,20 +9,20 @@ namespace NYT::NConcurrency {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <std::invocable<NConcurrency::IPollable&, NConcurrency::EPollControl> T>
-NConcurrency::IPollablePtr MakeSimplePollable(T body, std::string loggingTag)
+NConcurrency::IPollablePtr MakeSimplePollable(T body, NLogging::TLoggingTagList loggingTags)
 {
     class TSimplePollable
         : public NConcurrency::TPollableBase
     {
     public:
-        TSimplePollable(T body, std::string loggingTag)
+        TSimplePollable(T body, NLogging::TLoggingTagList loggingTags)
             : Body_(std::move(body))
-            , LoggingTag_(std::move(loggingTag))
+            , LoggingTags_(std::move(loggingTags))
         { }
 
-        const std::string& GetLoggingTag() const override
+        const NLogging::TLoggingTagList& GetLoggingTags() const override
         {
-            return LoggingTag_;
+            return LoggingTags_;
         }
 
         void OnEvent(NConcurrency::EPollControl control) override
@@ -35,10 +35,10 @@ NConcurrency::IPollablePtr MakeSimplePollable(T body, std::string loggingTag)
 
     private:
         T Body_;
-        const std::string LoggingTag_;
+        const NLogging::TLoggingTagList LoggingTags_;
     };
 
-    return New<TSimplePollable>(std::move(body), std::move(loggingTag));
+    return New<TSimplePollable>(std::move(body), std::move(loggingTags));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

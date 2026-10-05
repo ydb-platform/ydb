@@ -5,6 +5,8 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
+#include <ydb/library/actors/core/event_pb.h>
+
 namespace NYdb::NBS::NStorage {
 
 using namespace NActors;
@@ -86,11 +88,12 @@ STFUNC(TVolumeActor::StateWork)
         ev->Sender.LocalId());
 
     switch (ev->GetTypeRewrite()) {
-        cFunc(TEvents::TEvPoison::EventType, PassAway);
-
         HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);
         HFunc(TEvTabletPipe::TEvServerDisconnected, HandleServerDisconnected);
         HFunc(TEvTabletPipe::TEvServerDestroyed, HandleServerDestroyed);
+
+        HFunc(TEvTabletPipe::TEvClientConnected, HandleClientConnected);
+        HFunc(TEvTabletPipe::TEvClientDestroyed, HandleClientDestroyed);
 
         HFunc(
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
@@ -98,6 +101,13 @@ STFUNC(TVolumeActor::StateWork)
         HFunc(
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse,
             HandleUpdateVolumeConfigResponse);
+
+        HFunc(
+            NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest,
+            HandleStatVolume);
+        HFunc(
+            NNbs1CompatApi::NBlockStore::TEvVolume::TEvWaitReadyRequest,
+            HandleWaitReady);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
@@ -153,6 +163,122 @@ void TVolumeActor::HandleServerDestroyed(
         ToString(msg->ServerId).c_str());
 }
 
+void TVolumeActor::HandleClientConnected(
+    const TEvTabletPipe::TEvClientConnected::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
+    if (msg->Status == NKikimrProto::OK) {
+        return;
+    }
+
+    ResendPendingEventsToPartition(ctx, msg->ClientId);
+}
+
+void TVolumeActor::HandleClientDestroyed(
+    const TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
+    const TActorContext& ctx)
+{
+    ResendPendingEventsToPartition(ctx, ev->Get()->ClientId);
+}
+
+ui64 TVolumeActor::SendPendingEventToPartition(
+    const TActorContext& ctx,
+    ui64 partitionTabletId,
+    std::unique_ptr<IEventBase> event)
+{
+    TAllocChunkSerializer serializer;
+    Y_ABORT_UNLESS(event->SerializeToArcadiaStream(&serializer));
+
+    TPendingEvent pendingEvent{
+        .EventType = event->Type(),
+        .Data = serializer.Release(event->CreateSerializationInfo(false)),
+    };
+
+    if (PartitionTabletId == 0) {
+        PartitionTabletId = partitionTabletId;
+    } else {
+        Y_ABORT_UNLESS(PartitionTabletId == partitionTabletId);
+    }
+
+    const ui64 pendingEventId = NextPendingEventId++;
+    const auto& stored =
+        PendingEvents.emplace(pendingEventId, std::move(pendingEvent))
+            .first->second;
+
+    if (!PartitionPipeClient) {
+        OpenPartitionPipe(ctx);
+    }
+
+    NTabletPipe::SendData(
+        ctx,
+        PartitionPipeClient,
+        stored.EventType,
+        stored.Data);
+    return pendingEventId;
+}
+
+void TVolumeActor::OpenPartitionPipe(const TActorContext& ctx)
+{
+    NTabletPipe::TClientConfig clientConfig;
+    clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+    PartitionPipeClient = ctx.Register(
+        NTabletPipe::CreateClient(ctx.SelfID, PartitionTabletId, clientConfig));
+}
+
+void TVolumeActor::ResendPendingEventsToPartition(
+    const TActorContext& ctx,
+    const TActorId& pipeClient)
+{
+    if (pipeClient != PartitionPipeClient) {
+        LOG_DEBUG_S(
+            ctx,
+            NKikimrServices::NBS_VOLUME,
+            "Ignoring stale partition pipe event"
+                << ", tabletId: " << TabletID()
+                << ", pipeClient: " << pipeClient);
+        return;
+    }
+
+    LOG_WARN_S(
+        ctx,
+        NKikimrServices::NBS_VOLUME,
+        "Resending pending events after pipe failure"
+            << ", tabletId: " << TabletID() << ", partitionTabletId: "
+            << PartitionTabletId << ", pendingEvents: " << PendingEvents.size()
+            << ", pipeClient: " << pipeClient);
+
+    NTabletPipe::CloseClient(ctx, PartitionPipeClient);
+    PartitionPipeClient = {};
+
+    if (PendingEvents.empty()) {
+        return;
+    }
+
+    OpenPartitionPipe(ctx);
+    for (const auto& [pendingEventId, pendingEvent]: PendingEvents) {
+        Y_UNUSED(pendingEventId);
+        NTabletPipe::SendData(
+            ctx,
+            PartitionPipeClient,
+            pendingEvent.EventType,
+            pendingEvent.Data);
+    }
+}
+
+void TVolumeActor::ReleasePendingEvent(
+    const TActorContext& ctx,
+    ui64 pendingEventId)
+{
+    PendingEvents.erase(pendingEventId);
+    if (!PendingEvents.empty() || !PartitionPipeClient) {
+        return;
+    }
+
+    NTabletPipe::CloseClient(ctx, PartitionPipeClient);
+    PartitionPipeClient = {};
+}
+
 void TVolumeActor::HandleUpdateVolumeConfig(
     const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -175,8 +301,21 @@ void TVolumeActor::HandleUpdateVolumeConfig(
         ev->Cookie,
         MakeIntrusive<NBlockStore::TCallContext>());
 
-    TUpdateVolumeConfigRequest& request = UpdateVolumeConfigRequests[txId];
+    auto [it, inserted] = UpdateVolumeConfigRequests.try_emplace(txId);
+    TUpdateVolumeConfigRequest& request = it->second;
+    // A repeated TxId is SchemeShard resending after its pipe broke. Reply
+    // later to this latest sender and keep the pipe that is already open.
     request.RequestInfo = std::move(requestInfo);
+    if (!inserted) {
+        LOG_INFO_S(
+            ctx,
+            NKikimrServices::NBS_VOLUME,
+            "Repeated UpdateVolumeConfig for the pending request"
+                << ", tabletId: " << TabletID() << ", txId: " << txId
+                << ", sender: " << ev->Sender);
+        return;
+    }
+
     request.TxId = txId;
 
     Y_ABORT_UNLESS(msg->Record.GetPartitions().size() == 1);
@@ -192,22 +331,13 @@ void TVolumeActor::HandleUpdateVolumeConfig(
                 << ", partitionId: " << partition.GetPartitionId()
                 << ", tabletId: " << partitionTabletId);
 
-        auto forwardEvent =
+        auto event =
             std::make_unique<NKikimr::TEvBlockStore::TEvUpdateVolumeConfig>();
-        forwardEvent->Record.CopyFrom(msg->Record);
-
-        // Create pipe client and send the event
-        NTabletPipe::TClientConfig clientConfig;
-        clientConfig.RetryPolicy = {.RetryLimitCount = 3};
-        auto pipeClient = ctx.Register(NTabletPipe::CreateClient(
-            ctx.SelfID,
+        event->Record.CopyFrom(msg->Record);
+        request.PendingEventId = SendPendingEventToPartition(
+            ctx,
             partitionTabletId,
-            clientConfig));
-        NTabletPipe::SendData(ctx, pipeClient, forwardEvent.release());
-
-        // Store pipe client for later cleanup
-        request.PartitionPipes[partitionTabletId] = pipeClient;
-        request.PendingPartitions.insert(partitionTabletId);
+            std::move(event));
     }
 }
 
@@ -239,15 +369,7 @@ void TVolumeActor::HandleUpdateVolumeConfigResponse(
 
     TUpdateVolumeConfigRequest& request = it->second;
 
-    // Remove partition from pending set
-    request.PendingPartitions.erase(partitionTabletId);
-
-    // Close pipe to this partition
-    auto pipeIt = request.PartitionPipes.find(partitionTabletId);
-    if (pipeIt != request.PartitionPipes.end()) {
-        NTabletPipe::CloseClient(ctx, pipeIt->second);
-        request.PartitionPipes.erase(pipeIt);
-    }
+    ReleasePendingEvent(ctx, request.PendingEventId);
 
     // Send response to original sender
     auto response = std::make_unique<
@@ -267,6 +389,29 @@ void TVolumeActor::HandleUpdateVolumeConfigResponse(
 
     // Cleanup request
     UpdateVolumeConfigRequests.erase(it);
+}
+
+void TVolumeActor::HandleStatVolume(
+    const NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest::TPtr&
+        ev,
+    const NActors::TActorContext& ctx)
+{
+    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME, "Handle StatVolume request");
+
+    auto response = std::make_unique<
+        NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeResponse>();
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
+void TVolumeActor::HandleWaitReady(
+    const NNbs1CompatApi::NBlockStore::TEvVolume::TEvWaitReadyRequest::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    LOG_DEBUG(ctx, NKikimrServices::NBS_VOLUME, "Handle WaitReady request");
+
+    auto response = std::make_unique<
+        NNbs1CompatApi::NBlockStore::TEvVolume::TEvWaitReadyResponse>();
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
 }   // namespace NYdb::NBS::NStorage

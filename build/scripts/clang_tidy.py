@@ -3,8 +3,10 @@ import argparse
 import json
 import os
 import re
+import signal
 import shutil
 import sys
+import time
 
 import subprocess
 
@@ -15,6 +17,8 @@ load_yaml = None
 BUILD_VOLUME_PROFILE_KEY = "build_volume"
 BUILD_VOLUME_STATISTICS_KEY = "source-manager.NumFileBytesInTranslationUnit"
 CLANG_TIDY_STATS_FILE = "clang-tidy-stats.json"
+CLANG_TIDY_MAX_ATTEMPTS = 2
+CLANG_TIDY_SIGSEGV_EXIT_CODE = -signal.SIGSEGV
 
 
 def setup_script(args):
@@ -44,6 +48,13 @@ def parse_args():
     parser.add_argument("--header-filter", required=False, default=None)
     parser.add_argument("--collect-build-volume", action="store_true")
     parser.add_argument("--allow-generated-sources", action="store_true")
+    parser.add_argument(
+        "--native-profile",
+        action="store_true",
+        help="Use clang-tidy's native --enable-check-profile/--store-check-profile "
+        "profiling. When disabled, wall-time is measured in Python and a "
+        "synthetic profile is produced on the fly.",
+    )
     return parser.parse_known_args()
 
 
@@ -175,6 +186,21 @@ def compact_profile(profile):
     return {k: round(v, 3) for k, v in grouped_sums.items()}
 
 
+def run_clang_tidy(cmd, process_factory=subprocess.Popen):
+    start_time = time.time()
+    for attempt in range(CLANG_TIDY_MAX_ATTEMPTS):
+        process = process_factory(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        out, err = process.communicate()
+        exit_code = process.returncode
+        if exit_code != CLANG_TIDY_SIGSEGV_EXIT_CODE or attempt + 1 == CLANG_TIDY_MAX_ATTEMPTS:
+            break
+        print(
+            "clang-tidy crashed with exit code {}, retrying once\n{}".format(exit_code, err),
+            file=sys.stderr,
+        )
+    return out, err, time.time() - start_time, exit_code
+
+
 def main():
     args, clang_cmd = parse_args()
     if '-gz=zstd' in clang_cmd:
@@ -237,9 +263,12 @@ def main():
         "--header-filter",
         header_filter,
         "--use-color",
-        "--enable-check-profile",
-        "--store-check-profile={}".format(profile_tmpdir),
     ]
+    if args.native_profile:
+        cmd += [
+            "--enable-check-profile",
+            "--store-check-profile={}".format(profile_tmpdir),
+        ]
     if args.export_fixes == "yes":
         cmd += ["--export-fixes", fixes_file]
 
@@ -247,9 +276,7 @@ def main():
         cmd += ["--checks", args.checks]
 
     print("cmd: {}".format(' '.join(cmd)))
-    res = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    out, err = res.communicate()
-    exit_code = res.returncode
+    out, err, wall_time, exit_code = run_clang_tidy(cmd)
     if filtered_out and exit_code in (0, 1):
         for check in filtered_out["Checks"]:
             abs_check = check.lstrip('-')
@@ -262,7 +289,10 @@ def main():
                 )
                 exit_code = 1
     out = out.replace(args.source_root, "$(SOURCE_ROOT)")
-    profile = compact_profile(load_profile(profile_tmpdir))
+    if args.native_profile:
+        profile = compact_profile(load_profile(profile_tmpdir))
+    else:
+        profile = {"time.clang-tidy.total.wall": wall_time}
     if statistics_file is not None:
         build_volume = load_build_volume(statistics_file)
         if build_volume is not None:

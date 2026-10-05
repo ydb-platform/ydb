@@ -52,8 +52,7 @@ TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
     NKikimr::NMiniKQL::FillStaticModules(*FuncRegistry_);
 }
 
-TProgramFactory::~TProgramFactory() {
-}
+TProgramFactory::~TProgramFactory() = default;
 
 void TProgramFactory::AddUdfModule(
     const TStringBuf& moduleName,

@@ -28,7 +28,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG("THive::TTxProcessBootQueue::Complete",
             {"logPrefix", GetLogPrefix()});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 

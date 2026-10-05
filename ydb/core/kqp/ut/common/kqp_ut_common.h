@@ -20,7 +20,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/writer.h>
 #include <library/cpp/threading/future/async.h>
-
+#include <util/system/mutex.h>
 
 template <bool ForceVersionV1>
 TString MakeQuery(const TString& tmpl) {
@@ -77,11 +77,13 @@ public:
     ui32 DynamicNodeCount = 0;
     bool WithSampleTables = true;
     bool UseRealThreads = true;
+    bool UseRealInterconnect = false;
     bool EnableForceFollowers = false;
     bool EnableScriptExecutionBackgroundChecks = true;
     bool NeedsStatsCollectors = false;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
+    std::shared_ptr<TMutex> LogStreamMutex;
     TVector<TString> StoragePoolTypes;
     TMaybe<NFake::TStorage> Storage = Nothing();
     bool InitFederatedQuerySetupFactory = false;
@@ -126,6 +128,7 @@ public:
     TKikimrSettings& SetDescribeSchemaSecretsServiceFactory(NSecret::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; };
     TKikimrSettings& SetQueryReplayBackendFactory(std::shared_ptr<NKqp::IQueryReplayBackendFactory> value) { QueryReplayBackendFactory = std::move(value); return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
+    TKikimrSettings& SetUseRealInterconnect(bool value) { UseRealInterconnect = value; return *this; };
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
     TKikimrSettings& SetNeedsStatsCollectors(bool value) { NeedsStatsCollectors = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
@@ -369,7 +372,7 @@ void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table
 void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
     const TExpectedTableStats& expectedStats);
 
-void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
+void AssertTableStats(const NYdb::NQuery::TExecuteQueryResult& result, TStringBuf table,
     const TExpectedTableStats& expectedStats);
 
 inline void AssertTableReads(const NYdb::NTable::TDataQueryResult& result, TStringBuf table, ui64 expectedReads) {

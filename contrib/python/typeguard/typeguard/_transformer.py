@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import builtins
-import sys
 import typing
 from ast import (
     AST,
@@ -63,6 +62,9 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, cast, overload
+from typing import __all__ as typing_all
+
+from typing_extensions import __all__ as typing_extensions_all
 
 PreliminaryNameTypePair: typing.TypeAlias = tuple[Constant, "expr | None"]
 NameTypePair: typing.TypeAlias = tuple[Constant, expr]
@@ -387,15 +389,6 @@ class AnnotationTransformer(NodeTransformer):
             elif self._memo.name_matches(node.right, *anytype_names):
                 return node.right
 
-            # Turn union types to typing.Union constructs on Python 3.9
-            if sys.version_info < (3, 10):
-                union_name = self.transformer._get_import("typing", "Union")
-                return Subscript(
-                    value=union_name,
-                    slice=Tuple(elts=[node.left, node.right], ctx=Load()),
-                    ctx=Load(),
-                )
-
         return node
 
     def visit_Attribute(self, node: Attribute) -> Any:
@@ -438,7 +431,8 @@ class AnnotationTransformer(NodeTransformer):
                     return None
 
                 # If all items in the subscript were Any, erase the subscript entirely
-                if all(item is None for item in items):
+                # (but not for an empty subscript like tuple[()], which is meaningful)
+                if items and all(item is None for item in items):
                     return node.value
 
                 for index, item in enumerate(items):
@@ -456,9 +450,8 @@ class AnnotationTransformer(NodeTransformer):
                     node.value, "typing.Optional"
                 ) and not hasattr(node, "slice"):
                     return None
-                if sys.version_info >= (3, 9) and not hasattr(node, "slice"):
-                    return node.value
-                elif sys.version_info < (3, 9) and not hasattr(node.slice, "value"):
+
+                if not hasattr(node, "slice"):
                     return node.value
 
         return node
@@ -614,7 +607,19 @@ class TypeguardTransformer(NodeTransformer):
 
     def visit_ImportFrom(self, node: ImportFrom) -> ImportFrom:
         for name in node.names:
-            if name.name != "*":
+            if name.name == "*":
+                match node.module:
+                    case "typing":
+                        imported_names = typing_all
+                    case "typing_extensions":
+                        imported_names = typing_extensions_all
+                    case _:
+                        continue
+
+                for item in imported_names:
+                    self._memo.local_names.add(item)
+                    self._memo.imported_names.setdefault(item, f"{node.module}.{item}")
+            else:
                 alias = name.asname or name.name
                 self._memo.local_names.add(alias)
                 self._memo.imported_names[alias] = f"{node.module}.{name.name}"
@@ -904,7 +909,7 @@ class TypeguardTransformer(NodeTransformer):
                         Assign([cls_name], first_args_expr),
                     )
 
-                # Rmove any placeholder "pass" at the end
+                # Remove any placeholder "pass" at the end
                 if isinstance(node.body[-1], Pass):
                     del node.body[-1]
 
@@ -1161,13 +1166,8 @@ class TypeguardTransformer(NodeTransformer):
                     node.value,
                     List(
                         [
-                            List(
-                                [
-                                    Tuple(
-                                        [Constant(node.target.id), annotation],
-                                        ctx=Load(),
-                                    )
-                                ],
+                            Tuple(
+                                [Constant(node.target.id), annotation],
                                 ctx=Load(),
                             )
                         ],

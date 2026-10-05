@@ -6,6 +6,9 @@
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/library/actors/core/log.h>
+
+#include <library/cpp/containers/absl/btree_map.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -70,7 +73,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                     return false;
             }
 
-            std::map<ui32, TPersQueueReadBalancer::TPartitionInfo> partitionsInfo;
+            absl::btree_map<ui32, TPersQueueReadBalancer::TPartitionInfo> partitionsInfo;
             while (!partsRowset.EndOfSet()) { //found out tablets for partitions
                 ++Self->NumActiveParts;
                 ui32 part = partsRowset.GetValue<Schema::Partitions::Partition>();
@@ -83,7 +86,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 if (!partsRowset.Next())
                     return false;
             }
-            Self->PartitionsInfo.insert(partitionsInfo.rbegin(), partitionsInfo.rend());
+            Self->PartitionsInfo.insert(partitionsInfo.begin(), partitionsInfo.end());
 
             Self->TotalGroups = Self->PartitionsInfo.size();
 
@@ -114,7 +117,9 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
         } catch (const TNotReadyTabletException&) {
             return false;
         } catch (...) {
-        Y_ABORT("there must be no leaked exceptions");
+            AFL_ENSURE(false)("reason", "there must be no leaked exceptions")
+                ("exception", CurrentExceptionMessage())
+                ("tablet_id", Self->TabletID())("path", Self->Path)("topic", Self->Topic);
         }
         return true;
     }

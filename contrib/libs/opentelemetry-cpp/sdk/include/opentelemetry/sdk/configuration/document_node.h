@@ -3,9 +3,11 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
+#include "opentelemetry/sdk/configuration/optional_value.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -39,6 +41,7 @@ public:
   virtual std::size_t AsInteger() const = 0;
   virtual double AsDouble() const       = 0;
   virtual std::string AsString() const  = 0;
+  virtual bool IsNull() const           = 0;
 
   virtual std::unique_ptr<DocumentNode> GetRequiredChildNode(const std::string &name) const = 0;
   virtual std::unique_ptr<DocumentNode> GetChildNode(const std::string &name) const         = 0;
@@ -48,6 +51,10 @@ public:
 
   virtual std::size_t GetRequiredInteger(const std::string &name) const                    = 0;
   virtual std::size_t GetInteger(const std::string &name, std::size_t default_value) const = 0;
+  virtual OptionalValue<std::size_t> GetOptionalInteger(const std::string &name) const     = 0;
+
+  virtual std::int64_t GetSignedInteger(const std::string &name,
+                                        std::int64_t default_value) const = 0;
 
   virtual double GetRequiredDouble(const std::string &name) const               = 0;
   virtual double GetDouble(const std::string &name, double default_value) const = 0;
@@ -71,6 +78,7 @@ protected:
 
   bool BooleanFromString(const std::string &value) const;
   std::size_t IntegerFromString(const std::string &value) const;
+  std::int64_t SignedIntegerFromString(const std::string &value) const;
   double DoubleFromString(const std::string &value) const;
 };
 
@@ -178,9 +186,9 @@ private:
 class DocumentNodeLocation
 {
 public:
-  size_t offset;
-  size_t line;
-  size_t col;
+  std::size_t offset{};
+  std::size_t line{};
+  std::size_t col{};
   std::string filename;
 
   std::string ToString() const;

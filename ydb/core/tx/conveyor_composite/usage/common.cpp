@@ -1,11 +1,23 @@
 #include "common.h"
-#include "config.h"
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include "events.h"
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NConveyorComposite {
+
+bool TProcessGuard::SendTaskToExecute(const std::shared_ptr<ITask>& task) const {
+    AFL_VERIFY(!Finished);
+    if (ServiceActorId && NActors::TlsActivationContext) {
+        auto& context = NActors::TActorContext::AsActorContext();
+        context.Send(*ServiceActorId, new TEvExecution::TEvNewTask(task, Category, InternalProcessId));
+        return true;
+    } else {
+        task->Execute(nullptr, task);
+        return false;
+    }
+}
 
 void TProcessGuard::Finish() {
     AFL_VERIFY(!Finished);
@@ -17,14 +29,16 @@ void TProcessGuard::Finish() {
 }
 
 TProcessGuard::TProcessGuard(const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId,
-    const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId)
+    const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId,
+    const ui64 txId, const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool)
     : Category(category)
     , ScopeId(scopeId)
     , ExternalProcessId(externalProcessId)
     , ServiceActorId(actorId) {
     if (ServiceActorId) {
         NActors::TActorContext::AsActorContext().Send(
-            *ServiceActorId, new NConveyorComposite::TEvExecution::TEvRegisterProcess(cpuLimits, category, scopeId, InternalProcessId));
+            *ServiceActorId,
+            new NConveyorComposite::TEvExecution::TEvRegisterProcess(cpuLimits, category, scopeId, InternalProcessId, txId, schedulerPool));
     }
 }
 

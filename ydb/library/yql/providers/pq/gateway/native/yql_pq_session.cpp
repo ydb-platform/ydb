@@ -154,7 +154,15 @@ NThreading::TFuture<IPqGateway::TListStreams> TPqSession::ListStreams(const TStr
 IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopic(const TString& cluster, const TString& requestedDatabase, const TString& requestedPath, const TString& token) {
     const auto* config = ClusterConfigs->FindPtr(cluster);
     if (!config) {
-        ythrow yexception() << "Pq cluster `" << cluster << "` does not exist";
+        // For local (non-federated) topics the cluster name is empty.
+        // If a LocalTopicClientFactory is available, use an empty cluster config
+        // which routes through the local factory path below.
+        if (cluster.empty() && LocalTopicClientFactory) {
+            static const TPqClusterConfig defaultLocalConfig;
+            config = &defaultLocalConfig;
+        } else {
+            ythrow yexception() << "Pq cluster `" << cluster << "` does not exist";
+        }
     }
 
     TString database = requestedDatabase;
@@ -168,12 +176,11 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
         path = requestedPath.substr(pos + 1);
     }
 
+    YQL_ENSURE(CredentialsFactory, "CredentialsFactory is not set for `" << cluster << "`.`" << path << "`");
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     if (!config->GetEndpoint() && LocalTopicClientFactory) {
-        NYdb::NTopic::TDescribeTopicSettings settings;
-        settings.IncludeStats(true);
-        return LocalTopicClientFactory->CreateTopicClient(GetYdbPqClientOptions(database, *config, credentialsProviderFactory))->DescribeTopic(path, settings)
-            .Apply([path](const TAsyncDescribeTopicResult& f) {
+        return LocalTopicClientFactory->CreateTopicClient(TString(path), GetYdbPqClientOptions(database, *config, credentialsProviderFactory))->DescribeStream()
+            .Apply([path](const NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamDescription>>& f) {
                 IPqGateway::TClusterInfo info = {.Info = {.Status = TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE}};
 
                 TString error;
@@ -184,16 +191,17 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                 try {
                     const auto& response = f.GetValue();
                     if (response.IsSuccess()) {
-                        info.PartitionsCount = response.GetTopicDescription().GetTotalPartitionsCount();
-                        const auto& partitions = response.GetTopicDescription().GetPartitions();
-                        for (const auto& partitionInfo : partitions) {
-                            if (!partitionInfo.GetPartitionStats()) {
-                                continue;
-                            }
-                            info.MaxWriteTime[partitionInfo.GetPartitionId()] = partitionInfo.GetPartitionStats()->GetLastWriteTime();
+                        info.PartitionsCount = response.Value.Partitions.size();
+                        if (!response.Value.Consumers) {
+                            ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::Unsupported)
+                                << "Local PQ metadata requires a complete consumer registry";
+                        }
+                        info.Consumers.reserve(response.Value.Consumers->size());
+                        for (const auto& consumer : *response.Value.Consumers) {
+                            info.Consumers.emplace(consumer.Name);
                         }
                     } else {
-                        setError(response.GetIssues().ToString());
+                        setError(response.Issues.ToOneLineString());
                     }
                 } catch (...) {
                     setError(FormatCurrentException());
@@ -266,7 +274,12 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                                 ex << describeTopicResult.GetIssues().ToString();
                                 continue;
                             }
-                            results[i].PartitionsCount = describeTopicResult.GetTopicDescription().GetTotalPartitionsCount();
+                            const auto& topicDescription = describeTopicResult.GetTopicDescription();
+                            results[i].PartitionsCount = topicDescription.GetTotalPartitionsCount();
+                            results[i].Consumers.reserve(topicDescription.GetConsumers().size());
+                            for (const auto& consumer : topicDescription.GetConsumers()) {
+                                results[i].Consumers.emplace(consumer.GetConsumerName());
+                            }
                             gotAnyTopic = true;
                         } catch (...) {
                             addErrorCluster();

@@ -8,7 +8,6 @@
 #include <yt/yt/library/decimal/decimal.h>
 
 #include <yt/yt/library/skiff_ext/schema_match.h>
-#include <yt/yt/library/skiff_ext/parser.h>
 
 #include <yt/yt/library/tz_types/tz_types.h>
 
@@ -18,6 +17,8 @@
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/table_consumer.h>
 #include <yt/yt/client/table_client/value_consumer.h>
+
+#include <yt/yt/core/misc/coro_pipe.h>
 
 #include <yt/yt/core/yson/parser.h>
 #include <yt/yt/core/yson/token_writer.h>
@@ -465,8 +466,8 @@ public:
                     }
                     THROW_ERROR_EXCEPTION("Cannot create Skiff parser for table #%v",
                         tableIndex)
-                        << TErrorAttribute("logical_type", logicalType)
-                        << ex;
+                        .With("logical_type", logicalType)
+                        .With(ex);
                 }
                 parserTableDescription.DenseFieldConverters.emplace_back(converter);
             }
@@ -484,7 +485,7 @@ public:
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Cannot create Skiff parser for table #%v",
                         tableIndex)
-                        << ex;
+                        .With(ex);
                 }
                 parserTableDescription.SparseFieldConverters.emplace_back(converter);
             }
@@ -579,14 +580,15 @@ private:
                         columnId,
                         /*sparseColumn*/ sparseColumn);
                 case ELogicalMetatype::Tagged:
-                    // denullified type should not contain tagged type
+                case ELogicalMetatype::AggregateState:
+                    // Denullified type should not contain tagged types.
                     break;
             }
             YT_ABORT();
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Cannot create Skiff parser for column %Qv",
                 skiffField.Name())
-                << ex;
+                .With(ex);
         }
     }
 
@@ -681,7 +683,7 @@ std::unique_ptr<IParser> CreateParserForSkiff(
     if (tableIndex == 0 && config->OverrideIntermediateTableSchema) {
         if (!IsTrivialIntermediateSchema(*consumer->GetSchema())) {
             THROW_ERROR_EXCEPTION("Cannot use \"override_intermediate_table_schema\" since output table #0 has nontrivial schema")
-                << TErrorAttribute("schema", *consumer->GetSchema());
+                .With("schema", *consumer->GetSchema());
         }
         return CreateParserForSkiff(
             skiffSchemas[tableIndex],

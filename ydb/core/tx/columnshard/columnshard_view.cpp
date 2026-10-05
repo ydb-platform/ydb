@@ -133,28 +133,18 @@ std::optional<double> GetPk0NumericValue(const NArrow::TSimpleRow& row) {
     }
 }
 
-TString GetFirstFieldFromDebugString(const TString& debug) {
-    if (!debug) {
-        return {};
-    }
-    TString first = debug;
-    if (first.EndsWith(',')) {
-        first.pop_back();
-    }
-    if (const auto comma = first.find(','); comma != TString::npos) {
-        first = first.substr(0, comma);
-    }
-    if (first == "NULL") {
-        return {};
-    }
-    return first;
-}
-
-TString GetPk0DisplayLabel(const NArrow::TSimpleRow& row) {
+TString GetPkDisplayLabel(const NArrow::TSimpleRow& row) {
     if (!HasPkRowSchema(row)) {
         return {};
     }
-    return GetFirstFieldFromDebugString(row.DebugString());
+    TString debug = row.DebugString();
+    if (debug.EndsWith(',')) {
+        debug.pop_back();
+    }
+    if (debug == "NULL") {
+        return {};
+    }
+    return debug;
 }
 
 std::optional<TString> ScalarToCanonicalKey(const std::shared_ptr<arrow::Scalar>& scalar) {
@@ -227,14 +217,18 @@ std::optional<TString> ScalarToCanonicalKey(const std::shared_ptr<arrow::Scalar>
     }
 }
 
-std::optional<TString> GetPk0CanonicalKey(const NArrow::TSimpleRow& row) {
+std::optional<TString> GetPkCanonicalKey(const NArrow::TSimpleRow& row) {
     if (HasPkRowSchema(row)) {
+        // Composite PK: use full serialized row so all components participate in ordering / intersections.
+        if (row.GetSchema()->num_fields() > 1) {
+            return row.GetData();
+        }
         if (auto key = ScalarToCanonicalKey(row.GetScalar(0))) {
             return key;
         }
     }
 
-    const TString display = GetPk0DisplayLabel(row);
+    const TString display = GetPkDisplayLabel(row);
     if (!display) {
         return std::nullopt;
     }
@@ -256,12 +250,12 @@ void SerializePortionToJson(
     json.InsertValue("planStepMin", portion.RecordSnapshotMin().GetPlanStep());
     json.InsertValue("planStepMax", portion.RecordSnapshotMax().GetPlanStep());
     json.InsertValue("compactionLevel", portion.GetMeta().GetCompactionLevel());
-    json.InsertValue("pkMinStr", GetPk0DisplayLabel(portion.IndexKeyStart()));
-    json.InsertValue("pkMaxStr", GetPk0DisplayLabel(portion.IndexKeyEnd()));
+    json.InsertValue("pkMinStr", GetPkDisplayLabel(portion.IndexKeyStart()));
+    json.InsertValue("pkMaxStr", GetPkDisplayLabel(portion.IndexKeyEnd()));
 
     if (compressed) {
-        const auto pkMin = GetPk0CanonicalKey(portion.IndexKeyStart());
-        const auto pkMax = GetPk0CanonicalKey(portion.IndexKeyEnd());
+        const auto pkMin = GetPkCanonicalKey(portion.IndexKeyStart());
+        const auto pkMax = GetPkCanonicalKey(portion.IndexKeyEnd());
         json.InsertValue("pkMin", LookupBoundaryIndex(boundaryIndex, pkMin));
         json.InsertValue("pkMax", LookupBoundaryIndex(boundaryIndex, pkMax));
     } else {
@@ -440,10 +434,23 @@ NJson::TJsonValue CollectPortionsData(const NOlap::TColumnEngineForLogs& engine,
     LimitPortionsCount(activePortions, portionsLimitFilter);
 
     const auto pk0Field = pkSchema->field(0);
-    const bool compressed = UsesCompressedPkView(pk0Field->type()->id());
+    // Multi-column PK cannot be projected onto the first column alone without false overlaps;
+    // always use an ordinal axis built from full IndexKeyStart/End.
+    const bool compressed = pkSchema->num_fields() > 1 || UsesCompressedPkView(pk0Field->type()->id());
 
     result.InsertValue("pk0ArrowType", pk0Field->type()->ToString());
     result.InsertValue("pk0Name", pk0Field->name());
+    result.InsertValue("pkColumnCount", pkSchema->num_fields());
+    {
+        NJson::TJsonValue pkNamesJson = NJson::JSON_ARRAY;
+        NJson::TJsonValue pkTypesJson = NJson::JSON_ARRAY;
+        for (int i = 0; i < pkSchema->num_fields(); ++i) {
+            pkNamesJson.AppendValue(pkSchema->field(i)->name());
+            pkTypesJson.AppendValue(pkSchema->field(i)->type()->ToString());
+        }
+        result.InsertValue("pkNames", pkNamesJson);
+        result.InsertValue("pkTypes", pkTypesJson);
+    }
     result.InsertValue("compressed", compressed);
     result.InsertValue("pk0Temporal", IsTemporalPkType(pk0Field->type()->id()));
 
@@ -453,9 +460,9 @@ NJson::TJsonValue CollectPortionsData(const NOlap::TColumnEngineForLogs& engine,
         THashMap<TString, TString> boundaryDisplayLabels;
         for (const auto& portion : activePortions) {
             for (const auto& boundaryRow : { portion->IndexKeyStart(), portion->IndexKeyEnd() }) {
-                if (const auto key = GetPk0CanonicalKey(boundaryRow)) {
+                if (const auto key = GetPkCanonicalKey(boundaryRow)) {
                     boundaryRepresentatives.try_emplace(*key, boundaryRow);
-                    const TString displayLabel = GetPk0DisplayLabel(boundaryRow);
+                    const TString displayLabel = GetPkDisplayLabel(boundaryRow);
                     boundaryDisplayLabels.try_emplace(*key, displayLabel ? displayLabel : *key);
                 }
             }
@@ -571,39 +578,82 @@ TString EscapeJsString(const TString& in) {
     return out;
 }
 
+// Same idea as /trace probes UI: create ad-hoc session via mode=new&timeout=... so Cleaner binds
+// timeout to the session. mode=log alone only keeps ad-hoc traces for 1 minute.
+constexpr ui32 LwTraceSessionTimeoutSec = 30 * 60;
+
+TString LwTraceAdHocId(const TString& provider, const TString& probe) {
+    return TStringBuilder() << "." << provider << "." << probe << ".alsrt100000";
+}
+
+TString RenderLwTraceCreateUrl(ui32 nodeId) {
+    return TStringBuilder() << "/node/" << nodeId << "/trace?mode=new&timeout=" << LwTraceSessionTimeoutSec;
+}
+
 TString RenderLwTraceShardLogUrl(const TString& provider, const TString& probe, ui64 tabletId, ui32 nodeId) {
-    const TString traceId = TStringBuilder() << "." << provider << "." << probe << ".alsrt100000";
+    const TString traceId = LwTraceAdHocId(provider, probe);
     return TStringBuilder() << "/node/" << nodeId << "/trace?mode=log&id=" << traceId << "&f=tabletId=" << tabletId;
+}
+
+TString RenderLwTraceStartScript() {
+    // Creates the lwtrace session (binds timeout), then opens the log URL — like redirectPost on /trace.
+    return R"(<script>
+function startColumnShardLwTrace(createUrl, traceId, logUrl) {
+    var body = new URLSearchParams();
+    body.set('id', traceId);
+    fetch(createUrl, {method: 'POST', body: body, credentials: 'same-origin'})
+        .finally(function() { window.location.href = logUrl; });
+    return false;
+}
+function ensureColumnShardLwTrace(createUrl, traceId, onReady) {
+    var body = new URLSearchParams();
+    body.set('id', traceId);
+    fetch(createUrl, {method: 'POST', body: body, credentials: 'same-origin'})
+        .finally(onReady);
+}
+</script>)";
+}
+
+TString RenderLwTraceStartLink(const TString& createUrl, const TString& traceId, const TString& logUrl, const TString& title)
+{
+    return TStringBuilder() << "<a href=\"" << TEscapeHtml(logUrl) << "\" onclick=\"return startColumnShardLwTrace('"
+                            << EscapeJsString(createUrl) << "', '" << EscapeJsString(traceId) << "', '" << EscapeJsString(logUrl) << "');\">"
+                            << TEscapeHtml(title) << "</a>";
 }
 
 TString RenderLwTraceShardLinks(
     const TString& vizPage, const TString& provider, const TString& probe, ui64 tabletId, ui32 nodeId, const TString& title)
 {
     const TString tabletIdStr = ToString(tabletId);
-    const TString traceUrl = RenderLwTraceShardLogUrl(provider, probe, tabletId, nodeId);
+    const TString traceId = LwTraceAdHocId(provider, probe);
+    const TString createUrl = RenderLwTraceCreateUrl(nodeId);
+    const TString logUrl = RenderLwTraceShardLogUrl(provider, probe, tabletId, nodeId);
     const TString safeTitle = TEscapeHtml(title);
     const TString safeVizPage = TEscapeHtml(vizPage);
-    const TString safeTraceUrl = TEscapeHtml(traceUrl);
     TStringStream html;
     html << "<a href=\"app?page=" << safeVizPage << "&amp;TabletID=" << tabletIdStr << "\">" << safeTitle << "</a>";
     html << " | ";
-    html << "<a href=\"" << safeTraceUrl << "\">" << safeTitle << " (text)</a>";
+    html << RenderLwTraceStartLink(createUrl, traceId, logUrl, title + " (text)");
     return html.Str();
 }
 
 TString RenderScanTracesPage(ui64 tabletId, ui32 nodeId) {
     const TString nodeIdStr = ToString(nodeId);
     const TString tabletIdStr = ToString(tabletId);
-    const TString traceUrl = RenderLwTraceShardLogUrl("YDB_CS_SCAN", "StartScan", tabletId, nodeId);
+    const TString traceId = LwTraceAdHocId("YDB_CS_SCAN", "StartScan");
+    const TString createUrl = RenderLwTraceCreateUrl(nodeId);
+    const TString logUrl = RenderLwTraceShardLogUrl("YDB_CS_SCAN", "StartScan", tabletId, nodeId);
     TStringStream html;
     html << "<h3>Traces for all scans on shard</h3>";
-    html << "<p>Trace source: <a href=\"" << TEscapeHtml(traceUrl) << "\">" << TEscapeHtml(traceUrl) << "</a></p>";
+    html << "<p>Trace source: " << RenderLwTraceStartLink(createUrl, traceId, logUrl, logUrl) << "</p>";
     html << "<p><a href=\"app?TabletID=" << tabletIdStr << "\">Back</a></p>";
+    html << RenderLwTraceStartScript();
     html << "<script language=\"javascript\" type=\"text/javascript\" src=\"/node/" << nodeIdStr
          << "/columnshard/plotly-2.35.2.min.js\"></script>";
     html << "<script language=\"javascript\" type=\"text/javascript\" src=\"/node/" << nodeIdStr << "/columnshard/scan-trace-viz.js\"></script>";
     html << "<div id=\"scan-trace-viz\" style=\"width:100%;\"></div>";
-    html << "<script>renderScanTraceVisualization('" << EscapeJsString(traceUrl) << "', 'scan-trace-viz');</script>";
+    html << "<script>ensureColumnShardLwTrace('" << EscapeJsString(createUrl) << "', '" << EscapeJsString(traceId)
+         << "', function() { renderScanTraceVisualization('" << EscapeJsString(logUrl) << "', 'scan-trace-viz'); });</script>";
     return html.Str();
 }
 
@@ -721,12 +771,24 @@ TString TTxMonitoring::RenderMainPage() {
     html << "<h3><a href=\"app?page=compaction&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
     html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
     html << "<h3><a href=\"app?page=portions&TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> Portions </a></h3>";
+    html << RenderLwTraceStartScript();
     html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), Self->SelfId().NodeId(),
                           "Traces for all scans on shard")
          << "</h3>";
-    html << "<h3><a href=\""
-         << TEscapeHtml(RenderLwTraceShardLogUrl("YDB_CS_DATA_SOURCE", "StartSourceProcessing", Self->TabletID(), Self->SelfId().NodeId()))
-         << "\"> Traces for all portions on shard </a></h3>";
+    {
+        const ui32 nodeId = Self->SelfId().NodeId();
+        const TString traceId = LwTraceAdHocId("YDB_CS", "StartWrite");
+        const TString createUrl = RenderLwTraceCreateUrl(nodeId);
+        const TString logUrl = RenderLwTraceShardLogUrl("YDB_CS", "StartWrite", Self->TabletID(), nodeId);
+        html << "<h3>" << RenderLwTraceStartLink(createUrl, traceId, logUrl, "Traces for all writes on shard") << "</h3>";
+    }
+    {
+        const ui32 nodeId = Self->SelfId().NodeId();
+        const TString traceId = LwTraceAdHocId("YDB_CS_DATA_SOURCE", "StartSourceProcessing");
+        const TString createUrl = RenderLwTraceCreateUrl(nodeId);
+        const TString logUrl = RenderLwTraceShardLogUrl("YDB_CS_DATA_SOURCE", "StartSourceProcessing", Self->TabletID(), nodeId);
+        html << "<h3>" << RenderLwTraceStartLink(createUrl, traceId, logUrl, "Traces for all portions on shard") << "</h3>";
+    }
 
     html << "<h3>Tiering Errors</h3>";
     auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();
@@ -941,6 +1003,19 @@ TString TTxMonitoring::RenderPortionsPage() {
 
             function planStepToY(planStep, yMin, yMax, height, padding) {
                 return padding + height - (planStep - yMin) / (yMax - yMin) * height;
+            }
+
+            function formatPkSchema() {
+                const names = data.pkNames || [];
+                const types = data.pkTypes || [];
+                if (names.length) {
+                    const parts = [];
+                    for (let i = 0; i < names.length; ++i) {
+                        parts.push(names[i] + (types[i] ? ': ' + types[i] : ''));
+                    }
+                    return parts.join(', ');
+                }
+                return (data.pk0Name || '') + ', ' + (data.pk0ArrowType || '');
             }
 
             function formatPk(pk, portions, pkLabels) {
@@ -1161,7 +1236,7 @@ TString TTxMonitoring::RenderPortionsPage() {
                 ctx.strokeRect(paddingLeft, paddingTop, width, height);
                 ctx.fillStyle = '#333';
                 const pkViewSuffix = compressed ? ', compressed' : '';
-                const pkAxisLabel = 'pk (' + (data.pk0Name || '') + ', ' + (data.pk0ArrowType || '') + pkViewSuffix + ')';
+                const pkAxisLabel = 'pk (' + formatPkSchema() + pkViewSuffix + ')';
                 ctx.fillText(pkAxisLabel, paddingLeft, paddingTop - 10);
                 ctx.save();
                 ctx.translate(Math.min(15, paddingLeft / 3), paddingTop + height / 2);
@@ -1217,10 +1292,10 @@ TString TTxMonitoring::RenderPortionsPage() {
                     msg += ', plan_step: all range';
                 }
                 if (data.compressed && data.pkLabels) {
-                    msg += ' (compressed ordinal view, ' + data.pkLabels.length + ' boundaries, type: '
-                        + (data.pk0ArrowType || 'unknown') + ')';
-                } else if (data.pk0ArrowType) {
-                    msg += ' (native PK view, type: ' + data.pk0ArrowType + ')';
+                    msg += ' (compressed ordinal view, ' + data.pkLabels.length + ' boundaries, pk: '
+                        + formatPkSchema() + ')';
+                } else if (data.pk0ArrowType || (data.pkNames && data.pkNames.length)) {
+                    msg += ' (native PK view, pk: ' + formatPkSchema() + ')';
                 }
                 status.textContent = msg;
             }

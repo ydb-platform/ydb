@@ -159,7 +159,7 @@ private:
             return;
         }
 
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         auto yson = BuildStringFromProducer();
         response->set_value(ToProto(yson));
         context->Reply();
@@ -287,7 +287,7 @@ private:
             return;
         }
 
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         auto yson = BuildStringFromProducer(options);
         response->set_value(ToProto(yson));
         context->Reply();
@@ -372,7 +372,7 @@ private:
             return;
         }
 
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         auto yson = BuildStringFromProducer();
         response->set_value(ToProto(yson));
         context->Reply();
@@ -387,7 +387,7 @@ private:
             return;
         }
 
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         TStringStream stream;
         {
@@ -425,7 +425,7 @@ private:
             return;
         }
 
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         auto limit = request->has_limit()
             ? std::optional(request->limit())
@@ -459,7 +459,7 @@ private:
 
     void ExistsRecursive(const TYPath& path, TReqExists* /*request*/, TRspExists* /*response*/, const TCtxExistsPtr& context) override
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         auto consumer = CreateYPathDesignatedConsumer(path, EMissingPathMode::ThrowError, GetNullYsonConsumer());
         try {

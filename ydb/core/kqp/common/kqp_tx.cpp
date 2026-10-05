@@ -44,6 +44,37 @@ TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {
     return txInfo;
 }
 
+bool GuaranteesRepeatableReads(NKqpProto::EIsolationLevel isolationLevel) {
+    switch (isolationLevel) {
+        case NKqpProto::ISOLATION_LEVEL_SERIALIZABLE:
+        case NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE:
+        case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO:
+        case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
+            // These run on a single snapshot reused by every statement of the transaction.
+            return true;
+
+        case NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW:
+            // Every statement is meant to see the latest committed data.
+            return false;
+
+        case NKqpProto::ISOLATION_LEVEL_ONLINE_RO:
+        case NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO:
+        case NKqpProto::ISOLATION_LEVEL_READ_STALE:
+            // No snapshot at all, and consistency between statements is not promised.
+            return false;
+
+        case NKqpProto::ISOLATION_LEVEL_UNDEFINED:
+            // A query without transaction control: every statement is its own transaction.
+            return false;
+
+        case NKqpProto::EIsolationLevel_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NKqpProto::EIsolationLevel_INT_MAX_SENTINEL_DO_NOT_USE_:
+            break;
+    }
+
+    Y_UNREACHABLE();
+}
+
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery)
 {
@@ -297,6 +328,19 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     break;
                 case NKqpProto::TKqpPhyConnection::kSequencer:
                     return true;
+                case NKqpProto::TKqpPhyConnection::kVectorSearch: {
+                    // The actor reads the index impl tables and (unless the index covers every
+                    // output column) the main table inside the connection, so there is no
+                    // separate read operation in the plan to catch here.
+                    const auto& vectorSearch = input.GetVectorSearch();
+                    if (modifiedTables.contains(getTable(vectorSearch.GetTable()))
+                        || modifiedTables.contains(getTable(vectorSearch.GetLevelTable()))
+                        || modifiedTables.contains(getTable(vectorSearch.GetPostingTable())))
+                    {
+                        return true;
+                    }
+                    break;
+                }
                 case NKqpProto::TKqpPhyConnection::kVectorResolve: // FIXME: Maybe, when prefix tables are enabled
                 case NKqpProto::TKqpPhyConnection::kUnionAll:
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
@@ -335,8 +379,7 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     modifiedTables.insert(getTable(index.GetTable()));
                 }
 
-                // For plans compatibility with old indexes. Don't need it for new.
-                if (!settings.GetLookupColumns().empty() && tableModifiedBefore) {
+                if (settings.GetNeedLookup() && tableModifiedBefore) {
                     AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
                     return true;
                 }

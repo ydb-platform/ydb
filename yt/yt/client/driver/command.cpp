@@ -70,9 +70,9 @@ void TCommandBase::Register(TRegistrar registrar)
 void TCommandBase::Execute(ICommandContextPtr context)
 {
     const auto& request = context->Request();
-    Logger.AddTag("RequestId: %" PRIx64 ", User: %v",
-        request.Id,
-        request.AuthenticatedUser);
+    Logger
+        .AddTagFormat("RequestId", "%" PRIx64, request.Id)
+        .AddTag("User", request.AuthenticatedUser);
     Deserialize(*this, request.Parameters);
 
     if (!HasResponseParameters()) {

@@ -13,7 +13,58 @@ namespace NKikimr {
         }
     }
 
-    void TBlobStorageGroupProxy::CheckDeadlines() {
+    void TBlobStorageGroupProxy::ScheduleDeadlineCheck() {
+        DeadlineChecksStarted = true;
+        Schedule(DeadlineCheckInterval, new TEvCheckDeadlines(++DeadlineCheckGeneration));
+    }
+
+    bool TBlobStorageGroupProxy::CanEnterDormant() const {
+        return ActiveRequests.empty()
+            && InitQueue.empty()
+            && PutBatchedBucketQueue.empty()
+            && GetBatchedBucketQueue.empty()
+            && ResponsivenessTracker.IsEmpty();
+    }
+
+    void TBlobStorageGroupProxy::SetDormant(bool isDormant) {
+        Y_ABORT_UNLESS(!isDormant || CanEnterDormant());
+
+        if (std::exchange(IsDormant, isDormant) == isDormant) {
+            return;
+        }
+
+        YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PROXY, "DSProxy dormancy state changed",
+            {"group", GroupId},
+            {"isDormant", IsDormant});
+
+        if (Mon) {
+            Mon->CountDormancyTransition(IsDormant);
+        }
+        if (MonActor) {
+            Send(MonActor, new TEvSetProxyDormant(IsDormant));
+        }
+        if (!IsDormant && GroupStatUpdatesStarted) {
+            ScheduleUpdateGroupStat();
+        }
+    }
+
+    void TBlobStorageGroupProxy::HandleRequestActivity() {
+        LastRequestActivity = TActivationContext::Monotonic();
+        if (IsDormant) {
+            SetDormant(false);
+        }
+        if (!DeadlineChecksStarted) {
+            // Ejected proxies start this loop lazily on their first request.
+            ScheduleDeadlineCheck();
+        }
+    }
+
+    void TBlobStorageGroupProxy::Handle(TEvCheckDeadlines::TPtr& ev) {
+        if (ev->Get()->Generation != DeadlineCheckGeneration) {
+            return;
+        }
+        DeadlineChecksStarted = false;
+
         const TInstant now = TActivationContext::Now();
         std::multimap<TInstant, TActorId>::iterator it;
         for (it = DeadlineMap.begin(); it != DeadlineMap.end() && it->first <= now; ++it) {
@@ -23,7 +74,20 @@ namespace NKikimr {
             jt->second = {};
         }
         DeadlineMap.erase(DeadlineMap.begin(), it);
-        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(EvCheckDeadlines, 0, SelfId(), {}, nullptr, 0));
+
+        const i64 dormantTimeoutMinutes = Controls.DormantTimeoutMinutes.Update(now);
+        const TMonotonic monotonicNow = TActivationContext::Monotonic();
+        const bool dormancyDisabled = dormantTimeoutMinutes == 0 || IsBlobDepotProxy;
+        const bool timeoutReached = !dormancyDisabled
+            && monotonicNow >= LastRequestActivity + TDuration::Minutes(dormantTimeoutMinutes);
+
+        if (timeoutReached && CanEnterDormant()) {
+            SetDormant(true);
+        }
+
+        if (!IsDormant) {
+            ScheduleDeadlineCheck();
+        }
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvGet::TPtr &ev) {
@@ -113,6 +177,7 @@ namespace NKikimr {
                             .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                             .EnableStorageRetroTraceGeneration = static_cast<bool>(Controls.EnableStorageRetroTraceGeneration.Update(TActivationContext::Now())),
                             .EnableStorageRetroTraceCollectionSlowRequests = static_cast<bool>(Controls.EnableStorageRetroTraceCollectionSlowRequests.Update(TActivationContext::Now())),
+                            .EnableChecksumCalcAndValidationOnDsProxy = static_cast<bool>(Controls.EnableChecksumCalcAndValidationOnDsProxy.Update(TActivationContext::Now())),
                         },
                         .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo),
                         .AccelerationParams = GetAccelerationParams(),
@@ -252,6 +317,7 @@ namespace NKikimr {
                         .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                         .EnableStorageRetroTraceGeneration = static_cast<bool>(Controls.EnableStorageRetroTraceGeneration.Update(now)),
                         .EnableStorageRetroTraceCollectionSlowRequests = static_cast<bool>(Controls.EnableStorageRetroTraceCollectionSlowRequests.Update(now)),
+                        .EnableChecksumCalcAndValidationOnDsProxy = static_cast<bool>(Controls.EnableChecksumCalcAndValidationOnDsProxy.Update(now)),
                         .ExternalRelevanceWatcher = ev->Get()->ExternalRelevanceWatcher,
                     },
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
@@ -553,6 +619,7 @@ namespace NKikimr {
             DeadlineMap.erase(it->second);
         }
         ActiveRequests.erase(it);
+        LastRequestActivity = TActivationContext::Monotonic();
     }
 
     void TBlobStorageGroupProxy::Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev) {
@@ -596,6 +663,7 @@ namespace NKikimr {
                                     .ForceGroupGeneration = forceGroupGeneration,
                                     .EnableStorageRetroTraceGeneration = static_cast<bool>(Controls.EnableStorageRetroTraceGeneration.Update(now)),
                                     .EnableStorageRetroTraceCollectionSlowRequests = static_cast<bool>(Controls.EnableStorageRetroTraceCollectionSlowRequests.Update(now)),
+                                    .EnableChecksumCalcAndValidationOnDsProxy = static_cast<bool>(Controls.EnableChecksumCalcAndValidationOnDsProxy.Update(now)),
                                     .ExternalRelevanceWatcher = ev->Get()->ExternalRelevanceWatcher,
                                 },
                                 .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
@@ -621,6 +689,7 @@ namespace NKikimr {
                                     .ForceGroupGeneration = forceGroupGeneration,
                                     .EnableStorageRetroTraceGeneration = static_cast<bool>(Controls.EnableStorageRetroTraceGeneration.Update(now)),
                                     .EnableStorageRetroTraceCollectionSlowRequests = static_cast<bool>(Controls.EnableStorageRetroTraceCollectionSlowRequests.Update(now)),
+                                    .EnableChecksumCalcAndValidationOnDsProxy = static_cast<bool>(Controls.EnableChecksumCalcAndValidationOnDsProxy.Update(now)),
                                 },
                                 .Events = batch.Queue,
                                 .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
@@ -799,6 +868,15 @@ namespace NKikimr {
             auto q = RestartQuery(RestartCounter + 1);
             if (q->Type() != TEvBlobStorage::EvBunchOfEvents) {
                 SetExecutionRelay(*q, std::exchange(ExecutionRelay, {}));
+                // Restarting rebuilds the request field by field, so carry the admission hint over
+                // here rather than in each RestartQuery: a request must not become user data just
+                // because it raced with a group reconfiguration. The put path is exempt because it
+                // restarts as a bunch of events, each already carrying its own kind.
+                auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(q.get());
+                Y_DEBUG_ABORT_UNLESS(common);
+                if (common) {
+                    common->DataKind = DataKind;
+                }
             }
             ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
             const TActorId& proxyId = MakeBlobStorageProxyID(Info->GroupID);
@@ -911,9 +989,10 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupRequestActor::SendToProxy(std::unique_ptr<IEventBase> event, ui64 cookie, NWilson::TTraceId traceId) {
-        if (ForceGroupGeneration) {
+        if (ForceGroupGeneration || DataKind != NKikimrBlobStorage::TDataKind::USER) {
             if (auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(event.get())) {
                 common->ForceGroupGeneration = ForceGroupGeneration;
+                common->DataKind = DataKind;
             }
         }
         Send(ProxyActorId, event.release(), 0, cookie, std::move(traceId));
@@ -1073,12 +1152,24 @@ namespace NKikimr {
 
         TVDiskID vdiskId;
         NKikimrBlobStorage::EVDiskQueueId queueId;
+        bool userChecksumming = false;
 
         auto preprocess = [&](auto& ev) {
             Y_DEBUG_ABORT_UNLESS(ev.Record.HasVDiskID());
             vdiskId = VDiskIDFromVDiskID(ev.Record.GetVDiskID());
 
             using T = std::decay_t<decltype(ev)>;
+
+            if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVPut>) {
+                userChecksumming = ev.Record.HasChecksum();
+            }
+
+            if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVMultiPut>) {
+                userChecksumming = !!ev.Record.ItemsSize();
+                for (const auto& item : ev.Record.GetItems()) {
+                    userChecksumming &= item.HasChecksum();
+                }
+            }
 
             if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVGetBlock> &&
                     !std::is_same_v<T, TEvBlobStorage::TEvVBlock> &&
@@ -1135,7 +1226,8 @@ namespace NKikimr {
             default: Y_ABORT_S("unexpected VDisk request Type# " << Sprintf("0x%08" PRIx32, type));
         }
 
-        GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, Span.GetTraceId(), vdiskId, queueId);
+        GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, userChecksumming, Span.GetTraceId(),
+            vdiskId, queueId);
         ++RequestsInFlight;
     }
 

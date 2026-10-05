@@ -17,7 +17,11 @@
 #include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 #include <ydb/library/actors/wilson/wilson_with_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <util/generic/hash_set.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <unordered_map>
+#include <algorithm>
+#include <utility>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_HULLHUGE
 
@@ -179,6 +183,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         std::unique_ptr<TEvHullWriteHugeBlob> Item;
         ui64 WriteId;
         TDiskPart DiskAddr;
+        const bool IsStripe;
         static void *Cookie;
         TLazyRetroSpan Span;
 
@@ -243,10 +248,12 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             }
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             ctx.Send(NotifyID, new TEvHullHugeWritten(HugeSlot));
-            ctx.Send(HugeKeeperCtx->SkeletonId, new TEvHullLogHugeBlob(WriteId, Item->LogoBlobId, Item->Ingress,
+            auto logHuge = std::make_unique<TEvHullLogHugeBlob>(WriteId, Item->LogoBlobId, Item->Ingress,
                 DiskAddr, Item->IgnoreBlock, Item->IssueKeepFlag, Item->SenderId, Item->Cookie, Item->HandleClass,
-                std::move(Item->Result), &Item->ExtraBlockChecks, Item->WriteSource, Item->RewriteBlob), 0, 0,
-                Span.GetTraceId());
+                std::move(Item->Result), &Item->ExtraBlockChecks, Item->WriteSource, Item->RewriteBlob, IsStripe,
+                Item->FreshRefuseAtColor);
+            logHuge->FreshAdmission = std::exchange(Item->FreshAdmission, {});
+            ctx.Send(HugeKeeperCtx->SkeletonId, logHuge.release(), 0, 0, Span.GetTraceId());
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                             "Writer: finish: id# %s diskAddr# %s",
                             HugeSlot.ToString().data(), DiskAddr.ToString().data()));
@@ -275,7 +282,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 const NHuge::THugeSlot &hugeSlot,
                 std::unique_ptr<TEvHullWriteHugeBlob> item,
                 ui64 wId,
-                NWilson::TTraceId traceId)
+                NWilson::TTraceId traceId,
+                bool isStripe)
             : TActorBootstrapped<TThis>()
             , HugeKeeperCtx(std::move(hugeKeeperCtx))
             , NotifyID(notifyID)
@@ -283,6 +291,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             , Item(std::move(item))
             , WriteId(wId)
             , DiskAddr()
+            , IsStripe(isStripe)
             , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.HugeBlobKeeper.Write")
         {
             if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
@@ -304,6 +313,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         ui32 ChunkId = 0;
         TLazyRetroSpan Span;
         ui32 SlotSize;
+        const NKikimrBlobStorage::TPDiskSpaceColor::E RefuseAtColor;
+        const NPDisk::EAllocationPurpose Purpose;
 
         friend class TActorBootstrapped<THullHugeBlobChunkAllocator>;
 
@@ -313,12 +324,16 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "ChunkAllocator: bootstrap"));
             ctx.Send(HugeKeeperCtx->PDiskCtx->PDiskId,
                     new NPDisk::TEvChunkReserve(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
-                        HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, 1));
+                        HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, 1,
+                        Purpose == NPDisk::EAllocationPurpose::Maintenance, RefuseAtColor, Purpose));
             TThis::Become(&TThis::StateFunc);
         }
 
         void Handle(NPDisk::TEvChunkReserveResult::TPtr &ev, const TActorContext &ctx) {
             if (ev->Get()->Status == NKikimrProto::OUT_OF_SPACE) {
+                auto& oos = HugeKeeperCtx->VCtx->GetOutOfSpaceState();
+                oos.ObserveLocalChunk(ev->Get()->StatusFlags);
+                oos.ObserveSpaceHeadroom(ev->Get()->Headroom);
                 ctx.Send(ParentId, new TEvHullHugeChunkAllocated(SlotSize, false));
                 Die(ctx);
                 Span.EndOk();
@@ -387,11 +402,14 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         }
 
         THullHugeBlobChunkAllocator(std::shared_ptr<THugeKeeperCtx> hugeKeeperCtx,
-                std::shared_ptr<THullHugeKeeperPersState> pers, NWilson::TTraceId traceId, ui32 slotSize)
+                std::shared_ptr<THullHugeKeeperPersState> pers, NWilson::TTraceId traceId, ui32 slotSize,
+                NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor, NPDisk::EAllocationPurpose purpose)
             : HugeKeeperCtx(std::move(hugeKeeperCtx))
             , Pers(std::move(pers))
             , Span(TWilson::VDiskTopLevel, std::move(traceId), "VDisk.HullHugeBlobChunkAllocator")
             , SlotSize(slotSize)
+            , RefuseAtColor(refuseAtColor)
+            , Purpose(purpose)
         {}
     };
 
@@ -680,7 +698,24 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         std::shared_ptr<THugeKeeperCtx> HugeKeeperCtx;
         THullHugeKeeperState State;
         TActiveActors ActiveActors;
-        std::unordered_set<ui32> AllocatingChunkPerSlotSize;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        // Keep the bound of each outstanding allocator. Refusal at a USER bound
+        // must not reject SYSTEM, recovery or compaction requests queued for the
+        // same size. A chunk that is granted serves every waiter of its slot size,
+        // whatever class asked for it, so a bound holds per chunk rather than per
+        // blob: a class can get past its bound by the rest of one chunk.
+        using TPurpose = NPDisk::EAllocationPurpose;
+        struct TAllocation {
+            TColor::E Bound;
+            TPurpose Purpose;
+        };
+        std::unordered_map<ui32, TAllocation> AllocatingChunkPerSlotSize;
+
+        // Whether PDisk refusing `refused` means it would refuse a request of this bound and purpose as well.
+        static bool Covers(const TAllocation& refused, TColor::E bound, TPurpose purpose) {
+            return bound <= refused.Bound && purpose == refused.Purpose;
+        }
+
         std::multimap<ui64, std::unique_ptr<IEventHandle>> PendingLockResponses;
         std::set<ui64> WritesInFlight;
 
@@ -705,30 +740,39 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         };
 
         bool ProcessWrite(std::unique_ptr<TEvHullWriteHugeBlob::THandle>& ev, const TActorContext& ctx,
-                NWilson::TTraceId traceId, EProcessWriteReason reason) {
+                NWilson::TTraceId traceId, EProcessWriteReason reason,
+                TAllocation refused = {TColor::BLACK, TPurpose::Recovery}) {
             auto& msg = *ev->Get();
+            const TColor::E bound = msg.FreshRefuseAtColor.value_or(TColor::BLACK);
             NHuge::THugeSlot hugeSlot;
-            ui32 slotSize;
-            if (State.Pers->Heap->Allocate(msg.Data.GetSize(), &hugeSlot, &slotSize)) {
+            ui32 slotSize = 0;
+            if (State.Pers->AllocateBlob(msg.Data.GetSize(), &hugeSlot, &slotSize)) {
                 State.Pers->AddSlotInFlight(hugeSlot);
                 State.Pers->AddChunkSize(hugeSlot);
                 const ui64 lsnInfimum = HugeKeeperCtx->LsnMngr->GetLsn();
                 CheckLsn(lsnInfimum, "WriteHugeBlob");
                 const ui64 wId = State.LsnFifo.Push(HugeKeeperCtx->VCtx->VDiskLogPrefix, lsnInfimum);
                 WritesInFlight.insert(wId);
+                const bool isStripe = State.Pers->IsStripeAddr(hugeSlot.GetDiskPart());
                 auto aid = ctx.Register(new THullHugeBlobWriter(HugeKeeperCtx, ctx.SelfID, hugeSlot,
-                    std::unique_ptr<TEvHullWriteHugeBlob>(ev->Release().Release()), wId, std::move(traceId)));
+                    std::unique_ptr<TEvHullWriteHugeBlob>(ev->Release().Release()), wId, std::move(traceId), isStripe));
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 return true;
-            } else if (reason == EProcessWriteReason::OUT_OF_SPACE) {
-                // cancel this item because we have no space left to allocate a chunk
-                msg.Result->UpdateStatus(NKikimrProto::ERROR, "out of space");
-                SendVDiskResponse(ctx, msg.SenderId, msg.Result.release(), msg.Cookie, HugeKeeperCtx->VCtx, msg.HandleClass);
+            } else if (reason == EProcessWriteReason::OUT_OF_SPACE && Covers(refused, bound, msg.AllocationPurpose)) {
+                msg.Result->UpdateStatus(NKikimrProto::OUT_OF_SPACE, "huge chunk reservation refused");
+                // Skeleton owns the Fresh accounting, including the index charge
+                // of a put whose data allocation has failed.
+                auto logHuge = std::make_unique<TEvHullLogHugeBlob>(0, msg.LogoBlobId, msg.Ingress, TDiskPart(),
+                    msg.IgnoreBlock, msg.IssueKeepFlag, msg.SenderId, msg.Cookie, msg.HandleClass,
+                    std::move(msg.Result), &msg.ExtraBlockChecks, msg.WriteSource, msg.RewriteBlob, false,
+                    msg.FreshRefuseAtColor);
+                logHuge->FreshAdmission = std::exchange(msg.FreshAdmission, {});
+                ctx.Send(HugeKeeperCtx->SkeletonId, logHuge.release(), 0, 0, std::move(traceId));
                 return true;
-            } else if (AllocatingChunkPerSlotSize.insert(slotSize).second) {
+            } else if (AllocatingChunkPerSlotSize.emplace(slotSize, TAllocation{bound, msg.AllocationPurpose}).second) {
                 LWTRACK(HugeBlobChunkAllocatorStart, ev->Get()->Orbit);
                 auto aid = ctx.RegisterWithSameMailbox(new THullHugeBlobChunkAllocator(HugeKeeperCtx, State.Pers,
-                    std::move(traceId), slotSize));
+                    std::move(traceId), slotSize, bound, msg.AllocationPurpose));
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
             if (reason == EProcessWriteReason::INITIAL_PUT) {
@@ -737,22 +781,40 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             return false;
         }
 
-        void ProcessQueue(ui32 slotSize, bool success, const TActorContext &ctx) {
+        void ProcessQueue(ui32 slotSize, bool success, const TActorContext &ctx,
+                TAllocation refused = {TColor::BLACK, TPurpose::Recovery}) {
             auto& queue = State.WaitQueue[slotSize];
-            auto it = queue.begin();
             const auto reason = success
                 ? EProcessWriteReason::RECHECK
                 : EProcessWriteReason::OUT_OF_SPACE;
-            while (it != queue.end() && ProcessWrite(it->Item, ctx, it->Span.GetTraceId(), reason)) {
-                it->Span.EndOk();
-                ++it;
+            if (success) {
+                auto it = queue.begin();
+                while (it != queue.end() && ProcessWrite(it->Item, ctx, it->Span.GetTraceId(), reason, refused)) {
+                    it->Span.EndOk();
+                    ++it;
+                }
+                queue.erase(queue.begin(), it);
+                return;
             }
-            queue.erase(queue.begin(), it);
+
+            // A failed reservation belongs to one purpose/bound. Reject only
+            // requests covered by it. A request with another class starts a new
+            // allocator for the same slot size and remains queued.
+            while (!queue.empty()) {
+                auto& current = queue.front();
+                if (!ProcessWrite(current.Item, ctx, current.Span.GetTraceId(), reason, refused)) {
+                    // The first request of another class starts a new allocator;
+                    // leave it and the following requests queued behind it.
+                    break;
+                }
+                current.Span.EndOk();
+                queue.pop_front();
+            }
         }
 
         void FreeChunks(const TActorContext &ctx) {
             TVector<ui32> vec;
-            while (ui32 chunkId = State.Pers->Heap->RemoveChunk()) {
+            while (ui32 chunkId = State.Pers->RemoveChunk()) {
                 vec.push_back(chunkId);
             }
             if (!vec.empty()) {
@@ -878,11 +940,13 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
         void Handle(TEvHullHugeChunkAllocated::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "THullHugeKeeper:" " TEvHullHugeChunkAllocated: %s", msg->ToString().data()));
-            const size_t numErased = AllocatingChunkPerSlotSize.erase(msg->SlotSize);
-            Y_VERIFY_S(numErased == 1, HugeKeeperCtx->VCtx->VDiskLogPrefix);
+            const auto it = AllocatingChunkPerSlotSize.find(msg->SlotSize);
+            Y_VERIFY_S(it != AllocatingChunkPerSlotSize.end(), HugeKeeperCtx->VCtx->VDiskLogPrefix);
+            const TAllocation allocation = it->second;
+            AllocatingChunkPerSlotSize.erase(it);
             ActiveActors.Erase(ev->Sender);
-            ProcessAllocateSlotTasks(msg->SlotSize, ctx);
-            ProcessQueue(msg->SlotSize, msg->Success, ctx);
+            ProcessAllocateSlotTasks(msg->SlotSize, ctx, msg->Success, allocation);
+            ProcessQueue(msg->SlotSize, msg->Success, ctx, allocation);
         }
 
         void Handle(TEvHullFreeHugeSlots::TPtr &ev, const TActorContext &ctx) {
@@ -895,14 +959,23 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "THullHugeKeeper: TEvHullFreeHugeSlots: %s", msg->ToString().data()));
 
             for (const auto &x : msg->HugeBlobs) {
-                State.Pers->Heap->Free(x);
-                State.Pers->DeleteChunkSize(State.Pers->Heap->ConvertDiskPartToHugeSlot(x));
+                const bool isStripe = State.Pers->IsStripeAddr(x);
+                NHuge::THugeSlot hugeSlot = State.Pers->ConvertDiskPart(x);
+                State.Pers->FreeBlob(x);
+                if (!isStripe) {
+                    State.Pers->DeleteChunkSize(hugeSlot);
+                }
                 YDB_LOG_DEBUG_CTX_COMP(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "THullHugeKeeper: TEvHullFreeHugeSlots: one slot: addr# %s", x.ToString().data()));
                 ++State.ItemsAfterCommit;
             }
 
             for (const TDiskPart& x : msg->AllocatedBlobs) {
-                const bool deleted = State.Pers->DeleteSlotInFlight(State.Pers->Heap->ConvertDiskPartToHugeSlot(x));
+                if (State.Pers->IsStripeAddr(x)) {
+                    // an SST reserves a worst-case stripe and commits only the extent it filled, so the rest of the
+                    // reservation goes back to the heap as part of the very commit that makes the stripe durable
+                    State.Pers->ShrinkSlotInFlight(x);
+                }
+                const bool deleted = State.Pers->DeleteSlotInFlight(State.Pers->ConvertDiskPart(x));
                 Y_VERIFY_S(deleted, HugeKeeperCtx->VCtx->VDiskLogPrefix);
             }
 
@@ -920,7 +993,11 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                     checkAndSet(State.Pers->LogPos.LogoBlobsDbSlotDelLsn);
                     break;
                 case TLogSignature::SignatureHullBlocksDB:
+                    checkAndSet(State.Pers->LogPos.BlocksDbSlotDelLsn);
+                    break;
                 case TLogSignature::SignatureHullBarriersDB:
+                    checkAndSet(State.Pers->LogPos.BarriersDbSlotDelLsn);
+                    break;
                 default:
                     Y_ABORT("Impossible case");
             }
@@ -961,7 +1038,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             State.ItemsAfterCommit += msg->SlotIsUsed;
             // manage allocated slots
             const TDiskPart &hugeBlob = msg->HugeBlob;
-            NHuge::THugeSlot hugeSlot(State.Pers->Heap->ConvertDiskPartToHugeSlot(hugeBlob));
+            const bool isStripe = State.Pers->IsStripeAddr(hugeBlob);
+            NHuge::THugeSlot hugeSlot(State.Pers->ConvertDiskPart(hugeBlob));
             const bool deleted = State.Pers->DeleteSlotInFlight(hugeSlot);
             Y_VERIFY_S(deleted, HugeKeeperCtx->VCtx->VDiskLogPrefix);
             // depending on SlotIsUsed...
@@ -972,9 +1050,11 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 State.Pers->LogPos.HugeBlobLoggedLsn = msg->RecLsn;
             } else {
                 // ...free slot
-                State.Pers->Heap->Free(hugeBlob);
+                State.Pers->FreeBlob(hugeBlob);
                 // and remove chunk size record
-                State.Pers->DeleteChunkSize(hugeSlot);
+                if (!isStripe) {
+                    State.Pers->DeleteChunkSize(hugeSlot);
+                }
             }
 
             size_t numErased = WritesInFlight.erase(msg->WriteId);
@@ -1000,7 +1080,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             TDefragChunks lockedChunks;
             lockedChunks.reserve(msg->Chunks.size());
             for (const auto &d : msg->Chunks) {
-                bool locked = State.Pers->Heap->LockChunkForAllocation(d.ChunkId, d.SlotSize);
+                bool locked = State.Pers->LockChunkForAllocation(d.ChunkId, d.SlotSize);
                 if (locked) {
                     lockedChunks.push_back(d);
                 }
@@ -1019,15 +1099,24 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "THullHugeKeeper: TEvHugeStat"));
 
             auto res = std::make_unique<TEvHugeStatResult>();
-            res->Stat = State.Pers->Heap->GetStat();
+            res->Stat = State.Pers->GetHeapStat();
             UpdateGlobalFragmentationStat(res->Stat);
             ctx.Send(ev->Sender, res.release());
+        }
+
+        void Handle(TEvHugeSpaceStat::TPtr &ev, const TActorContext &ctx) {
+            auto res = std::make_unique<TEvHugeSpaceStatResult>();
+            res->Stat = State.Pers->Heap->GetSpaceStat();
+            if (State.Pers->StripeHeap) {
+                res->Stat.StripeHeap = State.Pers->StripeHeap->GetSpaceStat();
+            }
+            ctx.Send(ev->Sender, res.release(), 0, ev->Cookie);
         }
 
         void Handle(TEvHugeShredNotify::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
             std::ranges::sort(msg->ChunksToShred);
-            State.Pers->Heap->ShredNotify(msg->ChunksToShred);
+            State.Pers->ShredNotify(msg->ChunksToShred);
             FreeChunks(ctx);
 
             auto handle = std::make_unique<IEventHandle>(TEvBlobStorage::EvHugeShredNotifyResult, 0, ev->Sender, SelfId(),
@@ -1041,12 +1130,20 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
         void Handle(TEvListChunks::TPtr ev, const TActorContext& ctx) {
             auto response = std::make_unique<TEvListChunksResult>();
-            State.Pers->Heap->ListChunks(ev->Get()->ChunksOfInterest, response->ChunksHuge);
+            State.Pers->ListChunks(ev->Get()->ChunksOfInterest, response->ChunksHuge);
             ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
         }
 
         void HandleQueryForbiddenChunks(TAutoPtr<IEventHandle> ev, const TActorContext& ctx) {
-            ctx.Send(ev->Sender, new TEvHugeForbiddenChunks(State.Pers->Heap->GetForbiddenChunks()), 0, ev->Cookie);
+            ctx.Send(ev->Sender, new TEvHugeForbiddenChunks(State.Pers->GetForbiddenChunks()), 0, ev->Cookie);
+        }
+
+        void HandleQueryStripeChunks(TAutoPtr<IEventHandle> ev, const TActorContext& ctx) {
+            THashSet<TChunkIdx> chunks;
+            if (State.Pers->StripeHeap) {
+                State.Pers->StripeHeap->CollectChunkIds(chunks);
+            }
+            ctx.Send(ev->Sender, new TEvHugeStripeChunks(std::move(chunks)), 0, ev->Cookie);
         }
 
         void Handle(NPDisk::TEvCutLog::TPtr &ev, const TActorContext &ctx) {
@@ -1117,8 +1214,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 Y_DEBUG_ABORT_UNLESS(result.Empty());
 
                 NHuge::THugeSlot hugeSlot;
-                ui32 slotSize;
-                if (State.Pers->Heap->Allocate(task->BlobSizes[index], &hugeSlot, &slotSize)) {
+                ui32 slotSize = 0;
+                if (State.Pers->AllocateBlob(task->BlobSizes[index], &hugeSlot, &slotSize)) {
                     State.Pers->AddSlotInFlight(hugeSlot);
                     State.Pers->AddChunkSize(hugeSlot);
                     result = hugeSlot.GetDiskPart();
@@ -1127,9 +1224,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                         pending->Reset(index);
                     }
                 } else {
-                    if (AllocatingChunkPerSlotSize.insert(slotSize).second) {
+                    if (AllocatingChunkPerSlotSize.emplace(slotSize, TAllocation{TColor::BLACK, TPurpose::Maintenance}).second) {
                         auto aid = ctx.RegisterWithSameMailbox(new THullHugeBlobChunkAllocator(HugeKeeperCtx,
-                            State.Pers, {}, slotSize));
+                            State.Pers, {}, slotSize, TColor::BLACK, TPurpose::Maintenance));
                         ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                     }
                     done = false;
@@ -1158,19 +1255,55 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 }
             }
 
-            if (done) {
+            if (done && std::all_of(task->Result.begin(), task->Result.end(), [](const TDiskPart& p) { return !p.Empty(); })) {
+                std::vector<bool> isStripe;
+                isStripe.reserve(task->Result.size());
+                for (const TDiskPart& p : task->Result) {
+                    isStripe.push_back(State.Pers->IsStripeAddr(p));
+                }
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLHUGE, "THullHugeKeeper TryToFulfillTask",
                     {"VDiskLogPrefix", HugeKeeperCtx->VCtx->VDiskLogPrefix},
                     {"TEvHugeAllocateSlotsResult", FormatList(task->Result)});
-                Send(task->Sender, new TEvHugeAllocateSlotsResult(std::move(task->Result)), 0, task->Cookie);
+                Send(task->Sender, new TEvHugeAllocateSlotsResult(std::move(task->Result), std::move(isStripe)), 0,
+                    task->Cookie);
             }
         }
 
-        void ProcessAllocateSlotTasks(ui32 slotSize, const TActorContext& ctx) {
+        void ProcessAllocateSlotTasks(ui32 slotSize, const TActorContext& ctx, bool success, const TAllocation& allocation) {
+            // Compaction asks for its slots as maintenance at BLACK. A refusal of anything stricter -- a USER put that
+            // started the allocator these tasks queued behind -- says nothing about them: they try again, which starts
+            // an allocator of their own.
+            const bool refused = !success && Covers(allocation, TColor::BLACK, TPurpose::Maintenance);
             auto it = SlotSizeToTask.lower_bound(std::make_tuple(slotSize, nullptr));
             while (it != SlotSizeToTask.end() && std::get<0>(*it) == slotSize) {
                 auto node = SlotSizeToTask.extract(it++);
-                TryToFulfillTask(std::get<1>(node.value()), slotSize, ctx);
+                const auto task = std::get<1>(node.value());
+                if (!refused) {
+                    // A task that has to wait again goes back under this slot size, ahead of `it`.
+                    TryToFulfillTask(task, slotSize, ctx);
+                } else {
+                    // A task may hold slots of several sizes. Remove every
+                    // pending entry before releasing any of its partial result.
+                    for (const auto& [size, pending] : task->Pending) {
+                        Y_UNUSED(pending);
+                        SlotSizeToTask.erase(std::make_tuple(size, task));
+                    }
+                    for (const auto& p : task->Result) {
+                        if (!p.Empty()) {
+                            const auto slot = State.Pers->ResolveSlotInFlight(p);
+                            const bool isStripe = State.Pers->IsStripeAddr(p);
+                            State.Pers->FreeBlob(slot.GetDiskPart());
+                            if (!isStripe) {
+                                State.Pers->DeleteChunkSize(slot);
+                            }
+                            Y_VERIFY_S(State.Pers->DeleteSlotInFlight(slot), HugeKeeperCtx->VCtx->VDiskLogPrefix);
+                        }
+                    }
+                    Send(task->Sender, new TEvHugeAllocateSlotsResult(NKikimrProto::OUT_OF_SPACE), 0, task->Cookie);
+                    // Removing the task's other sizes may have invalidated it.
+                    it = SlotSizeToTask.lower_bound(std::make_tuple(slotSize, nullptr));
+                    FreeChunks(ctx);
+                }
             }
         }
 
@@ -1181,12 +1314,20 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             TryToFulfillTask(std::make_shared<TAllocateSlotsTask>(ev), 0, ctx);
         }
 
-        void Handle(TEvHugeDropAllocatedSlots::TPtr ev, const TActorContext& /*ctx*/) {
+        void Handle(TEvHugeDropAllocatedSlots::TPtr ev, const TActorContext& ctx) {
             for (const auto& p : ev->Get()->Locations) {
-                State.Pers->Heap->Free(p);
-                const bool deleted = State.Pers->DeleteSlotInFlight(State.Pers->Heap->ConvertDiskPartToHugeSlot(p));
+                // the caller reports what it meant to use, which for an abandoned SST stripe can be less than what was
+                // reserved; the whole reservation has to be released here
+                const NHuge::THugeSlot hugeSlot = State.Pers->ResolveSlotInFlight(p);
+                const bool isStripe = State.Pers->IsStripeAddr(p);
+                State.Pers->FreeBlob(hugeSlot.GetDiskPart());
+                if (!isStripe) {
+                    State.Pers->DeleteChunkSize(hugeSlot);
+                }
+                const bool deleted = State.Pers->DeleteSlotInFlight(hugeSlot);
                 Y_VERIFY_S(deleted, HugeKeeperCtx->VCtx->VDiskLogPrefix);
             }
+            FreeChunks(ctx);
         }
 
         //////////// Event Handlers ////////////////////////////////////
@@ -1206,9 +1347,11 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 HFunc(TEvHugePreCompact, Handle)
                 HFunc(TEvHugeLockChunks, Handle)
                 HFunc(TEvHugeStat, Handle)
+                HFunc(TEvHugeSpaceStat, Handle)
                 HFunc(TEvHugeShredNotify, Handle)
                 HFunc(TEvListChunks, Handle)
                 FFunc(TEvBlobStorage::EvHugeQueryForbiddenChunks, HandleQueryForbiddenChunks)
+                FFunc(TEvBlobStorage::EvHugeQueryStripeChunks, HandleQueryStripeChunks)
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(NMon::TEvHttpInfo, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)
@@ -1235,7 +1378,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
         void Bootstrap(const TActorContext &ctx) {
             // update global fragmentation stat
-            UpdateGlobalFragmentationStat(State.Pers->Heap->GetStat());
+            UpdateGlobalFragmentationStat(State.Pers->GetHeapStat());
             // run actor that periodically gather huge stat
             auto aid = ctx.Register(new THullHugeStatGather(HugeKeeperCtx, SelfId()));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);

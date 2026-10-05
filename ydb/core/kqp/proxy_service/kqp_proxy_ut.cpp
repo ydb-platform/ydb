@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service_impl.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
+#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/testlib/test_client.h>
@@ -644,7 +644,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
     }
 
     Y_UNIT_TEST(DatabasesCacheForServerless) {
-        auto ydb = NWorkload::TYdbSetupSettings()
+        auto ydb = NWorkloadManager::TYdbSetupSettings()
             .CreateSampleTenants(true)
             .Create();
 

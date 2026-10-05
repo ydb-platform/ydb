@@ -1,0 +1,4 @@
+.model flat
+.code
+
+End

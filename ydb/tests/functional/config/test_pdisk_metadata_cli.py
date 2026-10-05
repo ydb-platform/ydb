@@ -47,6 +47,38 @@ class TestPDiskMetadata(object):
                 logging.debug("node %s distconf json: %s", node_id, body)
             assert_that(ok)
 
+    def check_clean_metadata(self, pdisk_path):
+        clean = run_cli([
+            "admin", "blobstorage", "disk", "metadata", "clean", pdisk_path,
+        ])
+        assert_that("PDisk metadata cleaned" in clean.stdout)
+
+        read = run_cli([
+            "admin", "blobstorage", "disk", "metadata", "read", pdisk_path,
+        ])
+        assert_that(read.returncode == 0)
+        assert_that("No PDisk metadata found" in read.stdout)
+
+        read_json = run_cli([
+            "admin", "blobstorage", "disk", "metadata", "read", pdisk_path, "--json",
+        ])
+        assert_that(json.loads(read_json.stdout) == {})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            yaml_path = os.path.join(tmp, "committed.yaml")
+            read_yaml = run_cli([
+                "admin", "blobstorage", "disk", "metadata", "read", pdisk_path,
+                "--committed-yaml", yaml_path,
+            ], allow_nonzero=True)
+            assert_that(read_yaml.returncode != 0)
+            assert_that("requested YAML files were not written" in (read_yaml.stdout + read_yaml.stderr))
+            assert_that(not os.path.exists(yaml_path))
+
+        clean_again = run_cli([
+            "admin", "blobstorage", "disk", "metadata", "clean", pdisk_path,
+        ])
+        assert_that("PDisk metadata cleaned" in clean_again.stdout)
+
     @classmethod
     def setup_class(cls):
         cfg = KikimrConfigGenerator(
@@ -148,6 +180,7 @@ class TestPDiskMetadata(object):
                 ], allow_nonzero=True)
                 assert_that(res.returncode != 0)
                 assert_that(("validation failed" in res.stdout) or ("validation failed" in res.stderr))
+                self.check_clean_metadata(pdisk_path_n1)
         finally:
             for n in self.cluster.nodes.values():
                 n.start()

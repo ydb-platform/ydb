@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2023.0.0)
+VERSION(2023.1.0)
 
-ORIGINAL_SOURCE(https://github.com/uxlfoundation/oneTBB/archive/v2023.0.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/uxlfoundation/oneTBB/archive/v2023.1.0.tar.gz)
 
 LICENSE(Apache-2.0)
 
@@ -39,6 +39,7 @@ SRCS(
     src/tbb/market.cpp
     src/tbb/misc.cpp
     src/tbb/misc_ex.cpp
+    src/tbb/numa_allocation.cpp
     src/tbb/observer_proxy.cpp
     src/tbb/parallel_pipeline.cpp
     src/tbb/private_server.cpp

@@ -1,8 +1,9 @@
 #include "datashard_impl.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
-#include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -50,28 +51,31 @@ EExecutionStatus TTruncateUnit::Execute(
     const auto version = truncate.GetTableSchemaVersion();
     Y_ENSURE(version);
 
-    LOG_TRACE_S(actorCtx, NKikimrServices::TX_DATASHARD,
-            "TTruncateUnit::Execute. Changing SchemaVersion. TableId = " << pathId.LocalPathId << "; "
-           << " New SchemaVersion = " << version << "; "
-           << " TxId = " << op->GetTxId() << ".");
+    YDB_LOG_TRACE_CTX(actorCtx, "TTruncateUnit::Execute: changing schema version",
+        {"localPathId", pathId.LocalPathId},
+        {"version", version},
+        {"txId", op->GetTxId()});
 
     auto tableId = pathId.LocalPathId;
     Y_ENSURE(DataShard.GetUserTables().contains(tableId));
     auto localTid = DataShard.GetUserTables().at(tableId)->LocalTid;
 
-    LOG_DEBUG_S(actorCtx, NKikimrServices::TX_DATASHARD,
-               "TTruncateUnit::Execute - About to TRUNCATE TABLE at " << DataShard.TabletID()
-               << " tableId# " << tableId << " localTid# " << localTid << " TxId = " << op->GetTxId());
+    YDB_LOG_DEBUG_CTX(actorCtx, "TTruncateUnit::Execute: about to truncate table",
+        {"tabletId", DataShard.TabletID()},
+        {"tableId", tableId},
+        {"localTid", localTid},
+        {"txId", op->GetTxId()});
 
-    // break locks
     TDataShardLocksDb locksDb(DataShard, txc);
 
-    TSetupSysLocks guardLocks(op, DataShard, &locksDb);
-    const TTableId fullTableId(pathId.OwnerId, tableId);
-    DataShard.SysLocksTable().BreakAllLocks(fullTableId);
     DataShard.GetConflictsCache().GetTableCache(localTid).RemoveAllUncommittedWrites(txc.DB);
 
     txc.DB.Truncate(localTid);
+
+    // Truncate drops every row version, so nothing below this operation can be read any more.
+    // Advancing the low watermark keeps a stale snapshot read failing loudly instead of silently
+    // returning no rows.
+    DataShard.GetSnapshotManager().AdvanceWatermark(txc.DB, DataShard.GetMvccVersion(op.Get()));
 
     auto userTable = DataShard.AlterTableSchemaVersion(actorCtx, txc, pathId, version);
 
@@ -93,7 +97,8 @@ EExecutionStatus TTruncateUnit::Execute(
     userTable->StatsUpdateInProgress = false;
     userTable->StatsNeedUpdate = true;
 
-    DataShard.AddUserTable(pathId, userTable, &locksDb);
+    // Passing locksDb invalidates every lock of this shard, like any other schema change does.
+    DataShard.ReplaceUserTable(pathId, userTable, locksDb);
     if (userTable->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, actorCtx);
     }
@@ -102,12 +107,9 @@ EExecutionStatus TTruncateUnit::Execute(
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-    DataShard.SysLocksTable().ApplyLocks();
-    DataShard.SubscribeNewLocks(actorCtx);
-
-    LOG_DEBUG_S(actorCtx, NKikimrServices::TX_DATASHARD,
-               "TTruncateUnit::Execute - Finished successfully. TableId = " << tableId
-               << " TxId = " << op->GetTxId() << " - Operation COMPLETED");
+    YDB_LOG_DEBUG_CTX(actorCtx, "TTruncateUnit::Execute: finished successfully",
+        {"tableId", tableId},
+        {"txId", op->GetTxId()});
 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }
@@ -123,3 +125,7 @@ THolder<TExecutionUnit> CreateTruncateUnit(TDataShard &dataShard, TPipeline &pip
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

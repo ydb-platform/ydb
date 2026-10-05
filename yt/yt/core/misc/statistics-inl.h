@@ -84,8 +84,8 @@ std::pair<typename TSummaryMap::iterator, bool> CheckedEmplaceStatistic(
         }
 
         THROW_ERROR_EXCEPTION("Statistic path cannot be a prefix of another statistic path")
-            << TErrorAttribute("prefix_path", prefixPath)
-            << TErrorAttribute("contained_in_path", conflictPath);
+            .With("prefix_path", prefixPath)
+            .With("contained_in_path", conflictPath);
     }
     auto emplacedIt = existingStatistics.emplace_hint(hintIt, path, std::forward<Ts>(args)...);
     return {emplacedIt, true};
@@ -143,11 +143,17 @@ const typename TTaggedStatistics<TTags>::TSummaryMap& TTaggedStatistics<TTags>::
 }
 
 template <class TTags>
-void TTaggedStatistics<TTags>::Persist(const TStreamPersistenceContext& context)
+template <class C>
+void TTaggedStatistics<TTags>::Save(C& context) const
 {
-    using NYT::Persist;
+    NYT::Save(context, Data_);
+}
 
-    Persist(context, Data_);
+template <class TTags>
+template <class C>
+void TTaggedStatistics<TTags>::Load(C& context)
+{
+    NYT::Load(context, Data_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -31,7 +31,7 @@ TEST(TErrorTest, SerializationDepthLimit)
     constexpr int Depth = 1000;
     auto error = TError(TErrorCode(Depth), "error");
     for (int i = Depth - 1; i >= 0; --i) {
-        error = TError(TErrorCode(i), "error") << std::move(error);
+        error = TError(TErrorCode(i), "error").With(std::move(error));
     }
 
     // Use intermediate conversion to test YSON parser depth limit simultaneously.
@@ -70,7 +70,7 @@ TEST(TErrorTest, DoNotDuplicateOriginalErrorDepth)
 
     auto error = TError(TErrorCode(Depth), "error");
     for (int i = Depth; i >= 2; --i) {
-        error = TError(TErrorCode(i), "error") << std::move(error);
+        error = TError(TErrorCode(i), "error").With(std::move(error));
     }
 
     auto errorYson = ConvertToYsonString(error);
@@ -78,7 +78,7 @@ TEST(TErrorTest, DoNotDuplicateOriginalErrorDepth)
 
     // Due to reserialization, error already contains "original_error_depth" attribute.
     // It should not be duplicated after the next serialization.
-    error = TError(TErrorCode(1), "error") << std::move(error);
+    error = TError(TErrorCode(1), "error").With(std::move(error));
 
     // Use intermediate conversion to test YSON parser depth limit simultaneously.
     errorYson = ConvertToYsonString(error);

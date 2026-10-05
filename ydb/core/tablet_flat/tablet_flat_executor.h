@@ -507,6 +507,7 @@ namespace NFlatExecutorSetup {
         virtual void CompletedLoansChanged(const TActorContext &ctx); // would be no-op in default implementation
         virtual void CompactionComplete(ui32 tableId, const TActorContext &ctx); // would be no-op in default implementation
         virtual void VacuumComplete(ui64 vacuumGeneration, const TActorContext& ctx);
+        virtual void MoveDataCompleted(const TActorContext& ctx);
         virtual void BackupSnapshotComplete(const TActorContext &ctx); // would be no-op in default implementation
 
         virtual void ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
@@ -676,7 +677,8 @@ namespace NFlatExecutorSetup {
 
         virtual void StartVacuum(TVacuumTag tag) = 0;
         virtual void VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) = 0;
-        virtual void MoveData(TEvTablet::TEvMoveData::TPtr&) = 0;
+        virtual void MoveData(TEvTablet::TEvMoveData::TPtr&) = 0; // TEvMoveData is handled by basic executor
+        virtual void StartMoveDataVacuumFromOwner() = 0; // TEvMoveData is handled by tablet
 
         ui32 Generation() const { return Generation0; }
         ui32 Step() const { return Step0; }

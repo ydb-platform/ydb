@@ -65,4 +65,5 @@ public:
     double GetPercentile(double percentile);
     double GetRank(double value);
     i64 GetCount() const;
+    i64 ComputeWeight() const;
 };

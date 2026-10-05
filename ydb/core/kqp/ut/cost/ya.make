@@ -13,6 +13,7 @@ ENDIF()
 
 SRCS(
     kqp_cost_ut.cpp
+    kqp_affected_rows_pg_ut.cpp
 )
 
 PEERDIR(

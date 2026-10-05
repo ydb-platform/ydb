@@ -9,6 +9,8 @@
 #include "opentelemetry/context/context.h"
 #include "opentelemetry/logs/severity.h"
 #include "opentelemetry/nostd/string_view.h"
+#include "opentelemetry/nostd/variant.h"
+#include "opentelemetry/trace/span_context.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -63,12 +65,13 @@ public:
    * The default implementation is permissive and returns true.
    */
   bool Enabled(
-      const opentelemetry::context::Context &context,
+      const opentelemetry::nostd::variant<opentelemetry::trace::SpanContext,
+                                          opentelemetry::context::Context> &context_or_span,
       const opentelemetry::sdk::instrumentationscope::InstrumentationScope &instrumentation_scope,
       opentelemetry::logs::Severity severity,
       opentelemetry::nostd::string_view event_name = {}) const noexcept
   {
-    return EnabledImplementation(context, instrumentation_scope, severity, event_name);
+    return EnabledImplementation(context_or_span, instrumentation_scope, severity, event_name);
   }
 
   /**
@@ -89,9 +92,18 @@ public:
   virtual bool Shutdown(
       std::chrono::microseconds timeout = (std::chrono::microseconds::max)()) noexcept = 0;
 
+  /**
+   * Returns true if this processor's EnabledImplementation does any custom
+   * filtering. The default returns true (conservative — assume any subclass
+   * might filter), so the SDK Logger consults the full Enabled chain by
+   * default.
+   */
+  virtual bool HasEnabledFilter() const noexcept { return true; }
+
 protected:
   virtual bool EnabledImplementation(
-      const opentelemetry::context::Context & /*context*/,
+      const opentelemetry::nostd::variant<opentelemetry::trace::SpanContext,
+                                          opentelemetry::context::Context> & /*context_or_span*/,
       const opentelemetry::sdk::instrumentationscope::InstrumentationScope
           & /*instrumentation_scope*/,
       opentelemetry::logs::Severity /*severity*/,
@@ -99,6 +111,16 @@ protected:
   {
     return true;
   }
+
+public:
+  /**
+   * Returns true when records produced through this processor enforce LogRecord
+   * attribute limits (count and value length). The default returns false.
+   * Processors backed by an exporter delegate to the exporter; composite
+   * processors return true if any child does. The SDK Logger consults this once
+   * per context to decide whether to push limits onto each recordable.
+   */
+  virtual bool RecordableEnforcesLogRecordLimits() const noexcept { return false; }
 };
 }  // namespace logs
 }  // namespace sdk

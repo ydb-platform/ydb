@@ -82,8 +82,9 @@ void ExecuteBatchRead(
         }
 
         // NB: Must wait for all futures to become set to ensure all lambdas above have finished accessing the state.
-        auto results = WaitForWithStrategy(AllSet(std::move(batchFutures)), offloadParams->WaitForStrategy)
-            .ValueOrThrow();
+        auto resultsFuture = AllSet(std::move(batchFutures));
+        WaitUntilSet(resultsFuture.AsVoid(), {.Strategy = offloadParams->WaitForStrategy});
+        auto results = resultsFuture.GetOrCrash().ValueOrThrow();
         for (const auto& result : results) {
             result.ThrowOnError();
         }
@@ -174,13 +175,13 @@ void TVirtualMapBase::GetSelf(
         ? request->limit()
         : DefaultVirtualChildLimit;
 
-    context->SetRequestInfo("AttributeFilter: %v, Limit: %v",
-        attributeFilter,
-        limit);
+    context->AnnotateRequest()
+        .With("AttributeFilter", attributeFilter)
+        .With("Limit", limit);
 
     if (limit < 0) {
         THROW_ERROR_EXCEPTION("Limit is negative")
-            << TErrorAttribute("limit", limit);
+            .With("limit", limit);
     }
 
     auto keys = GetKeys(limit);
@@ -259,13 +260,13 @@ void TVirtualMapBase::ListSelf(
         ? request->limit()
         : DefaultVirtualChildLimit;
 
-    context->SetRequestInfo("AttributeFilter: %v, Limit: %v",
-        attributeFilter,
-        limit);
+    context->AnnotateRequest()
+        .With("AttributeFilter", attributeFilter)
+        .With("Limit", limit);
 
     if (limit < 0) {
         THROW_ERROR_EXCEPTION("Limit is negative")
-            << TErrorAttribute("limit", limit);
+            .With("limit", limit);
     }
 
     auto keys = GetKeys(limit);
@@ -317,7 +318,7 @@ void TVirtualMapBase::RemoveRecursive(
     TRspRemove* /*response*/,
     const TSupportsRemove::TCtxRemovePtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     NYPath::TTokenizer tokenizer(path);
     tokenizer.Advance();
@@ -501,9 +502,9 @@ void TVirtualListBase::GetSelf(
         ? request->limit()
         : DefaultVirtualChildLimit;
 
-    context->SetRequestInfo("AttributeFilter: %v, Limit: %v",
-        attributeFilter,
-        limit);
+    context->AnnotateRequest()
+        .With("AttributeFilter", attributeFilter)
+        .With("Limit", limit);
 
     i64 size = GetSize();
 

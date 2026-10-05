@@ -1,3 +1,5 @@
+#include <ydb/core/base/fulltext.h>
+
 #include "kqp_indexes_json_ut_common.h"
 
 namespace NKikimr::NKqp {
@@ -20,6 +22,31 @@ TKikimrRunner Kikimr(bool enableJsonIndex, bool enableJsonIndexAutoSelect) {
     return TKikimrRunner(settings);
 }
 
+TKikimrRunner KikimrJson(bool enableJsonIndexAutoSelect, bool compact) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableJsonIndex(true);
+    featureFlags.SetEnableJsonIndexAutoSelect(enableJsonIndexAutoSelect);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    if (compact) {
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+    }
+    return TKikimrRunner(settings);
+}
+
+TKikimrRunner KikimrJsonPrefix(bool enableJsonIndexAutoSelect, bool compact) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableJsonIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    featureFlags.SetEnableJsonIndexAutoSelect(enableJsonIndexAutoSelect);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    if (compact) {
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+    }
+    return TKikimrRunner(settings);
+}
+
 void CreateTestTable(TQueryClient& db, const std::string& type, bool withIndex) {
     const auto query = std::format(R"(
         CREATE TABLE TestTable (
@@ -32,15 +59,6 @@ void CreateTestTable(TQueryClient& db, const std::string& type, bool withIndex) 
     )", type, withIndex ? ", INDEX `json_idx` GLOBAL USING json ON (Text)" : "");
     auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-}
-
-TResultSet ReadIndex(TQueryClient& db, const char* table) {
-    const auto query = std::format(R"(
-        SELECT * FROM `TestTable/json_idx/{}`;
-    )", table);
-    auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    return result.GetResultSet(0);
 }
 
 void TestAddJsonIndex(const std::string& type, bool nullable) {
@@ -89,22 +107,15 @@ void TestAddJsonIndex(const std::string& type, bool nullable) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
-    CompareYson(R"([
-        [[10u];""];
-        [[11u];""];
-        [[12u];""];
-        [[13u];""];
-        [[14u];""];
-        [[15u];""];
-        [[16u];""];
-        [[13u];"\0\0"];
-        [[15u];"\0\0"];
-        [[12u];"\0\1"];
-        [[14u];"\0\2"];
-        [[15u];"\0\3item 1"];
+    CompareYsonUnordered(R"([
         [[10u];"\0\3literal string"];
-        [[15u];"\0\4\0\0\0\0\0\200F@"];
         [[11u];"\0\4\xB0rh\x91\xED|\xBF?"];
+        [[12u];"\0\1"];
+        [[13u];"\0\0"];
+        [[14u];"\0\2"];
+        [[15u];"\0\0"];
+        [[15u];"\0\3item 1"];
+        [[15u];"\0\4\0\0\0\0\0\200F@"];
         [[16u];"\3id"];
         [[16u];"\3id\0\4\0\0\0\0@\x87\xE4@"];
         [[16u];"\6brand"];
@@ -123,7 +134,7 @@ void TestAddJsonIndex(const std::string& type, bool nullable) {
         [[16u];"\6price\0\2"];
         [[16u];"\x0bpart_count"];
         [[16u];"\x0bpart_count\0\4\0\0\0\0\0\xE4\x95@"]
-    ])", FormatResultSetYson(ReadIndex(db)));
+    ])", FormatFulltextIndex(kikimr));
 }
 
 void FillTestTable(TQueryClient& db, const std::string& tableName, const std::string& jsonType) {
@@ -203,7 +214,55 @@ void ValidatePredicate(TQueryClient& db, const std::string& predicate, TParams p
     CompareYson(FormatResultSetYson(mainResult.GetResultSet(0)), FormatResultSetYson(indexResult.GetResultSet(0)));
 }
 
-void ValidateError(TQueryClient& db, const std::string& predicate, const std::string& errorMessage) {
+void ValidatePredicateKeys(TQueryClient& db, const std::string& predicate, const std::string& expected, TParams params) {
+    auto query = [&](const std::string& indexPart) {
+        return std::format(R"(
+            SELECT Key FROM TestTable VIEW {} WHERE {} ORDER BY Key;
+        )", indexPart, predicate);
+    };
+
+    auto mainResult = db.ExecuteQuery(query("PRIMARY KEY"), TTxControl::NoTx(), params).ExtractValueSync();
+    UNIT_ASSERT_C(mainResult.IsSuccess(),
+        "PRIMARY KEY query failed for predicate: " << predicate << ", issues: " << mainResult.GetIssues().ToString());
+
+    auto indexResult = db.ExecuteQuery(query("json_idx"), TTxControl::NoTx(), params).ExtractValueSync();
+    UNIT_ASSERT_C(indexResult.IsSuccess(),
+        "json_idx query failed for predicate: " << predicate << ", issues: " << indexResult.GetIssues().ToString());
+
+    CompareYson(TString(expected), FormatResultSetYson(mainResult.GetResultSet(0)));
+    CompareYson(TString(expected), FormatResultSetYson(indexResult.GetResultSet(0)));
+}
+
+void ValidatePredicateError(TQueryClient& db, const std::string& predicate, TParams params,
+    const std::string& errorMessage)
+{
+    static constexpr const char* table = "TestTable";
+    static constexpr const char* indexTable = "json_idx";
+
+    auto query = [&](const std::string& indexPart) {
+        return std::format(R"(
+            SELECT * FROM {} VIEW {} WHERE {} ORDER BY Key;
+        )", table, indexPart, predicate);
+    };
+
+    auto mainResult = db.ExecuteQuery(query("PRIMARY KEY"), TTxControl::NoTx(), params).ExtractValueSync();
+    auto indexResult = db.ExecuteQuery(query(indexTable), TTxControl::NoTx(), params).ExtractValueSync();
+
+    UNIT_ASSERT_C(!mainResult.IsSuccess(), "PRIMARY KEY query unexpectedly succeeded for predicate: " << predicate);
+    UNIT_ASSERT_C(!indexResult.IsSuccess(), "json_idx query unexpectedly succeeded for predicate: " << predicate);
+    UNIT_ASSERT_VALUES_EQUAL_C(mainResult.GetStatus(), indexResult.GetStatus(), "Different statuses for predicate: " << predicate
+        << ", primary issues: " << mainResult.GetIssues().ToString()
+        << ", index issues: " << indexResult.GetIssues().ToString());
+
+    if (!errorMessage.empty()) {
+        UNIT_ASSERT_STRING_CONTAINS_C(mainResult.GetIssues().ToString(), errorMessage, "PRIMARY KEY query, predicate = " << predicate);
+        UNIT_ASSERT_STRING_CONTAINS_C(indexResult.GetIssues().ToString(), errorMessage, "json_idx query, predicate = " << predicate);
+    }
+}
+
+void ValidateError(TQueryClient& db, const std::string& predicate, const std::string& errorMessage,
+    const std::string& unexpectedErrorMessage)
+{
     static constexpr const char* table = "TestTable";
     static constexpr const char* indexTable = "json_idx";
 
@@ -216,6 +275,10 @@ void ValidateError(TQueryClient& db, const std::string& predicate, const std::st
     auto result = db.ExecuteQuery(query(indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(!result.IsSuccess(), "Predicate: " + predicate + ", issues: " + result.GetIssues().ToString());
     UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), errorMessage, "for predicate = " << predicate);
+    if (!unexpectedErrorMessage.empty()) {
+        UNIT_ASSERT_C(!result.GetIssues().ToString().contains(unexpectedErrorMessage),
+            "Unexpected error message for predicate = " << predicate << ": " << unexpectedErrorMessage);
+    }
 }
 
 void ValidateError(TQueryClient& db, const std::string& predicate, TParams params, const std::string& errorMessage) {
@@ -538,16 +601,59 @@ void TestJsonCorpus(TTestJsonCorpusOptions tOpts, TPredicateBuilderOptions pOpts
 
     size_t okCount = 0;
     size_t errCount = 0;
+    std::array<bool, kJsonCorpusNumShapes> jsonExistsParameterShapes = {};
+    std::array<bool, kJsonCorpusNumShapes> jsonValueParameterShapes = {};
+    size_t jsonParameterCompositionCount = 0;
 
     auto predicates = TPredicateBuilder().BuildBatch(corpus, tOpts.IsStrict, tOpts.MaxPredicates, tOpts.Seed, pOpts);
     for (const auto& p : predicates) {
+        if (p.JsonParameterShape) {
+            const size_t shape = static_cast<size_t>(*p.JsonParameterShape);
+            UNIT_ASSERT_C(shape < kJsonCorpusNumShapes, "Invalid Json parameter shape metadata");
+            if (p.JsonParameterFunction == EJsonParameterFunction::JsonExists) {
+                jsonExistsParameterShapes[shape] = true;
+            } else if (p.JsonParameterFunction == EJsonParameterFunction::JsonValue) {
+                jsonValueParameterShapes[shape] = true;
+            } else {
+                UNIT_FAIL("Json parameter shape has no function-family metadata");
+            }
+        }
+        jsonParameterCompositionCount += p.IsJsonParameterComposition;
+
         const auto sqlMain = std::format("SELECT Key FROM TestTable VIEW PRIMARY KEY WHERE {} ORDER BY Key", p.Sql);
         const auto sqlIndex = std::format("SELECT Key FROM TestTable VIEW json_idx WHERE {} ORDER BY Key", p.Sql);
 
         auto idxResult = execQ(sqlIndex, p.Params);
         auto mainResult = execQ(sqlMain, p.Params);
 
-        if (p.ExpectExtractError) {
+        if (p.ExpectBothPathError) {
+            UNIT_ASSERT_C(!idxResult.IsSuccess(), "Expected INDEX query error for predicate: " << p.Sql);
+            UNIT_ASSERT_C(!mainResult.IsSuccess(), "Expected MAIN query error for predicate: " << p.Sql);
+            if (p.ExpectedIndexErrorSubstr.empty()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(idxResult.GetStatus(), mainResult.GetStatus(), "Different error statuses for predicate: " << p.Sql
+                    << ", index err: " << idxResult.GetIssues().ToString()
+                    << ", main err: " << mainResult.GetIssues().ToString());
+            }
+            if (!p.ExpectedBothPathErrorSubstr.empty()) {
+                UNIT_ASSERT_STRING_CONTAINS_C(mainResult.GetIssues().ToString(), p.ExpectedBothPathErrorSubstr, "MAIN query, predicate: " << p.Sql);
+            }
+            const auto& expectedIndexError = p.ExpectedIndexErrorSubstr.empty()
+                ? p.ExpectedBothPathErrorSubstr
+                : p.ExpectedIndexErrorSubstr;
+            if (!expectedIndexError.empty()) {
+                UNIT_ASSERT_STRING_CONTAINS_C(idxResult.GetIssues().ToString(), expectedIndexError, "INDEX query, predicate: " << p.Sql);
+            }
+            ++errCount;
+
+            Cerr << p.Sql << ", both err" << Endl;
+        } else if (!idxResult.IsSuccess() && idxResult.GetIssues().ToString().contains(
+            "JSON index cannot be used: full-range search cannot be performed using full-text search"))
+        {
+            UNIT_ASSERT_C(mainResult.IsSuccess(), "Main query failed for predicate: " << p.Sql << " err: " << mainResult.GetIssues().ToString());
+            ++errCount;
+
+            Cerr << p.Sql << ", full-range err" << Endl;
+        } else if (p.ExpectExtractError) {
             UNIT_ASSERT_C(!idxResult.IsSuccess(), "Expected extract error for predicate: " << p.Sql);
             UNIT_ASSERT_STRING_CONTAINS_C(idxResult.GetIssues().ToString(), p.ExpectedErrorSubstr, "for predicate: " << p.Sql);
             UNIT_ASSERT_C(mainResult.IsSuccess(), "Main query failed for predicate: " << p.Sql << " err: " << mainResult.GetIssues().ToString());
@@ -562,6 +668,25 @@ void TestJsonCorpus(TTestJsonCorpusOptions tOpts, TPredicateBuilderOptions pOpts
 
             Cerr << p.Sql << ", size: " << idxResult.GetResultSet(0).RowsCount() << Endl;
         }
+    }
+
+    if (pOpts.EnableJsonParameters) {
+        const size_t sqlNullShape = static_cast<size_t>(EJsonShape::SqlNull);
+        for (size_t shape = 0; shape < sqlNullShape; ++shape) {
+            if (pOpts.EnableJsonExists) {
+                UNIT_ASSERT_C(jsonExistsParameterShapes[shape], "Missing JSON_EXISTS Json parameter predicate for shape " << shape);
+            }
+            if (pOpts.EnableJsonValue) {
+                UNIT_ASSERT_C(jsonValueParameterShapes[shape], "Missing JSON_VALUE Json parameter predicate for shape " << shape);
+            }
+        }
+
+        const size_t expectedCompositions = static_cast<size_t>(pOpts.EnableAndCombinations)
+            + static_cast<size_t>(pOpts.EnableOrCombinations)
+            + static_cast<size_t>(pOpts.EnableAndCombinations && pOpts.EnableOrCombinations);
+        UNIT_ASSERT_C(jsonParameterCompositionCount >= expectedCompositions,
+            "Missing Json parameter compositions: expected at least " << expectedCompositions
+            << ", got " << jsonParameterCompositionCount);
     }
 
     Cerr << "JsonIndexCorpus: ok=" << okCount << " err=" << errCount << " total=" << predicates.size() << Endl;

@@ -24,11 +24,27 @@ DEFINE_REFCOUNTED_TYPE(TChaosCacheChannelConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TWatchedReplicationCardCacheConfig
+    : public TAsyncExpiringCacheConfig
+{
+    TWatchedReplicationCardCacheConfigPtr ApplyDynamic(
+        const TAsyncExpiringCacheDynamicConfigPtr& dynamicConfig) const;
+
+    REGISTER_YSON_STRUCT(TWatchedReplicationCardCacheConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TWatchedReplicationCardCacheConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TReplicationCardCacheConfig
     : public TAsyncExpiringCacheConfig
     , public TChaosCacheChannelConfig
 {
     bool EnableWatching;
+    TWatchedReplicationCardCacheConfigPtr WatchedCacheConfig;
 
     TReplicationCardCacheConfigPtr ApplyDynamic(const TReplicationCardCacheDynamicConfigPtr& dynamicConfig) const;
 
@@ -48,6 +64,7 @@ struct TReplicationCardCacheDynamicConfig
     : public TAsyncExpiringCacheDynamicConfig
 {
     std::optional<bool> EnableWatching;
+    TAsyncExpiringCacheDynamicConfigPtr WatchedCacheConfig;
 
     REGISTER_YSON_STRUCT(TReplicationCardCacheDynamicConfig);
 
@@ -58,5 +75,35 @@ DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NChaosClient
+struct TChaosLeaseCacheConfig
+    : public TAsyncExpiringCacheConfig
+    , public TChaosCacheChannelConfig
+{
+    bool EnableWatching;
 
+    TChaosLeaseCacheConfigPtr ApplyDynamic(const TChaosLeaseCacheDynamicConfigPtr& dynamicConfig) const;
+
+    REGISTER_YSON_STRUCT(TChaosLeaseCacheConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TChaosLeaseCacheConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TChaosLeaseCacheDynamicConfig
+    : public TAsyncExpiringCacheDynamicConfig
+{
+    std::optional<bool> EnableWatching;
+
+    REGISTER_YSON_STRUCT(TChaosLeaseCacheDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TChaosLeaseCacheDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NChaosClient

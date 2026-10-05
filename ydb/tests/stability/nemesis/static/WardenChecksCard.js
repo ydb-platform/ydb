@@ -11,6 +11,9 @@ export default {
     const showModal = ref(false)
     const modalCheck = ref(null)
     const activeTab = ref(0)  // Index of active tab (host)
+    const sinceLocal = ref('')
+    const untilLocal = ref('')
+    const hoursBack = ref(24)
 
     /** Worst status wins (for aggregating the same check across hosts). */
     function maxSafetyStatus(prev, next) {
@@ -224,7 +227,17 @@ export default {
     }
 
     function runChecks() {
-      emit('run-checks')
+      const payload = {}
+      if (sinceLocal.value) {
+        payload.since = new Date(sinceLocal.value).toISOString()
+      }
+      if (untilLocal.value) {
+        payload.until = new Date(untilLocal.value).toISOString()
+      }
+      if (!sinceLocal.value && !untilLocal.value && hoursBack.value) {
+        payload.hours_back = hoursBack.value
+      }
+      emit('run-checks', payload)
     }
 
     function formatHost(host) {
@@ -287,7 +300,10 @@ export default {
       getCheckProgress,
       getCheckProgressPercent,
       activeTab,
-      setActiveTab
+      setActiveTab,
+      sinceLocal,
+      untilLocal,
+      hoursBack
     }
   },
   template: `
@@ -299,14 +315,28 @@ export default {
             <span class="badge" :class="statusBadgeClass">{{ overallStatus }}</span>
             <span>{{ displayResults.completedAt }}</span>
           </h2>
-          <button 
-            class="btn btn-sm btn-primary" 
-            @click="runChecks"
-            :disabled="isLoading || overallStatus === 'running'"
-          >
-            <span v-if="isLoading || overallStatus === 'running'" class="loading loading-spinner loading-xs"></span>
-            {{ isLoading || overallStatus === 'running' ? 'Running...' : 'Run Checks' }}
-          </button>
+          <div class="flex items-end gap-2">
+            <label class="form-control">
+              <span class="label-text text-xs opacity-70">Since</span>
+              <input type="datetime-local" class="input input-bordered input-xs" v-model="sinceLocal" />
+            </label>
+            <label class="form-control">
+              <span class="label-text text-xs opacity-70">Until</span>
+              <input type="datetime-local" class="input input-bordered input-xs" v-model="untilLocal" />
+            </label>
+            <label class="form-control">
+              <span class="label-text text-xs opacity-70">Hours back</span>
+              <input type="number" min="1" class="input input-bordered input-xs w-16" v-model.number="hoursBack" />
+            </label>
+            <button 
+              class="btn btn-sm btn-primary" 
+              @click="runChecks"
+              :disabled="isLoading || overallStatus === 'running'"
+            >
+              <span v-if="isLoading || overallStatus === 'running'" class="loading loading-spinner loading-xs"></span>
+              {{ isLoading || overallStatus === 'running' ? 'Running...' : 'Run Checks' }}
+            </button>
+          </div>
         </div>
 
         <div v-if="displayResults.liveness.length === 0 && displayResults.safety.length === 0" class="text-center py-4 opacity-50">

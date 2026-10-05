@@ -578,26 +578,26 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
         auto [v1Type, v1Required] = CastToV1Type(columnType);
         if (protoSchema.has_required() && protoSchema.required() != v1Required) {
             THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"required\" do not match")
-                << TErrorAttribute("type_v3", ToString(*columnType))
-                << TErrorAttribute("required", protoSchema.required());
+                .With("type_v3", ToString(*columnType))
+                .With("required", protoSchema.required());
         }
         if (protoSchema.has_logical_type() && v1Type != FromProto<ESimpleLogicalValueType>(protoSchema.logical_type())) {
             THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"logical_type\" do not match")
-                << TErrorAttribute("type_v3", ToString(*columnType))
-                << TErrorAttribute("logical_type", FromProto<ESimpleLogicalValueType>(protoSchema.logical_type()));
+                .With("type_v3", ToString(*columnType))
+                .With("logical_type", FromProto<ESimpleLogicalValueType>(protoSchema.logical_type()));
         }
         if (protoSchema.has_type() && GetPhysicalType(v1Type) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"type\" do not match")
-                << TErrorAttribute("type_v3", ToString(*columnType))
-                << TErrorAttribute("type", protoSchema.type());
+                .With("type_v3", ToString(*columnType))
+                .With("type", physicalType);
         }
     } else if (protoSchema.has_logical_type()) {
         auto logicalType = FromProto<ESimpleLogicalValueType>(protoSchema.logical_type());
         columnType = MakeLogicalType(logicalType, protoSchema.required());
         if (protoSchema.has_type() && GetPhysicalType(logicalType) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"logical_type\" and \"type\" do not match")
-                << TErrorAttribute("logical_type", ToString(*columnType))
-                << TErrorAttribute("type", protoSchema.type());
+                .With("logical_type", ToString(*columnType))
+                .With("type", physicalType);
         }
     } else if (protoSchema.has_type()) {
         columnType = MakeLogicalType(GetLogicalType(physicalType), protoSchema.required());
@@ -736,6 +736,8 @@ void ToProto(
     protoStatistics->set_incomplete_input(statistics.IncompleteInput);
     protoStatistics->set_incomplete_output(statistics.IncompleteOutput);
     protoStatistics->set_query_count(statistics.QueryCount);
+    protoStatistics->set_scan_order(
+        static_cast<NProto::TQueryStatistics::EReportedScanOrder>(statistics.ScanOrder));
 
     ToProto(protoStatistics->mutable_inner_statistics(), statistics.InnerStatistics);
 }
@@ -775,6 +777,7 @@ void FromProto(
     statistics->IncompleteInput = protoStatistics.incomplete_input();
     statistics->IncompleteOutput = protoStatistics.incomplete_output();
     statistics->QueryCount = protoStatistics.query_count();
+    statistics->ScanOrder = FromProto<NQueryClient::EReportedScanOrder>(protoStatistics.scan_order());
 
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
@@ -1386,6 +1389,46 @@ void FromProto(
 }
 
 void ToProto(
+    TProtobufString* protoCookie,
+    const TFilePartitionCookiePtr& cookie)
+{
+    auto cookieBytes = ConvertToYsonString(cookie);
+    *protoCookie = cookieBytes.ToString();
+}
+
+void FromProto(
+    TFilePartitionCookiePtr* cookie,
+    const TProtobufString& protoCookie)
+{
+    *cookie = ConvertTo<TFilePartitionCookiePtr>(TYsonStringBuf(protoCookie));
+}
+
+void ToProto(
+    NProto::TFilePartition* protoFilePartition,
+    const NApi::TFilePartition& filePartition)
+{
+    ToProto(protoFilePartition->mutable_cookie(), filePartition.Cookie);
+    protoFilePartition->set_length(filePartition.Length);
+}
+
+void FromProto(
+    NApi::TFilePartition* filePartition,
+    const NProto::TFilePartition& protoFilePartition)
+{
+    FromProto(&filePartition->Cookie, protoFilePartition.cookie());
+    filePartition->Length = protoFilePartition.length();
+}
+
+void FromProto(
+    NApi::TFilePartitions* filePartitions,
+    const NProto::TRspPartitionFile& protoRspPartitionFile)
+{
+    FromProto(
+        &filePartitions->Partitions,
+        protoRspPartitionFile.partitions());
+}
+
+void ToProto(
     NProto::TRowBatchReadOptions* proto,
     const NQueueClient::TQueueRowBatchReadOptions& result)
 {
@@ -1514,8 +1557,6 @@ void FromProto(
     query->FinishTime = YT_OPTIONAL_FROM_PROTO(protoQuery, finish_time, TInstant);
     if (protoQuery.has_settings()) {
         query->Settings = TYsonString(protoQuery.settings());
-    } else {
-        query->Settings = TYsonString{};
     }
     query->User = YT_OPTIONAL_FROM_PROTO(protoQuery, user);
     query->AccessControlObject = YT_OPTIONAL_FROM_PROTO(protoQuery, access_control_object);
@@ -1524,19 +1565,13 @@ void FromProto(
     query->ResultCount = YT_OPTIONAL_FROM_PROTO(protoQuery, result_count);
     if (protoQuery.has_progress()) {
         query->Progress = TYsonString(protoQuery.progress());
-    } else {
-        query->Progress = TYsonString{};
     }
     query->Error = YT_APPLY_PROTO_OPTIONAL(protoQuery, error, FromProto<TError>);
     if (protoQuery.has_annotations()) {
         query->Annotations = TYsonString(protoQuery.annotations());
-    } else {
-        query->Annotations = TYsonString{};
     }
     if (protoQuery.has_other_attributes()) {
         query->OtherAttributes = NYTree::FromProto(protoQuery.other_attributes());
-    } else if (query->OtherAttributes) {
-        query->OtherAttributes->Clear();
     }
     if (protoQuery.has_secrets()) {
         query->Secrets = TYsonString(protoQuery.secrets());
@@ -2464,6 +2499,7 @@ bool IsChaosRetriableError(const TError& error)
             code == NTabletClient::EErrorCode::SyncReplicaNotInSync ||
             code == NTableClient::EErrorCode::UnableToSynchronizeReplicationCard ||
             code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
+            code == NTabletClient::EErrorCode::TabletReplicationEraIsUnknown ||
             code == NChaosClient::EErrorCode::ShortcutNotFound ||
             code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
             code == NChaosClient::EErrorCode::ShortcutRevoked ||
@@ -2483,6 +2519,8 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
         error.FindMatching(NTabletClient::EErrorCode::HunkTabletStoreToggleConflict) ||
         error.FindMatching(NTabletClient::EErrorCode::HunkStoreAllocationFailed) ||
+        error.FindMatching(NTabletClient::EErrorCode::TabletServantIsNotActive) ||
+        error.FindMatching(NTabletClient::EErrorCode::ReadOnlySmoothMovementStage) ||
         IsChaosRetriableError(error);
 }
 

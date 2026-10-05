@@ -14,7 +14,7 @@
 #undef RWF_APPEND
 
 #if !defined(_musl_)
-#include <ydb/library/uring/liburing_linux.h>
+#include "liburing_compat.h"
 #endif
 #include <libaio.h>
 #if !defined(_musl_)
@@ -297,7 +297,12 @@ public:
     int LockFile() {
         int ret = -1;
         errno = EWOULDBLOCK;
-        int retry = 2;
+        int retry = 5;
+
+        // Note, that previous process incarnation might still hold the
+        // lock to finish its I/O (especially when we use io_uring without SQPOLL).
+        // Even after waitpid() has returned for that process, lock is still held
+        // until all I/O is either cancelled or finished
         while (ret == -1 && errno == EWOULDBLOCK && retry > 0) {
             errno = 0;
             ret = File->Flock(LOCK_EX | LOCK_NB);

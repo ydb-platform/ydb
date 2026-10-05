@@ -14,6 +14,8 @@
 
 #include <util/generic/ptr.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
@@ -27,15 +29,16 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_T("Handle " << ev->Get()->ToString()
-            << ": entry# " << entry.ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"entry", entry});
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_W("Unexpected status"
-                << ": entry# " << entry.ToString());
+            YDB_LOG_WARN("Unexpected status",
+                {"entry", entry});
             return Schedule(RetryInterval, new TEvents::TEvWakeup);
         }
 
@@ -60,6 +63,9 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
             future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
                 actorSystem->Send(replyActorId, new NKqp::TEvDescribeSecretsResponse(result.GetValue()));
             });
+        } else if (AppData()->FeatureFlags.GetDisableOldSecrets()) {
+            // Just in case - when we disable old secrets, we'll make sure they are not needed any more
+            return Reply(false, "Usage of old secrets is disabled now. Please use new secrets");
         } else {
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
                 new NMetadata::NProvider::TEvAskSnapshot(SnapshotFetcher()));
@@ -110,11 +116,12 @@ public:
         , SecretName(secretName)
         , Cookie(cookie)
         , Database(database)
-        , LogPrefix("SecretResolver", ReplicationId)
+        , LogPrefix(CreateActorLogPrefix("SecretResolver", ReplicationId))
     {
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             return Reply(false, "Metadata service is not active");
         }
@@ -133,6 +140,8 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
@@ -149,7 +158,7 @@ private:
     const TString SecretName;
     const ui64 Cookie;
     const TString Database;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     static constexpr auto RetryInterval = TDuration::Seconds(1);
     NMetadata::NSecret::TSecretId SecretId;

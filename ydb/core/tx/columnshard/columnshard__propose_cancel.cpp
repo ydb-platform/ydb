@@ -1,5 +1,8 @@
 #include "columnshard_impl.h"
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_TX
+
 namespace NKikimr::NColumnShard {
 
 /**
@@ -21,8 +24,19 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        LOG_S_DEBUG("TTxProposeCancel.Execute");
+        YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "TTxProposeCancel.Execute");
 
+        auto op = Self->ProgressTxController->GetTxOperator(TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
+        if (!op) {
+            YDB_LOG_WARN("", {"event", "skip_cancel_no_operator"}, {"txId", TxId});
+            return true;
+        }
+        // race TTxProposeCancel vs TTxPlanStep, we do not wanna cancel a planned transaction
+        if (op->IsPlanned()) {
+            YDB_LOG_WARN("", {"event", "skip_cancel_already_planned"}, {"txId", TxId},
+                {"planStep", op->GetStep()});
+            return true;
+        }
         if (auto* lock = Self->GetOperationsManager().GetLockFeaturesForTxOptional(TxId)) {
             AFL_VERIFY(lock->IsTxIdAssigned())("tx_id", TxId)("lock_id", lock->GetLockId());
             lock->SetNeedsAborting();
@@ -36,7 +50,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_S_DEBUG("TTxProposeCancel.Complete");
+        YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "TTxProposeCancel.Complete");
         if (DoComplete) {
             Self->ProgressTxController->CompleteOnCancel(TxId, ctx);
         }

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     events.cpp
@@ -7,6 +7,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/library/yql/dq/comp_nodes/operator_memory_quota
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/common
     ydb/library/yql/dq/proto
@@ -14,7 +15,5 @@ PEERDIR(
     ydb/library/yql/utils/actors
     ydb/library/services
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

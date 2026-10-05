@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
 SRCS(
     logger.cpp
+    tag.cpp
     tagged_payload.cpp
     structured_payload.cpp
 )
@@ -12,6 +13,7 @@ PEERDIR(
     library/cpp/yt/assert
     library/cpp/yt/memory
     library/cpp/yt/misc
+    library/cpp/yt/mpl
     library/cpp/yt/system
     library/cpp/yt/yson_string
 )

@@ -107,12 +107,26 @@ bool TLeaderTabletInfo::InitiateAssignTabletGroups() {
     return true;
 }
 
+ui32 TLeaderTabletInfo::GetBlockStorageGeneration() const {
+    // We block right below the first unconfirmed history entry: a tablet running at that generation
+    // or later has blocked at least this generation itself, so our versioned block fails and reveals it.
+    // KnownGeneration can't always be used here, since it is increased on reassign and may be updated by the tablet.
+    ui32 firstUnconfirmedGeneration = KnownGeneration + 1;
+    for (const TTabletChannelInfo& channel : TabletStorageInfo->Channels) {
+        auto unconfirmedIt = std::ranges::upper_bound(channel.History, ConfirmedStorageVersion, std::less<ui32>(), [] (auto&& entry) { return entry.Version; });
+        if (unconfirmedIt != channel.History.end() && unconfirmedIt->FromGeneration > 0) {
+            firstUnconfirmedGeneration = std::min(firstUnconfirmedGeneration, unconfirmedIt->FromGeneration);
+        }
+    }
+    return firstUnconfirmedGeneration - 1;
+}
+
 bool TLeaderTabletInfo::InitiateBlockStorage(TSideEffects& sideEffects) {
     // attempt to kill tablet before blocking the storage group
     Kill(sideEffects);
     // blocks PREVIOUS entry of tablet history
-    IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), KnownGeneration, true);
-    sideEffects.Register(x);
+    IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), GetBlockStorageGeneration(), true);
+    sideEffects.RegisterAndTrack(x, YDB_LOG_CREATE_MESSAGE({"description", "BlockStorage"}, {"tabletId", Id}));
     return true;
 }
 
@@ -126,13 +140,13 @@ bool TLeaderTabletInfo::InitiateBlockStorage(TSideEffects& sideEffects, ui32 gen
     }
     Y_ABORT_UNLESS(channel != nullptr && !channel->History.empty());
     IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), generation, false);
-    sideEffects.Register(x);
+    sideEffects.RegisterAndTrack(x, YDB_LOG_CREATE_MESSAGE({"description", "BlockStorage"}, {"tabletId", Id}));
     return true;
 }
 
 bool TLeaderTabletInfo::InitiateDeleteStorage(TSideEffects& sideEffects) {
     IActor* x = CreateTabletReqDelete(Hive.SelfId(), TabletStorageInfo);
-    sideEffects.Register(x);
+    sideEffects.RegisterAndTrack(x, YDB_LOG_CREATE_MESSAGE({"description", "DeleteStorage"}, {"tabletId", Id}));
     return true;
 }
 
@@ -200,6 +214,15 @@ TActorId TLeaderTabletInfo::SetLockedToActor(const TActorId& actor, const TDurat
     return previousOwner;
 }
 
+void TLeaderTabletInfo::RestoreLockedTabletMetrics() {
+    if (Hive.CurrentConfig.GetLockedTabletsSendMetrics()
+            && IsLockedToActor()
+            && !IsDeleting())
+    {
+        BecomeUnknown(&Hive.GetNode(LockedToActor.NodeId()));
+    }
+}
+
 void TLeaderTabletInfo::AcquireAllocationUnits() {
     for (const auto& channel : TabletStorageInfo->Channels) {
         if (!channel.History.empty()) {
@@ -237,7 +260,7 @@ bool TLeaderTabletInfo::ReleaseAllocationUnit(ui32 channelId) {
     return false;
 }
 
-const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLeaderTabletInfo::FindFreeAllocationUnit(ui32 channelId) {
+const NKikimrBlobStorage::TGroupMetrics::TGroupParameters* TLeaderTabletInfo::FindFreeAllocationUnit(ui32 channelId) {
     TStoragePoolInfo* storagePool = Hive.FindStoragePool(GetChannelStoragePoolName(channelId));
     if (storagePool != nullptr) {
         auto params = Hive.BuildGroupParametersForChannel(*this, channelId);

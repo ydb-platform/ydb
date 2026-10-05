@@ -197,7 +197,7 @@ def is_py3(unit):
 
 
 @ymake.macro
-def _PY_PROGRAM(unit: ymake.Unit, *args: tuple[str, ...]):
+def _PY_PROGRAM(unit: ymake.Unit, *args: str):
     py_program(unit, is_py3(unit))
 
 
@@ -227,7 +227,7 @@ def py_program(unit, py3):
 
 
 @ymake.macro
-def PY_SRCS(unit: ymake.Unit, *args: tuple[str, ...]):
+def PY_SRCS(unit: ymake.Unit, *args: str):
     """
     @usage PY_SRCS({| CYTHONIZE_PY} {| CYTHON_C} { | TOP_LEVEL | NAMESPACE ns} Files...)
 
@@ -692,7 +692,7 @@ def _check_test_srcs(*args):
 
 
 @ymake.macro
-def TEST_SRCS(unit: ymake.Unit, *args: tuple[str, ...]):
+def TEST_SRCS(unit: ymake.Unit, *args: str):
     _check_test_srcs(*args)
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
         namespace = "__tests__"
@@ -703,7 +703,7 @@ def TEST_SRCS(unit: ymake.Unit, *args: tuple[str, ...]):
 
 
 @ymake.macro
-def PY_DOCTESTS(unit: ymake.Unit, *args: tuple[str, ...]):
+def PY_DOCTESTS(unit: ymake.Unit, *args: str):
     """
     @usage PY_DOCTESTS(Packages...)
 
@@ -722,7 +722,7 @@ def py_register(unit, func, py3):
 
 
 @ymake.macro
-def PY_REGISTER(unit: ymake.Unit, *args: tuple[str, ...]):
+def PY_REGISTER(unit: ymake.Unit, *args: str):
     """
     @usage: PY_REGISTER([package.]module_name)
 
@@ -808,7 +808,7 @@ def PY_CONSTRUCTOR(unit: ymake.Unit, arg: str):
 
 
 @ymake.macro
-def PY_ENUMS_SERIALIZATION(unit: ymake.Unit, *args: tuple[str, ...]):
+def PY_ENUMS_SERIALIZATION(unit: ymake.Unit, *args: str):
     ns = ''
     args = iter(args)
     for arg in args:
@@ -826,7 +826,7 @@ def PY_ENUMS_SERIALIZATION(unit: ymake.Unit, *args: tuple[str, ...]):
 
 
 @ymake.macro
-def CPP_ENUMS_SERIALIZATION(unit: ymake.Unit, *args: tuple[str, ...]):
+def CPP_ENUMS_SERIALIZATION(unit: ymake.Unit, *args: str):
     args = iter(args)
     for arg in args:
         # Namespace directives.

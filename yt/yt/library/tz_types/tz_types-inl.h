@@ -33,7 +33,7 @@ public:
         auto result = NameToTimezoneIndex_.find(timezoneName);
         if (result == NameToTimezoneIndex_.end()) {
             THROW_ERROR_EXCEPTION("Invalid timezone name")
-                << TErrorAttribute("timezone_name", timezoneName);
+                .With("timezone_name", timezoneName);
         }
         return result->second;
     }
@@ -44,11 +44,11 @@ public:
             THROW_ERROR_EXCEPTION("Invalid timezone index, value %v not in range [0:%v]",
                 index,
                 std::ssize(TzBuffer_) - 1)
-                << TErrorAttribute("timezone_index", index);
+                .With("timezone_index", index);
         }
         if (TzBuffer_[index].empty()) {
             THROW_ERROR_EXCEPTION("Index of an empty timezone is not valid")
-                << TErrorAttribute("timezone_index", index);
+                .With("timezone_index", index);
         }
         return TzBuffer_[index];
     }
@@ -58,7 +58,7 @@ public:
         auto result = NameToTimezoneIndex_.find(timezoneName);
         if (result == NameToTimezoneIndex_.end()) {
             THROW_ERROR_EXCEPTION("Invalid timezone name")
-                << TErrorAttribute("timezone_name", timezoneName);
+                .With("timezone_name", timezoneName);
         }
     }
 
@@ -125,8 +125,8 @@ TTZItem<T> ParseTzValue(std::string_view from)
     constexpr size_t expectedLength = sizeof(T) + sizeof(ui16);
     if (expectedLength != from.size()) {
         THROW_ERROR_EXCEPTION("Invalid length of TzType<%v>: %v", TypeName<T>(), std::ssize(from))
-            << TErrorAttribute("actual_length", std::ssize(from))
-            << TErrorAttribute("expected_length", expectedLength);
+            .With("actual_length", std::ssize(from))
+            .With("expected_length", expectedLength);
     }
     return TTZItem<T>({ParsePresorted<T>(from), ParsePresorted<ui16>(from.substr(sizeof(T)))});
 }

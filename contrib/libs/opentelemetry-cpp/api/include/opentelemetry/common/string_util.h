@@ -3,7 +3,13 @@
 
 #pragma once
 
-#include <ctype.h>
+#include <cctype>
+
+#include "opentelemetry/common/macros.h"
+
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
+#  include <stdexcept>
+#endif
 
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/version.h"
@@ -17,15 +23,34 @@ class StringUtil
 public:
   static nostd::string_view Trim(nostd::string_view str, size_t left, size_t right) noexcept
   {
-    while (left <= right && isspace(str[left]))
+    if (right >= str.size())
+    {
+      return nostd::string_view();
+    }
+    while (left <= right && std::isspace(str[left]))
     {
       left++;
     }
-    while (left <= right && isspace(str[right]))
+    while (left <= right && std::isspace(str[right]))
     {
       right--;
     }
-    return str.substr(left, 1 + right - left);
+    if (left > right)
+    {
+      return nostd::string_view();
+    }
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
+    try
+#endif
+    {
+      return str.substr(left, 1 + right - left);
+    }
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
+    catch (const std::out_of_range &)
+    {
+      return nostd::string_view();
+    }
+#endif
   }
 
   static nostd::string_view Trim(nostd::string_view str) noexcept

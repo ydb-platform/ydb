@@ -1,6 +1,7 @@
 #include "mlp_consumer.h"
 #include "mlp_storage.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -10,7 +11,10 @@
 #include <util/generic/serialized_enum.h>
 #include <util/stream/format.h>
 
+#include <cmath>
 #include <ranges>
+
+#define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -169,12 +173,15 @@ TConsumerActor::TConsumerActor(
     , Config(config)
     , RetentionPeriod(retentionPeriod)
     , PartitionEndOffset(partitionEndOffset)
-    , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider(), StorageSettingsFromConfig(Config, GetPartitionConfig())))
+    , Storage(std::make_unique<TStorage>(TAppData::TimeProvider, StorageSettingsFromConfig(Config, GetPartitionConfig())))
     , DetailedMetricsRoot(detailedMetricsRoot) {
 }
 
 void TConsumerActor::Bootstrap() {
-    LOG_D("Start MLP consumer " << Config.GetName());
+    LOG_D(
+        "Start MLP consumer",
+        {"configName", Config.GetName()}
+    );
     Become(&TConsumerActor::StateInit);
 
     UpdateStorageConfig();
@@ -214,37 +221,57 @@ void TConsumerActor::PassAway() {
     TBase::PassAway();
 }
 
-TString TConsumerActor::BuildLogPrefix() const {
-    return TStringBuilder() << "[" << PartitionId << "][MLP][" << Config.GetName() << "] ";
+TStructuredMessage TConsumerActor::BuildLogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"partition", PartitionId},
+        {"consumer", Config.GetName()});
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
-    LOG_D("Queue TEvPQ::TEvMLPReadRequest " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "Queue TEvPQ::TEvMLPReadRequest",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     ReadRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
-    LOG_D("Queue TEvPQ::TEvMLPCommitRequest " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "Queue TEvPQ::TEvMLPCommitRequest",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     CommitRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
-    LOG_D("Queue TEvPQ::TEvMLPUnlockRequest " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "Queue TEvPQ::TEvMLPUnlockRequest",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     UnlockRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
-    LOG_D("Queue TEvPQ::TEvMLPChangeMessageDeadlineRequest " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "Queue TEvPQ::TEvMLPChangeMessageDeadlineRequest",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     ChangeMessageDeadlineRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
-    LOG_D("Queue TEvPQ::TEvMLPPurgeRequest " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "Queue TEvPQ::TEvMLPPurgeRequest",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     PurgeRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev) {
-    LOG_D("Queue TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "Queue TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     UpdateExternalLockedMessageGroupsIdRequestsQueue.push_back(std::move(ev));
 }
 
@@ -313,7 +340,11 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                         LastWALIndex = snapshot.GetWALIndex();
                         Storage->Initialize(snapshot);
                     } else {
-                        LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << snapshot.GetConfiguration().GetGeneration());
+                        LOG_W(
+                            "Received snapshot from old consumer vs",
+                            {"generation", Config.GetGeneration()},
+                            {"snapshotConfigurationGeneration", snapshot.GetConfiguration().GetGeneration()}
+                        );
                     }
 
                     break;
@@ -345,11 +376,19 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                         }
 
                         if (Config.GetGeneration() == wal.GetGeneration()) {
-                            LOG_D("Read WAL " << w.key());
+                            LOG_D(
+                                "Read WAL",
+                                {"wKey", w.key()}
+                            );
                             LastWALIndex = wal.GetWALIndex();
                             Storage->ApplyWAL(wal);
                         } else {
-                            LOG_W("Received WAL from old consumer generation: " << Config.GetGeneration() << " vs " << wal.GetGeneration() << " key: " << w.key());
+                            LOG_W(
+                                "Received WAL from old consumer vs",
+                                {"generation", Config.GetGeneration()},
+                                {"walGeneration", wal.GetGeneration()},
+                                {"key", w.key()}
+                            );
                         }
                     }
 
@@ -398,7 +437,10 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 }
 
 void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
-    LOG_D("HandleOnWrite TEvKeyValue::TEvResponse " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "HandleOnWrite TEvKeyValue::TEvResponse",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
 
     auto& record = ev->Get()->Record;
 
@@ -445,7 +487,11 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
 
 void TConsumerActor::CommitIfNeeded() {
     auto offset = Storage->GetFirstUncommittedOffset();
-    LOG_D("Try commit offset: " << offset << " vs " << LastCommittedOffset);
+    LOG_D(
+        "Try commit",
+        {"offset", offset},
+        {"lastCommittedOffset", LastCommittedOffset}
+    );
     if (LastCommittedOffset != offset) {
         Send(PartitionActorId, MakeEvCommit(Config, offset));
         LastCommittedOffset = offset;
@@ -471,8 +517,12 @@ void TConsumerActor::UpdateChildPartitionsOnCommit() {
 }
 
 void TConsumerActor::UpdateStorageConfig() {
-    LOG_D("Update config: RetentionPeriod: " << (RetentionPeriod.has_value() ? RetentionPeriod->ToString() : "infinity")
-        << " " << Config.ShortDebugString());
+    LOG_D(
+        "Update config",
+        {"retentionPeriod", (RetentionPeriod.has_value() ? RetentionPeriod->ToString() : "infinity")},
+            {"config",
+        Config.ShortDebugString()}
+    );
 
     AFL_ENSURE(Storage->GetKeepMessageOrder() == Config.GetKeepMessageOrder())("initial", Storage->GetKeepMessageOrder())("new", Config.GetKeepMessageOrder());
     Storage->SetMaxMessageProcessingCount(Config.GetMaxProcessingAttempts());
@@ -508,18 +558,22 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
     InitializeDetailedMetrics();
     UpdateLockedGroupsIdInChildPartitions(false);
 
-    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
-        ScheduleProcessing();
-    }
+    ScheduleProcessing();
 }
 
 void TConsumerActor::HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvEndOffsetChanged. Offset: " << ev->Get()->Offset);
+    LOG_D(
+        "Handle TEvPQ::TEvEndOffsetChanged",
+        {"offset", ev->Get()->Offset}
+    );
     PartitionEndOffset = ev->Get()->Offset;
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvEndOffsetChanged::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvEndOffsetChanged. Offset: " << ev->Get()->Offset);
+    LOG_D(
+        "Handle TEvPQ::TEvEndOffsetChanged",
+        {"offset", ev->Get()->Offset}
+    );
     PartitionEndOffset = ev->Get()->Offset;
     FetchMessagesIfNeeded();
 }
@@ -542,6 +596,22 @@ void TConsumerActor::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     }
 
     Send(ev->Sender, std::move(response), 0, ev->Cookie);
+}
+
+void TConsumerActor::RetryChildPartitionSync(ui32 partitionId) {
+    if (ChildPartitionsOrderManager.SetSendFullStateByPartitionId(partitionId, TChildPartitionsOrderManager::ESendReasons::DeliveryProblem)) {
+        Schedule(ChildPartitionsOrderManager.UpdateChildPartitionsBackoff.Next(), new TEvents::TEvWakeup(EWakeUpTag::UpdateChildPartitions));
+    }
+}
+
+void TConsumerActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
+    LOG_D(
+        "Handle TEvPQ::TEvMLPErrorResponse",
+        {"partitionId", ev->Get()->GetPartitionId()},
+            {"status", ev->Get()->GetStatus()},
+            {"error", ev->Get()->Record.GetErrorMessage()}
+    );
+    RetryChildPartitionSync(ev->Get()->GetPartitionId());
 }
 
 void TConsumerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -572,10 +642,15 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
         hFunc(TEvPersQueue::TEvResponse, HandleOnInit);
         hFunc(TEvPQ::TEvError, Handle);
+        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateInit", ev));
+            LOG_E(
+                "Unexpected",
+                {"event", EventStr("StateInit", ev)}
+            );
             AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
     }
 }
@@ -599,11 +674,15 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPersQueue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
-        hFunc(TEvents::TEvWakeup, HandleOnWork);
+        hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateWork", ev));
+            LOG_E(
+                "Unexpected",
+                {"event", EventStr("StateWork", ev)}
+            );
             AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWork", ev));
     }
 }
@@ -627,11 +706,15 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPersQueue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateWrite", ev));
+            LOG_E(
+                "Unexpected",
+                {"event", EventStr("StateWrite", ev)}
+            );
             AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWrite", ev));
     }
 }
@@ -644,12 +727,16 @@ void TConsumerActor::Restart(TString&& error) {
     PassAway();
 }
 
+bool TConsumerActor::InStateWork() const {
+    return CurrentStateFunc() == &TConsumerActor::StateWork;
+}
+
 void TConsumerActor::ScheduleProcessing() {
-    if (ProcessingScheduled) {
+    if (ProcessingScheduled || !InStateWork()) {
         return;
     }
 
-    const bool force = NextForcedProcessingTime <= TInstant::Now();
+    const bool force = NextForcedProcessingTime <= TAppData::TimeProvider->Now();
     const bool dlqEmptyOrAlreadyProcessing = DLQMoverActorId || Storage->DLQEmpty();
     if (!force &&
         ReadRequestsQueue.empty() &&
@@ -663,7 +750,7 @@ void TConsumerActor::ScheduleProcessing() {
         return;
     }
 
-    auto now = TInstant::Now();
+    auto now = TAppData::TimeProvider->Now();
     TDuration delay = NextProcessingTime > now && dlqEmptyOrAlreadyProcessing
         ? NextProcessingTime - now
         : TDuration::Zero();
@@ -672,10 +759,14 @@ void TConsumerActor::ScheduleProcessing() {
 }
 
 void TConsumerActor::ProcessEventQueue() {
+    // Must not apply queued ops while a KV persist is in flight (StateWrite):
+    // callers are gated by InStateWork(); Persist() switches to StateWrite only after this turn starts.
+    AFL_ENSURE(InStateWork());
+
     LOG_D("ProcessEventQueue");
 
-    NextProcessingTime = TInstant::Now() + TDuration::MilliSeconds(AppData()->PQConfig.GetMLPBatchWindowMilliSeconds());
-    NextForcedProcessingTime = TInstant::Now() + TDuration::Seconds(1);
+    NextProcessingTime = TAppData::TimeProvider->Now() + TDuration::MilliSeconds(AppData()->PQConfig.GetMLPBatchWindowMilliSeconds());
+    NextForcedProcessingTime = TAppData::TimeProvider->Now() + TDuration::Seconds(1);
 
     for (auto& ev : CommitRequestsQueue) {
         absl::flat_hash_map<ui64, EOperationResult> offsetResults;
@@ -733,7 +824,15 @@ void TConsumerActor::ProcessEventQueue() {
     for (auto& ev : UpdateExternalLockedMessageGroupsIdRequestsQueue) {
         const NKikimrPQ::TEvMLPUpdateExternalLockedMessageGroupsId& record = ev->Get()->Record;
         auto updateResult = Storage->UpdateExternalLockedMessageGroupsId(record.GetUpdate());
-        LOG_D("UpdateExternalLockedMessageGroupsId: " << "Applied=" << updateResult.Applied << ", " << "Invalid=" << updateResult.Invalid << ", " << "ModeChanged=" << updateResult.ModeChanged << ", " << "SetChanged=" << updateResult.SetChanged << ", " << "VersionChanged=" << updateResult.VersionChanged << "; " << ShortDebugString(record.GetUpdate()));
+        LOG_D(
+            "UpdateExternalLockedMessageGroupsId",
+            {"applied", updateResult.Applied},
+            {"invalid", updateResult.Invalid},
+            {"modeChanged", updateResult.ModeChanged},
+            {"setChanged", updateResult.SetChanged},
+            {"versionChanged", updateResult.VersionChanged},
+            {"shortDebugStringRecordUpdate", ShortDebugString(record.GetUpdate())}
+        );
         if (updateResult.Applied) {
             ChildPartitionsOrderManager.SetSendFullStateToAll(updateResult.ModeChanged ? TChildPartitionsOrderManager::ESendReasons::ParentChange : TChildPartitionsOrderManager::ESendReasons::Commit, Storage->GetEstimatedLockedMessageGroupsIdSizeFromSelfAndParents());
         }
@@ -741,9 +840,12 @@ void TConsumerActor::ProcessEventQueue() {
     UpdateExternalLockedMessageGroupsIdRequestsQueue.clear();
 
     Storage->ProccessDeadlines();
-    LOG_T("AfterDeadlinesDump: " << Storage->DebugString());
+    LOG_T(
+        "Dump NPQLOGPREFIX, afterDeadlinesDump",
+        {"afterDeadlinesDump", Storage->DebugString()}
+    );
 
-    auto now = TInstant::Now();
+    auto now = TAppData::TimeProvider->Now();
 
     TStorage::TPosition position;
     std::deque<TEvPQ::TEvMLPReadRequest::TPtr> readRequestsQueue;
@@ -769,7 +871,12 @@ void TConsumerActor::ProcessEventQueue() {
 
         if (messages.empty() && ev->Get()->GetWaitDeadline() <= now) {
             // Optimization: do not need to upload the message body.
-            LOG_D("Reply empty result: sender=" << ev->Sender.ToString() << " cookie=" << ev->Cookie);
+            LOG_D(
+                "Reply empty result",
+                {"sender", ev->Sender},
+                            {"cookie",
+                ev->Cookie}
+            );
             Send(ev->Sender, new TEvPQ::TEvMLPReadResponse(), 0, ev->Cookie);
             continue;
         } else if (messages.empty()) {
@@ -799,7 +906,10 @@ void TConsumerActor::Persist() {
 
     Become(&TConsumerActor::StateWrite);
 
-    LOG_T("Dump befor persist: " << Storage->DebugString());
+    LOG_T(
+        "Dump befor",
+        {"persist", Storage->DebugString()}
+    );
 
     auto tryInlineChannel = [](auto& write) {
         if (write->GetValue().size() < 2048) {
@@ -817,7 +927,11 @@ void TConsumerActor::Persist() {
         batch.SerializeTo(wal);
 
         auto data = wal.SerializeAsString();
-        LOG_D("Write WAL Size: " << data.size() << " Key: " << key);
+        LOG_D(
+            "Write WAL",
+            {"size", data.size()},
+            {"key", key}
+        );
 
         auto request = std::make_unique<TEvKeyValue::TEvRequest>();
         request->Record.SetCookie(static_cast<ui64>(EKvCookie::TxWrite));
@@ -856,7 +970,11 @@ void TConsumerActor::Persist() {
         auto from = MinWALKey(PartitionId, Config.GetName());
         auto to = MakeWALKey(PartitionId, Config.GetName(), LastWALIndex);
 
-        LOG_D("Delete old WAL: " << from << " - " << to);
+        LOG_D(
+            "Delete old",
+            {"WAL", from},
+            {"to", to}
+        );
 
         auto* del = request->Record.AddCmdDeleteRange();
         del->MutableRange()->SetFrom(std::move(from));
@@ -866,7 +984,13 @@ void TConsumerActor::Persist() {
 
         Send(TabletActorId, std::move(request));
 
-        LOG_D("Write Snapshot Count: " << Storage->GetMessageCount() << " Size: " << write->GetValue().size() << " cookie: " << cookie);
+        LOG_D(
+            "Write Snapshot",
+            {"count", Storage->GetMessageCount()},
+                    {"size",
+            write->GetValue().size()},
+                    {"cookie", cookie}
+        );
     }
 }
 
@@ -880,13 +1004,35 @@ size_t TConsumerActor::RequiredToFetchMessageCount() const {
     if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
         maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
     }
+    if (const size_t missingGroups = FifoUnlockedGroupDeficit()) {
+        const size_t estimate = EstimateFetchCountForNewGroups(metrics.InflightMessageCount, metrics.InflightMessageGroupCount, missingGroups);
+        maxMessages = std::max(maxMessages, estimate);
+    }
 
     return std::min(maxMessages, Storage->MaxMessages - metrics.InflightMessageCount);
 }
 
+// messages whose group head is already in flight are Unprocessed but not readable,
+// so check the number of groups
+size_t TConsumerActor::FifoUnlockedGroupDeficit() const {
+    if (!Config.GetKeepMessageOrder()) {
+        return 0;
+    }
+    const float unlockedGroupsRatio = ClampVal<float>(AppData()->PQConfig.GetMLPUnlockedGroupsRatio(), 0.0, 1.0);
+    if (unlockedGroupsRatio <= 0.0f) {
+        return 0;
+    }
+    auto& metrics = Storage->GetMetrics();
+    const size_t inflightGroups = metrics.InflightMessageGroupCount;
+    const size_t lockedGroups = metrics.LockedMessageGroupCount;
+    const size_t readableGroups = inflightGroups > lockedGroups ? inflightGroups - lockedGroups : 0;
+    const size_t targetReadableGroups = static_cast<size_t>(std::ceil(unlockedGroupsRatio * inflightGroups));
+    return readableGroups < targetReadableGroups ? targetReadableGroups - readableGroups : 0;
+}
+
 bool TConsumerActor::FetchMessagesIfNeeded() {
     if (Storage->GetMessageCount() > 0) {
-        LastTimeWithMessages = TInstant::Now();
+        LastTimeWithMessages = TAppData::TimeProvider->Now();
         NotifyPQRB();
     }
 
@@ -895,7 +1041,11 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
     }
 
     if (PartitionEndOffset <= Storage->GetLastOffset()) {
-        LOG_D("Skip fetch: partition end offset is reached: " << PartitionEndOffset << " vs " << Storage->GetLastOffset());
+        LOG_D(
+            "Skip fetch: partition end offset is vs",
+            {"reached", PartitionEndOffset},
+            {"storageLastOffset", Storage->GetLastOffset()}
+        );
         return false;
     }
 
@@ -909,16 +1059,25 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
         && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2
         && metrics.UnprocessedMessageCount >= metrics.InflightMessageCount / 4
         && !Storage->HasRetentionExpiredMessages()) {
-        LOG_D("Skip fetch: there are enough messages. InflightMessageCount=" << metrics.InflightMessageCount
-            << ", UnprocessedMessageCount=" << metrics.UnprocessedMessageCount
-            << ", LockedMessageCount=" << metrics.LockedMessageCount);
+        LOG_D(
+            "Skip fetch: there are enough messages",
+            {"inflightMessageCount", metrics.InflightMessageCount},
+            {"unprocessedMessageCount", metrics.UnprocessedMessageCount},
+            {"lockedMessageCount", metrics.LockedMessageCount}
+        );
         return false;
     }
 
     FetchInProgress = true;
 
     auto maxMessages = RequiredToFetchMessageCount();
-    LOG_D("Fetching " << maxMessages << " messages from offset " << Storage->GetLastOffset() << " from " << PartitionActorId);
+    LOG_D(
+        "Fetching messages from offset",
+        {"maxMessages", maxMessages},
+        {"storageLastOffset", Storage->GetLastOffset()},
+            {"partitionActorId",
+        PartitionActorId}
+    );
     Send(TabletActorId, MakeEvPQRead(Config.GetName(), PartitionId, Storage->GetLastOffset(), maxMessages));
 
     return true;
@@ -942,7 +1101,10 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     FetchInProgress = false;
 
     if (!IsSucess(ev)) {
-        LOG_W("Fetch messages failed: " << ev->Get()->Record.DebugString());
+        LOG_W(
+            "Fetch messages",
+            {"failed", ev->Get()->Record.DebugString()}
+        );
         return;
     }
 
@@ -991,48 +1153,24 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         lastOffset = resultEndOffset;
     }
 
-    LOG_D("Fetched " << logicalMessageCount << " messages");
+    LOG_D(
+        "Fetched messages",
+        {"messageCount", logicalMessageCount}
+    );
+
     if (allMessagesAdded) {
         FetchMessagesIfNeeded();
     }
 
     if (logicalMessageCount > 0) {
-        LastTimeWithMessages = TInstant::Now();
+        LastTimeWithMessages = TAppData::TimeProvider->Now();
         NotifyPQRB();
     }
-    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
-        ScheduleProcessing();
-    }
+    ScheduleProcessing();
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
     Restart(TStringBuilder() << "Received error: " << ev->Get()->Error);
-}
-
-void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
-    LOG_D("HandleOnWork TEvents::TEvWakeup " << ev->Get()->Tag);
-    switch (ev->Get()->Tag) {
-        case EWakeUpTag::Regular: {
-            FetchMessagesIfNeeded();
-            if (!ProcessingScheduled) {
-                ProcessEventQueue();
-            }
-            NotifyPQRB(true);
-            UpdateMetrics();
-            ScheduleProcessing();
-            Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
-            break;
-        }
-        case EWakeUpTag::Processing: {
-            ProcessingScheduled = false;
-            ProcessEventQueue();
-            break;
-        }
-        case EWakeUpTag::UpdateChildPartitions: {
-            UpdateLockedGroupsIdInChildPartitions(false);
-            break;
-        }
-    }
 }
 
 void TConsumerActor::MoveToDLQIfPossible() {
@@ -1041,17 +1179,19 @@ void TConsumerActor::MoveToDLQIfPossible() {
     }
 
     auto destinationTopic = [&]() -> TString {
-        auto databasePrefix = TStringBuilder() << Database << "/";
-        if (Config.GetDeadLetterQueue().StartsWith("sqs://") || Config.GetDeadLetterQueue().StartsWith(databasePrefix)) {
-            return Config.GetDeadLetterQueue();
-        } else {
-            return databasePrefix << Config.GetDeadLetterQueue();
+        const auto& dlq = Config.GetDeadLetterQueue();
+        if (dlq.empty() || dlq.StartsWith("sqs://")) {
+            return dlq;
         }
+        return NormalizePath(CanonizePath(Database), CanonizePath(dlq));
     };
 
     auto messages = Storage->GetDLQMessages();
     if (!messages.empty()) {
-        LOG_D("Move to DLQ: " << JoinSeq(", ", messages));
+        LOG_D(
+            "Move",
+            {"toDLQ", JoinSeq(", ", messages)}
+        );
         DLQMoverActorId = RegisterWithSameMailbox(CreateDLQMover({
             .ParentActorId = SelfId(),
             .Database = Database,
@@ -1069,12 +1209,18 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvMLPDLQMoverResponse");
 
     if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-        LOG_W("Error moving messages to the DLQ: " << ev->Get()->ErrorDescription);
+        LOG_W(
+            "Error moving messages to the DLQ",
+            {"DLQ", ev->Get()->ErrorDescription}
+        );
         Storage->WakeUpDLQ();
     }
 
     auto& moved = ev->Get()->MovedMessages;
-    LOG_D("Moved to the DLQ: " << JoinSeq(", ", moved | std::views::transform(AsTDLQMessage)));
+    LOG_D(
+        "Moved to the",
+        {"DLQ", JoinSeq(", ", moved | std::views::transform(AsTDLQMessage))}
+    );
 
     DLQMoverActorId = {};
     for (auto [offset, seqNo] : moved) {
@@ -1085,20 +1231,40 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
         AFL_ENSURE(result)("o", offset)("s", seqNo);
     }
 
-    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
-        ScheduleProcessing();
-    }
+    ScheduleProcessing();
 }
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
-    LOG_D("Handle TEvents::TEvWakeup " << ev->Get()->Tag);
-    if (ev->Get()->Tag == EWakeUpTag::UpdateChildPartitions) {
-        UpdateLockedGroupsIdInChildPartitions(false);
-        return;
+    LOG_D(
+        "Handle TEvents::TEvWakeup",
+        {"tag", ev->Get()->Tag}
+    );
+    switch (ev->Get()->Tag) {
+        case EWakeUpTag::UpdateChildPartitions:
+            UpdateLockedGroupsIdInChildPartitions(false);
+            return;
+        case EWakeUpTag::Processing:
+            // The flag is reset in any state: the scheduled wakeup is consumed here, so
+            // ScheduleProcessing() must be able to schedule a new one for later requests.
+            ProcessingScheduled = false;
+            if (!InStateWork()) {
+                return;
+            }
+            ProcessEventQueue();
+            return;
+        case EWakeUpTag::Regular:
+            if (InStateWork()) {
+                FetchMessagesIfNeeded();
+                if (!ProcessingScheduled) {
+                    ProcessEventQueue();
+                }
+                ScheduleProcessing();
+            }
+            UpdateMetrics();
+            NotifyPQRB(true);
+            Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
+            return;
     }
-    UpdateMetrics();
-    NotifyPQRB(true);
-    Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
 }
 
 void TConsumerActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
@@ -1111,7 +1277,7 @@ bool TConsumerActor::UseForReading() const {
     if (!Storage->HasUnlockedMessageGroupsId()) {
         return false;
     }
-    return LastTimeWithMessages > TInstant::Now() - NoMessagesTimeout || LastCommittedOffset < PartitionEndOffset;
+    return LastTimeWithMessages > TAppData::TimeProvider->Now() - NoMessagesTimeout || LastCommittedOffset < PartitionEndOffset;
 }
 
 void TConsumerActor::NotifyPQRB(bool force) {
@@ -1210,7 +1376,12 @@ void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
             }
             Storage->IterateMessageGroupsIdExclusiveFromParent(append);
         }
-        LOG_D("UpdateLockedGroupsIdInChildPartitions: updating child partition " << childPartitionId << "; reason=" << state.SendFullStateReasonsAsString() << "; update=" << ShortDebugString(record));
+        LOG_D(
+            "UpdateLockedGroupsIdInChildPartitions: updating child partition",
+            {"childPartitionId", childPartitionId},
+            {"reason", state.SendFullStateReasonsAsString()},
+            {"update", ShortDebugString(record)}
+        );
         auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), state.TabletId, true, state.Cookie);
         Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
         state.MarkAsSent();

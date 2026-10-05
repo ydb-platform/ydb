@@ -11,12 +11,12 @@ namespace NYT::NDetail {
 
 struct TNullToken
 {
-    friend bool TagInvoke(TTagInvokeTag<IsCancelationRequested>, const TNullToken&) noexcept
+    friend bool TagInvoke(NMpl::TTagInvokeTag<IsCancelationRequested>, const TNullToken&) noexcept
     {
         return false;
     }
 
-    friend const TError& TagInvoke(TTagInvokeTag<GetCancelationError>, const TNullToken&) noexcept
+    friend const TError& TagInvoke(NMpl::TTagInvokeTag<GetCancelationError>, const TNullToken&) noexcept
     {
         YT_ABORT();
     }
@@ -30,12 +30,12 @@ struct TTokenForCancelableContext
 {
     TCancelableContextPtr Context;
 
-    friend bool TagInvoke(TTagInvokeTag<IsCancelationRequested>, const TTokenForCancelableContext& token) noexcept
+    friend bool TagInvoke(NMpl::TTagInvokeTag<IsCancelationRequested>, const TTokenForCancelableContext& token) noexcept
     {
         return token.Context->IsCanceled();
     }
 
-    friend const TError& TagInvoke(TTagInvokeTag<GetCancelationError>, const TTokenForCancelableContext& token)
+    friend const TError& TagInvoke(NMpl::TTagInvokeTag<GetCancelationError>, const TTokenForCancelableContext& token)
     {
         return token.Context->GetCancelationError();
     }
@@ -53,12 +53,12 @@ struct TTokenForFuture
 
     TFutureState<void>* FutureState;
 
-    friend bool TagInvoke(TTagInvokeTag<IsCancelationRequested>, const TTokenForFuture& token) noexcept
+    friend bool TagInvoke(NMpl::TTagInvokeTag<IsCancelationRequested>, const TTokenForFuture& token) noexcept
     {
         return token.FutureState->IsCanceled();
     }
 
-    friend const TError& TagInvoke(TTagInvokeTag<GetCancelationError>, const TTokenForFuture& token)
+    friend const TError& TagInvoke(NMpl::TTagInvokeTag<GetCancelationError>, const TTokenForFuture& token)
     {
         return token.FutureState->GetCancelationError();
     }

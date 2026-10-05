@@ -24,6 +24,16 @@ const TMap<TString, TString>& GetExternalSourceTypeAliases() {
     return aliases;
 }
 
+// Legacy configuration aliases: only for available_external_data_sources config.
+// These are NOT used for EDS type validation (users cannot create EDS with these types).
+const TMap<TString, TString>& GetLegacyConfigAliases() {
+    static const TMap<TString, TString> aliases = {
+        // "YdbTopics" in config now means "Ydb" (topics are distinguished by EKind)
+        {"YdbTopics", ToString(NYql::EDatabaseType::Ydb)},
+    };
+    return aliases;
+}
+
 TString ResolveExternalSourceTypeAlias(const TString& type) {
     const auto& aliases = GetExternalSourceTypeAliases();
     auto it = aliases.find(type);
@@ -49,8 +59,16 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
 private:
     static std::set<TString> NormalizeAvailableTypes(const std::set<TString>& types) {
         std::set<TString> normalized;
+        const auto& legacyAliases = GetLegacyConfigAliases();
         for (const auto& type : types) {
-            normalized.insert(ResolveExternalSourceTypeAlias(type));
+            // First check legacy config aliases (e.g., "YdbTopics" → "Ydb")
+            auto legacyIt = legacyAliases.find(type);
+            if (legacyIt != legacyAliases.end()) {
+                normalized.insert(legacyIt->second);
+            } else {
+                // Then apply standard aliases (e.g., "MoniumMetrics" → "Solomon")
+                normalized.insert(ResolveExternalSourceTypeAlias(type));
+            }
         }
         return normalized;
     }
@@ -157,7 +175,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Ydb),
-            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::YT),
@@ -181,7 +199,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Solomon),
-            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN", "SERVICE_ACCOUNT"}, {"use_tls", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN", "SERVICE_ACCOUNT", "IAM"}, {"use_tls", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::Iceberg),
@@ -203,10 +221,6 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
             ToString(NYql::EDatabaseType::OpenSearch),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
         },
-        {
-            ToString(NYql::EDatabaseType::YdbTopics),
-            CreateExternalDataSource(TString{NYql::PqProviderName}, {"NONE", "BASIC", "TOKEN", "IAM"}, {"database_name", "use_tls", "shared_reading"}, hostnamePatternsRegEx)
-        }
     },
     allExternalDataSourcesAreAvailable,
     availableExternalDataSources); 

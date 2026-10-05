@@ -28,18 +28,13 @@ public:
     }
 
     std::shared_ptr<IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings) final {
-        if (!TopicClient) {
-            TopicClient = CreateFileTopicClient(Topics, FileClientSettings);
-        }
-
-        return TopicClient->CreateWriteSession(settings);
+        return CreateFileTopicWriteSession(Topics, FileClientSettings, settings);
     }
 
 private:
     const THashMap<TClusterNPath, TDummyTopic> Topics;
     const TFederatedTopicClientSettings FederatedClientSettings;
     const TFileTopicClientSettings FileClientSettings;
-    ITopicClient::TPtr TopicClient;
 };
 
 } // anonymous namespace

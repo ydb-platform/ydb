@@ -7,8 +7,7 @@
 
 #include <yql/essentials/utils/sort.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 using TComparator = std::function<bool(const NUdf::TUnboxedValuePod l, const NUdf::TUnboxedValuePod r)>;
@@ -22,21 +21,21 @@ class THeapWrapper: public TMutableCodegeneratorNode<THeapWrapper>
                     public ICodegeneratorRootNode
 #endif
 {
-    typedef TMutableCodegeneratorNode<THeapWrapper> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<THeapWrapper>;
 
 public:
     THeapWrapper(TAlgorithm algorithm, TComputationMutables& mutables, IComputationNode* list, IComputationExternalNode* left, IComputationExternalNode* right, IComputationNode* compare)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , Algorithm(algorithm)
-        , List(list)
-        , Left(left)
-        , Right(right)
-        , Compare(compare)
+        , Algorithm_(algorithm)
+        , List_(list)
+        , Left_(left)
+        , Right_(right)
+        , Compare_(compare)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto list = List->GetValue(ctx);
+        auto list = List_->GetValue(ctx);
 
         const auto size = list.GetListLength();
 
@@ -47,7 +46,8 @@ public:
         NUdf::TUnboxedValue* items = nullptr;
         const auto next = ctx.HolderFactory.CloneArray(list.Release(), items);
 
-        NUdf::TUnboxedValuePod *const begin = items, *const end = items + size;
+        NUdf::TUnboxedValuePod* const begin = items;
+        NUdf::TUnboxedValuePod* const end = items + size;
 
         Do(ctx, begin, end);
 
@@ -55,14 +55,14 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
 
         const auto fact = ctx.GetFactory();
 
-        const auto list = GetNodeValue(List, ctx, block);
+        const auto list = GetNodeValue(List_, ctx, block);
 
         const auto size = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListLength>(Type::getInt64Ty(context), list, ctx.Codegen, block);
 
@@ -106,38 +106,39 @@ public:
 #endif
 private:
     void Do(TComputationContext& ctx, NUdf::TUnboxedValuePod* begin, NUdf::TUnboxedValuePod* end) const {
-        if (ctx.ExecuteLLVM && Comparator) {
-            return Algorithm(begin, end, std::bind(Comparator, std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
+        if (ctx.ExecuteLLVM && Comparator_) {
+            Algorithm_(begin, end, std::bind(Comparator_, std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
+            return;
         }
 
         TArgsPlace args;
-        Left->SetGetter([&](TComputationContext&) { return args.front(); });
-        Right->SetGetter([&](TComputationContext&) { return args.back(); });
-        Algorithm(begin, end, std::bind(&THeapWrapper::Comp, this, std::ref(args), std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
+        Left_->SetGetter([&](TComputationContext&) { return args.front(); });
+        Right_->SetGetter([&](TComputationContext&) { return args.back(); });
+        Algorithm_(begin, end, std::bind(&THeapWrapper::Comp, this, std::ref(args), std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
     }
 
     bool Comp(TArgsPlace& args, TComputationContext& ctx, const NUdf::TUnboxedValuePod l, const NUdf::TUnboxedValuePod r) const {
         args = {{l, r}};
-        Left->InvalidateValue(ctx);
-        Right->InvalidateValue(ctx);
-        return Compare->GetValue(ctx).Get<bool>();
+        Left_->InvalidateValue(ctx);
+        Right_->InvalidateValue(ctx);
+        return Compare_->GetValue(ctx).Get<bool>();
     }
 
     void RegisterDependencies() const final {
-        this->DependsOn(List);
-        this->Own(Left);
-        this->Own(Right);
-        this->DependsOn(Compare);
+        this->DependsOn(List_);
+        this->Own(Left_);
+        this->Own(Right_);
+        this->DependsOn(Compare_);
     }
 
-    const TAlgorithm Algorithm;
+    const TAlgorithm Algorithm_;
 
-    IComputationNode* const List;
-    IComputationExternalNode* const Left;
-    IComputationExternalNode* const Right;
-    IComputationNode* const Compare;
+    IComputationNode* const List_;
+    IComputationExternalNode* const Left_;
+    IComputationExternalNode* const Right_;
+    IComputationNode* const Compare_;
 
-    TComparePtr Comparator = nullptr;
+    TComparePtr Comparator_ = nullptr;
 
 #ifndef MKQL_DISABLE_CODEGEN
     TString MakeName() const {
@@ -147,17 +148,17 @@ private:
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (CompareFunc) {
-            Comparator = reinterpret_cast<TComparePtr>(codegen.GetPointerToFunction(CompareFunc));
+        if (CompareFunc_) {
+            Comparator_ = reinterpret_cast<TComparePtr>(codegen.GetPointerToFunction(CompareFunc_));
         }
     }
 
     void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        CompareFunc = GenerateCompareFunction(codegen, MakeName(), Left, Right, Compare);
-        codegen.ExportSymbol(CompareFunc);
+        CompareFunc_ = GenerateCompareFunction(codegen, MakeName(), Left_, Right_, Compare_);
+        codegen.ExportSymbol(CompareFunc_);
     }
 
-    Function* CompareFunc = nullptr;
+    Function* CompareFunc_ = nullptr;
 #endif
 };
 
@@ -180,24 +181,24 @@ class TNthWrapper: public TMutableCodegeneratorNode<TNthWrapper>
                    public ICodegeneratorRootNode
 #endif
 {
-    typedef TMutableCodegeneratorNode<TNthWrapper> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TNthWrapper>;
 
 public:
     TNthWrapper(TNthAlgorithm algorithm, TComputationMutables& mutables, IComputationNode* list, IComputationNode* middle, IComputationExternalNode* left, IComputationExternalNode* right, IComputationNode* compare)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , Algorithm(algorithm)
-        , List(list)
-        , Middle(middle)
-        , Left(left)
-        , Right(right)
-        , Compare(compare)
+        , Algorithm_(algorithm)
+        , List_(list)
+        , Middle_(middle)
+        , Left_(left)
+        , Right_(right)
+        , Compare_(compare)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto list = List->GetValue(ctx);
+        auto list = List_->GetValue(ctx);
 
-        auto middle = Middle->GetValue(ctx).Get<ui64>();
+        auto middle = Middle_->GetValue(ctx).Get<ui64>();
         const auto size = list.GetListLength();
 
         middle = std::min(middle, size);
@@ -209,7 +210,9 @@ public:
         NUdf::TUnboxedValue* items = nullptr;
         const auto next = ctx.HolderFactory.CloneArray(list.Release(), items);
 
-        NUdf::TUnboxedValuePod *const begin = items, *const mid = items + middle, *const end = items + size;
+        NUdf::TUnboxedValuePod* const begin = items;
+        NUdf::TUnboxedValuePod* const mid = items + middle;
+        NUdf::TUnboxedValuePod* const end = items + size;
 
         Do(ctx, begin, mid, end);
 
@@ -217,15 +220,15 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
 
         const auto fact = ctx.GetFactory();
 
-        const auto list = GetNodeValue(List, ctx, block);
-        const auto midv = GetNodeValue(Middle, ctx, block);
+        const auto list = GetNodeValue(List_, ctx, block);
+        const auto midv = GetNodeValue(Middle_, ctx, block);
         const auto middle = GetterFor<ui64>(midv, context, block);
 
         const auto size = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListLength>(Type::getInt64Ty(context), list, ctx.Codegen, block);
@@ -277,40 +280,41 @@ public:
 #endif
 private:
     void Do(TComputationContext& ctx, NUdf::TUnboxedValuePod* begin, NUdf::TUnboxedValuePod* nth, NUdf::TUnboxedValuePod* end) const {
-        if (ctx.ExecuteLLVM && Comparator) {
-            return Algorithm(begin, nth, end, std::bind(Comparator, std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
+        if (ctx.ExecuteLLVM && Comparator_) {
+            Algorithm_(begin, nth, end, std::bind(Comparator_, std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
+            return;
         }
 
         TArgsPlace args;
-        Left->SetGetter([&](TComputationContext&) { return args.front(); });
-        Right->SetGetter([&](TComputationContext&) { return args.back(); });
-        Algorithm(begin, nth, end, std::bind(&TNthWrapper::Comp, this, std::ref(args), std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
+        Left_->SetGetter([&](TComputationContext&) { return args.front(); });
+        Right_->SetGetter([&](TComputationContext&) { return args.back(); });
+        Algorithm_(begin, nth, end, std::bind(&TNthWrapper::Comp, this, std::ref(args), std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
     }
 
     bool Comp(TArgsPlace& args, TComputationContext& ctx, const NUdf::TUnboxedValuePod l, const NUdf::TUnboxedValuePod r) const {
         args = {{l, r}};
-        Left->InvalidateValue(ctx);
-        Right->InvalidateValue(ctx);
-        return Compare->GetValue(ctx).Get<bool>();
+        Left_->InvalidateValue(ctx);
+        Right_->InvalidateValue(ctx);
+        return Compare_->GetValue(ctx).Get<bool>();
     }
 
     void RegisterDependencies() const final {
-        this->DependsOn(List);
-        this->DependsOn(Middle);
-        this->Own(Left);
-        this->Own(Right);
-        this->DependsOn(Compare);
+        this->DependsOn(List_);
+        this->DependsOn(Middle_);
+        this->Own(Left_);
+        this->Own(Right_);
+        this->DependsOn(Compare_);
     }
 
-    const TNthAlgorithm Algorithm;
+    const TNthAlgorithm Algorithm_;
 
-    IComputationNode* const List;
-    IComputationNode* const Middle;
-    IComputationExternalNode* const Left;
-    IComputationExternalNode* const Right;
-    IComputationNode* const Compare;
+    IComputationNode* const List_;
+    IComputationNode* const Middle_;
+    IComputationExternalNode* const Left_;
+    IComputationExternalNode* const Right_;
+    IComputationNode* const Compare_;
 
-    TComparePtr Comparator = nullptr;
+    TComparePtr Comparator_ = nullptr;
 
 #ifndef MKQL_DISABLE_CODEGEN
     TString MakeName() const {
@@ -320,17 +324,17 @@ private:
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (CompareFunc) {
-            Comparator = reinterpret_cast<TComparePtr>(codegen.GetPointerToFunction(CompareFunc));
+        if (CompareFunc_) {
+            Comparator_ = reinterpret_cast<TComparePtr>(codegen.GetPointerToFunction(CompareFunc_));
         }
     }
 
     void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        CompareFunc = GenerateCompareFunction(codegen, MakeName(), Left, Right, Compare);
-        codegen.ExportSymbol(CompareFunc);
+        CompareFunc_ = GenerateCompareFunction(codegen, MakeName(), Left_, Right_, Compare_);
+        codegen.ExportSymbol(CompareFunc_);
     }
 
-    Function* CompareFunc = nullptr;
+    Function* CompareFunc_ = nullptr;
 #endif
 };
 
@@ -375,5 +379,4 @@ IComputationNode* WrapNthElement(TCallable& callable, const TComputationNodeFact
 IComputationNode* WrapPartialSort(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapNth(&NYql::FastPartialSort<NUdf::TUnboxedValuePod*, TComparator>, callable, ctx);
 }
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

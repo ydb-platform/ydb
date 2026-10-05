@@ -3,9 +3,12 @@
 #include "defs.h"
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/util/max_tracker.h>
 
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
+
+#include <util/generic/hash.h>
 
 namespace NKikimr {
     namespace NVDiskMon {
@@ -27,14 +30,44 @@ namespace NKikimr {
 
             // update histogram with with an operation with duration 'd'
             void Collect(TDuration d, ui64 size = 0);
+            void AddInFlightRequest(ui64 requestId, TInstant receivedTime);
+            void RemoveInFlightRequest(ui64 requestId);
+            void UpdateCounters(TInstant now);
 
         private:
             NMonitoring::THistogramPtr Histo;
             ::NMonitoring::TDynamicCounters::TCounterPtr ThroughputBytes;
+            TMaxTracker LatencyUsMax;
+            ::NMonitoring::TDynamicCounters::TCounterPtr LatencyUsCompletedSum;
+            ::NMonitoring::TDynamicCounters::TCounterPtr LatencyCompletedCount;
+            ::NMonitoring::TDynamicCounters::TCounterPtr InFlightLatencyUsSum;
+            ::NMonitoring::TDynamicCounters::TCounterPtr InFlightCount;
+            THashMap<ui64, TInstant> InFlightRequests;
         };
 
         using TLtcHistoPtr = std::shared_ptr<TLtcHisto>;
 
+        // Owns one in-flight latency record. Construction/destruction updates the tracked
+        // request set immediately; visible monitoring counters are snapshot-published by
+        // TLtcHisto::UpdateCounters().
+        class TInFlightLatencyGuard {
+        public:
+            TInFlightLatencyGuard() = default;
+            TInFlightLatencyGuard(TLtcHistoPtr histogram, ui64 requestId, TInstant receivedTime);
+            ~TInFlightLatencyGuard();
+
+            TInFlightLatencyGuard(const TInFlightLatencyGuard&) = delete;
+            TInFlightLatencyGuard& operator=(const TInFlightLatencyGuard&) = delete;
+
+            TInFlightLatencyGuard(TInFlightLatencyGuard&& other) noexcept;
+            TInFlightLatencyGuard& operator=(TInFlightLatencyGuard&& other) noexcept;
+
+            void Reset();
+
+        private:
+            TLtcHistoPtr Histogram;
+            ui64 RequestId = 0;
+        };
+
     } // NVDiskMon
 } // NKikimr
-

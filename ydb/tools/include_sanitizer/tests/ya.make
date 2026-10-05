@@ -8,6 +8,8 @@ TEST_SRCS(
     test_patch.py
     test_pilot.py
     test_bench.py
+    test_buildbench.py
+    test_fanout.py
 )
 
 PEERDIR(

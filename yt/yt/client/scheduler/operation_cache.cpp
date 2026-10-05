@@ -20,7 +20,7 @@ TOperationCache::TOperationCache(
     : TAsyncExpiringCache(
         std::move(config),
         NRpc::TDispatcher::Get()->GetHeavyInvoker(),
-        SchedulerLogger().WithTag("Cache: Operation"),
+        SchedulerLogger().WithTag("Cache", "Operation"),
         std::move(profiler))
     , Attributes_(std::move(attributes))
     , Client_(std::move(client))

@@ -73,4 +73,13 @@ Y_UNIT_TEST_SUITE(JsonValueView) {
         UNIT_ASSERT_VALUES_EQUAL(ScalarStr(TJsonValueView::OfNumber(2.5)), BlobScalar("2.5"));
         UNIT_ASSERT_VALUES_EQUAL(ScalarStr(TJsonValueView::OfBool(true)), BlobScalar("true"));
     }
+
+    Y_UNIT_TEST(ToJsonValue) {
+        UNIT_ASSERT_VALUES_EQUAL(TJsonValueView::OfString("hi").ToJsonValue().GetString(), "hi");
+        UNIT_ASSERT_VALUES_EQUAL(TJsonValueView::OfNumber(2.5).ToJsonValue().GetDouble(), 2.5);
+        UNIT_ASSERT(TJsonValueView::OfBool(true).ToJsonValue().GetBoolean());
+        const auto blob = ToBinaryJson(R"({"a":1})");
+        const auto json = TJsonValueView::OfBinaryJson(TStringBuf(blob.data(), blob.size())).ToJsonValue();
+        UNIT_ASSERT_VALUES_EQUAL(json["a"].GetInteger(), 1);
+    }
 }

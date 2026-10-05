@@ -3,13 +3,14 @@
 #include "public.h"
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/property.h>
 
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
 
 #include <library/cpp/yt/memory/range.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <util/digest/multi.h>
 
@@ -115,6 +116,8 @@ TLockMask MaxMask(TLockMask lhs, TLockMask rhs);
 void ToProto(NTabletClient::NProto::TLockMask* protoLockMask, const TLockMask& lockMask);
 void FromProto(TLockMask* lockMask, const NTabletClient::NProto::TLockMask& protoLockMask);
 
+void FormatValue(TStringBuilderBase* builder, const TLockMask& lockMask, TStringBuf spec);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TColumnSchema
@@ -136,16 +139,16 @@ public:
 public:
     TColumnSchema();
     TColumnSchema(
-        const std::string& name,
+        TStringBuf name,
         EValueType type,
         std::optional<ESortOrder> sortOrder = {});
     TColumnSchema(
-        const std::string& name,
+        TStringBuf name,
         ESimpleLogicalValueType type,
         std::optional<ESortOrder> sortOrder = {});
 
     TColumnSchema(
-        const std::string& name,
+        TStringBuf name,
         TLogicalTypePtr type,
         std::optional<ESortOrder> sortOrder = {});
 
@@ -406,6 +409,9 @@ public:
     //! Returns the ordered schema used in replication logs.
     TTableSchemaPtr ToReplicationLog() const;
 
+    //! Returns the column count of #ToReplicationLog().
+    int GetReplicationLogColumnCount() const;
+
     //! Only applies to sorted dynamic tables.
     //! Returns the static schema used for unversioned updates from bulk insert.
     //! Key columns remain unchanged. Additional column |($change_type)| is prepended.
@@ -551,6 +557,7 @@ struct TSchemaValidationOptions
     bool AllowUnversionedUpdateColumns = false;
     bool AllowTimestampColumns = false;
     bool AllowOperationColumns = false;
+    bool AllowShuffleColumns = false;
 };
 
 void ValidateColumnSchema(
@@ -572,6 +579,8 @@ void ValidateNoDescendingSortOrder(
     const TKeyColumns& keyColumns);
 
 void ValidateNoRenamedColumns(const TTableSchema& schema);
+
+void ValidateNoAggregateStateType(const TTableSchema& schema);
 
 void ValidateColumnUniqueness(const TTableSchema& schema);
 

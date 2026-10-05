@@ -16,6 +16,9 @@ service NbsService {
     // Delete NBS partition
     rpc DeletePartition(Ydb.Nbs.DeletePartitionRequest) returns (Ydb.Nbs.DeletePartitionResponse);
 
+    // Grow an existing NBS partition. Shrinking is not allowed.
+    rpc ResizePartition(Ydb.Nbs.ResizePartitionRequest) returns (Ydb.Nbs.ResizePartitionResponse);
+
     // Get load actor adapter actor id for partition
     rpc GetLoadActorAdapterActorId(Ydb.Nbs.GetLoadActorAdapterActorIdRequest) returns (Ydb.Nbs.GetLoadActorAdapterActorIdResponse);
 

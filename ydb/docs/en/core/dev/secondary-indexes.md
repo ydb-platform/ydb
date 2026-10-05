@@ -8,13 +8,37 @@ To use similar capabilities for any fields or combinations of fields in a table,
 
 In transactional systems, using indexes helps reduce or eliminate performance degradation and increased query execution costs as the volume of stored data grows.
 
-This article describes the basic operations for working with secondary indexes and provides links to detailed materials for each operation. Information about different types of secondary indexes and their features is in the Secondary indexes article in the "Concepts" section.
+This article describes the basic operations for working with secondary indexes and provides links to detailed materials for each operation. Information about different types of secondary indexes and their features is available in [{#T}](../concepts/query_execution/secondary_indexes.md) in the "Concepts" section.
 
 ## Creating secondary indexes {#create}
 
 A secondary index is a schema object and can be defined when creating a table using the [YQL `CREATE TABLE` command](../yql/reference/syntax/create_table/index.md), or added to it later using the [YQL `ALTER TABLE` command](../yql/reference/syntax/alter_table/index.md).
 
 The [create index `table index add` command](../reference/ydb-cli/commands/secondary_index.md#add) is supported in the {{ ydb-short-name }} CLI.
+
+Without a secondary index, a query that filters only on a non-key column typically performs a full table scan (`FullScan`) and reads every row. For example, consider this table:
+
+```yql
+CREATE TABLE users (
+    id Uint64,
+    email Utf8,
+    name Utf8,
+    PRIMARY KEY (id)
+);
+```
+
+the query:
+
+```yql
+DECLARE $email AS Utf8;
+SELECT * FROM users WHERE email = $email;
+```
+
+must read all table rows because `email` is not part of the primary key. Adding an index lets you run selects on `email` without a full table scan:
+
+```yql
+ALTER TABLE users ADD INDEX idx_email GLOBAL ON (email);
+```
 
 Since an index contains its own data derived from the table data, when creating an index on an existing table with data, an initial index build operation will be performed, which may take a long time. This operation runs in the background, does not block work with the table, but until the build is complete, the new index cannot be used.
 
@@ -35,32 +59,31 @@ Given the above feature, it is useless to try to index all possible column combi
 
 ## Using secondary indexes in data retrieval {#use}
 
-To access a table by a secondary index, its name must be explicitly specified in the `VIEW` section after the table name, as described in the article about the [`SELECT` command](../yql/reference/syntax/select#secondary_index) in YQL. For example, to retrieve from the Orders table (`orders`) a sample of orders for a customer with a given ID (`id_customer`), the query will look as follows:
+When retrieving data from a table, {{ ydb-short-name }} provides two ways to use secondary indexes:
 
+1. **Explicit index specification** — the secondary index name is specified in the `VIEW` section after the table name, as described in the article about the [`SELECT` command](../yql/reference/syntax/select#secondary_index) in YQL. For example, to retrieve from the Orders table (`orders`) a sample of orders for a customer with a given ID (`id_customer`), the query will look as follows:
 
-```yql
-DECLARE $customer_id AS Uint64;
-SELECT *
-FROM   orders VIEW idx_customer AS o
-WHERE  o.id_customer = $customer_id
-```
+   ```yql
+   DECLARE $customer_id AS Uint64;
+   SELECT *
+   FROM   orders VIEW idx_customer AS o
+   WHERE  o.id_customer = $customer_id
+   ```
 
+   , where `idx_customer` is the name of the secondary index on the `orders` table, with the first field being `id_customer`.
 
-, where `idx_customer` is the name of the secondary index on the `orders` table, with the first field being `id_customer`.
-
-Without specifying the `VIEW` section, the `orders` table will be fully scanned to execute such a query.
-
-In transactional applications, such informational queries are executed using paginated data output, which prevents the cost and execution time from growing as the number of records matching the filter conditions increases. The approach to writing [paged queries](../dev/paging.md) described using the primary key example is also applicable to columns included in a secondary index.
-
-An experimental feature for automatic selection of a secondary index to use in a query is also implemented. The selection algorithm is currently rule-based and uses only the query text to automatically select a secondary index.
-
-### Automatic index usage in queries
+2. **Automatic index selection by the query optimizer** — if the `VIEW` section is not specified, the optimizer can independently decide to use a particular secondary index based on the query text. Detailed criteria for index selection are described below.
 
 {% note warning %}
 
-This mechanism is experimental and is currently disabled by default. It can be enabled using the [`index_auto_choose_mode` setting in `table_service_config`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/table_service_config.proto#L268). The setting will also affect the behavior of the query service.
+If you have existing queries without an explicit index (without the `VIEW` section), adding a new index to a table may cause those queries to start using it automatically. This can lead to unexpected changes in the query plan and execution time. To avoid such surprises, it is recommended to:
+
+* Explicitly specify which index a query should use via the `VIEW` section;
+* Based on the secondary index selection criteria, anticipate in advance whether adding a new secondary index may affect existing queries.
 
 {% endnote %}
+
+### Automatic index usage in queries
 
 Explicitly specifying the `VIEW` section takes precedence over the optimizer's decision to use secondary indexes. That is, the query
 
@@ -134,6 +157,8 @@ CREATE TABLE `Table` (
 `SELECT * FROM Table WHERE SubKey2 = 2` — any of `Index21` and `Index212` may be selected. When using the aforementioned indexes, the point prefix length will be 1. The number of columns used is also maximized when selecting `Index21` and `Index212`.
 
 `SELECT Value2 FROM Table WHERE SubKey2 = 2` — Index212 should be selected. When using Index21 and Index212, the point prefix length will be 1, but when using Index212, no read from the main table is needed.
+
+This example illustrates a general rule: an index avoids an extra read from the main table when it contains all columns required by the query. A global secondary index contains its key columns, columns added via `COVER`, and the main table's primary-key columns, which are stored implicitly (see [{#T}](../concepts/query_execution/secondary_indexes.md)). If the query selects any other columns (for example, `SELECT * FROM Table WHERE SubKey2 = 2`), they must be read additionally from the main table for the matching rows.
 
 `SELECT * FROM Table WHERE SubKey2 > 2` — `Index21` or `Index212` will be used, since the read range is nontrivial only when they are used.
 

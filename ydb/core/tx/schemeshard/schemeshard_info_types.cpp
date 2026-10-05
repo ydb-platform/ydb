@@ -1,5 +1,6 @@
 #include "schemeshard_info_types.h"
 
+#include "schemeshard_generated_column_utils.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
 #include "schemeshard_import_helpers.h"  // for ValidateImportDstPath
@@ -14,7 +15,9 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/util/pb.h>
@@ -270,6 +273,16 @@ bool TSubDomainInfo::CheckSmallBlobsQuotas(IQuotaCounters* counters) {
     return ApplyQuotaExceededStatus(combinedStatus, SmallBlobsQuotaExceeded, COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED, counters);
 }
 
+bool TSubDomainInfo::ApplyStorageSpaceExhausted(bool value, IQuotaCounters* counters) {
+    if (StorageSpaceExhausted == value) {
+        return false;
+    }
+    StorageSpaceExhausted = value;
+    counters->ChangeSimpleCounter(COUNTER_STORAGE_SPACE_EXHAUSTED, value ? +1 : -1);
+    ++DomainStateVersion;
+    return true;
+}
+
 bool TSubDomainInfo::CheckQuotas(IQuotaCounters* counters) {
     const ui64 versionBefore = DomainStateVersion;
     const bool diskQuotaChanged = CheckDiskSpaceQuotas(counters);
@@ -437,7 +450,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     const TSubDomainInfo& subDomain,
     const TCreateAlterDataFeatureFlags& featureFlags,
     TString& errStr,
-    const THashSet<TString>& localSequences)
+    const THashSet<TString>& localSequences,
+    bool allowReplicationMode)
 {
     TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
     alterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
@@ -511,6 +525,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
+            if (col.HasDefaultFromExpression()) {
+                errStr = Sprintf("Cannot add a generated (GENERATED ALWAYS AS) expression to the existing column '%s'", colName.data());
+                return nullptr;
+            }
+
             bool isChangeNotNullConstraint = col.HasNotNull();
             bool isChangeSetNotNullInProgress = col.HasSetNotNullInProgress();
 
@@ -554,6 +573,40 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 if (isChangeSetNotNullInProgress || isChangeNotNullConstraint || columnFamily) {
                     errStr = Sprintf("Cannot alter serial column '%s'", colName.c_str());
                     return nullptr;
+                }
+            }
+
+            if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression && columnFamily && columnFamily->GetId() != 0) {
+                NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+                if (generatedDesc.ParseFromString(sourceColumn.DefaultValue) && !generatedDesc.GetStored()) {
+                    errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
+                    return nullptr;
+                }
+            }
+
+            if (isChangeNotNullConstraint || isChangeSetNotNullInProgress) {
+                if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+                    errStr = Sprintf("Can't change nullability of generated column '%s'", colName.c_str());
+                    return nullptr;
+                }
+
+                for (const auto& [_, srcCol] : source->Columns) {
+                    if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped()) {
+                        continue;
+                    }
+
+                    NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+                    if (!generatedDesc.ParseFromString(srcCol.DefaultValue)) {
+                        continue;
+                    }
+
+                    for (const auto& dependency : generatedDesc.GetDependencyColumnNames()) {
+                        if (dependency == colName) {
+                            errStr = Sprintf("Can't change nullability of column '%s': it is used by generated column '%s'", colName.c_str(),
+                                srcCol.Name.data());
+                            return nullptr;
+                        }
+                    }
                 }
             }
 
@@ -689,6 +742,24 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
+            if (col.HasDefaultFromExpression()) {
+                const bool stored = col.GetDefaultFromExpression().GetStored();
+                if (stored && !featureFlags.EnableGeneratedStored) {
+                    errStr = Sprintf("STORED GENERATED columns are disabled. Column: %s", colName.c_str());
+                    return nullptr;
+                }
+
+                if (!stored && !featureFlags.EnableGeneratedVirtual) {
+                    errStr = Sprintf("VIRTUAL GENERATED columns are disabled. Column: %s", colName.c_str());
+                    return nullptr;
+                }
+
+                if (!stored && columnFamily && columnFamily->GetId() != 0) {
+                    errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
+                    return nullptr;
+                }
+            }
+
             alterData->NextColumnId = Max(colId + 1, alterData->NextColumnId);
 
             colName2Id[colName] = colId;
@@ -705,6 +776,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             } else if (col.HasDefaultFromLiteral()) {
                 column.DefaultKind = ETableColumnDefaultKind::FromLiteral;
                 column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
+            } else if (col.HasDefaultFromExpression()) {
+                column.DefaultKind = ETableColumnDefaultKind::FromExpression;
+                column.DefaultValue = col.GetDefaultFromExpression().SerializeAsString();
             }
         }
     }
@@ -743,6 +817,27 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             if (source->TTLSettings().HasEnabled() && source->TTLSettings().GetEnabled().GetColumnName() == colName) {
                 errStr = Sprintf("Can't drop TTL column: '%s', disable TTL first ", colName.data());
                 return nullptr;
+            }
+            for (const auto& [srcColId, srcCol] : source->Columns) {
+                if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped()) {
+                    continue;
+                }
+
+                if (auto it = alterData->Columns.find(srcColId);
+                    it != alterData->Columns.end() && it->second.DeleteVersion == alterData->AlterVersion)
+                {
+                    continue;
+                }
+
+                NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+                if (generatedDesc.ParseFromString(srcCol.DefaultValue)) {
+                    for (const auto& dependency : generatedDesc.GetDependencyColumnNames()) {
+                        if (dependency == colName) {
+                            errStr = Sprintf("Can't drop column '%s': it is used by generated column '%s'", colName.data(), srcCol.Name.data());
+                            return nullptr;
+                        }
+                    }
+                }
             }
 
             alterData->Columns[colId] = colIt->second;
@@ -829,6 +924,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 desc->AddColumnNames(colName);
                 desc->AddColumnIds(it->second);
             }
+            bool hasEqHeightHistogram = false;
             for (const auto rawType : add.GetTypes()) {
                 const auto type = static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(rawType);
                 switch (type) {
@@ -837,11 +933,37 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                         return nullptr;
                     case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
                         break;
+                    case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+                        hasEqHeightHistogram = true;
+                        break;
                     default:
                         errStr = TStringBuilder() << "Unknown statistic type: " << rawType;
                         return nullptr;
                 }
                 desc->AddTypes(type);
+            }
+            if (hasEqHeightHistogram) {
+                for (const auto& colName : add.GetColumnNames()) {
+                    const ui32 colId = colName2Id.at(colName);
+                    const TColumn* column = nullptr;
+                    if (auto it = alterData->Columns.find(colId); it != alterData->Columns.end()) {
+                        column = &it->second;
+                    } else if (source) {
+                        if (auto it = source->Columns.find(colId); it != source->Columns.end()) {
+                            column = &it->second;
+                        }
+                    }
+                    if (!column || column->IsDropped()) {
+                        errStr = TStringBuilder() << "Undefined column: " << colName;
+                        return nullptr;
+                    }
+                    if (!NScheme::NTypeIds::IsPresortEncodable(column->PType.GetTypeId())) {
+                        errStr = TStringBuilder()
+                            << "EQ_HEIGHT_HISTOGRAM is not supported for column '" << colName
+                            << "' of type " << NScheme::TypeName(column->PType, column->PTypeMod);
+                        return nullptr;
+                    }
+                }
             }
         }
     }
@@ -903,7 +1025,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
             break;
         case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
-            if (source) {
+            if (source && !allowReplicationMode) {
                 errStr = "Cannot set replication mode";
                 return nullptr;
             }
@@ -962,6 +1084,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
         if (column.Family != 0) {
             errStr = Sprintf("Key column '%s' must belong to the default family", keyName.data());
+            return nullptr;
+        }
+        if (column.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+            errStr = Sprintf("Generated column '%s' cannot be part of the primary key", keyName.data());
             return nullptr;
         }
         column.KeyOrder = keyOrder;
@@ -1034,6 +1160,11 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
         for (auto& c : Columns) {
             const TColumn& column = c.second;
             if (column.IsDropped()) {
+                continue;
+            }
+            // A VIRTUAL generated column is computed at read time by KQP: the datashards
+            // must never learn about it
+            if (IsVirtualGeneratedColumn(column)) {
                 continue;
             }
             auto colDescr = TableDescription.AddColumns();
@@ -2137,6 +2268,14 @@ void TTableInfo::CopyPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     Y_ABORT_UNLESS(Stats.Aggregated.RowCount == 0 && Stats.Aggregated.DataSize == 0);
     Stats.PartitionStats.clear();
     Stats.UpdatedStats.clear();
+    // New physical shard IDs: any history copied from the source table is keyed by stale
+    // shard idxs and must be dropped to keep PartitionSplitMergeStates keys subset of PartitionStats keys.
+    // NOTE: the corresponding pathId may still sit in TSchemeShard::TablesWithDeferredSplitMerge
+    // and in SplitMergeRevisitQueue with QueuedForRevisit=true. That cross-object cleanup is
+    // intentionally deferred and self-healing: UpdateSplitMergeCounters prunes stale membership
+    // entries, and the revisit wave clears QueuedForRevisit when DeferredShards is empty.
+    PartitionSplitMergeStates.clear();
+    TableSplitMergeState = TTableSplitMergeState{};
     Stats.Aggregated.PartCount = newPartitioning.size();
     Y_ABORT_UNLESS(SplitOpsInFlight.empty());
     ExpectedPartitionCount = newPartitioning.size();
@@ -2175,7 +2314,9 @@ void TTableInfo::ApplySplitMerge(
     TVector<TTableShardInfo>&& dstPartitions,
     const TVector<TShardIdx>& removedShards,
     ui64 splitFirstIdx,
-    TInstant now
+    TInstant now,
+    bool trackSplitMergeDemand,
+    bool loadSplitLineage
 ) {
     const ui64 kRemoved = removedShards.size();
     const ui64 kAdded = dstPartitions.size();
@@ -2233,11 +2374,201 @@ void TTableInfo::ApplySplitMerge(
         Partitions[i]->Position = i;
     }
 
+    // Split/merge history: subdivide/merge along the partition lineage. The history is kept
+    // in a SEPARATE map (not folded into TPartitionStats) precisely so it survives this
+    // transition -- Stats.PartitionStats was just zeroed for the dst shards above, which would
+    // otherwise wipe the lineage / hysteresis / fairness signal here. Children inherit the
+    // parent range's history. The empty() guard skips the O(removed+added) lookups entirely
+    // when no state was ever recorded -- except for a by-load split, where the persisted
+    // op signal (loadSplitLineage) must seed child state even with an empty map (restart
+    // case). Cleanup of removed shards' entries is deliberately NOT
+    // gated by trackSplitMergeDemand: after a flag toggle-off the map stays populated, and
+    // skipping cleanup would break the keys-subset-of-PartitionStats invariant. Only the
+    // parent-scan propagation is flag-gated.
+    if (!PartitionSplitMergeStates.empty() || loadSplitLineage) {
+        if (trackSplitMergeDemand) {
+            TInstant parentLastSplitTime;
+            TInstant parentLastMergeTime;
+            ui32 parentMaxLoadSplitLineageDepth = 0;
+            bool anyParentHistory = false;
+            for (const TShardIdx& s : removedShards) {
+                if (const auto* h = PartitionSplitMergeStates.FindPtr(s)) {
+                    anyParentHistory = true;
+                    parentLastSplitTime = Max(parentLastSplitTime, h->LastSplitTime);
+                    parentLastMergeTime = Max(parentLastMergeTime, h->LastMergeTime);
+                    parentMaxLoadSplitLineageDepth = Max(parentMaxLoadSplitLineageDepth, h->LoadSplitLineageDepth);
+                }
+            }
+
+            const bool isSplit = kAdded > kRemoved;
+            const bool isMerge = kAdded < kRemoved;
+            // After a SchemeShard restart PartitionSplitMergeStates is empty (in-memory
+            // only), so anyParentHistory is false even when the persisted op carries
+            // LoadSplitLineage == true (TxInFlightV2). Fire the propagation in that case
+            // too, treating the missing parent history as depth 0 -- otherwise the
+            // persisted by-load signal is dead on its intended restart path.
+            if (anyParentHistory || (isSplit && loadSplitLineage)) {
+                for (auto* dst : dstPtrs) {
+                    // Intentional insert: dst shards are brand-new IDs with no entries yet;
+                    // creating their state here IS the lineage propagation. Invariant-safe:
+                    // dst shards were just added to Stats.PartitionStats above.
+                    auto& h = PartitionSplitMergeStates[dst->ShardIdx];
+                    h.LastSplitTime = parentLastSplitTime;
+                    h.LastMergeTime = parentLastMergeTime;
+                    if (isSplit) {
+                        h.LastSplitTime = now;
+                        // Consecutive by-load splits deepen the lineage; size-splits do not.
+                        h.LoadSplitLineageDepth = parentMaxLoadSplitLineageDepth + (loadSplitLineage ? 1 : 0);
+                    } else if (isMerge) {
+                        h.LastMergeTime = now;
+                        h.LoadSplitLineageDepth = 0;  // merge relieves the hot region
+                    } else {
+                        h.LoadSplitLineageDepth = parentMaxLoadSplitLineageDepth;
+                    }
+                }
+            }
+        }
+
+        // Erase parent (now-gone) shard keys from the history map and the tableState deferred set.
+        for (const TShardIdx& s : removedShards) {
+            DropFromSplitMergeState(s);
+            PartitionSplitMergeStates.erase(s);
+        }
+    }
+
     PreserializedTablePartitions.clear();
     PreserializedTablePartitionsNoKeys.clear();
     PreserializedTableSplitBoundaries.clear();
 
     VerifyConsistency();
+}
+
+void TTableInfo::UpdateSplitMergePickCache(const TShardIdx& shardIdx) {
+    // Called after a deferral was recorded for shardIdx (which is in DeferredShards). While a
+    // shard stays deferred its weight only grows and candidates only move forward, so the
+    // only way another shard can overtake the cached winner is through this method.
+    const auto* h = PartitionSplitMergeStates.FindPtr(shardIdx);
+    if (!h) {
+        return;
+    }
+    const ui32 weight = h->DeferredWeight();
+    const TInstant candidate = h->OldestCandidate();
+    auto& s = TableSplitMergeState;
+    // Most-deferred first; tie-broken by the oldest (smallest) candidate timestamp.
+    if (s.CachedPickShardIdx == InvalidShardIdx || weight > s.CachedPickWeight
+        || (weight == s.CachedPickWeight && candidate < s.CachedPickCandidate)) {
+        s.CachedPickShardIdx = shardIdx;
+        s.CachedPickWeight = weight;
+        s.CachedPickCandidate = candidate;
+    }
+}
+
+void TTableInfo::InvalidateSplitMergePickCache(const TShardIdx& shardIdx) {
+    if (TableSplitMergeState.CachedPickShardIdx == shardIdx) {
+        TableSplitMergeState.CachedPickShardIdx = InvalidShardIdx;
+    }
+}
+
+TShardIdx TTableInfo::PickMostDeferredPartition() {
+    auto& tableState = TableSplitMergeState;
+
+    // O(1) fast path: the cache is maintained incrementally by UpdateSplitMergePickCache /
+    // InvalidateSplitMergePickCache and is exact as long as it validates against the current
+    // per-shard state (weight and candidate unchanged, shard still deferred).
+    if (tableState.CachedPickShardIdx != InvalidShardIdx) {
+        const auto* h = PartitionSplitMergeStates.FindPtr(tableState.CachedPickShardIdx);
+        if (h && tableState.DeferredShards.contains(tableState.CachedPickShardIdx)
+            && h->DeferredWeight() == tableState.CachedPickWeight
+            && h->OldestCandidate() == tableState.CachedPickCandidate) {
+            return tableState.CachedPickShardIdx;
+        }
+        tableState.CachedPickShardIdx = InvalidShardIdx;
+    }
+
+    TShardIdx best = InvalidShardIdx;
+    ui32 bestWeight = 0;
+    TInstant bestCandidate;
+    TVector<TShardIdx> stale;
+    for (const auto& [shardIdx, wantsSplit] : tableState.DeferredShards) {
+        const auto* h = PartitionSplitMergeStates.FindPtr(shardIdx);
+        if (!h) {
+            // No per-shard state: the entry is stale by definition; prune it so the table
+            // cannot churn in the revisit queue forever (and the counts stay exact).
+            stale.push_back(shardIdx);
+            continue;
+        }
+        const ui32 weight = h->DeferredWeight();
+        const TInstant candidate = h->OldestCandidate();
+        // Most-deferred first; tie-broken by the oldest (smallest) candidate timestamp.
+        if (best == InvalidShardIdx || weight > bestWeight
+            || (weight == bestWeight && candidate < bestCandidate)) {
+            best = shardIdx;
+            bestWeight = weight;
+            bestCandidate = candidate;
+        }
+    }
+    if (!stale.empty()) {
+        for (const TShardIdx& shardIdx : stale) {
+            const auto it = tableState.DeferredShards.find(shardIdx);
+            if (it == tableState.DeferredShards.end()) {
+                continue;
+            }
+            if (it->second) {
+                if (tableState.SplitDemandCount) {
+                    --tableState.SplitDemandCount;
+                }
+            } else if (tableState.MergeDemandCount) {
+                --tableState.MergeDemandCount;
+            }
+            tableState.DeferredShards.erase(it);
+        }
+        RecomputeOldestPendingCandidateAt();
+    }
+    if (best != InvalidShardIdx) {
+        tableState.CachedPickShardIdx = best;
+        tableState.CachedPickWeight = bestWeight;
+        tableState.CachedPickCandidate = bestCandidate;
+    }
+    return best;
+}
+
+void TTableInfo::DropFromSplitMergeState(const TShardIdx& shardIdx) {
+    auto& tableState = TableSplitMergeState;
+    const auto it = tableState.DeferredShards.find(shardIdx);
+    if (it == tableState.DeferredShards.end()) {
+        return;
+    }
+    // Decrement exactly the count that was incremented on insert (stored direction).
+    if (it->second) {
+        if (tableState.SplitDemandCount) {
+            --tableState.SplitDemandCount;
+        }
+    } else if (tableState.MergeDemandCount) {
+        --tableState.MergeDemandCount;
+    }
+    tableState.DeferredShards.erase(it);
+    InvalidateSplitMergePickCache(shardIdx);
+    RecomputeOldestPendingCandidateAt();
+}
+
+void TTableInfo::RecomputeOldestPendingCandidateAt() {
+    auto& tableState = TableSplitMergeState;
+    if (tableState.DeferredShards.empty()) {
+        tableState.OldestPendingCandidateAt = TInstant();
+        return;
+    }
+    TInstant oldest;
+    for (const auto& [shardIdx, wantsSplit] : tableState.DeferredShards) {
+        const auto* h = PartitionSplitMergeStates.FindPtr(shardIdx);
+        if (!h) {
+            continue;
+        }
+        const TInstant& candidate = h->LastCandidate(wantsSplit);
+        if (candidate && (!oldest || candidate < oldest)) {
+            oldest = candidate;
+        }
+    }
+    tableState.OldestPendingCandidateAt = oldest;
 }
 
 void TTableInfo::VerifyConsistency() const {
@@ -2264,6 +2595,14 @@ void TTableInfo::VerifyConsistency() const {
         }
         // Position must reflect actual index in Partitions.
         Y_ABORT_UNLESS(p->Position == i);
+    }
+
+    // Split/merge history invariant: keys subset of live partitions (dies with the partition).
+    for (const auto& [shardIdx, _] : PartitionSplitMergeStates) {
+        Y_ABORT_UNLESS(Stats.PartitionStats.contains(shardIdx));
+    }
+    for (const auto& [shardIdx, _] : TableSplitMergeState.DeferredShards) {
+        Y_ABORT_UNLESS(Stats.PartitionStats.contains(shardIdx));
     }
 
     Y_ABORT_UNLESS(CondEraseSchedule.IsValidHeap());
@@ -2575,7 +2914,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
                                     THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
                                     float cpuUsageThreshold, const TTableInfo* mainTableForIndex,
                                     TInstant now,
-                                    TString& reason) const
+                                    TString& reason, bool& mergeByLoad) const
 {
     if (ExpectedPartitionCount + 1 - shardsToMerge.size() <= GetMinPartitionsCount()) {
         return false;
@@ -2610,6 +2949,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     if (IsMergeBySizeEnabled(forceShardSplitSettings) && stats->DataSize + totalSize <= sizeToMerge) {
         reason = TStringBuilder() << "merge by size ("
             << "shardSize: " << stats->DataSize << ")";
+        mergeByLoad = false;
         canMerge = true;
     }
 
@@ -2618,6 +2958,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     bool canMergeByLoad = IsMergeByLoadEnabled(mainTableForIndex);
     if (!canMerge && canMergeByLoad && stats->StartTime && stats->StartTime + minUptime < now) {
         reason = "merge by load";
+        mergeByLoad = true;
         canMerge = true;
     }
 
@@ -2663,7 +3004,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                          TShardIdx shardIdx, const TTabletId& tabletId,
                                          TVector<TShardIdx>& shardsToMerge, const TTableInfo* mainTableForIndex,
                                          TInstant now,
-                                         TString& reason) const
+                                         TString& reason, bool& mergeByLoad) const
 {
     // Don't split/merge backup tables
     if (IsBackup) {
@@ -2700,17 +3041,20 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
 
     THashSet<TTabletId> partOwners;
     TString shardMergeReason;
+    bool shardMergeByLoad = false;
 
     // Make sure we can actually merge current shard first
-    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
+    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason, shardMergeByLoad)) {
         return false;
     }
+    // The threshold-cross reason of the whole merge wave follows its first shard.
+    mergeByLoad = shardMergeByLoad;
 
     reason = TStringBuilder() << "shard with tabletId: " << tabletId
         << " " << shardMergeReason;
 
     for (i64 pi = partitionIdx - 1; pi >= 0; --pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi]->ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi]->ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason, shardMergeByLoad)) {
             break;
         }
     }
@@ -2718,7 +3062,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     Reverse(shardsToMerge.begin(), shardsToMerge.end());
 
     for (ui64 pi = partitionIdx + 1; pi < GetPartitions().size(); ++pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi]->ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi]->ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason, shardMergeByLoad)) {
             break;
         }
     }
@@ -3392,7 +3736,9 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         result.AddError("no items to import");
     }
 
-    Items.swap(items);
+    if (result.Success) {
+        Items.swap(items);
+    }
 
     return result;
 }

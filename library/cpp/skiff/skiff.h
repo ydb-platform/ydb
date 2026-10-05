@@ -70,38 +70,55 @@ bool operator==(const TUint256& lhs, const TUint256& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TBlockVarHeader
+{
+    i64 Count = 0;
+    std::optional<i64> ByteSize;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TUncheckedSkiffParser
 {
 public:
     explicit TUncheckedSkiffParser(IZeroCopyInput* stream);
     TUncheckedSkiffParser(const std::shared_ptr<TSkiffSchema>& schema, IZeroCopyInput* stream);
 
+    bool ParseBoolean();
+
     i8 ParseInt8();
     i16 ParseInt16();
     i32 ParseInt32();
     i64 ParseInt64();
+
+    TInt128 ParseInt128();
+    TInt256 ParseInt256();
+
+    i32 ParseVarInt32();
+    i64 ParseVarInt64();
 
     ui8 ParseUint8();
     ui16 ParseUint16();
     ui32 ParseUint32();
     ui64 ParseUint64();
 
-    TInt128 ParseInt128();
     TUint128 ParseUint128();
-
-    TInt256 ParseInt256();
     TUint256 ParseUint256();
 
+    float ParseFloat();
     double ParseDouble();
 
-    bool ParseBoolean();
-
     TStringBuf ParseString32();
-
+    TStringBuf ParseStringVar();
     TStringBuf ParseYson32();
+
+    TStringBuf ParseStringFixed(i64 size);
 
     ui8 ParseVariant8Tag();
     ui16 ParseVariant16Tag();
+    i32 ParseVariantVarTag();
+
+    TBlockVarHeader ParseBlockVarHeader();
 
     bool HasMoreData();
 
@@ -119,6 +136,9 @@ private:
 
     template <typename T>
     T ParseSimple();
+
+    template <typename TFunction>
+    TStringBuf ParseString(EWireType wireType, TFunction&& parseLength);
 
 private:
     IZeroCopyInput* const Underlying_;
@@ -138,32 +158,41 @@ public:
     TCheckedSkiffParser(const std::shared_ptr<TSkiffSchema>& schema, IZeroCopyInput* stream);
     ~TCheckedSkiffParser();
 
+    bool ParseBoolean();
+
     i8 ParseInt8();
     i16 ParseInt16();
     i32 ParseInt32();
     i64 ParseInt64();
+
+    TInt128 ParseInt128();
+    TInt256 ParseInt256();
+
+    i32 ParseVarInt32();
+    i64 ParseVarInt64();
 
     ui8 ParseUint8();
     ui16 ParseUint16();
     ui32 ParseUint32();
     ui64 ParseUint64();
 
-    TInt128 ParseInt128();
     TUint128 ParseUint128();
-
-    TInt256 ParseInt256();
     TUint256 ParseUint256();
 
+    float ParseFloat();
     double ParseDouble();
 
-    bool ParseBoolean();
-
     TStringBuf ParseString32();
-
+    TStringBuf ParseStringVar();
     TStringBuf ParseYson32();
+
+    TStringBuf ParseStringFixed(i64 size);
 
     ui8 ParseVariant8Tag();
     ui16 ParseVariant16Tag();
+    i32 ParseVariantVarTag();
+
+    TBlockVarHeader ParseBlockVarHeader();
 
     bool HasMoreData();
 
@@ -188,7 +217,6 @@ public:
 
     ~TUncheckedSkiffWriter();
 
-    void WriteDouble(double value);
     void WriteBoolean(bool value);
 
     void WriteInt8(i8 value);
@@ -196,23 +224,34 @@ public:
     void WriteInt32(i32 value);
     void WriteInt64(i64 value);
 
+    void WriteInt128(TInt128 value);
+    void WriteInt256(const TInt256& value);
+
+    void WriteVarInt32(i32 value);
+    void WriteVarInt64(i64 value);
+
     void WriteUint8(ui8 value);
     void WriteUint16(ui16 value);
     void WriteUint32(ui32 value);
     void WriteUint64(ui64 value);
 
-    void WriteInt128(TInt128 value);
     void WriteUint128(TUint128 value);
-
-    void WriteInt256(const TInt256& value);
     void WriteUint256(const TUint256& value);
 
-    void WriteString32(TStringBuf value);
+    void WriteFloat(float value);
+    void WriteDouble(double value);
 
+    void WriteString32(TStringBuf value);
+    void WriteStringVar(TStringBuf value);
     void WriteYson32(TStringBuf value);
+
+    void WriteStringFixed(TStringBuf value);
 
     void WriteVariant8Tag(ui8 tag);
     void WriteVariant16Tag(ui16 tag);
+    void WriteVariantVarTag(i32 tag);
+
+    void WriteBlockVarHeader(const TBlockVarHeader& blockHeader);
 
     void StartBlob();
     void FinishBlob();
@@ -221,7 +260,6 @@ public:
     void Finish();
 
 private:
-
     template <typename T>
     void WriteSimple(T data);
 
@@ -246,31 +284,41 @@ public:
 
     ~TCheckedSkiffWriter();
 
+    void WriteBoolean(bool value);
+
     void WriteInt8(i8 value);
     void WriteInt16(i16 value);
     void WriteInt32(i32 value);
     void WriteInt64(i64 value);
+
+    void WriteInt128(TInt128 value);
+    void WriteInt256(const TInt256& value);
+
+    void WriteVarInt32(i32 value);
+    void WriteVarInt64(i64 value);
 
     void WriteUint8(ui8 value);
     void WriteUint16(ui16 value);
     void WriteUint32(ui32 value);
     void WriteUint64(ui64 value);
 
-    void WriteDouble(double value);
-    void WriteBoolean(bool value);
-
-    void WriteInt128(TInt128 value);
     void WriteUint128(TUint128 value);
+    void WriteUint256(const TUint256& value);
 
-    void WriteInt256(TInt256 value);
-    void WriteUint256(TUint256 value);
+    void WriteFloat(float value);
+    void WriteDouble(double value);
 
     void WriteString32(TStringBuf value);
-
+    void WriteStringVar(TStringBuf value);
     void WriteYson32(TStringBuf value);
+
+    void WriteStringFixed(TStringBuf value);
 
     void WriteVariant8Tag(ui8 tag);
     void WriteVariant16Tag(ui16 tag);
+    void WriteVariantVarTag(i32 tag);
+
+    void WriteBlockVarHeader(const TBlockVarHeader& blockHeader);
 
     void StartBlob();
     void FinishBlob();
@@ -286,7 +334,8 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <EWireType wireType>
-class TUnderlyingIntegerType {
+class TUnderlyingIntegerType
+{
 private:
     TUnderlyingIntegerType() = default;
     static constexpr auto F();

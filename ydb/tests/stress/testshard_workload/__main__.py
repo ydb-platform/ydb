@@ -10,11 +10,10 @@ if __name__ == '__main__':
     parser.add_argument('--endpoint', default='grpc://localhost:2135', help="YDB endpoint")
     parser.add_argument('--database', default=None, required=True, help='A database, where TestShard will be created')
     parser.add_argument('--duration', default=120, type=lambda x: int(x), help='A duration of workload in seconds')
-    parser.add_argument('--owner-idx', default=1, type=lambda x: int(x), help='Owner index for tablet creation')
+    parser.add_argument('--path', default='testshard_1', help='Path to the TestShardSet object, relative to the database or absolute')
     parser.add_argument('--count', default=1, type=lambda x: int(x), help='Number of tablets to create')
     parser.add_argument('--config', default=None, help='Path to custom testshard config file')
-    parser.add_argument('--channels', default=None, help='Comma-separated list of storage channels (e.g., /Root/db1:ssd,/Root/db1:ssd,/Root/db1:ssd). \
-                                                          Required, if database is /Root')
+    parser.add_argument('--channels', default=None, help='Comma-separated list of storage pool kinds')
     parser.add_argument('--tsserver-port', default=35000, type=lambda x: int(x), help='Port for TestShard validation server')
     parser.add_argument('--tsserver-host', default='localhost', help='Host of a TestShard validation server')
     parser.add_argument('--stats-interval', default=10, type=lambda x: int(x), help='Interval in seconds between stats output')
@@ -49,7 +48,7 @@ if __name__ == '__main__':
         args.endpoint,
         args.database,
         duration=args.duration,
-        owner_idx=args.owner_idx,
+        path=args.path,
         count=args.count,
         config_path=args.config,
         channels=channels,

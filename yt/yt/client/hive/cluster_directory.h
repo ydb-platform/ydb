@@ -91,6 +91,11 @@ public:
     //! Returns true if there is a cluster with corresponding TVM id in the directory.
     bool HasTvmId(NAuth::TTvmId tvmId) const;
 
+    //! Returns the time of the last completed directory update.
+    std::optional<TInstant> GetLastSuccessfulUpdateTime() const;
+
+    // NB: subscribers to these signals have to be executed synchronously
+    // because old connection can be terminated after this signal is fired.
     DEFINE_SIGNAL(void(const std::string&, NYTree::INodePtr), OnClusterUpdated);
     DEFINE_SIGNAL(void(const std::string&), OnClusterUnregistered);
 
@@ -104,6 +109,8 @@ protected:
 
     const TConnection::TConnectionOptions ConnectionOptions_;
 
+    std::optional<TCluster> FindCluster(const std::string& name) const;
+
     virtual TConnectionPtr CreateConnection(const std::string& name, const NYTree::INodePtr& connectionConfig) = 0;
     virtual NObjectClient::TCellTagList GetCellTags(const TCluster& cluster);
 
@@ -112,6 +119,7 @@ private:
     THashMap<NApi::TClusterTag, TCluster> CellTagToCluster_;
     THashMap<std::string, TCluster> NameToCluster_;
     THashMultiSet<NAuth::TTvmId> ClusterTvmIds_;
+    std::optional<TInstant> LastSuccessfulUpdateTime_;
 
     TClusterDirectoryUpdateResult TryUpdateDirectory(const THashMap<std::string, NYTree::INodePtr>& nameToConfig);
     TCluster CreateCluster(const std::string& name, const NYTree::INodePtr& connectionConfig);

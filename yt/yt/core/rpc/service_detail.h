@@ -21,7 +21,6 @@
 #include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/object_pool.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
-#include <yt/yt/core/misc/ring_queue.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -34,6 +33,8 @@
 #include <yt/yt/library/profiling/sensor.h>
 
 #include <yt/yt/library/syncmap/map.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 #include <library/cpp/yt/memory/ref.h>
@@ -170,6 +171,9 @@ public:
     using TTypedRequest = TTypedServiceRequest<TRequestMessage>;
     using TTypedResponse = TTypedServiceResponse<TResponseMessage>;
 
+    using TRequestPool = TObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>;
+    using TResponsePool = TObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>;
+
     TGenericTypedServiceContext(
         TIntrusivePtr<TServiceContext> context,
         const THandlerInvocationOptions& options)
@@ -178,8 +182,8 @@ public:
     {
         const auto& underlyingContext = this->GetUnderlyingContext();
         Response_ = underlyingContext->IsPooled()
-            ? ObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>().Allocate()
-            : std::make_shared<TTypedResponse>();
+            ? ResponsePool().AllocateUnique()
+            : TResponsePool::AllocateUniqueUnpooled();
         Response_->Context_ = underlyingContext.Get();
 
         if (this->GetResponseCodec() == NCompression::ECodec::None) {
@@ -190,11 +194,9 @@ public:
     bool DeserializeRequest()
     {
         const auto& underlyingContext = this->GetUnderlyingContext();
-        if (underlyingContext->IsPooled()) {
-            Request_ = ObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>().Allocate();
-        } else {
-            Request_ = std::make_shared<TTypedRequest>();
-        }
+        Request_ = underlyingContext->IsPooled()
+            ? RequestPool().AllocateUnique()
+            : TRequestPool::AllocateUniqueUnpooled();
 
         Request_->Context_ = underlyingContext.Get();
         const auto& tracker = Request_->Context_->GetMemoryUsageTracker();
@@ -273,7 +275,7 @@ public:
                 underlyingContext->Reply(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Error deserializing request attachments")
-                    << TError(ex));
+                    .With(ex));
                 return false;
             }
 
@@ -330,8 +332,18 @@ public:
 protected:
     const THandlerInvocationOptions Options_;
 
-    typename TObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>::TObjectPtr Request_;
-    typename TObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>::TObjectPtr Response_;
+    typename TRequestPool::TObjectUniquePtr Request_;
+    typename TResponsePool::TObjectUniquePtr Response_;
+
+    static TRequestPool& RequestPool()
+    {
+        return ObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>();
+    }
+
+    static TResponsePool& ResponsePool()
+    {
+        return ObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>();
+    }
 
     struct TSerializedResponse
     {
@@ -625,7 +637,7 @@ protected:
         //! Also system methods do not require authentication.
         bool System = false;
 
-        //! Log level for events emitted via |Set(Request|Response)Info|-like functions.
+        //! Log level for the request and response log messages.
         NLogging::ELogLevel LogLevel = NLogging::ELogLevel::Debug;
         //! Log level for events emitted when method fails, by default |LogLevel| is used.
         std::optional<NLogging::ELogLevel> ErrorLogLevel;
@@ -776,9 +788,10 @@ protected:
         std::atomic<bool> Heavy = false;
         std::atomic<bool> Pooled = true;
 
-        // This value represents the combined queue sizes of all request
-        // queues associated with the method.
+        // These values represent the combined queue sizes and queue byte sizes
+        // of all request queues associated with the method.
         std::atomic<int> QueueSize = 0;
+        std::atomic<i64> QueueByteSize = 0;
 
         std::atomic<int> QueueSizeLimit = 0;
         std::atomic<i64> QueueByteSizeLimit = 0;
@@ -1149,12 +1162,13 @@ public:
 
     int GetQueueSize() const;
     std::optional<int> GetQueueSizeLimit() const;
-    // TODO(h0pless): support queue byte size limit for symmetry's sake.
+    std::optional<i64> GetQueueByteSizeLimit() const;
     i64 GetQueueByteSize() const;
     int GetConcurrency() const;
     i64 GetConcurrencyByte() const;
 
     void SetQueueSizeLimit(std::optional<int> limit);
+    void SetQueueByteSizeLimit(std::optional<i64> limit);
 
     void OnRequestArrived(TServiceBase::TServiceContextPtr context);
     void OnRequestFinished(i64 requestTotalSize);
@@ -1174,9 +1188,6 @@ private:
     TServiceBase* Service_;
     TServiceBase::TRuntimeMethodInfo* RuntimeInfo_ = nullptr;
 
-    std::atomic<int> Concurrency_ = 0;
-    std::atomic<i64> ConcurrencyByte_ = 0;
-
     struct TRequestThrottler
     {
         const NConcurrency::IReconfigurableThroughputThrottlerPtr Throttler;
@@ -1190,9 +1201,15 @@ private:
     std::atomic<bool> Throttled_ = false;
 
     std::atomic<int> QueueSize_ = 0;
+    std::atomic<i64> QueueByteSize_ = 0;
+    std::atomic<int> Concurrency_ = 0;
+    std::atomic<i64> ConcurrencyByte_ = 0;
+
     // Not std::optional to guarantee lock freeness; -1 means inf.
     std::atomic<int> QueueSizeLimit_ = -1;
-    std::atomic<i64> QueueByteSize_ = 0;
+    std::atomic<i64> QueueByteSizeLimit_ = -1;
+    // TODO(h0pless): Add ConcurrencyLimit and ConcurrencyByteLimit.
+
     moodycamel::ConcurrentQueue<TServiceBase::TServiceContextPtr> Queue_;
 
     std::atomic<TDuration> TestingDelay_;

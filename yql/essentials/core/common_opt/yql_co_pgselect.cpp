@@ -26,6 +26,7 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
             size_t countOfPercents = 0;
             ForEach(str.begin(), str.end(), [&](char c) { countOfPercents += (c == '%');});
             if (!hasUnderscore && countOfPercents == 0) {
+                // clang-format off
                 return ctx.Builder(node->Pos())
                     .Callable("PgOp")
                         .Atom(0, "=")
@@ -33,6 +34,7 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
                         .Add(2, pattern)
                     .Seal()
                     .Build();
+                // clang-format on
             }
 
             TStringBuf op;
@@ -53,6 +55,7 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
             }
 
             if (!op.empty()) {
+                // clang-format off
                 return ctx.Builder(node->Pos())
                     .Callable("ToPg")
                         .Callable(0, op)
@@ -65,10 +68,12 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
             }
         }
     }
 
+    // clang-format off
     auto matcher = ctx.Builder(node->Pos())
         .Callable("Udf")
             .Atom(0, "Re2.Match")
@@ -104,7 +109,9 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     return ctx.Builder(node->Pos())
         .Callable("ToPg")
             .Callable(0, "If")
@@ -127,6 +134,7 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr ExpandPgBetween(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -136,6 +144,7 @@ TExprNode::TPtr ExpandPgBetween(const TExprNode::TPtr& node, TExprContext& ctx, 
     auto begin = node->ChildPtr(1);
     auto end = node->ChildPtr(2);
     if (isSym) {
+        // clang-format off
         auto swap = ctx.Builder(node->Pos())
             .Callable("PgOp")
                 .Atom(0, "<")
@@ -143,8 +152,10 @@ TExprNode::TPtr ExpandPgBetween(const TExprNode::TPtr& node, TExprContext& ctx, 
                 .Add(2, begin)
             .Seal()
             .Build();
+        // clang-format on
 
         auto swapper = [&](auto x, auto y) {
+            // clang-format off
             return ctx.Builder(node->Pos())
                 .Callable("IfPresent")
                     .Callable(0, "FromPg")
@@ -162,6 +173,7 @@ TExprNode::TPtr ExpandPgBetween(const TExprNode::TPtr& node, TExprContext& ctx, 
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         };
 
         // swap: null->null, false->begin, true->end
@@ -172,6 +184,7 @@ TExprNode::TPtr ExpandPgBetween(const TExprNode::TPtr& node, TExprContext& ctx, 
         end = newEnd;
     }
 
+    // clang-format off
     return ctx.Builder(node->Pos())
         .Callable("PgAnd")
             .Callable(0, "PgOp")
@@ -186,6 +199,7 @@ TExprNode::TPtr ExpandPgBetween(const TExprNode::TPtr& node, TExprContext& ctx, 
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 } // namespace NYql

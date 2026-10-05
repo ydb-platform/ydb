@@ -5,6 +5,27 @@
 
 namespace NYql::NTypeAnnImpl {
 
+struct TYqlFromSettings {
+    bool IsExplicitlyColumnOrdered = false;
+
+    static TMaybe<TYqlFromSettings> Parse(const TExprNode::TPtr& settings, TExtContext& ctx);
+};
+
+struct TYqlColumnOrderItem {
+    TString Content;
+    bool IsSynthetic = false;
+
+    friend bool operator==(const TYqlColumnOrderItem& lhs, const TYqlColumnOrderItem& rhs) = default;
+    friend bool operator!=(const TYqlColumnOrderItem& lhs, const TYqlColumnOrderItem& rhs) = default;
+};
+
+struct TYqlResultItemLabel: TYqlColumnOrderItem {
+    TPositionHandle Position;
+    bool IsShadowingWarning = false;
+};
+
+using TYqlColumnOrder = TVector<TYqlColumnOrderItem>;
+
 IGraphTransformer::TStatus PromoteYqlAggOptions(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
@@ -16,7 +37,18 @@ IGraphTransformer::TStatus InferYqlImplicitUsingJoinColumns(
     const TInputs& groupInputs,
     const TVector<ui32>& lhsIndexes,
     const TVector<ui32>& rhsIndexes,
+    const TExprNode& setItem,
     TVector<std::pair<TString, TString>>& implicitUsing,
+    TExtContext& ctx);
+
+bool ValidateYqlWithoutSetting(TExprNode& setting, TExprContext& ctx);
+
+bool IsYqlWithoutItem(TStringBuf itemName, const TExprNode& without, bool isJoin);
+
+IGraphTransformer::TStatus ApplyYqlWithoutToStar(
+    const TExprNode& setItem,
+    const TInputs& inputs,
+    TVector<const TItemExprType*>& items,
     TExtContext& ctx);
 
 IGraphTransformer::TStatus InferYqlInferUnionType(
@@ -27,6 +59,48 @@ IGraphTransformer::TStatus InferYqlInferUnionType(
     TExtContext& ctx,
     bool& areColumnsOrdered,
     bool& isUniversal);
+
+/// NB: this is a light version only for a simple and sound static analysis.
+TMaybe<TYqlColumnOrder> InferYqlSimpleColumnOrder(const TExprNode::TPtr& input);
+
+IGraphTransformer::TStatus ValidateYqlExplicitColumnOrders(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TExtContext& ctx,
+    TPositionHandle position,
+    const TVector<TPositionHandle>& expectedPositions,
+    const TVector<TString>& expectedOrder,
+    const TYqlColumnOrder& actualOrder);
+
+IGraphTransformer::TStatus ValidateYqlWarnShadow(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TExtContext& ctx,
+    const TInputs& inputs);
+
+IGraphTransformer::TStatus YqlColumnOrTypeWrapper(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+
+IGraphTransformer::TStatus FinalizeYqlColumnRefs(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+
+IGraphTransformer::TStatus ValidateYqlSubLinkSettings(
+    const TExprNode::TPtr& input,
+    TContext& ctx,
+    bool& isUniversal);
+
+IGraphTransformer::TStatus ValidateYqlSublinkInCollectionItemsNullable(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TContext& ctx,
+    const TTypeAnnotationNode* lookupType,
+    const TTypeAnnotationNode* collectionItemType);
+
+TExprNode::TPtr RebuildLambdaYqlWin(
+    const TExprNode::TPtr& node,
+    const TExprNode::TPtr& row,
+    const TExprNode* windows,
+    TExprContext& ctx);
 
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);

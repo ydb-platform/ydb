@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    consumer_collection.cpp
     memory_controller.cpp
     memtable_collection.cpp
 )

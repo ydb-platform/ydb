@@ -1,7 +1,8 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     control.cpp
+    dynamic_function_registry.cpp
     kqp_batch_operations.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
@@ -30,6 +31,7 @@ PEERDIR(
     library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/protobuf/json
+    library/cpp/threading/hot_swap
     ydb/core/base
     ydb/core/engine
     ydb/core/grpc_services/cancelation
@@ -53,11 +55,10 @@ PEERDIR(
     yql/essentials/core/dq_integration
     yql/essentials/core/issue
     yql/essentials/core/services
+    yql/essentials/minikql
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/issue
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(kqp_tx_info.h)
 GENERATE_ENUM_SERIALIZATION(kqp_yql.h)

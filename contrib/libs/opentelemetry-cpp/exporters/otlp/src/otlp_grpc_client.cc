@@ -7,12 +7,11 @@
 #include <grpcpp/resource_quota.h>
 #include <grpcpp/security/credentials.h>
 #include <grpcpp/support/channel_arguments.h>
-#include <stdint.h>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <fstream>
 #include <iterator>
-#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -36,7 +35,6 @@
 #  include <condition_variable>
 #  include <cstdio>
 #  include <mutex>
-#  include <ratio>
 #  include <unordered_set>
 
 #  include "opentelemetry/common/timestamp.h"
@@ -461,7 +459,7 @@ void OtlpGrpcClient::PopulateChannelArguments(const OtlpGrpcClientOptions &optio
 std::unique_ptr<grpc::ClientContext> OtlpGrpcClient::MakeClientContext(
     const OtlpGrpcClientOptions &options)
 {
-  std::unique_ptr<grpc::ClientContext> context{new grpc::ClientContext()};
+  std::unique_ptr<grpc::ClientContext> context = std::make_unique<grpc::ClientContext>();
   if (!context)
   {
     return context;
@@ -516,11 +514,19 @@ grpc::Status OtlpGrpcClient::DelegateExport(
     std::unique_ptr<grpc::ClientContext> &&context,
     std::unique_ptr<google::protobuf::Arena> &&arena,
     proto::collector::trace::v1::ExportTraceServiceRequest *request,
-    proto::collector::trace::v1::ExportTraceServiceResponse *response)
+    proto::collector::trace::v1::ExportTraceServiceResponse *response,
+    std::function<void(std::unique_ptr<google::protobuf::Arena> &&,
+                       proto::collector::trace::v1::ExportTraceServiceResponse *)> &&on_complete)
 {
   auto trace_grpc_context = std::move(context);
   auto trace_arena        = std::move(arena);
-  return stub->Export(trace_grpc_context.get(), *request, response);
+  auto status             = stub->Export(trace_grpc_context.get(), *request, response);
+  if (status.ok() && on_complete)
+  {
+    auto callback = std::move(on_complete);
+    callback(std::move(trace_arena), response);
+  }
+  return status;
 }
 
 grpc::Status OtlpGrpcClient::DelegateExport(
@@ -528,11 +534,20 @@ grpc::Status OtlpGrpcClient::DelegateExport(
     std::unique_ptr<grpc::ClientContext> &&context,
     std::unique_ptr<google::protobuf::Arena> &&arena,
     proto::collector::metrics::v1::ExportMetricsServiceRequest *request,
-    proto::collector::metrics::v1::ExportMetricsServiceResponse *response)
+    proto::collector::metrics::v1::ExportMetricsServiceResponse *response,
+    std::function<void(std::unique_ptr<google::protobuf::Arena> &&,
+                       proto::collector::metrics::v1::ExportMetricsServiceResponse *)>
+        &&on_complete)
 {
   auto metrics_grpc_context = std::move(context);
   auto metrics_arena        = std::move(arena);
-  return stub->Export(metrics_grpc_context.get(), *request, response);
+  auto status               = stub->Export(metrics_grpc_context.get(), *request, response);
+  if (status.ok() && on_complete)
+  {
+    auto callback = std::move(on_complete);
+    callback(std::move(metrics_arena), response);
+  }
+  return status;
 }
 
 grpc::Status OtlpGrpcClient::DelegateExport(
@@ -540,11 +555,19 @@ grpc::Status OtlpGrpcClient::DelegateExport(
     std::unique_ptr<grpc::ClientContext> &&context,
     std::unique_ptr<google::protobuf::Arena> &&arena,
     proto::collector::logs::v1::ExportLogsServiceRequest *request,
-    proto::collector::logs::v1::ExportLogsServiceResponse *response)
+    proto::collector::logs::v1::ExportLogsServiceResponse *response,
+    std::function<void(std::unique_ptr<google::protobuf::Arena> &&,
+                       proto::collector::logs::v1::ExportLogsServiceResponse *)> &&on_complete)
 {
   auto logs_grpc_context = std::move(context);
   auto logs_arena        = std::move(arena);
-  return stub->Export(logs_grpc_context.get(), *request, response);
+  auto status            = stub->Export(logs_grpc_context.get(), *request, response);
+  if (status.ok() && on_complete)
+  {
+    auto callback = std::move(on_complete);
+    callback(std::move(logs_arena), response);
+  }
+  return status;
 }
 
 void OtlpGrpcClient::AddReference(OtlpGrpcClientReferenceGuard &guard,
@@ -734,20 +757,20 @@ bool OtlpGrpcClient::ForceFlush(
   while (timeout_steady > std::chrono::steady_clock::duration::zero() &&
          request_counter > async_data_->finished_request_counter.load(std::memory_order_acquire))
   {
-    // When changes of running_sessions_ and notify_one/notify_all happen between predicate
-    // checking and waiting, we should not wait forever.We should cleanup gc sessions here as soon
-    // as possible to call FinishSession() and cleanup resources.
+    // A completion can land between the loop condition and the wait, so the wait is bounded and the
+    // condition re-read on every wakeup. Never wait past the caller's deadline.
+    const std::chrono::steady_clock::duration wait_interval =
+        (std::min)(std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                       async_data_->export_timeout),
+                   timeout_steady);
+
     std::chrono::steady_clock::time_point start_timepoint = std::chrono::steady_clock::now();
-    if (std::cv_status::timeout !=
-        async_data_->session_waker.wait_for(lock, async_data_->export_timeout))
-    {
-      break;
-    }
+    async_data_->session_waker.wait_for(lock, wait_interval);
 
     timeout_steady -= std::chrono::steady_clock::now() - start_timepoint;
   }
 
-  return timeout_steady > std::chrono::steady_clock::duration::zero();
+  return request_counter <= async_data_->finished_request_counter.load(std::memory_order_acquire);
 #else
   return true;
 #endif

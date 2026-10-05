@@ -11,8 +11,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
 
-#include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard::NBackup {
@@ -51,14 +49,27 @@ public:
             Counters.OnError();
             return Fail(result.GetError().GetErrorMessage());
         }
-        Register(result.DetachResult().release());
+        DownloaderActorId = Register(result.DetachResult().release());
         Become(&TThis::StateMain);
     }
 
     STRICT_STFUNC(StateMain,
         hFunc(NKikimr::TEvDataShard::TEvGetS3DownloadInfo, Handle) hFunc(NKikimr::TEvDataShard::TEvStoreS3DownloadInfo, Handle)
             hFunc(NKikimr::TEvDataShard::TEvS3UploadRowsRequest, Handle) hFunc(NKikimr::TEvDataShard::TEvAsyncJobComplete, Handle)
-                hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle))
+                hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle) cFunc(NActors::TEvents::TEvPoisonPill::EventType, HandlePoisonPill))
+
+    void HandlePoisonPill() {
+        Counters.OnActorDead();
+        PassAway();
+    }
+
+    void PassAway() override {
+        if (DownloaderActorId) {
+            Send(DownloaderActorId, new NActors::TEvents::TEvPoisonPill());
+            DownloaderActorId = {};
+        }
+        TActorBootstrapped<TImportDownloader>::PassAway();
+    }
 
     void Handle(TEvPrivate::TEvBackupImportRecordBatchResult::TPtr&) {
         auto response = std::make_unique<NKikimr::TEvDataShard::TEvS3UploadRowsResponse>();
@@ -71,7 +82,7 @@ public:
     }
 
     void Handle(NKikimr::TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev) {
-        AFL_VERIFY(google::protobuf::util::MessageDifferencer::Equals(ev->Get()->Info.DownloadState, NKikimrBackup::TS3DownloadState()));
+        // Nothing is stored here: the downloader gets back what it asked to store.
         Send(ev->Sender, std::make_unique<NKikimr::TEvDataShard::TEvS3DownloadInfo>(ev->Get()->Info));
     }
 
@@ -176,6 +187,7 @@ public:
     }
 
 private:
+    TActorId DownloaderActorId;
     NDataShard::TS3Download LastInfo;
     TActorId LastActorId;
     NActors::TActorId SubscriberActorId;

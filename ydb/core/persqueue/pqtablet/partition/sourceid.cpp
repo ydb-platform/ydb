@@ -1,6 +1,9 @@
 #include "sourceid.h"
 
 #include <util/generic/size_literals.h>
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
 
 namespace NKikimr::NPQ {
 
@@ -92,8 +95,29 @@ void THeartbeatProcessor::ForgetHeartbeat(const TString& sourceId, const TRowVer
     }
 }
 
-void THeartbeatProcessor::ForgetSourceId(const TString& sourceId) {
+void THeartbeatProcessor::ForgetHeartbeatSourceId(const TString& sourceId) {
     SourceIdsWithHeartbeat.erase(sourceId);
+}
+
+void TSchemaChangeProcessor::ApplySchemaChange(const TString& sourceId, const TRowVersion& version) {
+    SourceIdsWithSchemaChange.insert(sourceId);
+    SourceIdsBySchemaChange[version].insert(sourceId);
+}
+
+void TSchemaChangeProcessor::ForgetSchemaChange(const TString& sourceId, const TRowVersion& version) {
+    auto it = SourceIdsBySchemaChange.find(version);
+    if (it == SourceIdsBySchemaChange.end()) {
+        return;
+    }
+
+    it->second.erase(sourceId);
+    if (it->second.empty()) {
+        SourceIdsBySchemaChange.erase(it);
+    }
+}
+
+void TSchemaChangeProcessor::ForgetSchemaChangeSourceId(const TString& sourceId) {
+    SourceIdsWithSchemaChange.erase(sourceId);
 }
 
 TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<i16> producerEpoch)
@@ -151,6 +175,20 @@ TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, 
     return copy;
 }
 
+TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, TSchemaChangeInfo&& schemaChange, TMaybe<i16> producerEpoch) const {
+    auto copy = Updated(seqNo, offset, writeTs, producerEpoch);
+    copy.LastSchemaChange = std::move(schemaChange);
+
+    return copy;
+}
+
+TSourceIdInfo TSourceIdInfo::Updated(TSchemaChangeInfo&& schemaChange) const {
+    auto copy = *this;
+    copy.LastSchemaChange = std::move(schemaChange);
+
+    return copy;
+}
+
 TSourceIdInfo TSourceIdInfo::Parse(const TString& data, TInstant now) {
     AFL_ENSURE(data.size() >= 2 * sizeof(ui64))("description", "Data must contain at least SeqNo & Offset");
     ui32 pos = 0;
@@ -202,6 +240,9 @@ TSourceIdInfo TSourceIdInfo::Parse(const NKikimrPQ::TMessageGroupInfo& proto) {
     if (proto.HasLastHeartbeat()) {
         result.LastHeartbeat = THeartbeat::Parse(proto.GetLastHeartbeat());
     }
+    if (proto.HasLastSchemaChange()) {
+        result.LastSchemaChange = TSchemaChangeInfo::Parse(proto.GetLastSchemaChange());
+    }
 
     return result;
 }
@@ -224,6 +265,9 @@ void TSourceIdInfo::Serialize(NKikimrPQ::TMessageGroupInfo& proto) const {
     }
     if (LastHeartbeat) {
         LastHeartbeat->Serialize(*proto.MutableLastHeartbeat());
+    }
+    if (LastSchemaChange) {
+        LastSchemaChange->Serialize(*proto.MutableLastSchemaChange());
     }
 }
 
@@ -261,9 +305,13 @@ void TSourceIdStorage::DeregisterSourceId(const TString& sourceId) {
         return;
     }
 
-    ForgetSourceId(sourceId);
+    ForgetHeartbeatSourceId(sourceId);
+    ForgetSchemaChangeSourceId(sourceId);
     if (const auto& heartbeat = it->second.LastHeartbeat) {
         ForgetHeartbeat(sourceId, heartbeat->Version);
+    }
+    if (const auto& schemaChange = it->second.LastSchemaChange) {
+        ForgetSchemaChange(sourceId, schemaChange->Version);
     }
 
     if (it->second.Explicit) {
@@ -315,9 +363,9 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
 
                 size += cmd.ByteSize();
                 if (size >= MAX_DELETE_COMMAND_SIZE || toDelOffsets.size() >= MAX_DELETE_COMMAND_COUNT) {
-                    LOG_INFO_S(*TlsActivationContext, NKikimrServices::PERSQUEUE, "DropOldSourceIds reached proto size limit"
-                        << ": size# " << size
-                        << ", count# " << toDelOffsets.size());
+                    YDB_LOG_INFO("DropOldSourceIds reached proto size limit",
+                        {"size", size},
+                        {"count", toDelOffsets.size()});
                     reachedLimit = true;
                     break;
                 }
@@ -363,7 +411,7 @@ void TSourceIdStorage::LoadSourceIdInfo(const TString& key, const TString& data,
     case TKeyPrefix::MarkProtoSourceId:
         return LoadProtoSourceIdInfo(key, data);
     default:
-        Y_FAIL_S("Unexpected mark: " << (char)mark);
+        AFL_ENSURE(false)("reason", "Unexpected mark")("mark", (char)mark);
     }
 }
 
@@ -413,6 +461,16 @@ void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdIn
         ApplyHeartbeat(sourceId, heartbeat->Version);
     }
 
+    if (const auto& schemaChange = sourceIdInfo.LastSchemaChange) {
+        AFL_ENSURE(sourceIdInfo.Explicit);
+
+        if (it != InMemorySourceIds.end() && it->second.LastSchemaChange) {
+            ForgetSchemaChange(sourceId, it->second.LastSchemaChange->Version);
+        }
+
+        ApplySchemaChange(sourceId, schemaChange->Version);
+    }
+
     InMemorySourceIds[sourceId] = std::move(sourceIdInfo);
 }
 
@@ -447,6 +505,17 @@ TInstant TSourceIdStorage::MinAvailableTimestamp(TInstant now) const {
     }
 
     return ds;
+}
+
+TRowVersion TSourceIdStorage::GetCommittedSchemaChangeVersion() const {
+    if (ExplicitSourceIds.empty() || ExplicitSourceIds.size() != SourceIdsWithSchemaChange.size()) {
+        return TRowVersion::Min();
+    }
+
+    // Each explicit source with a schema change is in exactly one version bucket;
+    // the map is ordered, so the minimum committed version is begin()->first.
+    AFL_ENSURE(!SourceIdsBySchemaChange.empty());
+    return SourceIdsBySchemaChange.begin()->first;
 }
 
 /// TSourceIdWriter
@@ -572,6 +641,8 @@ TMaybe<THeartbeat> THeartbeatEmitter::CanEmit() const {
             if (Heartbeats.contains(sourceId) && Heartbeats.at(sourceId).Version > version) {
                 --rest;
             } else {
+                // Early exit: if any source in this bucket hasn't advanced past `version`,
+                // the bucket is still active (rest > 0 regardless of iteration order).
                 break;
             }
         }
@@ -613,6 +684,112 @@ TMaybe<THeartbeat> THeartbeatEmitter::GetFromDiff(TSourceIdsByHeartbeat::const_i
 
     AFL_ENSURE(Heartbeats.contains(someSourceId));
     return Heartbeats.at(someSourceId);
+}
+
+/// TSchemaChangeEmitter
+TSchemaChangeEmitter::TSchemaChangeEmitter(const TSourceIdStorage& storage)
+    : Storage(storage)
+{
+}
+
+void TSchemaChangeEmitter::Process(const TString& sourceId, TSchemaChangeInfo&& schemaChange) {
+    auto it = Storage.InMemorySourceIds.find(sourceId);
+    if (it != Storage.InMemorySourceIds.end() && it->second.LastSchemaChange) {
+        if (schemaChange.Version <= it->second.LastSchemaChange->Version) {
+            return;
+        }
+    }
+
+    if (!Storage.SourceIdsWithSchemaChange.contains(sourceId)) {
+        NewSourceIdsWithSchemaChange.insert(sourceId);
+    }
+
+    if (SchemaChanges.contains(sourceId)) {
+        ForgetSchemaChange(sourceId, SchemaChanges.at(sourceId).Version);
+    }
+
+    ApplySchemaChange(sourceId, schemaChange.Version);
+    SchemaChanges[sourceId] = std::move(schemaChange);
+}
+
+TMaybe<TSchemaChangeInfo> TSchemaChangeEmitter::CanEmit() const {
+    if (Storage.ExplicitSourceIds.size() != (Storage.SourceIdsWithSchemaChange.size() + NewSourceIdsWithSchemaChange.size())) {
+        // there is no quorum
+        return Nothing();
+    }
+
+    if (SourceIdsBySchemaChange.empty()) {
+        // there is no new schema changes, nothing to emit
+        return Nothing();
+    }
+
+    if (Storage.SourceIdsBySchemaChange.empty()) {
+        // got quorum, memory state
+        return GetFromDiff(SourceIdsBySchemaChange.begin());
+    }
+
+    if (!NewSourceIdsWithSchemaChange.empty()) {
+        // got quorum, mixed state
+        if (Storage.SourceIdsBySchemaChange.begin()->first < SourceIdsBySchemaChange.begin()->first) {
+            return GetFromStorage(Storage.SourceIdsBySchemaChange.begin());
+        } else {
+            return GetFromDiff(SourceIdsBySchemaChange.begin());
+        }
+    }
+
+    TMaybe<TRowVersion> emitVersion;
+
+    for (auto it = Storage.SourceIdsBySchemaChange.begin(), end = Storage.SourceIdsBySchemaChange.end(); it != end; ++it) {
+        const auto& [version, sourceIds] = *it;
+        auto rest = sourceIds.size();
+
+        for (const auto& sourceId : sourceIds) {
+            if (SchemaChanges.contains(sourceId) && SchemaChanges.at(sourceId).Version > version) {
+                --rest;
+            } else {
+                // Early exit: if any source in this bucket hasn't advanced past `version`,
+                // the bucket is still active (rest > 0 regardless of iteration order).
+                break;
+            }
+        }
+
+        if (rest) {
+            break;
+        }
+
+        if (auto next = std::next(it); next != end && next->first < SourceIdsBySchemaChange.begin()->first) {
+            emitVersion = next->first;
+        } else {
+            emitVersion = SourceIdsBySchemaChange.begin()->first;
+            break;
+        }
+    }
+
+    if (emitVersion) {
+        if (auto it = Storage.SourceIdsBySchemaChange.find(*emitVersion); it != Storage.SourceIdsBySchemaChange.end()) {
+            return GetFromStorage(it);
+        } else {
+            return GetFromDiff(SourceIdsBySchemaChange.begin());
+        }
+    }
+
+    return Nothing();
+}
+
+TMaybe<TSchemaChangeInfo> TSchemaChangeEmitter::GetFromStorage(TSourceIdsBySchemaChange::const_iterator it) const {
+    AFL_ENSURE(!it->second.empty());
+    const auto& someSourceId = *it->second.begin();
+
+    AFL_ENSURE(Storage.InMemorySourceIds.contains(someSourceId));
+    return Storage.InMemorySourceIds.at(someSourceId).LastSchemaChange;
+}
+
+TMaybe<TSchemaChangeInfo> TSchemaChangeEmitter::GetFromDiff(TSourceIdsBySchemaChange::const_iterator it) const {
+    AFL_ENSURE(!it->second.empty());
+    const auto& someSourceId = *it->second.begin();
+
+    AFL_ENSURE(SchemaChanges.contains(someSourceId));
+    return SchemaChanges.at(someSourceId);
 }
 
 }

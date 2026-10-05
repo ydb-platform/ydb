@@ -246,6 +246,7 @@ public:
         }
 
         if (result->Status == NKikimrProto::BLOCKED) {
+            ErrorDescription = result->ErrorReason;
             YDB_LOG_ERROR("Received BLOCKED EvGetResult",
                 {"marker", "KV323"},
                 {"errorDescription", ErrorDescription},
@@ -263,6 +264,7 @@ public:
         }
 
         if (result->Status != NKikimrProto::OK) {
+            ErrorDescription = result->ErrorReason;
             YDB_LOG_ERROR("Unexpected EvGetResult",
                 {"marker", "KV316"},
                 {"errorDescription", ErrorDescription},
@@ -338,9 +340,15 @@ public:
             readItem.InFlight = false;
         }
         if (hasErrorResponses) {
+            ErrorDescription = result->ErrorReason;
             ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
             return;
         }
+
+        Y_ABORT_UNLESS(!batch.ReadItemIndecies.empty());
+        IntermediateResult->Stat.GetLatencies.emplace_back(
+                ReadItems[batch.ReadItemIndecies.front()].ReadItem->LogoBlobId.Channel(),
+                (TActivationContext::Now() - batch.SentTime).MilliSeconds());
 
         ReceivedGetResults++;
         if (ReceivedGetResults == Batches.size()) {

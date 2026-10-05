@@ -1,14 +1,18 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "opentelemetry/exporters/otlp/otlp_log_recordable.h"
+#include <cstddef>
+#include <cstdint>
+
 #include "opentelemetry/common/attribute_value.h"
 #include "opentelemetry/common/timestamp.h"
+#include "opentelemetry/exporters/otlp/otlp_log_recordable.h"
 #include "opentelemetry/exporters/otlp/otlp_populate_attribute_utils.h"
 #include "opentelemetry/logs/severity.h"
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/instrumentationscope/instrumentation_scope.h"
+#include "opentelemetry/sdk/logs/log_record_limits.h"
 #include "opentelemetry/sdk/logs/readable_log_record.h"
 #include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/trace/span_id.h"
@@ -194,7 +198,7 @@ void OtlpLogRecordable::SetSeverity(opentelemetry::logs::Severity severity) noex
 
 void OtlpLogRecordable::SetBody(const opentelemetry::common::AttributeValue &message) noexcept
 {
-  OtlpPopulateAttributeUtils::PopulateAnyValue(proto_record_.mutable_body(), message, true);
+  OtlpPopulateAttributeUtils::PopulateAnyValue(proto_record_.mutable_body(), message);
 }
 
 void OtlpLogRecordable::SetEventId(int64_t /* id */, nostd::string_view event_name) noexcept
@@ -236,7 +240,26 @@ void OtlpLogRecordable::SetTraceFlags(const opentelemetry::trace::TraceFlags &tr
 void OtlpLogRecordable::SetAttribute(opentelemetry::nostd::string_view key,
                                      const opentelemetry::common::AttributeValue &value) noexcept
 {
-  OtlpPopulateAttributeUtils::PopulateAttribute(proto_record_.add_attributes(), key, value, true);
+  if (key.empty())
+  {
+    return;
+  }
+  if (static_cast<std::size_t>(proto_record_.attributes_size()) >= limits_.attribute_count_limit)
+  {
+    proto_record_.set_dropped_attributes_count(proto_record_.dropped_attributes_count() + 1);
+    return;
+  }
+
+  AttributeConverterOptions options;
+  options.attribute_value_length_limit = limits_.attribute_value_length_limit;
+  OtlpPopulateAttributeUtils::PopulateAttribute(proto_record_.add_attributes(), key, value,
+                                                options);
+}
+
+void OtlpLogRecordable::SetLogRecordLimits(
+    const opentelemetry::sdk::logs::LogRecordLimits &limits) noexcept
+{
+  limits_ = limits;
 }
 
 void OtlpLogRecordable::SetResource(const opentelemetry::sdk::resource::Resource &resource) noexcept

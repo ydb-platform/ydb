@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -15,29 +14,29 @@ class TIfWrapper: public TMutableCodegeneratorNode<TIfWrapper<IsOptional>> {
 public:
     TIfWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* predicate, IComputationNode* thenBranch, IComputationNode* elseBranch)
         : TBaseComputation(mutables, kind)
-        , Predicate(predicate)
-        , ThenBranch(thenBranch)
-        , ElseBranch(elseBranch)
+        , Predicate_(predicate)
+        , ThenBranch_(thenBranch)
+        , ElseBranch_(elseBranch)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& predicate = Predicate->GetValue(ctx);
+        const auto& predicate = Predicate_->GetValue(ctx);
         if (IsOptional && !predicate) {
             return NUdf::TUnboxedValuePod();
         }
 
-        return (predicate.Get<bool>() ? ThenBranch : ElseBranch)->GetValue(ctx).Release();
+        return (predicate.Get<bool>() ? ThenBranch_ : ElseBranch_)->GetValue(ctx).Release();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto then = BasicBlock::Create(context, "then", ctx.Func);
         const auto elsb = BasicBlock::Create(context, "else", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        const auto value = GetNodeValue(Predicate, ctx, block);
+        const auto value = GetNodeValue(Predicate_, ctx, block);
         const auto result = PHINode::Create(value->getType(), IsOptional ? 3U : 2U, "result", done);
 
         if (IsOptional) {
@@ -54,14 +53,14 @@ public:
 
         {
             block = then;
-            const auto left = GetNodeValue(ThenBranch, ctx, block);
+            const auto left = GetNodeValue(ThenBranch_, ctx, block);
             result->addIncoming(left, block);
             BranchInst::Create(done, block);
         }
 
         {
             block = elsb;
-            const auto right = GetNodeValue(ElseBranch, ctx, block);
+            const auto right = GetNodeValue(ElseBranch_, ctx, block);
             result->addIncoming(right, block);
             BranchInst::Create(done, block);
         }
@@ -72,14 +71,14 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Predicate);
-        this->DependsOn(ThenBranch);
-        this->DependsOn(ElseBranch);
+        this->DependsOn(Predicate_);
+        this->DependsOn(ThenBranch_);
+        this->DependsOn(ElseBranch_);
     }
 
-    IComputationNode* const Predicate;
-    IComputationNode* const ThenBranch;
-    IComputationNode* const ElseBranch;
+    IComputationNode* const Predicate_;
+    IComputationNode* const ThenBranch_;
+    IComputationNode* const ElseBranch_;
 };
 
 template <bool IsOptional>
@@ -88,26 +87,26 @@ class TFlowIfWrapper: public TStatefulFlowCodegeneratorNode<TFlowIfWrapper<IsOpt
 
 public:
     TFlowIfWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* predicate, IComputationNode* thenBranch, IComputationNode* elseBranch)
-        : TBaseComputation(mutables, nullptr, kind)
-        , Predicate(predicate)
-        , ThenBranch(thenBranch)
-        , ElseBranch(elseBranch)
+        : TBaseComputation(mutables, /*source=*/nullptr, kind)
+        , Predicate_(predicate)
+        , ThenBranch_(thenBranch)
+        , ElseBranch_(elseBranch)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsInvalid()) {
-            state = Predicate->GetValue(ctx);
+            state = Predicate_->GetValue(ctx);
         }
 
         if (IsOptional && !state) {
             return NUdf::TUnboxedValuePod::MakeFinish();
         }
 
-        return (state.Get<bool>() ? ThenBranch : ElseBranch)->GetValue(ctx).Release();
+        return (state.Get<bool>() ? ThenBranch_ : ElseBranch_)->GetValue(ctx).Release();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -120,7 +119,7 @@ public:
 
         block = init;
 
-        GetNodeValue(statePtr, Predicate, ctx, block);
+        GetNodeValue(statePtr, Predicate_, ctx, block);
 
         BranchInst::Create(test, block);
 
@@ -144,14 +143,14 @@ public:
 
         {
             block = then;
-            const auto left = GetNodeValue(ThenBranch, ctx, block);
+            const auto left = GetNodeValue(ThenBranch_, ctx, block);
             result->addIncoming(left, block);
             BranchInst::Create(done, block);
         }
 
         {
             block = elsb;
-            const auto right = GetNodeValue(ElseBranch, ctx, block);
+            const auto right = GetNodeValue(ElseBranch_, ctx, block);
             result->addIncoming(right, block);
             BranchInst::Create(done, block);
         }
@@ -162,14 +161,14 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOnBoth(ThenBranch, ElseBranch)) {
-            this->DependsOn(flow, Predicate);
+        if (const auto flow = this->FlowDependsOnBoth(ThenBranch_, ElseBranch_)) {
+            this->DependsOn(flow, Predicate_);
         }
     }
 
-    IComputationNode* const Predicate;
-    IComputationNode* const ThenBranch;
-    IComputationNode* const ElseBranch;
+    IComputationNode* const Predicate_;
+    IComputationNode* const ThenBranch_;
+    IComputationNode* const ElseBranch_;
 };
 
 class TWideIfWrapper: public TStatefulWideFlowCodegeneratorNode<TWideIfWrapper> {
@@ -177,22 +176,22 @@ class TWideIfWrapper: public TStatefulWideFlowCodegeneratorNode<TWideIfWrapper> 
 
 public:
     TWideIfWrapper(TComputationMutables& mutables, IComputationNode* predicate, IComputationWideFlowNode* thenBranch, IComputationWideFlowNode* elseBranch)
-        : TBaseComputation(mutables, nullptr, EValueRepresentation::Embedded)
-        , Predicate(predicate)
-        , ThenBranch(thenBranch)
-        , ElseBranch(elseBranch)
+        : TBaseComputation(mutables, /*source=*/nullptr, EValueRepresentation::Embedded)
+        , Predicate_(predicate)
+        , ThenBranch_(thenBranch)
+        , ElseBranch_(elseBranch)
     {
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
-            state = Predicate->GetValue(ctx);
+            state = Predicate_->GetValue(ctx);
         }
 
-        return (state.Get<bool>() ? ThenBranch : ElseBranch)->FetchValues(ctx, output);
+        return (state.Get<bool>() ? ThenBranch_ : ElseBranch_)->FetchValues(ctx, output);
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -205,7 +204,7 @@ public:
 
         block = init;
 
-        GetNodeValue(statePtr, Predicate, ctx, block);
+        GetNodeValue(statePtr, Predicate_, ctx, block);
 
         BranchInst::Create(test, block);
 
@@ -221,13 +220,13 @@ public:
 
         block = then;
 
-        const auto left = GetNodeValues(ThenBranch, ctx, block);
+        const auto left = GetNodeValues(ThenBranch_, ctx, block);
         result->addIncoming(left.first, block);
         BranchInst::Create(done, block);
 
         block = elsb;
 
-        const auto right = GetNodeValues(ElseBranch, ctx, block);
+        const auto right = GetNodeValues(ElseBranch_, ctx, block);
         result->addIncoming(right.first, block);
         BranchInst::Create(done, block);
 
@@ -272,14 +271,14 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOnBoth(ThenBranch, ElseBranch)) {
-            DependsOn(flow, Predicate);
+        if (const auto flow = FlowDependsOnBoth(ThenBranch_, ElseBranch_)) {
+            DependsOn(flow, Predicate_);
         }
     }
 
-    IComputationNode* const Predicate;
-    IComputationWideFlowNode* const ThenBranch;
-    IComputationWideFlowNode* const ElseBranch;
+    IComputationNode* const Predicate_;
+    IComputationWideFlowNode* const ThenBranch_;
+    IComputationWideFlowNode* const ElseBranch_;
 };
 
 } // namespace
@@ -319,5 +318,4 @@ IComputationNode* WrapIf(TCallable& callable, const TComputationNodeFactoryConte
     THROW yexception() << "Wrong signature.";
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

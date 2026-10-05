@@ -1,4 +1,4 @@
-/* Generated from norwegian.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from norwegian.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
 #ifdef __cplusplus
 extern "C" {
@@ -12,4 +12,3 @@ extern int norwegian_UTF_8_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
-

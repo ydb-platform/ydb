@@ -16,7 +16,10 @@ import bisect
 import re
 from typing import Dict, List, Tuple
 
-_line_start_re = re.compile(r'^', re.M)
+# Matches the end-of-line sequences that Python treats as line boundaries in source code, i.e.
+# "\r\n", "\r", or "\n". Using this (rather than a plain `re.M` `^`) means we recognise a lone
+# "\r" as a line separator, matching how the tokenizer and ast module number lines. See issue #105.
+_line_end_re = re.compile(r'\r\n|\r|\n')
 
 class LineNumbers:
   """
@@ -26,16 +29,15 @@ class LineNumbers:
   This class expects unicode for input and stores positions in unicode. But it supports
   translating to and from utf8 offsets, which are used by ast parsing.
   """
-  def __init__(self, text):
-    # type: (str) -> None
-    # A list of character offsets of each line's first character.
-    self._line_offsets = [m.start(0) for m in _line_start_re.finditer(text)]
+  def __init__(self, text: str) -> None:
+    # A list of character offsets of each line's first character. The first line always starts at
+    # offset 0, and each subsequent line starts right after an end-of-line sequence.
+    self._line_offsets = [0] + [m.end(0) for m in _line_end_re.finditer(text)]
     self._text = text
     self._text_len = len(text)
-    self._utf8_offset_cache = {} # type: Dict[int, List[int]] # maps line num to list of char offset for each byte in line
+    self._utf8_offset_cache: Dict[int, List[int]] = {} # maps line num to list of char offset for each byte in line
 
-  def from_utf8_col(self, line, utf8_column):
-    # type: (int, int) -> int
+  def from_utf8_col(self, line: int, utf8_column: int) -> int:
     """
     Given a 1-based line number and 0-based utf8 column, returns a 0-based unicode column.
     """
@@ -50,8 +52,7 @@ class LineNumbers:
 
     return offsets[max(0, min(len(offsets)-1, utf8_column))]
 
-  def line_to_offset(self, line, column):
-    # type: (int, int) -> int
+  def line_to_offset(self, line: int, column: int) -> int:
     """
     Converts 1-based line number and 0-based column to 0-based character offset into text.
     """
@@ -63,8 +64,7 @@ class LineNumbers:
     else:
       return min(self._line_offsets[line] + max(0, column), self._text_len)
 
-  def offset_to_line(self, offset):
-    # type: (int) -> Tuple[int, int]
+  def offset_to_line(self, offset: int) -> Tuple[int, int]:
     """
     Converts 0-based character offset to pair (line, col) of 1-based line and 0-based column
     numbers.

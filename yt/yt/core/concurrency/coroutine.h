@@ -5,7 +5,7 @@
 
 #include <yt/yt/core/actions/callback.h>
 
-#include <library/cpp/yt/misc/concepts.h>
+#include <library/cpp/yt/mpl/concepts.h>
 
 #include <util/system/context.h>
 
@@ -30,16 +30,20 @@ public:
     TCoroutineBase(const TCoroutineBase& other) = delete;
     TCoroutineBase& operator=(const TCoroutineBase& other) = delete;
 
-    ~TCoroutineBase();
-
     bool IsCompleted() const noexcept;
 
 protected:
-    template <CInvocable<void()> TBody>
+    template <NMpl::CInvocable<void()> TBody>
     explicit TCoroutineBase(TBody body, EExecutionStackKind stackKind);
+
+    ~TCoroutineBase();
 
     void Resume();
     void Suspend();
+
+    //! If the coroutine is still running (suspended mid-body), resumes it to
+    //! unwind via TCoroutineAbandonedException.
+    void Abandon();
 
 private:
     enum class EState
@@ -51,11 +55,10 @@ private:
 
     std::shared_ptr<NThreading::TExecutionStack> CoroutineStack_;
 
-    // Points to a TExceptionSafeContext placed on the stack of the thread that
-    // called Resume(). Owning the caller context per-invocation (rather than as
-    // a member captured once at construction) keeps TSAN's fiber and ASAN's
-    // stack bounds in sync with the thread actually driving the coroutine,
-    // which may differ from the thread that constructed it.
+    // Points to the TExceptionSafeContext on the stack of the thread that called
+    // Resume(). Capturing it per invocation rather than once at construction keeps
+    // TSAN's fiber and ASAN's stack bounds in sync with the thread actually driving
+    // the coroutine, which may differ from the one that constructed it.
     TExceptionSafeContext* CallerContext_ = nullptr;
 
     // We have to delay initialization of this object until the body
@@ -78,7 +81,7 @@ private:
     // and eliminate type-erasure. If this class was more
     // popular it would make sense to move the rest of the fields
     // to the stack at the cost of much worse readability.
-    template <CInvocable<void()> TBody>
+    template <NMpl::CInvocable<void()> TBody>
     class TTrampoLine
         : public ITrampoLine
     {
@@ -112,10 +115,12 @@ public:
     // definition with concepts which refer to the class
     // name, aliases or variables. That's why it is commented out.
     template <class TCallee>
-    // requires CInvocable<TCallee, void(TCoroutine<R(TArgs...)>&, TArgs...)>
+    // requires NMpl::CInvocable<TCallee, void(TCoroutine<R(TArgs...)>&, TArgs...)>
     TCoroutine(
         TCallee&& callee,
         EExecutionStackKind stackKind = DefaultExecutionStackKind);
+
+    ~TCoroutine();
 
     template <class... TParams>
     const std::optional<R>& Run(TParams&&... params);
@@ -128,7 +133,7 @@ private:
     std::optional<R> Result_;
 
     template <class TCallee>
-    CInvocable<void()> auto MakeBody(TCallee&& callee);
+    NMpl::CInvocable<void()> auto MakeBody(TCallee&& callee);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -146,10 +151,12 @@ public:
     // definition with concepts which refer to the class
     // name, aliases or variables. That's why it is commented out.
     template <class TCallee>
-    // requires CInvocable<TCallee, void(TCoroutine<R(TArgs...)>&, TArgs...)>
+    // requires NMpl::CInvocable<TCallee, void(TCoroutine<R(TArgs...)>&, TArgs...)>
     TCoroutine(
         TCallee&& callee,
         EExecutionStackKind stackKind = DefaultExecutionStackKind);
+
+    ~TCoroutine();
 
     template <class... TParams>
     bool Run(TParams&&... params);
@@ -161,7 +168,7 @@ private:
     bool Result_ = false;
 
     template <class TCallee>
-    CInvocable<void()> auto MakeBody(TCallee&& callee);
+    NMpl::CInvocable<void()> auto MakeBody(TCallee&& callee);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

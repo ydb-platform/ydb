@@ -400,6 +400,40 @@ class KiKiMRClusterInterface(object):
         )
         return database_name
 
+    def alter_database(
+            self,
+            database_name,
+            storage_units_to_add=None,
+            storage_units_to_remove=None,
+            timeout_seconds=120,
+            token=None,
+    ):
+        req = AlterTenantRequest(database_name)
+
+        if token is not None:
+            req.set_user_token(token)
+
+        assert storage_units_to_add or storage_units_to_remove
+        if storage_units_to_add:
+            for pool_type, count in storage_units_to_add.items():
+                req.add_storage_groups_to_add(pool_type, count)
+
+        if storage_units_to_remove:
+            for pool_type, count in storage_units_to_remove.items():
+                req.add_storage_groups_to_remove(pool_type, count)
+
+        response = self.client.send_request(req.protobuf, method='ConsoleRequest')
+        operation = response.AlterTenantResponse.Response.operation
+        if not operation.ready and response.Status.Code != StatusIds.STATUS_CODE_UNSPECIFIED:
+            raise RuntimeError(
+                'alter_database_storage_units failed: %s: %s' % (response.Status.Code, response.Status.Reason)
+            )
+        if not operation.ready:
+            operation = self.__wait_console_op(operation.id, timeout_seconds=timeout_seconds, token=token)
+        if operation.status != StatusIds.SUCCESS:
+            raise RuntimeError('alter_database_storage_units failed: %s' % (operation.status,))
+        return database_name
+
     def remove_database(
             self,
             database_name,
@@ -408,28 +442,43 @@ class KiKiMRClusterInterface(object):
     ):
         logger.debug(database_name)
 
-        operation_id = self._remove_database_send_op(database_name, token=token)
+        operation_id = self._remove_database_send_op(
+            database_name, token=token, timeout_seconds=timeout_seconds)
         self._remove_database_wait_op(database_name, operation_id, timeout_seconds=timeout_seconds, token=token)
         self._remove_database_wait_tenant_gone(database_name, timeout_seconds=timeout_seconds, token=token)
 
         return database_name
 
-    def _remove_database_send_op(self, database_name, token=None):
+    def _remove_database_send_op(self, database_name, token=None, timeout_seconds=20):
         logger.debug('%s: send console operation, token %s', database_name, token)
 
-        req = RemoveTenantRequest(database_name)
+        # Console is briefly unavailable right after a rolling restart. The
+        # readiness failure used to surface as teardown "400050: Console is unavailable".
+        deadline = time.time() + timeout_seconds
+        while True:
+            req = RemoveTenantRequest(database_name)
 
-        if token is not None:
-            req.set_user_token(token)
+            if token is not None:
+                req.set_user_token(token)
 
-        response = self.client.send_request(req.protobuf, method='ConsoleRequest')
-        operation = response.RemoveTenantResponse.Response.operation
-        logger.debug('%s: response from console: %s', database_name, response)
+            response = self.client.send_request(req.protobuf, method='ConsoleRequest')
+            operation = response.RemoveTenantResponse.Response.operation
+            logger.debug('%s: response from console: %s', database_name, response)
 
-        if not operation.ready and response.Status.Code != StatusIds.STATUS_CODE_UNSPECIFIED:
-            raise RuntimeError('remove_database failed: %s: %s' % (response.Status.Code, response.Status.Reason))
+            status_code = response.Status.Code
+            if operation.ready or status_code == StatusIds.STATUS_CODE_UNSPECIFIED:
+                return operation.id
 
-        return operation.id
+            if status_code == StatusIds.UNAVAILABLE and time.time() < deadline:
+                logger.warning(
+                    '%s: console unavailable (%s), retrying remove_database',
+                    database_name,
+                    response.Status.Reason,
+                )
+                time.sleep(1)
+                continue
+
+            raise RuntimeError('remove_database failed: %s: %s' % (status_code, response.Status.Reason))
 
     def _remove_database_wait_op(self, database_name, operation_id, timeout_seconds=20, token=None):
         logger.debug('%s: wait console operation done', database_name)

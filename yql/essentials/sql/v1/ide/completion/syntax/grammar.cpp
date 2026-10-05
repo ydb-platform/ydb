@@ -124,7 +124,7 @@ private:
 };
 
 const ISqlGrammar& GetSqlGrammar() {
-    const static TSqlGrammar DefaultSqlGrammar(NSQLReflect::LoadLexerGrammar());
+    thread_local const TSqlGrammar DefaultSqlGrammar(NSQLReflect::LoadLexerGrammar());
     return DefaultSqlGrammar;
 }
 

@@ -110,9 +110,9 @@ private:
         if (Offset_ > 0) {
             if (Offset_ > std::ssize(result)) {
                 THROW_ERROR_EXCEPTION("Offset is out of bounds")
-                    << TErrorAttribute("offset", Offset_)
-                    << TErrorAttribute("part_size", result.Size())
-                    << TErrorAttribute("part_index", NextPartIndex_ - 1);
+                    .With("offset", Offset_)
+                    .With("part_size", result.Size())
+                    .With("part_index", NextPartIndex_ - 1);
             }
             result = result.Slice(result.Begin() + Offset_, result.End());
             Offset_ = 0;
@@ -186,9 +186,9 @@ private:
             }
 
             THROW_ERROR_EXCEPTION("Inconsistent part size")
-                << TErrorAttribute("expected_size", *PartSize_)
-                << TErrorAttribute("actual_size", actualSize)
-                << TErrorAttribute("part_index", wrongPartIndex);
+                .With("expected_size", *PartSize_)
+                .With("actual_size", actualSize)
+                .With("part_index", wrongPartIndex);
         }
         PreviousPartSize_ = value.Length;
         return value;

@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/transaction.h>
 
 #include <util/generic/size_literals.h>
@@ -13,12 +14,14 @@
 
 #include <google/protobuf/wire_format_lite.h>
 
+#include <algorithm>
 #include <queue>
 #include <condition_variable>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace NYdb::inline Dev::NTopic {
@@ -36,8 +39,9 @@ namespace NWriteSessionGrpc {
 
 inline constexpr std::string_view PARTITION_KEY_META_KEY = "__partition_key";
 
-inline size_t GetMaxGrpcMessageSize() {
-    return 120_MB;
+inline size_t GetMaxGrpcMessageSize(const TGRpcConnectionsImpl& connections) {
+    // Keep the existing batching cap, but never exceed the driver's send limit.
+    return std::min<uint64_t>(120_MB, connections.GetMaxOutboundMessageSize());
 }
 
 using TWireFormatLite = google::protobuf::internal::WireFormatLite;
@@ -56,6 +60,14 @@ inline size_t ProtoInt64FieldSize(ui32 fieldNumber, i64 value) {
     }
     return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_INT64)
         + TWireFormatLite::Int64Size(value);
+}
+
+inline size_t ProtoUInt64FieldSize(ui32 fieldNumber, ui64 value) {
+    if (value == 0) {
+        return 0;
+    }
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_UINT64)
+        + TWireFormatLite::UInt64Size(value);
 }
 
 inline size_t ProtoInt64FieldSizeUpperBound(ui32 fieldNumber) {
@@ -96,7 +108,7 @@ inline size_t ProtoMessageFieldSize(ui32 fieldNumber, size_t size) {
 
 class TRequestSizeLimiter {
 public:
-    explicit TRequestSizeLimiter(ui32 envelopeFieldNumber, size_t maxSize = GetMaxGrpcMessageSize())
+    explicit TRequestSizeLimiter(ui32 envelopeFieldNumber, size_t maxSize)
         : EnvelopeFieldNumber(envelopeFieldNumber)
         , MaxSize(maxSize)
     {
@@ -135,13 +147,40 @@ inline size_t ProtoMetadataItemFieldSize(ui32 fieldNumber, const std::pair<std::
     return ProtoMessageFieldSize(fieldNumber, itemSize);
 }
 
+inline size_t ProtoTransactionIdentityFieldSize(ui32 fieldNumber, const TTransactionId& tx) {
+    const size_t txSize = ProtoStringFieldSize(1, tx.TxId.size())
+        + ProtoStringFieldSize(2, tx.SessionId.size());
+    return ProtoMessageFieldSize(fieldNumber, txSize);
+}
+
 inline size_t ProtoTransactionIdentityFieldSize(ui32 fieldNumber, const std::optional<TTransactionId>& tx) {
     if (!tx) {
         return 0;
     }
-    const size_t txSize = ProtoStringFieldSize(1, tx->TxId.size())
-        + ProtoStringFieldSize(2, tx->SessionId.size());
-    return ProtoMessageFieldSize(fieldNumber, txSize);
+    return ProtoTransactionIdentityFieldSize(fieldNumber, *tx);
+}
+
+inline size_t ProtoDeferredPublishIdentityFieldSize(ui32 fieldNumber, const TDeferredPublication& deferred) {
+    size_t deferredSize = ProtoUInt64FieldSize(1, deferred.IntPublicationId);
+    if (deferred.ExtPublicationId) {
+        deferredSize += ProtoStringFieldSize(2, deferred.ExtPublicationId->size());
+    }
+    return ProtoMessageFieldSize(fieldNumber, deferredSize);
+}
+
+template <typename TMessage>
+inline size_t ProtoWriteRequestContextFieldSize(const TMessage& message) {
+    if constexpr (requires { message.WriteContext; }) {
+        if (auto* tx = std::get_if<TTransactionId>(&message.WriteContext)) {
+            return ProtoTransactionIdentityFieldSize(3, *tx);
+        }
+        if (auto* deferred = std::get_if<TDeferredPublication>(&message.WriteContext)) {
+            return ProtoDeferredPublishIdentityFieldSize(9, *deferred);
+        }
+        return 0;
+    } else {
+        return ProtoTransactionIdentityFieldSize(3, message.Tx);
+    }
 }
 
 inline size_t ProtoTopicMessageDataFieldSize(
@@ -167,7 +206,7 @@ size_t EstimateTopicWriteRequestBlockSize(
     size_t size = 0;
     if (includeRequestFields) {
         size += ProtoInt32FieldSize(2, static_cast<i32>(block.CodecID));
-        size += ProtoTransactionIdentityFieldSize(3, originalMessages.front().Tx);
+        size += ProtoWriteRequestContextFieldSize(originalMessages.front());
     }
 
     if (block.MessageCount > 1) {
@@ -338,6 +377,10 @@ public:
             ] (bool ok)
             {
                 if (!ok) {
+                    // Delay context is cancelled (driver Stop, previous
+                    // reconnect). Notify the session so it can AbortImpl and
+                    // drop ClientContext; otherwise Stop(true) waits for CQ.
+                    callback(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
                     return;
                 }
 

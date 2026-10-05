@@ -375,6 +375,9 @@ bool TOlapColumnBase::IsAllowedDictionaryType(ui32 typeId) {
         case NYql::NProto::Date:
         case NYql::NProto::Datetime:
         case NYql::NProto::Timestamp:
+        case NYql::NProto::Interval:
+        case NYql::NProto::Uuid:
+        case NYql::NProto::DyNumber:
             return true;
         default:
             return false;

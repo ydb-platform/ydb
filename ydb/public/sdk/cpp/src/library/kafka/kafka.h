@@ -425,9 +425,18 @@ private:
 
 class TKafkaReadable {
 public:
+    static constexpr size_t DefaultMaxArrayBytes = 32 * 1024 * 1024;
+
     TKafkaReadable(const TBuffer& is)
         : Is(is)
         , Position(0) {
+    }
+
+    TKafkaReadable(const TBuffer& is, const TKafkaReadable& limitsFrom)
+        : Is(is)
+        , Position(0)
+        , AllowCompressed_(limitsFrom.AllowCompressed_)
+        , MaxArrayBytes_(limitsFrom.MaxArrayBytes_) {
     }
 
     template <typename T>
@@ -487,6 +496,14 @@ public:
         return AllowCompressed_;
     }
 
+    void SetMaxArrayBytes(size_t maxArrayBytes) {
+        MaxArrayBytes_ = maxArrayBytes == 0 ? DefaultMaxArrayBytes : maxArrayBytes;
+    }
+
+    size_t MaxArrayBytes() const {
+        return MaxArrayBytes_;
+    }
+
 private:
     void checkEof(size_t length);
 
@@ -494,6 +511,7 @@ private:
     size_t Position;
     // Temporary switch until server-side Kafka record batch support is implemented.
     bool AllowCompressed_ = false;
+    size_t MaxArrayBytes_ = DefaultMaxArrayBytes;
 };
 
 struct TReadDemand {

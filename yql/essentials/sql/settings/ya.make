@@ -19,8 +19,14 @@ PEERDIR(
     yql/essentials/utils
 )
 
+GENERATE_ENUM_SERIALIZATION(translation_settings.h)
+
 END()
 
 RECURSE(
     flags
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

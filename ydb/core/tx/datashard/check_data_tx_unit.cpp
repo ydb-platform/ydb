@@ -5,6 +5,8 @@
 
 #include <ydb/core/tablet/tablet_exception.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -62,9 +64,10 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         DataShard.IncCounter(COUNTER_MINIKQL_PROGRAM_SIZE, dataTx->ProgramSize());
     } else {
         Y_ENSURE(dataTx->RequirePrepare());
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Require prepare Tx " << op->GetTxId() <<  " at " << DataShard.TabletID()
-                    << ": " << dataTx->GetErrors());
+        YDB_LOG_DEBUG_CTX(ctx, "Require prepare Tx",
+            {"txId", op->GetTxId()},
+            {"tabletId", DataShard.TabletID()},
+            {"errors", dataTx->GetErrors()});
     }
 
     // Check if we are out of space and tx wants to update user
@@ -80,7 +83,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         BuildResult(op)->AddError(NKikimrTxDataShard::TError::DISK_GROUP_OUT_OF_SPACE, err);
         op->Abort(EExecutionUnitKind::FinishPropose);
 
-        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
+        if (DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute).Kick()) {
+            YDB_LOG_ERROR_CTX(ctx, err);
+        }
 
         return EExecutionStatus::Executed;
     }
@@ -96,7 +101,8 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                 ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
             op->Abort(EExecutionUnitKind::FinishPropose);
 
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
+            YDB_LOG_ERROR_CTX(ctx, "TCheckDataTxUnit::Execute: cannot read from snapshot on follower",
+                {"errorMessage", err});
 
             return EExecutionStatus::Executed;
         } else if (snapshot < DataShard.GetSnapshotManager().GetLowWatermark()) {
@@ -108,7 +114,8 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                 ->AddError(NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST, err);
             op->Abort(EExecutionUnitKind::FinishPropose);
 
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
+            YDB_LOG_ERROR_CTX(ctx, "TCheckDataTxUnit::Execute: reads from stale snapshot",
+                {"errorMessage", err});
 
             return EExecutionStatus::Executed;
         }
@@ -130,7 +137,8 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                 ->AddError(NKikimrTxDataShard::TError::READ_SIZE_EXECEEDED, err);
             op->Abort(EExecutionUnitKind::FinishPropose);
 
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
+            YDB_LOG_ERROR_CTX(ctx, "TCheckDataTxUnit::Execute: transaction read size exceeds limit",
+                {"errorMessage", err});
 
             return EExecutionStatus::Executed;
         }
@@ -146,7 +154,8 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                 ->AddError(NKikimrTxDataShard::TError::READ_SIZE_EXECEEDED, err);
             op->Abort(EExecutionUnitKind::FinishPropose);
 
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
+            YDB_LOG_ERROR_CTX(ctx, "TCheckDataTxUnit::Execute: transaction total keys size exceeds limit",
+                {"errorMessage", err});
 
             return EExecutionStatus::Executed;
         }
@@ -167,7 +176,8 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                         ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
                     op->Abort(EExecutionUnitKind::FinishPropose);
 
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
+                    YDB_LOG_ERROR_CTX(ctx, "TCheckDataTxUnit::Execute: write key size exceeds limit",
+                        {"errorMessage", err});
 
                     return EExecutionStatus::Executed;
                 }
@@ -183,7 +193,8 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
                             op->Abort(EExecutionUnitKind::FinishPropose);
 
-                            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
+                            YDB_LOG_ERROR_CTX(ctx, "TCheckDataTxUnit::Execute: write column value exceeds limit",
+                                {"errorMessage", err});
 
                             return EExecutionStatus::Executed;
                         }
@@ -206,8 +217,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                             BuildResult(op)->AddError(NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED, err);
                             op->Abort(EExecutionUnitKind::FinishPropose);
 
-                            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
-
+                            if (DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute).Kick()) {
+                                YDB_LOG_ERROR_CTX(ctx, err);
+                            }
                             return EExecutionStatus::Executed;
                         }
                     }
@@ -289,7 +301,8 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
             BuildResult(op)->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
             op->Abort(EExecutionUnitKind::FinishPropose);
 
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+            YDB_LOG_NOTICE_CTX(ctx, "TCheckDataTxUnit::Execute: cannot propose tx at blocked shard",
+                {"errorMessage", err});
 
             return EExecutionStatus::Executed;
         }
@@ -308,9 +321,10 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
             }
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Prepared " << op->GetKind() << " transaction txId " << op->GetTxId()
-                    << " at tablet " << DataShard.TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TCheckDataTxUnit::Execute: prepared transaction",
+            {"opKind", op->GetKind()},
+            {"txId", op->GetTxId()},
+            {"tabletId", DataShard.TabletID()});
     }
 
     return EExecutionStatus::Executed;
@@ -329,3 +343,7 @@ THolder<TExecutionUnit> CreateCheckDataTxUnit(TDataShard &dataShard,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -72,15 +72,6 @@ bool IsAtomListComparison(const TCoAtomList& list, TString* columnName = nullptr
     return true;
 }
 
-bool IsAtomListComparison(const TExprNode::TPtr& node) {
-    if (!node || !node->IsList() || (node->ChildrenSize() != 3 && node->ChildrenSize() != 4) || !node->Child(0)->IsAtom()) {
-        return false;
-    }
-
-    const auto op = TString(node->Child(0)->Content());
-    return ComparisonSigns().contains(op) || SubstringFormats().contains(op);
-}
-
 void AddColumn(TOlapFilterInspection& inspection, const TString& columnName) {
     if (!columnName.empty()) {
         inspection.Columns.insert(columnName);
@@ -211,6 +202,21 @@ TString AtomListValue(const TExprNode& node, bool quoteString) {
     return {};
 }
 
+TString FormatOlapUdfArgument(const TExprBase& argument) {
+    if (const auto column = argument.Maybe<TKqpOlapApplyColumnArg>()) {
+        return TStringBuilder() << '`' << column.Cast().ColumnName().StringValue() << '`';
+    }
+    return NPlanUtils::PrettyExprStr(argument);
+}
+
+TString FormatOlapUdf(const TKqpOlapUdf& udf) {
+    TVector<TString> args;
+    for (const auto& argument : udf.Args()) {
+        args.emplace_back(FormatOlapUdfArgument(TExprBase(argument)));
+    }
+    return TStringBuilder() << "Udf(" << udf.KernelName().StringValue() << ")(" << JoinStrings(args, ", ") << ')';
+}
+
 TString FormatOlapFilterExpr(const TExprNode::TPtr& node) {
     if (!node) {
         return {};
@@ -240,6 +246,8 @@ TString FormatOlapFilterExpr(const TExprNode::TPtr& node) {
         } catch (...) {
             return {};
         }
+    } else if (auto olapUdf = TMaybeNode<TKqpOlapUdf>(node)) {
+        return FormatOlapUdf(olapUdf.Cast());
     }
 
     for (const auto& child : node->Children()) {
@@ -274,7 +282,7 @@ bool IsNothingLike(const TExprNode::TPtr& node) {
         return true;
     }
 
-    if (node->IsCallable({"Just", "SafeCast", "StrictCast", "Convert", "ToString", "FromPg", "ToPg"}) && node->ChildrenSize() > 0) {
+    if (node->IsCallable({"Just", "SafeCast", "StrictCast", "Convert", "ToString"}) && node->ChildrenSize() > 0) {
         return IsNothingLike(node->HeadPtr());
     }
 
@@ -286,7 +294,7 @@ std::optional<TString> FormatLiteralValue(const TExprNode::TPtr& node) {
         return std::nullopt;
     }
 
-    if (node->IsCallable({"Just", "SafeCast", "StrictCast", "Convert", "ToString", "FromPg", "ToPg"}) && node->ChildrenSize() > 0) {
+    if (node->IsCallable({"Just", "SafeCast", "StrictCast", "Convert", "ToString"}) && node->ChildrenSize() > 0) {
         return FormatLiteralValue(node->HeadPtr());
     }
 
@@ -542,34 +550,104 @@ std::optional<TExplainRanges> ParseRangesForExplain(const TExprNode::TPtr& node)
     return std::nullopt;
 }
 
-TExprNode::TPtr RenameColumnsImpl(const TExprNode::TPtr& node, const THashMap<TString, TString>& renameMap, TExprContext& ctx) {
+bool IsOlapColumnAtomPosition(const TExprNode& node, ui32 index) {
+    if (node.IsCallable("KqpOlapProjection")) {
+        return index == TKqpOlapProjection::idx_ColumnName || index == TKqpOlapProjection::idx_OlapOperation;
+    }
+    if (node.IsCallable("KqpOlapFilter")) {
+        return index == TKqpOlapFilter::idx_Condition;
+    }
+    if (node.IsCallable("KqpOlapNot") || node.IsCallable("KqpOlapAnd") ||
+        node.IsCallable("KqpOlapOr") || node.IsCallable("KqpOlapXor")) {
+        return true;
+    }
+    if (node.IsCallable("SafeCast")) {
+        return index == TCoSafeCast::idx_Value;
+    }
+    if (node.IsCallable("KqpOlapApplyColumnArg")) {
+        return index == TKqpOlapApplyColumnArg::idx_ColumnName;
+    }
+
+    if (node.IsCallable("KqpOlapJsonValue") || node.IsCallable("KqpOlapJsonExists")) {
+        return index == TKqpOlapJsonValue::idx_Column;
+    }
+
+    if (!node.IsList()) {
+        return false;
+    }
+
+    const auto size = node.ChildrenSize();
+    if (size == 1) {
+        return index == 0;
+    }
+    return size <= 5 && index > 0 && node.Child(0)->IsAtom();
+}
+
+TExprNode::TPtr RenameColumnAtom(const TExprNode::TPtr& atom, const THashMap<TString, TString>& renameMap, TExprContext& ctx) {
+    const auto it = renameMap.find(TString(atom->Content()));
+    return it == renameMap.end() ? atom : ctx.NewAtom(atom->Pos(), it->second);
+}
+
+TExprNode::TPtr RenameColumnsImpl(const TExprNode::TPtr& node, const THashMap<TString, TString>& renameMap,
+    TExprContext& ctx, const TExprNode* rowArgument)
+{
     if (!node) {
         return node;
     }
 
-    if (node->IsCallable("Member") && node->ChildrenSize() == 2 && node->Child(1)->IsAtom()) {
-        const auto it = renameMap.find(TString(node->Child(1)->Content()));
-        if (it != renameMap.end()) {
-            auto children = node->ChildrenList();
-            children[1] = ctx.NewAtom(node->Child(1)->Pos(), it->second);
-            return ctx.ChangeChildren(*node, std::move(children));
+    if (node->IsLambda()) {
+        // Kernel lambdas are handled separately below: their fields are user data.
+        Y_ENSURE(node->Head().ChildrenSize() == 1);
+        auto body = RenameColumnsImpl(node->TailPtr(), renameMap, ctx, &node->Head().Head());
+        return body == node->TailPtr() ? node : ctx.ChangeChild(*node, 1, std::move(body));
+    }
+
+    if (node->IsCallable("Member")) {
+        auto input = RenameColumnsImpl(node->HeadPtr(), renameMap, ctx, rowArgument);
+        auto name = &node->Head() == rowArgument ? RenameColumnAtom(node->TailPtr(), renameMap, ctx) : node->TailPtr();
+        return input == node->HeadPtr() && name == node->TailPtr()
+            ? node : ctx.ChangeChildren(*node, {std::move(input), std::move(name)});
+    }
+
+    if (const auto column = TMaybeNode<TKqpOlapApplyColumnArg>(node)) {
+        // Only the top-level fields describe bindings. Nested StructTypes are values.
+        const auto rowType = column.Cast().TableRowType().Ptr();
+        Y_ENSURE(rowType->IsCallable("StructType"), "Expected expanded OLAP input row type");
+        auto items = rowType->ChildrenList();
+        for (auto& item : items) {
+            auto name = RenameColumnAtom(item->HeadPtr(), renameMap, ctx);
+            if (name != item->HeadPtr()) {
+                item = ctx.ChangeChild(*item, 0, std::move(name));
+            }
         }
+        auto type = items == rowType->ChildrenList() ? rowType : ctx.ChangeChildren(*rowType, std::move(items));
+        auto name = RenameColumnAtom(column.Cast().ColumnName().Ptr(), renameMap, ctx);
+        return type == rowType && name == column.Cast().ColumnName().Ptr()
+            ? node : ctx.ChangeChildren(*node, {std::move(type), std::move(name)});
+    }
+
+    if (TCoDataCtor::Match(node.Get()) || TCoParameter::Match(node.Get()) || node->IsCallable("StructType")) {
         return node;
     }
 
     bool changed = false;
     auto children = node->ChildrenList();
     for (ui32 i = 0; i < children.size(); ++i) {
-        if (IsAtomListComparison(node) && i == 1 && children[i]->IsAtom()) {
-            const auto it = renameMap.find(TString(children[i]->Content()));
-            if (it != renameMap.end()) {
-                children[i] = ctx.NewAtom(children[i]->Pos(), it->second);
+        // Apply's lambda operates on column values; its local fields and literal
+        // lists are not table bindings. Only Args belongs to the OLAP namespace.
+        if (TKqpOlapApply::Match(node.Get()) && i != TKqpOlapApply::idx_Args) {
+            continue;
+        }
+        if (children[i]->IsAtom() && IsOlapColumnAtomPosition(*node, i)) {
+            auto renamed = RenameColumnAtom(children[i], renameMap, ctx);
+            if (renamed != children[i]) {
+                children[i] = std::move(renamed);
                 changed = true;
-                continue;
             }
+            continue;
         }
 
-        auto renamed = RenameColumnsImpl(children[i], renameMap, ctx);
+        auto renamed = RenameColumnsImpl(children[i], renameMap, ctx, rowArgument);
         if (renamed != children[i]) {
             children[i] = std::move(renamed);
             changed = true;
@@ -609,7 +687,7 @@ TExprNode::TPtr TOlapFilterInspector::RenameColumns(
     if (renameMap.empty()) {
         return node;
     }
-    return RenameColumnsImpl(node, renameMap, ctx);
+    return RenameColumnsImpl(node, renameMap, ctx, nullptr);
 }
 
 TString TOlapFilterInspector::Format(const TKqpOlapFilter& filter) {

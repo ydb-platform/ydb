@@ -1,5 +1,5 @@
 #pragma once
-#include "types.h"
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 #include "others_storage.h"
 #include "settings.h"
 #include "stats.h"
@@ -192,10 +192,8 @@ public:
             if (separateColumns && settings.GetEnableNativeColumnsResolved()) {
                 valueType = DetectValueTypeForArray(i->GetValues());
             }
-            IChunkedArray::EType accessorType = IChunkedArray::EType::Array;
-            if (settings.IsSparsed(presentCount, recordsCount)) {
-                accessorType = IChunkedArray::EType::SparsedArray;
-            } else if (separateColumns && DictionaryApplicableForValueType(valueType) &&
+            auto accessorType = settings.IsSparsed(presentCount, recordsCount) ? IChunkedArray::EType::SparsedArray : IChunkedArray::EType::Array;
+            if (separateColumns && CanBeDictionaryEncoded(valueType) &&
                        settings.IsDictionary(presentCount, enumerateValues)) {
                 accessorType = IChunkedArray::EType::Dictionary;
             }

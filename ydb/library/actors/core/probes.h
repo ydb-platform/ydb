@@ -155,9 +155,10 @@
           TYPES(ui32, TString, ui32, ui32, ui32, ui32),                                                                               \
           NAMES("poolId", "pool", "threacCount", "minThreadCount", "maxThreadCount", "defaultThreadCount"))                           \
     PROBE(HarmonizeCheckPool, GROUPS("Harmonizer"),                                                                                   \
-          TYPES(ui32, TString, double, double, double, double, ui32, ui32, bool, bool, bool),                                         \
+          TYPES(ui32, TString, double, double, double, double, ui32, ui32, bool, bool, bool, ui32, double, double),                    \
           NAMES("poolId", "pool", "elapsed", "cpu", "lastSecondElapsed", "lastSecondCpu", "threadCount", "maxThreadCount",    \
-                  "isStarved", "isNeedy", "isHoggish"))                                                                               \
+                  "isStarved", "isNeedy", "isHoggish", "needyCpuWindowSeconds", "needyWindowCpu",                              \
+                  "needyWindowFullThreadCpu"))                                                                                        \
     PROBE(HarmonizeCheckPoolByThread, GROUPS("Harmonizer"),                                                                           \
           TYPES(ui32, TString, i16, double, double, double, double),                                                                  \
           NAMES("poolId", "pool", "threadIdx", "elapsed", "cpu", "lastSecondElapsed", "lastSecondCpu"))                       \

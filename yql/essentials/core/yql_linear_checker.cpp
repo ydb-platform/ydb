@@ -42,29 +42,31 @@ bool ValidateLinearTypeAnn(TPositionHandle pos, const TTypeAnnotationNode& type,
     }
 
     if (hasError) {
+        // clang-format off
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() <<
             "Linear types can be used either directly or via Struct/Tuple (non-recursive), but got type " <<
             type << "\nConsider using ToDynamicLinear function"));
+        // clang-format on
     }
 
     return !hasError;
 }
 
-class TUsageVisitor
-{
+class TUsageVisitor {
 public:
     // length = 1 for Linear, N for Struct/Tuple
     using TUsage = TStackVec<TMaybe<TPositionHandle>, 1>;
 
     explicit TUsageVisitor(TExprContext& ctx)
         : Ctx_(ctx)
-    {}
+    {
+    }
 
     void Visit(const TExprNode& node, const TExprNode* parent, const bool noSecondUsageCheck = false) {
         auto [it, inserted] = Visited_.emplace(&node, TUsage{});
         if (node.GetTypeAnn()->HasStaticLinear()) {
             auto scope = node.GetDependencyScope();
-            if (scope && parent) {
+            if (scope && parent && !node.IsLambda() && !parent->IsLambda()) {
                 auto scopeParent = parent->GetDependencyScope();
                 if (scopeParent && scopeParent->first != scope->first) {
                     AddScopeError(node.Pos(), parent->Pos());
@@ -147,15 +149,23 @@ public:
         if (node.IsLambda()) {
             // validate arg & bodies
             bool isValid = true;
-            for (const auto& arg: node.Head().Children()) {
-                if (arg->GetTypeAnn()->HasStaticLinear()) {
+
+            for (ui32 argIdx = 0; argIdx < node.Head().ChildrenSize(); ++argIdx) {
+                const auto& arg = *node.Head().Child(argIdx);
+                if (arg.GetTypeAnn()->HasStaticLinear()) {
+                    if (parent && parent->IsCallable("Fold") && argIdx == 1) {
+                        continue;
+                    }
                     isValid = false;
-                    AddError(arg->Pos(), "An argument of a lambda should not be a linear type");
+                    AddError(arg.Pos(), "An argument of a lambda should not be a linear type");
                 }
             }
 
             for (ui32 i = 1; i < node.ChildrenSize(); ++i) {
                 if (node.Child(i)->GetTypeAnn()->HasStaticLinear()) {
+                    if (parent && parent->IsCallable("Fold")) {
+                        continue;
+                    }
                     isValid = false;
                     AddError(node.Child(i)->Pos(), "A lambda body should not be a linear type");
                 }
@@ -166,7 +176,14 @@ public:
             }
 
             for (ui32 i = 1; i < node.ChildrenSize(); ++i) {
-                Visit(*node.Child(i), parent);
+                Visit(*node.Child(i), &node);
+            }
+
+            if (parent && parent->IsCallable("Fold")) {
+                const auto& state = *node.Head().Child(1);
+                if (state.GetTypeAnn()->HasStaticLinear() && Visited_.find(&state) == Visited_.end()) {
+                    AddError(state.Pos(), "Linear value is not consumed");
+                }
             }
         } else {
             if (node.IsCallable("If")) {
@@ -174,8 +191,7 @@ public:
                 Visit(*node.Child(2), &node, /*noSecondUsageCheck=*/true);
                 Visit(*node.Child(0), &node);
                 HandleIfNode(node, parent);
-            }
-            else {
+            } else {
                 for (const auto& child : node.Children()) {
                     Visit(*child, &node, noSecondUsageCheck);
                 }
@@ -184,7 +200,6 @@ public:
     }
 
     bool GetLinearObjects(const TExprNode& node, TNodeMap<TUsage>& result) {
-
         const bool isLiteral = (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple && node.IsList()) ||
                                node.IsCallable("AsStruct");
 
@@ -205,7 +220,6 @@ public:
         }
 
         return true;
-
     }
 
     void HandleIfNode(const TExprNode& node, const TExprNode* /*parent*/) {
@@ -262,7 +276,7 @@ public:
 
                     if (!usage[i].Defined()) {
                         AddError(node->Pos(), TStringBuilder() << "Element #" << i
-                            << " is not consumed, type: " << *tupleType->GetItems()[i]);
+                                                               << " is not consumed, type: " << *tupleType->GetItems()[i]);
                     }
                 }
             } else if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
@@ -275,7 +289,7 @@ public:
 
                     if (!usage[i].Defined()) {
                         AddError(node->Pos(), TStringBuilder() << "Member '" << structType->GetItems()[i]->GetName()
-                            << "' is not consumed, type: " << *structType->GetItems()[i]->GetItemType());
+                                                               << "' is not consumed, type: " << *structType->GetItems()[i]->GetItemType());
                     }
                 }
             }
@@ -318,13 +332,12 @@ private:
         Ctx_.AddError(TIssue(Ctx_.GetPosition(pos), message));
     }
 
-private:
     TExprContext& Ctx_;
     bool HasErrors_ = false;
     TNodeMap<TUsage> Visited_;
 };
 
-}
+} // namespace
 
 bool ValidateLinearTypes(const TExprNode& root, TExprContext& ctx) {
     bool hasErrors = false;
@@ -338,6 +351,14 @@ bool ValidateLinearTypes(const TExprNode& root, TExprContext& ctx) {
                     return false;
                 }
             }
+        }
+
+        // AsErased hides a value inside an opaque box, defeating the single-use
+        // tracking that is the point of linear types, so reject boxing any linear value.
+        if (node.IsCallable("AsErased") && node.Head().GetTypeAnn()->HasStaticLinear()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "AsErased is not allowed for linear types"));
+            hasErrors = true;
+            return false;
         }
 
         return true;
@@ -354,4 +375,4 @@ bool ValidateLinearTypes(const TExprNode& root, TExprContext& ctx) {
     return !visitor.HasErrors();
 }
 
-}
+} // namespace NYql

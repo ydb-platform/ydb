@@ -71,7 +71,7 @@ public:
         if (!TerminationError_.IsOK()) {
             auto error = TerminationError_;
             guard.Release();
-            responseHandler->HandleError(error);
+            responseHandler->HandleError(error, EndpointAddress_);
             return nullptr;
         }
 
@@ -178,6 +178,7 @@ private:
             const IClientRequestPtr& request,
             IClientResponseHandlerPtr responseHandler)
         {
+            request->Header().set_start_time(ToProto(TInstant::Now()));
             auto httpRequestHeaders = TranslateRequest(request);
 
             auto protocol = channel->IsHttps_ ? "https" : "http";
@@ -197,8 +198,9 @@ private:
                     httpRequestBody = requestBody[1];
                 }
             } catch (const std::exception& ex) {
-                responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Request serialization failed")
-                    << ex);
+                responseHandler->HandleError(
+                    TError(NRpc::EErrorCode::TransportError, "Request serialization failed").With(ex),
+                    channel->EndpointAddress_);
                 return;
             }
 
@@ -242,25 +244,30 @@ private:
         {
             try {
                 if (!responseOrError.IsOK()) {
-                    responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "HTTP client request failed")
-                        << responseOrError);
+                    responseHandler->HandleError(
+                        TError(NRpc::EErrorCode::TransportError, "HTTP client request failed").With(responseOrError),
+                        address);
                     return;
                 }
 
                 const auto& response = responseOrError.Value();
                 if (response->GetStatusCode() == EStatusCode::NotFound) {
-                    responseHandler->HandleError(TError(NRpc::EErrorCode::NoSuchService, "URL was not resolved to a service"));
+                    responseHandler->HandleError(
+                        TError(NRpc::EErrorCode::NoSuchService, "URL was not resolved to a service"),
+                        address);
                     return;
                 }
 
                 if (response->GetStatusCode() == EStatusCode::BadRequest) {
-                    responseHandler->HandleError(ParseYTError(response));
+                    responseHandler->HandleError(ParseYTError(response), address);
                     return;
                 }
 
                 if (response->GetStatusCode() != EStatusCode::OK) {
-                    responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Unexpected HTTP status code")
-                        << TErrorAttribute("status", response->GetStatusCode()));
+                    responseHandler->HandleError(
+                        TError(NRpc::EErrorCode::TransportError, "Unexpected HTTP status code")
+                            .With("status", response->GetStatusCode()),
+                        address);
                     return;
                 }
 
@@ -277,8 +284,9 @@ private:
                     /*attachments*/ {});
                 responseHandler->HandleResponse(responseMessage, address);
             } catch (const std::exception& ex) {
-                responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Response deserialization failed")
-                    << ex);
+                responseHandler->HandleError(
+                    TError(NRpc::EErrorCode::TransportError, "Response deserialization failed").With(ex),
+                    address);
             }
         }
 
@@ -312,6 +320,10 @@ private:
             if (rpcHeader.has_request_id()) {
                 auto requestId = FromProto<TRequestId>(rpcHeader.request_id());
                 httpHeaders->Add(RequestIdHeaderName, ToString(requestId));
+            }
+
+            if (rpcHeader.has_start_time()) {
+                httpHeaders->Add(StartTimeHeaderName, ToString(rpcHeader.start_time()));
             }
 
             if (rpcHeader.HasExtension(NRpc::NProto::TCredentialsExt::credentials_ext)) {

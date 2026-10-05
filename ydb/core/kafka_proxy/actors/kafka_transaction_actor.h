@@ -1,5 +1,6 @@
 #pragma once
 
+#include "actors.h"
 #include "kafka_init_producer_id_actor.h"
 #include <ydb/core/kafka_proxy/kafka_log_impl.h>
 #include <ydb/core/kafka_proxy/kafka_topic_partition.h>
@@ -14,7 +15,8 @@ namespace NKafka {
 
     It accumulates transaction state (partitions in tx, offsets) and on commit submits transaction to KQP
     */
-    class TTransactionActor : public NActors::TActor<TTransactionActor> {
+    class TTransactionActor : public NActors::TActor<TTransactionActor>
+                            , public TKafkaExceptionHandler<TTransactionActor> {
 
         using TBase = NActors::TActor<TTransactionActor>;
 
@@ -48,8 +50,15 @@ namespace NKafka {
                 TxnTimeoutMs(txnTimeoutMs),
                 CreatedAt(TAppData::TimeProvider->Now()) {};
 
-            TStringBuilder LogPrefix() const {
-                return TStringBuilder() << "KafkaTransactionActor{TransactionalId=" << TransactionalId << "; ProducerId=" << ProducerInstanceId.Id << "; ProducerEpoch=" << ProducerInstanceId.Epoch << "}: ";
+
+            NStructuredLog::TStructuredMessage LogPrefix() const {
+                return YDB_LOG_CREATE_MESSAGE(
+                    {"actorClassName", "KafkaTransactionActor"},
+                    {"selfId", SelfId()},
+                    {"transactionalId", TransactionalId},
+                    {"producerId", ProducerInstanceId.Id},
+                    {"producerEpoch", ProducerInstanceId.Epoch},
+                    {"databasePath", DatabasePath});
             }
 
         private:
@@ -65,10 +74,10 @@ namespace NKafka {
                         HFunc(TEvents::TEvPoison, Handle);
                     }
                 } catch (const yexception& y) {
-                    KAFKA_LOG_CRIT("Critical error happened. Reason: " << y.what());
-                    if (EndTxnRequestPtr) {
-                        SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::UNKNOWN_SERVER_ERROR, y.what());
-                    }
+                    YDB_LOG_CRIT_COMP(NKikimrServices::KAFKA_PROXY, "Critical error happened",
+                        {LogPrefix()},
+                        {"reason", y.what()});
+                    ReplyPendingEndTxn(EKafkaErrors::UNKNOWN_SERVER_ERROR, y.what());
                     Die(ActorContext());
                 }
             }
@@ -102,12 +111,20 @@ namespace NKafka {
             template<class EventType>
             bool ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest);
             TString GetFullTopicPath(const TString& topicName);
+            TString GetMetadataDatabasePath() const;
             TString GetYqlWithTablesNames();
             NYdb::TParams BuildSelectParams();
             THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildAddKafkaOperationsRequest(const TString& kqpTransactionId);
             void HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx);
             void HandleAddKafkaOperationsResponse(const TString& kqpTransactionId, const TActorContext& ctx);
             void HandleCommitResponse(const TActorContext& ctx);
+            void ReplyPendingEndTxn(EKafkaErrors errorCode, const TString& errorMessage = {});
+            // Kafka Java treats BROKER_NOT_AVAILABLE / INVALID_TXN_STATE as fatal on EndTxn.
+            // COORDINATOR_NOT_AVAILABLE and CONCURRENT_TRANSACTIONS are retryable; keep the actor
+            // so a retry still sees partitions/offsets. CONCURRENT_TRANSACTIONS matches Kafka 3.4
+            // when the previous transaction is still completing.
+            void FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage,
+                                     EKafkaErrors errorCode = EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
             TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
             TMaybe<TProducerState> ParseProducerState(const NKqp::TEvKqp::TEvQueryResponse& response);
             TMaybe<TString> GetErrorInProducerState(const TMaybe<TProducerState>& producerState);
@@ -124,9 +141,9 @@ namespace NKafka {
             // helper fields
             const TString DatabasePath;
             const TString ResourceDatabasePath;
-            // This field need to preserve request details between several requests to KQP
-            // In case something goes off road, we can always send error back to client
-            TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;
+            // The connection processes one in-flight Kafka request, so at most one EndTxn is pending
+            // while KQP commits. Extra EndTxn on this actor is rejected with CONCURRENT_TRANSACTIONS.
+            TEvKafka::TEvEndTxnRequest::TPtr PendingEndTxnRequest;
             bool CommitStarted = false;
             ui64 TxnTimeoutMs;
             TInstant CreatedAt;

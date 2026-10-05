@@ -22,10 +22,15 @@
 
 namespace NYdb::inline Dev {
 
+using NCredentials::NDetail::TOwningFacilityCredentialsProvider;
+
 constexpr std::chrono::milliseconds BACKOFF_START{50};
 constexpr std::chrono::milliseconds BACKOFF_MAX{10000};
 constexpr std::chrono::milliseconds PERIODIC_TICK{100};
 constexpr std::chrono::milliseconds MINIMUM_REFRESH_INTERVAL{100};
+// Delay before a new token request cycle after the previous one ended with a terminal error
+// (non-retryable status, exhausted retry budget, malformed response or request).
+constexpr std::chrono::milliseconds TERMINAL_FAILURE_RETRY_DELAY{10000};
 
 // Implementation detail for the IAM factory templates below. Symbols in NDetail are not part of
 // the public YDB C++ SDK API and may change or be removed without notice.
@@ -77,19 +82,17 @@ private:
               std::weak_ptr<ICoreFacility> responseFacility,
               TCredentialsProviderPtr authTokenProvider)
             : Rpc_(rpc)
-            , Ticket_("")
             , NextTicketUpdate_(SysTimePoint{})
+            , RetryDeadline_(SafeAddSystemTime(SysClock::now(), ToBoundedSysDuration(2 * iamEndpoint.RequestTimeout)))
             , IamEndpoint_(iamEndpoint)
             , RequestFiller_(requestFiller)
             , Context_(std::nullopt)
-            , LastRequestError_("")
             , NeedStop_(false)
             , BackoffTimeout_(BACKOFF_START)
             , Lock_()
             , ResponseFacility_(std::move(responseFacility))
             , AuthTokenProvider_(authTokenProvider)
-            , FirstTokenReady_(NThreading::NewPromise<void>())
-            , FirstTokenReadySet_(false)
+            , AuthInfo_(NThreading::NewPromise<std::string>())
         {
             std::shared_ptr<grpc::ChannelCredentials> creds = nullptr;
             if (IamEndpoint_.EnableSsl) {
@@ -112,7 +115,7 @@ private:
         void StartPeriodicTask() {
             auto facility = ResponseFacility_.lock();
             if (!facility) {
-                FailFirstToken("IAM-token provider response facility is not available");
+                Fail("IAM-token provider response facility is not available");
                 return;
             }
 
@@ -125,7 +128,7 @@ private:
                             return false;
                         }
                         if (status != EStatus::SUCCESS) {
-                            self->FailFirstToken(TStringBuilder()
+                            self->Fail(TStringBuilder()
                                 << "IAM-token provider periodic task failed with status "
                                 << static_cast<int>(status));
                             return false;
@@ -135,53 +138,30 @@ private:
                     PERIODIC_TICK
                 );
             } catch (...) {
-                FailFirstToken(TStringBuilder()
+                Fail(TStringBuilder()
                     << "Failed to start IAM-token provider periodic task: "
                     << CurrentExceptionMessage());
             }
         }
 
-        std::string GetTicket() {
+        NThreading::TFuture<std::string> GetAuthInfoAsync() {
             std::lock_guard guard(Lock_);
-            if (Ticket_.empty()) {
-                ythrow yexception() << "IAM-token not ready yet. " << LastRequestError_;
-            }
-            return Ticket_;
-        }
-
-        void WaitForToken() {
-            std::unique_lock guard(Lock_);
-            TokenReady_.wait_for(guard,
-                std::chrono::microseconds(2 * IamEndpoint_.RequestTimeout.MicroSeconds()),
-                [this]() {
-                    return NeedStop_ || !Ticket_.empty(); 
-                }
-            );
-        }
-
-        NThreading::TFuture<void> GetReadyFuture() const {
-            return FirstTokenReady_.GetFuture();
+            return AuthInfo_.GetFuture();
         }
 
         void Stop() {
-            bool setStoppedException = false;
+            NThreading::TPromise<std::string> promise;
             {
                 std::unique_lock guard(Lock_);
-                if (NeedStop_) {
-                    return;
-                }
                 NeedStop_ = true;
-                setStoppedException = MarkFirstTokenReadyLocked();
-                TokenReady_.notify_all();
+                promise = AuthInfo_;
                 if (Context_.has_value()) {
                     Context_->TryCancel();
                 }
                 ContextReady_.wait(guard, [this]() { return !Context_.has_value(); });
             }
-            if (setStoppedException) {
-                FirstTokenReady_.SetException(
-                    std::make_exception_ptr(yexception() << "IAM-token provider stopped before token was ready"));
-            }
+            promise.TrySetException(std::make_exception_ptr(
+                yexception() << "IAM-token provider stopped before token was ready"));
             Stub_.reset();
             Channel_.reset();
         }
@@ -189,21 +169,32 @@ private:
     private:
         using SysDuration = SysClock::duration;
 
-        bool MarkFirstTokenReadyLocked() {
-            return !std::exchange(FirstTokenReadySet_, true);
-        }
-
-        void FailFirstToken(std::string error) {
-            bool setException = false;
+        // Unrecoverable failure: the provider has no facility to run on. Stops the periodic task
+        // for good and fails every current and future GetAuthInfoAsync().
+        void Fail(std::string error) {
+            NThreading::TPromise<std::string> promise;
             {
                 std::lock_guard guard(Lock_);
-                if ((setException = MarkFirstTokenReadyLocked())) {
-                    LastRequestError_ = error;
+                NeedStop_ = true;
+                promise = AuthInfo_;
+                if (Context_) {
+                    Context_->TryCancel();
                 }
             }
-            if (setException) {
-                FirstTokenReady_.SetException(std::make_exception_ptr(yexception() << error));
-            }
+            promise.TrySetException(std::make_exception_ptr(yexception() << error));
+        }
+
+        // Terminal failure of the current token request cycle: the cycle's waiters get the error
+        // right away (via the returned promise, to be completed outside Lock_), but the provider
+        // stays alive and starts a new cycle after TERMINAL_FAILURE_RETRY_DELAY, so a temporary
+        // IAM outage or a briefly revoked grant does not leave it permanently dead.
+        NThreading::TPromise<std::string> FailAttemptImpl() { // call with Lock_
+            NextTicketUpdate_ = SafeAddSystemTime(SysClock::now(), ToBoundedSysDuration(TERMINAL_FAILURE_RETRY_DELAY));
+            return AuthInfo_;
+        }
+
+        static void SetError(NThreading::TPromise<std::string>& promise, const std::string& error) {
+            promise.TrySetException(std::make_exception_ptr(yexception() << error));
         }
 
         static SysDuration ToBoundedSysDuration(const TDuration& d) {
@@ -251,16 +242,11 @@ private:
                 }
 
                 if (auto self = weakSelf.lock()) {
-                    bool failFirstToken;
                     {
                         std::lock_guard guard(self->Lock_);
-                        failFirstToken = self->MarkFirstTokenReadyLocked();
                         self->ResetContextImpl();
                     }
-                    if (failFirstToken) {
-                        self->FirstTokenReady_.SetException(std::make_exception_ptr(
-                            yexception() << "IAM-token provider response facility is not available"));
-                    }
+                    self->Fail("IAM-token provider response facility is not available");
                 }
             };
 
@@ -268,42 +254,41 @@ private:
 
             try {
                 RequestFiller_(req);
+                Rpc_(Stub_.get(), &*Context_, &req, response.get(), std::move(cb));
             } catch (...) {
-                std::optional<std::string> firstTokenError;
-                const auto now = SysClock::now();
+                const std::string error = CurrentExceptionMessage();
+                NThreading::TPromise<std::string> promise;
                 {
                     std::lock_guard guard(Lock_);
-                    LastRequestError_ = TStringBuilder()
-                        << "Last request error was at " << FormatSysTimeUtcIsoMicros(now)
-                        << ". Failed to prepare IAM request: " << CurrentExceptionMessage();
-                    if (MarkFirstTokenReadyLocked()) {
-                        firstTokenError = LastRequestError_;
-                    }
                     ResetContextImpl();
-                    RescheduleOnFailure();
+                    promise = FailAttemptImpl();
                 }
-                if (firstTokenError) {
-                    FirstTokenReady_.SetException(std::make_exception_ptr(yexception() << *firstTokenError));
-                }
-                return;
+                SetError(promise, error);
             }
-
-            Rpc_(Stub_.get(), &*Context_, &req, response.get(), std::move(cb));
         }
 
-        void FillContext(std::unique_lock<std::mutex>& guard) {
+        bool FillContext(std::unique_lock<std::mutex>& guard) {
             std::optional<std::string> authToken;
             if (AuthTokenProvider_) {
                 guard.unlock();
                 try {
-                    authToken = AuthTokenProvider_->GetAuthInfo();
+                    if (!AuthTokenInfo_.Initialized()) {
+                        AuthTokenInfo_ = AuthTokenProvider_->GetAuthInfoAsync();
+                    }
+                    if (!AuthTokenInfo_.IsReady()) {
+                        guard.lock();
+                        return false;
+                    }
+                    authToken = AuthTokenInfo_.GetValue();
+                    AuthTokenInfo_ = {};
                 } catch (...) {
+                    AuthTokenInfo_ = {};
                     guard.lock();
                     throw;
                 }
                 guard.lock();
                 if (NeedStop_) {
-                    return;
+                    return false;
                 }
             }
 
@@ -317,6 +302,7 @@ private:
             if (authToken) {
                 context.AddMetadata("authorization", "Bearer " + *authToken);
             }
+            return true;
         }
 
         void ResetContextImpl() {
@@ -332,8 +318,10 @@ private:
         }
 
         bool OnPeriodicTick() {
-            std::optional<std::string> firstTokenError;
+            std::optional<std::string> terminalError;
+            NThreading::TPromise<std::string> promise;
             bool updateTicket = false;
+            bool authPending = false;
             {
                 std::unique_lock guard(Lock_);
                 if (NeedStop_) {
@@ -342,68 +330,91 @@ private:
                 if (Context_.has_value() || SysClock::now() < NextTicketUpdate_) {
                     return true;
                 }
+                if (AuthInfo_.GetFuture().IsReady()) {
+                    // Start a new token request cycle with a fresh retry budget.
+                    AuthInfo_ = NThreading::NewPromise<std::string>();
+                    RetryDeadline_ = SafeAddSystemTime(SysClock::now(), ToBoundedSysDuration(2 * IamEndpoint_.RequestTimeout));
+                    BackoffTimeout_ = BACKOFF_START;
+                }
                 try {
-                    FillContext(guard);
+                    authPending = !FillContext(guard);
                 } catch (...) {
-                    const auto now = SysClock::now();
-                    LastRequestError_ = TStringBuilder()
-                        << "Last request error was at " << FormatSysTimeUtcIsoMicros(now)
+                    terminalError = TStringBuilder()
+                        << "Last request error was at " << FormatSysTimeUtcIsoMicros(SysClock::now())
                         << ". Failed to prepare IAM request context: " << CurrentExceptionMessage();
-                    if (MarkFirstTokenReadyLocked()) {
-                        firstTokenError = LastRequestError_;
-                    }
                     ResetContextImpl();
                 }
                 if (NeedStop_) {
                     ResetContextImpl();
                     return false;
                 }
-                if (!Context_.has_value()) {
-                    RescheduleOnFailure();
+                if (terminalError) {
+                    promise = FailAttemptImpl();
+                } else if (!Context_.has_value()) {
+                    if (!authPending) {
+                        RescheduleOnFailure();
+                    }
                 } else {
                     updateTicket = true;
                 }
             }
-            if (firstTokenError) {
-                FirstTokenReady_.SetException(std::make_exception_ptr(yexception() << *firstTokenError));
-            }
-            if (updateTicket) {
+            if (terminalError) {
+                SetError(promise, *terminalError);
+            } else if (updateTicket) {
                 UpdateTicket();
             }
             return true;
         }
 
         void ProcessIamResponse(grpc::Status&& status, TResponse&& result) {
-            bool setFirstTokenReady = false;
+            std::optional<std::string> token;
+            std::optional<std::string> terminalError;
+            NThreading::TPromise<std::string> promise;
 
             {
                 std::lock_guard guard(Lock_);
 
                 if (!status.ok()) {
-                    LastRequestError_ = TStringBuilder()
+                    const std::string error = TStringBuilder()
                         << "Last request error was at " << FormatSysTimeUtcIsoMicros(SysClock::now())
                         << ". GrpcStatusCode: " << static_cast<int>(status.error_code())
                         << " Message: \"" << status.error_message()
                         << "\" iam-endpoint: \"" << IamEndpoint_.Endpoint << "\"";
 
-                    RescheduleOnFailure();
+                    if (IsRetryable(status.error_code()) && SysClock::now() < RetryDeadline_) {
+                        RescheduleOnFailure();
+                    } else {
+                        terminalError = error;
+                    }
+                } else if (result.iam_token().empty()) {
+                    terminalError = "IAM-token service returned an empty token";
                 } else {
-                    LastRequestError_ = "";
-                    Ticket_ = result.iam_token();
+                    token = result.iam_token();
+                    promise = AuthInfo_;
 
                     const SysTimePoint expiresAt = SysClock::from_time_t(result.expires_at().seconds());
                     RescheduleOnSuccess(expiresAt);
+                }
 
-                    setFirstTokenReady = MarkFirstTokenReadyLocked();
-                    TokenReady_.notify_all();
+                if (terminalError) {
+                    promise = FailAttemptImpl();
                 }
 
                 ResetContextImpl();
             }
 
-            if (setFirstTokenReady) {
-                FirstTokenReady_.SetValue();
+            if (token) {
+                promise.TrySetValue(std::move(*token));
+            } else if (terminalError) {
+                SetError(promise, *terminalError);
             }
+        }
+
+        static bool IsRetryable(grpc::StatusCode code) {
+            return code == grpc::StatusCode::CANCELLED || code == grpc::StatusCode::UNKNOWN ||
+                code == grpc::StatusCode::DEADLINE_EXCEEDED || code == grpc::StatusCode::RESOURCE_EXHAUSTED ||
+                code == grpc::StatusCode::ABORTED || code == grpc::StatusCode::INTERNAL ||
+                code == grpc::StatusCode::UNAVAILABLE;
         }
 
         void RescheduleOnFailure() { // call with Lock_
@@ -431,21 +442,19 @@ private:
         std::shared_ptr<typename TService::Stub> Stub_;
         TAsyncRpc Rpc_;
 
-        std::string Ticket_;
         SysTimePoint NextTicketUpdate_;
+        SysTimePoint RetryDeadline_;
         const TIamEndpoint IamEndpoint_;
         const TRequestFiller RequestFiller_;
         std::optional<grpc::ClientContext> Context_;
         std::condition_variable ContextReady_;
-        std::condition_variable TokenReady_;
-        std::string LastRequestError_;
         bool NeedStop_;
         std::chrono::milliseconds BackoffTimeout_;
         std::mutex Lock_;
         std::weak_ptr<ICoreFacility> ResponseFacility_;
         TCredentialsProviderPtr AuthTokenProvider_;
-        NThreading::TPromise<void> FirstTokenReady_;
-        bool FirstTokenReadySet_;
+        NThreading::TFuture<std::string> AuthTokenInfo_;
+        NThreading::TPromise<std::string> AuthInfo_;
     };
 
 public:
@@ -453,14 +462,10 @@ public:
                                 const TRequestFiller& requestFiller,
                                 TAsyncRpc rpc,
                                 std::weak_ptr<ICoreFacility> responseFacility,
-                                TCredentialsProviderPtr authTokenProvider = nullptr,
-                                bool waitForToken = true)
+                                TCredentialsProviderPtr authTokenProvider = nullptr)
         : Impl_(std::make_shared<TImpl>(endpoint, requestFiller, rpc, std::move(responseFacility), authTokenProvider))
     {
         Impl_->StartPeriodicTask();
-        if (waitForToken) {
-            Impl_->WaitForToken();
-        }
     }
 
     ~TGrpcIamCredentialsProvider() {
@@ -468,90 +473,43 @@ public:
     }
 
     std::string GetAuthInfo() const override {
-        return Impl_->GetTicket();
+        return GetAuthInfoAsync().GetValueSync();
+    }
+
+    NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
+        return Impl_->GetAuthInfoAsync();
     }
 
     bool IsValid() const override {
         return true;
     }
 
-    NThreading::TFuture<void> GetReadyFuture() const {
-        return Impl_->GetReadyFuture();
-    }
-
 private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-// Adapter that keeps a self-owned ICoreFacility alive for the lifetime of an inner credentials
-// provider. Used by deprecated no-arg ICredentialsProviderFactory::CreateProvider() paths where
-// the caller hasn't supplied a facility.
-class TOwningFacilityCredentialsProvider : public ICredentialsProvider {
-public:
-    TOwningFacilityCredentialsProvider(std::shared_ptr<ICoreFacility> facility,
-                                       TCredentialsProviderPtr inner)
-        : Facility_(std::move(facility))
-        , Inner_(std::move(inner))
-    {}
-
-    std::string GetAuthInfo() const override {
-        return Inner_->GetAuthInfo();
-    }
-
-    bool IsValid() const override {
-        return Inner_->IsValid();
-    }
-
-private:
-    // Field declaration order matters: Inner_ is destroyed first so that its Stop() can still
-    // drive the facility's queue (cancel the in-flight gRPC context, drain the response callback),
-    // and only then is Facility_ destroyed.
-    std::shared_ptr<ICoreFacility> Facility_;
-    TCredentialsProviderPtr Inner_;
-};
-
-namespace NPrivate {
-
-template <typename TProvider, typename TParams>
-NThreading::TFuture<TCredentialsProviderPtr> CreateGrpcIamCredentialsProviderAsync(
-    const TParams& params,
-    std::weak_ptr<ICoreFacility> facility,
-    std::shared_ptr<ICoreFacility> ownedFacility = {})
-{
-    auto inner = std::make_shared<TProvider>(params, std::move(facility), false);
-    auto ready = inner->GetReadyFuture();
-    TCredentialsProviderPtr provider = std::move(inner);
-    if (ownedFacility) {
-        provider = std::make_shared<TOwningFacilityCredentialsProvider>(
-            std::move(ownedFacility), std::move(provider));
-    }
-    return ready.Return(std::move(provider));
-}
-
-} // namespace NPrivate
-
 template<typename TRequest, typename TResponse, typename TService>
 class TIamJwtCredentialsProvider : public TGrpcIamCredentialsProvider<TRequest, TResponse, TService> {
 public:
-    TIamJwtCredentialsProvider(const TIamJwtParams& params, std::weak_ptr<ICoreFacility> responseFacility, bool waitForToken = true)
+    TIamJwtCredentialsProvider(const TIamJwtParams& params, std::weak_ptr<ICoreFacility> responseFacility)
         : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
             [jwtParams = params.JwtParams](TRequest& req) {
                 req.set_jwt(MakeSignedJwt(jwtParams));
             }, [](typename TService::Stub* stub, grpc::ClientContext* context, const TRequest* request, TResponse* response, std::function<void(grpc::Status)> cb) {
                 stub->async()->Create(context, request, response, std::move(cb));
-            }, std::move(responseFacility), nullptr, waitForToken) {}
+            }, std::move(responseFacility)) {}
 };
 
 template<typename TRequest, typename TResponse, typename TService>
 class TIamOAuthCredentialsProvider : public TGrpcIamCredentialsProvider<TRequest, TResponse, TService> {
 public:
-    TIamOAuthCredentialsProvider(const TIamOAuth& params, std::weak_ptr<ICoreFacility> responseFacility, bool waitForToken = true)
+    TIamOAuthCredentialsProvider(const TIamOAuth& params, std::weak_ptr<ICoreFacility> responseFacility)
         : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
             [token = params.OAuthToken](TRequest& req) {
                 req.set_yandex_passport_oauth_token(TStringType{token});
             }, [](typename TService::Stub* stub, grpc::ClientContext* context, const TRequest* request, TResponse* response, std::function<void(grpc::Status)> cb) {
                 stub->async()->Create(context, request, response, std::move(cb));
-            }, std::move(responseFacility), nullptr, waitForToken) {}
+            }, std::move(responseFacility)) {}
 };
 
 template<typename TRequest, typename TResponse, typename TService>
@@ -574,12 +532,6 @@ public:
             });
     }
 
-    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const override {
-        auto facility = CreateSimpleCoreFacility();
-        return NPrivate::CreateGrpcIamCredentialsProviderAsync<
-            TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(Params_, facility, facility);
-    }
-
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
         return std::make_shared<TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
@@ -593,11 +545,6 @@ public:
             Params_.JwtParams.KeyId,
             Params_.JwtParams.PubKey,
             Params_.JwtParams.PrivKey);
-    }
-
-    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
-        return NPrivate::CreateGrpcIamCredentialsProviderAsync<
-            TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
 
 private:
@@ -622,12 +569,6 @@ public:
             });
     }
 
-    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const override {
-        auto facility = CreateSimpleCoreFacility();
-        return NPrivate::CreateGrpcIamCredentialsProviderAsync<
-            TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(Params_, facility, facility);
-    }
-
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
         return std::make_shared<TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
@@ -638,11 +579,6 @@ public:
             Params_,
             TService::service_full_name(),
             Params_.OAuthToken);
-    }
-
-    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
-        return NPrivate::CreateGrpcIamCredentialsProviderAsync<
-            TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
 
 private:

@@ -6,6 +6,7 @@
 
 #include <library/cpp/deprecated/split/split_iterator.h>
 
+#include <util/string/cast.h>
 #include <util/string/split.h>
 #include <util/string/join.h>
 #include <util/system/env.h>
@@ -33,7 +34,7 @@ public:
 };
 
 [[noreturn]] TString ThrowBad(TStringBuf flag, const TVector<TString>& args) {
-    YQL_ENSURE(false, "Bad " << flag << "args [" << JoinSeq(", ", args) << "]");
+    YQL_ENSURE(false, "Bad " << flag << " args [" << JoinSeq(", ", args) << "]");
 }
 
 } // namespace
@@ -101,6 +102,10 @@ bool TParsedSettings::ApplyTo(TTranslationSettings& settings, NYql::TIssues& iss
         settings.PgParser = true;
     }
 
+    if (Syntax) {
+        settings.Syntax = Syntax;
+    }
+
     return true;
 }
 
@@ -152,6 +157,8 @@ bool ParseTranslationSettingsFromComments(const TString& query, TParsedSettings&
             // Is always turned on, ignore
         } else if (value == "syntax_pg") {
             parsed.HasPgParser = true;
+        } else if (value.StartsWith("syntax_")) {
+            parsed.Syntax = value.substr(7);
         } else {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, lineNumber), NYql::TIssuesIds::DEFAULT_ERROR,
                                            TStringBuilder() << "Unknown SQL translation setting: " << value));
@@ -177,15 +184,30 @@ void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettin
         {
             "YqlSelect",
             [](const TVector<TString>& args, TTranslationSettings& s) {
-                if (args.size() == 1 && args[0] == "disable") {
+                if (!args.empty() && args[0] == "disable") {
                     s.YqlSelect = EYqlSelect::Disable;
-                } else if (args.size() == 1 && args[0] == "auto") {
+                } else if (!args.empty() && args[0] == "auto") {
                     s.YqlSelect = EYqlSelect::Auto;
-                } else if (args.size() == 1 && args[0] == "force") {
+                } else if (!args.empty() && args[0] == "force") {
                     s.YqlSelect = EYqlSelect::Force;
                 } else {
                     ThrowBad("YqlSelect", args);
                 }
+            },
+        },
+        {
+            "MaxParseTreeDepth",
+            [](const TVector<TString>& args, TTranslationSettings& s) {
+                if (args.empty()) {
+                    ThrowBad("MaxParseTreeDepth", args);
+                }
+
+                size_t value = 0;
+                if (!TryFromString(args[0], value)) {
+                    ThrowBad("MaxParseTreeDepth", args);
+                }
+
+                s.MaxParseTreeDepth = value;
             },
         },
     };
@@ -196,6 +218,9 @@ void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettin
         } else if (const auto* parser = Parsers.FindPtr(flag)) {
             (*parser)(args, settings);
         } else {
+            if (settings.StrictConfigValidation) {
+                throw yexception() << "Unknown SQL flag: " << flag;
+            }
             // Ignore unknown valuable flags, like we are
             // able to ignore TTranslationSettings::Flags.
         }

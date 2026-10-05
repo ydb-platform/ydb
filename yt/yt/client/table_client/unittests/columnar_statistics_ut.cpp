@@ -6,10 +6,14 @@
 
 #include <yt/yt/client/table_client/unittests/helpers/helpers.h>
 
+#include <yt/yt/client/transaction_client/ts_literal.h>
+
 #include <yt/yt/core/test_framework/framework.h>
 
 namespace NYT::NTableClient {
 namespace {
+
+using NTransactionClient::operator""_ts;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -656,14 +660,14 @@ TEST(TUpdateColumnarStatisticsTest, VersionedRow)
     TVersionedRowBuilder builder(buffer);
 
     builder.AddKey(MakeUnversionedInt64Value(12));
-    builder.AddValue(MakeVersionedStringValue("b", 10, 1));
-    builder.AddValue(MakeVersionedInt64Value(1, 11, 2));
+    builder.AddValue(MakeVersionedStringValue("b", 10_ts, 1));
+    builder.AddValue(MakeVersionedInt64Value(1, 11_ts, 2));
     rows.emplace_back(builder.FinishRow());
 
     builder.AddKey(MakeUnversionedInt64Value(33));
-    builder.AddValue(MakeVersionedStringValue("c", 15, 1));
-    builder.AddValue(MakeVersionedStringValue("a", 20, 1));
-    builder.AddValue(MakeVersionedInt64Value(143, 11, 2));
+    builder.AddValue(MakeVersionedStringValue("c", 15_ts, 1));
+    builder.AddValue(MakeVersionedStringValue("a", 20_ts, 1));
+    builder.AddValue(MakeVersionedInt64Value(143, 11_ts, 2));
     rows.emplace_back(builder.FinishRow());
 
     auto statistics = TColumnarStatistics::MakeEmpty(3);

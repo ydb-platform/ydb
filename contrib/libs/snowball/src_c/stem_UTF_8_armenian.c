@@ -1,6 +1,18 @@
-/* Generated from armenian.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from armenian.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_UTF_8_armenian.h"
+
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
+
+struct SN_local {
+    struct SN_env z;
+    int i_p2;
+    int i_pV;
+};
+
+typedef struct SN_local SN_local;
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,24 +21,14 @@ extern int armenian_UTF_8_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
+
 static int r_ending(struct SN_env * z);
 static int r_noun(struct SN_env * z);
 static int r_verb(struct SN_env * z);
 static int r_adjective(struct SN_env * z);
-static int r_R2(struct SN_env * z);
 static int r_mark_regions(struct SN_env * z);
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 
-extern struct SN_env * armenian_UTF_8_create_env(void);
-extern void armenian_UTF_8_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_0[6] = { 0xD5, 0xA2, 0xD5, 0xA1, 0xD6, 0x80 };
 static const symbol s_0_1[8] = { 0xD6, 0x80, 0xD5, 0xB8, 0xD6, 0x80, 0xD5, 0xA4 };
 static const symbol s_0_2[10] = { 0xD5, 0xA5, 0xD6, 0x80, 0xD5, 0xB8, 0xD6, 0x80, 0xD5, 0xA4 };
@@ -423,10 +425,9 @@ static const struct among a_3[57] = {
 
 static const unsigned char g_v[] = { 209, 4, 128, 0, 18 };
 
-
 static int r_mark_regions(struct SN_env * z) {
-    z->I[1] = z->l;
-    z->I[0] = z->l;
+    ((SN_local *)z)->i_pV = z->l;
+    ((SN_local *)z)->i_p2 = z->l;
     {
         int v_1 = z->c;
         {
@@ -434,7 +435,7 @@ static int r_mark_regions(struct SN_env * z) {
             if (ret < 0) goto lab0;
             z->c += ret;
         }
-        z->I[1] = z->c;
+        ((SN_local *)z)->i_pV = z->c;
         {
             int ret = in_grouping_U(z, g_v, 1377, 1413, 1);
             if (ret < 0) goto lab0;
@@ -450,20 +451,16 @@ static int r_mark_regions(struct SN_env * z) {
             if (ret < 0) goto lab0;
             z->c += ret;
         }
-        z->I[0] = z->c;
+        ((SN_local *)z)->i_p2 = z->c;
     lab0:
         z->c = v_1;
     }
     return 1;
 }
 
-static int r_R2(struct SN_env * z) {
-    return z->I[0] <= z->c;
-}
-
 static int r_adjective(struct SN_env * z) {
     z->ket = z->c;
-    if (!find_among_b(z, a_0, 23)) return 0;
+    if (!find_among_b(z, a_0, 23, 0)) return 0;
     z->bra = z->c;
     {
         int ret = slice_del(z);
@@ -474,7 +471,7 @@ static int r_adjective(struct SN_env * z) {
 
 static int r_verb(struct SN_env * z) {
     z->ket = z->c;
-    if (!find_among_b(z, a_1, 71)) return 0;
+    if (!find_among_b(z, a_1, 71, 0)) return 0;
     z->bra = z->c;
     {
         int ret = slice_del(z);
@@ -485,7 +482,7 @@ static int r_verb(struct SN_env * z) {
 
 static int r_noun(struct SN_env * z) {
     z->ket = z->c;
-    if (!find_among_b(z, a_2, 40)) return 0;
+    if (!find_among_b(z, a_2, 40, 0)) return 0;
     z->bra = z->c;
     {
         int ret = slice_del(z);
@@ -496,12 +493,9 @@ static int r_noun(struct SN_env * z) {
 
 static int r_ending(struct SN_env * z) {
     z->ket = z->c;
-    if (!find_among_b(z, a_3, 57)) return 0;
+    if (!find_among_b(z, a_3, 57, 0)) return 0;
     z->bra = z->c;
-    {
-        int ret = r_R2(z);
-        if (ret <= 0) return ret;
-    }
+    if (((SN_local *)z)->i_p2 > z->c) return 0;
     {
         int ret = slice_del(z);
         if (ret < 0) return ret;
@@ -515,11 +509,10 @@ extern int armenian_UTF_8_stem(struct SN_env * z) {
         if (ret < 0) return ret;
     }
     z->lb = z->c; z->c = z->l;
-
     {
         int v_1;
-        if (z->c < z->I[1]) return 0;
-        v_1 = z->lb; z->lb = z->I[1];
+        if (z->c < ((SN_local *)z)->i_pV) return 0;
+        v_1 = z->lb; z->lb = ((SN_local *)z)->i_pV;
         {
             int v_2 = z->l - z->c;
             {
@@ -558,7 +551,16 @@ extern int armenian_UTF_8_stem(struct SN_env * z) {
     return 1;
 }
 
-extern struct SN_env * armenian_UTF_8_create_env(void) { return SN_create_env(0, 2); }
+extern struct SN_env * armenian_UTF_8_create_env(void) {
+    struct SN_env * z = SN_new_env(sizeof(SN_local));
+    if (z) {
+        ((SN_local *)z)->i_p2 = 0;
+        ((SN_local *)z)->i_pV = 0;
+    }
+    return z;
+}
 
-extern void armenian_UTF_8_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void armenian_UTF_8_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

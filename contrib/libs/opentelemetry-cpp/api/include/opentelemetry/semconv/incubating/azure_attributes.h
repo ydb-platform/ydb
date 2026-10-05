@@ -63,6 +63,13 @@ static constexpr const char *kAzureCosmosdbResponseSubStatusCode =
     "azure.cosmosdb.response.sub_status_code";
 
 /**
+  The name of the Azure <a
+  href="https://learn.microsoft.com/azure/azure-resource-manager/management/manage-resource-groups-portal">resource
+  group</a> the resource belongs to.
+ */
+static constexpr const char *kAzureResourceGroupName = "azure.resource_group.name";
+
+/**
   <a
   href="https://learn.microsoft.com/azure/azure-resource-manager/management/azure-services-resource-providers">Azure
   Resource Provider Namespace</a> as recognized by the client.

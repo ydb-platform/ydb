@@ -11,6 +11,9 @@
 
 namespace NKikimr::NKqp {
 
+inline constexpr size_t MaxWarmupGroupSids = 256;
+inline constexpr size_t MaxWarmupGroupSidsBytes = 16 * 1024;
+
 struct TEvKqpWarmupComplete : public NActors::TEventLocal<TEvKqpWarmupComplete, TKqpEvents::EvWarmupComplete> {
     bool Success;
     TString Message;

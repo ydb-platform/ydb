@@ -7,15 +7,27 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+NProto::TError MakeWriteClientDestroyedError()
+{
+    return MakeError(E_REJECTED, "WriteClient destroyed");
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 TWriteRequestBundle::TWriteRequestBundle(
     NActors::TActorSystem* const actorSystem,
     IWriteClientWeakPtr writeClient,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     const NWilson::TTraceId& traceId,
     TCallContextPtr callContext,
-    TBlockRange64 vchunkRange)
+    TBlockRange16 vchunkRange)
     : WriteClient(std::move(writeClient))
     , Request(std::move(request))
+    , SgList(Request->Sglist.CreateDepender())
     , Span(
           NKikimr::TWilsonNbs::NbsBasic,
           traceId.Clone(),
@@ -32,19 +44,19 @@ void TWriteRequestBundle::Reply(
     THostMask requestedWrites,
     THostMask completedWrites)
 {
-    Request->Sglist.Close();
+    SgList.Close();
 
     if (auto client = WriteClient.lock()) {
         client->OnWriteBlocksResponse(
             shared_from_this(),
             TWriteRequestResponse{
                 .Error = std::move(error),
-                .Lsn = Lsn,
+                .PBufferKey = PBufferKey,
                 .RequestedWrites = requestedWrites,
                 .CompletedWrites = completedWrites});
     } else {
-        SendFinalReply(
-            TWriteBlocksLocalResponse{.Error = MakeError(E_CANCELLED)});
+        SendFinalReply(TWriteBlocksLocalResponse{
+            .Error = MakeWriteClientDestroyedError()});
     }
 }
 
@@ -79,24 +91,24 @@ TBlockRange64 TWriteRequestBundle::GetRange() const
     return Request->Headers.Range;
 }
 
-TBlockRange64 TWriteRequestBundle::GetVChunkRange() const
+TBlockRange16 TWriteRequestBundle::GetVChunkRange() const
 {
     return VChunkRange;
 }
 
-void TWriteRequestBundle::SetLsn(ui64 lsn)
+void TWriteRequestBundle::SetPBufferKey(TPBufferKey pBufferKey)
 {
-    Lsn = lsn;
+    PBufferKey = pBufferKey;
 }
 
-ui64 TWriteRequestBundle::GetLsn() const
+TPBufferKey TWriteRequestBundle::GetPBufferKey() const
 {
-    return Lsn;
+    return PBufferKey;
 }
 
 TGuardedSgList& TWriteRequestBundle::GetSgList()
 {
-    return Request->Sglist;
+    return SgList;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

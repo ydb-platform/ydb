@@ -41,6 +41,7 @@ runs:
             --clang-coverage --coverage-report
             -DCOVERAGE_TARGET_REGEXP=ydb/public/sdk/cpp
             --coverage-prefix-filter=ydb/public/sdk/cpp
+            --coverage-exclude-regexp='/(ut|tests)/|_(ut|it)\.(c|cc|cpp|cxx|h|hh|hpp|hxx)'
             --test-threads "${{ inputs.test_threads }}"
             --link-threads "${{ inputs.link_threads }}"
             --output "$out_dir"

@@ -1,16 +1,35 @@
 #include "json_value_view.h"
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
+
 #include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
 
 #include <util/generic/ylimits.h>
+#include <util/stream/str.h>
 #include <util/string/cast.h>
+#include <util/string/escape.h>
 
 #include <cmath>
 #include <limits>
 
 namespace NKikimr::NArrow::NAccessor {
+
+namespace {
+
+NBinaryJson::TBinaryJson JsonValueToBinaryJsonVerified(const NJson::TJsonValue& json) {
+    const auto dumpedJson = WriteJsonRoundTripSafe(json);
+    auto result = NBinaryJson::SerializeToBinaryJson(dumpedJson);
+    if (std::holds_alternative<TString>(result)) {
+        AFL_VERIFY(false)("error", std::get<TString>(result))("type", json.GetType())("input_dump", EscapeC(dumpedJson));
+    }
+    return std::get<NBinaryJson::TBinaryJson>(std::move(result));
+}
+
+}   // namespace
 
 std::optional<TString> TJsonValueView::JsonNumberToString(double jsonNumber) {
     if (std::isnan(jsonNumber)) {
@@ -90,6 +109,34 @@ std::optional<TStringBuf> TJsonValueView::GetBinaryJsonBlobOptional() const {
     return Bytes;
 }
 
+NJson::TJsonValue TJsonValueView::ToJsonValue() const {
+    switch (Kind) {
+        case EKind::BinaryJson: {
+            const auto text = NBinaryJson::SerializeToJson(Bytes);
+            NJson::TJsonValue result;
+            AFL_VERIFY(NJson::ReadJsonTree(text, &result));
+            return result;
+        }
+        case EKind::String:
+            return NJson::TJsonValue(Bytes);
+        case EKind::Number:
+            return NJson::TJsonValue(Number);
+        case EKind::Bool:
+            return NJson::TJsonValue(Bool);
+    }
+}
+
+NBinaryJson::TBinaryJson TJsonValueView::ToBinaryJson() const {
+    switch (Kind) {
+        case EKind::BinaryJson:
+            return NBinaryJson::TBinaryJson(Bytes.data(), Bytes.size());
+        case EKind::String:
+        case EKind::Number:
+        case EKind::Bool:
+            return JsonValueToBinaryJsonVerified(ToJsonValue());
+    }
+}
+
 std::optional<TStringBuf> TJsonValueView::ScalarFromBinaryJson() const {
     if (Bytes.empty()) {
         return std::nullopt;
@@ -115,6 +162,15 @@ std::optional<TStringBuf> TJsonValueView::ScalarFromBinaryJson() const {
         case NBinaryJson::EEntryType::Container:
             return std::nullopt;
     }
+}
+
+TString WriteJsonRoundTripSafe(const NJson::TJsonValue& json) {
+    NJson::TJsonWriterConfig config;
+    // avoid precision loss on double conversion
+    config.FloatToStringMode = PREC_AUTO;
+    TStringStream dumpedJson;
+    NJson::WriteJson(&dumpedJson, &json, config);
+    return dumpedJson.Str();
 }
 
 } // namespace NKikimr::NArrow::NAccessor

@@ -71,16 +71,23 @@ namespace NYql::NGenericPushDown {
         TMaybe<TString> histogram;
     };
 
+    struct TUuidColumnStatsData {
+        TMaybe<TString> lowValue;
+        TMaybe<TString> highValue;
+        TMaybe<i64> numNulls;
+    };
+
     struct TColumnStatistics {
         TString ColumnName;
         Ydb::Type ColumnType;
         TMaybe<TBooleanColumnStatsData> BooleanStats;
-        TMaybe<TBooleanColumnStatsData> DoubleStats;
+        TMaybe<TDoubleColumnStatsData> DoubleStats;
         TMaybe<TLongColumnStatsData> LongStats;
         TMaybe<TStringColumnStatsData> StringStats;
         TMaybe<TBinaryColumnStatsData> BinaryStats;
         TMaybe<TDecimalColumnStatsData> DecimalStats;
         TMaybe<TTimestampColumnStatsData> Timestamp;
+        TMaybe<TUuidColumnStatsData> UuidStats;
     };
 
 } // namespace NYql::NGenericPushDown

@@ -15,6 +15,7 @@ SRCS(
     draft/persqueue_error_codes.proto
     draft/ydb_backup.proto
     draft/ydb_bridge.proto
+    draft/ydb_distributed_storage.proto
     draft/ydb_dynamic_config.proto
     draft/ydb_logstore.proto
     draft/ydb_maintenance.proto
@@ -50,6 +51,7 @@ SRCS(
     ydb_rate_limiter.proto
     ydb_scheme.proto
     ydb_secret.proto
+    ydb_udf.proto
     ydb_scripting.proto
     ydb_status_codes.proto
     ydb_table.proto

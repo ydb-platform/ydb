@@ -42,11 +42,7 @@ public:
 
     void SignalDiscoveryCompleted();
     void InitCredentials(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
-    NThreading::TFuture<void> GetCredentialsReady() const;
     std::shared_ptr<ICredentialsProvider> GetCredentialsProvider() const;
-#ifndef YDB_GRPC_UNSECURE_AUTH
-    std::shared_ptr<grpc::CallCredentials> GetCallCredentials() const;
-#endif
 
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
     void PostToResponseQueue(TPostTaskCb&& f) override;
@@ -79,13 +75,9 @@ public:
 private:
     struct TCredentials {
         std::shared_ptr<ICredentialsProvider> Provider;
-#ifndef YDB_GRPC_UNSECURE_AUTH
-        std::shared_ptr<grpc::CallCredentials> CallCredentials;
-#endif
     };
 
-    NThreading::TFuture<void> CredentialsReady;
-    NThreading::TFuture<TCredentials> Credentials;
+    TCredentials Credentials;
     mutable std::once_flag ClientTlsValidationOnceFlag_;
     mutable bool ClientTlsCredentialsValid_ = true;
     mutable std::string ClientTlsValidationDetail_;

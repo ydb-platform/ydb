@@ -9,6 +9,7 @@
 #include "kafka_producer_instance_id.h"
 #include <ydb/library/aclib/aclib.h>
 #include "actors/actors.h"
+#include <util/generic/hash.h>
 
 using namespace NActors;
 
@@ -47,6 +48,7 @@ struct TEvKafka {
         EvFetchActorStateRequest,
         EvFetchActorStateResponse,
         EvMtlsAuthRequest,
+        EvTokenRecheck,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -172,7 +174,9 @@ struct TEvKafka {
 
         TEvAuthResult(EAuthSteps authStep, std::shared_ptr<TEvKafka::TEvResponse> clientResponse, TIntrusiveConstPtr<NACLib::TUserToken> token, TString databasePath, TString databaseId,
                       TString folderId, TString cloudId, TString serviceAccountId, TString coordinator, TString resourcePath,
-                      bool isServerless, TString error = "", TString resourceDatabasePath = "")
+                      bool isServerless, TString error = "", TString resourceDatabasePath = "",
+                      TString ticket = {}, TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> ticketParserEntries = {},
+                      TString authDatabasePath = {}, TString peerName = {})
             : AuthStep(authStep)
             , UserToken(token)
             , DatabasePath(databasePath)
@@ -185,7 +189,11 @@ struct TEvKafka {
             , IsServerless(isServerless)
             , ResourceDatabasePath(resourceDatabasePath)
             , Error(error)
-            , ClientResponse(std::move(clientResponse)) {
+            , ClientResponse(std::move(clientResponse))
+            , Ticket(std::move(ticket))
+            , TicketParserEntries(std::move(ticketParserEntries))
+            , AuthDatabasePath(std::move(authDatabasePath))
+            , PeerName(std::move(peerName)) {
         }
 
         EAuthSteps AuthStep;
@@ -203,6 +211,26 @@ struct TEvKafka {
         TString Error;
         TString SaslMechanism;
         std::shared_ptr<TEvKafka::TEvResponse> ClientResponse;
+        TString Ticket;
+        TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> TicketParserEntries;
+        TString AuthDatabasePath;
+        TString PeerName;
+    };
+
+    struct TEvTokenRecheck : public TEventLocal<TEvTokenRecheck, EvTokenRecheck> {
+        enum class EKind {
+            Periodic,
+            Timeout,
+        };
+
+        TEvTokenRecheck() = default;
+        explicit TEvTokenRecheck(EKind kind, ui64 cookie = 0)
+            : Kind(kind)
+            , Cookie(cookie)
+        {}
+
+        EKind Kind = EKind::Periodic;
+        ui64 Cookie = 0;
     };
 
     struct TEvHandshakeResult : public TEventLocal<TEvHandshakeResult, EvHandshakeResult> {
@@ -254,21 +282,25 @@ struct TEvKafka {
     struct TEvWakeup : public TEventLocal<TEvWakeup, EvWakeup> {
     };
 
-struct TPartitionOffsetsInfo {
-    ui64 PartitionId;
-    ui64 Generation;
-    ui64 StartOffset;
-    ui64 EndOffset;
+struct PartitionConsumerOffset {
+    ui64 PartitionIndex = 0;
+    ui64 Offset = 0;
+    std::optional<TString> Metadata = std::nullopt;
+
+    PartitionConsumerOffset() = default;
+    PartitionConsumerOffset(ui64 partitionIndex, ui64 offset, std::optional<TString> metadata = std::nullopt)
+        : PartitionIndex(partitionIndex)
+        , Offset(offset)
+        , Metadata(metadata)
+    {}
 };
 
-struct TGetOffsetsRequest : public NKikimr::NGRpcProxy::V1::TLocalRequestBase {
-    TGetOffsetsRequest() = default;
-    TGetOffsetsRequest(const TString& topic, const TString& database, const TString& token, const TVector<ui32>& partitionIds)
-        : TLocalRequestBase(topic, database, token)
-        , PartitionIds(partitionIds)
-    {}
-
-    TVector<ui32> PartitionIds;
+struct TPartitionOffsetsInfo {
+    ui64 PartitionId = 0;
+    ui64 Generation = 0;
+    ui64 StartOffset = 0;
+    ui64 EndOffset = 0;
+    THashMap<TString, PartitionConsumerOffset> Consumers;
 };
 
 struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResponse, EvTopicOffsetsResponse>
@@ -280,18 +312,7 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
     TVector<TPartitionOffsetsInfo> Partitions;
 };
 
-struct PartitionConsumerOffset {
-    ui64 PartitionIndex;
-    ui64 Offset;
-    std::optional<TString> Metadata = std::nullopt;
-
-    PartitionConsumerOffset(ui64 partitionIndex, ui64 offset, std::optional<TString> metadata = std::nullopt) :
-                                                PartitionIndex(partitionIndex),
-                                                Offset(offset),
-                                                Metadata(metadata) {}
-};
-
-struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse>
+struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvCommitedOffsetsResponse>
                                   , public NKikimr::NGRpcProxy::V1::TLocalResponseBase
 {
     TEvCommitedOffsetsResponse()
@@ -315,12 +336,13 @@ struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModifi
 
 struct TEvAddPartitionsToTxnRequest : public TEventLocal<TEvAddPartitionsToTxnRequest, EvAddPartitionsToTxnRequest> {
     TEvAddPartitionsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddPartitionsToTxnRequestData>& request, const TActorId connectionId,
-                                 const TString& databasePath, const TString& resourceDatabasePath)
+                                 const TString& databasePath, const TString& resourceDatabasePath, bool EnableKafkaServerlessTransactionsFlag = false)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
     , DatabasePath(databasePath)
     , ResourceDatabasePath(resourceDatabasePath)
+    , InitialEnableKafkaServerlessTransactionsFlagValue(EnableKafkaServerlessTransactionsFlag)
     {}
 
     ui64 CorrelationId;
@@ -328,6 +350,7 @@ struct TEvAddPartitionsToTxnRequest : public TEventLocal<TEvAddPartitionsToTxnRe
     TActorId ConnectionId;
     TString DatabasePath;
     TString ResourceDatabasePath;
+    bool InitialEnableKafkaServerlessTransactionsFlagValue;
 };
 struct TEvTopicDescribeResponse : public NActors::TEventLocal<TEvTopicDescribeResponse, EvDescribeTopicsResponse>
                                 , public NKikimr::NGRpcProxy::V1::TLocalResponseBase
@@ -350,12 +373,13 @@ struct TEvTopicDescribeResponse : public NActors::TEventLocal<TEvTopicDescribeRe
 
 struct TEvAddOffsetsToTxnRequest : public TEventLocal<TEvAddOffsetsToTxnRequest, EvAddOffsetsToTxnRequest> {
     TEvAddOffsetsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddOffsetsToTxnRequestData>& request, const TActorId connectionId,
-                             const TString& databasePath, const TString& resourceDatabasePath)
+                             const TString& databasePath, const TString& resourceDatabasePath,  bool EnableKafkaServerlessTransactionsFlag = false)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
     , DatabasePath(databasePath)
     , ResourceDatabasePath(resourceDatabasePath)
+    , InitialEnableKafkaServerlessTransactionsFlagValue(EnableKafkaServerlessTransactionsFlag)
     {}
 
     ui64 CorrelationId;
@@ -363,16 +387,18 @@ struct TEvAddOffsetsToTxnRequest : public TEventLocal<TEvAddOffsetsToTxnRequest,
     TActorId ConnectionId;
     TString DatabasePath;
     TString ResourceDatabasePath;
+    bool InitialEnableKafkaServerlessTransactionsFlagValue;
 };
 
 struct TEvTxnOffsetCommitRequest : public TEventLocal<TEvTxnOffsetCommitRequest, EvTxnOffsetCommitRequest> {
     TEvTxnOffsetCommitRequest(const ui64 correlationId, const TMessagePtr<TTxnOffsetCommitRequestData>& request, const TActorId connectionId,
-                              const TString& databasePath, const TString& resourceDatabasePath)
+                              const TString& databasePath, const TString& resourceDatabasePath, bool EnableKafkaServerlessTransactionsFlag = false)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
     , DatabasePath(databasePath)
     , ResourceDatabasePath(resourceDatabasePath)
+    , InitialEnableKafkaServerlessTransactionsFlagValue(EnableKafkaServerlessTransactionsFlag)
     {}
 
     ui64 CorrelationId;
@@ -380,16 +406,18 @@ struct TEvTxnOffsetCommitRequest : public TEventLocal<TEvTxnOffsetCommitRequest,
     TActorId ConnectionId;
     TString DatabasePath;
     TString ResourceDatabasePath;
+    bool InitialEnableKafkaServerlessTransactionsFlagValue;
 };
 
 struct TEvEndTxnRequest : public TEventLocal<TEvEndTxnRequest, EvEndTxnRequest> {
     TEvEndTxnRequest(const ui64 correlationId, const TMessagePtr<TEndTxnRequestData>& request, const TActorId connectionId,
-                     const TString& databasePath, const TString& resourceDatabasePath)
+                     const TString& databasePath, const TString& resourceDatabasePath, bool EnableKafkaServerlessTransactionsFlag = false)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
     , DatabasePath(databasePath)
     , ResourceDatabasePath(resourceDatabasePath)
+    , InitialEnableKafkaServerlessTransactionsFlagValue(EnableKafkaServerlessTransactionsFlag)
     {}
 
     ui64 CorrelationId;
@@ -397,6 +425,7 @@ struct TEvEndTxnRequest : public TEventLocal<TEvEndTxnRequest, EvEndTxnRequest> 
     TActorId ConnectionId;
     TString DatabasePath;
     TString ResourceDatabasePath;
+    bool InitialEnableKafkaServerlessTransactionsFlagValue;
 };
 
 /*

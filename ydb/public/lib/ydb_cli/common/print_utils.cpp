@@ -279,10 +279,14 @@ void PrintAllPermissions(
     const std::string& owner,
     const std::vector<NScheme::TPermissions>& permissions,
     const std::vector<NScheme::TPermissions>& effectivePermissions,
+    bool interruptInheritance,
     IOutputStream& out
 ) {
     out << "Owner: " << owner << Endl << Endl << "Permissions: " << Endl;
     PrintPermissions(permissions, out);
+    if (interruptInheritance) {
+        out << Endl << "Is permission inheritance interrupted: true" << Endl;
+    }
     out << Endl << "Effective permissions: " << Endl;
     PrintPermissions(effectivePermissions, out);
 }

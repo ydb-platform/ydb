@@ -1,6 +1,17 @@
-/* Generated from tamil.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from tamil.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_UTF_8_tamil.h"
+
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
+
+struct SN_local {
+    struct SN_env z;
+    unsigned char b_found_vetrumai_urupu;
+};
+
+typedef struct SN_local SN_local;
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,6 +20,7 @@ extern int tamil_UTF_8_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
+
 static int r_has_min_length(struct SN_env * z);
 static int r_remove_common_word_endings(struct SN_env * z);
 static int r_remove_tense_suffixes(struct SN_env * z);
@@ -23,18 +35,49 @@ static int r_remove_pronoun_prefixes(struct SN_env * z);
 static int r_remove_question_prefixes(struct SN_env * z);
 static int r_remove_question_suffixes(struct SN_env * z);
 static int r_remove_plural_suffix(struct SN_env * z);
-#ifdef __cplusplus
-extern "C" {
-#endif
 
+static const symbol s_0[] = { 0xE0, 0xAE, 0x93 };
+static const symbol s_1[] = { 0xE0, 0xAE, 0x92 };
+static const symbol s_2[] = { 0xE0, 0xAE, 0x89 };
+static const symbol s_3[] = { 0xE0, 0xAE, 0x8A };
+static const symbol s_4[] = { 0xE0, 0xAE, 0x8E };
+static const symbol s_5[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_6[] = { 0xE0, 0xAE, 0xB3, 0xE0, 0xAF, 0x8D };
+static const symbol s_7[] = { 0xE0, 0xAE, 0xB2, 0xE0, 0xAF, 0x8D };
+static const symbol s_8[] = { 0xE0, 0xAE, 0x9F, 0xE0, 0xAF, 0x81 };
+static const symbol s_9[] = { 0xE0, 0xAF, 0x88 };
+static const symbol s_10[] = { 0xE0, 0xAE, 0xAE, 0xE0, 0xAF, 0x8D };
+static const symbol s_11[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_12[] = { 0xE0, 0xAE, 0xAE, 0xE0, 0xAF, 0x8D };
+static const symbol s_13[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_14[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_15[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_16[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_17[] = { 0xE0, 0xAF, 0x81, 0xE0, 0xAE, 0x99, 0xE0, 0xAF, 0x8D };
+static const symbol s_18[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_19[] = { 0xE0, 0xAE, 0xB2, 0xE0, 0xAF, 0x8D };
+static const symbol s_20[] = { 0xE0, 0xAE, 0xB3, 0xE0, 0xAF, 0x8D };
+static const symbol s_21[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_22[] = { 0xE0, 0xAF, 0x81, 0xE0, 0xAE, 0xAE, 0xE0, 0xAF, 0x8D };
+static const symbol s_23[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_24[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_25[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_26[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_27[] = { 0xE0, 0xAE, 0xAE };
+static const symbol s_28[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_29[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_30[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_31[] = { 0xE0, 0xAE, 0xBF };
+static const symbol s_32[] = { 0xE0, 0xAF, 0x88 };
+static const symbol s_33[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_34[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_35[] = { 0xE0, 0xAE, 0xBF, 0xE0, 0xAE, 0xA9, 0xE0, 0xAF, 0x8D };
+static const symbol s_36[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_37[] = { 0xE0, 0xAE, 0x9A };
+static const symbol s_38[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_39[] = { 0xE0, 0xAF, 0x8D };
+static const symbol s_40[] = { 0xE0, 0xAF, 0x8D };
 
-extern struct SN_env * tamil_UTF_8_create_env(void);
-extern void tamil_UTF_8_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_0[6] = { 0xE0, 0xAE, 0xB5, 0xE0, 0xAF, 0x81 };
 static const symbol s_0_1[6] = { 0xE0, 0xAE, 0xB5, 0xE0, 0xAF, 0x82 };
 static const symbol s_0_2[6] = { 0xE0, 0xAE, 0xB5, 0xE0, 0xAF, 0x8A };
@@ -637,48 +680,6 @@ static const struct among a_26[6] = {
 { 9, s_26_5, 0, -1, 0}
 };
 
-static const symbol s_0[] = { 0xE0, 0xAE, 0x93 };
-static const symbol s_1[] = { 0xE0, 0xAE, 0x92 };
-static const symbol s_2[] = { 0xE0, 0xAE, 0x89 };
-static const symbol s_3[] = { 0xE0, 0xAE, 0x8A };
-static const symbol s_4[] = { 0xE0, 0xAE, 0x8E };
-static const symbol s_5[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_6[] = { 0xE0, 0xAE, 0xB3, 0xE0, 0xAF, 0x8D };
-static const symbol s_7[] = { 0xE0, 0xAE, 0xB2, 0xE0, 0xAF, 0x8D };
-static const symbol s_8[] = { 0xE0, 0xAE, 0x9F, 0xE0, 0xAF, 0x81 };
-static const symbol s_9[] = { 0xE0, 0xAF, 0x88 };
-static const symbol s_10[] = { 0xE0, 0xAE, 0xAE, 0xE0, 0xAF, 0x8D };
-static const symbol s_11[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_12[] = { 0xE0, 0xAE, 0xAE, 0xE0, 0xAF, 0x8D };
-static const symbol s_13[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_14[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_15[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_16[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_17[] = { 0xE0, 0xAF, 0x81, 0xE0, 0xAE, 0x99, 0xE0, 0xAF, 0x8D };
-static const symbol s_18[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_19[] = { 0xE0, 0xAE, 0xB2, 0xE0, 0xAF, 0x8D };
-static const symbol s_20[] = { 0xE0, 0xAE, 0xB3, 0xE0, 0xAF, 0x8D };
-static const symbol s_21[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_22[] = { 0xE0, 0xAF, 0x81, 0xE0, 0xAE, 0xAE, 0xE0, 0xAF, 0x8D };
-static const symbol s_23[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_24[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_25[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_26[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_27[] = { 0xE0, 0xAE, 0xAE };
-static const symbol s_28[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_29[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_30[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_31[] = { 0xE0, 0xAE, 0xBF };
-static const symbol s_32[] = { 0xE0, 0xAF, 0x88 };
-static const symbol s_33[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_34[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_35[] = { 0xE0, 0xAE, 0xBF, 0xE0, 0xAE, 0xA9, 0xE0, 0xAF, 0x8D };
-static const symbol s_36[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_37[] = { 0xE0, 0xAE, 0x9A };
-static const symbol s_38[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_39[] = { 0xE0, 0xAF, 0x8D };
-static const symbol s_40[] = { 0xE0, 0xAF, 0x8D };
-
 static int r_has_min_length(struct SN_env * z) {
     return len_utf8(z->p) > 4;
 }
@@ -687,7 +688,7 @@ static int r_fix_va_start(struct SN_env * z) {
     int among_var;
     z->bra = z->c;
     if (z->c + 5 >= z->l || z->p[z->c + 5] >> 5 != 4 || !((3078 >> (z->p[z->c + 5] & 0x1f)) & 1)) return 0;
-    among_var = find_among(z, a_0, 4);
+    among_var = find_among(z, a_0, 4, 0);
     if (!among_var) return 0;
     z->ket = z->c;
     switch (among_var) {
@@ -742,7 +743,7 @@ static int r_fix_endings(struct SN_env * z) {
 static int r_remove_question_prefixes(struct SN_env * z) {
     z->bra = z->c;
     if (!(eq_s(z, 3, s_4))) return 0;
-    if (!find_among(z, a_1, 10)) return 0;
+    if (!find_among(z, a_1, 10, 0)) return 0;
     if (!(eq_s(z, 3, s_5))) return 0;
     z->ket = z->c;
     {
@@ -764,11 +765,11 @@ static int r_fix_ending(struct SN_env * z) {
     int among_var;
     if (len_utf8(z->p) <= 3) return 0;
     z->lb = z->c; z->c = z->l;
-    {
+    do {
         int v_1 = z->l - z->c;
         z->ket = z->c;
-        among_var = find_among_b(z, a_5, 17);
-        if (!among_var) goto lab1;
+        among_var = find_among_b(z, a_5, 17, 0);
+        if (!among_var) goto lab0;
         z->bra = z->c;
         switch (among_var) {
             case 1:
@@ -780,7 +781,7 @@ static int r_fix_ending(struct SN_env * z) {
             case 2:
                 {
                     int v_2 = z->l - z->c;
-                    if (!find_among_b(z, a_2, 3)) goto lab1;
+                    if (!find_among_b(z, a_2, 3, 0)) goto lab0;
                     z->c = z->l - v_2;
                 }
                 {
@@ -807,14 +808,10 @@ static int r_fix_ending(struct SN_env * z) {
                 }
                 break;
             case 6:
-                if (!(z->I[0])) goto lab1;
-                {
-                    int v_3 = z->l - z->c;
-                    if (!(eq_s_b(z, 3, s_9))) goto lab2;
-                    goto lab1;
-                lab2:
-                    z->c = z->l - v_3;
-                }
+                if (!((SN_local *)z)->b_found_vetrumai_urupu) goto lab0;
+                if (!(eq_s_b(z, 3, s_9))) goto lab1;
+                goto lab0;
+            lab1:
                 {
                     int ret = slice_from_s(z, 6, s_10);
                     if (ret < 0) return ret;
@@ -828,11 +825,11 @@ static int r_fix_ending(struct SN_env * z) {
                 break;
             case 8:
                 {
-                    int v_4 = z->l - z->c;
-                    if (!find_among_b(z, a_3, 8)) goto lab3;
-                    goto lab1;
-                lab3:
-                    z->c = z->l - v_4;
+                    int v_3 = z->l - z->c;
+                    if (!find_among_b(z, a_3, 8, 0)) goto lab2;
+                    goto lab0;
+                lab2:
+                    z->c = z->l - v_3;
                 }
                 {
                     int ret = slice_del(z);
@@ -841,7 +838,7 @@ static int r_fix_ending(struct SN_env * z) {
                 break;
             case 9:
                 if (z->c - 2 <= z->lb || (z->p[z->c - 1] != 136 && z->p[z->c - 1] != 141)) among_var = 2; else
-                among_var = find_among_b(z, a_4, 3);
+                among_var = find_among_b(z, a_4, 3, 0);
                 switch (among_var) {
                     case 1:
                         {
@@ -858,19 +855,19 @@ static int r_fix_ending(struct SN_env * z) {
                 }
                 break;
         }
-        goto lab0;
-    lab1:
+        break;
+    lab0:
         z->c = z->l - v_1;
         z->ket = z->c;
         if (!(eq_s_b(z, 3, s_13))) return 0;
-        {
-            int v_5 = z->l - z->c;
-            if (!find_among_b(z, a_6, 6)) goto lab5;
+        do {
+            int v_4 = z->l - z->c;
+            if (!find_among_b(z, a_6, 6, 0)) goto lab3;
             {
-                int v_6 = z->l - z->c;
-                if (!(eq_s_b(z, 3, s_14))) { z->c = z->l - v_6; goto lab6; }
-                if (!find_among_b(z, a_7, 6)) { z->c = z->l - v_6; goto lab6; }
-            lab6:
+                int v_5 = z->l - z->c;
+                if (!(eq_s_b(z, 3, s_14))) { z->c = z->l - v_5; goto lab4; }
+                if (!find_among_b(z, a_7, 6, 0)) { z->c = z->l - v_5; goto lab4; }
+            lab4:
                 ;
             }
             z->bra = z->c;
@@ -878,34 +875,31 @@ static int r_fix_ending(struct SN_env * z) {
                 int ret = slice_del(z);
                 if (ret < 0) return ret;
             }
-            goto lab4;
+            break;
+        lab3:
+            z->c = z->l - v_4;
+            if (!find_among_b(z, a_8, 11, 0)) goto lab5;
+            z->bra = z->c;
+            if (!(eq_s_b(z, 3, s_15))) goto lab5;
+            {
+                int ret = slice_del(z);
+                if (ret < 0) return ret;
+            }
+            break;
         lab5:
-            z->c = z->l - v_5;
-            if (!find_among_b(z, a_8, 11)) goto lab7;
-            z->bra = z->c;
-            if (!(eq_s_b(z, 3, s_15))) goto lab7;
+            z->c = z->l - v_4;
             {
-                int ret = slice_del(z);
-                if (ret < 0) return ret;
-            }
-            goto lab4;
-        lab7:
-            z->c = z->l - v_5;
-            {
-                int v_7 = z->l - z->c;
-                if (!find_among_b(z, a_9, 9)) return 0;
-                z->c = z->l - v_7;
+                int v_6 = z->l - z->c;
+                if (!find_among_b(z, a_9, 9, 0)) return 0;
+                z->c = z->l - v_6;
             }
             z->bra = z->c;
             {
                 int ret = slice_del(z);
                 if (ret < 0) return ret;
             }
-        }
-    lab4:
-        ;
-    }
-lab0:
+        } while (0);
+    } while (0);
     z->c = z->lb;
     return 1;
 }
@@ -913,8 +907,8 @@ lab0:
 static int r_remove_pronoun_prefixes(struct SN_env * z) {
     z->bra = z->c;
     if (z->c + 2 >= z->l || z->p[z->c + 2] >> 5 != 4 || !((672 >> (z->p[z->c + 2] & 0x1f)) & 1)) return 0;
-    if (!find_among(z, a_10, 3)) return 0;
-    if (!find_among(z, a_11, 10)) return 0;
+    if (!find_among(z, a_10, 3, 0)) return 0;
+    if (!find_among(z, a_11, 10, 0)) return 0;
     if (!(eq_s(z, 3, s_16))) return 0;
     z->ket = z->c;
     {
@@ -937,27 +931,26 @@ static int r_remove_plural_suffix(struct SN_env * z) {
     z->lb = z->c; z->c = z->l;
     z->ket = z->c;
     if (z->c - 8 <= z->lb || z->p[z->c - 1] != 141) return 0;
-    among_var = find_among_b(z, a_13, 4);
+    among_var = find_among_b(z, a_13, 4, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
         case 1:
-            {
+            do {
                 int v_1 = z->l - z->c;
-                if (!find_among_b(z, a_12, 6)) goto lab1;
+                if (!find_among_b(z, a_12, 6, 0)) goto lab0;
                 {
                     int ret = slice_from_s(z, 9, s_17);
                     if (ret < 0) return ret;
                 }
-                goto lab0;
-            lab1:
+                break;
+            lab0:
                 z->c = z->l - v_1;
                 {
                     int ret = slice_from_s(z, 3, s_18);
                     if (ret < 0) return ret;
                 }
-            }
-        lab0:
+            } while (0);
             break;
         case 2:
             {
@@ -991,7 +984,7 @@ static int r_remove_question_suffixes(struct SN_env * z) {
     {
         int v_1 = z->l - z->c;
         z->ket = z->c;
-        if (!find_among_b(z, a_14, 3)) goto lab0;
+        if (!find_among_b(z, a_14, 3, 0)) goto lab0;
         z->bra = z->c;
         {
             int ret = slice_from_s(z, 3, s_21);
@@ -1016,7 +1009,7 @@ static int r_remove_command_suffixes(struct SN_env * z) {
     z->lb = z->c; z->c = z->l;
     z->ket = z->c;
     if (z->c - 5 <= z->lb || z->p[z->c - 1] != 191) return 0;
-    if (!find_among_b(z, a_15, 2)) return 0;
+    if (!find_among_b(z, a_15, 2, 0)) return 0;
     z->bra = z->c;
     {
         int ret = slice_del(z);
@@ -1059,7 +1052,7 @@ static int r_remove_common_word_endings(struct SN_env * z) {
     }
     z->lb = z->c; z->c = z->l;
     z->ket = z->c;
-    among_var = find_among_b(z, a_17, 26);
+    among_var = find_among_b(z, a_17, 26, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -1072,7 +1065,7 @@ static int r_remove_common_word_endings(struct SN_env * z) {
         case 2:
             {
                 int v_1 = z->l - z->c;
-                if (!find_among_b(z, a_16, 8)) goto lab0;
+                if (!find_among_b(z, a_16, 8, 0)) goto lab0;
                 return 0;
             lab0:
                 z->c = z->l - v_1;
@@ -1099,20 +1092,20 @@ static int r_remove_common_word_endings(struct SN_env * z) {
 
 static int r_remove_vetrumai_urupukal(struct SN_env * z) {
     int among_var;
-    z->I[0] = 0;
+    ((SN_local *)z)->b_found_vetrumai_urupu = 0;
     {
         int ret = r_has_min_length(z);
         if (ret <= 0) return ret;
     }
     z->lb = z->c; z->c = z->l;
-    {
+    do {
         int v_1 = z->l - z->c;
         {
             int v_2 = z->l - z->c;
             z->ket = z->c;
-            if (z->c - 2 <= z->lb || z->p[z->c - 1] >> 5 != 4 || !((-2147475197 >> (z->p[z->c - 1] & 0x1f)) & 1)) goto lab1;
-            among_var = find_among_b(z, a_20, 22);
-            if (!among_var) goto lab1;
+            if (z->c - 2 <= z->lb || z->p[z->c - 1] >> 5 != 4 || !((-2147475197 >> (z->p[z->c - 1] & 0x1f)) & 1)) goto lab0;
+            among_var = find_among_b(z, a_20, 22, 0);
+            if (!among_var) goto lab0;
             z->bra = z->c;
             switch (among_var) {
                 case 1:
@@ -1128,20 +1121,16 @@ static int r_remove_vetrumai_urupukal(struct SN_env * z) {
                     }
                     break;
                 case 3:
-                    {
-                        int v_3 = z->l - z->c;
-                        if (!(eq_s_b(z, 3, s_27))) goto lab2;
-                        goto lab1;
-                    lab2:
-                        z->c = z->l - v_3;
-                    }
+                    if (!(eq_s_b(z, 3, s_27))) goto lab1;
+                    goto lab0;
+                lab1:
                     {
                         int ret = slice_from_s(z, 3, s_28);
                         if (ret < 0) return ret;
                     }
                     break;
                 case 4:
-                    if (len_utf8(z->p) < 7) goto lab1;
+                    if (len_utf8(z->p) < 7) goto lab0;
                     {
                         int ret = slice_from_s(z, 3, s_29);
                         if (ret < 0) return ret;
@@ -1149,11 +1138,11 @@ static int r_remove_vetrumai_urupukal(struct SN_env * z) {
                     break;
                 case 5:
                     {
-                        int v_4 = z->l - z->c;
-                        if (!find_among_b(z, a_18, 8)) goto lab3;
-                        goto lab1;
-                    lab3:
-                        z->c = z->l - v_4;
+                        int v_3 = z->l - z->c;
+                        if (!find_among_b(z, a_18, 8, 0)) goto lab2;
+                        goto lab0;
+                    lab2:
+                        z->c = z->l - v_3;
                     }
                     {
                         int ret = slice_from_s(z, 3, s_30);
@@ -1162,11 +1151,11 @@ static int r_remove_vetrumai_urupukal(struct SN_env * z) {
                     break;
                 case 6:
                     {
-                        int v_5 = z->l - z->c;
-                        if (!find_among_b(z, a_19, 8)) goto lab4;
-                        goto lab1;
-                    lab4:
-                        z->c = z->l - v_5;
+                        int v_4 = z->l - z->c;
+                        if (!find_among_b(z, a_19, 8, 0)) goto lab3;
+                        goto lab0;
+                    lab3:
+                        z->c = z->l - v_4;
                     }
                     {
                         int ret = slice_del(z);
@@ -1182,54 +1171,52 @@ static int r_remove_vetrumai_urupukal(struct SN_env * z) {
             }
             z->c = z->l - v_2;
         }
-        goto lab0;
-    lab1:
+        break;
+    lab0:
         z->c = z->l - v_1;
         {
-            int v_6 = z->l - z->c;
+            int v_5 = z->l - z->c;
             z->ket = z->c;
             if (!(eq_s_b(z, 3, s_32))) return 0;
-            {
-                int v_7 = z->l - z->c;
+            do {
+                int v_6 = z->l - z->c;
+                {
+                    int v_7 = z->l - z->c;
+                    if (!find_among_b(z, a_21, 6, 0)) goto lab5;
+                    goto lab4;
+                lab5:
+                    z->c = z->l - v_7;
+                }
+                break;
+            lab4:
+                z->c = z->l - v_6;
                 {
                     int v_8 = z->l - z->c;
-                    if (!find_among_b(z, a_21, 6)) goto lab7;
-                    goto lab6;
-                lab7:
+                    if (!find_among_b(z, a_22, 6, 0)) return 0;
+                    if (!(eq_s_b(z, 3, s_33))) return 0;
                     z->c = z->l - v_8;
                 }
-                goto lab5;
-            lab6:
-                z->c = z->l - v_7;
-                {
-                    int v_9 = z->l - z->c;
-                    if (!find_among_b(z, a_22, 6)) return 0;
-                    if (!(eq_s_b(z, 3, s_33))) return 0;
-                    z->c = z->l - v_9;
-                }
-            }
-        lab5:
+            } while (0);
             z->bra = z->c;
             {
                 int ret = slice_from_s(z, 3, s_34);
                 if (ret < 0) return ret;
             }
-            z->c = z->l - v_6;
+            z->c = z->l - v_5;
         }
-    }
-lab0:
-    z->I[0] = 1;
+    } while (0);
+    ((SN_local *)z)->b_found_vetrumai_urupu = 1;
     {
-        int v_10 = z->l - z->c;
+        int v_9 = z->l - z->c;
         z->ket = z->c;
-        if (!(eq_s_b(z, 9, s_35))) goto lab8;
+        if (!(eq_s_b(z, 9, s_35))) goto lab6;
         z->bra = z->c;
         {
             int ret = slice_from_s(z, 3, s_36);
             if (ret < 0) return ret;
         }
-    lab8:
-        z->c = z->l - v_10;
+    lab6:
+        z->c = z->l - v_9;
     }
     z->c = z->lb;
     {
@@ -1257,7 +1244,8 @@ static int r_remove_tense_suffixes(struct SN_env * z) {
 
 static int r_remove_tense_suffix(struct SN_env * z) {
     int among_var;
-    z->I[1] = 0;
+    int b_found_a_match;
+    b_found_a_match = 0;
     {
         int ret = r_has_min_length(z);
         if (ret <= 0) return ret;
@@ -1268,7 +1256,7 @@ static int r_remove_tense_suffix(struct SN_env * z) {
         {
             int v_2 = z->l - z->c;
             z->ket = z->c;
-            among_var = find_among_b(z, a_25, 46);
+            among_var = find_among_b(z, a_25, 46, 0);
             if (!among_var) goto lab0;
             z->bra = z->c;
             switch (among_var) {
@@ -1282,7 +1270,7 @@ static int r_remove_tense_suffix(struct SN_env * z) {
                     {
                         int v_3 = z->l - z->c;
                         if (z->c - 2 <= z->lb || z->p[z->c - 1] >> 5 != 4 || !((1951712 >> (z->p[z->c - 1] & 0x1f)) & 1)) goto lab1;
-                        if (!find_among_b(z, a_23, 12)) goto lab1;
+                        if (!find_among_b(z, a_23, 12, 0)) goto lab1;
                         goto lab0;
                     lab1:
                         z->c = z->l - v_3;
@@ -1295,7 +1283,7 @@ static int r_remove_tense_suffix(struct SN_env * z) {
                 case 3:
                     {
                         int v_4 = z->l - z->c;
-                        if (!find_among_b(z, a_24, 8)) goto lab2;
+                        if (!find_among_b(z, a_24, 8, 0)) goto lab2;
                         goto lab0;
                     lab2:
                         z->c = z->l - v_4;
@@ -1306,13 +1294,9 @@ static int r_remove_tense_suffix(struct SN_env * z) {
                     }
                     break;
                 case 4:
-                    {
-                        int v_5 = z->l - z->c;
-                        if (!(eq_s_b(z, 3, s_37))) goto lab3;
-                        goto lab0;
-                    lab3:
-                        z->c = z->l - v_5;
-                    }
+                    if (!(eq_s_b(z, 3, s_37))) goto lab3;
+                    goto lab0;
+                lab3:
                     {
                         int ret = slice_from_s(z, 3, s_38);
                         if (ret < 0) return ret;
@@ -1326,9 +1310,9 @@ static int r_remove_tense_suffix(struct SN_env * z) {
                     break;
                 case 6:
                     {
-                        int v_6 = z->l - z->c;
+                        int v_5 = z->l - z->c;
                         if (!(eq_s_b(z, 3, s_40))) goto lab0;
-                        z->c = z->l - v_6;
+                        z->c = z->l - v_5;
                     }
                     {
                         int ret = slice_del(z);
@@ -1336,37 +1320,36 @@ static int r_remove_tense_suffix(struct SN_env * z) {
                     }
                     break;
             }
-            z->I[1] = 1;
+            b_found_a_match = 1;
             z->c = z->l - v_2;
         }
     lab0:
         z->c = z->l - v_1;
     }
     {
-        int v_7 = z->l - z->c;
+        int v_6 = z->l - z->c;
         z->ket = z->c;
         if (z->c - 8 <= z->lb || (z->p[z->c - 1] != 141 && z->p[z->c - 1] != 177)) goto lab4;
-        if (!find_among_b(z, a_26, 6)) goto lab4;
+        if (!find_among_b(z, a_26, 6, 0)) goto lab4;
         z->bra = z->c;
         {
             int ret = slice_del(z);
             if (ret < 0) return ret;
         }
-        z->I[1] = 1;
+        b_found_a_match = 1;
     lab4:
-        z->c = z->l - v_7;
+        z->c = z->l - v_6;
     }
     z->c = z->lb;
     {
         int ret = r_fix_endings(z);
         if (ret < 0) return ret;
     }
-    if (!(z->I[1])) return 0;
-    return 1;
+    return b_found_a_match;
 }
 
 extern int tamil_UTF_8_stem(struct SN_env * z) {
-    z->I[0] = 0;
+    ((SN_local *)z)->b_found_vetrumai_urupu = 0;
     {
         int v_1 = z->c;
         {
@@ -1396,9 +1379,13 @@ extern int tamil_UTF_8_stem(struct SN_env * z) {
         z->c = v_3;
     }
     {
+        int ret = r_remove_question_suffixes(z);
+        if (ret < 0) return ret;
+    }
+    {
         int v_4 = z->c;
         {
-            int ret = r_remove_question_suffixes(z);
+            int ret = r_remove_um(z);
             if (ret < 0) return ret;
         }
         z->c = v_4;
@@ -1406,7 +1393,7 @@ extern int tamil_UTF_8_stem(struct SN_env * z) {
     {
         int v_5 = z->c;
         {
-            int ret = r_remove_um(z);
+            int ret = r_remove_common_word_endings(z);
             if (ret < 0) return ret;
         }
         z->c = v_5;
@@ -1414,7 +1401,7 @@ extern int tamil_UTF_8_stem(struct SN_env * z) {
     {
         int v_6 = z->c;
         {
-            int ret = r_remove_common_word_endings(z);
+            int ret = r_remove_vetrumai_urupukal(z);
             if (ret < 0) return ret;
         }
         z->c = v_6;
@@ -1422,7 +1409,7 @@ extern int tamil_UTF_8_stem(struct SN_env * z) {
     {
         int v_7 = z->c;
         {
-            int ret = r_remove_vetrumai_urupukal(z);
+            int ret = r_remove_plural_suffix(z);
             if (ret < 0) return ret;
         }
         z->c = v_7;
@@ -1430,7 +1417,7 @@ extern int tamil_UTF_8_stem(struct SN_env * z) {
     {
         int v_8 = z->c;
         {
-            int ret = r_remove_plural_suffix(z);
+            int ret = r_remove_command_suffixes(z);
             if (ret < 0) return ret;
         }
         z->c = v_8;
@@ -1438,23 +1425,23 @@ extern int tamil_UTF_8_stem(struct SN_env * z) {
     {
         int v_9 = z->c;
         {
-            int ret = r_remove_command_suffixes(z);
+            int ret = r_remove_tense_suffixes(z);
             if (ret < 0) return ret;
         }
         z->c = v_9;
     }
-    {
-        int v_10 = z->c;
-        {
-            int ret = r_remove_tense_suffixes(z);
-            if (ret < 0) return ret;
-        }
-        z->c = v_10;
-    }
     return 1;
 }
 
-extern struct SN_env * tamil_UTF_8_create_env(void) { return SN_create_env(0, 2); }
+extern struct SN_env * tamil_UTF_8_create_env(void) {
+    struct SN_env * z = SN_new_env(sizeof(SN_local));
+    if (z) {
+        ((SN_local *)z)->b_found_vetrumai_urupu = 0;
+    }
+    return z;
+}
 
-extern void tamil_UTF_8_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void tamil_UTF_8_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

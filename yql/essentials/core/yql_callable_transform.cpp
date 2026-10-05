@@ -111,9 +111,7 @@ IDataProvider* TCallableTransformerParsers::ParseWrite(const TExprNode& input, T
 }
 
 IDataProvider* TCallableTransformerParsers::ParseMaterialize(const TExprNode& input, TExprContext& ctx) {
-    if (!IsAvailableLangVersion(NFeature::Materialize.MinLangVer, Types_.LangVer)) {
-        ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder()
-            << "Materialize! is not available before version " << FormatLangVersion(NFeature::Materialize.MinLangVer).GetOrElse("<unknown>")));
+    if (!EnsureAvailable(input.Pos(), NFeature::Materialize, ctx, Types_)) {
         return nullptr;
     }
 
@@ -144,7 +142,7 @@ IDataProvider* TCallableTransformerParsers::ParseMaterialize(const TExprNode& in
 }
 
 IDataProvider* TCallableTransformerParsers::ParseConfigure(const TExprNode& input, TExprContext& ctx, bool& isUniversal) {
-    isUniversal= false;
+    isUniversal = false;
     if (!EnsureMinArgsCount(input, 2, ctx)) {
         return nullptr;
     }

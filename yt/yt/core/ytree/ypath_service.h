@@ -7,13 +7,13 @@
 
 #include <yt/yt/core/logging/log.h>
 
-#include <yt/yt/core/misc/property.h>
-
 #include <yt/yt/core/rpc/public.h>
 
 #include <yt/yt/core/yson/consumer.h>
 
 #include <yt/yt/library/profiling/sensor.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <variant>
 

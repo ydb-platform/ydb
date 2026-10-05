@@ -2,8 +2,7 @@
 
 #include <util/system/unaligned_mem.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <typename T, bool IsConst = std::is_const_v<T>>
 class TStateWrapper;
@@ -11,7 +10,7 @@ class TStateWrapper;
 template <typename T>
 class TStateWrapper<T, true> {
 public:
-    TStateWrapper(const void* ptr)
+    explicit TStateWrapper(const void* ptr)
         : State_(ReadUnaligned<typename std::remove_const<T>::type>(ptr))
     {
     }
@@ -31,7 +30,7 @@ private:
 template <typename T>
 class TStateWrapper<T, false> {
 public:
-    TStateWrapper(void* ptr)
+    explicit TStateWrapper(void* ptr)
         : State_(ReadUnaligned<T>(ptr))
         , Ptr_(ptr)
     {
@@ -73,5 +72,4 @@ inline NYql::NDecimal::TDecimal Cast(const std::shared_ptr<arrow::Buffer>& buffe
     return *reinterpret_cast<const NYql::NDecimal::TDecimal*>(buffer->data());
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

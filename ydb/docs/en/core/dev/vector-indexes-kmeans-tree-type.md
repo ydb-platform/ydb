@@ -52,13 +52,17 @@ For example, if you expect 10 million vectors, set `levels` to 3 and `clusters` 
 * Level 2: each level-1 cluster split into 50 clusters of 4,000 vectors each;
 * Level 3: each level-2 cluster split into 50 clusters of 80 vectors each.
 
+### Automatic parameter selection {#auto-settings}
+
+You can omit the `clusters` and `levels` parameters when creating an index. In that case {{ ydb-short-name }} selects them automatically based on the number of vectors in the table. Explicitly specified parameters are never overridden.
+
 ## Search recall tuning {#search-recall}
 
 If a cluster’s centroid is closest to the query, the vectors in that cluster are usually closer to the query than vectors in other clusters. For complex data topologies this may not hold, so {{ ydb-short-name }} allows scanning vectors in more than one cluster per level.
 
-The number of clusters participating in search is set by the `KMeansTreeSearchTopSize` parameter. By default it is 1: {{ ydb-short-name }} picks one nearest cluster at the first level, then requests its child clusters at the second level over the network, picks one nearest again, and so on. This parameter is not set at index creation time but [for the search](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize).
+The number of clusters participating in search is set by the `KMeansTreeSearchTopSize` parameter. By default it is 4 with overlapping clusters (`overlap_clusters > 1`) and 10 without overlap. This parameter is not set at index creation time but [for the search](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize).
 
-If you set a larger value, e.g. 3, the system will select three nearest clusters at each level instead of one. Moving to the next level then requires fetching the child vectors of all three selected clusters over the network, from which the next three are chosen. This improves recall but increases network traffic and the number of vectors scanned.
+If you set a larger value, e.g. 20, the system will select up to 20 nearest clusters at each level. Moving to the next level then requires fetching the child centroids of all selected clusters over the network, from which the next 20 are chosen. This improves recall but increases network traffic and the number of vectors scanned.
 
 ## Covering index {#covering-index}
 
@@ -82,6 +86,40 @@ Filtering is built into the vector index because:
 
 * If you filter before search, you get a set of rows in which to find nearest vectors. A normal vector index can only search over all vectors in the table, not an arbitrary subset. To find nearest vectors, the DB would have to scan all remaining rows and compute distance to the query for each.
 * If you filter after search, you may get fewer results than needed and recall drops. You would have to repeat the search with a higher limit, which is also slow. In {{ ydb-short-name }}, filtering is integrated into the vector index structure and algorithm, so rows that do not match the filter are excluded from consideration immediately.
+
+## Adaptive clusters {#adaptive-clusters}
+
+A filtered vector index builds a separate cluster tree for each distinct value of the filtering columns, and different values often contain very different numbers of vectors — from millions down to a few dozen. A single fixed `clusters` value cannot be optimal for all of them at once: a small value produces large leaf clusters that are slow to scan, while a large value produces many nearly empty clusters, which wastes space and can harm recall.
+
+Adaptive clusters solve this: when enabled, {{ ydb-short-name }} chooses the number of clusters *per filtering-column value* automatically, based on how many vectors that value actually contains. Values with more vectors get more clusters (up to the `clusters` value, which acts as the upper bound), and values with few vectors get fewer clusters.
+
+Adaptive clusters are controlled by the `adaptive_clusters` [index parameter](../yql/reference/syntax/create_table/vector_index.md):
+
+* `adaptive_clusters` applies only to filtered indexes (indexes with more than one index column). For non-filtered indexes it has no effect.
+* When you create a filtered index without explicitly specifying parameters and {{ ydb-short-name }} [selects them automatically](#auto-settings), adaptive clusters are enabled by default.
+* When you specify index parameters explicitly, `adaptive_clusters` defaults to `false`; to enable adaptive mode, set `adaptive_clusters` to `true`.
+
+In adaptive mode, the `clusters` parameter is interpreted as the *maximum* number of clusters for any single filtering-column value. The actual number chosen for each value is derived from its vector count, `levels`, and [`overlap_clusters`](vector-indexes.md#overlap-clusters), and is never lower than 2. Values with very few vectors (fewer than 100) always use the minimum of 2 clusters.
+
+Example of creating a filtered index with adaptive clusters:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (user, embedding)
+  COVER (embedding, data)
+  WITH (
+    distance=cosine,
+    vector_type="float",
+    vector_dimension=512,
+    clusters=512,
+    levels=2,
+    adaptive_clusters=true
+  );
+```
+
+Here `clusters=512` is the upper bound: a `user` with millions of vectors may get close to 512 clusters, while a `user` with only a few dozen vectors gets just 2.
 
 ## Index internals {#index-structure}
 

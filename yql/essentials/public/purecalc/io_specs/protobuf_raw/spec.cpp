@@ -276,7 +276,7 @@ void FillInputValue(
     TString scratch;
     auto reflection = source->GetReflection();
     for (ui32 i = 0; i < mappings.size(); ++i) {
-        auto mapping = mappings[i];
+        const auto& mapping = mappings[i];
         if (!mapping.Field) {
             YQL_ENSURE(timestampColumn && mapping.Name == *timestampColumn);
             destination[i] = TUnboxedValuePod(timeProvider->Now().MicroSeconds());
@@ -632,7 +632,6 @@ public:
             inputSpec.GetSchemaOptions().FieldRenames);
     }
 
-public:
     void DoConvert(const Message* message, TUnboxedValue& result) {
         auto& holderFactory = Worker_->GetGraph().GetHolderFactory();
         TUnboxedValue* items = nullptr;
@@ -794,11 +793,10 @@ public:
             // its own destruction. So we're using our own reference to the scoped alloc. That reference is alive
             // because scoped alloc destroyed after computation graph.
             auto unguard = Unguard(ScopedAlloc_);
-            Underlying_.Destroy();
+            Underlying_.reset();
         }
     }
 
-public:
     TUnboxedValue GetListIterator() const override {
         YQL_ENSURE(!HasIterator_, "Only one pass over input is supported");
         HasIterator_ = true;
@@ -854,7 +852,6 @@ public:
         }
     }
 
-public:
     void OnObject(Message* message) override {
         TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
 
@@ -892,7 +889,6 @@ public:
     {
     }
 
-public:
     OutputItemType<TOutputSpec> Fetch() override {
         TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
 
@@ -929,7 +925,6 @@ public:
     {
     }
 
-public:
     OutputItemType<TOutputSpec> Fetch() override {
         TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
 
@@ -971,7 +966,6 @@ public:
     // same trick here. Well, that's because in push mode, consumer is destroyed before acquiring scoped alloc and
     // destroying computation graph.
 
-public:
     void OnObject(const TUnboxedValue* value) override {
         OutputItemType<TOutputSpec> message = Converter_.DoConvert(*value);
         auto unguard = Unguard(Worker_->GetScopedAlloc());

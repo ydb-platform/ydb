@@ -7,6 +7,7 @@
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>
@@ -34,6 +35,7 @@ struct TUserTable : public TThrRefBase {
             : ColumnCodec(family.GetColumnCodec())
             , ColumnCache(family.GetColumnCache())
             , ColumnCacheMode(family.GetColumnCacheMode())
+            , StorageConfig(family.GetStorageConfig())
             , OuterThreshold(SaveGetThreshold(family.GetStorageConfig().GetDataThreshold()))
             , ExternalThreshold(SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold()))
             , Storage(family.GetStorage())
@@ -61,11 +63,35 @@ struct TUserTable : public TThrRefBase {
             if (family.GetStorageConfig().HasDataThreshold()) {
                 OuterThreshold = SaveGetThreshold(family.GetStorageConfig().GetDataThreshold());
             }
-            if (family.GetStorageConfig().GetExternalThreshold()) {
+            if (family.GetStorageConfig().HasExternalThreshold()) {
                 ExternalThreshold = SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold());
             }
             if (family.HasStorage()) {
                 Storage = family.GetStorage();
+            }
+            if (family.HasStorageConfig()) {
+                const auto& srcStorage = family.GetStorageConfig();
+                if (srcStorage.HasSysLog()) {
+                    StorageConfig.MutableSysLog()->CopyFrom(srcStorage.GetSysLog());
+                }
+                if (srcStorage.HasLog()) {
+                    StorageConfig.MutableLog()->CopyFrom(srcStorage.GetLog());
+                }
+                if (srcStorage.HasData()) {
+                    StorageConfig.MutableData()->CopyFrom(srcStorage.GetData());
+                }
+                if (srcStorage.HasExternal()) {
+                    StorageConfig.MutableExternal()->CopyFrom(srcStorage.GetExternal());
+                }
+                if (srcStorage.HasDataThreshold()) {
+                    StorageConfig.SetDataThreshold(srcStorage.GetDataThreshold());
+                }
+                if (srcStorage.HasExternalThreshold()) {
+                    StorageConfig.SetExternalThreshold(srcStorage.GetExternalThreshold());
+                }
+                if (srcStorage.HasExternalChannelsCount()) {
+                    StorageConfig.SetExternalChannelsCount(srcStorage.GetExternalChannelsCount());
+                }
             }
             Room.Reset(new TStorageRoom(family.GetRoom()));
         }
@@ -85,6 +111,7 @@ struct TUserTable : public TThrRefBase {
         NKikimrSchemeOp::EColumnCodec ColumnCodec;
         NKikimrSchemeOp::EColumnCache ColumnCache;
         NKikimrSchemeOp::EColumnCacheMode ColumnCacheMode;
+        NKikimrSchemeOp::TStorageConfig StorageConfig;
         ui32 OuterThreshold;
         ui32 ExternalThreshold;
         NKikimrSchemeOp::EColumnStorage Storage;
@@ -464,6 +491,10 @@ struct TUserTable : public TThrRefBase {
     TReplicationConfig ReplicationConfig;
     TIncrementalBackupConfig IncrementalBackupConfig;
     bool IsBackup = false;
+    // Per-table METRICS_LEVEL override (Unspecified = falls back to the
+    // database-wide TABLES_METRICS_LEVEL default).
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel DetailedMetricsLevel =
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
     ui32 UniqueIndexKeySize = 0;
     NKikimrSchemeOp::ESpecialTableType SpecialTableType = NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeNone;
 
@@ -541,6 +572,10 @@ struct TUserTable : public TThrRefBase {
     ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
     void SetTableSchemaVersion(ui64 schemaVersion);
     bool ResetTableSchemaVersion();
+
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetDetailedMetricsLevel() const {
+        return DetailedMetricsLevel;
+    }
 
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
     void SwitchIndexState(const TPathId& indexPathId, TTableIndex::EState state);

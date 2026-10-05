@@ -64,8 +64,6 @@ domains_config:
       node: [1, 2, 3]
       nto_select: 3
     ssid: 1
-table_service_config:
-  sql_version: 1
 actor_system_config:          # the configuration of the actor system which descibes how cores of the instance are distributed
   executor:                   # accross different types of workloads in the instance.
   - name: System              # system executor of the actor system. in this executor YDB launches system type of workloads, like system tablets

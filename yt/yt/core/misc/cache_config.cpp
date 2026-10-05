@@ -36,6 +36,8 @@ void TSlruCacheConfig::Register(TRegistrar registrar)
         .GreaterThanOrEqual(0.0);
     registrar.Parameter("enable_ghost_caches", &TThis::EnableGhostCaches)
         .Default(true);
+    registrar.Parameter("reject_oversized_items", &TThis::RejectOversizedItems)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         if (!IsPowerOf2(config->ShardCount)) {
@@ -57,6 +59,8 @@ void TSlruCacheDynamicConfig::Register(TRegistrar registrar)
         .InRange(0.0, 1.0);
     registrar.Parameter("enable_ghost_caches", &TThis::EnableGhostCaches)
         .Default(true);
+    registrar.Parameter("reject_oversized_items", &TThis::RejectOversizedItems)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -84,8 +88,8 @@ void TAsyncExpiringCacheConfig::Register(TRegistrar registrar)
     registrar.Postprocessor([] (TThis* config) {
         if (config->RefreshTime && *config->RefreshTime && *config->RefreshTime > config->ExpireAfterSuccessfulUpdateTime) {
             THROW_ERROR_EXCEPTION("\"refresh_time\" must be less than \"expire_after_successful_update_time\"")
-                << TErrorAttribute("refresh_time", config->RefreshTime)
-                << TErrorAttribute("expire_after_successful_update_time", config->ExpireAfterSuccessfulUpdateTime);
+                .With("refresh_time", config->RefreshTime)
+                .With("expire_after_successful_update_time", config->ExpireAfterSuccessfulUpdateTime);
         }
     });
 }

@@ -144,6 +144,12 @@ BOTOCORE_DEFAUT_SESSION_VARIABLES = {
         'auto',
         None,
     ),
+    'sts_regional_endpoints': (
+        'sts_regional_endpoints',
+        'AWS_STS_REGIONAL_ENDPOINTS',
+        'regional',
+        None,
+    ),
     'retry_mode': ('retry_mode', 'AWS_RETRY_MODE', 'legacy', None),
     'defaults_mode': ('defaults_mode', 'AWS_DEFAULTS_MODE', 'legacy', None),
     # We can't have a default here for v1 because we need to defer to
@@ -180,29 +186,25 @@ BOTOCORE_DEFAUT_SESSION_VARIABLES = {
         "when_supported",
         None,
     ),
-}
-
-# Evaluate AWS_STS_REGIONAL_ENDPOINTS settings
-try:
-    # This is not a public interface and is subject to abrupt breaking changes.
-    # Any usage is not advised or supported in external code bases.
-    from botocore.customizations.sts import (
-        sts_default_setting as _sts_default_setting,
-    )
-except ImportError:
-    _sts_default_setting = 'legacy'
-
-_STS_DEFAULT_SETTINGS = {
-    'sts_regional_endpoints': (
-        'sts_regional_endpoints',
-        'AWS_STS_REGIONAL_ENDPOINTS',
-        _sts_default_setting,
+    'account_id_endpoint_mode': (
+        'account_id_endpoint_mode',
+        'AWS_ACCOUNT_ID_ENDPOINT_MODE',
+        'preferred',
+        None,
+    ),
+    'disable_host_prefix_injection': (
+        'disable_host_prefix_injection',
+        'AWS_DISABLE_HOST_PREFIX_INJECTION',
+        None,
+        utils.ensure_boolean,
+    ),
+    'auth_scheme_preference': (
+        'auth_scheme_preference',
+        'AWS_AUTH_SCHEME_PREFERENCE',
+        None,
         None,
     ),
 }
-BOTOCORE_DEFAUT_SESSION_VARIABLES.update(_STS_DEFAULT_SETTINGS)
-
-
 # A mapping for the s3 specific configuration vars. These are the configuration
 # vars that typically go in the s3 section of the config file. This mapping
 # follows the same schema as the previous session variable mapping.

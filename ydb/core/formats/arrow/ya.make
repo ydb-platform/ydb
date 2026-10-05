@@ -1,19 +1,18 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/formats/arrow/serializer
-    ydb/core/kqp/common/result_set_format
     ydb/core/scheme
     ydb/library/actors/core
     ydb/library/formats/arrow
+    ydb/library/formats/arrow/minikql
+    ydb/library/formats/arrow/modifier
     ydb/library/services
     yql/essentials/minikql
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
 )
-
-YQL_LAST_ABI_VERSION()
 
 SRCS(
     arrow_batch_builder.cpp

@@ -282,6 +282,11 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleKillSession(TKiKillSession node, TExprContext& ctx) override {
+        Y_UNUSED(node, ctx);
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
         Y_UNUSED(ctx, node);
         return TStatus::Ok;
@@ -705,7 +710,8 @@ public:
             || node.IsCallable(TKiUpsertObject::CallableName())
             || node.IsCallable(TKiCreateObject::CallableName())
             || node.IsCallable(TKiAlterObject::CallableName())
-            || node.IsCallable(TKiDropObject::CallableName()))
+            || node.IsCallable(TKiDropObject::CallableName())
+            || node.IsCallable(TKiKillSession::CallableName()))
         {
             return true;
         }
@@ -1007,8 +1013,9 @@ public:
             return true;
         }
 
-        if (tableDesc.Metadata->ExternalSource.SourceType != ESourceType::ExternalDataSource && tableDesc.Metadata->ExternalSource.SourceType != ESourceType::ExternalTable) {
-            YQL_CVLOG(NLog::ELevel::ERROR, NLog::EComponent::ProviderKikimr) << "Skip RewriteIO for external entity: unknown entity type: " << (int)tableDesc.Metadata->ExternalSource.SourceType;
+        auto& metadata = *tableDesc.Metadata;
+        if (!metadata.IsExternalDataSource() && !metadata.IsExternalTable()) {
+            YQL_CVLOG(NLog::ELevel::ERROR, NLog::EComponent::ProviderKikimr) << "Skip RewriteIO for external entity: unknown entity type";
             return true;
         }
 
@@ -1022,9 +1029,9 @@ public:
         if (mode != "insert_abort") {
             if (mode == "drop" || mode == "drop_if_exists") {
                 TString dropHint;
-                if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
+                if (metadata.IsExternalDataSource()) {
                     dropHint = "DROP EXTERNAL DATA SOURCE";
-                } else if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable) {
+                } else if (metadata.IsExternalTable()) {
                     dropHint = "DROP EXTERNAL TABLE";
                 }
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Cannot drop external entity by using DROP TABLE" << (dropHint ?  ". Please use " : "") << dropHint));
@@ -1034,8 +1041,16 @@ public:
             return false;
         }
 
-        if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
+        if (metadata.IsExternalDataSource() && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Attempt to write to external data source \"" << key.GetTablePath() << "\" without table. Please specify table to write to"));
+            return false;
+        }
+
+        const bool isExternalTable = metadata.IsExternalTable();
+        if (!ExternalWritePaths.insert(NCommon::FullTableName(dataSink.Cluster(), key.GetTablePath())).second) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+                << "Multiple writes into same topic or external object is not supported. "
+                << "Found multiple write operations for " << (isExternalTable ? "external table" : "object") << ": " << NCommon::FullTableName(dataSink.Cluster(), key.GetTablePath())));
             return false;
         }
 
@@ -1046,11 +1061,12 @@ public:
                 .Repeat(TExprStep::RewriteIO);
 
         YQL_ENSURE(ExternalSourceFactory);
-        const auto& externalSource = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
-        if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
+        if (metadata.IsExternalDataSource()) {
+            const auto& dataSource = metadata.ExternalDataSource();
+            const TString providerName = dataSource.GetProviderName(ExternalSourceFactory);
             auto writeArgs = node->ChildrenList();
             writeArgs[1] = Build<TCoDataSink>(ctx, node->Pos())
-                            .Category(ctx.NewAtom(node->Pos(), externalSource->GetName()))
+                            .Category(ctx.NewAtom(node->Pos(), providerName))
                             .FreeArgs()
                                 .Add(writeArgs[1]->ChildrenList()[1])
                             .Build()
@@ -1059,22 +1075,23 @@ public:
             return true;
         }
 
-        // tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable
-        TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.TableLocation) });
+        const auto& externalTable = metadata.ExternalTable();
+        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(metadata.GetExternalSourceType());
+        TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), externalTable.GetLocation()) });
         auto table = ctx.NewList(node->Pos(), {ctx.NewAtom(node->Pos(), "table"), path});
         auto keyNode = ctx.NewCallable(node->Pos(), "Key", {table});
         resultNode = Build<TCoWrite>(ctx, node->Pos())
             .World(node->Child(0))
             .DataSink()
-                .Category(ctx.NewAtom(node->Pos(), externalSource->GetName()))
+                .Category(ctx.NewAtom(node->Pos(), externalSourceInfo->GetName()))
                 .FreeArgs()
-                    .Add(ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.DataSourcePath))
+                    .Add(ctx.NewAtom(node->Pos(), externalTable.GetDataSourcePath()))
                     .Build()
                 .Build()
             .FreeArgs()
                 .Add(keyNode)
                 .Add(node->Child(3))
-                .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, externalSource, tableDesc.Metadata->ExternalSource.TableContent))
+                .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, externalSourceInfo, externalTable.GetContent()))
             .Build()
             .Done().Ptr();
         return true;
@@ -1269,6 +1286,12 @@ public:
                     }
                 } else if (mode == "analyze") {
                     auto columns = Build<TCoAtomList>(ctx, node->Pos());
+                    TMaybeNode<TExprBase> sampleRate;
+                    for (const auto& setting : settings.Other) {
+                        if (setting.Name().Value() == "sampleRate") {
+                            sampleRate = setting.Value();
+                        }
+                    }
 
                     for (const auto& column: settings.Columns.Cast().Ptr()->Children()) {
                         columns.Add(column);
@@ -1279,6 +1302,7 @@ public:
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
                         .Columns(columns.Done())
+                        .SampleRate(sampleRate)
                         .Done()
                         .Ptr();
                 } else {
@@ -1855,8 +1879,10 @@ public:
                     return nullptr; // Error has been already reported in parsing
                 }
                 auto mode = settings.Mode.Cast();
-                if (mode == "create") {
+                if (mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace") {
                     const auto emptyAtom = Build<TCoAtom>(ctx, node->Pos()).Value("").Done();
+                    const auto falseAtom = Build<TCoAtom>(ctx, node->Pos()).Value("0").Done();
+                    const auto trueAtom = Build<TCoAtom>(ctx, node->Pos()).Value("1").Done();
                     return Build<TKiCreateSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
@@ -1864,23 +1890,31 @@ public:
                         .Value(settings.Value.IsValid() ? settings.Value.Cast() : emptyAtom)
                         .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : emptyAtom)
                         .ValueParamName(settings.ValueParamName.IsValid() ? settings.ValueParamName.Cast() : emptyAtom)
+                        .ReplaceIfExists(mode == "create_or_replace" ? trueAtom : falseAtom)
+                        .ExistingOk(mode == "create_if_not_exists" ? trueAtom : falseAtom)
                         .Done()
                         .Ptr();
-                } else if (mode == "alter") {
+                } else if (mode == "alter" || mode == "alter_if_exists") {
                     const auto emptyAtom = Build<TCoAtom>(ctx, node->Pos()).Value("").Done();
+                    const auto falseAtom = Build<TCoAtom>(ctx, node->Pos()).Value("0").Done();
+                    const auto trueAtom = Build<TCoAtom>(ctx, node->Pos()).Value("1").Done();
                     return Build<TKiAlterSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
                         .Value(settings.Value.IsValid() ? settings.Value.Cast() : emptyAtom)
                         .ValueParamName(settings.ValueParamName.IsValid() ? settings.ValueParamName.Cast() : emptyAtom)
+                        .MissingOk(mode == "alter_if_exists" ? trueAtom : falseAtom)
                         .Done()
                         .Ptr();
-                } else if (mode == "drop") {
+                } else if (mode == "drop" || mode == "drop_if_exists") {
+                    const auto falseAtom = Build<TCoAtom>(ctx, node->Pos()).Value("0").Done();
+                    const auto trueAtom = Build<TCoAtom>(ctx, node->Pos()).Value("1").Done();
                     return Build<TKiDropSecret>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
+                        .MissingOk(mode == "drop_if_exists" ? trueAtom : falseAtom)
                         .Done()
                         .Ptr();
                 } else {
@@ -1915,6 +1949,11 @@ private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
+
+    // Query-planning state: counts write operations per external entity path
+    // within a single query compilation (multiple writes into the same
+    // external object are not supported).
+    THashSet<TString> ExternalWritePaths;
 
     TAutoPtr<IGraphTransformer> IntentDeterminationTransformer;
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
@@ -2032,7 +2071,7 @@ TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& c
 
     YQL_ENSURE(mode);
     auto modeStr = mode.Cast().Value();
-    if (modeStr == "create" || modeStr == "alter") {
+    if (modeStr == "create" || modeStr == "create_if_not_exists" || modeStr == "create_or_replace" || modeStr == "alter" || modeStr == "alter_if_exists") {
         if (!value && !valueParamName) {
             ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
                 "Secret value is required: provide a literal or a single string parameter"));
@@ -2134,6 +2173,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiDropObject>(input)) {
         return HandleDropObject(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiKillSession>(input)) {
+        return HandleKillSession(node.Cast(), ctx);
     }
 
     if (auto node = TMaybeNode<TKiModifyPermissions>(input)) {
@@ -2275,7 +2318,7 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
 TAutoPtr<IGraphTransformer> CreateKiSinkIntentDeterminationTransformer(
     TIntrusivePtr<TKikimrSessionContext> sessionCtx)
 {
-    return new TKiSinkIntentDeterminationTransformer(sessionCtx);
+    return CreateSqlPathAliasesTransformer(sessionCtx, new TKiSinkIntentDeterminationTransformer(sessionCtx));
 }
 
 } // namespace NYql

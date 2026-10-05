@@ -6,7 +6,6 @@ RECURSE(
     expr_nodes
     opt
     runtime
-    state
     tasks
     transform
     type_ann

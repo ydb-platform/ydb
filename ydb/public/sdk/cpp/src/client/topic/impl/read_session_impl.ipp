@@ -64,8 +64,11 @@ static const bool DecompressEverything = !std::string{std::getenv("PQ_DECOMPRESS
 
 template<bool UseMigrationProtocol>
 TLog TPartitionStreamImpl<UseMigrationProtocol>::GetLog() const {
-    if (auto session = CbContext->LockShared()) {
-        return session->GetLog();
+    auto callbackContext = CopyCallbackContext();
+    if (callbackContext) {
+        if (auto session = callbackContext->LockShared()) {
+            return session->GetLog();
+        }
     }
     return {};
 }
@@ -73,7 +76,11 @@ TLog TPartitionStreamImpl<UseMigrationProtocol>::GetLog() const {
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::Commit(uint64_t startOffset, uint64_t endOffset) {
     std::vector<std::pair<ui64, ui64>> toCommit;
-    if (auto sessionShared = CbContext->LockShared()) {
+    auto callbackContext = CopyCallbackContext();
+    if (!callbackContext) {
+        return;
+    }
+    if (auto sessionShared = callbackContext->LockShared()) {
         Y_ABORT_UNLESS(endOffset > startOffset);
         {
             std::lock_guard guard(sessionShared->Lock);
@@ -95,14 +102,22 @@ void TPartitionStreamImpl<UseMigrationProtocol>::Commit(uint64_t startOffset, ui
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
-    if (auto sessionShared = CbContext->LockShared()) {
+    auto callbackContext = CopyCallbackContext();
+    if (!callbackContext) {
+        return;
+    }
+    if (auto sessionShared = callbackContext->LockShared()) {
         sessionShared->RequestPartitionStreamStatus(this);
     }
 }
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) {
-    if (auto sessionShared = CbContext->LockShared()) {
+    auto callbackContext = CopyCallbackContext();
+    if (!callbackContext) {
+        return;
+    }
+    if (auto sessionShared = callbackContext->LockShared()) {
         if (commitOffset.has_value()) {
             SetFirstNotReadOffset(commitOffset.value());
         }
@@ -112,14 +127,22 @@ void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<uin
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmDestroy() {
-    if (auto sessionShared = CbContext->LockShared()) {
+    auto callbackContext = CopyCallbackContext();
+    if (!callbackContext) {
+        return;
+    }
+    if (auto sessionShared = callbackContext->LockShared()) {
         sessionShared->ConfirmPartitionStreamDestroy(this);
     }
 }
 
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmEnd(std::span<const uint32_t> childIds) {
-    if (auto sessionShared = CbContext->LockShared()) {
+    auto callbackContext = CopyCallbackContext();
+    if (!callbackContext) {
+        return;
+    }
+    if (auto sessionShared = callbackContext->LockShared()) {
         sessionShared->ConfirmPartitionStreamEnd(this, childIds);
     }
 }
@@ -175,6 +198,9 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
                                                                             TDeferredActions<UseMigrationProtocol>& deferred)
 {
     if constexpr (!UseMigrationProtocol) {
+        if (!CbContext) {
+            return;
+        }
         if (auto session = CbContext->LockShared()) {
             if (!session->AllParentSessionsHasBeenRead(stream->GetPartitionId(), stream->GetPartitionSessionId())) {
                 return;
@@ -189,8 +215,13 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
         NotReady.pop_front();
     };
 
-    while (!NotReady.empty() && NotReady.front().IsReady()) {
+    while (!NotReady.empty() && (NotReady.front().IsReady() || NotReady.front().IsAbandoned())) {
         auto& front = NotReady.front();
+
+        if (front.IsAbandoned()) {
+            NotReady.pop_front();
+            continue;
+        }
 
         if (front.IsDataEvent()) {
             if (queue.HasDataEventCallback()) {
@@ -239,9 +270,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
     for (auto& event : NotReady) {
         const bool isDataEvent = event.IsDataEvent();
 
-        if (event.IsReady() ||
-            (isDataEvent && !event.GetDataEvent().SetAbandoned()) // Try to cancel inflight decompression tasks if any (returns true if message was decompressed and become ready)
-        ) {
+        if (!isDataEvent || !event.GetDataEvent().SetAbandoned()) {
             if (!hasNonReadyEvents) {
                 // Continue ready events prefix
                 ready.push_back(std::move(event));
@@ -280,7 +309,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::Cleanup(TDeferredActio
         }
 
         auto& dataEvent = event.GetDataEvent();
-        if (event.IsReady() || !dataEvent.SetAbandoned()) {
+        if (!dataEvent.SetAbandoned()) {
             accumulator.Add(dataEvent.GetParent(), dataEvent.GetDataSize(), dataEvent.GetMessageCount());
         } else {
             infos.push_back(dataEvent.GetParent());
@@ -933,6 +962,11 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnUserRetrievedEvent(i
 
     TDeferredActions<UseMigrationProtocol> deferred;
     std::lock_guard guard(Lock);
+    if (Aborting) {
+        // Session is being torn down: memory budget is no longer used to gate reading,
+        // and cleanup paths may release the same data more than once.
+        return;
+    }
     UpdateMemoryUsageStatisticsImpl();
 
     Y_ABORT_UNLESS(decompressedSize <= DecompressedDataSize);
@@ -1954,9 +1988,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ClearAllPartitionStrea
     deferredDelete.reserve(streams.size());
     for (auto& stream : streams) {
         std::lock_guard guard(stream->GetLock());
-        if (stream->HasEvents()) {
-            deferredDelete.push_back(stream->ExtractQueue());
-        }
+        EventsQueue->ExtractPartitionStreamQueue(stream, deferredDelete);
     }
 
     for (auto& queue : deferredDelete) {
@@ -2672,15 +2704,14 @@ bool TReadSessionEventsQueue<UseMigrationProtocol>::PushDataEvent(TIntrusivePtr<
                                                                   size_t batch,
                                                                   size_t message,
                                                                   TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
-                                                                  std::atomic<bool>& ready,
-                                                                  std::atomic<bool>& abandoned)
+                                                                  std::atomic<EDecompressionTaskState>& state)
 {
 
     std::lock_guard<std::mutex> guard(TParent::Mutex);
     if (this->Closed) {
         return false;
     }
-    partitionStream->InsertDataEvent(batch, message, parent, ready, abandoned);
+    partitionStream->InsertDataEvent(batch, message, parent, state);
     return true;
 }
 
@@ -2717,7 +2748,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::GetDataEventImpl(TIntr
 
         auto& front = queue.front();
 
-        return front.IsDataEvent() && front.IsReady();
+        return front.IsDataEvent() && front.IsReady() && !front.IsAbandoned();
     };
 
     Y_ABORT_UNLESS(readyDataInTheHead());
@@ -3198,8 +3229,7 @@ bool TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double
                                                      CurrentDecompressingMessage.first,
                                                      CurrentDecompressingMessage.second,
                                                      TDataDecompressionInfo::shared_from_this(),
-                                                     ReadyThresholds.back().Ready,
-                                                     ReadyThresholds.back().Abandoned);
+                                                     ReadyThresholds.back().State);
             if (!pushRes) {
                 deferred.DeferDestroyDecompressionInfos({TDataDecompressionInfo::shared_from_this()});
                 session->AbortImpl(&deferred);
@@ -3285,7 +3315,7 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
                         continue;
                     }
                     seqNo = static_cast<ui64>(*codecResult.BatchBaseSequence) + static_cast<ui64>(recordMeta.SequenceDelta);
-                    createTime = TInstant::MilliSeconds(*codecResult.BatchBaseTimestampMs + recordMeta.TimestampDelta);
+                    createTime = TInstant::MilliSeconds(NKafka::GetRecordTimestamp(*codecResult.BatchBaseTimestampMs, recordMeta.TimestampDelta));
                 }
 
                 TReadSessionEvent::TDataReceivedEvent::TMessageInformation messageInfo(
@@ -3636,15 +3666,16 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
     parent->OnDataDecompressed(SourceDataSize, EstimatedDecompressedSize, DecompressedSize, messagesProcessed);
 
     parent->SourceDataNotProcessed -= dataProcessed;
-    Ready->Ready = true;
-
-    if (auto session = parent->CbContext->LockShared()) {
-        session->GetEventsQueue()->SignalReadyEvents(PartitionStream);
-    }
-
-    if (bool expected = false; !Ready->Abandoned.compare_exchange_strong(expected, true)) {
-        // Message is dropped due to partition stream cancellation, we should release decompressed memory
+    auto expected = EDecompressionTaskState::InProcess;
+    if (Ready->State.compare_exchange_strong(expected, EDecompressionTaskState::Ready)) {
+        if (auto session = parent->CbContext->LockShared()) {
+            session->GetEventsQueue()->SignalReadyEvents(PartitionStream);
+        }
+    } else {
+        Y_ABORT_UNLESS(expected == EDecompressionTaskState::Cleanup);
+        // Cleanup claimed the whole task before it became ready.
         parent->OnUserRetrievedEvent(DecompressedSize, messagesProcessed);
+        Ready->State.store(EDecompressionTaskState::Abandoned);
     }
 
     if (auto session = parent->CbContext->LockShared()) {

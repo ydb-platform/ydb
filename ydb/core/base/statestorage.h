@@ -3,12 +3,15 @@
 #include "defs.h"
 #include "events.h"
 #include <ydb/core/protos/statestorage.pb.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/util/numerical_maybe.h>
 #include <ydb/library/actors/interconnect/event_filter.h>
 #include <util/stream/str.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
+
+namespace NKikimrConfig {
+    class TStateStorageConfig;
+}
 
 namespace NKikimr {
 
@@ -631,10 +634,10 @@ struct TBoardRetrySettings {
     TDuration MaxDelayMs = TDuration::MilliSeconds(5000);
 };
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);
-TIntrusivePtr<TStateStorageInfo> BuildSchemeBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);
-void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& config,
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TStateStorageConfig& config);
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TStateStorageConfig& config);
+TIntrusivePtr<TStateStorageInfo> BuildSchemeBoardInfo(const NKikimrConfig::TStateStorageConfig& config);
+void BuildStateStorageInfos(const NKikimrConfig::TStateStorageConfig& config,
     TIntrusivePtr<TStateStorageInfo> &stateStorageInfo,
     TIntrusivePtr<TStateStorageInfo> &boardInfo,
     TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo);

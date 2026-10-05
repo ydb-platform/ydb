@@ -15,6 +15,7 @@ constexpr int LinuxErrorCodeCount = 2000;
 
 DEFINE_ENUM(ELinuxErrorCode,
     ((NOENT)              ((LinuxErrorCodeBase + ENOENT)))
+    ((SRCH)               ((LinuxErrorCodeBase + ESRCH)))
     ((IO)                 ((LinuxErrorCodeBase + EIO)))
     ((ACCESS)             ((LinuxErrorCodeBase + EACCES)))
     ((NFILE)              ((LinuxErrorCodeBase + ENFILE)))

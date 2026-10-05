@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/assert/assert.h>
 
+#include <library/cpp/yt/string/raw_formatter.h>
+
 #include <library/cpp/yt/cpu_clock/clock.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
@@ -19,19 +21,38 @@ namespace NYT::NLogging {
 
 namespace NDetail {
 
-void OnCriticalLogEvent(
-    const TLogger& logger,
-    const TLogEvent& event)
+void AbortOnCriticalLogEvent(const TLogEvent& event)
 {
-    if (event.Level == ELogLevel::Fatal ||
-        event.Level == ELogLevel::Alert && logger.GetAbortOnAlert())
-    {
-        fprintf(stderr, "*** Aborting on critical log event\n");
-        auto message = FormatTaggedPayload(std::get<TTaggedLogEventPayload>(event.Payload));
-        fwrite(message.data(), 1, message.size(), stderr);
-        fprintf(stderr, "\n");
-        YT_ABORT();
+    TRawFormatter<1024> renderedEvent;
+    FormatTaggedPayload(&renderedEvent, std::get<TTaggedLogEventPayload>(event.Payload));
+
+    // Writes the message to stderr; the crash handler shuts the log manager down.
+    ::NYT::NDetail::AssertTrapImpl(
+        event.Level == ELogLevel::Fatal ? "YT_LOG_FATAL" : "YT_LOG_ALERT",
+        renderedEvent.GetBuffer(),
+        /*description*/ {},
+        /*file*/ event.SourceFile,
+        /*line*/ event.SourceLine,
+        /*function*/ {});
+}
+
+void LogFatalEventAndAbort(
+    const TLoggingContext& loggingContext,
+    const TLogger& logger,
+    ::TSourceLocation sourceLocation,
+    TTaggedLogEventPayload payload)
+{
+    auto event = CreateLogEvent(loggingContext, logger, ELogLevel::Fatal);
+    event.Payload = std::move(payload);
+    event.SourceFile = sourceLocation.File;
+    event.SourceLine = sourceLocation.Line;
+
+    // A logger with no log manager cannot take the event; the abort still reports it.
+    if (logger) {
+        logger.Write(TLogEvent(event));
     }
+
+    AbortOnCriticalLogEvent(event);
 }
 
 } // namespace NDetail
@@ -72,7 +93,7 @@ YT_DEFINE_THREAD_LOCAL(bool, ThreadMessageTagDestroyed, false);
 
 struct TThreadMessageTagStorage
 {
-    std::string Tag;
+    TLoggingTagList Tags;
 
     ~TThreadMessageTagStorage()
     {
@@ -82,20 +103,20 @@ struct TThreadMessageTagStorage
 
 YT_DEFINE_THREAD_LOCAL(TThreadMessageTagStorage, ThreadMessageTag);
 
-void SetThreadMessageTag(std::string messageTag)
+void SetThreadMessageTags(TLoggingTagList messageTags)
 {
     if (Y_UNLIKELY(ThreadMessageTagDestroyed())) {
         return;
     }
-    ThreadMessageTag().Tag = std::move(messageTag);
+    ThreadMessageTag().Tags = std::move(messageTags);
 }
 
-std::string& GetThreadMessageTag()
+const TLoggingTagList& GetThreadMessageTags()
 {
     if (Y_UNLIKELY(ThreadMessageTagDestroyed())) {
-        return *LeakySingleton<std::string>();
+        return *LeakySingleton<TLoggingTagList>();
     }
-    return ThreadMessageTag().Tag;
+    return ThreadMessageTag().Tags;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -157,25 +178,22 @@ void TLogger::Write(TLogEvent&& event) const
     LogManager_->Enqueue(std::move(event));
 }
 
-void TLogger::AddRawTag(TStringBuf tag)
+TLogger& TLogger::AddTags(const TLoggingTagList& tags)
 {
-    auto* state = GetMutableCoWState();
-    if (!state->Tag.empty()) {
-        state->Tag += ", ";
-    }
-    state->Tag.append(tag.data(), tag.size());
+    GetMutableCoWState()->Tags.Add(tags);
+    return *this;
 }
 
-TLogger TLogger::WithRawTag(TStringBuf tag) const &
+TLogger TLogger::WithTags(const TLoggingTagList& tags) const &
 {
     auto result = *this;
-    result.AddRawTag(tag);
+    result.AddTags(tags);
     return result;
 }
 
-TLogger TLogger::WithRawTag(TStringBuf tag) &&
+TLogger TLogger::WithTags(const TLoggingTagList& tags) &&
 {
-    AddRawTag(tag);
+    AddTags(tags);
     return std::move(*this);
 }
 
@@ -228,10 +246,10 @@ TLogger TLogger::WithMinLevel(ELogLevel minLevel) &&
     return std::move(*this);
 }
 
-const std::string& TLogger::GetTag() const
+const TLoggingTagList& TLogger::GetTags() const
 {
-    static const std::string emptyResult;
-    return CoWState_ ? CoWState_->Tag : emptyResult;
+    static const TLoggingTagList emptyResult;
+    return CoWState_ ? CoWState_->Tags : emptyResult;
 }
 
 const TLogger::TStructuredTags& TLogger::GetStructuredTags() const

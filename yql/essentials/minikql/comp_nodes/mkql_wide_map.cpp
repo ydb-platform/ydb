@@ -6,7 +6,9 @@
 
 namespace NKikimr::NMiniKQL {
 
+#ifndef MKQL_DISABLE_CODEGEN
 using NYql::EnsureDynamicCast;
+#endif
 
 namespace {
 
@@ -16,53 +18,53 @@ class TWideMapFlowWrapper: public TStatelessWideFlowCodegeneratorNode<TWideMapFl
 public:
     TWideMapFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, TComputationNodePtrVector&& newItems)
         : TBaseComputation(flow)
-        , Flow(flow)
-        , Items(std::move(items))
-        , NewItems(std::move(newItems))
-        , PasstroughtMap(GetPasstroughtMapOneToOne(Items, NewItems))
-        , ReversePasstroughtMap(GetPasstroughtMapOneToOne(NewItems, Items))
-        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
+        , Flow_(flow)
+        , Items_(std::move(items))
+        , NewItems_(std::move(newItems))
+        , PasstroughtMap_(GetPasstroughtMapOneToOne(Items_, NewItems_))
+        , ReversePasstroughtMap_(GetPasstroughtMapOneToOne(NewItems_, Items_))
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Items_.size()))
     {
     }
 
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
-        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
 
-        for (auto i = 0U; i < Items.size(); ++i) {
-            if (const auto& map = PasstroughtMap[i]; map && !Items[i]->GetDependentsCount()) {
+        for (auto i = 0U; i < Items_.size(); ++i) {
+            if (const auto& map = PasstroughtMap_[i]; map && !Items_[i]->GetDependentsCount()) {
                 if (const auto out = output[*map]) {
                     fields[i] = out;
                 }
             } else {
-                fields[i] = &Items[i]->RefValue(ctx);
+                fields[i] = &Items_[i]->RefValue(ctx);
             }
         }
 
-        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
+        if (const auto result = Flow_->FetchValues(ctx, fields); EFetchResult::One != result) {
             return result;
         }
 
-        for (auto i = 0U; i < NewItems.size(); ++i) {
+        for (auto i = 0U; i < NewItems_.size(); ++i) {
             if (const auto out = output[i]) {
-                if (const auto& map = ReversePasstroughtMap[i]) {
-                    if (const auto from = *map; !Items[from]->GetDependentsCount()) {
-                        if (const auto first = *PasstroughtMap[from]; first != i) {
+                if (const auto& map = ReversePasstroughtMap_[i]) {
+                    if (const auto from = *map; !Items_[from]->GetDependentsCount()) {
+                        if (const auto first = *PasstroughtMap_[from]; first != i) {
                             *out = *output[first];
                         }
                         continue;
                     }
                 }
 
-                *out = NewItems[i]->GetValue(ctx);
+                *out = NewItems_[i]->GetValue(ctx);
             }
         }
         return EFetchResult::One;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto result = GetNodeValues(Flow, ctx, block);
+        const auto result = GetNodeValues(Flow_, ctx, block);
 
         const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, result.first, ConstantInt::get(result.first->getType(), 0), "good", block);
 
@@ -73,9 +75,9 @@ public:
 
         block = work;
 
-        for (auto i = 0U; i < Items.size(); ++i) {
-            if (Items[i]->GetDependentsCount() > 0U || !PasstroughtMap[i]) {
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, result.second[i](ctx, block));
+        for (auto i = 0U; i < Items_.size(); ++i) {
+            if (Items_[i]->GetDependentsCount() > 0U || !PasstroughtMap_[i]) {
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Items_[i])->CreateSetValue(ctx, block, result.second[i](ctx, block));
             }
         }
 
@@ -84,12 +86,12 @@ public:
         block = pass;
 
         TGettersList getters;
-        getters.reserve(NewItems.size());
-        for (auto i = 0U; i < NewItems.size(); ++i) {
-            if (const auto map = ReversePasstroughtMap[i]) {
+        getters.reserve(NewItems_.size());
+        for (auto i = 0U; i < NewItems_.size(); ++i) {
+            if (const auto map = ReversePasstroughtMap_[i]) {
                 getters.emplace_back(result.second[*map]);
             } else {
-                getters.emplace_back([node = NewItems[i]](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(node, ctx, block); });
+                getters.emplace_back([node = NewItems_[i]](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(node, ctx, block); });
             }
         };
         return {result.first, std::move(getters)};
@@ -97,18 +99,18 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow)) {
-            std::for_each(Items.cbegin(), Items.cend(), std::bind(&TWideMapFlowWrapper::Own, flow, std::placeholders::_1));
-            std::for_each(NewItems.cbegin(), NewItems.cend(), std::bind(&TWideMapFlowWrapper::DependsOn, flow, std::placeholders::_1));
+        if (const auto flow = FlowDependsOn(Flow_)) {
+            std::for_each(Items_.cbegin(), Items_.cend(), std::bind(&TWideMapFlowWrapper::Own, flow, std::placeholders::_1));
+            std::for_each(NewItems_.cbegin(), NewItems_.cend(), std::bind(&TWideMapFlowWrapper::DependsOn, flow, std::placeholders::_1));
         }
     }
 
-    IComputationWideFlowNode* const Flow;
-    const TComputationExternalNodePtrVector Items;
-    const TComputationNodePtrVector NewItems;
-    const TPasstroughtMap PasstroughtMap, ReversePasstroughtMap;
+    IComputationWideFlowNode* const Flow_;
+    const TComputationExternalNodePtrVector Items_;
+    const TComputationNodePtrVector NewItems_;
+    const TPasstroughtMap PasstroughtMap_, ReversePasstroughtMap_;
 
-    const ui32 WideFieldsIndex;
+    const ui32 WideFieldsIndex_;
 };
 
 class TWideMapStreamWrapper: public TMutableComputationNode<TWideMapStreamWrapper> {
@@ -117,12 +119,12 @@ class TWideMapStreamWrapper: public TMutableComputationNode<TWideMapStreamWrappe
 public:
     TWideMapStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, TComputationExternalNodePtrVector&& items, TComputationNodePtrVector&& newItems)
         : TBaseComputation(mutables)
-        , Stream(stream)
-        , Items(std::move(items))
-        , NewItems(std::move(newItems))
-        , PasstroughtMap(GetPasstroughtMapOneToOne(Items, NewItems))
-        , ReversePasstroughtMap(GetPasstroughtMapOneToOne(NewItems, Items))
-        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
+        , Stream_(stream)
+        , Items_(std::move(items))
+        , NewItems_(std::move(newItems))
+        , PasstroughtMap_(GetPasstroughtMapOneToOne(Items_, NewItems_))
+        , ReversePasstroughtMap_(GetPasstroughtMapOneToOne(NewItems_, Items_))
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Items_.size()))
     {
     }
 
@@ -130,11 +132,11 @@ public:
         return ctx.HolderFactory.Create<TStreamValue>(
             ctx,
             ctx.HolderFactory,
-            Stream->GetValue(ctx),
-            Items,
-            NewItems,
-            PasstroughtMap,
-            ReversePasstroughtMap);
+            Stream_->GetValue(ctx),
+            Items_,
+            NewItems_,
+            PasstroughtMap_,
+            ReversePasstroughtMap_);
     }
 
 private:
@@ -151,72 +153,72 @@ private:
                      TPassthroughSpan passtroughtMap,
                      TPassthroughSpan reversePasstroughtMap)
             : TBase(memInfo)
-            , CompCtx(compCtx)
-            , HolderFactory(holderFactory)
-            , Stream(std::move(stream))
-            , Items(items)
-            , NewItems(newItems)
-            , PasstroughtMap(std::move(passtroughtMap))
-            , ReversePasstroughtMap(std::move(reversePasstroughtMap))
+            , CompCtx_(compCtx)
+            , HolderFactory_(holderFactory)
+            , Stream_(std::move(stream))
+            , Items_(items)
+            , NewItems_(newItems)
+            , PasstroughtMap_(std::move(passtroughtMap))
+            , ReversePasstroughtMap_(std::move(reversePasstroughtMap))
         {
-            State.resize(Items.size());
-            Y_UNUSED(HolderFactory);
+            State_.resize(Items_.size());
+            Y_UNUSED(HolderFactory_);
         }
 
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) final {
             Y_UNUSED(width);
-            if (const auto result = Stream.WideFetch(State.data(), State.size()); NUdf::EFetchStatus::Ok != result) {
+            if (const auto result = Stream_.WideFetch(State_.data(), State_.size()); NUdf::EFetchStatus::Ok != result) {
                 return result;
             }
 
-            for (auto i = 0U; i < Items.size(); ++i) {
-                if (const auto& map = PasstroughtMap[i]; map && !Items[i]->GetDependentsCount()) {
-                    output[*map] = State[i];
+            for (auto i = 0U; i < Items_.size(); ++i) {
+                if (const auto& map = PasstroughtMap_[i]; map && !Items_[i]->GetDependentsCount()) {
+                    output[*map] = State_[i];
                 } else {
-                    Items[i]->RefValue(CompCtx) = State[i];
+                    Items_[i]->RefValue(CompCtx_) = State_[i];
                 }
             }
 
-            for (auto i = 0U; i < NewItems.size(); ++i) {
-                if (const auto& map = ReversePasstroughtMap[i]) {
-                    if (const auto from = *map; !Items[from]->GetDependentsCount()) {
-                        if (const auto first = *PasstroughtMap[from]; first != i) {
+            for (auto i = 0U; i < NewItems_.size(); ++i) {
+                if (const auto& map = ReversePasstroughtMap_[i]) {
+                    if (const auto from = *map; !Items_[from]->GetDependentsCount()) {
+                        if (const auto first = *PasstroughtMap_[from]; first != i) {
                             output[i] = output[first];
                         }
                         continue;
                     }
                 }
 
-                output[i] = NewItems[i]->GetValue(CompCtx);
+                output[i] = NewItems_[i]->GetValue(CompCtx_);
             }
             return NUdf::EFetchStatus::Ok;
         }
 
     private:
-        TComputationContext& CompCtx;
-        const THolderFactory& HolderFactory;
-        NUdf::TUnboxedValue Stream;
-        const TComputationExternalNodePtrVector& Items;
-        const TComputationNodePtrVector& NewItems;
+        TComputationContext& CompCtx_;
+        const THolderFactory& HolderFactory_;
+        NUdf::TUnboxedValue Stream_;
+        const TComputationExternalNodePtrVector& Items_;
+        const TComputationNodePtrVector& NewItems_;
 
-        const TPassthroughSpan PasstroughtMap;
-        const TPassthroughSpan ReversePasstroughtMap;
-        TUnboxedValueVector State;
+        const TPassthroughSpan PasstroughtMap_;
+        const TPassthroughSpan ReversePasstroughtMap_;
+        TUnboxedValueVector State_;
     };
 
     void RegisterDependencies() const final {
-        Stream->AddDependent(this);
-        std::for_each(Items.cbegin(), Items.cend(), std::bind(&TWideMapStreamWrapper::Own, this, std::placeholders::_1));
-        std::for_each(NewItems.cbegin(), NewItems.cend(), std::bind(&TWideMapStreamWrapper::DependsOn, this, std::placeholders::_1));
+        Stream_->AddDependent(this);
+        std::for_each(Items_.cbegin(), Items_.cend(), std::bind(&TWideMapStreamWrapper::Own, this, std::placeholders::_1));
+        std::for_each(NewItems_.cbegin(), NewItems_.cend(), std::bind(&TWideMapStreamWrapper::DependsOn, this, std::placeholders::_1));
     }
 
-    IComputationNode* const Stream;
-    const TComputationExternalNodePtrVector Items;
-    const TComputationNodePtrVector NewItems;
-    const TPasstroughtMap PasstroughtMap;
-    const TPasstroughtMap ReversePasstroughtMap;
+    IComputationNode* const Stream_;
+    const TComputationExternalNodePtrVector Items_;
+    const TComputationNodePtrVector NewItems_;
+    const TPasstroughtMap PasstroughtMap_;
+    const TPasstroughtMap ReversePasstroughtMap_;
 
-    const ui32 WideFieldsIndex;
+    const ui32 WideFieldsIndex_;
 };
 } // namespace
 

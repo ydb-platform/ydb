@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from hamcrest import assert_that, equal_to, not_none
+import botocore
+
+from hamcrest import assert_that, equal_to, not_, not_none, raises
 
 from ydb.tests.library.sqs_topic.test_base import KikimrSqsTopicTestBase
 
@@ -30,6 +32,7 @@ class TestSqsTopicSendMessage(KikimrSqsTopicTestBase):
             QueueUrl=self._queue_url,
             MessageBody=message_body,
             MessageGroupId='message-group-1',
+            MessageDeduplicationId='deduplication-id-1',
         )
 
         assert_that(response['MessageId'], not_none())
@@ -85,3 +88,76 @@ class TestSqsTopicSendMessage(KikimrSqsTopicTestBase):
         )
 
         assert_that(duplicate_response['MessageId'], equal_to(response['MessageId']))
+
+    def test_send_message_fifo_with_content_based_deduplication(self):
+        queue_name = self._make_fifo_queue_name('send_message_fifo_with_content_based_deduplication')
+        self._queue_url = self._boto_client.create_queue(
+            QueueName=queue_name,
+            Attributes={
+                'FifoQueue': 'true',
+                'ContentBasedDeduplication': 'true',
+            },
+        )['QueueUrl']
+
+        message_body = 'hello from fifo sqs'
+        response = self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody=message_body,
+            MessageGroupId='message-group-1',
+        )
+
+        assert_that(response['MessageId'], not_none())
+        assert_that(response['SequenceNumber'], not_none())
+
+        # Same body without MessageDeduplicationId: SHA-256 of body is used, so duplicate is dropped.
+        duplicate_response = self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody=message_body,
+            MessageGroupId='message-group-1',
+        )
+
+        assert_that(duplicate_response['MessageId'], equal_to(response['MessageId']))
+
+        # Different body produces a different content hash and is not deduplicated.
+        other_response = self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody='other body',
+            MessageGroupId='message-group-1',
+        )
+
+        assert_that(other_response['MessageId'], not_(equal_to(response['MessageId'])))
+
+        # Explicit MessageDeduplicationId overrides content-based hash.
+        explicit_response = self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody='yet another body',
+            MessageGroupId='message-group-1',
+            MessageDeduplicationId='explicit-deduplication-id',
+        )
+        explicit_duplicate_response = self._boto_client.send_message(
+            QueueUrl=self._queue_url,
+            MessageBody='completely different body',
+            MessageGroupId='message-group-1',
+            MessageDeduplicationId='explicit-deduplication-id',
+        )
+
+        assert_that(explicit_duplicate_response['MessageId'], equal_to(explicit_response['MessageId']))
+
+    def test_send_message_fifo_without_content_based_deduplication(self):
+        self._create_fifo_queue('send_message_fifo_without_content_based_deduplication')
+
+        def send_without_message_deduplication_id():
+            self._boto_client.send_message(
+                QueueUrl=self._queue_url,
+                MessageBody='hello from fifo sqs',
+                MessageGroupId='message-group-1',
+            )
+
+        # Without ContentBasedDeduplication, MessageDeduplicationId is required.
+        assert_that(
+            send_without_message_deduplication_id,
+            raises(
+                botocore.exceptions.ClientError,
+                pattern='MissingParameter',
+            ),
+        )

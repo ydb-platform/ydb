@@ -1,5 +1,7 @@
 #include "impl.h"
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
@@ -7,13 +9,15 @@ namespace NKikimr::NBsController {
 class TBlobStorageController::TTxUpdateDiskMetrics : public TTransactionBase<TBlobStorageController> {
     std::vector<TPDiskId> PDiskIds;
     std::vector<TVSlotId> VSlotIds;
+    std::map<TBoxStoragePoolId, bool> DatabaseSpaceLatches; // changed by these metrics
 
 public:
     TTxUpdateDiskMetrics(TBlobStorageController *controller, std::vector<TPDiskId> pdiskIds,
-            std::vector<TVSlotId> vslotIds)
+            std::vector<TVSlotId> vslotIds, std::map<TBoxStoragePoolId, bool> databaseSpaceLatches)
         : TBase(controller)
         , PDiskIds(std::move(pdiskIds))
         , VSlotIds(std::move(vslotIds))
+        , DatabaseSpaceLatches(std::move(databaseSpaceLatches))
     {}
 
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_UPDATE_DISK_METRICS; }
@@ -49,11 +53,22 @@ public:
             }
         }
 
+        // hysteresis latches are persisted along with the metrics they follow from; a pool might have been deleted
+        // meanwhile, and its latch row along with it, which must not be recreated
+        EraseNodesIf(DatabaseSpaceLatches, [&](const auto& item) { return !Self->StoragePools.contains(item.first); });
+        Self->PersistDatabaseSpaceLatches(db, DatabaseSpaceLatches);
+
         return true;
     }
 
     void Complete(const TActorContext&) override {}
 };
+
+void TBlobStorageController::RecomputePDiskNumActiveDynamicSlots(TPDiskInfo *pdisk) {
+    pdisk->NumActiveDynamicSlots = pdisk->ComputeNumActiveDynamicSlots([this](TGroupId groupId) {
+        return FindGroup(groupId);
+    });
+}
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr &ev) {
     TabletCounters->Cumulative()[NBlobStorageController::COUNTER_UPDATE_DISK_METRICS_COUNT].Increment(1);
@@ -74,6 +89,19 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
     for (const auto& m : record.GetVDisksMetrics()) {
         const TVDiskID vdiskId = VDiskIDFromVDiskID(m.GetVDiskId());
         if (const auto *slot = FindVSlot(vdiskId)) {
+            // incoming events are processed by priority, so a newer report may have overtaken this one
+            if (const ui64 sequence = record.GetMetricsSequence()) {
+                if (sequence < slot->LastMetricsSequence) {
+                    YDB_LOG_DEBUG("Ignoring outdated VDisk metrics",
+                        {"marker", "BSCTXUDM04"},
+                        {"VDiskId", vdiskId},
+                        {"sequence", sequence},
+                        {"lastSequence", slot->LastMetricsSequence});
+                    continue;
+                }
+                slot->LastMetricsSequence = sequence;
+            }
+
             // process persistent metrics
             NKikimrBlobStorage::TVDiskMetrics newMetrics(slot->PersistedMetrics);
             newMetrics.MergeFrom(m);
@@ -133,11 +161,16 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
                 {"VDiskId", vdiskId});
         }
     }
-    for (const TGroupInfo *group : dirtyGroups) {
-        const TStorageStatusFlags flags = group->GetStorageStatusFlags();
-        StoragePoolStat->Update(TStoragePoolStat::ConvertId(group->StoragePoolId), group->StatusFlags, flags);
-        group->StatusFlags = flags;
+    {
+        TDatabaseSpaceTracker::TBatch batch(DatabaseSpace);
+        for (const TGroupInfo *group : dirtyGroups) {
+            const TStorageStatusFlags flags = group->GetStorageStatusFlags();
+            StoragePoolStat->Update(TStoragePoolStat::ConvertId(group->StoragePoolId), group->StatusFlags, flags);
+            group->StatusFlags = flags;
+            UpdateDatabaseSpaceGroup(*group);
+        }
     }
+    auto databaseSpaceLatches = PublishDatabaseSpaceChanges();
 
     // apply PDisk metrics update
     for (const auto& m : record.GetPDisksMetrics()) {
@@ -149,6 +182,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
                 pdiskIds.push_back(pdiskId);
             }
 
+            const ui32 oldSlotSizeInUnits = pdisk->GetEffectiveSlotSizeInUnits();
             if (pdisk->UpdatePDiskMetrics(m, now)) {
                 // this PDisk just did obtain full metrics set, we can unblock any pending SelectGroups operations
                 for (auto& [id, slot] : pdisk->VSlotsOnPDisk) {
@@ -156,6 +190,9 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
                         groupsToCheck.insert(slot->Group->ID);
                     }
                 }
+            }
+            if (pdisk->GetEffectiveSlotSizeInUnits() != oldSlotSizeInUnits) {
+                RecomputePDiskNumActiveDynamicSlots(pdisk);
             }
             pdisk->UpdateOperational(true);
 
@@ -175,7 +212,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
     // process VDisk status
     ProcessVDiskStatus(record.GetVDiskStatus());
 
-    Execute(new TTxUpdateDiskMetrics(this, std::move(pdiskIds), std::move(vslotIds)));
+    Execute(new TTxUpdateDiskMetrics(this, std::move(pdiskIds), std::move(vslotIds), std::move(databaseSpaceLatches)));
 }
 
 bool TBlobStorageController::CompareMetrics(const NKikimrBlobStorage::TPDiskMetrics& prev,

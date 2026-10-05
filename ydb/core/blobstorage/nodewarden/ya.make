@@ -1,6 +1,8 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
+    blobstorage_executor_pool_mapping.cpp
+    blobstorage_executor_pool_mapping.h
     group_stat_aggregator.cpp
     group_stat_aggregator.h
     distconf.cpp
@@ -32,6 +34,7 @@ SRCS(
     node_warden.h
     node_warden_blob_depot_s3.cpp
     node_warden_cache.cpp
+    node_warden_database_space.cpp
     node_warden_events.h
     node_warden_group.cpp
     node_warden_group_resolver.cpp
@@ -54,6 +57,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/blob_depot
     ydb/core/blob_depot/agent
+    ydb/core/blobstorage/base
     ydb/core/blobstorage/bridge/proxy
     ydb/core/blobstorage/bridge/syncer
     ydb/core/blobstorage/common

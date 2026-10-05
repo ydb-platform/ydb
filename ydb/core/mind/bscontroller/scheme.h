@@ -3,6 +3,17 @@
 #include "defs.h"
 #include "mood.h"
 
+#include <ydb/core/base/blobstorage_pdisk_category.h>
+#include <ydb/core/base/blobstorage_grouptype.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+
+#include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_base3.pb.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/protos/blobstorage_disk_color.pb.h>
+#include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
+#include <ydb/core/protos/bridge.pb.h>
+
 namespace NKikimr {
 
 namespace NBsController {
@@ -28,7 +39,7 @@ struct Schema : NIceDb::Schema {
         struct NodeID : Column<1, Node::ID::ColumnType> {}; // PK
         struct PDiskID : Column<2, Node::NextPDiskID::ColumnType> {}; // PK
         struct Path : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct Category : Column<4, NScheme::NTypeIds::Uint64> { using Type = TPDiskCategory;};
+        struct Category : Column<4, NScheme::NTypeIds::Uint64> { using Type = TPDiskCategory; };
         //struct SystemConfig : Column<5, NScheme::NTypeIds::String> {};
         //struct PhysicalLocation : Column<6, NScheme::NTypeIds::String> {};
         struct Guid : Column<7, NScheme::NTypeIds::Uint64> {};
@@ -75,24 +86,22 @@ struct Schema : NIceDb::Schema {
         struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; static constexpr Type Default = TBridgePileId(); };
 
         // VirtualGroup management code
-        struct VirtualGroupName : Column<112, NScheme::NTypeIds::Utf8> {}; // unique name of the virtual group
+        struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group
         struct VirtualGroupState : Column<102, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EVirtualGroupState; };
-        struct HiveId : Column<113, NScheme::NTypeIds::Uint64> {}; // hive id for this vg
-        struct Database : Column<120, NScheme::NTypeIds::String> {}; // database path
-        struct BlobDepotConfig : Column<106, NScheme::NTypeIds::String> {}; // serialized blob depot config protobuf
-        struct BlobDepotId : Column<109, NScheme::NTypeIds::Uint64> {}; // created blobdepot tablet id
-        struct ErrorReason : Column<110, NScheme::NTypeIds::Utf8> {}; // creation error reason
-        struct NeedAlter : Column<111, NScheme::NTypeIds::Bool> {}; // did the BlobDepotConfig change?
-        struct AppliedGroupGeneration : Column<122, NScheme::NTypeIds::Uint32> {}; // last applied group generation
-        struct Metrics : Column<114, NScheme::NTypeIds::String> {}; // for virtual groups only
-        struct BridgeGroupInfo : Column<121, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TGroupInfo; }; // bridged group protobuf
+        struct HiveId            : Column<113, NScheme::NTypeIds::Uint64> {}; // hive id for this vg
+        struct Database          : Column<120, NScheme::NTypeIds::String> {}; // database path
+        struct BlobDepotConfig   : Column<106, NScheme::NTypeIds::String> {}; // serialized blob depot config protobuf
+        struct BlobDepotId       : Column<109, NScheme::NTypeIds::Uint64> {}; // created blobdepot tablet id
+        struct ErrorReason       : Column<110, NScheme::NTypeIds::Utf8>   {}; // creation error reason
+        struct NeedAlter         : Column<111, NScheme::NTypeIds::Bool>   {}; // did the BlobDepotConfig change?
+        struct Metrics           : Column<114, NScheme::NTypeIds::String> {}; // for virtual groups only
+        struct BridgeGroupInfo   : Column<121, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TGroupInfo; }; // bridged group protobuf
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
               SeenOperational, DecommitStatus, GroupSizeInUnits, BridgePileId, VirtualGroupName, VirtualGroupState,
-              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo,
-              AppliedGroupGeneration>;
+              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo>;
     };
 
     struct State : Table<1> {
@@ -125,6 +134,8 @@ struct Schema : NIceDb::Schema {
         struct StorageYamlConfig : Column<27, NScheme::NTypeIds::String> {};
         struct ExpectedStorageYamlConfigVersion : Column<28, NScheme::NTypeIds::Uint64> {};
         struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct DatabaseSpaceBlockColor : Column<30, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
+        struct DatabaseSpaceUnblockColor : Column<31, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
@@ -132,7 +143,7 @@ struct Schema : NIceDb::Schema {
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
               UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ShredState, StorageYamlConfig,
-              ExpectedStorageYamlConfigVersion, EnableConfigV2>;
+              ExpectedStorageYamlConfigVersion, EnableConfigV2, DatabaseSpaceBlockColor, DatabaseSpaceUnblockColor>;
     };
 
     struct VSlot : Table<5> {
@@ -330,6 +341,8 @@ struct Schema : NIceDb::Schema {
         struct BridgeMode : Column<27, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         // does this pool define DDisk pool instead of VDisk one?
         struct DDisk : Column<28, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        // TStoragePoolSettings.VDiskHeapAllocatorNumLeadingDisks; null inherits the global value, 0 is explicit
+        struct VDiskHeapAllocatorNumLeadingDisks : Column<29, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<BoxId, StoragePoolId>;
 
@@ -337,7 +350,7 @@ struct Schema : NIceDb::Schema {
             DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
             VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
             Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
-            DefaultGroupSizeInUnits, BridgeMode, DDisk>;
+            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks>;
     };
 
     struct BoxStoragePoolUser : Table<121> {
@@ -468,6 +481,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp, ErrorCount>;
     };
 
+    struct DirectBlockGroupTabletState : Table<133> {
+        struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {}; // PK
+        struct Revision : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LastChangedAt : Column<3, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+
+        using TKey = TableKey<TabletId>;
+        using TColumns = TableColumns<TabletId, Revision, LastChangedAt>;
+    };
+
     struct DirectBlockGroupClaims : Table<134> {
         struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {}; // PK
         struct DirectBlockGroupId : Column<2, NScheme::NTypeIds::Uint64> {}; // PK
@@ -477,6 +499,17 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<TabletId, DirectBlockGroupId>;
         using TColumns = TableColumns<TabletId, DirectBlockGroupId, NumVChunksClaimed, Allocation>;
     };
+
+    // storage pools currently blocking writes to their databases (the hysteresis latch that can't be derived from
+    // group colors); the row is deleted along with the storage pool
+    struct DatabaseSpaceExhaustedPool : Table<135> {
+        struct BoxId : Column<1, NScheme::NTypeIds::Uint64> {}; // PK
+        struct StoragePoolId : Column<2, NScheme::NTypeIds::Uint64> {}; // PK
+
+        using TKey = TableKey<BoxId, StoragePoolId>;
+        using TColumns = TableColumns<BoxId, StoragePoolId>;
+    };
+
 
     using TTables = SchemaTables<
         Node,
@@ -503,7 +536,9 @@ struct Schema : NIceDb::Schema {
         DriveSerial,
         BlobDepotDeleteQueue,
         BridgeSyncState,
-        DirectBlockGroupClaims
+        DirectBlockGroupTabletState,
+        DirectBlockGroupClaims,
+        DatabaseSpaceExhaustedPool
     >;
 
     using TSettings = SchemaSettings<

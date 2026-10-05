@@ -685,7 +685,8 @@ public:
             ScanYtTableContentTables(dqWrite.Cast().Input().Ptr(), processTable);
         } else if (opBase.Maybe<TYtSort>() || opBase.Maybe<TYtMerge>()
                 || opBase.Maybe<TYtCopy>() || opBase.Maybe<TYtEquiJoin>()
-                || opBase.Maybe<TYtTouch>() || opBase.Maybe<TYtDropTable>()
+                || opBase.Maybe<TYtTouch>() || opBase.Maybe<TYtCreateSymlink>()
+                || opBase.Maybe<TYtDropTable>() || opBase.Maybe<TYtDropSymlink>()
                 || opBase.Maybe<TYtDropView>() || opBase.Maybe<TYtCreateView>()
                 || opBase.Maybe<TYtStatOut>()) {
             // Lambdaless ops: nothing to scan.
@@ -842,6 +843,8 @@ public:
             future = DoFill(op.Cast(), execCtx, ctx);
         } else if (auto op = opBase.Maybe<TYtMapReduce>()) {
             future = DoMapReduce(op.Cast(), execCtx, ctx);
+        } else if (auto op = opBase.Maybe<TYtTouch>()) {
+            future = DoTouch(execCtx);
         } else {
             // We don't support this operation
             return UploadFmrInputsAndForwardToUnderlyingGateway(execCtx, node, ctx, std::move(options), nodePos);
@@ -1145,6 +1148,10 @@ public:
         return Slave_->Publish(node, ctx, std::move(options));
     }
 
+    TFuture<TUnlockTablesResult> UnlockTables(TUnlockTablesOptions&& options) final {
+        return Slave_->UnlockTables(std::move(options));
+    }
+
     TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) override {
         TMaybe<TFuture<TDropTablesResponse>> fmrFuture;
         TMaybe<TFuture<TDropTrackablesResult>> ytFuture;
@@ -1155,7 +1162,7 @@ public:
             std::vector<TString> fmrTableIds;
             TVector<IYtGateway::TDropTrackablesOptions::TClusterAndPath> ytPaths;
 
-            for (const auto& path : options.Pathes()) {
+            for (const auto& path : options.Paths()) {
                 TFmrTableId tableId(path.Cluster, path.Path);
 
                 auto tmpFolder = GetTablesTmpFolder(*options.Config(), path.Cluster, Sessions_[sessionId]->UseSecureTmp_, Sessions_[sessionId]->OperationOptions_);
@@ -1180,7 +1187,7 @@ public:
             }
 
             if (!ytPaths.empty()) {
-                options.Pathes() = std::move(ytPaths);
+                options.Paths() = std::move(ytPaths);
                 ytFuture = Slave_->DropTrackables(std::move(options));
             }
 
@@ -1766,7 +1773,15 @@ public:
         Coordinator_->OpenSession(openRequest).GetValueSync();
 
         with_lock(Mutex_) {
-            Sessions_[sessionId] = MakeIntrusive<TFmrSession>(sessionId, options.UserName(), options.RandomProvider(), options.TimeProvider(), options.OperationOptions(), options.ProgressWriter(), options.UseSecureTmp());
+            Sessions_[sessionId] = MakeIntrusive<TFmrSession>(
+                sessionId,
+                options.UserName(),
+                options.RandomProvider(),
+                options.TimeProvider(),
+                options.OperationOptions(),
+                options.Credentials(),
+                options.ProgressWriter(),
+                options.UseSecureTmp());
         }
         YQL_CLOG(INFO, FastMapReduce) << "Registered session " << sessionId << " with coordinator";
 
@@ -2750,6 +2765,39 @@ private:
         return fmrOutputTables;
     }
 
+    TFuture<TFmrOperationResult> DoTouch(const TExecContextSimple<TRunOptions>::TPtr& execCtx) {
+        TString sessionId = execCtx->GetSessionId();
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+
+        auto fmrOutputTables = GetOutputTables(execCtx);
+        auto config = execCtx->Options_.Config();
+
+        TTouchOperationParams touchOperationParams{.Output = fmrOutputTables};
+        TStartOperationRequest touchOperationRequest{
+            .OperationType = EOperationType::Touch,
+            .OperationParams = touchOperationParams,
+            .SessionId = sessionId,
+            .IdempotencyKey = GenerateId(),
+            .NumRetries = 1,
+            .ClusterConnections = {},
+            .FmrOperationSpec = config->FmrOperationSpec.Get(execCtx->Cluster_)
+        };
+
+        std::vector<TString> outputPaths;
+        std::transform(execCtx->OutTables_.begin(), execCtx->OutTables_.end(), std::back_inserter(outputPaths), [execCtx](const auto& table) {
+            return execCtx->Cluster_ + "." + table.Path;
+        });
+
+        auto fmrJobFuture = GetUploadResourcesFuture(sessionId, config, {}, {}, execCtx->Options_.PublicId());
+        YQL_CLOG(INFO, FastMapReduce) << "Starting Touch for fmr tables: " << JoinRange(' ', outputPaths.begin(), outputPaths.end());
+        return fmrJobFuture.Apply([=, this, self = TIntrusivePtr<TFmrYtGateway>(this)](const auto& fmrJobF) mutable {
+            Y_UNUSED(self);
+            touchOperationRequest.FmrJob = fmrJobF.GetValue().FmrJob;
+            return GetRunningOperationFuture(touchOperationRequest, sessionId, Nothing(), execCtx->Options_.PublicId());
+        });
+    }
+
     TFuture<TFmrOperationResult> DoMerge(TExecContextSimple<TRunOptions>::TPtr& execCtx) {
         TString sessionId = execCtx->GetSessionId();
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
@@ -2906,7 +2954,7 @@ private:
                     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, execCtx->Options_.LangVer());
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(lambdaCode, nodeCount,
-                    TSimpleFileTransformProvider(execCtx->FunctionRegistry_, userDataBlocks));
+                    TSimpleFileTransformProvider(execCtx->FunctionRegistry_, userDataBlocks, execCtx->FileStorage_));
                 fmrJob->SetLambdaCode(lambdaCode);
             }
 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     config.cpp
@@ -25,13 +25,17 @@ END()
 RECURSE(
     cluster_tracker
     codecs
+    dataplane
     counters
     describer
     fetcher
+    ru_quoter
     list_topics
     mlp
+    nameresolver
     partition_index_generator
     partition_key_range
+    reset_offset
     schema
     write_meta
     cloud_events

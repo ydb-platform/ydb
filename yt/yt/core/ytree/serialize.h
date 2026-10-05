@@ -7,7 +7,8 @@
 #include <yt/yt/core/yson/producer.h>
 
 #include <yt/yt/core/misc/guid.h>
-#include <yt/yt/core/misc/mpl.h>
+#include <library/cpp/yt/mpl/concepts.h>
+#include <library/cpp/yt/mpl/type_traits.h>
 #include <yt/yt/core/misc/statistic_path.h>
 
 #include <yt/yt/core/yson/writer.h>
@@ -158,7 +159,6 @@ void Serialize(const std::array<T, N>& value, NYson::IYsonConsumer* consumer);
 template <class... T>
 void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer);
 
-// Helper struct for serializing/deserializing keys of associative containers.
 template <class T>
 struct TAssociativeContainerKeyHelper;
 

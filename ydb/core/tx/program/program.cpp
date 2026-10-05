@@ -1,6 +1,8 @@
 #include "builder.h"
 #include "program.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/program/execution.h>
@@ -157,6 +159,9 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
     if (!hasProjection) {
         return TConclusionStatus::Fail("program has no projections");
     }
+    if (HasAppData() && AppData()->FeatureFlags.GetEnableCsIndexReadMemoryTracking()) {
+        programBuilder.EnableIndexMemoryReserve();
+    }
     auto programStatus = programBuilder.Finish();
     if (programStatus.IsFail()) {
         return programStatus;
@@ -176,9 +181,10 @@ const THashSet<ui32>& TProgramContainer::GetProcessingColumns() const {
 }
 
 TConclusion<std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>> TProgramContainer::ApplyProgram(
-    std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& collection, const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const {
+    std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& collection) const {
     if (Program) {
-        return Program->Apply(source, std::move(collection));
+        NArrow::NSSA::TFakeDataSource fakeSource;
+        return Program->Apply(fakeSource, std::move(collection));
     } else if (OverrideProcessingColumnsVector) {
         collection->RemainOnly(*OverrideProcessingColumnsVector, true);
     }
@@ -188,7 +194,7 @@ TConclusion<std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>> TProgramCo
 TConclusion<std::shared_ptr<arrow::RecordBatch>> TProgramContainer::ApplyProgram(
     const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const {
     auto resources = std::make_unique<NArrow::NAccessor::TAccessorsCollection>(batch, resolver);
-    auto status = ApplyProgram(std::move(resources), std::make_shared<NArrow::NSSA::TFakeDataSource>());
+    auto status = ApplyProgram(std::move(resources));
     if (status.IsFail()) {
         return status;
     }

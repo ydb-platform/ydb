@@ -3,6 +3,7 @@
 #include <library/cpp/getopt/last_getopt.h>
 #include <util/generic/bitops.h>
 #include <util/generic/strbuf.h>
+#include <util/generic/ymath.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/system/info.h>
@@ -12,6 +13,7 @@
 #endif
 
 #include "device_test_tool.h"
+#include "device_test_tool_cli.h"
 #include "device_test_tool_aio_test.h"
 #include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_ddisk_client_server.h"
@@ -88,6 +90,15 @@ static void InstallServerSignalHandler() {
     signal(SIGTERM, ServerSignalHandler);
 }
 
+static void InterconnectServerSignalHandler(int) {
+    NKikimr::InterconnectServerStopEvent.Signal();
+}
+
+static void InstallInterconnectServerSignalHandler() {
+    signal(SIGINT, InterconnectServerSignalHandler);
+    signal(SIGTERM, InterconnectServerSignalHandler);
+}
+
 static const char* ydb_logo =
 R"__(
 
@@ -130,82 +141,32 @@ static size_t NumberOfMyCpus() {
 }
 #endif
 
-int main(int argc, char **argv) {
+static int Run(int argc, char **argv) {
     using namespace NLastGetopt;
-    TOpts opts = TOpts::Default();
-    bool disablePDiskDataEncryption = false;
-    TVector<TString> paths;
-    opts.AddLongOption("path", "path to device (can be specified multiple times for multi-device tests)")
-        .RequiredArgument("FILE")
-        .AppendTo(&paths);
-    opts.AddLongOption("cfg", "path to config file").RequiredArgument().DefaultValue("cfg.txt");
-    opts.AddLongOption("name", "device name").DefaultValue("Name");
-    opts.AddLongOption("type", "device type  - ROT|SSD|NVME").DefaultValue("ROT");
-    opts.AddLongOption("output-format", "wiki|human|json").DefaultValue("wiki");
-    opts.AddLongOption("mon-port", "port for monitoring http page").DefaultValue("0");
-    opts.AddLongOption("run-count", "number of times to run each test").DefaultValue("1");
-    opts.AddLongOption("inflight-from", "override InFlight starting value (PDisk/DDisk/UringRouter tests)").DefaultValue("0");
-    opts.AddLongOption("inflight-to", "override InFlight ending value (PDisk/DDisk/UringRouter tests)").DefaultValue("0");
-    opts.AddLongOption("no-logo", "disable logo printing on start").NoArgument();
-    opts.AddLongOption("disable-file-lock", "disable file locking before test").NoArgument().DefaultValue("0");
-    opts.AddLongOption("disable-pdisk-encryption", "disable PDisk data encryption").StoreTrue(&disablePDiskDataEncryption);
-    opts.AddLongOption("log-level", "log level for BS_LOAD_TEST/BS_DDISK: warn|info|debug|trace (default warn). INTERCONNECT is floored at INFO; BS_DEVICE/BS_PDISK at WARN")
-        .RequiredArgument("LEVEL").DefaultValue("warn");
-    ui32 serverNodeId = 0;
-    ui32 clientNodeId = 0;
-    TVector<TString> clientEndpoints;
-    ui16 icPort = 0;
-    // DDisk client/server options are hidden from the auto-generated --help list and
-    // re-rendered below as a dedicated "DDisk client/server options" section. Keep the
-    // section text in sync with the option definitions here.
-    opts.AddLongOption("server", "run as DDisk server with the given node ID (sets up PDisks/DDisks, listens via interconnect)")
-        .RequiredArgument("NODE_ID").StoreResult(&serverNodeId).Hidden();
-    opts.AddLongOption("client", "client node ID; in server mode this is the expected client's ID (used in the nameserver), in client mode this is the client's own ID")
-        .RequiredArgument("NODE_ID").StoreResult(&clientNodeId).Hidden();
-    opts.AddLongOption("endpoint", "server endpoint in 'host:port' or '[host]:port' form; repeat once per server (client only)")
-        .RequiredArgument("HOST:PORT").AppendTo(&clientEndpoints).Hidden();
-    opts.AddLongOption("ic-port", "interconnect port for server to listen on (server only)")
-        .RequiredArgument("PORT").StoreResult(&icPort).Hidden();
-    opts.AddLongOption("num-server-devices", "number of devices per server (default 1)")
-        .RequiredArgument("N").DefaultValue("1").Hidden();
-    bool useUring = false;
-    opts.AddLongOption("use-uring", "use io_uring transport for interconnect instead of epoll (Linux 5.19+)")
-        .StoreTrue(&useUring).NoArgument().Hidden();
-
-    {
-        const size_t kCol = 26;
-        auto row = [&](TStringBuf flag, TStringBuf help) {
-            TString left = TString::Join("--", flag);
-            if (left.size() < kCol) {
-                return TString::Join(left, TString(kCol - left.size(), ' '), help, "\n");
-            }
-            return TString::Join(left, "\n", TString(kCol, ' '), help, "\n");
-        };
-
-        TStringBuilder ddiskHelp;
-        ddiskHelp
-            << row("server NODE_ID",
-                   "run as DDisk server with the given node ID (sets up PDisks/DDisks, listens via interconnect)")
-            << row("client NODE_ID",
-                   "client node ID; in server mode this is the expected client's ID (used in the nameserver), "
-                   "in client mode this is the client's own ID")
-            << row("endpoint HOST:PORT",
-                   "server endpoint in 'host:port' or '[host]:port' form; repeat once per server (client only)")
-            << row("ic-port PORT",
-                   "interconnect port for server to listen on (server only)")
-            << row("num-server-devices N",
-                   "number of devices per server (default 1)")
-            << row("use-uring",
-                   "use io_uring transport for interconnect instead of epoll (Linux 5.19+)");
-
-        opts.AddSection("DDisk client/server options", ddiskHelp);
+    using namespace NKikimr::NStressTool;
+    const bool ddisk = argc > 1 && TStringBuf(argv[1]) == "ddisk";
+    TVector<const char*> args(argv, argv + argc);
+    TString programName = argv[0];
+    if (ddisk) {
+        programName += " ddisk";
+        args.erase(args.begin() + 1);
+        args[0] = programName.c_str();
     }
-
-    TOptsParseResult res(&opts, argc, argv);
+    TCommandLine cli(ddisk);
+    TOptsParseResult res(&cli.Opts, args.size(), args.data());
+    auto& paths = cli.Paths;
+    const auto serverNodeId = cli.ServerNodeId;
+    const auto clientNodeId = cli.ClientNodeId;
+    const auto icPort = cli.IcPort;
+    const auto& clientEndpoints = cli.ClientEndpoints;
+    const auto inFlight = ResolveInFlight(res, ddisk);
 
     // Server mode is selected by --server. Client mode by --client without --server.
     // In server mode, --client is also required and provides the expected client's NodeID
     // so the interconnect handshake can resolve the peer in the static nameserver table.
+    // Both modes are shared between DDisk (real device paths, PDisk/DDisk actors) and
+    // Interconnect (no device paths, just a load responder / load actor) tests; which
+    // one is used is decided later based on the config file contents.
     const bool serverMode = res.Has("server");
     const bool clientMode = !serverMode && res.Has("client");
     if (serverMode) {
@@ -219,10 +180,6 @@ int main(int argc, char **argv) {
         }
         if (clientNodeId == serverNodeId) {
             Cerr << "Error: --server and --client NODE_IDs must differ" << Endl;
-            return 1;
-        }
-        if (paths.empty()) {
-            Cerr << "Error: --server requires at least one --path" << Endl;
             return 1;
         }
         if (!icPort) {
@@ -241,7 +198,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (!clientMode && paths.empty()) {
+    if (!clientMode && !serverMode && paths.empty()) {
         Cerr << "Error: at least one --path must be specified" << Endl;
         return 1;
     }
@@ -250,8 +207,11 @@ int main(int argc, char **argv) {
         Cout << ydb_logo << Flush;
     }
 
-    // For client mode, paths can be empty; use a dummy for TPerfTestConfig
-    if (clientMode && paths.empty()) {
+    const bool pathsProvided = !paths.empty();
+
+    // For client mode, and for server mode when running as an interconnect
+    // responder (no real devices), paths can be empty; use a dummy for TPerfTestConfig.
+    if ((clientMode || serverMode) && paths.empty()) {
         paths.push_back("unused");
     }
 
@@ -263,12 +223,26 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    try {
+        ValidateDDiskOptions(res);
+    } catch (const yexception& ex) {
+        Cerr << "Error: " << ex.what() << Endl;
+        return 1;
+    }
+
+    auto protoTests = LoadTests(res, ddisk);
+
     NKikimr::TPerfTestConfig config(paths, res.Get("name"), res.Get("type"),
             res.Get("output-format"), res.Get("mon-port"), !res.Has("disable-file-lock"),
-            res.Get("run-count"), res.Get("inflight-from"), res.Get("inflight-to"), disablePDiskDataEncryption,
-            logLevel);
-    NDevicePerfTest::TPerfTests protoTests;
-    NKikimr::ParsePBFromFile(res.Get("cfg"), &protoTests);
+            res.Get("run-count"), inFlight.From, inFlight.To, cli.DisablePDiskDataEncryption,
+            cli.DisableDDiskChecksums, cli.ForcePDiskFallback, logLevel);
+    config.DDiskDevNullMode = cli.DDiskDevNullMode;
+    if (ddisk) {
+        config.PhysicalChunkSize = DDiskChunkSize;
+    }
+    if (res.Has("ddisk-checksums-cache-size")) {
+        config.DDiskChecksumsCacheBytes = ui64(res.Get<ui32>("ddisk-checksums-cache-size")) << 20;
+    }
 
     for (ui32 i = 0; i < protoTests.DDiskTestListSize(); ++i) {
         const auto& ddiskTest = protoTests.GetDDiskTestList(i);
@@ -278,20 +252,123 @@ int main(int argc, char **argv) {
                 continue;
             }
 
-            const ui32 ioSizeBytes = record.GetDDiskLoad().GetIoSizeBytes();
+            const auto& load = record.GetDDiskLoad();
+            const ui32 ioSizeBytes = load.GetIoSizeBytes();
             if (ioSizeBytes < 4096 || !IsPowerOf2(ioSizeBytes)) {
                 Cerr << "Error: invalid DDiskLoad.IoSizeBytes in DDiskTestList[" << i
                     << "].DDiskTestList[" << j << "]: " << ioSizeBytes
                     << " (must be power of two and >= 4096)" << Endl;
                 return 1;
             }
+
+            const float backgroundWriteRatio = load.GetBackgroundWriteRatio();
+            if (!IsValidFloat(backgroundWriteRatio)
+                    || backgroundWriteRatio < 0 || backgroundWriteRatio > 1
+                    || (backgroundWriteRatio > 0 && !load.GetIsReadLoad())) {
+                Cerr << "Error: invalid DDiskLoad.BackgroundWriteRatio in DDiskTestList[" << i
+                    << "].DDiskTestList[" << j << "]: " << backgroundWriteRatio
+                    << " (must be a finite value in [0, 1] writes per measured read, and nonzero only for read load)" << Endl;
+                return 1;
+            }
+            if (backgroundWriteRatio > 0) {
+                const ui32 backgroundWriteSizeKiB = load.GetBackgroundWriteSizeKiB();
+                if (backgroundWriteSizeKiB < 4 || !IsPowerOf2(backgroundWriteSizeKiB)
+                        || backgroundWriteSizeKiB > Max<ui32>() / 1024) {
+                    Cerr << "Error: invalid DDiskLoad.BackgroundWriteSizeKiB in DDiskTestList[" << i
+                        << "].DDiskTestList[" << j << "]: " << backgroundWriteSizeKiB
+                        << " (must be power of two and >= 4)" << Endl;
+                    return 1;
+                }
+                const ui32 backgroundWriteSizeBytes = backgroundWriteSizeKiB * 1024;
+                if (load.GetExpectedChunkSize() % backgroundWriteSizeBytes != 0) {
+                    Cerr << "Error: DDiskLoad.ExpectedChunkSize must be divisible by background write size"
+                        << " in DDiskTestList[" << i << "].DDiskTestList[" << j << "]" << Endl;
+                    return 1;
+                }
+                for (ui32 areaIdx = 0; areaIdx < static_cast<ui32>(load.AreasSize()); ++areaIdx) {
+                    const ui32 areaSize = load.GetAreas(areaIdx).GetAreaSize();
+                    if (!areaSize || areaSize % backgroundWriteSizeBytes != 0) {
+                        Cerr << "Error: DDiskLoad.Areas[" << areaIdx
+                            << "].AreaSize must be nonzero and divisible by background write size"
+                            << " in DDiskTestList[" << i << "].DDiskTestList[" << j << "]" << Endl;
+                        return 1;
+                    }
+                }
+            }
         }
     }
 
-    // Client-server mode dispatch
+    // Client-server mode dispatch. Two independent flavors share --server/--client/
+    // --endpoint/--ic-port: DDisk (real device paths, PDisk/DDisk actors) is used when
+    // the config has DDiskTestList; Interconnect (no device paths, just a load
+    // responder / load actor talking over a real network connection) is used when the
+    // config has InterconnectTestList instead. This lets a second ydb_stress_tool
+    // instance on another host act as the interconnect load responder.
     if (serverMode || clientMode) {
-        if (protoTests.DDiskTestListSize() == 0) {
-            Cerr << "Error: --server/--client mode requires DDiskTestList in config" << Endl;
+        const bool hasDDiskTests = protoTests.DDiskTestListSize() > 0;
+        const bool hasInterconnectTests = protoTests.InterconnectTestListSize() > 0;
+
+        if (!hasDDiskTests && !hasInterconnectTests) {
+            Cerr << "Error: --server/--client mode requires DDiskTestList or InterconnectTestList in config" << Endl;
+            return 1;
+        }
+        if (hasDDiskTests && hasInterconnectTests) {
+            Cerr << "Error: --server/--client mode requires exactly one of DDiskTestList or InterconnectTestList in config" << Endl;
+            return 1;
+        }
+
+        if (hasInterconnectTests) {
+            // Interconnect network test: no real device paths are used.
+            NDevicePerfTest::TInterconnectTest testProto = protoTests.GetInterconnectTestList(0);
+
+            if (serverMode) {
+                InstallInterconnectServerSignalHandler();
+                auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
+                THolder<NKikimr::TPerfTest> test(new NKikimr::TInterconnectServer(config, serverNodeId, clientNodeId, icPort));
+                test->SetPrinter(printer);
+                test->RunTest();
+                return 0;
+            }
+
+            if (clientMode) {
+                // Build server peer list. Server with index i (0-based) gets NodeId = i + 1.
+                // Config's InterconnectLoad.NodeHops entries should reference these NodeIds
+                // to route traffic to the corresponding remote server.
+                TVector<NKikimr::TInterconnectPeer> serverPeers;
+                serverPeers.reserve(clientEndpoints.size());
+                for (size_t i = 0; i < clientEndpoints.size(); ++i) {
+                    try {
+                        auto [host, port] = ParseHostPort(clientEndpoints[i]);
+                        serverPeers.push_back({static_cast<ui32>(i + 1), host, port});
+                    } catch (const yexception& ex) {
+                        Cerr << "Error: --endpoint #" << (i + 1) << ": " << ex.what() << Endl;
+                        return 1;
+                    }
+                }
+                for (const auto& peer : serverPeers) {
+                    if (peer.NodeId == clientNodeId) {
+                        Cerr << "Error: --client NODE_ID (" << clientNodeId
+                             << ") collides with server NodeId " << peer.NodeId
+                             << "; client NodeId must differ from all server NodeIds" << Endl;
+                        return 1;
+                    }
+                }
+
+                auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
+                for (ui32 run = 0; run < config.RunCount; ++run) {
+                    THolder<NKikimr::TPerfTest> test(
+                        new NKikimr::TInterconnectClient(config, testProto, clientNodeId, serverPeers));
+                    test->SetPrinter(printer);
+                    test->RunTest();
+                }
+                printer->EndTest();
+                return 0;
+            }
+        }
+
+        // DDisk test: real device paths (--path) are required.
+        if (serverMode && !pathsProvided) {
+            Cerr << "Error: --server requires at least one --path (DDisk mode)" << Endl;
             return 1;
         }
         NDevicePerfTest::TDDiskTest testProto = protoTests.GetDDiskTestList(0);
@@ -299,7 +376,7 @@ int main(int argc, char **argv) {
         if (serverMode) {
             InstallServerSignalHandler();
             auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
-            THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskServer<>(config, testProto, serverNodeId, clientNodeId, icPort, useUring));
+            THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskServer<>(config, testProto, serverNodeId, clientNodeId, icPort));
             test->SetPrinter(printer);
             test->RunTest();
             return 0;
@@ -307,6 +384,7 @@ int main(int argc, char **argv) {
 
         if (clientMode) {
             ui32 numServerDevices = FromString<ui32>(res.Get("num-server-devices"));
+            Y_ENSURE(!ddisk || numServerDevices > 0, "--num-server-devices must be positive");
 
             // Build server peer list. Server with index i (0-based) gets NodeId = i + 1.
             TVector<NKikimr::TInterconnectPeer> serverPeers;
@@ -317,6 +395,14 @@ int main(int argc, char **argv) {
                     serverPeers.push_back({static_cast<ui32>(i + 1), host, port});
                 } catch (const yexception& ex) {
                     Cerr << "Error: --endpoint #" << (i + 1) << ": " << ex.what() << Endl;
+                    return 1;
+                }
+            }
+            for (const auto& peer : serverPeers) {
+                if (peer.NodeId == clientNodeId) {
+                    Cerr << "Error: --client NODE_ID (" << clientNodeId
+                         << ") collides with server NodeId " << peer.NodeId
+                         << "; client NodeId must differ from all server NodeIds" << Endl;
                     return 1;
                 }
             }
@@ -332,11 +418,11 @@ int main(int argc, char **argv) {
 
             auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
             if (config.HasInFlightOverride()) {
-                for (ui32 inFlight = config.InFlightFrom; inFlight <= config.InFlightTo; inFlight *= 2) {
+                for (ui32 inFlight : InFlightValues(config.InFlightFrom, config.InFlightTo)) {
                     overrideDDiskInFlight(testProto, inFlight);
                     for (ui32 run = 0; run < config.RunCount; ++run) {
                         THolder<NKikimr::TPerfTest> test(
-                            new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices, useUring));
+                            new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices));
                         test->SetPrinter(printer);
                         test->RunTest();
                     }
@@ -344,7 +430,7 @@ int main(int argc, char **argv) {
             } else {
                 for (ui32 run = 0; run < config.RunCount; ++run) {
                     THolder<NKikimr::TPerfTest> test(
-                        new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices, useUring));
+                        new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices));
                     test->SetPrinter(printer);
                     test->RunTest();
                 }
@@ -388,15 +474,15 @@ int main(int argc, char **argv) {
     // Check if inflight override is specified for unsupported tests
     if (config.HasInFlightOverride()) {
         if (protoTests.AioTestListSize() > 0) {
-            Cerr << "Error: --inflight-from/--inflight-to are not supported for AioTest" << Endl;
+            Cerr << "Error: inflight overrides are not supported for AioTest" << Endl;
             return 1;
         }
         if (protoTests.TrimTestListSize() > 0) {
-            Cerr << "Error: --inflight-from/--inflight-to are not supported for TrimTest" << Endl;
+            Cerr << "Error: inflight overrides are not supported for TrimTest" << Endl;
             return 1;
         }
         if (protoTests.HasDriveEstimatorTest()) {
-            Cerr << "Error: --inflight-from/--inflight-to are not supported for DriveEstimatorTest" << Endl;
+            Cerr << "Error: inflight overrides are not supported for DriveEstimatorTest" << Endl;
             return 1;
         }
         // Check for unsupported PDiskLogLoad
@@ -405,7 +491,7 @@ int main(int argc, char **argv) {
             for (ui32 j = 0; j < pdiskTest.PDiskTestListSize(); ++j) {
                 const auto& record = pdiskTest.GetPDiskTestList(j);
                 if (record.Command_case() == NKikimr::TEvLoadTestRequest::CommandCase::kPDiskLogLoad) {
-                    Cerr << "Error: --inflight-from/--inflight-to are not supported for PDiskLogLoad" << Endl;
+                    Cerr << "Error: inflight overrides are not supported for PDiskLogLoad" << Endl;
                     return 1;
                 }
             }
@@ -456,7 +542,7 @@ int main(int argc, char **argv) {
     for (ui32 i = 0; i < protoTests.UringRouterTestListSize(); ++i) {
         NDevicePerfTest::TUringRouterTest testProto = protoTests.GetUringRouterTestList(i);
         if (config.HasInFlightOverride()) {
-            for (ui32 inFlight = config.InFlightFrom; inFlight <= config.InFlightTo; inFlight *= 2) {
+            for (ui32 inFlight : InFlightValues(config.InFlightFrom, config.InFlightTo)) {
                 testProto.SetQueueDepth(inFlight);
                 for (ui32 run = 0; run < config.RunCount; ++run) {
                     THolder<NKikimr::TPerfTest> test(new NKikimr::TUringRouterTest(config, testProto));
@@ -505,7 +591,7 @@ int main(int argc, char **argv) {
     for (ui32 i = 0; i < protoTests.PDiskTestListSize(); ++i) {
         NDevicePerfTest::TPDiskTest testProto = protoTests.GetPDiskTestList(i);
         if (config.HasInFlightOverride()) {
-            for (ui32 inFlight = config.InFlightFrom; inFlight <= config.InFlightTo; inFlight *= 2) {
+            for (ui32 inFlight : InFlightValues(config.InFlightFrom, config.InFlightTo)) {
                 overridePDiskInFlight(testProto, inFlight);
                 for (ui32 run = 0; run < config.RunCount; ++run) {
                     THolder<NKikimr::TPerfTest> test(new NKikimr::TPDiskTest(config, testProto));
@@ -536,7 +622,7 @@ int main(int argc, char **argv) {
     for (ui32 i = 0; i < protoTests.DDiskTestListSize(); ++i) {
         NDevicePerfTest::TDDiskTest testProto = protoTests.GetDDiskTestList(i);
         if (config.HasInFlightOverride()) {
-            for (ui32 inFlight = config.InFlightFrom; inFlight <= config.InFlightTo; inFlight *= 2) {
+            for (ui32 inFlight : InFlightValues(config.InFlightFrom, config.InFlightTo)) {
                 overrideDDiskInFlight(testProto, inFlight);
                 for (ui32 run = 0; run < config.RunCount; ++run) {
                     THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskTest(config, testProto));
@@ -584,7 +670,7 @@ int main(int argc, char **argv) {
         NDevicePerfTest::TPersistentBufferTest testProto = protoTests.GetPersistentBufferTestList(i);
         if (config.HasInFlightOverride()) {
             for (ui32 measureType : xrange(3)) {
-                for (ui32 inFlight = config.InFlightFrom; inFlight <= config.InFlightTo; inFlight *= 2) {
+                for (ui32 inFlight : InFlightValues(config.InFlightFrom, config.InFlightTo)) {
                     overridePBufferInFlight(testProto, inFlight);
                     for (ui32 run = 0; run < config.RunCount; ++run) {
                         overridePBufferMeasureType(testProto, measureType);
@@ -628,4 +714,13 @@ int main(int argc, char **argv) {
     printer->EndTest();
 
     return 0;
+}
+
+int main(int argc, char** argv) {
+    try {
+        return Run(argc, argv);
+    } catch (const std::exception& ex) {
+        Cerr << "Error: " << ex.what() << Endl;
+        return 1;
+    }
 }

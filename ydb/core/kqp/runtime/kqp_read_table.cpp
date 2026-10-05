@@ -287,6 +287,10 @@ public:
     virtual ui32 GetAllColumnsSize() const = 0;
 
 private:
+    bool IsSuitableForCache() const final {
+        return false;
+    }
+
     TKqpScanComputeContext& ComputeCtx;
     mutable TIntrusivePtr<IKqpTableReader> TableReader;
     const std::vector<EValueRepresentation> Representations;
@@ -424,6 +428,10 @@ public:
     virtual ui32 GetAllColumnsSize() const = 0;
 
 private:
+    bool IsSuitableForCache() const final {
+        return false;
+    }
+
     TKqpScanComputeContext& ComputeCtx;
     // Mutable is bad for computation pattern cache.
     // Probably this hack is necessary for LLVM. Need to review

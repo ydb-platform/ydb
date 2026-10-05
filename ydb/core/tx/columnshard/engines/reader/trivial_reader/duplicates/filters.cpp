@@ -150,10 +150,21 @@ void TFiltersStore::AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFil
     AFL_VERIFY(WaitingPortions.emplace(portionId, constructor).second);
 }
 
+bool TFiltersStore::AbortWaitingPortion(const ui64 portionId, const TString& error) {
+    auto it = WaitingPortions.find(portionId);
+    if (it == WaitingPortions.end()) {
+        return false;
+    }
+    it->second->Abort(error);
+    WaitingPortions.erase(it);
+    return true;
+}
+
 void TFiltersStore::Abort(const TString& error) {
     for (const auto& [_, constructor] : WaitingPortions) {
         constructor->Abort(error);
     }
+    WaitingPortions.clear();
 }
 
 TFiltersStore::~TFiltersStore() {

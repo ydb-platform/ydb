@@ -359,6 +359,134 @@
       "FollowerId"
     ]
   },
+  "query_metrics_one_hour": {
+    "columns": [
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "QueryText",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Count",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "MinDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "MaxDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "MinReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinUpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxUpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumUpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinUpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxUpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumUpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinDeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxDeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumDeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinRequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxRequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumRequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LocksBrokenAsBreaker",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LocksBrokenAsVictim",
+        "type": "Uint64?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
   "query_metrics_one_minute": {
     "columns": [
       {
@@ -564,6 +692,26 @@
       {
         "name": "TraceId",
         "type": "Utf8?"
+      },
+      {
+        "name": "WmClassifiedBy",
+        "type": "Utf8?"
+      },
+      {
+        "name": "DurationUs",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CpuTimeUs",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ComputeMemoryBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ReadIngressBytesRate",
+        "type": "Uint64?"
       }
     ],
     "primary_key": [
@@ -603,6 +751,10 @@
       {
         "name": "HasPath",
         "type": "Utf8?"
+      },
+      {
+        "name": "HasStream",
+        "type": "Bool?"
       }
     ],
     "primary_key": [
@@ -645,6 +797,10 @@
       },
       {
         "name": "TotalMemoryLimitPercentPerNode",
+        "type": "Double?"
+      },
+      {
+        "name": "TotalCpuGuaranteePercentPerNode",
         "type": "Double?"
       }
     ],
@@ -705,6 +861,42 @@
       {
         "name": "PreviousExecutionIds",
         "type": "Utf8?"
+      },
+      {
+        "name": "CreatedBy",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ModifiedBy",
+        "type": "Utf8?"
+      },
+      {
+        "name": "StartedBy",
+        "type": "Utf8?"
+      },
+      {
+        "name": "StoppedBy",
+        "type": "Utf8?"
+      },
+      {
+        "name": "CreatedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "ModifiedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "SubmittedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "StartedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "FinishedAt",
+        "type": "Timestamp?"
       }
     ],
     "primary_key": [
@@ -1957,6 +2149,65 @@
     "primary_key": [
       "IntervalEnd",
       "Rank"
+    ]
+  },
+  "udf_modules": {
+    "columns": [
+      {
+        "name": "Uid",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Md5",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Name",
+        "type": "Utf8?"
+      },
+      {
+        "name": "ModuleType",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Version",
+        "type": "Uint64?"
+      },
+      {
+        "name": "Size",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ChunkCount",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CompileStatus",
+        "type": "Utf8?"
+      },
+      {
+        "name": "CompileError",
+        "type": "Utf8?"
+      },
+      {
+        "name": "CreatedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "CompileStartedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "CompileFinishedAt",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Manifest",
+        "type": "Utf8?"
+      }
+    ],
+    "primary_key": [
+      "Uid"
     ]
   }
 }

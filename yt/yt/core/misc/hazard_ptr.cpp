@@ -1,7 +1,6 @@
 #include "hazard_ptr.h"
 
 #include <yt/yt/core/misc/proc.h>
-#include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/finally.h>
 
@@ -11,6 +10,7 @@
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
 #include <library/cpp/yt/containers/intrusive_linked_list.h>
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 

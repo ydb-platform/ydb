@@ -3,19 +3,16 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::DoExecute(
+TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto source = context.GetDataSource().lock();
-    if (!source) {
-        return TConclusionStatus::Fail("source was destroyed before (original fetch start)");
-    }
+    auto& source = context.GetDataSource();
     THashSet<uint32_t> uniqueEntityIds;
     std::vector<std::shared_ptr<IFetchLogic>> logic;
     for (auto&& [_, i] : DataAddresses) {
         auto acc = context.GetResources().GetAccessorOptional(i.GetColumnId());
-        THashSet<TString> subColumnsToFetch;
+        THashSet<NAccessor::NSubColumns::TCanonicalSubColumnName> subColumnsToFetch;
         for (auto&& sc : i.GetSubColumnNames(true)) {
-            if (!acc || !acc->HasSubColumnData(sc)) {
+            if (!acc || !acc->HasSubColumnData(sc.GetValue())) {
                 if (!sc && acc) {
                     context.MutableResources().Remove(i.GetColumnId());
                 }
@@ -25,7 +22,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
         if (subColumnsToFetch.empty()) {
             continue;
         }
-        auto conclusion = source->StartFetchData(context, i.SelectSubColumns(subColumnsToFetch));
+        auto conclusion = source.StartFetchData(context, i.SelectSubColumns(subColumnsToFetch));
         if (conclusion.IsFail()) {
             return conclusion;
         } else if (!!conclusion.GetResult()) {
@@ -41,7 +38,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
     }
 
     for (auto&& [_, i] : IndexContext) {
-        auto conclusion = source->StartFetchIndex(context, i);
+        auto conclusion = source.StartFetchIndex(context, i);
         if (conclusion.IsFail()) {
             return conclusion;
         } else {
@@ -59,7 +56,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
         if (context.GetResources().GetAccessorOptional(i.GetColumnId())) {
             continue;
         }
-        auto conclusion = source->StartFetchHeader(context, i);
+        auto conclusion = source.StartFetchHeader(context, i);
         if (conclusion.IsFail()) {
             return conclusion;
         } else if (!!conclusion.GetResult()) {
@@ -74,29 +71,22 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
         }
     }
 
-    auto conclusion = source->StartFetch(context, logic);
-    if (conclusion.IsFail()) {
-        return conclusion;
-    } else if (!*conclusion) {
-        return IResourceProcessor::EExecutionResult::Success;
-    } else {
-        return EExecutionResult::InBackground;
-    }
+    return source.StartFetch(context, logic);
 }
 
-TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
+TConclusion<TExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     const auto acc = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
     for (auto&& sc : DataAddress.GetSubColumnNames(true)) {
-        if (!acc || !acc->HasSubColumnData(sc)) {
-            auto source = context.GetDataSource().lock();
-            if (!source) {
-                return TConclusionStatus::Fail("source was destroyed before (original assemble start)");
+        if (!acc || !acc->HasSubColumnData(sc.GetValue())) {
+            auto& source = context.GetDataSource();
+            auto conclusion = source.AssembleAccessor(context, GetOutputColumnIdOnce(), sc.GetValue());
+            if (conclusion.IsFail()) {
+                return conclusion;
             }
-            source->AssembleAccessor(context, GetOutputColumnIdOnce(), sc);
         }
     }
-    return EExecutionResult::Success;
+    return TExecutionResult::Done();
 }
 
 }   // namespace NKikimr::NArrow::NSSA

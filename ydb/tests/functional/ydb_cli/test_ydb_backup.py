@@ -1664,6 +1664,8 @@ class TestDatabaseBackup(BaseTestClusterBackupInFiles):
             ".sys/nodes/permissions.pb",
             ".sys/partition_stats/system_view.pb",
             ".sys/partition_stats/permissions.pb",
+            ".sys/query_metrics_one_hour/system_view.pb",
+            ".sys/query_metrics_one_hour/permissions.pb",
             ".sys/query_metrics_one_minute/system_view.pb",
             ".sys/query_metrics_one_minute/permissions.pb",
             ".sys/query_sessions/system_view.pb",
@@ -1698,6 +1700,8 @@ class TestDatabaseBackup(BaseTestClusterBackupInFiles):
             ".sys/top_queries_by_request_units_one_hour/permissions.pb",
             ".sys/top_queries_by_request_units_one_minute/system_view.pb",
             ".sys/top_queries_by_request_units_one_minute/permissions.pb",
+            ".sys/udf_modules/system_view.pb",
+            ".sys/udf_modules/permissions.pb",
         ])
 
 
@@ -1873,6 +1877,8 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
             ".sys/nodes/permissions.pb",
             ".sys/partition_stats/system_view.pb",
             ".sys/partition_stats/permissions.pb",
+            ".sys/query_metrics_one_hour/system_view.pb",
+            ".sys/query_metrics_one_hour/permissions.pb",
             ".sys/query_metrics_one_minute/system_view.pb",
             ".sys/query_metrics_one_minute/permissions.pb",
             ".sys/query_sessions/system_view.pb",
@@ -1907,6 +1913,8 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
             ".sys/top_queries_by_request_units_one_hour/permissions.pb",
             ".sys/top_queries_by_request_units_one_minute/system_view.pb",
             ".sys/top_queries_by_request_units_one_minute/permissions.pb",
+            ".sys/udf_modules/system_view.pb",
+            ".sys/udf_modules/permissions.pb",
         ])
 
         self.restore_cluster_backup(input="cluster_backup")

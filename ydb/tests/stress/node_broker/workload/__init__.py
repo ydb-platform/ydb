@@ -62,6 +62,8 @@ class WorkloadCacheMiss(WorkloadBase):
 
 
 class WorkloadRegisterNode(WorkloadBase):
+    NODE_POOL_SIZE = 10_000
+
     def __init__(self, client, stop):
         super().__init__(client, "", "register_node", stop)
         self.registered = 0
@@ -75,7 +77,10 @@ class WorkloadRegisterNode(WorkloadBase):
     def _get_next_port(self):
         with self.lock:
             port = self.next_port
-            self.next_port += 1
+            # Re-register a bounded set of nodes. Dynamic node IDs are kept
+            # until their leases expire, so using a new endpoint forever
+            # eventually exhausts the NodeBroker ID range.
+            self.next_port = (self.next_port + 1) % self.NODE_POOL_SIZE
             return port
 
     def _register_node(self, node_port):

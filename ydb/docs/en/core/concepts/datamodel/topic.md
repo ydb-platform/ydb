@@ -68,6 +68,8 @@ Auto-partitioning on the topic is paused. Automatic increase in the number of pa
 
 Examples of YQL queries for switching the topic to various auto-partitioning modes can be found [here](../../yql/reference/syntax/alter-topic.md#autopartitioning).
 
+{% include [no_up_and_down](./_includes/no_up_and_down.md) %}
+
 ### Limitations {#autopartitioning_constraints}
 
 The following limitations apply when using auto-partitioning:

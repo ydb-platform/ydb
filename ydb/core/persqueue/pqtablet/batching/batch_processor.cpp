@@ -4,6 +4,8 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NBatching {
 
 namespace {
@@ -17,6 +19,10 @@ TBatchProcessor::TBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletA
 
 void TBatchProcessor::Bootstrap(const NActors::TActorContext&) {
     Become(&TThis::StateWork);
+}
+
+TStructuredMessage TBatchProcessor::BuildLogPrefix() const {
+    return {};
 }
 
 NActors::TActorId TBatchProcessor::GetOrCreateConsumerProcessor(const TString& user) {
@@ -63,7 +69,10 @@ STFUNC(TBatchProcessor::StateWork) {
         HFunc(TEvPQ::TEvConsumerRemoved, HandleConsumerRemoved);
         HFunc(NActors::TEvents::TEvPoisonPill, Handle);
     default:
-        LOG_W("Unexpected event in TBatchProcessor: " << ev->GetTypeRewrite());
+        LOG_W(
+            "Unexpected event",
+            {"inTBatchProcessor", ev->GetTypeRewrite()}
+        );
         break;
     }
 }

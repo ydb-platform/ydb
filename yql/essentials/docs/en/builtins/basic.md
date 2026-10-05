@@ -337,10 +337,13 @@ Builds a `Callable` given a function name and optional `external user types`, `R
 * `Udf(Foo::Bar, "1e9+7" as RunConfig")(1, 'extended' As Precision)` — Call udf `Foo::Bar` with specified `RunConfig` and named parameters.
 * `Udf(Foo::Bar, $parent as Depends)` — Call udf `Foo::Bar` with specified computation dependency on specified node - since version [2025.03](../changelog/2025.03.md).
 
-You can also specify additional settings as named arguments; their type must be `String`:
+You can also specify additional settings as named arguments; their type must be `String` or numeric literal:
 
-* Cpu - a factor describing how much CPU the udf consumes. The default value is "1". The higher this value, the more parallelism is required to call such a udf.
+* Cpu - a factor describing how much CPU the udf consumes. Must be a positive number. The default value is "1". The higher this value, the more parallelism is required to call such a udf. Example: "4.5".
 * ExtraMem - the additional memory required by the udf in bytes. The default value is "0".
+  Supported formats:
+  1. Value in bytes (non-negative integer)
+  2. String representations with suffixes: "K", "M", "G" (for example, "2048M", "1G", "512K")
 
 #### Signatures
 
@@ -370,7 +373,11 @@ SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
 ```
 
 ```yql
-SELECT Udf(Foo::Bar, "4" as Cpu, "100000000" as ExtraMem)(1);
+SELECT Udf(Foo::Bar, 4.5 as Cpu, 100000000 as ExtraMem)(1);
+```
+
+```yql
+SELECT Udf(Foo::Bar, "4.5" as Cpu, "100M" as ExtraMem)(1);
 ```
 
 ## CurrentUtc... {#current-utc}
@@ -992,6 +999,45 @@ LinearDestroy(T, [Linear<U1>...])->T
 
 This function is available since version [2025.05](../changelog/2025.05.md).
 The function returns its first argument, consuming zero or more values ​​of the [linear](../types/linear.md) types listed after the first argument.
+
+## AsErased, PeekErased {#type_erasure}
+
+#### Signature
+
+```yql
+AsErased(T)->Resource<_Erased>
+PeekErased(Resource<_Erased>, type U)->Optional<U>
+```
+
+Functions are available since version [2026.02](../changelog/2026.02.md).
+
+The `AsErased` function erases the value type, converting any input type to a fixed type. Passing a [Linear](../types/linear.md) type to `AsErased` is prohibited (but `DynamicLinear` type can be used).
+The `PeekErased` function checks whether the original type strictly matches the specified one. If the types do not match, an empty `Optional` is returned; otherwise, the filled-in value of the original type is returned.
+
+A typical use for these functions is to construct recursive functions and/or data. For example, a tree node type and its creation function might look like this:
+
+```yql
+$erased = TypeOf(AsErased(NULL));
+$nodeType = Struct<value: String, left: Optional<$erased>, right: Optional<$erased>>;
+
+$makeNode = ($value, $left, $right) -> {
+    RETURN CAST(
+        <|
+            value: $value,
+            left: if($left IS NOT NULL, AsErased($left)),
+            right: if($right IS NOT NULL, AsErased($right))
+        |> AS $nodeType
+    );
+};
+```
+
+#### Example
+
+```yql
+$e = AsErased(1);
+SELECT PeekErased($e, Int32), -- 1
+       PeekErased($e, String) -- NULL
+```
 
 ## Block
 

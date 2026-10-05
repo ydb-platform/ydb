@@ -60,18 +60,28 @@ TSchemalessFormatWriterBase::TSchemalessFormatWriterBase(
         TabletIndexId_ = NameTable_->GetIdOrRegisterName(TabletIndexColumnName);
     } catch (const std::exception& ex) {
         SetError(TError("Failed to add system columns to name table for a format writer")
-            << ex);
+            .With(ex));
     }
 }
 
 TFuture<void> TSchemalessFormatWriterBase::GetReadyEvent()
 {
     ProcessWriteFutures();
-    if (HasError()) {
-        return MakeFuture(GetError());
+    if (WriteFutures_.empty()) {
+        if (HasError()) {
+            return MakeFuture(GetError());
+        }
+        return OKFuture;
     }
+
     // NB: Must wait for *all* outstanding requests, not just the first (front) one.
-    return WriteFutures_.empty() ? OKFuture : WriteFutures_.back();
+    if (HasError()) {
+        return WriteFutures_.back()
+            .Apply(BIND([error = GetError()] (const TError& /*writeError*/) {
+                THROW_ERROR error;
+            }));
+    }
+    return WriteFutures_.back();
 }
 
 TFuture<void> TSchemalessFormatWriterBase::Close()
@@ -219,7 +229,7 @@ bool TSchemalessFormatWriterBase::CheckKeySwitch(TUnversionedRow row, bool isLas
         CurrentKey_ = row;
     } catch (const std::exception& ex) {
         // COMPAT(psushin): composite values are not comparable anymore.
-        THROW_ERROR_EXCEPTION("Cannot inject key switch into output stream") << ex;
+        THROW_ERROR_EXCEPTION("Cannot inject key switch into output stream").With(ex);
     }
 
     if (isLastRow && CurrentKey_) {

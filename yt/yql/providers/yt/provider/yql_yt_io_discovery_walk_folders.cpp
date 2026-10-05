@@ -211,6 +211,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::AfterListFolderOp(TExprContext& ctx
             ProcessingState_ = PreHandling;
         } else {
             folderListVal.ReportIssues(ctx.IssueManager);
+            return IGraphTransformer::TStatus::Error;
         }
 
         BatchFolderListFuture_ = Nothing();
@@ -539,9 +540,9 @@ IGraphTransformer::TStatus TWalkFoldersImpl::PostHandleVisitedInSingleFolder(TEx
 
     }
 
-    const auto folderListExpr = BuildFolderListExpr(ctx, PosHandle_, folderListItems);
-
-    const auto makeNextUserState = [&] (const TExprBase& userStateUnpickled) {
+    const auto makeNextUserState = [this, &ctx,
+                                    folderListExpr = BuildFolderListExpr(ctx, PosHandle_, folderListItems),
+                                    folderLevel = folder.Level] (const TExprBase& userStateUnpickled) {
         return Build<TCoApply>(ctx, PosHandle_)
             .Callable(PostHandler_.GetRef())
             .FreeArgs()
@@ -549,7 +550,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::PostHandleVisitedInSingleFolder(TEx
                 .Add(userStateUnpickled)
                 .Add<TCoInt64>()
                     .Literal()
-                        .Value(ToString(folder.Level))
+                        .Value(ToString(folderLevel))
                     .Build()
                 .Build()
             .Build()

@@ -21,7 +21,9 @@ struct TCoreDump
 struct ICoreDumper
     : public virtual TRefCounted
 {
-    virtual TCoreDump WriteCoreDump(const std::vector<TString>& notes, const TString& reason) = 0;
+    virtual TCoreDump WriteCoreDump(
+        const std::vector<std::string>& notes,
+        TStringBuf reason) = 0;
 
     virtual const NYTree::IYPathServicePtr& CreateOrchidService() const = 0;
 };

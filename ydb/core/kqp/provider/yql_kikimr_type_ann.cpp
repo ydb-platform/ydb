@@ -1,8 +1,10 @@
+#include "generated_column.h"
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_settings.h"
 #include "yql_kikimr_type_ann_pg.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/docapi/traits.h>
@@ -12,6 +14,7 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/services/metadata/optimization/abstract.h>
 
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/type_ann/type_ann_impl.h>
 #include <yql/essentials/core/type_ann/type_ann_list.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -52,6 +55,30 @@ static const TSet<TString> REPLICATION_AND_TRANSFER_SECRETS_SETTINGS = [] {
 // Its value must never be supplied by the user, so DML may not name it explicitly.
 bool IsSystemGeneratedColumn(const std::string_view name) {
     return name == NKikimr::NTableIndex::NFulltext::RowIdColumn;
+}
+
+bool CheckEqHeightHistogramColumnTypes(
+    const TVector<TString>& columnNames,
+    const TMap<TString, TKikimrColumnMetadata>& columns,
+    TPositionHandle pos,
+    TExprContext& ctx)
+{
+    for (const auto& name : columnNames) {
+        auto it = columns.find(name);
+        if (it == columns.end()) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "Statistics column: " << name << " was not found in the table"));
+            return false;
+        }
+        const auto& col = it->second;
+        if (!NKikimr::NScheme::NTypeIds::IsPresortEncodable(col.TypeInfo.GetTypeId())) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "EQ_HEIGHT_HISTOGRAM is not supported for column '" << name
+                << "' of type " << col.Type));
+            return false;
+        }
+    }
+    return true;
 }
 
 void MaybeAutoBindRowIdSequence(NYql::TKikimrTableMetadata& meta) {
@@ -174,6 +201,74 @@ bool ValidateInteger(TExprContext& ctx, const TMaybeNode<TExprBase>& value, TStr
     return true;
 }
 
+IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& lambda, const TTypeAnnotationNode* rowType,
+    const TTypeAnnotationNode& columnType, const TString& columnName, TExprContext& ctx, TTypeAnnotationContext& typeCtx)
+{
+    if (!rowType) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    // Annotate a copy so the stored lambda is left as-is (and un-annotated) when no rewrite is needed
+    auto probe = ctx.DeepCopyLambda(*lambda);
+    if (!UpdateLambdaAllArgumentsTypes(probe, {rowType}, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!InstantAnnotateTypes(probe, ctx, /* wholeProgram */ false, typeCtx) || !probe->GetTypeAnn()) {
+        ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
+            << "Failed to infer the type of generated column " << columnName));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (IsSameAnnotation(RemoveOptionality(columnType), RemoveOptionality(*probe->GetTypeAnn()))) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    TExprNode::TPtr converted = probe->TailPtr();
+    if (TryConvertTo(converted, columnType, ctx, typeCtx) == IGraphTransformer::TStatus::Error) {
+        ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
+            << "Generated column " << columnName << " expression is not convertible to the column type"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (converted != probe->TailPtr()) {
+        lambda = ctx.NewLambda(probe->Pos(), probe->HeadPtr(), std::move(converted));
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription& table, const TString& cluster,
+    TKikimrSessionContext& sessionCtx, TTypeAnnotationContext& typeCtx, TExprContext& ctx)
+{
+    for (auto& [name, col] : table.Metadata->Columns) {
+        if (!col.DefaultExpression || col.DefaultExpression->Expr) {
+            continue;
+        }
+
+        const TString generatedQuery = AssembleGeneratedQuery(col.DefaultExpression->ExprText);
+        NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
+            sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
+        settingsBuilder.SetFromConfig(sessionCtx.Config());
+
+        auto lambda = CompileGeneratedExpr(generatedQuery, name, ctx, settingsBuilder, typeCtx.Modules);
+        if (!lambda) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (const auto* columnType = table.GetColumnType(name)) {
+            if (auto status = CoerceGeneratedLambdaToColumnType(lambda, table.SchemeNode, *columnType, name, ctx, typeCtx);
+                status != IGraphTransformer::TStatus::Ok)
+            {
+                return status;
+            }
+        }
+
+        col.DefaultExpression->Expr = lambda;
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+}
+
 class TKiSourceTypeAnnotationTransformer : public TKiSourceVisitorTransformer {
 public:
     TKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types)
@@ -209,6 +304,12 @@ private:
                 const TKikimrTableDescription* tableDesc;
                 if ((tableDesc = SessionCtx->Tables().EnsureTableExists(cluster, key.GetTablePath(), node.Pos(), ctx)) == nullptr) {
                     return TStatus::Error;
+                }
+
+                if (auto status = CompileGeneratedLambdas(*tableDesc, cluster, *SessionCtx, Types, ctx);
+                    status != TStatus::Ok)
+                {
+                    return status;
                 }
 
                 const auto& view = key.GetView();
@@ -542,6 +643,202 @@ namespace {
         return true;
     }
 
+    void CollectGeneratedColumnRefs(const TExprNode& body, const TExprNode* rowArg, THashSet<TString>& refs) {
+        VisitExpr(body, [&](const TExprNode& node) {
+            if (node.IsCallable("Member") && node.ChildrenSize() == 2 && node.Child(0) == rowArg && node.Child(1)->IsAtom()) {
+                refs.insert(TString(node.Child(1)->Content()));
+            }
+            return true;
+        });
+    }
+
+    IGraphTransformer::TStatus ValidateGeneratedExprType(const TString& columnName, const TTypeAnnotationNode& columnType,
+        const TExprNode& lambda, TExprContext& ctx, const TTypeAnnotationContext& typeCtx)
+    {
+        const TTypeAnnotationNode* exprType = lambda.GetTypeAnn();
+        YQL_ENSURE(exprType);
+
+        const auto& columnUnwrapped = RemoveOptionality(columnType);
+        const auto& exprUnwrapped = RemoveOptionality(*exprType);
+
+        const auto typeMismatch = [&]() {
+            return TStringBuilder() << "Generated column " << columnName << " expression type mismatch, expected: " << columnUnwrapped
+                                    << ", actual: " << exprUnwrapped;
+        };
+
+        if (columnUnwrapped.GetKind() != exprUnwrapped.GetKind()) {
+            ctx.AddError(TIssue(ctx.GetPosition(lambda.Pos()), typeMismatch()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!IsSameAnnotation(columnUnwrapped, exprUnwrapped)) {
+            TExprNode::TPtr scratch = lambda.TailPtr();
+            auto status = TryConvertTo(scratch, columnType, ctx, typeCtx);
+            if (status == IGraphTransformer::TStatus::Error) {
+                ctx.AddError(TIssue(ctx.GetPosition(lambda.Pos()), typeMismatch()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        if (columnType.GetKind() != ETypeAnnotationKind::Pg && !columnType.IsOptionalOrNull() && exprType->IsOptionalOrNull()) {
+            ctx.AddError(TIssue(ctx.GetPosition(lambda.Pos()),
+                TStringBuilder() << "Generated column " << columnName << " is declared NOT NULL, but its expression can evaluate to NULL"
+                                 << " (type " << *exprType << "). Make the expression non-nullable, for example with COALESCE,"
+                                 << " or declare the column nullable"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus ValidateGeneratedColumns(const TKiCreateTable& create, TKikimrTableMetadata& meta, TExprContext& ctx,
+        TTypeAnnotationContext& typeCtx, const TString& cluster, TKikimrSessionContext& sessionCtx)
+    {
+        THashSet<TString> generatedColumns;
+        THashSet<TString> allColumns;
+
+        for (const auto& [name, col] : meta.Columns) {
+            allColumns.insert(name);
+            if (col.IsDefaultFromExpression()) {
+                generatedColumns.insert(name);
+            }
+        }
+
+        if (generatedColumns.empty()) {
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!sessionCtx.Config().GetEnableIndexStreamWrite()) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), "Generated columns require EnableIndexStreamWrite"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        THashSet<TString> keyColumns(meta.KeyColumnNames.begin(), meta.KeyColumnNames.end());
+
+        // Row struct type used to type-check every generated expression
+        TVector<const TItemExprType*> rowTypeItems;
+        rowTypeItems.reserve(meta.Columns.size());
+        for (auto item : create.Columns()) {
+            auto columnTuple = item.Cast<TExprList>();
+            auto name = columnTuple.Item(0).Cast<TCoAtom>().Value();
+
+            const auto* columnType = columnTuple.Item(1).Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            const auto* columnMeta = meta.Columns.FindPtr(name);
+            if (columnMeta && columnMeta->NotNull && columnType->GetKind() != ETypeAnnotationKind::Pg) {
+                columnType = &RemoveOptionality(*columnType);
+            }
+
+            rowTypeItems.push_back(ctx.MakeType<TItemExprType>(name, columnType));
+        }
+
+        const TTypeAnnotationNode* rowType = ctx.MakeType<TStructExprType>(rowTypeItems);
+
+        for (auto item : create.Columns()) {
+            auto columnTuple = item.Cast<TExprList>();
+            auto columnName = TString(columnTuple.Item(0).Cast<TCoAtom>().Value());
+            if (!generatedColumns.contains(columnName)) {
+                continue;
+            }
+
+            auto& columnMeta = meta.Columns[columnName];
+            const bool stored = columnMeta.DefaultExpression->Stored;
+
+            if (stored && !sessionCtx.Config().FeatureFlags.GetEnableGeneratedStored()) {
+                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                    << "STORED GENERATED columns are disabled. Column: " << columnName));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!stored && !sessionCtx.Config().FeatureFlags.GetEnableGeneratedVirtual()) {
+                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                    << "VIRTUAL GENERATED columns are disabled. Column: " << columnName));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (keyColumns.contains(columnName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                    << "Generated columns cannot be part of the primary key"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            // Recompile the stored SQL text into (lambda '(row) <expr>)
+            const TString generatedQuery = AssembleGeneratedQuery(columnMeta.DefaultExpression->ExprText);
+            NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
+                sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
+            settingsBuilder.SetFromConfig(sessionCtx.Config());
+
+            auto lambda = CompileGeneratedExpr(generatedQuery, columnName, ctx, settingsBuilder, typeCtx.Modules);
+            if (!lambda) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            THashSet<TString> refs;
+            CollectGeneratedColumnRefs(lambda->Tail(), &lambda->Head().Head(), refs);
+
+            for (const auto& ref : refs) {
+                if (ref == columnName) {
+                    ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                        << "Generated column " << columnName << " can not reference itself"));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                if (!allColumns.contains(ref)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                        << "Generated column " << columnName << " references an unknown column: " << ref));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                if (generatedColumns.contains(ref)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                        << "Generated column " << columnName << " references another generated column: " << ref));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+
+            // Persist the dependency columns
+            columnMeta.DefaultExpression->Dependencies.assign(refs.begin(), refs.end());
+            Sort(columnMeta.DefaultExpression->Dependencies);
+
+            // Type the expression against the row struct
+            if (!UpdateLambdaAllArgumentsTypes(lambda, {rowType}, ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            // Type the expression body
+            if (!InstantAnnotateTypes(lambda, ctx, /* wholeProgram */ false, typeCtx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!lambda->GetTypeAnn()) {
+                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
+                    << "Failed to infer the type of generated column " << columnName));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const auto* columnAnnType = columnTuple.Item(1).Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            if (auto status = ValidateGeneratedExprType(columnName, *columnAnnType, *lambda, ctx, typeCtx);
+                status != IGraphTransformer::TStatus::Ok)
+            {
+                return status;
+            }
+
+            if (const TTypeAnnotationNode* exprType = lambda->GetTypeAnn();
+                exprType && !IsSameAnnotation(RemoveOptionality(*columnAnnType), RemoveOptionality(*exprType)))
+            {
+                TExprNode::TPtr converted = lambda->TailPtr();
+                if (TryConvertTo(converted, *columnAnnType, ctx, typeCtx) != IGraphTransformer::TStatus::Error
+                    && converted != lambda->TailPtr())
+                {
+                    lambda = ctx.NewLambda(lambda->Pos(), lambda->HeadPtr(), std::move(converted));
+                }
+            }
+
+            columnMeta.DefaultExpression->Expr = lambda;
+        }
+
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     bool ParseConstraintNode(TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple,
         TCoNameValueTuple constraint, bool& needEval, bool isAlter = false) {
         auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
@@ -603,6 +900,28 @@ namespace {
             columnMeta.NotNull = true;
         } else if (constraint.Name().Value() == "not_null") {
             columnMeta.NotNull = true;
+        } else if (constraint.Name().Value() == "generated") {
+            if (isAlter) {
+                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                    "Column addition with a GENERATED ALWAYS AS expression is not supported"));
+                return false;
+            }
+
+            if (columnMeta.IsDefaultKindDefined()) {
+                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder()
+                    << "Column " << columnName << " is GENERATED and can not have a Serial/DEFAULT value at the same time"));
+                return false;
+            }
+
+            YQL_ENSURE(constraint.Value().IsValid());
+
+            const auto& generatedValue = constraint.Value().Cast().Ref();
+            YQL_ENSURE(generatedValue.ChildrenSize() >= 3);
+
+            columnMeta.DefaultExpression = TDefaultExpressionColumnInfo{};
+            columnMeta.DefaultExpression->ExprText = TString(generatedValue.Child(1)->Content());
+            columnMeta.DefaultExpression->Stored = generatedValue.Child(2)->Content() == "stored";
+            columnMeta.SetDefaultFromExpression();
         }
 
         return true;
@@ -665,6 +984,12 @@ private:
         }
 
         MaybeAutoBindRowIdSequence(*table->Metadata);
+
+        if (auto status = CompileGeneratedLambdas(*table, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
+            status != TStatus::Ok)
+        {
+            return status;
+        }
 
         auto pos = ctx.GetPosition(node.Pos());
         if (auto maybeTuple = node.Input().Maybe<TExprList>()) {
@@ -772,6 +1097,13 @@ private:
                 return TStatus::Error;
             }
 
+            if (info.IsDefaultFromExpression() && rowType->FindItem(name)) {
+                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                    << "Column " << name << " is a GENERATED ALWAYS column and its value cannot be set explicitly"
+                    << " for table: " << table->Metadata->Name));
+                return TStatus::Error;
+            }
+
             if (rowType->FindItem(name)) {
                 continue;
             }
@@ -784,7 +1116,7 @@ private:
                 continue;
             }
 
-            if (info.IsDefaultKindDefined()) {
+            if (info.IsDefaultKindDefined() && !info.IsDefaultFromExpression()) {
                 if (op == TYdbOperation::Upsert && !info.IsBuildInProgress) {
                     generateColumnsIfInsertColumnsSet.emplace(name);
                 }
@@ -965,6 +1297,12 @@ private:
 
         MaybeAutoBindRowIdSequence(*table->Metadata);
 
+        if (auto status = CompileGeneratedLambdas(*table, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
+            status != TStatus::Ok)
+        {
+            return status;
+        }
+
         auto rowType = table->SchemeNode;
         auto& filterLambda = node.Ptr()->ChildRef(TKiUpdateTable::idx_Filter);
         if (!UpdateLambdaAllArgumentsTypes(filterLambda, {rowType}, ctx)) {
@@ -1014,6 +1352,13 @@ private:
             if (!column) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
                     << "Column '" << item->GetName() << "' does not exist in table '" << node.Table().Value() << "'."));
+                return TStatus::Error;
+            }
+
+            if (column->IsDefaultFromExpression()) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                    << "Column " << item->GetName() << " is a GENERATED ALWAYS column and its value cannot be set explicitly"
+                    << " for table: " << table->Metadata->Name));
                 return TStatus::Error;
             }
 
@@ -1073,6 +1418,12 @@ private:
 
         if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
             return TStatus::Error;
+        }
+
+        if (auto status = CompileGeneratedLambdas(*table, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
+            status != TStatus::Ok)
+        {
+            return status;
         }
 
         auto rowType = table->SchemeNode;
@@ -1263,6 +1614,10 @@ private:
 
         MaybeAutoBindRowIdSequence(*meta);
 
+        if (auto status = ValidateGeneratedColumns(create, *meta, ctx, Types, cluster, *SessionCtx); status != TStatus::Ok) {
+            return status;
+        }
+
         if (meta->TableType == ETableType::Table) {
             for (auto&& setting : create.TableSettings()) {
                 if (setting.Name().Value() == "storeType") {
@@ -1366,8 +1721,8 @@ private:
                 return TStatus::Error;
             }
 
-            TVector<TString> indexColums;
-            TVector<TString> dataColums;
+            TVector<TString> indexColumns;
+            TVector<TString> dataColumns;
 
             for (const auto& indexCol : index.Columns()) {
                 if (!meta->Columns.contains(TString(indexCol.Value()))) {
@@ -1375,7 +1730,7 @@ private:
                         << "Index column: " << indexCol.Value() << " was not found in the index table"));
                     return IGraphTransformer::TStatus::Error;
                 }
-                indexColums.emplace_back(TString(indexCol.Value()));
+                indexColumns.emplace_back(TString(indexCol.Value()));
             }
 
             for (const auto& dataCol : index.DataColumns()) {
@@ -1384,41 +1739,7 @@ private:
                         << "Data column: " << dataCol.Value() << " was not found in the index table"));
                     return IGraphTransformer::TStatus::Error;
                 }
-                dataColums.emplace_back(TString(dataCol.Value()));
-            }
-
-            const bool isFulltextIndex =
-                indexType == TIndexDescription::EType::GlobalFulltextPlain ||
-                indexType == TIndexDescription::EType::GlobalFulltextRelevance ||
-                indexType == TIndexDescription::EType::GlobalFulltextCompact ||
-                indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance;
-            // Fulltext index key columns are [prefix..., text]; the text column is the last one.
-            // More than one key column means the index has prefix columns.
-            if (isFulltextIndex && indexColums.size() > 1) {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndexPrefix()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                        "Fulltext index prefix columns support is disabled"));
-                    return TStatus::Error;
-                }
-                // Relevance scoring uses a corpus-global dictionary keyed by token only; with prefix
-                // columns as the leading sort key the same token scatters across prefix groups, which
-                // the streaming dictionary/borders build cannot aggregate. Not supported yet.
-                if (indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                        "Fulltext index prefix columns are not supported for compact relevance indexes"));
-                    return TStatus::Error;
-                }
-                // Prefix columns must be disjoint from the primary key (doc-id) columns:
-                // the posting key is [prefix..., text, doc_id...] and a column cannot appear twice.
-                const THashSet<TString> pkColumns{meta->KeyColumnNames.begin(), meta->KeyColumnNames.end()};
-                for (size_t i = 0; i + 1 < indexColums.size(); ++i) {
-                    if (pkColumns.contains(indexColums[i])) {
-                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
-                            << "Fulltext index prefix column '" << indexColums[i]
-                            << "' must not be a primary key column"));
-                        return TStatus::Error;
-                    }
-                }
+                dataColumns.emplace_back(TString(dataCol.Value()));
             }
 
             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
@@ -1427,7 +1748,7 @@ private:
             TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDescription;
             // fulltext index has per-column analyzers settings; the text column is the last index column
             fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
-                indexColums.empty() ? "<none>" : indexColums.back()
+                indexColumns.empty() ? "<none>" : indexColumns.back()
             );
             for (const auto& indexSetting : index.IndexSettings()) {
                 const auto& nameLower = to_lower(indexSetting.Name().StringValue());
@@ -1508,34 +1829,34 @@ private:
                     break;
                 }
                 case TIndexDescription::EType::LocalBloomFilter:
-                    if (!dataColums.empty()) {
+                    if (!dataColumns.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                             "Local bloom index does not support data columns"));
                         return IGraphTransformer::TStatus::Error;
                     }
                     if (meta->StoreType == EStoreType::Column) {
                         // Column-store: keep existing restriction of exactly 1 column
-                        if (indexColums.size() != 1) {
+                        if (indexColumns.size() != 1) {
                             ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                                 "Local bloom index on column tables requires exactly one index column"));
                             return IGraphTransformer::TStatus::Error;
                         }
                     } else {
                         // Row-store: columns must be a left-prefix of PK
-                        if (indexColums.empty()) {
+                        if (indexColumns.empty()) {
                             ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                                 "Local bloom index requires at least one PK prefix column"));
                             return IGraphTransformer::TStatus::Error;
                         }
-                        if (indexColums.size() > meta->KeyColumnNames.size()) {
+                        if (indexColumns.size() > meta->KeyColumnNames.size()) {
                             ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                                 "Bloom filter prefix columns exceed the number of primary key columns"));
                             return IGraphTransformer::TStatus::Error;
                         }
-                        for (size_t i = 0; i < indexColums.size(); ++i) {
-                            if (indexColums[i] != meta->KeyColumnNames[i]) {
+                        for (size_t i = 0; i < indexColumns.size(); ++i) {
+                            if (indexColumns[i] != meta->KeyColumnNames[i]) {
                                 ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
-                                    << "Bloom filter column '" << indexColums[i]
+                                    << "Bloom filter column '" << indexColumns[i]
                                     << "' does not match PK column '" << meta->KeyColumnNames[i]
                                     << "' at position " << i));
                                 return IGraphTransformer::TStatus::Error;
@@ -1546,7 +1867,7 @@ private:
                     specializedIndexDescription = std::move(localBloomFilterDescription);
                     break;
                 case TIndexDescription::EType::LocalBloomNgramFilter: {
-                    if (indexColums.size() != 1 || !dataColums.empty()) {
+                    if (indexColumns.size() != 1 || !dataColumns.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                             "Local bloom ngram index requires exactly one index column and does not support data columns"));
                         return IGraphTransformer::TStatus::Error;
@@ -1556,14 +1877,14 @@ private:
                     break;
                 }
                 case TIndexDescription::EType::LocalMinMax: {
-                    if (!dataColums.empty()) {
+                    if (!dataColumns.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(dataColums)));
+                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(dataColumns)));
                         return IGraphTransformer::TStatus::Error;
                     }
-                    if (indexColums.size() != 1) {
+                    if (indexColumns.size() != 1) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColums)));
+                            NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(indexColumns)));
                         return IGraphTransformer::TStatus::Error;
                     }
 
@@ -1574,8 +1895,8 @@ private:
             // IndexState and version, pathId are ignored for create table with index request
             TIndexDescription indexDesc(
                 TString(index.Name().Value()),
-                indexColums,
-                dataColums,
+                indexColumns,
+                dataColumns,
                 indexType,
                 TIndexDescription::EIndexState::Ready,
                 0,
@@ -1606,12 +1927,17 @@ private:
             }
             for (const auto& type : statistics.Types()) {
                 const auto typeName = to_upper(TString(type.Value()));
-                if (typeName != "COUNT_MIN_SKETCH") {
+                if (typeName != "COUNT_MIN_SKETCH" && typeName != "EQ_HEIGHT_HISTOGRAM") {
                     ctx.AddError(TIssue(ctx.GetPosition(type.Pos()), TStringBuilder()
                         << "Unknown statistic type: " << TString(type.Value())));
                     return TStatus::Error;
                 }
                 statisticsDesc.Types.push_back(typeName);
+            }
+            if (IsIn(statisticsDesc.Types, "EQ_HEIGHT_HISTOGRAM")
+                    && !CheckEqHeightHistogramColumnTypes(
+                        statisticsDesc.Columns, meta->Columns, statistics.Pos(), ctx)) {
+                return TStatus::Error;
             }
 
             meta->MultiColumnStatistics.push_back(statisticsDesc);
@@ -1847,6 +2173,12 @@ private:
                     return TStatus::Error;
                 }
 
+                if (const auto* ttlColumn = meta->Columns.FindPtr(ttlSettings.ColumnName); ttlColumn && ttlColumn->IsDefaultFromExpression()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), TStringBuilder()
+                        << "TTL column " << ttlSettings.ColumnName << " can not be a GENERATED column"));
+                    return TStatus::Error;
+                }
+
                 meta->TableSettings.TtlSettings.Set(ttlSettings);
             } else if (name == "resetTtlSettings") {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
@@ -1875,12 +2207,37 @@ private:
                 meta->TableSettings.ExternalDataChannelsCount = FromString<ui32>(
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 );
+            } else if (name == "setMetricsLevel") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics is off"));
+                    return TStatus::Error;
+                }
+                auto raw = TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                Ydb::Table::MetricsSettings::MetricsLevel level;
+                TString error;
+                if (!ParseTablesMetricsLevel(raw, level, error)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), error));
+                    return TStatus::Error;
+                }
+                meta->TableSettings.MetricsLevel = level;
+            } else if (name == "resetMetricsLevel") {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    "Can't reset METRICS_LEVEL"));
+                return TStatus::Error;
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     TStringBuilder() << "Unknown table profile setting: " << name));
                 return TStatus::Error;
             }
         }
+
+        if (meta->StoreType == EStoreType::Column && meta->TableSettings.MetricsLevel) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()),
+                "METRICS_LEVEL is not supported for column tables"));
+            return TStatus::Error;
+        }
+
         return TStatus::Ok;
     }
 
@@ -2263,13 +2620,66 @@ private:
                         "Column FAMILY is not supported for column tables"));
                     return TStatus::Error;
                 }
+            } else if (name == "addStatistics") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                        "Multi-column statistics support is disabled"));
+                    return TStatus::Error;
+                }
+                auto listNode = action.Value().Cast<TExprList>();
+                TVector<TString> columnNames;
+                TVector<TString> typeNames;
+                TPositionHandle columnsPos = action.Pos();
+                for (size_t i = 0; i < listNode.Size(); ++i) {
+                    auto item = listNode.Item(i).Cast<TExprList>();
+                    auto itemName = TString(item.Item(0).Cast<TCoAtom>().Value());
+                    if (itemName == "statisticsColumns") {
+                        auto columnList = item.Item(1).Cast<TCoAtomList>();
+                        columnsPos = columnList.Pos();
+                        for (auto column : columnList) {
+                            TString columnName(column.Value());
+                            if (!table->Metadata->Columns.contains(columnName)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(column.Pos()), TStringBuilder()
+                                    << "Statistics column: " << columnName << " was not found in the table"));
+                                return TStatus::Error;
+                            }
+                            columnNames.push_back(std::move(columnName));
+                        }
+                    } else if (itemName == "statisticsTypes") {
+                        auto typeList = item.Item(1).Cast<TCoAtomList>();
+                        for (auto type : typeList) {
+                            const auto typeName = to_upper(TString(type.Value()));
+                            if (typeName != "COUNT_MIN_SKETCH" && typeName != "EQ_HEIGHT_HISTOGRAM") {
+                                ctx.AddError(TIssue(ctx.GetPosition(type.Pos()), TStringBuilder()
+                                    << "Unknown statistic type: " << TString(type.Value())));
+                                return TStatus::Error;
+                            }
+                            typeNames.push_back(typeName);
+                        }
+                    }
+                }
+                if (IsIn(typeNames, "EQ_HEIGHT_HISTOGRAM")
+                        && !CheckEqHeightHistogramColumnTypes(
+                            columnNames, table->Metadata->Columns, columnsPos, ctx)) {
+                    return TStatus::Error;
+                }
+            } else if (name == "setTableSettings" && table->Metadata->IsOlap()) {
+                auto listNode = action.Value().Cast<TCoNameValueTupleList>();
+                for (const auto& setting : listNode) {
+                    auto settingName = setting.Name().Value();
+                    if (settingName == "setMetricsLevel" || settingName == "resetMetricsLevel") {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                            "METRICS_LEVEL is not supported for column tables"));
+                        return TStatus::Error;
+                    }
+                }
             } else if (name != "setTableSettings"
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
                     && name != "renameIndexTo"
                     && name != "alterIndex"
-                    && name != "addStatistics"
                     && name != "dropStatistics"
+                    && name != "rebuildIndex"
                     && name != "compact")
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
@@ -2288,32 +2698,43 @@ private:
         for (const auto& setting : settings) {
             auto name = setting.Name().Value();
             if (name == "setMeteringMode") {
-                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
-                    return false;
-                }
-                auto val = to_lower(TString(setting.Value().template Cast<TCoAtom>().Value()));
+                const auto val = to_lower(TString(
+                    setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()));
                 Ydb::Topic::MeteringMode meteringMode;
-                auto result = GetTopicMeteringModeFromString(val, meteringMode);
-                if (!result) {
+                if (!GetTopicMeteringModeFromString(val, meteringMode)) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
                                         TStringBuilder() << "unknown metering_mode: " << val));
+                    return false;
                 }
-
-            } else if (name == "setMinPartitions") {
-                ui32 value = FromString<ui32>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
-                );
-                minParts = value;
+            } else if (name == "setMinPartitions" || name == "setMaxPartitions") {
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value();
+                ui32 value = 0;
+                if (!TryFromString<ui32>(literal, value)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                        TStringBuilder() << (name == "setMinPartitions" ? "min_active_partitions" : "max_active_partitions")
+                            << " value is out of Uint32 range: " << literal));
+                    return false;
+                }
+                if (name == "setMinPartitions") {
+                    minParts = value;
+                } else {
+                    maxPartitions = value;
+                }
                 errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
-            } else if (name == "setMaxPartitions") {
-                ui32 value = FromString<ui32>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
-                );
-                maxPartitions = value;
-                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
+            } else if (name == "resetMetricsLevel"
+                    || name == "resetRetentionPeriod"
+                    || name == "resetRetentionStorage"
+                    || name == "resetPartitionWriteSpeed"
+                    || name == "resetPartitionWriteBurstSpeed"
+                    || name == "resetSupportedCodecs"
+                    || name == "resetContentBasedDeduplication"
+                    || name == "resetAutoPartitioningStabilizationWindow"
+                    || name == "resetAutoPartitioningUpUtilizationPercent"
+                    || name == "resetAutoPartitioningDownUtilizationPercent") {
+                // Applied in execution: native Topic API reset or SET of the default value.
             } else if (name.StartsWith("reset")) {
                 ctx.AddError(TIssue(
-                        errorPos,
+                        ctx.GetPosition(setting.Name().Pos()),
                         TStringBuilder() << "RESET is currently not supported for topic options")
                 );
                 return false;
@@ -2359,7 +2780,7 @@ private:
     }
 
     virtual TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
-        if (!CheckTopicSettings(node.Settings(), ctx)) {
+        if (!CheckTopicSettings(node.TopicSettings(), ctx) || !CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;
         }
 
@@ -2435,7 +2856,7 @@ private:
     }
 
     virtual TStatus HandleAlterTopic(TKiAlterTopic node, TExprContext& ctx) override {
-        if (!CheckTopicSettings(node.Settings(), ctx)) {
+        if (!CheckTopicSettings(node.TopicSettings(), ctx) || !CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;
         }
        THashSet<TString> allConsumers;
@@ -2678,7 +3099,7 @@ private:
         }
 
         static const THashSet<TString> supportedSettings = {
-            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR"
+            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR", "TABLES_METRICS_LEVEL"
         };
 
         for (const auto& setting : node.Settings()) {
@@ -2711,6 +3132,24 @@ private:
             }
             if (name == "MAX_CHILDREN_IN_DIR") {
                 if (!ValidateInteger(ctx, value, name)) {
+                    return TStatus::Error;
+                }
+            }
+            if (name == "TABLES_METRICS_LEVEL") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "TABLES_METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics is off"));
+                    return TStatus::Error;
+                }
+                if (!value.Maybe<TCoDataCtor>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Value of the TABLES_METRICS_LEVEL must be a string or an integer."));
+                    return TStatus::Error;
+                }
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel metricsLevel;
+                TString error;
+                if (!ParseDatabaseTablesMetricsLevel(value.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value(), metricsLevel, error)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), error));
                     return TStatus::Error;
                 }
             }
@@ -2857,6 +3296,22 @@ private:
             return status;
         }
 
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleKillSession(TKiKillSession node, TExprContext& ctx) override {
+        if (!EnsureWorldType(node.World().Ref(), ctx)
+            || !EnsureSpecificDataSink(node.DataSink().Ref(), KikimrProviderName, ctx)
+            || !EnsureSpecificDataType(node.SessionId().Ref(), EDataSlot::Utf8, ctx))
+        {
+            return TStatus::Error;
+        }
+        if (!node.SessionId().Maybe<TCoUtf8>() && !node.SessionId().Maybe<TCoParameter>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.SessionId().Pos()),
+                "KILL SESSION expects a session identifier or an Utf8 parameter"));
+            return TStatus::Error;
+        }
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
@@ -3069,6 +3524,19 @@ private:
     }
 
     virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) override {
+        if (auto sampleRate = node.SampleRate(); sampleRate) {
+            if (!sampleRate.Maybe<TCoDouble>()) {
+                ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                    "ANALYZE SAMPLE rate must evaluate to Double"));
+                return TStatus::Error;
+            }
+            if (!SessionCtx->Config().FeatureFlags.GetEnableAnalyzeSampling()) {
+                ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                    "ANALYZE sampling is disabled"));
+                return TStatus::Error;
+            }
+        }
+
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);
         if (!table) {
             return TStatus::Error;

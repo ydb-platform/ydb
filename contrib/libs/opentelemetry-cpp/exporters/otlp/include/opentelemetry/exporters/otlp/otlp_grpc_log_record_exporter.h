@@ -69,6 +69,12 @@ public:
   std::unique_ptr<opentelemetry::sdk::logs::Recordable> MakeRecordable() noexcept override;
 
   /**
+   * The OTLP recordable applies the configured LogRecord attribute limits, so
+   * the SDK should push the limits onto each record it produces.
+   */
+  bool RecordableEnforcesLogRecordLimits() const noexcept override { return true; }
+
+  /**
    * Exports a vector of log records to the configured gRPC endpoint. Guaranteed to return after a
    * timeout specified from the options passed to the constructor.
    * @param records A list of log records.

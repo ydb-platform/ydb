@@ -1,8 +1,13 @@
-# cython: language_level=3
-
 from cpython.exc cimport PyErr_NoMemory
 from cpython.mem cimport PyMem_Free, PyMem_Malloc, PyMem_Realloc
-from cpython.unicode cimport PyUnicode_DecodeASCII, PyUnicode_DecodeUTF8Stateful
+from cpython.unicode cimport (
+    PyUnicode_DATA,
+    PyUnicode_DecodeASCII,
+    PyUnicode_DecodeUTF8Stateful,
+    PyUnicode_GET_LENGTH,
+    PyUnicode_KIND,
+    PyUnicode_READ,
+)
 from libc.stdint cimport uint8_t, uint64_t
 from libc.string cimport memcpy, memset
 
@@ -18,16 +23,15 @@ cdef str ALLOWED = UNRESERVED + SUB_DELIMS_WITHOUT_QS
 cdef str QS = '+&=;'
 
 DEF BUF_SIZE = 8 * 1024  # 8KiB
-cdef char BUFFER[BUF_SIZE]
 
-cdef inline Py_UCS4 _to_hex(uint8_t v):
+cdef inline Py_UCS4 _to_hex(uint8_t v) noexcept:
     if v < 10:
         return <Py_UCS4>(v+0x30)  # ord('0') == 0x30
     else:
         return <Py_UCS4>(v+0x41-10)  # ord('A') == 0x41
 
 
-cdef inline int _from_hex(Py_UCS4 v):
+cdef inline int _from_hex(Py_UCS4 v) noexcept:
     if '0' <= v <= '9':
         return <int>(v) - 0x30  # ord('0') == 0x30
     elif 'A' <= v <= 'F':
@@ -38,29 +42,43 @@ cdef inline int _from_hex(Py_UCS4 v):
         return -1
 
 
-cdef inline int _is_lower_hex(Py_UCS4 v):
+cdef inline int _is_lower_hex(Py_UCS4 v) noexcept:
     return 'a' <= v <= 'f'
 
 
-cdef inline Py_UCS4 _restore_ch(Py_UCS4 d1, Py_UCS4 d2):
+cdef inline bint _is_surrogate(Py_UCS4 ch) noexcept:
+    return 0xD800 <= ch <= 0xDFFF
+
+
+cdef inline Py_ssize_t _skip_surrogates(
+    int kind, const void *data, Py_ssize_t idx, Py_ssize_t length
+) noexcept:
+    # Advance past lone surrogates; they cannot be UTF-8 encoded and are
+    # dropped, so they must not break up a percent escape during requoting.
+    while idx < length and _is_surrogate(PyUnicode_READ(kind, data, idx)):
+        idx += 1
+    return idx
+
+
+cdef inline long _restore_ch(Py_UCS4 d1, Py_UCS4 d2):
     cdef int digit1 = _from_hex(d1)
     if digit1 < 0:
-        return <Py_UCS4>-1
+        return -1
     cdef int digit2 = _from_hex(d2)
     if digit2 < 0:
-        return <Py_UCS4>-1
-    return <Py_UCS4>(digit1 << 4 | digit2)
+        return -1
+    return digit1 << 4 | digit2
 
 
 cdef uint8_t ALLOWED_TABLE[16]
 cdef uint8_t ALLOWED_NOTQS_TABLE[16]
 
 
-cdef inline bint bit_at(uint8_t array[], uint64_t ch):
+cdef inline bint bit_at(uint8_t array[], uint64_t ch) noexcept:
     return array[ch >> 3] & (1 << (ch & 7))
 
 
-cdef inline void set_bit(uint8_t array[], uint64_t ch):
+cdef inline void set_bit(uint8_t array[], uint64_t ch) noexcept:
     array[ch >> 3] |= (1 << (ch & 7))
 
 
@@ -78,20 +96,22 @@ for i in range(128):
 
 cdef struct Writer:
     char *buf
+    bint heap_allocated_buf
     Py_ssize_t size
     Py_ssize_t pos
     bint changed
 
 
-cdef inline void _init_writer(Writer* writer):
-    writer.buf = &BUFFER[0]
+cdef inline void _init_writer(Writer* writer, char* buf):
+    writer.buf = buf
+    writer.heap_allocated_buf = False
     writer.size = BUF_SIZE
     writer.pos = 0
     writer.changed = 0
 
 
 cdef inline void _release_writer(Writer* writer):
-    if writer.buf != BUFFER:
+    if writer.heap_allocated_buf:
         PyMem_Free(writer.buf)
 
 
@@ -102,12 +122,13 @@ cdef inline int _write_char(Writer* writer, Py_UCS4 ch, bint changed):
     if writer.pos == writer.size:
         # reallocate
         size = writer.size + BUF_SIZE
-        if writer.buf == BUFFER:
+        if not writer.heap_allocated_buf:
             buf = <char*>PyMem_Malloc(size)
             if buf == NULL:
                 PyErr_NoMemory()
                 return -1
             memcpy(buf, writer.buf, writer.size)
+            writer.heap_allocated_buf = True
         else:
             buf = <char*>PyMem_Realloc(writer.buf, size)
             if buf == NULL:
@@ -138,8 +159,12 @@ cdef inline int _write_utf8(Writer* writer, Py_UCS4 symbol):
         if _write_pct(writer, <uint8_t>(0xc0 | (utf >> 6)), True) < 0:
             return -1
         return _write_pct(writer,  <uint8_t>(0x80 | (utf & 0x3f)), True)
-    elif 0xD800 <= utf <= 0xDFFF:
-        # surogate pair, ignored
+    elif _is_surrogate(symbol):
+        # lone surrogate; invalid in UTF-8 so it is dropped, matching the
+        # pure-Python quoter's errors="ignore" encode. Mark the writer as
+        # changed so _do_quote returns the surrogate-free buffer rather than
+        # the untouched input string.
+        writer.changed = True
         return 0
     elif utf < 0x10000:
         if _write_pct(writer, <uint8_t>(0xe0 | (utf >> 12)), True) < 0:
@@ -202,7 +227,6 @@ cdef class _Quoter:
             set_bit(self._protected_table, ch)
 
     def __call__(self, val):
-        cdef Writer writer
         if val is None:
             return None
         if type(val) is not str:
@@ -211,25 +235,74 @@ cdef class _Quoter:
                 val = str(val)
             else:
                 raise TypeError("Argument should be str")
-        _init_writer(&writer)
+        return self._do_quote_or_skip(<str>val)
+
+    cdef str _do_quote_or_skip(self, str val):
+        cdef char[BUF_SIZE] buffer
+        cdef Py_UCS4 ch
+        cdef Py_ssize_t length = PyUnicode_GET_LENGTH(val)
+        cdef Py_ssize_t idx = length
+        cdef bint must_quote = 0
+        cdef Writer writer
+        cdef int kind = PyUnicode_KIND(val)
+        cdef const void *data = PyUnicode_DATA(val)
+
+        # If everything in the string is in the safe
+        # table and all ASCII, we can skip quoting
+        while idx:
+            idx -= 1
+            ch = PyUnicode_READ(kind, data, idx)
+            if ch >= 128 or not bit_at(self._safe_table, ch):
+                must_quote = 1
+                break
+
+        if not must_quote:
+            return val
+
+        _init_writer(&writer, &buffer[0])
         try:
-            return self._do_quote(<str>val, &writer)
+            return self._do_quote(<str>val, length, kind, data, &writer)
         finally:
             _release_writer(&writer)
 
-    cdef str _do_quote(self, str val, Writer *writer):
+    cdef str _do_quote(
+        self,
+        str val,
+        Py_ssize_t length,
+        int kind,
+        const void *data,
+        Writer *writer
+    ):
         cdef Py_UCS4 ch
+        cdef Py_UCS4 d1
+        cdef Py_UCS4 d2
+        cdef long chl
         cdef int changed
-        cdef int idx = 0
-        cdef int length = len(val)
+        cdef bint surrogate_skipped
+        cdef Py_ssize_t idx = 0
+        cdef Py_ssize_t pos1
+        cdef Py_ssize_t pos2
 
         while idx < length:
-            ch = val[idx]
+            ch = PyUnicode_READ(kind, data, idx)
             idx += 1
-            if ch == '%' and self._requote and idx <= length - 2:
-                ch = _restore_ch(val[idx], val[idx + 1])
-                if ch != <Py_UCS4>-1:
-                    idx += 2
+            if ch == '%' and self._requote and idx < length:
+                # Lone surrogates are dropped (see _skip_surrogates), so look
+                # through them for the two hex digits of the "%XX" escape; this
+                # keeps the C quoter consistent with the pure-Python backend,
+                # which strips surrogates before scanning.
+                pos1 = _skip_surrogates(kind, data, idx, length)
+                pos2 = _skip_surrogates(kind, data, pos1 + 1, length)
+                if pos2 < length:
+                    d1 = PyUnicode_READ(kind, data, pos1)
+                    d2 = PyUnicode_READ(kind, data, pos2)
+                    chl = _restore_ch(d1, d2)
+                else:
+                    chl = -1
+                if chl != -1:
+                    ch = <Py_UCS4>chl
+                    surrogate_skipped = pos1 != idx or pos2 != pos1 + 1
+                    idx = pos2 + 1
                     if ch < 128:
                         if bit_at(self._protected_table, ch):
                             if _write_pct(writer, ch, True) < 0:
@@ -241,8 +314,8 @@ cdef class _Quoter:
                                 raise
                             continue
 
-                    changed = (_is_lower_hex(val[idx - 2]) or
-                               _is_lower_hex(val[idx - 1]))
+                    changed = (surrogate_skipped or
+                               _is_lower_hex(d1) or _is_lower_hex(d2))
                     if _write_pct(writer, ch, changed) < 0:
                         raise
                     continue
@@ -270,15 +343,26 @@ cdef class _Quoter:
 
 cdef class _Unquoter:
     cdef str _ignore
+    cdef bint _has_ignore
     cdef str _unsafe
+    cdef bytes _unsafe_bytes
+    cdef Py_ssize_t _unsafe_bytes_len
+    cdef const unsigned char * _unsafe_bytes_char
     cdef bint _qs
+    cdef bint _plus  # to match urllib.parse.unquote_plus
     cdef _Quoter _quoter
     cdef _Quoter _qs_quoter
 
-    def __init__(self, *, ignore="", unsafe="", qs=False):
+    def __init__(self, *, ignore="", unsafe="", qs=False, plus=False):
         self._ignore = ignore
+        self._has_ignore = bool(self._ignore)
         self._unsafe = unsafe
+        # unsafe may only be extended ascii characters (0-255)
+        self._unsafe_bytes = self._unsafe.encode('ascii')
+        self._unsafe_bytes_len = len(self._unsafe_bytes)
+        self._unsafe_bytes_char = self._unsafe_bytes
         self._qs = qs
+        self._plus = plus
         self._quoter = _Quoter()
         self._qs_quoter = _Quoter(qs=True)
 
@@ -294,24 +378,33 @@ cdef class _Unquoter:
         return self._do_unquote(<str>val)
 
     cdef str _do_unquote(self, str val):
-        if len(val) == 0:
+        cdef Py_ssize_t length = PyUnicode_GET_LENGTH(val)
+        if length == 0:
             return val
+
         cdef list ret = []
         cdef char buffer[4]
         cdef Py_ssize_t buflen = 0
         cdef Py_ssize_t consumed
         cdef str unquoted
         cdef Py_UCS4 ch = 0
+        cdef long chl = 0
         cdef Py_ssize_t idx = 0
-        cdef Py_ssize_t length = len(val)
         cdef Py_ssize_t start_pct
-
+        cdef int kind = PyUnicode_KIND(val)
+        cdef const void *data = PyUnicode_DATA(val)
+        cdef bint changed = 0
         while idx < length:
-            ch = val[idx]
+            ch = PyUnicode_READ(kind, data, idx)
             idx += 1
             if ch == '%' and idx <= length - 2:
-                ch = _restore_ch(val[idx], val[idx + 1])
-                if ch != <Py_UCS4>-1:
+                changed = 1
+                chl = _restore_ch(
+                    PyUnicode_READ(kind, data, idx),
+                    PyUnicode_READ(kind, data, idx + 1)
+                )
+                if chl != -1:
+                    ch = <Py_UCS4>chl
                     idx += 2
                     assert buflen < 4
                     buffer[buflen] = ch
@@ -338,7 +431,10 @@ cdef class _Unquoter:
                     buflen = 0
                     if self._qs and unquoted in '+=&;':
                         ret.append(self._qs_quoter(unquoted))
-                    elif unquoted in self._unsafe or unquoted in self._ignore:
+                    elif (
+                        (self._unsafe_bytes_len and unquoted in self._unsafe) or
+                        (self._has_ignore and unquoted in self._ignore)
+                    ):
                         ret.append(self._quoter(unquoted))
                     else:
                         ret.append(unquoted)
@@ -352,13 +448,18 @@ cdef class _Unquoter:
                 buflen = 0
 
             if ch == '+':
-                if not self._qs or ch in self._unsafe:
+                if (
+                    (not self._qs and not self._plus) or
+                    (self._unsafe_bytes_len and self._is_char_unsafe(ch))
+                ):
                     ret.append('+')
                 else:
+                    changed = 1
                     ret.append(' ')
                 continue
 
-            if ch in self._unsafe:
+            if self._unsafe_bytes_len and self._is_char_unsafe(ch):
+                changed = 1
                 ret.append('%')
                 h = hex(ord(ch)).upper()[2:]
                 for ch in h:
@@ -367,7 +468,16 @@ cdef class _Unquoter:
 
             ret.append(ch)
 
+        if not changed:
+            return val
+
         if buflen:
             ret.append(val[length - buflen * 3 : length])
 
         return ''.join(ret)
+
+    cdef inline bint _is_char_unsafe(self, Py_UCS4 ch):
+        for i in range(self._unsafe_bytes_len):
+            if ch == self._unsafe_bytes_char[i]:
+                return True
+        return False

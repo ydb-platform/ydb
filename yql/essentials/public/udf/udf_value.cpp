@@ -2,8 +2,6 @@
 
 namespace NYql::NUdf {
 
-IBoxedValue::IBoxedValue()
-{
-}
+IBoxedValue::IBoxedValue() = default;
 
 } // namespace NYql::NUdf

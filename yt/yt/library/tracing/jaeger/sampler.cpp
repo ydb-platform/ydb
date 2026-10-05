@@ -1,28 +1,15 @@
 #include "sampler.h"
 
+#include "config.h"
+
+#include <yt/yt/core/profiling/timing.h>
+
+#include <yt/yt/core/tracing/trace_context.h>
+
 namespace NYT::NTracing {
 
 using namespace NConcurrency;
 using namespace NProfiling;
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TSamplerConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("global_sample_rate", &TThis::GlobalSampleRate)
-        .Default(0.0);
-    registrar.Parameter("user_sample_rate", &TThis::UserSampleRate)
-        .Default();
-    registrar.Parameter("user_endpoints", &TThis::UserEndpoint)
-        .Default();
-    registrar.Parameter("clear_sampled_flag", &TThis::ClearSampledFlag)
-        .Default();
-
-    registrar.Parameter("min_per_user_samples", &TThis::MinPerUserSamples)
-        .Default(0);
-    registrar.Parameter("min_per_user_samples_period", &TThis::MinPerUserSamplesPeriod)
-        .Default(TDuration::Minutes(1));
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -42,6 +29,10 @@ bool TSampler::TUserState::TrySampleByMinCount(ui64 minCount, TCpuDuration perio
 
     return Sampled.fetch_add(1) < minCount;
 }
+
+TSampler::TSampler()
+    : TSampler(New<TSamplerConfig>())
+{ }
 
 TSampler::TSampler(
     TSamplerConfigPtr config,

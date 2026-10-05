@@ -10,6 +10,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    kqp_kill_session_proxy_ut.cpp
     kqp_proxy_ut.cpp
     kqp_script_executions_ut.cpp
 )
@@ -19,7 +20,8 @@ PEERDIR(
     ydb/core/kqp/run_script_actor
     ydb/core/kqp/proxy_service
     ydb/core/kqp/ut/common
-    ydb/core/kqp/workload_service/ut/common
+    ydb/library/yql/providers/common/http_gateway/ut_helpers
+    ydb/services/workload_manager/ut/common
     ydb/public/lib/ut_helpers
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/query

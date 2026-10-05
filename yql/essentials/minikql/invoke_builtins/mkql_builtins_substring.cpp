@@ -1,8 +1,7 @@
 #include "mkql_builtins_impl.h" // Y_IGNORE
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -75,5 +74,4 @@ void RegisterSubstring(IBuiltinFunctionRegistry& registry) {
     RegisterSubstringnOpt<NUdf::TDataType<NUdf::TUtf8>>(registry, "Substring");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

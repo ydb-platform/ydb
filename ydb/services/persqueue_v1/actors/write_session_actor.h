@@ -1,18 +1,16 @@
 #pragma once
 
 #include "events.h"
-#include "partition_writer.h"
+#include "helpers.h"
 #include "persqueue_utils.h"
 #include "write_request_info.h"
-#include "partition_writer_cache_actor.h"
-
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
@@ -29,29 +27,29 @@ inline TActorId GetPQWriteServiceActorID() {
     return TActorId(0, "PQWriteSvc");
 }
 
-template<bool UseMigrationProtocol>
+template <EProtocol Protocol>
 class TWriteSessionActor
-    : public NActors::TActorBootstrapped<TWriteSessionActor<UseMigrationProtocol>>
+    : public NPQ::TBaseActor<TWriteSessionActor<Protocol>>
     , private NPQ::TRlHelpers
-    , public NActors::IActorExceptionHandler
 {
-    using TSelf = TWriteSessionActor<UseMigrationProtocol>;
-    using TClientMessage = std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteClientMessage,
+    using TBase = NPQ::TBaseActor<TWriteSessionActor<Protocol>>;
+    using TSelf = TWriteSessionActor<Protocol>;
+    using TClientMessage = std::conditional_t<Protocol == EProtocol::PQv1, PersQueue::V1::StreamingWriteClientMessage,
                                               Topic::StreamWriteMessage::FromClient>;
-    using TServerMessage = std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteServerMessage,
+    using TServerMessage = std::conditional_t<Protocol == EProtocol::PQv1, PersQueue::V1::StreamingWriteServerMessage,
                                               Topic::StreamWriteMessage::FromServer>;
 
     using TInitRequest =
-        std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteClientMessage::InitRequest,
+        std::conditional_t<Protocol == EProtocol::PQv1, PersQueue::V1::StreamingWriteClientMessage::InitRequest,
                            Topic::StreamWriteMessage::InitRequest>;
 
     using TEvWriteInit =
-        std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvWriteInit, TEvPQProxy::TEvTopicWriteInit>;
-    using TEvWrite = std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvWrite, TEvPQProxy::TEvTopicWrite>;
+        std::conditional_t<Protocol == EProtocol::PQv1, TEvPQProxy::TEvWriteInit, TEvPQProxy::TEvTopicWriteInit>;
+    using TEvWrite = std::conditional_t<Protocol == EProtocol::PQv1, TEvPQProxy::TEvWrite, TEvPQProxy::TEvTopicWrite>;
     using TEvUpdateToken =
-        std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvUpdateToken, TEvPQProxy::TEvTopicUpdateToken>;
+        std::conditional_t<Protocol == EProtocol::PQv1, TEvPQProxy::TEvUpdateToken, TEvPQProxy::TEvTopicUpdateToken>;
     using TEvStreamWriteRequest =
-        std::conditional_t<UseMigrationProtocol, NKikimr::NGRpcService::TEvStreamPQWriteRequest,
+        std::conditional_t<Protocol == EProtocol::PQv1, NKikimr::NGRpcService::TEvStreamPQWriteRequest,
                            NKikimr::NGRpcService::TEvStreamTopicWriteRequest>;
 
     using IContext = NGRpcServer::IGRpcStreamingContext<TClientMessage, TServerMessage>;
@@ -64,9 +62,9 @@ class TWriteSessionActor
     // Codec ID size in bytes
     static constexpr ui32 CODEC_ID_SIZE = 1;
 
-    TString UserAgent = UseMigrationProtocol ? "pqv1 server" : "topic server";
+    TString UserAgent = Protocol == EProtocol::PQv1 ? "pqv1 server" : "topic server";
     TString SdkBuildInfo;
-    static constexpr auto ProtoName = UseMigrationProtocol ? "v1" : "topic";
+    static constexpr auto ProtoName = Protocol == EProtocol::PQv1 ? "v1" : "topic";
 
 public:
     TWriteSessionActor(TEvStreamWriteRequest* request, const ui64 cookie,
@@ -82,6 +80,12 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FRONT_PQ_WRITE;
+    }
+
+    NPQ::TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"cookie", Cookie},
+            {"sessionId", OwnerCookie});
     }
 
 private:

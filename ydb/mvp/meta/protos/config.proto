@@ -26,7 +26,8 @@ message TMetaConfig {
             }
 
             // Link source identifier (for example: grafana/dashboard/search).
-            optional string Source = 1;
+            // Defaults to source=url.
+            optional string Source = 1 [default = "url"];
             // Optional display name shown in UI.
             optional string Title = 2;
             // Source-specific URL. Can be absolute or relative, depending on source.
@@ -35,7 +36,7 @@ message TMetaConfig {
             repeated string Tag = 4;
             // Grafana folder UID filters (for source=grafana/dashboard/search).
             repeated string Folder = 5;
-            // Optional override for source-specific generated link parameters.
+            // Optional override for source-specific generated query parameters.
             // When omitted, source defaults are used.
             repeated TLinkParameterMapping LinkParameterMappings = 6;
         }

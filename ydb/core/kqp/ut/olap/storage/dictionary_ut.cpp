@@ -36,6 +36,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableOlapCompression(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnshardInterval(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnshardUuid(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableColumnshardDyNumber(true);
         return settings;
     }
 
@@ -1746,8 +1749,46 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         Variator::ToExecutor(Variator::SingleScript(scriptAlterDictOnExistingPlainWithoutActualization)).Execute(GetDictionarySettings());
     }
 
+    TString scriptDictionaryIntervalUuidDyNumber = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            c_interval Interval,
+            c_uuid Uuid,
+            c_dynumber DyNumber,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_interval` SET ENCODING(DICT)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_uuid` SET ENCODING(DICT)
+        ------
+        SCHEMA:
+        ALTER TABLE `/Root/ColumnTable` ALTER COLUMN `c_dynumber` SET ENCODING(DICT)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, c_interval, c_uuid, c_dynumber) VALUES
+            (1u, CAST(1000000 AS Interval), CAST("550e8400-e29b-41d4-a716-446655440000" AS Uuid), CAST("3.14" AS DyNumber));
+        ------
+        READ: SELECT pk, c_interval, c_uuid, c_dynumber FROM `/Root/ColumnTable` ORDER BY pk;
+        EXPECTED: [[1u;[1000000];["550e8400-e29b-41d4-a716-446655440000"];[".314e1"]]]
+    )";
+    Y_UNIT_TEST(DictionarySupportedIntervalUuidDyNumber) {
+        Variator::ToExecutor(Variator::SingleScript(scriptDictionaryIntervalUuidDyNumber)).Execute(GetDictionarySettings());
+    }
+
     // One table with a column per supported (comparable) type; set DICTIONARY on each, insert one row, read back.
-    // Supported for dictionary: Bool, Int*, Uint*, Float, Double, String/Utf8, Date, Datetime, Timestamp. (Bytes omitted: X'...' literal not supported in script.)
+    // Supported for dictionary: Bool, Int*, Uint*, Float, Double, String/Utf8, Date, Datetime, Timestamp,
+    // Interval, Uuid, DyNumber. (Bytes omitted: X'...' literal not supported in script.)
     TString scriptDictionarySupportedTypes = R"(
         STOP_COMPACTION
         ------

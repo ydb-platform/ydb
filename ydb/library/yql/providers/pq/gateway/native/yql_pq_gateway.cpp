@@ -1,6 +1,7 @@
 #include "yql_pq_gateway.h"
 #include "yql_pq_session.h"
 
+#include <ydb/library/yql/providers/pq/gateway/clients/external/yql_pq_deferred_publish_client.h>
 #include <ydb/library/yql/providers/pq/gateway/clients/external/yql_pq_federated_topic_client.h>
 #include <ydb/library/yql/providers/pq/gateway/clients/external/yql_pq_topic_client.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -100,14 +101,14 @@ public:
         (*ClusterConfigs)[cluster.GetName()] = cluster;
     }
 
-    ITopicClient::TPtr GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) final {
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const TString& stream, const TDriver& driver, const TTopicClientSettings& settings) final {
         const bool hasEndpoint = HasEndpoint(driver, settings);
         if (!hasEndpoint && LocalTopicClientFactory) {
-            return LocalTopicClientFactory->CreateTopicClient(settings);
+            return LocalTopicClientFactory->CreateTopicClient(stream, settings);
         }
 
         Y_VALIDATE(hasEndpoint, "Missing endpoint value for topic client and local topics are not allowed");
-        return CreateExternalTopicClient(driver, settings);
+        return CreateExternalTopicClient(stream, driver, settings);
     }
 
     IFederatedTopicClient::TPtr GetFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings) final {
@@ -118,6 +119,16 @@ public:
 
         Y_VALIDATE(hasEndpoint, "Missing endpoint value for federated topic client and local topics are not allowed");
         return CreateExternalFederatedTopicClient(driver, settings);
+    }
+
+    IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver& driver, const NYdb::TCommonClientSettings& settings) final {
+        const bool hasEndpoint = HasEndpoint(driver, settings);
+        if (!hasEndpoint && LocalTopicClientFactory) {
+            return LocalTopicClientFactory->CreateDeferredPublishClient(settings);
+        }
+
+        Y_VALIDATE(hasEndpoint, "Missing endpoint value for deferred publish client and local topics are not allowed");
+        return CreateExternalDeferredPublishClient(driver, settings);
     }
 
     TTopicClientSettings GetTopicClientSettings() const final {

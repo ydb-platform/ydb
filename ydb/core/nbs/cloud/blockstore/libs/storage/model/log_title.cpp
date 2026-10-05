@@ -7,6 +7,8 @@
 #include <util/string/builder.h>
 #include <util/system/datetime.h>
 
+#include <variant>
+
 namespace NYdb::NBS {
 
 namespace {
@@ -75,8 +77,8 @@ TString ToString(const TLogTitle::TVolume& data)
 {
     TStringBuilder stream;
 
-    stream << "[v:" << TOptional{data.DiskId} << "/" << data.TabletId << "/"
-           << data.Generation;
+    stream << "[v:" << TOptional{data.DiskId};
+    stream << " tbl:" << data.TabletId << "/" << data.Generation;
 
     return stream;
 }
@@ -85,8 +87,18 @@ TString ToString(const TLogTitle::TPartitionDirect& data)
 {
     TStringBuilder stream;
 
-    stream << "[pd:" << TOptional{data.DiskId} << "/" << data.TabletId << "/"
-           << data.Generation;
+    stream << "[pd:" << TOptional{data.DiskId};
+    stream << " tbl:" << data.TabletId << "/" << TOptional{data.Generation};
+
+    return stream;
+}
+
+TString ToString(const TLogTitle::TFastPathService& data)
+{
+    TStringBuilder stream;
+
+    stream << "[fps:" << TOptional{data.DiskId};
+    stream << " tbl:" << data.TabletId << "/" << data.Generation;
 
     return stream;
 }
@@ -96,7 +108,7 @@ TString ToString(const TLogTitle::TDirectBlockGroup& data)
     TStringBuilder stream;
 
     stream << "[dbg:" << data.DiskId << "/" << data.DBGIndex;
-    stream << " t:" << TOptional{data.TabletId} << "/" << data.Generation;
+    stream << " tbl:" << data.TabletId << "/" << data.Generation;
 
     return stream;
 }
@@ -107,6 +119,7 @@ TString ToString(const TLogTitle::TVChunk& data)
 
     stream << "[vchk:" << data.DiskId << "/" << data.DBGIndex << "/"
            << data.VChunkIndex;
+    stream << " tbl:" << data.TabletId << "/" << data.Generation;
 
     return stream;
 }
@@ -115,7 +128,9 @@ TString ToString(const TLogTitle::TDDiskDataCopier& data)
 {
     TStringBuilder stream;
 
-    stream << "[copy:" << data.DiskId;
+    stream << "[copy:" << data.DiskId << "/" << data.DBGIndex << "/"
+           << data.VChunkIndex;
+    stream << " tbl:" << data.TabletId << "/" << data.Generation;
     stream << " dst:" << data.Destination;
 
     return stream;
@@ -126,6 +141,7 @@ TString ToString(const TLogTitle::TInterconnectTransport& data)
     TStringBuilder stream;
 
     stream << "[ic:" << data.DiskId << "/" << data.DBGIndex;
+    stream << " tbl:" << data.TabletId << "/" << data.Generation;
 
     return stream;
 }
@@ -149,36 +165,14 @@ TString TLogTitle::GetPartitionPrefix(
 
 TChildLogTitle TLogTitle::GetChild(const ui64 startTime) const
 {
-    TStringBuilder childPrefix;
-    childPrefix << CachedPrefix;
-    const auto duration = CyclesToDurationSafe(startTime - StartTime);
-    childPrefix << " t:" << FormatDuration(duration);
-
-    return {childPrefix, startTime};
+    return MakeChild(startTime, std::span<const TLogParam>{});
 }
 
-TChildLogTitle TLogTitle::GetChildWithTags(
+TChildLogTitle TLogTitle::MakeChild(
     const ui64 startTime,
-    std::span<const std::pair<TString, TString>> additionalTags) const
+    std::span<const TLogParam> tags) const
 {
-    TStringBuilder childPrefix;
-    childPrefix << CachedPrefix;
-
-    for (const auto& [key, value]: additionalTags) {
-        childPrefix << " " << key << ":" << value;
-    }
-
-    const auto duration = CyclesToDurationSafe(startTime - StartTime);
-    childPrefix << " t:" << FormatDuration(duration);
-
-    return {childPrefix, startTime};
-}
-
-TChildLogTitle TLogTitle::GetChildWithTags(
-    const ui64 startTime,
-    std::initializer_list<std::pair<TString, TString>> additionalTags) const
-{
-    return GetChildWithTags(startTime, std::span(additionalTags));
+    return {CachedPrefix, StartTime, startTime, tags};
 }
 
 TString TLogTitle::Get(EDetails details) const
@@ -258,16 +252,36 @@ void TLogTitle::Rebuild()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TChildLogTitle::TChildLogTitle(TString cachedPrefix, ui64 startTime)
-    : CachedPrefix(std::move(cachedPrefix))
+TChildLogTitle::TChildLogTitle(
+    TString parentPrefix,
+    ui64 parentStartTime,
+    ui64 startTime,
+    std::span<const TLogParam> tags)
+    : ParentPrefix(std::move(parentPrefix))
+    , ParentStartTime(parentStartTime)
     , StartTime(startTime)
-{}
+    , TagCount(tags.size())
+{
+    Y_DEBUG_ABORT_UNLESS(tags.size() <= MaxLogTagCount);
+    for (size_t i = 0; i < TagCount; ++i) {
+        Tags[i] = tags[i];
+    }
+}
 
 TString TChildLogTitle::GetWithTime() const
 {
-    const auto duration = CyclesToDurationSafe(GetCycleCount() - StartTime);
     TStringBuilder builder;
-    builder << CachedPrefix << " + " << FormatDuration(duration) << "]";
+    builder << ParentPrefix;
+
+    if (TagCount) {
+        builder << " ";
+        NBlockStore::PrintParams(builder.Out, {Tags.data(), TagCount});
+    }
+
+    const auto sinceParent = CyclesToDurationSafe(StartTime - ParentStartTime);
+    const auto sinceStart = CyclesToDurationSafe(GetCycleCount() - StartTime);
+    builder << " t:" << FormatDuration(sinceParent) << " + "
+            << FormatDuration(sinceStart) << "]";
     return builder;
 }
 

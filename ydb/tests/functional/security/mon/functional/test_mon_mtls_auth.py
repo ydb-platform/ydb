@@ -214,10 +214,7 @@ def client_certificates(certificates):
     }
 
 
-@pytest.fixture(scope='module')
-def ydb_configurator(ydb_cluster_configuration, certificates):
-    config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
-
+def _setup_mtls_monitoring_config(config_generator, certificates, client_certificate_required):
     config_generator.yaml_config['client_certificate_authorization'] = {
         'client_certificate_definitions': [
             {
@@ -249,11 +246,42 @@ def ydb_configurator(ydb_cluster_configuration, certificates):
     config_generator.monitoring_tls_cert_path = certificates['server_cert']
     config_generator.monitoring_tls_key_path = certificates['server_key']
     config_generator.monitoring_tls_ca_path = certificates['server_ca']
+    config_generator.monitoring_tls_client_certificate_required = client_certificate_required
+    if client_certificate_required:
+        config_generator.monitoring_tls_admin_client_cert_path = certificates['admin_client_crt']
+        config_generator.monitoring_tls_admin_client_key_path = certificates['admin_client_key']
 
+
+@pytest.fixture(scope='module')
+def ydb_configurator(ydb_cluster_configuration, certificates):
+    config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
+    _setup_mtls_monitoring_config(config_generator, certificates, client_certificate_required=False)
     return config_generator
 
 
-def _test_endpoint_with_certificate(trace_endpoint, client_certificates, cert_type, expected_status):
+@pytest.fixture(scope='module')
+def ydb_configurator_required_mtls(ydb_cluster_configuration, certificates):
+    config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
+    _setup_mtls_monitoring_config(config_generator, certificates, client_certificate_required=True)
+    return config_generator
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_required_mtls(ydb_configurator_required_mtls):
+    from ydb.tests.library.harness.kikimr_runner import KiKiMR
+
+    cluster = KiKiMR(ydb_configurator_required_mtls)
+    cluster.start()
+    yield cluster
+    cluster.stop()
+
+
+def _test_endpoint_without_client_certificate(trace_endpoint, ca_file):
+    with pytest.raises(requests.exceptions.SSLError):
+        requests.get(trace_endpoint, verify=ca_file, timeout=5)
+
+
+def _test_endpoint_with_client_certificate(trace_endpoint, client_certificates, cert_type, expected_status):
     session = requests.Session()
     adapter = MTLSAdapter(
         cert_file=client_certificates[f'{cert_type}_cert'],
@@ -290,10 +318,10 @@ def test_mtls_auth(ydb_cluster, client_certificates):
     _test_endpoint_without_any_auth(trace_endpoint)
 
     # With viewer certificate
-    _test_endpoint_with_certificate(trace_endpoint, client_certificates, 'viewer', 403)
+    _test_endpoint_with_client_certificate(trace_endpoint, client_certificates, 'viewer', 403)
 
     # With administration certificate
-    _test_endpoint_with_certificate(trace_endpoint, client_certificates, 'admin', 200)
+    _test_endpoint_with_client_certificate(trace_endpoint, client_certificates, 'admin', 200)
 
 
 def test_token_auth_when_mtls_is_enabled(ydb_cluster, client_certificates):
@@ -303,7 +331,7 @@ def test_token_auth_when_mtls_is_enabled(ydb_cluster, client_certificates):
     trace_endpoint = f'{base_url}/trace'
 
     # Checks that mTLS is enabled
-    _test_endpoint_with_certificate(trace_endpoint, client_certificates, 'admin', 200)
+    _test_endpoint_with_client_certificate(trace_endpoint, client_certificates, 'admin', 200)
 
     # Without any authentication
     _test_endpoint_without_any_auth(trace_endpoint)
@@ -313,3 +341,21 @@ def test_token_auth_when_mtls_is_enabled(ydb_cluster, client_certificates):
 
     # With an admin token
     _test_endpoint_with_token(trace_endpoint, 'root@builtin', 200)
+
+
+def test_required_mtls_rejects_connection_without_client_cert(ydb_cluster_required_mtls, client_certificates):
+    host = ydb_cluster_required_mtls.nodes[1].host
+    mon_port = ydb_cluster_required_mtls.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+    trace_endpoint = f'{base_url}/trace'
+
+    _test_endpoint_without_client_certificate(trace_endpoint, client_certificates['ca'])
+
+
+def test_required_mtls_accepts_connection_with_client_cert(ydb_cluster_required_mtls, client_certificates):
+    host = ydb_cluster_required_mtls.nodes[1].host
+    mon_port = ydb_cluster_required_mtls.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+    trace_endpoint = f'{base_url}/trace'
+
+    _test_endpoint_with_client_certificate(trace_endpoint, client_certificates, 'admin', 200)

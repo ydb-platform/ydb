@@ -50,6 +50,8 @@ namespace NActors {
 
         virtual ~TExecutorThread();
 
+        void Prepare();
+
         template <ESendingType SendingType = ESendingType::Common>
         TActorId RegisterActor(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>(),
                                TActorId parentId = TActorId());
@@ -78,7 +80,6 @@ namespace NActors {
         TThreadId GetThreadId() const; // blocks, must be called after Start()
         TWorkerId GetWorkerId() const;
 
-        void SubscribeToPreemption(TActorId actorId);
         ui32 GetOverwrittenEventsPerMailbox() const;
         void SetOverwrittenEventsPerMailbox(ui32 value);
         ui64 GetOverwrittenTimePerMailboxTs() const;
@@ -89,7 +90,7 @@ namespace NActors {
 
         TProcessingResult Execute(TMailbox* mailbox, bool isTailExecution, NHPTimer::STime mailboxScheduledTimestampTs);
 
-        void UpdateThreadStats();
+        TExecutorThreadStats* UpdateThreadStats();
 
     public:
         TActorSystem* const ActorSystem;
@@ -103,6 +104,9 @@ namespace NActors {
     protected:
         // Pool-specific
         TStackVec<TExecutorThreadStats, DefaultPoolCountForExecutorThread> Stats;
+        // Published for off-thread collectors. Stats is fully initialized before
+        // threads start and never moves; ExecutionStats remains executor-owned.
+        std::atomic<TExecutorThreadStats*> CurrentStats = nullptr;
 
         // Event-specific (currently executing)
         TVector<THolder<IActor>> DyingActors;

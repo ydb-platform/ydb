@@ -8,7 +8,7 @@ The integration is available for Python and JavaScript.
 
 ## Installation {#setup}
 
-To use this integration, install a local {{ ydb-short-name }}. For more information, see [{#T}](../../quickstart.md#install).
+To use this integration, install a local {{ ydb-short-name }}. For more information, see [Install and start {{ ydb-short-name }}](../../quickstart.md#install).
 
 Also install the LangChain packages and an embedding model for the required language:
 

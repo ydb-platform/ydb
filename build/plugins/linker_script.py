@@ -2,7 +2,7 @@ from ymake import macro, Unit
 
 
 @macro
-def LINKER_SCRIPT(unit: Unit, *args: tuple[str, ...]):
+def LINKER_SCRIPT(unit: Unit, *args: str):
     """
     @usage: LINKER_SCRIPT(Files...)
 

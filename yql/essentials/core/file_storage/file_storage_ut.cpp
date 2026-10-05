@@ -3,19 +3,26 @@
 #include <yql/essentials/utils/test_http_server/test_http_server.h>
 #include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
 #include <yql/essentials/core/file_storage/http_download/http_download.h>
+#include <yql/essentials/core/file_storage/download/download_limiter.h>
+#include <yql/essentials/core/file_storage/download/download_output_file_stream.h>
 #include <yql/essentials/utils/fetch/proto/fetch_config.pb.h>
+#include <yql/essentials/utils/fetch/fetch.h>
 
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/threading/future/async.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/testing/common/scope.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
+#include <util/generic/size_literals.h>
 #include <util/stream/file.h>
 #include <util/stream/str.h>
 #include <util/system/tempfile.h>
 #include <util/thread/pool.h>
 #include <util/system/file_lock.h>
+#include <util/system/guard.h>
+#include <util/system/mutex.h>
 #include <util/datetime/base.h>
 #include <util/system/fs.h>
 
@@ -61,6 +68,84 @@ void RemoveUrlMeta(const TFsPath& root) {
 
 TString MakeWeakETag(const TString& strongETag) {
     return "W/" + strongETag;
+}
+
+class TTestDownloader: public NFS::IDownloader {
+public:
+    TVector<TDownloadLimiter> Limiters;
+
+    bool Accept(const THttpURL&) override {
+        return true;
+    }
+
+    std::tuple<NFS::TDataProvider, TString, TString> Download(const THttpURL&, const TString&, const TString& etag, const TString&, TDownloadLimiter limiter) override {
+        const auto guard = Guard(Mutex_);
+        Limiters.push_back(limiter);
+        if (etag == "content") {
+            return {};
+        }
+        auto provider = [limiter](const TFsPath& path) {
+            TDownloadOutputFileStream output(TFile(path, CreateAlways | WrOnly | Seq), limiter);
+            output.Write("ABC");
+            output.Finish();
+            return std::make_pair(ui64{3}, TString("902fbdd2b1df0c4f70b4a5d23525e932"));
+        };
+        return {provider, "content", {}};
+    }
+
+private:
+    TMutex Mutex_;
+};
+
+Y_UNIT_TEST(DownloadLimitSharedByAsyncRequestsAndCacheHits) {
+    TFileStorageConfig params;
+    params.SetDownloadBandwidthLimitBytes(100);
+    params.SetThreads(2);
+    auto downloader = MakeIntrusive<TTestDownloader>();
+    auto storage = CreateAsyncFileStorage(params, {downloader});
+    auto first = storage->PutUrlAsync("http://test/first", {});
+    auto second = storage->PutUrlAsync("http://test/second", {});
+    UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(first.GetValueSync()->GetPath()), "ABC");
+    UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(second.GetValueSync()->GetPath()), "ABC");
+    auto cached = storage->PutUrl("http://test/first", {});
+    UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(cached->GetPath()), "ABC");
+    UNIT_ASSERT_VALUES_EQUAL(downloader->Limiters.size(), 3);
+    for (const auto& limiter : downloader->Limiters) {
+        UNIT_ASSERT_VALUES_EQUAL(limiter.GetQuota(1), 1);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(downloader->Limiters.front().GetQuota(100), 91);
+}
+
+Y_UNIT_TEST(DefaultDownloadLimitUsesMaximumQuota) {
+    UNIT_ASSERT_VALUES_EQUAL(TFileStorageConfig().GetDownloadBandwidthLimitBytes(), 0);
+    auto downloader = MakeIntrusive<TTestDownloader>();
+    auto storage = CreateFileStorage({}, {downloader});
+    UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(storage->PutUrl("http://test/file", {})->GetPath()), "ABC");
+    UNIT_ASSERT_VALUES_EQUAL(downloader->Limiters.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(downloader->Limiters.front().GetQuota(Max<size_t>()), Max<size_t>() - 3);
+}
+
+void CheckHttpDownloadLimiter(bool fakeChecksums) {
+    NTesting::TScopedEnvironment localMode("YQL_LOCAL", fakeChecksums ? "1" : "0");
+    auto server = CreateTestHttpServer();
+    server->SetRequestHandler([](const auto&) { return TTestHttpServer::TReply::Ok("ABC"); });
+    auto limiter = TDownloadLimiter(NSize::TSize(100_B));
+    auto downloader = MakeHttpDownloader({});
+    auto [provider, etag, lastModified] = downloader->Download(ParseURL(server->GetUrl()), {}, {}, {}, limiter);
+    TTempFileHandle file;
+    const auto [size, md5] = provider(file.GetName());
+    UNIT_ASSERT_VALUES_EQUAL(size, 3);
+    UNIT_ASSERT_VALUES_EQUAL(md5, fakeChecksums ? "" : "902fbdd2b1df0c4f70b4a5d23525e932");
+    UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(file.GetName()), "ABC");
+    UNIT_ASSERT_VALUES_EQUAL(limiter.GetQuota(100), 97);
+}
+
+Y_UNIT_TEST(HttpDownloadUsesLimiter) {
+    CheckHttpDownloadLimiter(false);
+}
+
+Y_UNIT_TEST(HttpDownloadUsesLimiterWithFakeChecksums) {
+    CheckHttpDownloadLimiter(true);
 }
 
 Y_UNIT_TEST(PutUrlNoTokenNoETag) {
@@ -497,7 +582,7 @@ Y_UNIT_TEST(NoUrlDownloadRetryOnBadCode) {
     UNIT_ASSERT_VALUES_EQUAL(3, downloadCount);
 }
 
-Y_UNIT_TEST(PutEmptyFiles) {
+void CheckPutEmptyFiles(bool throttling) {
     auto server = CreateTestHttpServer();
 
     TString currentETag = "TAG_1";
@@ -507,7 +592,9 @@ Y_UNIT_TEST(PutEmptyFiles) {
         return TTestHttpServer::TReply::OkETag(currentContent, currentETag, 0);
     });
 
-    TFileStoragePtr fs = CreateTestFS();
+    TFileStorageConfig params;
+    params.SetDownloadBandwidthLimitBytes(throttling ? 1 : 0);
+    TFileStoragePtr fs = CreateTestFS(params);
 
     auto url = server->GetUrl();
 
@@ -524,7 +611,15 @@ Y_UNIT_TEST(PutEmptyFiles) {
     }
 }
 
-Y_UNIT_TEST(BadContentLength) {
+Y_UNIT_TEST(PutEmptyFiles) {
+    CheckPutEmptyFiles(false);
+}
+
+Y_UNIT_TEST(PutEmptyFilesWithDownloadLimit) {
+    CheckPutEmptyFiles(true);
+}
+
+void CheckBadContentLength(bool throttling) {
     auto server = CreateTestHttpServer();
 
     int downloadCount = 0;
@@ -536,12 +631,21 @@ Y_UNIT_TEST(BadContentLength) {
 
     TFileStorageConfig params;
     params.SetRetryCount(3);
+    params.SetDownloadBandwidthLimitBytes(throttling ? 100 : 0);
     TFileStoragePtr fs = CreateTestFS(params);
 
     auto url = server->GetUrl();
 
     UNIT_ASSERT_EXCEPTION_CONTAINS(fs->PutUrl(url, {}), std::exception, "Size mismatch while downloading url http");
     UNIT_ASSERT_VALUES_EQUAL(3, downloadCount);
+}
+
+Y_UNIT_TEST(BadContentLength) {
+    CheckBadContentLength(false);
+}
+
+Y_UNIT_TEST(BadContentLengthWithDownloadLimit) {
+    CheckBadContentLength(true);
 }
 
 Y_UNIT_TEST(SocketTimeout) {
@@ -564,23 +668,19 @@ Y_UNIT_TEST(SocketTimeout) {
 Y_UNIT_TEST(PutFileStrippedWithBandwidthLimit) {
     TTempFileHandle testFile;
     NFs::Copy("/proc/self/exe", testFile.GetName());
-    i64 fileSize = GetFileLength(testFile.GetName().c_str());
-    UNIT_ASSERT_GT(fileSize, 0);
 
     TFileStorageConfig paramsNoLimit;
     TFileStoragePtr fsNoLimit = CreateFileStorage(paramsNoLimit);
-    TInstant startNoLimit = TInstant::Now();
     auto linkNoLimit = fsNoLimit->PutFileStripped(testFile.GetName());
-    TDuration timeNoLimit = TInstant::Now() - startNoLimit;
 
     UNIT_ASSERT(linkNoLimit);
     UNIT_ASSERT(!linkNoLimit->GetStorageFileName().empty());
 
-    // Calculate current bandwidth and set limit to half of it
-    double currentBandwidthBytesPerMs = static_cast<double>(fileSize) / timeNoLimit.MilliSeconds();
-    double limitedBandwidthBytesPerMs = currentBandwidthBytesPerMs / 2.0;
-    ui64 limitedBandwidthKBps = static_cast<ui64>(limitedBandwidthBytesPerMs * 1000 / 1024);
-    TString bandwidthLimitStr = TStringBuilder() << limitedBandwidthKBps << "K";
+    const ui64 strippedSize = linkNoLimit->GetSize();
+    UNIT_ASSERT_GT(strippedSize, 0);
+
+    const TString bandwidthLimitStr = TStringBuilder() << strippedSize;
+    const TDuration expectedTransferDuration = TDuration::Seconds(1);
 
     TFileStorageConfig paramsWithLimit;
     paramsWithLimit.SetStripBandwidthLimit(bandwidthLimitStr);
@@ -591,9 +691,7 @@ Y_UNIT_TEST(PutFileStrippedWithBandwidthLimit) {
 
     UNIT_ASSERT(linkWithLimit);
     UNIT_ASSERT(!linkWithLimit->GetStorageFileName().empty());
-    // Both should produce identical stripped binaries
     UNIT_ASSERT_EQUAL(linkNoLimit->GetMd5(), linkWithLimit->GetMd5());
-    // Bandwidth-limited operation should take at least 1.5x longer
-    UNIT_ASSERT_GT(timeWithLimit, timeNoLimit * 1.5);
+    UNIT_ASSERT_GT(timeWithLimit, expectedTransferDuration * 0.8);
 }
 } // Y_UNIT_TEST_SUITE(TFileStorageTests)

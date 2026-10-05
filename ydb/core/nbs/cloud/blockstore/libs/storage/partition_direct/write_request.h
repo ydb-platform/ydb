@@ -43,7 +43,7 @@ private:
     void SendIndirectWriteRequest(THostMask hosts);
     void OnIndirectWriteResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
-    void SendAdditionalDirectWrites();
+    void MaybeSendAdditionalDirectWrites();
     void SendDirectWriteRequestsToDesired(size_t count);
     void SendDirectWriteRequestsToHandoffs(size_t count);
     void SendDirectWriteRequest(THostIndex host);
@@ -52,9 +52,10 @@ private:
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
-    void ReplyOrNotifyBelated(
-        NProto::TError error,
-        THostMask completedOnCurrentResponse);
+    // Sends one direct write in place of a failed one, or replies when the
+    // quorum is unreachable. Does nothing after the reply.
+    void MaybeSendReplacementDirectWrite(const NProto::TError& error);
+    void MaybeReplyOrNotifyBelated(THostMask completedOnCurrentResponse);
     void Reply(NProto::TError error);
     void NotifyBelated(THostMask completedOnCurrentResponse);
 
@@ -63,12 +64,13 @@ private:
     void OnHedgingTimeout();
     void OnRequestTimeout();
 
-    [[nodiscard]] bool ShouldReplyOk() const;
+    [[nodiscard]] bool IsQuorumReached() const;
     [[nodiscard]] bool IsQuorumReachable() const;
     [[nodiscard]] size_t GetQuorumDeficit() const;
     [[nodiscard]] THostMask GetRunningDirectWrites() const;
 
     TString ExtendedDebugState() const;
+    TString PrintHostAndNode(THostIndex host) const;
 
     NActors::TActorSystem* ActorSystem;
     const EWriteMode WriteMode;
@@ -92,6 +94,7 @@ using TWriteRequestExecutorPtr = std::shared_ptr<TWriteRequestExecutor>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Creates a write executor. The bundle must already have PBufferKey set.
 TWriteRequestExecutorPtr CreateWriteRequestExecutor(
     NActors::TActorSystem* const actorSystem,
     const TLogTitle& logTitle,

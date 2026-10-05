@@ -6,11 +6,23 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivemodel_db.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/ddisk_config.pb.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 
 #include <functional>
 #include <util/folder/path.h>
+#include <util/generic/vector.h>
+
+namespace NKikimrConfig {
+
+    class TBlobStorageConfig;
+    class TStaticNameserviceConfig;
+    class TDomainsConfig;
+    class TSelfManagementConfig;
+    class TBridgeConfig;
+    class TDynamicNodeConfig;
+    class TFeatureFlags;
+
+} // NKikimrConfig
 
 namespace NKikimr {
     struct ICacheAccessor {
@@ -20,21 +32,20 @@ namespace NKikimr {
     };
 
     struct TNodeWardenConfig : public TThrRefBase {
-        NKikimrConfig::TBlobStorageConfig BlobStorageConfig;
-        NKikimrConfig::TStaticNameserviceConfig NameserviceConfig;
-        std::optional<NKikimrConfig::TDomainsConfig> DomainsConfig;
-        std::optional<NKikimrConfig::TSelfManagementConfig> SelfManagementConfig;
-        std::optional<NKikimrConfig::TBridgeConfig> BridgeConfig;
-        std::optional<NKikimrConfig::TDynamicNodeConfig> DynamicNodeConfig;
+        std::unique_ptr<NKikimrConfig::TBlobStorageConfig> BlobStorageConfig;
+        std::unique_ptr<NKikimrConfig::TStaticNameserviceConfig> NameserviceConfig;
+        std::unique_ptr<NKikimrConfig::TDomainsConfig> DomainsConfig;
+        std::unique_ptr<NKikimrConfig::TSelfManagementConfig> SelfManagementConfig;
+        std::unique_ptr<NKikimrConfig::TBridgeConfig> BridgeConfig;
+        std::unique_ptr<NKikimrConfig::TDynamicNodeConfig> DynamicNodeConfig;
         TString ConfigDirPath;
         std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
         TString StartupConfigYaml;
         std::optional<TString> StartupStorageYaml;
-        TIntrusivePtr<IPDiskServiceFactory> PDiskServiceFactory;
         TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<NPDisk::TDriveModelDb> AllDriveModels;
         NKikimrBlobStorage::TPDiskConfig PDiskConfigOverlay;
-        NKikimrConfig::TFeatureFlags FeatureFlags;
+        std::unique_ptr<NKikimrConfig::TFeatureFlags> FeatureFlags;
         NKikimrBlobStorage::TIncrHugeConfig IncrHugeConfig;
         THashMap<TString, TIntrusivePtr<NPDisk::TSectorMap>> SectorMaps;
         std::unique_ptr<ICacheAccessor> CacheAccessor;
@@ -56,14 +67,12 @@ namespace NKikimr {
 
         std::optional<NYdb::NBS::NProto::TDDiskConfig> DDiskConfig;
         std::optional<NYdb::NBS::NProto::TPBufferConfig> PBufferConfig;
+        TVector<ui32> BlobStorageExecutorPoolIds;
 
         std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor;
 
-        TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
-            : PDiskServiceFactory(pDiskServiceFactory)
-            , AllVDiskKinds(new TAllVDiskKinds)
-            , AllDriveModels(new NPDisk::TDriveModelDb)
-        {}
+        TNodeWardenConfig();
+        ~TNodeWardenConfig();
 
         bool IsCacheEnabled() const {
             return static_cast<bool>(CacheAccessor);

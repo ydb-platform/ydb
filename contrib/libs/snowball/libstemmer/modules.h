@@ -4,10 +4,11 @@
  * Do not edit manually.
  *
  * Modules included by this file are: arabic, armenian, basque, catalan,
- * danish, dutch, dutch_porter, english, esperanto, estonian, finnish, french,
- * german, greek, hindi, hungarian, indonesian, irish, italian, lithuanian,
- * nepali, norwegian, porter, portuguese, romanian, russian, serbian, spanish,
- * swedish, tamil, turkish, yiddish
+ * czech, danish, dutch, dutch_porter, english, esperanto, estonian, finnish,
+ * french, german, greek, hindi, hungarian, indonesian, irish, italian,
+ * lithuanian, nepali, norwegian, persian, polish, porter, portuguese,
+ * romanian, russian, serbian, sesotho, spanish, swedish, tamil, turkish,
+ * yiddish
  */
 
 #include "../src_c/stem_UTF_8_arabic.h"
@@ -16,6 +17,8 @@
 #include "../src_c/stem_UTF_8_basque.h"
 #include "../src_c/stem_ISO_8859_1_catalan.h"
 #include "../src_c/stem_UTF_8_catalan.h"
+#include "../src_c/stem_ISO_8859_2_czech.h"
+#include "../src_c/stem_UTF_8_czech.h"
 #include "../src_c/stem_ISO_8859_1_danish.h"
 #include "../src_c/stem_UTF_8_danish.h"
 #include "../src_c/stem_ISO_8859_1_dutch.h"
@@ -46,6 +49,9 @@
 #include "../src_c/stem_UTF_8_nepali.h"
 #include "../src_c/stem_ISO_8859_1_norwegian.h"
 #include "../src_c/stem_UTF_8_norwegian.h"
+#include "../src_c/stem_UTF_8_persian.h"
+#include "../src_c/stem_ISO_8859_2_polish.h"
+#include "../src_c/stem_UTF_8_polish.h"
 #include "../src_c/stem_ISO_8859_1_porter.h"
 #include "../src_c/stem_UTF_8_porter.h"
 #include "../src_c/stem_ISO_8859_1_portuguese.h"
@@ -54,6 +60,7 @@
 #include "../src_c/stem_KOI8_R_russian.h"
 #include "../src_c/stem_UTF_8_russian.h"
 #include "../src_c/stem_UTF_8_serbian.h"
+#include "../src_c/stem_UTF_8_sesotho.h"
 #include "../src_c/stem_ISO_8859_1_spanish.h"
 #include "../src_c/stem_UTF_8_spanish.h"
 #include "../src_c/stem_ISO_8859_1_swedish.h"
@@ -105,6 +112,14 @@ static const struct stemmer_modules modules[] = {
   {"cat", ENC_UTF_8, catalan_UTF_8_create_env, catalan_UTF_8_close_env, catalan_UTF_8_stem},
   {"catalan", ENC_ISO_8859_1, catalan_ISO_8859_1_create_env, catalan_ISO_8859_1_close_env, catalan_ISO_8859_1_stem},
   {"catalan", ENC_UTF_8, catalan_UTF_8_create_env, catalan_UTF_8_close_env, catalan_UTF_8_stem},
+  {"ces", ENC_ISO_8859_2, czech_ISO_8859_2_create_env, czech_ISO_8859_2_close_env, czech_ISO_8859_2_stem},
+  {"ces", ENC_UTF_8, czech_UTF_8_create_env, czech_UTF_8_close_env, czech_UTF_8_stem},
+  {"cs", ENC_ISO_8859_2, czech_ISO_8859_2_create_env, czech_ISO_8859_2_close_env, czech_ISO_8859_2_stem},
+  {"cs", ENC_UTF_8, czech_UTF_8_create_env, czech_UTF_8_close_env, czech_UTF_8_stem},
+  {"cze", ENC_ISO_8859_2, czech_ISO_8859_2_create_env, czech_ISO_8859_2_close_env, czech_ISO_8859_2_stem},
+  {"cze", ENC_UTF_8, czech_UTF_8_create_env, czech_UTF_8_close_env, czech_UTF_8_stem},
+  {"czech", ENC_ISO_8859_2, czech_ISO_8859_2_create_env, czech_ISO_8859_2_close_env, czech_ISO_8859_2_stem},
+  {"czech", ENC_UTF_8, czech_UTF_8_create_env, czech_UTF_8_close_env, czech_UTF_8_stem},
   {"da", ENC_ISO_8859_1, danish_ISO_8859_1_create_env, danish_ISO_8859_1_close_env, danish_ISO_8859_1_stem},
   {"da", ENC_UTF_8, danish_UTF_8_create_env, danish_UTF_8_close_env, danish_UTF_8_stem},
   {"dan", ENC_ISO_8859_1, danish_ISO_8859_1_create_env, danish_ISO_8859_1_close_env, danish_ISO_8859_1_stem},
@@ -143,6 +158,8 @@ static const struct stemmer_modules modules[] = {
   {"eu", ENC_UTF_8, basque_UTF_8_create_env, basque_UTF_8_close_env, basque_UTF_8_stem},
   {"eus", ENC_ISO_8859_1, basque_ISO_8859_1_create_env, basque_ISO_8859_1_close_env, basque_ISO_8859_1_stem},
   {"eus", ENC_UTF_8, basque_UTF_8_create_env, basque_UTF_8_close_env, basque_UTF_8_stem},
+  {"fa", ENC_UTF_8, persian_UTF_8_create_env, persian_UTF_8_close_env, persian_UTF_8_stem},
+  {"fas", ENC_UTF_8, persian_UTF_8_create_env, persian_UTF_8_close_env, persian_UTF_8_stem},
   {"fi", ENC_ISO_8859_1, finnish_ISO_8859_1_create_env, finnish_ISO_8859_1_close_env, finnish_ISO_8859_1_stem},
   {"fi", ENC_UTF_8, finnish_UTF_8_create_env, finnish_UTF_8_close_env, finnish_UTF_8_stem},
   {"fin", ENC_ISO_8859_1, finnish_ISO_8859_1_create_env, finnish_ISO_8859_1_close_env, finnish_ISO_8859_1_stem},
@@ -210,6 +227,14 @@ static const struct stemmer_modules modules[] = {
   {"nor", ENC_UTF_8, norwegian_UTF_8_create_env, norwegian_UTF_8_close_env, norwegian_UTF_8_stem},
   {"norwegian", ENC_ISO_8859_1, norwegian_ISO_8859_1_create_env, norwegian_ISO_8859_1_close_env, norwegian_ISO_8859_1_stem},
   {"norwegian", ENC_UTF_8, norwegian_UTF_8_create_env, norwegian_UTF_8_close_env, norwegian_UTF_8_stem},
+  {"pers", ENC_UTF_8, persian_UTF_8_create_env, persian_UTF_8_close_env, persian_UTF_8_stem},
+  {"persian", ENC_UTF_8, persian_UTF_8_create_env, persian_UTF_8_close_env, persian_UTF_8_stem},
+  {"pl", ENC_ISO_8859_2, polish_ISO_8859_2_create_env, polish_ISO_8859_2_close_env, polish_ISO_8859_2_stem},
+  {"pl", ENC_UTF_8, polish_UTF_8_create_env, polish_UTF_8_close_env, polish_UTF_8_stem},
+  {"pol", ENC_ISO_8859_2, polish_ISO_8859_2_create_env, polish_ISO_8859_2_close_env, polish_ISO_8859_2_stem},
+  {"pol", ENC_UTF_8, polish_UTF_8_create_env, polish_UTF_8_close_env, polish_UTF_8_stem},
+  {"polish", ENC_ISO_8859_2, polish_ISO_8859_2_create_env, polish_ISO_8859_2_close_env, polish_ISO_8859_2_stem},
+  {"polish", ENC_UTF_8, polish_UTF_8_create_env, polish_UTF_8_close_env, polish_UTF_8_stem},
   {"por", ENC_ISO_8859_1, portuguese_ISO_8859_1_create_env, portuguese_ISO_8859_1_close_env, portuguese_ISO_8859_1_stem},
   {"por", ENC_UTF_8, portuguese_UTF_8_create_env, portuguese_UTF_8_close_env, portuguese_UTF_8_stem},
   {"porter", ENC_ISO_8859_1, porter_ISO_8859_1_create_env, porter_ISO_8859_1_close_env, porter_ISO_8859_1_stem},
@@ -229,12 +254,15 @@ static const struct stemmer_modules modules[] = {
   {"russian", ENC_KOI8_R, russian_KOI8_R_create_env, russian_KOI8_R_close_env, russian_KOI8_R_stem},
   {"russian", ENC_UTF_8, russian_UTF_8_create_env, russian_UTF_8_close_env, russian_UTF_8_stem},
   {"serbian", ENC_UTF_8, serbian_UTF_8_create_env, serbian_UTF_8_close_env, serbian_UTF_8_stem},
+  {"sesotho", ENC_UTF_8, sesotho_UTF_8_create_env, sesotho_UTF_8_close_env, sesotho_UTF_8_stem},
+  {"sot", ENC_UTF_8, sesotho_UTF_8_create_env, sesotho_UTF_8_close_env, sesotho_UTF_8_stem},
   {"spa", ENC_ISO_8859_1, spanish_ISO_8859_1_create_env, spanish_ISO_8859_1_close_env, spanish_ISO_8859_1_stem},
   {"spa", ENC_UTF_8, spanish_UTF_8_create_env, spanish_UTF_8_close_env, spanish_UTF_8_stem},
   {"spanish", ENC_ISO_8859_1, spanish_ISO_8859_1_create_env, spanish_ISO_8859_1_close_env, spanish_ISO_8859_1_stem},
   {"spanish", ENC_UTF_8, spanish_UTF_8_create_env, spanish_UTF_8_close_env, spanish_UTF_8_stem},
   {"sr", ENC_UTF_8, serbian_UTF_8_create_env, serbian_UTF_8_close_env, serbian_UTF_8_stem},
   {"srp", ENC_UTF_8, serbian_UTF_8_create_env, serbian_UTF_8_close_env, serbian_UTF_8_stem},
+  {"st", ENC_UTF_8, sesotho_UTF_8_create_env, sesotho_UTF_8_close_env, sesotho_UTF_8_stem},
   {"sv", ENC_ISO_8859_1, swedish_ISO_8859_1_create_env, swedish_ISO_8859_1_close_env, swedish_ISO_8859_1_stem},
   {"sv", ENC_UTF_8, swedish_UTF_8_create_env, swedish_UTF_8_close_env, swedish_UTF_8_stem},
   {"swe", ENC_ISO_8859_1, swedish_ISO_8859_1_create_env, swedish_ISO_8859_1_close_env, swedish_ISO_8859_1_stem},
@@ -257,6 +285,7 @@ static const char * algorithm_names[] = {
   "armenian", 
   "basque", 
   "catalan", 
+  "czech", 
   "danish", 
   "dutch", 
   "dutch_porter", 
@@ -275,11 +304,14 @@ static const char * algorithm_names[] = {
   "lithuanian", 
   "nepali", 
   "norwegian", 
+  "persian", 
+  "polish", 
   "porter", 
   "portuguese", 
   "romanian", 
   "russian", 
   "serbian", 
+  "sesotho", 
   "spanish", 
   "swedish", 
   "tamil", 

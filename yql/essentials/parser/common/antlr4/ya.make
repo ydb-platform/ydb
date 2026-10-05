@@ -6,6 +6,7 @@ PEERDIR(
 )
 
 SRCS(
+    depth_limiting_listener.cpp
     error_listener.cpp
 )
 

@@ -37,6 +37,7 @@ POSSIBILITY OF SUCH DAMAGE.  */
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #if defined (HAVE_KERN_PROC_ARGS) || defined (HAVE_KERN_PROC)

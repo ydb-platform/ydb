@@ -1,6 +1,7 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/kqp/gateway/actors/analyze_actor.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/local_rpc/helper.h>
@@ -20,6 +21,8 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <functional>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
 
 namespace NKikimr::NKqp {
@@ -110,7 +113,7 @@ public:
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
         bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
         bool expectsResult, TTxAllocatorState::TPtr txAlloc,
-        const TActorId& kqpTempTablesAgentActor)
+        const TActorId& kqpTempTablesAgentActor, NWilson::TTraceId traceId, TInstant deadline)
         : PhyTx(phyTx)
         , QueryType(queryType)
         , QueryData(queryData)
@@ -127,6 +130,8 @@ public:
         , ExpectsResult(expectsResult)
         , TxAlloc(std::move(txAlloc))
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
+        , TraceId(std::move(traceId))
+        , Deadline(deadline)
     {
         YQL_ENSURE(RequestContext);
         YQL_ENSURE(PhyTx);
@@ -138,7 +143,7 @@ public:
     }
 
     void StartAlterOperation() {
-        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, 0, NWilson::TTraceId(TraceId));
         Become(&TKqpSchemeExecuter::ExecuteState);
     }
 
@@ -165,7 +170,7 @@ public:
         modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
+        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false, NWilson::TTraceId(TraceId));
         RegisterWithSameMailbox(requestHandler);
 
         auto actorSystem = TActivationContext::ActorSystem();
@@ -213,7 +218,7 @@ public:
         }
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
+        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false, NWilson::TTraceId(TraceId));
         RegisterWithSameMailbox(requestHandler);
 
         auto actorSystem = TlsActivationContext->ActorSystem();
@@ -253,7 +258,7 @@ public:
 
         auto ev = std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(request);
 
-        Send(MakeSchemeCacheID(), ev.release());
+        Send(MakeSchemeCacheID(), ev.release(), 0, 0, NWilson::TTraceId(TraceId));
         Become(&TKqpSchemeExecuter::ExecuteState);
     }
 
@@ -278,7 +283,12 @@ public:
             const auto errText = TStringBuilder()
                 << "Cannot resolve working dir."
                 << " path# " << JoinPath(dirPath);
-            KQP_STLOG_D(KQPSCHEME, errText);
+            YDB_LOG_DEBUG("Cannot resolve working dir for CTAS move table",
+                {"marker", "KQPSCHEME"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"errText", errText});
 
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::RESOLVE_LOOKUP_ERROR, errText);
             return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, issue);
@@ -337,7 +347,7 @@ public:
         makeDir->SetName(CombinePath(dirPath.begin(), std::prev(dirPath.end()), false));
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
+        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false, NWilson::TTraceId(TraceId));
         RegisterWithSameMailbox(requestHandler);
 
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
@@ -602,10 +612,14 @@ public:
             case NKqpProto::TKqpSchemeOperation::kAnalyzeTable: {
                 const auto& analyzeOperation = schemeOp.GetAnalyzeTable();
 
+                // Older plans omit the rate, which defaults to zero in proto3.
+                const double sampleRate = analyzeOperation.GetSampleRate() == 0.0 ? 1.0 : analyzeOperation.GetSampleRate();
+
                 auto analyzePromise = NewPromise<IKqpGateway::TGenericResult>();
 
                 TVector<TString> columns{analyzeOperation.columns().begin(), analyzeOperation.columns().end()};
-                IActor* analyzeActor = new TAnalyzeActor(Database, analyzeOperation.GetTablePath(), columns, analyzePromise);
+                IActor* analyzeActor = new TAnalyzeActor(Database, analyzeOperation.GetTablePath(), columns, analyzePromise,
+                    sampleRate, NWilson::TTraceId(TraceId));
 
                 auto actorSystem = TActivationContext::ActorSystem();
                 AnalyzeActorId = RegisterWithSameMailbox(analyzeActor);
@@ -737,7 +751,8 @@ public:
             ev.Release(),
             promise,
             failedOnAlreadyExists,
-            successOnNotExist
+            successOnNotExist,
+            NWilson::TTraceId(TraceId)
         );
         RegisterWithSameMailbox(requestHandler);
 
@@ -812,9 +827,110 @@ public:
         Become(&TKqpSchemeExecuter::ObjectExecuteState);
     }
 
+    void StartKillSession() {
+        if (!AppData()->FeatureFlags.GetEnableKillSession()) {
+            return ReplyErrorAndDie(Ydb::StatusIds::UNSUPPORTED, "KILL SESSION is disabled");
+        }
+        const auto& operation = PhyTx->GetSchemeOperation().GetKillSession();
+        switch (operation.GetTargetCase()) {
+            case NKqpProto::TKqpKillSession::kSessionId:
+                KillSessionId = operation.GetSessionId();
+                break;
+            case NKqpProto::TKqpKillSession::kSessionIdParameter: {
+                const auto& name = operation.GetSessionIdParameter();
+                auto* parameter = QueryData ? QueryData->GetParameterUnboxedValuePtr(name) : nullptr;
+                if (!parameter || !parameter->first->IsData()
+                    || static_cast<NMiniKQL::TDataType*>(parameter->first)->GetSchemeType() != NUdf::TDataType<NUdf::TUtf8>::Id)
+                {
+                    return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "KILL SESSION requires a non-NULL Utf8 parameter: " << name);
+                }
+                KillSessionId = TString(parameter->second.AsStringRef());
+                break;
+            }
+            default:
+                return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, "KILL SESSION requires a session ID");
+        }
+
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = Database;
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        entry.Path = SplitPath(Database);
+        entry.SyncVersion = true;
+        entry.RedirectRequired = false;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
+        Become(&TKqpSchemeExecuter::KillSessionState);
+        if (Deadline != TInstant::Max()) {
+            const auto now = TAppData::TimeProvider->Now();
+            if (Deadline <= now) {
+                return ReplyErrorAndDie(Ydb::StatusIds::TIMEOUT, "KILL SESSION deadline exceeded");
+            }
+            Schedule(Deadline - now, new TEvents::TEvWakeup());
+        }
+    }
+
+    void HandleKillSession(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto& entries = ev->Get()->Request->ResultSet;
+        if (ev->Get()->Request->ErrorCount || entries.size() != 1 || !entries.front().SecurityObject) {
+            return ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "Cannot authorize KILL SESSION for this database");
+        }
+
+        const auto& security = *entries.front().SecurityObject;
+        const bool isAdmin = IsAdministrator(AppData(), UserToken.Get())
+            || (AppData()->FeatureFlags.GetEnableDatabaseAdmin()
+                && IsDatabaseAdministrator(UserToken.Get(), security.GetOwnerSID()));
+        if (!isAdmin && (!UserToken || !security.CheckAccess(NACLib::ConnectDatabase, *UserToken))) {
+            return ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "Access denied for KILL SESSION");
+        }
+        const bool canKillAnySession = isAdmin
+            || (UserToken && security.CheckAccess(NACLib::UpdateRow, *UserToken));
+
+        auto request = std::make_unique<TEvKqp::TEvKillSessionRequest>();
+        auto& record = request->Record;
+        record.SetSessionId(KillSessionId);
+        record.SetDatabase(Database);
+        if (UserToken) {
+            record.SetUserToken(UserToken->SerializeAsString());
+        }
+        record.SetCanKillAnySession(canKillAnySession);
+        record.SetSourceSessionId(RequestContext->SessionId);
+        record.SetDeadlineUs(Deadline.MicroSeconds());
+        record.SetTraceId(RequestContext->TraceId);
+        Send(MakeKqpProxyID(SelfId().NodeId()), request.release(), IEventHandle::FlagTrackDelivery);
+    }
+
+    void HandleKillSession(TEvKqp::TEvKillSessionResponse::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        ReplyErrorAndDie(record.GetStatus(), record.MutableIssues());
+    }
+
+    STATEFN(KillSessionState) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleKillSession);
+                hFunc(TEvKqp::TEvKillSessionResponse, HandleKillSession);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                case TEvents::TEvWakeup::EventType:
+                    ReplyErrorAndDie(Ydb::StatusIds::TIMEOUT, "Timed out waiting for session termination");
+                    break;
+                case TEvents::TEvUndelivered::EventType:
+                    ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver KILL SESSION request");
+                    break;
+                default:
+                    UnexpectedEvent("KillSessionState", ev->GetTypeRewrite());
+                    break;
+            }
+        } catch (const yexception& e) {
+            InternalError(e.what());
+        }
+    }
+
     void Bootstrap() {
         const auto& schemeOp = PhyTx->GetSchemeOperation();
-        if (schemeOp.GetObjectType()) {
+        if (schemeOp.HasKillSession()) {
+            StartKillSession();
+        } else if (schemeOp.GetObjectType()) {
             MakeObjectRequest();
         } else if (IsCreateTableAs && schemeOp.GetOperationCase() == NKqpProto::TKqpSchemeOperation::kAlterTable) {
             FindWorkingDirForCTAS();
@@ -907,7 +1023,7 @@ public:
 
     void Navigate(const TActorId& schemeCache) {
         const auto& schemeOp = PhyTx->GetSchemeOperation();
-    
+
         TString path;
         switch (schemeOp.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kBuildOperation: {
@@ -951,15 +1067,19 @@ public:
         }
 
         auto ev = std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release());
-        Send(schemeCache, ev.release());
+        Send(schemeCache, ev.release(), 0, 0, NWilson::TTraceId(TraceId));
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&) {
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        KQP_STLOG_D(KQPSCHEME, "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-            (error_count, ev->Get()->Request.Get()->ErrorCount));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"errorCount", ev->Get()->Request.Get()->ErrorCount});
 
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
@@ -982,20 +1102,33 @@ public:
             }
 
             TString error(builder);
-            KQP_STLOG_E(KQPSCHEME, error);
+            YDB_LOG_ERROR("Unable to navigate scheme paths",
+                {"marker", "KQPSCHEME"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"error", error});
             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NYql::TIssue(error));
         }
 
         AFL_ENSURE(resp->ResultSet.size() <= 2);
 
         if (UserToken && !UserToken->GetSerializedToken().empty() && !CheckAlterAccess(*UserToken, resp)) {
-            KQP_STLOG_E(KQPSCHEME, "Access check failed");
+            YDB_LOG_ERROR("Access check failed",
+                {"marker", "KQPSCHEME"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()});
             return ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, NYql::TIssue("Unauthorized"));
         }
 
         auto domainInfo = resp->ResultSet.front().DomainInfo;
         if (!domainInfo) {
-            KQP_STLOG_E(KQPSCHEME, "Got empty domain info");
+            YDB_LOG_ERROR("Got empty domain info",
+                {"marker", "KQPSCHEME"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()});
             return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssue("empty domain info"));
         }
 
@@ -1054,8 +1187,12 @@ public:
         const auto status = response.GetStatus();
         auto issuesProto = response.GetIssues();
 
-        KQP_STLOG_D(KQPSCHEME, "Handle TEvIndexBuilder::TEvCreateResponse",
-            (response, response.ShortUtf8DebugString()));
+        YDB_LOG_DEBUG("Handle TEvIndexBuilder::TEvCreateResponse",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"response", response.ShortUtf8DebugString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
             if (response.HasSchemeStatus() && response.GetSchemeStatus() == NKikimrScheme::EStatus::StatusAlreadyExists) {
@@ -1073,8 +1210,12 @@ public:
         const auto status = response.GetStatus();
         auto issuesProto = response.GetIssues();
 
-        KQP_STLOG_D(KQPSCHEME, "Handle TEvForcedCompaction::TEvCreateResponse",
-            (response, response.ShortUtf8DebugString()));
+        YDB_LOG_DEBUG("Handle TEvForcedCompaction::TEvCreateResponse",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"response", response.ShortUtf8DebugString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
             DoSubscribe();
@@ -1088,8 +1229,12 @@ public:
         const auto status = response.GetStatus();
         auto issuesProto = response.GetIssues();
 
-        KQP_STLOG_D(KQPSCHEME, "Handle TEvSetColumnConstraint::TEvCreateResponse",
-            (response, response.ShortUtf8DebugString()));
+        YDB_LOG_DEBUG("Handle TEvSetColumnConstraint::TEvCreateResponse",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"response", response.ShortUtf8DebugString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
             DoSubscribe();
@@ -1159,8 +1304,12 @@ public:
 
     void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
-        KQP_STLOG_D(KQPSCHEME, "Handle TEvIndexBuilder::TEvGetResponse",
-            (record, record.ShortDebugString()));
+        YDB_LOG_DEBUG("Handle TEvIndexBuilder::TEvGetResponse",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"record", record.ShortDebugString()});
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             // Internal error: we made incorrect request to get status of index build operation
             NYql::TIssues responseIssues;
@@ -1184,8 +1333,12 @@ public:
 
     void Handle(NSchemeShard::TEvForcedCompaction::TEvGetResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
-        KQP_STLOG_D(KQPSCHEME, "Handle TEvForcedCompaction::TEvGetResponse",
-            (record, record.ShortDebugString()));
+        YDB_LOG_DEBUG("Handle TEvForcedCompaction::TEvGetResponse",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"record", record.ShortDebugString()});
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             // Internal error: we made incorrect request to get status of compaction operation
             NYql::TIssues responseIssues;
@@ -1212,8 +1365,12 @@ public:
 
     void Handle(NSchemeShard::TEvSetColumnConstraint::TEvGetResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
-        KQP_STLOG_D(KQPSCHEME, "Handle TEvSetColumnConstraint::TEvGetResponse",
-            (record, record.ShortDebugString()));
+        YDB_LOG_DEBUG("Handle TEvSetColumnConstraint::TEvGetResponse",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"record", record.ShortDebugString()});
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues responseIssues;
             NYql::IssuesFromMessage(record.GetIssues(), responseIssues);
@@ -1233,7 +1390,8 @@ public:
 
         if (state == Ydb::Table::SetNotNullState::STATE_DONE) {
             return ReplyErrorAndDie(Ydb::StatusIds::SUCCESS, record.MutableIssues());
-        } else if (state == Ydb::Table::SetNotNullState::STATE_CANCELLED) {
+        } else if (state == Ydb::Table::SetNotNullState::STATE_CANCELLED ||
+                   state == Ydb::Table::SetNotNullState::STATE_REJECTED) {
             return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, record.MutableIssues());
         } else {
             return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, record.MutableIssues());
@@ -1250,7 +1408,7 @@ public:
         }
 
         Y_ABORT_UNLESS(SchemePipeActorId_);
-        NTabletPipe::SendData(SelfId(), SchemePipeActorId_, ev.release());
+        NTabletPipe::SendData(SelfId(), SchemePipeActorId_, ev.release(), 0, NWilson::TTraceId(TraceId));
     }
 
     void HandleExecute(TEvPrivate::TEvResult::TPtr& ev) {
@@ -1299,9 +1457,13 @@ public:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
-        KQP_STLOG_D(KQPSCHEME, "Got EvAbortExecution",
-            (status, NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())),
-            (issues, issues.ToOneLineString()));
+        YDB_LOG_DEBUG("Got EvAbortExecution",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"status", NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())},
+            {"issues", issues.ToOneLineString()});
 
         if (AnalyzeActorId) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), issues);
@@ -1332,10 +1494,14 @@ private:
     }
 
     void UnexpectedEvent(const TString& state, ui32 eventType) {
-        KQP_STLOG_C(KQPSCHEME, "TKqpSchemeExecuter, unexpected event",
-            (event_type, eventType),
-            (state, state),
-            (self_id, SelfId()));
+        YDB_LOG_CRIT("TKqpSchemeExecuter, unexpected event",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"eventType", eventType},
+            {"state", state},
+            {"selfId", SelfId()});
 
         InternalError(TStringBuilder() << "Unexpected event at TKqpSchemeExecuter, state: " << state
             << ", event: " << eventType);
@@ -1355,7 +1521,12 @@ private:
     }
 
     void InternalError(const NYql::TIssues& issues) {
-        KQP_STLOG_E(KQPSCHEME, issues.ToOneLineString());
+        YDB_LOG_ERROR("Internal error during scheme operation",
+            {"marker", "KQPSCHEME"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"ctx", *GetUserRequestContext()},
+            {"issues", issues.ToOneLineString()});
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED,
             "Internal error while executing scheme operation.");
 
@@ -1403,6 +1574,9 @@ private:
     bool ExpectsResult = false;
     TTxAllocatorState::TPtr TxAlloc;
     const TActorId KqpTempTablesAgentActor;
+    const NWilson::TTraceId TraceId;
+    const TInstant Deadline;
+    TString KillSessionId;
     TActorId AnalyzeActorId;
 };
 
@@ -1414,12 +1588,13 @@ IActor* CreateKqpSchemeExecuter(
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, bool createTmpDir, bool isCreateTableAs,
     TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
-    bool expectsResult, TTxAllocatorState::TPtr txAlloc, const TActorId& kqpTempTablesAgentActor)
+    bool expectsResult, TTxAllocatorState::TPtr txAlloc, const TActorId& kqpTempTablesAgentActor,
+    NWilson::TTraceId traceId, TInstant deadline)
 {
     return new TKqpSchemeExecuter(
         phyTx, queryType, queryData, target, requestType, database, userToken, clientAddress,
         temporary, createTmpDir, isCreateTableAs, tempDirName, std::move(ctx),
-        expectsResult, std::move(txAlloc), kqpTempTablesAgentActor);
+        expectsResult, std::move(txAlloc), kqpTempTablesAgentActor, std::move(traceId), deadline);
 }
 
 } // namespace NKikimr::NKqp

@@ -12,6 +12,7 @@ SRCS(
     funnel_queue.h
     futex.h
     intrinsics.h
+    intrusive_funnel_queue.h
     local_process_key.h
     named_tuple.h
     queue_chunk.h
@@ -52,4 +53,8 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+)
+
+RECURSE(
+    benchmark
 )

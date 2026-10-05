@@ -2,7 +2,7 @@
 
 #include <library/cpp/yt/error/error.h>
 
-#include <library/cpp/yt/misc/concepts.h>
+#include <library/cpp/yt/mpl/concepts.h>
 
 #include <library/cpp/yt/misc/static_initializer.h>
 
@@ -17,7 +17,7 @@ namespace NDetail {
 class TInitHelper
 {
 public:
-    template <CInvocable<void()> TFunc>
+    template <NMpl::CInvocable<void()> TFunc>
     TInitHelper(const TFunc& func)
     {
         func();
@@ -26,7 +26,7 @@ public:
 
 void TryVerifyThreadIsOnly();
 
-template <CInvocable<void(bool ok, int threadCount)> TFunc>
+template <NMpl::CInvocable<void(bool ok, int threadCount)> TFunc>
 void BlockSignalAtProcessStart(int signal, const TFunc& func);
 
 } // namespace NDetail

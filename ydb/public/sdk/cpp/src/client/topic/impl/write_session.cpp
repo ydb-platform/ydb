@@ -56,6 +56,10 @@ NThreading::TFuture<void> TWriteSession::WaitEvent() {
     return TryGetImpl()->EventsQueue->WaitEvent();
 }
 
+NThreading::TFuture<bool> TWriteSession::Flush() {
+    return TryGetImpl()->Flush();
+}
+
 void TWriteSession::WriteEncoded(TContinuationToken&& token, std::string_view data, ECodec codec, ui32 originalSize,
                                     std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) {
     auto message = TWriteMessage::CompressedMessage(std::move(data), codec, originalSize);

@@ -93,12 +93,15 @@ def get_gateway_cfg_suffix():
     return get_param('gateway_config_suffix', default_suffix) or ''
 
 
-def get_gateway_cfg_filename():
+def get_gateway_cfg_dir():
     suffix = get_gateway_cfg_suffix()
     if suffix == '':
-        return 'gateways.conf'
-    else:
-        return 'gateways-' + suffix + '.conf'
+        return 'yql/essentials/cfg/tests'
+    return 'yql/essentials/cfg/tests-' + suffix
+
+
+def get_gateway_cfg_filename():
+    return 'gateways.conf'
 
 
 def merge_gateway_cfg_patch(patch_cfg_file, gateway_config):
@@ -111,13 +114,17 @@ def merge_gateway_cfg_patch(patch_cfg_file, gateway_config):
 
 
 def merge_default_gateway_cfg(cfg_dir, gateway_config):
-
-    with open(yql_source_path(os.path.join(cfg_dir, 'gateways.conf'))) as f:
+    gateway_cfg_filename = get_gateway_cfg_filename()
+    with open(yql_source_path(os.path.join(cfg_dir, gateway_cfg_filename))) as f:
         text_format.Merge(f.read(), gateway_config)
 
     suffix = get_gateway_cfg_suffix()
     if suffix:
-        with open(yql_source_path(os.path.join(cfg_dir, 'gateways-' + suffix + '.conf'))) as f:
+        # The patch lives in a dedicated folder (e.g. tests-experimental),
+        # independent of the base cfg_dir which may point elsewhere
+        # (yql/cfg/local for LOCAL_BENCH, yql/essentials/cfg/udf_test, etc.).
+        patch_dir = get_gateway_cfg_dir()
+        with open(yql_source_path(os.path.join(patch_dir, gateway_cfg_filename))) as f:
             text_format.Merge(f.read(), gateway_config)
 
 
@@ -130,21 +137,13 @@ def find_file(path):
     return res
 
 
-output_path_cache = {}
-
-
 def yql_output_path(*args, **kwargs):
     if not get_param('LOCAL_BENCH_XX'):
         # abspath is needed, because output_path may be relative when test is run directly (without ya make).
         return os.path.abspath(yatest.common.output_path(*args, **kwargs))
 
     else:
-        if args and args in output_path_cache:
-            return output_path_cache[args]
-        res = os.path.join(tempfile.mkdtemp(prefix='yql_tmp_'), *args)
-        if args:
-            output_path_cache[args] = res
-        return res
+        return os.path.join(tempfile.mkdtemp(prefix='yql_tmp_'), *args)
 
 
 def yql_binary_path(*args, **kwargs):
@@ -153,6 +152,17 @@ def yql_binary_path(*args, **kwargs):
 
     else:
         return find_file(args[0])
+
+
+def yql_binary_path_with_impl(path):
+    directory, binary = os.path.split(path)
+    try:
+        impl_path = yql_binary_path(os.path.join(directory, 'impl', binary))
+        if impl_path:
+            return impl_path
+    except Exception:
+        pass
+    return yql_binary_path(path)
 
 
 def yql_source_path(*args, **kwargs):
@@ -282,6 +292,10 @@ def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir
         attr = def_attr
 
     if attr is not None:
+        if not isinstance(attr, (six.binary_type, six.text_type)):
+            attr = cyson.dumps(attr, format='pretty')
+        if isinstance(attr, six.binary_type):
+            attr = attr.decode('utf-8')
         if attr_postprocess is not None:
             attr = attr_postprocess(attr)
 
@@ -1006,9 +1020,12 @@ def normalize_table_yson(y):
     if isinstance(y, dict):
         normDict = OrderedDict()
         for k, v in sorted(six.iteritems(y), key=lambda x: x[0], reverse=True):
-            if k == "_other":
-                normDict[normalize_table_yson(k)] = sorted(normalize_table_yson(v))
-            elif v != "Void" and v is not None and not isinstance(v, YsonEntity):
+            if k == "_other" or k == b"_other":
+                normDict[normalize_table_yson(k)] = sorted(
+                    normalize_table_yson(v),
+                    key=cyson.dumps,
+                )
+            elif v != "Void" and v != b"Void" and v is not None and not isinstance(v, YsonEntity):
                 normDict[normalize_table_yson(k)] = normalize_table_yson(v)
         return normDict
     return y
@@ -1102,7 +1119,7 @@ def normalize_result(res, sort):
         for data in r[b'Write']:
             is_list = (b'Type' in data) and (data[b'Type'][0] == b'ListType')
             if is_list and sort and b'Data' in data:
-                data[b'Data'] = sorted(data[b'Data'])
+                data[b'Data'] = sorted(data[b'Data'], key=cyson.dumps)
             if b'Ref' in data:
                 data[b'Ref'] = []
                 data[b'Truncated'] = True
@@ -1215,4 +1232,3 @@ class LoggingDowngrade(object):
         for name, level in self.loggers:
             log = logging.getLogger(name)
             log.setLevel(level)
-        return True

@@ -48,6 +48,7 @@ public:
             auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
             auto blobDepotDeleteQueue = db.Table<Schema::BlobDepotDeleteQueue>().Select();
             auto bridgeSyncState = db.Table<Schema::BridgeSyncState>().Select();
+            auto databaseSpaceExhaustedPool = db.Table<Schema::DatabaseSpaceExhaustedPool>().Select();
             if (!state.IsReady()
                     || !nodes.IsReady()
                     || !disk.IsReady()
@@ -68,7 +69,8 @@ public:
                     || !scrubState.IsReady()
                     || !pdiskSerial.IsReady()
                     || !blobDepotDeleteQueue.IsReady()
-                    || !bridgeSyncState.IsReady()) {
+                    || !bridgeSyncState.IsReady()
+                    || !databaseSpaceExhaustedPool.IsReady()) {
                 return false;
             }
         }
@@ -97,6 +99,8 @@ public:
                 Self->GroupReservePart = state.GetValue<T::GroupReservePart>();
                 Self->MaxScrubbedDisksAtOnce = state.GetValue<T::MaxScrubbedDisksAtOnce>();
                 Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>();
+                Self->DatabaseSpace.SetThresholds(state.GetValue<T::DatabaseSpaceBlockColor>(),
+                    state.GetValue<T::DatabaseSpaceUnblockColor>());
                 Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->AllowMultipleRealmsOccupation = state.GetValueOrDefault<T::AllowMultipleRealmsOccupation>();
                 Self->SysViewChangedSettings = true;
@@ -202,7 +206,6 @@ public:
         // Group
         Self->GroupMap.clear();
         Self->GroupLookup.clear();
-        Self->OwnerIdIdxToGroup.clear();
         Self->IndexGroupSpeciesToGroup.clear();
         {
             using T = Schema::Group;
@@ -258,7 +261,6 @@ public:
                 OPTIONAL(BlobDepotConfig)
                 OPTIONAL(BlobDepotId)
                 OPTIONAL(ErrorReason)
-                OPTIONAL(AppliedGroupGeneration)
 
                 if (groups.HaveValue<T::Metrics>()) {
                     const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());
@@ -271,7 +273,6 @@ public:
 
 #undef OPTIONAL
 
-                Self->OwnerIdIdxToGroup.emplace(groups.GetValue<T::Owner>(), groups.GetKey());
                 Self->IndexGroupSpeciesToGroup[group.GetGroupSpecies()].push_back(group.ID);
                 if (!groups.Next())
                     return false;
@@ -576,6 +577,40 @@ public:
             Self->StoragePoolStat->Update(TStoragePoolStat::ConvertId(group->StoragePoolId), std::nullopt, group->StatusFlags);
         }
 
+        // database space state; the hysteresis latches are restored and evaluated against complete group counters
+        Self->DatabaseSpace.ResetState();
+        {
+            TDatabaseSpaceTracker::TBatch batch(Self->DatabaseSpace);
+            for (const auto& [id, info] : Self->StoragePools) {
+                Self->UpdateDatabaseSpacePool(id, info);
+            }
+            for (const auto& [groupId, group] : Self->GroupMap) {
+                Self->UpdateDatabaseSpaceGroup(*group);
+            }
+
+            using T = Schema::DatabaseSpaceExhaustedPool;
+            std::vector<TBoxStoragePoolId> gonePools;
+            auto table = db.Table<T>().Select();
+            if (!table.IsReady()) {
+                return false;
+            }
+            while (!table.EndOfSet()) {
+                const TBoxStoragePoolId poolId(table.GetValue<T::BoxId>(), table.GetValue<T::StoragePoolId>());
+                if (Self->StoragePools.contains(poolId)) {
+                    Self->DatabaseSpace.RestorePoolExhausted(poolId, true);
+                } else {
+                    gonePools.push_back(poolId); // must not happen, as the row is deleted along with the pool
+                }
+                if (!table.Next()) {
+                    return false;
+                }
+            }
+            for (const auto& [boxId, storagePoolId] : gonePools) {
+                db.Table<T>().Key(boxId, storagePoolId).Delete();
+            }
+        }
+        Self->CommitDatabaseSpaceChanges(db);
+
         // scrub state
         Self->ScrubState.Clear();
         {
@@ -761,8 +796,16 @@ public:
                 kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
                 kvp->SetGeneration(groupInfo->Generation);
 
+                TMaybe<TKikimrScopeId> scopeId;
+                const TStoragePoolInfo& info = Self->StoragePools.at(groupInfo->StoragePoolId);
+                if (info.SchemeshardId && info.PathItemId) {
+                    scopeId = TKikimrScopeId(*info.SchemeshardId, *info.PathItemId);
+                } else {
+                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
+                }
+
                 NKikimrBlobStorage::TGroupInfo proto;
-                SerializeGroupInfo(&proto, *groupInfo, Self->StoragePools);
+                SerializeGroupInfo(&proto, *groupInfo, info, scopeId);
                 const bool success = proto.SerializeToString(kvp->MutableValue());
                 Y_DEBUG_ABORT_UNLESS(success);
             }

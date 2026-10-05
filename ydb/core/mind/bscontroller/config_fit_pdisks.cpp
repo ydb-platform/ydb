@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include <ydb/core/util/pb.h>
+
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
@@ -104,19 +106,13 @@ namespace NKikimr {
                     }
                 }
                 // run ExtractConfig as the very last step
-                const ui32 oldSlotSizeInUnits = pdiskInfo->SlotSizeInUnits;
+                const ui32 oldSlotSizeInUnits = pdiskInfo->GetEffectiveSlotSizeInUnits();
                 pdiskInfo->ExtractConfig(defaultMaxSlots);
-                if (pdiskInfo->SlotSizeInUnits != oldSlotSizeInUnits) {
-                    ui32 numActiveSlots = 0;
-                    for (const auto& [vslotId, vslot] : pdiskInfo->VSlotsOnPDisk) {
-                        if (vslot->IsBeingDeleted()) {
-                            continue;
-                        }
-                        const TBlobStorageController::TGroupInfo *group = state.Groups.Find(vslot->GroupId);
-                        Y_ABORT_UNLESS(group);
-                        numActiveSlots += TPDiskConfig::GetOwnerWeight(group->GroupSizeInUnits, pdiskInfo->SlotSizeInUnits);
-                    }
-                    pdiskInfo->NumActiveSlots = numActiveSlots;
+                // Slot weights depend on SlotSizeInUnits, independently of quota calculation.
+                if (pdiskInfo->GetEffectiveSlotSizeInUnits() != oldSlotSizeInUnits) {
+                    pdiskInfo->NumActiveDynamicSlots = pdiskInfo->ComputeNumActiveDynamicSlots([&](TGroupId groupId) {
+                        return state.Groups.Find(groupId);
+                    });
                 }
             }
         }

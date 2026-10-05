@@ -1,3 +1,41 @@
+* Fixed async credentials acquisition for unary and streaming RPCs and Topic/PersQueue write sessions; the SDK now uses the token returned by `GetAuthInfoAsync()` without a second synchronous lookup.
+
+## v3.24.0
+
+* Added `NValueHelpers::Embedding` to create FloatVector `Bytes` query parameters from numeric ranges.
+
+* Topic and PersQueue writers now respect the driver's outbound gRPC message size limit when batching writes.
+
+* Added a draft UDF client (`client/draft/ydb_udf.h`) with manifest-based uploads, separate module type/code kind, per-platform compile state and optional timestamps, and incremental `UploadModuleFromFile` on a dedicated I/O executor. Upload futures include the final gRPC status.
+
+* Added an optional S3 object key prefix to TTL eviction settings for column tables.
+
+* Added `TTopicClient::ResetOffset` / `TResetOffsetSettings` to rewind a consumer's committed offsets on all topic partitions.
+
+* Added OIDC/OAuth authentication via `NOidc::CreateOidcProviderFactory`, supporting static access tokens, Client Credentials Grant, and Device Authorization Grant, with token refresh and interfaces for token caching and interactive sign-in.
+
+* Added `Float16` and `BFloat16` vector index types.
+
+## v3.23.0
+
+* Added optional `TRetryOperationSettings::StopToken` for cooperative cancellation between retry attempts.
+
+* Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
+
+## v3.22.0
+
+* Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.
+
+* Fixed query parameters with incomplete types being sent to the server; the parameter builder now reports the error locally.
+
+* Added the initial process-wide SDK runtime infrastructure. Driver cancellation and callback accounting are now isolated per driver, without changing public APIs or resource-sharing behavior.
+
+## v3.21.1
+
+* Fix read session close deadlock in topic sdk.
+
+## v3.21.0
+
 * Fixed Query SDK `CreateSession` metrics being recorded when reusing a session from the pool.
 
 * Added `TQueryClient::DeleteSession` to explicitly delete a query session by session id.
@@ -8,7 +46,7 @@
 
 * Added a distributed lock primitive based on the coordination service, which implements basic_lockable concept.
 
-# v3.20.0
+## v3.20.0
 
 * Added automatic retries for unary methods of table and query clients(ExecuteQuery, ExecuteScript, BulkUpsert, ReadRows).
 

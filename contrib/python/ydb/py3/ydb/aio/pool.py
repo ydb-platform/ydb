@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from typing import Any, Callable, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Callable, Optional, Tuple, TYPE_CHECKING, cast
 
 from ydb import issues
-from ydb.opentelemetry.tracing import SpanName, create_ydb_span
+from ydb.observability.tracing import SpanName, create_ydb_span
 from ydb.pool import ConnectionsCache as _ConnectionsCache, IConnectionPool
 
 from .connection import Connection, EndpointKey
@@ -310,6 +310,15 @@ class ConnectionPool(IConnectionPool):
                 self._discovery.notify_disconnected()
 
         return __wrapper__
+
+    def _pessimize_node(self, node_id: int) -> None:
+        """Deprioritize the connection attached to the given YDB node."""
+        if node_id <= 0:
+            return
+
+        connection = cast(Optional[Connection], self._store.get_connection_by_node_id(node_id))
+        if connection is not None:
+            asyncio.get_running_loop().create_task(self._on_disconnected(connection)())
 
     async def wait(self, timeout: Optional[float] = 7.0, fail_fast: bool = False) -> None:  # type: ignore[override]  # async override of sync method
         with create_ydb_span(SpanName.DRIVER_INITIALIZE, self._driver_config, kind="internal").attach_context():

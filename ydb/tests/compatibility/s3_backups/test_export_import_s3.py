@@ -50,8 +50,12 @@ class TestExportImportS3(MixedClusterFixture):
             .with_bucket(s3_bucket)
         )
 
+        extra_feature_flags = ["enable_export_auto_dropping"]
+        if self._is_column_table_export_available():
+            extra_feature_flags.append("enable_column_tables_backup")
+
         yield from self.setup_cluster(
-            extra_feature_flags=["enable_export_auto_dropping", "enable_column_tables_backup"]
+            extra_feature_flags=extra_feature_flags
         )
 
     @staticmethod

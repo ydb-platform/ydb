@@ -1,5 +1,6 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
+#include <ydb/core/base/nameservice.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/mind/dynamic_nameserver.h>
 #include <ydb/core/protos/bridge.pb.h>
@@ -31,7 +32,7 @@ namespace NKikimr::NStorage {
         YDB_LOG_DEBUG("Bootstrap",
             {"marker", "NWDC00"});
 
-        auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
+        auto ns = NNodeBroker::BuildNameserverTable(*Cfg->NameserviceConfig);
         auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
 
         for (const auto& [nodeId, item] : ns->StaticNodeTable) {
@@ -48,7 +49,7 @@ namespace NKikimr::NStorage {
                 pileNames.emplace(bridge.GetPiles(i).GetName(), i);
             }
 
-            for (const auto& item : Cfg->NameserviceConfig.GetNode()) {
+            for (const auto& item : Cfg->NameserviceConfig->GetNode()) {
                 const TNodeLocation location = item.HasLocation() ? TNodeLocation(item.GetLocation())
                     : item.HasWalleLocation() ? TNodeLocation(item.GetWalleLocation())
                     : TNodeLocation();
@@ -301,6 +302,10 @@ namespace NKikimr::NStorage {
                     "Binding# " << Binding->ToString() << " Subscription# " << subs.ToString());
                 okay = true;
             }
+            if (RootProbe && RootProbe->NodeId == nodeId) {
+                Y_ABORT_UNLESS(!RootProbe->SessionId || subs.SessionId == RootProbe->SessionId);
+                okay = true;
+            }
             if (const auto it = DirectBoundNodes.find(nodeId); it != DirectBoundNodes.end()) {
                 Y_VERIFY_S(!subs.SessionId || subs.SessionId == it->second.SessionId, "sessionId# " << subs.SessionId
                     << " node.SessionId# " << it->second.SessionId);
@@ -336,6 +341,9 @@ namespace NKikimr::NStorage {
 
         if (Binding) {
             Y_ABORT_UNLESS(SubscribedSessions.contains(Binding->NodeId));
+        }
+        if (RootProbe) {
+            Y_ABORT_UNLESS(Scepter && !Binding && SubscribedSessions.contains(RootProbe->NodeId));
         }
         for (const auto& [nodeId, info] : DirectBoundNodes) {
             Y_VERIFY_S(SubscribedSessions.contains(nodeId), "NodeId# " << nodeId);
@@ -431,8 +439,7 @@ namespace NKikimr::NStorage {
         if (change && NodeListObtained && StorageConfigLoaded) {
             if (IsSelfStatic) {
                 UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
-                UpdateQuorums();
-                IssueNextBindRequest();
+                ReconcileNodeRole();
             }
             processPendingEvents();
         }
@@ -479,7 +486,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeConfigScatter, Handle);
             hFunc(TEvNodeConfigGather, Handle);
             hFunc(TEvNodeConfigInvokeOnRoot, HandleInvokeOnRoot);
-            IgnoreFunc(TEvNodeConfigInvokeOnRootResult);
+            hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -506,6 +513,8 @@ namespace NKikimr::NStorage {
             fFunc(TEvPrivate::EvRetryCollectConfigsAndPropose, HandleRetryCollectConfigsAndPropose);
             cFunc(TEvPrivate::EvRetryPersistConfig, HandleRetryPersistConfig);
             cFunc(TEvPrivate::EvFlushRetroTraceBatch, HandleFlushRetroTraceBatch);
+            fFunc(TEvPrivate::EvRootProbeTimeout, HandleRootProbeTimeout);
+            fFunc(TEvPrivate::EvBindingTimeout, HandleBindingTimeout);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
@@ -517,9 +526,7 @@ namespace NKikimr::NStorage {
         }
 
         if (IsSelfStatic && StorageConfig && NodeListObtained) {
-            UpdateQuorums();
-            IssueNextBindRequest();
-            CheckRootNodeStatus();
+            ReconcileNodeRole();
         }
         if (StorageConfig && NodeListObtained) {
             ReportStorageConfigToNodeWarden();

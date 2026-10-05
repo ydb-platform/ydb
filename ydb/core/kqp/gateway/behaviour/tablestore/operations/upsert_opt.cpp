@@ -33,6 +33,12 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
             return TConclusionStatus::Fail("SCAN_READER_POLICY_NAME have to be in ['PLAIN', 'SIMPLE', 'TRIVIAL']");
         }
     }
+    if (auto status = ExtractInsertOption(features, "DEDUPLICATION_ENABLED", DeduplicationEnabled); status.IsFail()) {
+        return status;
+    }
+    if (auto status = ExtractInsertOption(features, "CACHE_BLOBS_AFTER_WRITE", CacheBlobsAfterWrite); status.IsFail()) {
+        return status;
+    }
     if (auto status = ExtractInsertOption(features, "INSERT_OPTIONS.BUILD_INDEXES_ENABLED", InsertOptionsBuildIndexesEnabled); status.IsFail()) {
         return status;
     }
@@ -83,6 +89,12 @@ void TUpsertOptionsOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTab
     schemaData.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
     if (ScanReaderPolicyName) {
         schemaData.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
+    }
+    if (DeduplicationEnabled) {
+        schemaData.MutableOptions()->SetDeduplicationEnabled(*DeduplicationEnabled);
+    }
+    if (CacheBlobsAfterWrite) {
+        schemaData.MutableOptions()->SetCacheBlobsAfterWrite(*CacheBlobsAfterWrite);
     }
     if (CompactionPlannerConstructor.HasObject()) {
         CompactionPlannerConstructor.SerializeToProto(*schemaData.MutableOptions()->MutableCompactionPlannerConstructor());

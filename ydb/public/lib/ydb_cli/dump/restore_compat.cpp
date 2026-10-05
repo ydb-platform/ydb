@@ -3,6 +3,8 @@
 #include <ydb/library/backup/query_builder.h>
 #include <ydb/library/backup/query_uploader.h>
 
+#include <util/stream/str.h>
+
 namespace NYdb::NDump {
 
 using namespace NBackup;
@@ -62,7 +64,13 @@ public:
     }
 
     void Feed(NPrivate::TLine&& line) override {
-        AddLine(line);
+        try {
+            AddLine(line);
+        } catch (const std::exception& e) {
+            TStringStream loc;
+            line.GetLocation().Out(loc);
+            throw yexception() << loc.Str() << ": " << e.what();
+        }
 
         ++Rows;
         Bytes += RecordSize(line);
@@ -117,12 +125,14 @@ public:
     explicit TDataWriter(
             const TString& path,
             TTableClient& tableClient,
+            NQuery::TQueryClient& queryClient,
             const NPrivate::IDataAccumulator* accumulator,
-            const TRestoreSettings& settings)
+            const TRestoreSettings& settings,
+            bool isColumnTable)
         : Path(path)
         , TableClient(tableClient)
         , UseBulkUpsert(settings.Mode_ == TRestoreSettings::EMode::BulkUpsert)
-    {   
+    {
         const auto* dataAccumulator = dynamic_cast<const TDataAccumulator*>(accumulator);
         Y_ENSURE(dataAccumulator);
 
@@ -133,7 +143,11 @@ public:
         opts.ReactionTime = settings.RateLimiterSettings_.ReactionTime_;
         opts.RetryOperationMaxRetries =  settings.MaxRetries_;
 
-        Uploader = MakeHolder<TUploader>(opts, TableClient, dataAccumulator->GetQueryString());
+        if (!UseBulkUpsert && isColumnTable) {
+            Uploader = MakeHolder<TUploader>(opts, queryClient, dataAccumulator->GetQueryString());
+        } else {
+            Uploader = MakeHolder<TUploader>(opts, TableClient, dataAccumulator->GetQueryString());
+        }
     }
 
     bool Push(NPrivate::TBatch&& batch) override {
@@ -178,9 +192,11 @@ NPrivate::IDataAccumulator* CreateCompatAccumulator(
 NPrivate::IDataWriter* CreateCompatWriter(
         const TString& path,
         TTableClient& tableClient,
+        NQuery::TQueryClient& queryClient,
         const NPrivate::IDataAccumulator* accumulator,
-        const TRestoreSettings& settings) {
-    return new TDataWriter(path, tableClient, accumulator, settings);
+        const TRestoreSettings& settings,
+        bool isColumnTable) {
+    return new TDataWriter(path, tableClient, queryClient, accumulator, settings, isColumnTable);
 }
 
 } // NYdb::NDump

@@ -62,7 +62,12 @@ Functions for ASCII strings:
 
 * `String::AsciiToTitle(String{Flags:AutoMap}) -> String`: Changes only Latin characters. For working with other alphabets, see Unicode::ToTitle
 
-* `String::SplitToList( String?, String, [ DelimeterString:Bool?, SkipEmpty:Bool?, Limit:Uint64? ]) -> List<String>`
+* Signature:
+
+  ```text
+  String::SplitToList( String?, String,
+  [ DelimeterString:Bool?, SkipEmpty:Bool?, Limit:Uint64? ]) -> List<String>
+  ```
 
   The first argument is the source string
   The second argument is a delimiter
@@ -104,7 +109,14 @@ Functions for ASCII strings:
 
 * `String::IsAsciiHex(String{Flags:AutoMap}) -> Bool`
 
-* `String::LevensteinDistance(String{Flags:AutoMap}, String{Flags:AutoMap}) -> Uint64`
+* Signature:
+
+  ```text
+  String::LevensteinDistance(String{Flags:AutoMap},
+  String{Flags:AutoMap}) -> Uint64
+  ```
+
+
 
 * `String::LeftPad(String{Flags:AutoMap}, Uint64, [String?]) -> String`
 
@@ -142,6 +154,7 @@ The functions from the String library don't support Cyrillic and can only work w
 
 ```yql
 SELECT String::Base64Encode("YQL"); -- "WVFM"
+SELECT String::Base64Decode("WVFM"); -- "YQL"
 SELECT String::Strip("YQL ");       -- "YQL"
 SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3", "4,5,6,7"]
 ```

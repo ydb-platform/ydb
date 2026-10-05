@@ -38,8 +38,8 @@ public:
 private:
     TFuture<TTableMountInfoPtr> DoGet(const NYPath::TYPath& path, bool /*isPeriodicUpdate*/) noexcept override
     {
-        YT_LOG_DEBUG("Requesting table mount info (Path: %v)",
-            path);
+        YT_TLOG_DEBUG("Requesting table mount info")
+            .With("Path", path);
 
         TApiServiceProxy proxy(Channel_);
         proxy.SetDefaultTimeout(Timeout_);
@@ -112,11 +112,11 @@ private:
                     tableInfo->UpperCapBound = MakeUnversionedOwningRow(tabletCount);
                 }
 
-                YT_LOG_DEBUG("Table mount info received (Path: %v, TableId: %v, TabletCount: %v, Dynamic: %v)",
-                    path,
-                    tableInfo->TableId,
-                    tableInfo->Tablets.size(),
-                    tableInfo->Dynamic);
+                YT_TLOG_DEBUG("Table mount info received")
+                    .With("Path", path)
+                    .With("TableId", tableInfo->TableId)
+                    .With("TabletCount", tableInfo->Tablets.size())
+                    .With("Dynamic", tableInfo->Dynamic);
 
                 return tableInfo;
             }));

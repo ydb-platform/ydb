@@ -1,6 +1,6 @@
 #include "use.h"
 
-#include "evaluate.h"
+#include <yql/essentials/sql/v1/ide/analysis/evaluate.h>
 
 #include <yql/essentials/sql/v1/ide/pure_ast/narrowing_visitor.h>
 
@@ -11,7 +11,7 @@ namespace {
 class TVisitor: public NSQLPureAST::TSQLv1NarrowingVisitor {
 public:
     TVisitor(const TParsedInput& input, const INamedNodes* nodes)
-        : NSQLPureAST::TSQLv1NarrowingVisitor(input.Tokens, input.Original.CursorPosition)
+        : NSQLPureAST::TSQLv1NarrowingVisitor(&input.ParseTree->Tokens(), input.CursorPosition)
         , Nodes_(nodes)
     {
     }
@@ -106,7 +106,7 @@ TMaybe<TClusterContext> ParseClusterContext(SQLv1::Cluster_exprContext* ctx, con
 
 // TODO(YQL-19747): Use any to maybe conversion function
 TMaybe<TClusterContext> FindUseStatement(TParsedInput input, const INamedNodes& nodes) {
-    std::any result = TVisitor(input, &nodes).visit(input.SqlQuery);
+    std::any result = TVisitor(input, &nodes).visit(input.ParseTree->Root());
     if (!result.has_value()) {
         return Nothing();
     }

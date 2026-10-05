@@ -15,7 +15,7 @@ private:
     std::shared_ptr<IStepFunction> Function;
 
     virtual NJson::TJsonValue DoDebugJson() const override;
-    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
+    virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
     TConclusion<bool> AddMonoValue(
         const bool monoValue, const std::shared_ptr<IChunkedArray>& accResult, const TProcessorContext& context) const;
 
@@ -26,7 +26,7 @@ private:
     TConclusion<std::optional<bool>> GetMonoInput(const std::shared_ptr<IChunkedArray>& inputArray) const;
     TConclusion<bool> GetMonoInput(const std::shared_ptr<arrow::Scalar>& scalar) const;
 
-    bool IsFinishDatum(const arrow::Datum& datum) const;
+    bool IsFinishAccessor(const std::shared_ptr<IChunkedArray>& accessor) const;
     virtual ui64 DoGetWeight() const override;
 
 public:

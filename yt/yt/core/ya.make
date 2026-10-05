@@ -45,7 +45,6 @@ SRCS(
     compression/stream.cpp
     compression/lz.cpp
     compression/lzma.cpp
-    compression/public.cpp
     compression/snappy.cpp
     compression/zlib.cpp
     compression/zstd.cpp
@@ -104,6 +103,7 @@ SRCS(
 
     crypto/config.cpp
     crypto/crypto.cpp
+    crypto/helpers.cpp
     crypto/tls.cpp
 
     logging/appendable_compressed_file.cpp
@@ -196,7 +196,6 @@ SRCS(
 
     phoenix/context.cpp
     phoenix/descriptors.cpp
-    phoenix/load.cpp
     phoenix/schemas.cpp
     phoenix/type_def.cpp
     phoenix/type_registry.cpp
@@ -212,6 +211,7 @@ SRCS(
     GLOBAL rpc/configure_dispatcher.cpp
     rpc/dispatcher.cpp
     rpc/dynamic_channel_pool.cpp
+    rpc/dynamic_channel_pool_provider.cpp
     rpc/endpoint_address.cpp
     rpc/hedging_channel.cpp
     rpc/helpers.cpp
@@ -370,6 +370,7 @@ PEERDIR(
     library/cpp/yt/logging
     library/cpp/yt/logging/plain_text_formatter
     library/cpp/yt/misc
+    library/cpp/yt/mpl
     library/cpp/yt/memory
     library/cpp/yt/string
     library/cpp/yt/yson
@@ -424,6 +425,7 @@ END()
 RECURSE(
     http
     test_framework
+    yaml
 )
 
 IF (NOT OPENSOURCE AND OS_LINUX)
@@ -433,6 +435,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
         concurrency/benchmarks
         bus/benchmarks
         logging/benchmark
+        phoenix/benchmarks
         rpc/benchmark
         ypath/benchmarks
         yson/benchmark
@@ -454,6 +457,7 @@ ENDIF()
 RECURSE_FOR_TESTS(
     actions/unittests
     concurrency/unittests
+    dns/unittests
     http/unittests
     misc/unittests
     net/unittests
@@ -479,6 +483,7 @@ IF (NOT OS_WINDOWS)
         phoenix/unittests
         profiling/unittests
         rpc/grpc/unittests
+        rpc/http/unittests
         rpc/unittests
         ypath/unittests
         ytree/unittests

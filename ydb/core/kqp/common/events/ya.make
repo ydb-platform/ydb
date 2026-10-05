@@ -1,9 +1,8 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     events.cpp
     query.cpp
-    workload_service.cpp
 )
 
 PEERDIR(
@@ -24,7 +23,5 @@ PEERDIR(
 )
 
 GENERATE_ENUM_SERIALIZATION(script_executions.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()

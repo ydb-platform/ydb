@@ -51,6 +51,8 @@ using namespace NYT::NConcurrency;
 //   - "session_timeout"
 [[maybe_unused]] const TDuration TableReaderTimeout = TDuration::Minutes(35);
 
+constexpr ssize_t AttachmentChunkSize = 4_MB;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 ESecurityAction FromApiSecurityAction(NSecurityClient::ESecurityAction action)
@@ -193,6 +195,16 @@ NYTree::INodePtr ToApiNode(const TNode& node)
     return NYTree::ConvertToNode(NYson::TYsonString(NodeToYsonString(node, NYson::EYsonFormat::Binary)));
 }
 
+// Write data in small chunks to avoid generating large RPC attachments.
+void WriteInChunks(const void* buf, ssize_t len, ssize_t maxChunkSize, const NApi::IFileWriterPtr& writer)
+{
+    auto data = TSharedRef::MakeCopy<TDefaultSharedBlobTag>(TRef(buf, len));
+    for (ssize_t offset = 0; offset < std::ssize(data); offset += maxChunkSize) {
+        auto chunk = data.Slice(offset, Min(offset + maxChunkSize, std::ssize(data)));
+        WaitAndProcess(writer->Write(std::move(chunk)));
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSyncRpcInputStream
@@ -225,6 +237,8 @@ private:
         }
     }
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TSyncRpcOutputStream
     : public IOutputStream
@@ -1044,6 +1058,20 @@ std::unique_ptr<IAbortableInputStream> TRpcRawClient::ReadFile(
     return std::make_unique<TSyncRpcInputStream>(std::move(stream));
 }
 
+std::unique_ptr<IAbortableInputStream> TRpcRawClient::ReadFilePartition(
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options)
+{
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.ReadFilePartition");
+
+    auto apiCookie = NYTree::ConvertTo<NApi::TFilePartitionCookiePtr>(NYson::TYsonString(cookie));
+
+    auto future = Clients_.Heavy->CreateFilePartitionReader(apiCookie, SerializeOptionsForReadFilePartition(options));
+    auto reader = WaitAndProcess(future);
+    auto stream = CreateAbortableInputStreamAdapter(CreateCopyingAdapter(reader));
+    return std::make_unique<TSyncRpcInputStream>(std::move(stream));
+}
+
 class TRpcWriteFileRequestStream
     : public IOutputStream
 {
@@ -1057,7 +1085,7 @@ public:
 private:
     void DoWrite(const void* buf, size_t len) override
     {
-        WaitAndProcess(Writer_->Write(TSharedRef::MakeCopy<TDefaultSharedBlobTag>(TRef(buf, len))));
+        WriteInChunks(buf, len, AttachmentChunkSize, Writer_);
     }
 
     void DoFinish() override
@@ -1334,6 +1362,7 @@ std::unique_ptr<IOutputStream> TRpcRawClient::WriteTable(
 
     auto stream = WaitAndProcess(future);
     auto rowStream = New<TSerializingRowStream>(std::move(stream));
+
     return std::make_unique<TSyncRpcOutputStream>(std::move(rowStream));
 }
 
@@ -1768,7 +1797,7 @@ private:
 
     void DoWrite(const void* buf, size_t len) override
     {
-        WaitAndProcess(Underlying_->Write(TSharedRef::MakeCopy<TDefaultSharedBlobTag>(TRef(buf, len))));
+        WriteInChunks(buf, len, AttachmentChunkSize, Underlying_);
     }
 
     void DoFinish() override
@@ -1829,7 +1858,7 @@ TVector<TTabletInfo> TRpcRawClient::GetTabletInfos(
         result.push_back(TTabletInfo{
             .TotalRowCount = info.TotalRowCount,
             .TrimmedRowCount = info.TrimmedRowCount,
-            .BarrierTimestamp = info.BarrierTimestamp,
+            .BarrierTimestamp = info.BarrierTimestamp.Underlying(),
         });
     }
     return result;
@@ -1923,6 +1952,31 @@ TMultiTablePartitions TRpcRawClient::GetTablePartitions(
     return result;
 }
 
+TFilePartitions TRpcRawClient::GetFilePartitions(
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    const TVector<TFileReadRange>& ranges,
+    const TGetFilePartitionsOptions& options)
+{
+    auto traceContextGuard = CreateTraceContext("RpcRawClient.GetFilePartitions");
+
+    auto future = Clients_.Light->PartitionFile(
+        path,
+        SerializeFileReadRanges(ranges),
+        SerializeOptionsForGetFilePartitions(transactionId, options));
+    auto filePartitions = WaitAndProcess(future);
+
+    TFilePartitions result;
+    result.Partitions.reserve(filePartitions.Partitions.size());
+    for (const auto& entry : filePartitions.Partitions) {
+        result.Partitions.push_back(TFilePartition{
+            .Cookie = NYson::ConvertToYsonString(entry.Cookie).ToString(),
+            .Length = entry.Length,
+        });
+    }
+    return result;
+}
+
 void TRpcRawClient::CheckClusterLiveness(const TCheckClusterLivenessOptions& options)
 {
     auto traceContextGuard = CreateTraceContext("RpcRawClient.CheckClusterLiveness");
@@ -1938,7 +1992,7 @@ ui64 TRpcRawClient::GenerateTimestamp()
 
     auto future = Clients_.Light->GetTimestampProvider()->GenerateTimestamps();
     auto result = WaitAndProcess(future);
-    return result;
+    return result.Underlying();
 }
 
 IRawBatchRequestPtr TRpcRawClient::CreateRawBatchRequest()

@@ -201,7 +201,7 @@ public:
     NTableClient::TVersionedWriteOptions GetVersionedWriteOptions() const;
 
     // "access_method"
-    std::optional<std::string> GetAccessMethod() const;
+    std::optional<ELayerAccessMethod> GetAccessMethod() const;
 
     // "input_query"
     std::optional<std::string> GetInputQuery() const;

@@ -556,7 +556,6 @@ def test_retain_dunder_attributes():
     assert foo.__defaults__ == ("foo",)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9), reason="Requires ast.unparse()")
 def test_debug_instrumentation(monkeypatch, capsys):
     monkeypatch.setattr("typeguard.config.debug_instrumentation", True)
 
@@ -710,3 +709,61 @@ def test_duplicate_function():
 
     assert foo1() == [0, 1, 2, 3, 4]
     assert foo() == [5, 6, 7, 8, 9]
+
+
+class TestAssignmentExpression:
+    def test_non_iterable_value(self):
+        @typechecked
+        def foo() -> int:
+            x: int = 0
+            if (x := 5) > 0:
+                pass
+
+            return x
+
+        assert foo() == 5
+
+    def test_value_is_not_consumed(self):
+        @typechecked
+        def foo() -> str:
+            x: str = "init"
+            if x := "abc":
+                pass
+
+            return x
+
+        assert foo() == "abc"
+
+    def test_annotated_argument(self):
+        @typechecked
+        def foo(x: str) -> str:
+            if x := "abc":
+                pass
+
+            return x
+
+        assert foo("init") == "abc"
+
+    def test_iterator_value_is_not_consumed(self):
+        @typechecked
+        def foo() -> Iterator[int]:
+            x: Iterator[int] = iter([])
+            if x := iter([1, 2, 3]):
+                pass
+
+            return x
+
+        assert list(foo()) == [1, 2, 3]
+
+    def test_bad_value_still_raises(self):
+        @typechecked
+        def foo() -> None:
+            x: int = 0
+            if (x := "not an int") is not None:  # noqa: F841
+                pass
+
+        with pytest.raises(
+            TypeCheckError,
+            match=r"value assigned to x \(str\) is not an instance of int",
+        ):
+            foo()

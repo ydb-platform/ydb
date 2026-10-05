@@ -59,7 +59,7 @@ void MediaValidator(const NYT::TNode& value) {
 }
 
 TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext)
-    : NCommon::TSettingDispatcher(YtProviderName, qContext)
+    : NCommon::TSettingDispatcher(YtProviderName, qContext, typeCtx.StrictConfigValidation)
 {
     const auto codecValidator = [] (const TString&, TString str) {
         if (!ValidateCompressionCodecValue(str)) {
@@ -92,6 +92,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
         });
     REGISTER_SETTING(*this, InflightTempTablesLimit);
     REGISTER_SETTING(*this, ReleaseTempData).Parser([](const TString& v) { return FromString<EReleaseTempDataMode>(v); });
+    REGISTER_SETTING(*this, ReleaseSnapshotLocks).Parser([](const TString& v) { return FromString<EReleaseSnapshotLocksMode>(v); });
     REGISTER_SETTING(*this, IgnoreYamrDsv);
     REGISTER_SETTING(*this, IgnoreWeakSchema);
     REGISTER_SETTING(*this, InferSchema)
@@ -124,7 +125,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, QueryCacheTtl);
     REGISTER_SETTING(*this, QueryCacheUseForCalc);
     REGISTER_SETTING(*this, QueryCacheUseExpirationTimeout);
-    REGISTER_SETTING(*this, QueryCacheCombineChunksReplace);
+    REGISTER_SETTING(*this, QueryCacheReportProgress);
 
     REGISTER_SETTING(*this, DefaultMemoryLimit);
     REGISTER_SETTING(*this, DefaultMemoryReserveFactor).Lower(0.0).Upper(1.0);
@@ -345,6 +346,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, CommonJoinCoreLimit);
     REGISTER_SETTING(*this, CombineCoreLimit).Lower(1_MB); // Min 1Mb
     REGISTER_SETTING(*this, SwitchLimit).Lower(1_MB); // Min 1Mb
+    REGISTER_SETTING(*this, JoinCommonAnySideFirst);
     REGISTER_SETTING(*this, JoinMergeTablesLimit);
     REGISTER_SETTING(*this, JoinMergeUseSmallAsPrimary);
     REGISTER_SETTING(*this, JoinMergeReduceJobMaxSize).Lower(1); // YT requires max_data_size_per_job to be > 0, YT default is 200GB
@@ -513,6 +515,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, UseQLFilter);
     REGISTER_SETTING(*this, PruneQLFilterLambda).Deprecated();
     REGISTER_SETTING(*this, _EnableQLFilter);
+    REGISTER_SETTING(*this, QLFilterDepthLimit);
     REGISTER_SETTING(*this, MergeAdjacentPointRanges);
     REGISTER_SETTING(*this, KeyFilterForStartsWith);
     REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
@@ -525,6 +528,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, BatchListFolderConcurrency).Lower(1); // Upper bound on concurrent batch folder list requests https://yt.yandex-team.ru/docs/api/commands#execute_batch
     REGISTER_SETTING(*this, ForceTmpSecurity);
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
+    REGISTER_SETTING(*this, JoinCommonUseFlatPayload);
+    REGISTER_SETTING(*this, JoinCommonFlatPayloadColumnLimit);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, EnableDynamicStoreReadInDQ);
     REGISTER_SETTING(*this, UseDefaultArrowAllocatorInJobs);
@@ -536,6 +541,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, EnforceJobUtc);
     REGISTER_SETTING(*this, _EnforceRegexpProbabilityFail);
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
+    REGISTER_SETTING(*this, PassOptLLVMToDqCodecs);
     REGISTER_SETTING(*this, DQRPCReaderInflight).Lower(1);
     REGISTER_SETTING(*this, DQRPCReaderTimeout);
     REGISTER_SETTING(*this, BlockReaderSupportedTypes);
@@ -642,10 +648,19 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, TmpSecurity).Parser([](const TString& v) { return FromString<ETmpSecurityMode>(v); });
     REGISTER_SETTING(*this, _ParseExpressionColumns);
     REGISTER_SETTING(*this, _SecureTmpTokenUsersAccessPeriod);
+    REGISTER_SETTING(*this, _FixEndlessLoopInDropIfExists);
+    REGISTER_SETTING(*this, _ForbidReservedColumns);
+    REGISTER_SETTING(*this, _ReplaceEmptyOpWithTouch);
+    REGISTER_SETTING(*this, _PruneSync);
+    REGISTER_SETTING(*this, ApplyMaxJobCountToAll);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {
     return settings.ReleaseTempData.Get().GetOrElse(EReleaseTempDataMode::Finish);
+}
+
+EReleaseSnapshotLocksMode GetReleaseSnapshotLocksMode(const TYtSettings& settings) {
+    return settings.ReleaseSnapshotLocks.Get().GetOrElse(EReleaseSnapshotLocksMode::Finish);
 }
 
 EJoinCollectColumnarStatisticsMode GetJoinCollectColumnarStatisticsMode(const TYtSettings& settings) {

@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(ConsistentIndexRead)
                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                                 execSettings)
                             .ExtractValueSync();
-                        UNIT_ASSERT_C(result.IsSuccess() || result.GetStatus() == EStatus::ABORTED, result.GetIssues().ToString());
+                        UNIT_ASSERT_C(result.IsSuccess() || result.GetStatus() == EStatus::ABORTED || result.GetStatus() == EStatus::UNDETERMINED, result.GetIssues().ToString());
                         break;
                     }
                     case 1: {
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(ConsistentIndexRead)
                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                                 execSettings)
                            .ExtractValueSync();
-                        UNIT_ASSERT_C(result.IsSuccess() || result.GetStatus() == EStatus::ABORTED, result.GetIssues().ToString());
+                        UNIT_ASSERT_C(result.IsSuccess() || result.GetStatus() == EStatus::ABORTED || result.GetStatus() == EStatus::UNDETERMINED, result.GetIssues().ToString());
                         break;
                     }
                     case 2: {

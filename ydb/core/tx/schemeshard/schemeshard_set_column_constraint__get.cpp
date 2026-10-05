@@ -4,6 +4,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 
 namespace NKikimr::NSchemeShard {
 
@@ -19,7 +21,9 @@ public:
 
     bool DoExecute(TTransactionContext&, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        LOG_D("TTxGetSetColumnConstraint::DoExecute " << record.ShortDebugString());
+        YDB_LOG_DEBUG("TTxGetSetColumnConstraint::DoExecute",
+            {"record", record.ShortDebugString()},
+        );
 
         Response = MakeHolder<TEvSetColumnConstraint::TEvGetResponse>();
 
@@ -56,14 +60,14 @@ public:
         FillSetColumnConstraint(*proto, operationInfo, Self);
 
         // Add issue for cancelled operations
-        if (operationInfo.IsCancelled && !operationInfo.CancellationReason.empty()) {
+        if (operationInfo.IsCancelled) {
             auto* issue = respRecord.AddIssues();
             issue->set_message(operationInfo.CancellationReason);
             issue->set_issue_code(0);
             issue->set_severity(NYql::TSeverityIds::S_ERROR);
         }
 
-        if (operationInfo.ValidationFailed && operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Done) {
+        if (operationInfo.ValidationFailed) {
             TPath tablePath = TPath::Init(operationInfo.TablePathId, Self);
             auto* issue = respRecord.AddIssues();
             issue->set_message(TStringBuilder()
@@ -84,3 +88,5 @@ ITransaction* TSchemeShard::CreateTxGetSetColumnConstraint(TEvSetColumnConstrain
 }
 
 } // NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

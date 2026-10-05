@@ -3,6 +3,7 @@
 import logging
 
 from ydb.tests.functional.secrets.lib.secrets_plugin import create_secrets, DATABASE, ROOT
+from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_schemeshard_id
 import requests
 
 logger = logging.getLogger(__name__)
@@ -12,15 +13,6 @@ CLUSTER_CONFIG = dict(
         # 'TX_PROXY': LogLevels.DEBUG,
     },
 )
-
-
-def get_tenant_schemeshard_id(ydb_cluster, root_path, database_path):
-    mon_url = f"http://{cluster_http_endpoint(ydb_cluster)}"
-    response = requests.get(f"{mon_url}/viewer/json/describe?database={root_path}&path={database_path}", timeout=10)
-    response.raise_for_status()
-    data = response.json()
-
-    return int(data["PathDescription"]["Self"]["SchemeshardId"])
 
 
 def cluster_http_endpoint(cluster):

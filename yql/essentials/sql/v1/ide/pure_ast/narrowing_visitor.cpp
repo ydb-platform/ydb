@@ -2,7 +2,7 @@
 
 namespace NSQLPureAST {
 
-TSQLv1NarrowingVisitor::TSQLv1NarrowingVisitor(antlr4::TokenStream* tokens, size_t cursorPosition)
+TSQLv1NarrowingVisitor::TSQLv1NarrowingVisitor(const antlr4::TokenStream* tokens, size_t cursorPosition)
     : Tokens_(tokens)
     , CursorPosition_(cursorPosition)
 {

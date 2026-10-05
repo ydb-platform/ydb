@@ -29,12 +29,14 @@ namespace NKikimr {
         , Controls(std::move(params.Controls))
     {}
 
-    IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon) {
+    IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+            const TControlWrapper& dormantTimeoutMinutes) {
         return new TBlobStorageGroupProxy(groupId, true, nodeMon,
                 TBlobStorageProxyParameters{
                     .Controls = TBlobStorageProxyControlWrappers{
                         .EnablePutBatching = TControlWrapper(false, false, true),
                         .EnableVPatch = TControlWrapper(false, false, true),
+                        .DormantTimeoutMinutes = dormantTimeoutMinutes,
                     }
                 }
         );

@@ -185,12 +185,154 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::Filter(/*isDictionary=*/true))).Execute();
     }
 
+    // The second read verifies that every active Col2 portion has dictionary positions.
+    Y_UNIT_TEST(ILikeKernel) {
+        const TString script = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 Utf8 ENCODING(DICT),
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, "Alpha"), (2u, "beta"), (3u, "ALPINE")
+        ------
+        READ: PRAGMA OptimizeSimpleILike; PRAGMA AnsiLike; PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true";
+              SELECT Col1 FROM `/Root/ColumnTable` WHERE Col2 ILIKE "%alp%" ORDER BY Col1;
+        EXPECTED: [[1u];[3u]]
+        ------
+        READ: $All = SELECT COUNT(*) AS cnt FROM `/Root/ColumnTable/.sys/primary_index_stats`
+                      WHERE Activity == 1 AND EntityName = 'Col2';
+              $Ok = SELECT SUM(CASE
+                    WHEN JSON_EXISTS(CAST(ChunkDetails AS JsonDocument), "$.positions_blob_size")
+                    THEN 1 ELSE 0 END) AS ok
+                  FROM `/Root/ColumnTable/.sys/primary_index_stats`
+                  WHERE Activity == 1 AND EntityName = 'Col2';
+              SELECT ($All > 0u) AND ($All == $Ok);
+        EXPECTED: [[[%true]]]
+        )";
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
     Y_UNIT_TEST(Simple) {
         Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::Simple(/*isDictionary=*/true))).Execute();
     }
 
     Y_UNIT_TEST(SimpleExists) {
         Variator::ToExecutor(Variator::SingleScript(NSubColumnsScenarios::SimpleExists(/*isDictionary=*/true))).Execute();
+    }
+
+    // Shared setup for the DISTINCT JSON_VALUE dictionary-only scenarios: one portion where every sub-column
+    // ("a", "b") is dictionary encoded; row 6 has no "a" so DISTINCT must still observe NULL.
+    constexpr const char* DistinctJsonPragmas =
+        R"(PRAGMA Kikimr.OptEnableOlapPushdown = "true"; PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true"; PRAGMA Kikimr.OptForceOlapPushdownDistinct = "a";)";
+
+    TString DistinctJsonDictionarySetup() {
+        return TStringBuilder() << DictionaryTableSetup() << R"(
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
+                    `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_UNIQUE_FRACTION`=`1`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a" : "x", "b" : "p"}')), (2u, JsonDocument('{"a" : "y", "b" : "q"}')),
+                                                             (3u, JsonDocument('{"a" : "x", "b" : "q"}')), (4u, JsonDocument('{"a" : "y", "b" : "p"}')),
+                                                             (5u, JsonDocument('{"a" : "x", "b" : "r"}')), (6u, JsonDocument('{"b" : "r"}'))
+        ------
+        )" << AccessorTypeCheck(NArrow::NAccessor::IChunkedArray::EType::Dictionary) << R"(
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------)";
+    }
+
+    // Forced DISTINCT over JSON_VALUE of a dictionary encoded sub-column reads only the sub-column dictionary
+    // (counter grows per scan), with and without LIMIT, and keeps NULL for rows without the key.
+    Y_UNIT_TEST(DistinctJsonValueDictionaryOnly) {
+        const TString script = TStringBuilder() << DistinctJsonDictionarySetup() << R"(
+        READ: )" << DistinctJsonPragmas << R"( PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10"; SELECT DISTINCT JSON_VALUE(Col2, "$.a") AS a FROM `/Root/ColumnTable` LIMIT 10;
+        EXPECTED_UNORDERED: [[["x"]];[["y"]];[#]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 1
+        ------
+        READ: )" << DistinctJsonPragmas << R"( SELECT DISTINCT JSON_VALUE(Col2, "$.a") AS a FROM `/Root/ColumnTable`;
+        EXPECTED_UNORDERED: [[["x"]];[["y"]];[#]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 2
+        ------
+        READ: )" << DistinctJsonPragmas << R"( PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "2"; SELECT COUNT(*) FROM (SELECT DISTINCT JSON_VALUE(Col2, "$.a") AS a FROM `/Root/ColumnTable` LIMIT 2);
+        EXPECTED: [[2u]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 3
+        )";
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    // A filter on another path of the same JSON column needs the rows: dictionary-only must stay off and
+    // results must match the plain evaluation.
+    Y_UNIT_TEST(DistinctJsonValueDictionaryOnly_FilterOnOtherPathDisables) {
+        const TString script = TStringBuilder() << DistinctJsonDictionarySetup() << R"(
+        READ: )" << DistinctJsonPragmas << R"( PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10"; SELECT DISTINCT JSON_VALUE(Col2, "$.a") AS a FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.b") = "p" LIMIT 10;
+        EXPECTED_UNORDERED: [[["x"]];[["y"]]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        READ: )" << DistinctJsonPragmas << R"( SELECT DISTINCT JSON_VALUE(Col2, "$.a") AS a FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.b") = "r";
+        EXPECTED_UNORDERED: [[["x"]];[#]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        ------
+        READ: )" << DistinctJsonPragmas << R"( SELECT DISTINCT JSON_VALUE(Col2, "$.a") AS a FROM `/Root/ColumnTable` WHERE Col1 > 2u;
+        EXPECTED_UNORDERED: [[["x"]];[["y"]];[#]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        )";
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    // Second portion written after switching the dictionary off: its "a" is a plain sub-column. Two portions require
+    // duplicate filtering, which (as for plain dictionary columns) keeps dictionary-only off for the whole scan; the
+    // point is that mixed encodings of the same sub-column return the right DISTINCT set with the forced pushdown.
+    Y_UNIT_TEST(DistinctJsonValueDictionaryOnly_MixedPortions) {
+        const TString script = TStringBuilder() << DistinctJsonDictionarySetup() << R"(
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
+                    `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_UNIQUE_FRACTION`=`0`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (7u, JsonDocument('{"a" : "z", "b" : "p"}')), (8u, JsonDocument('{"a" : "z", "b" : "q"}'))
+        ------
+        READ: )" << DistinctJsonPragmas << R"( PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10"; SELECT DISTINCT JSON_VALUE(Col2, "$.a") AS a FROM `/Root/ColumnTable` LIMIT 10;
+        EXPECTED_UNORDERED: [[["x"]];[["y"]];[["z"]];[#]]
+        ------
+        READ: )" << DistinctJsonPragmas << R"( SELECT DISTINCT JSON_VALUE(Col2, "$.a") AS a FROM `/Root/ColumnTable`;
+        EXPECTED_UNORDERED: [[["x"]];[["y"]];[["z"]];[#]]
+        ------
+        CHECK_COUNTER: Deriviative/Dictionary/OnlyOptimization/Count
+        PATH: tablets/subsystem/columnshard/module_id/Scan
+        EXPECTED: 0
+        )";
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
     }
 }
 

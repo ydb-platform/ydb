@@ -288,9 +288,9 @@ public:
     }
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
-        YDB_LOG_DEBUG("TArrowInferencinator",
+        YDB_LOG_DEBUG("TArrowInferencinator got file error",
             {"selfId", SelfId()},
-            {"ev", ev->Get()->Issues.ToOneLineString()});
+            {"issues", ev->Get()->Issues.ToOneLineString()});
         ReplyAndReset(ctx, new TEvInferredFileSchema(ev->Get()->Path, std::move(ev->Get()->Issues)));
     }
 

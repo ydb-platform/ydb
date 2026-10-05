@@ -128,10 +128,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
         if (nodesToOptimize.find(input.Get()) != nodesToOptimize.end()) {
             auto newSettings = RemoveSettings(*input->Child(TYtTableContent::idx_Settings), EYtSettingType::BlockInputReady, ctx);
             if (auto read = TYtTableContent(input).Input().Maybe<TYtReadTable>()) {
-                bool materialize = false;
+                bool anyMaterialized = false;
                 const bool singleSection = 1 == read.Cast().Input().Size();
                 TVector<TYtSection> newSections;
                 for (auto section: read.Cast().Input()) {
+                    bool materialize = false;
                     if (NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Sample | EYtSettingType::SysColumns)) {
                         materialize = true;
                     }
@@ -170,6 +171,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
                         }
                     }
                     if (materialize) {
+                        anyMaterialized = true;
                         if (!NPrivate::EnsurePersistableYsonTypes(section.Pos(), *section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx, state)) {
                             return {};
                         }
@@ -210,7 +212,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
                     }
 
                 }
-                if (materialize) {
+                if (anyMaterialized) {
                     auto newRead = Build<TYtReadTable>(ctx, read.Cast().Pos())
                         .InitFrom(read.Cast())
                         .Input()

@@ -2,7 +2,7 @@ import ymake
 
 
 @ymake.macro
-def _CHECK_CLANG_WARNINGS(unit: ymake.Unit, name: str, *args: tuple[str, ...]):
+def _CHECK_CLANG_WARNINGS(unit: ymake.Unit, name: str, *args: str):
     for item in args:
         if item.startswith('-Wno-') or not item.startswith('-W'):
             ymake.report_configure_error(

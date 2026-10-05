@@ -1,15 +1,16 @@
-import importlib
-import codecs
-import time
-import unicodedata
-import pytest
-import numpy as np
-from numpy.f2py.crackfortran import markinnerspaces, nameargspattern
-from . import util
-from numpy.f2py import crackfortran
-import textwrap
 import contextlib
+import importlib
 import io
+import textwrap
+import time
+
+import pytest
+
+import numpy as np
+from numpy.f2py import crackfortran
+from numpy.f2py.crackfortran import markinnerspaces, nameargspattern
+
+from . import util
 
 
 class TestNoSpace(util.F2PyTest):
@@ -66,7 +67,7 @@ class TestPublicPrivate:
         pyf = crackfortran.crack2fortran(mod)
         assert 'bar' not in pyf
 
-class TestModuleProcedure():
+class TestModuleProcedure:
     def test_moduleOperators(self, tmp_path):
         fpath = util.getpath("tests", "src", "crackfortran", "operators.f90")
         mod = crackfortran.crackfortran([str(fpath)])
@@ -116,12 +117,16 @@ class TestExternal(util.F2PyTest):
 
 class TestCrackFortran(util.F2PyTest):
     # gh-2848: commented lines between parameters in subroutine parameter lists
-    sources = [util.getpath("tests", "src", "crackfortran", "gh2848.f90")]
+    sources = [util.getpath("tests", "src", "crackfortran", "gh2848.f90"),
+               util.getpath("tests", "src", "crackfortran", "common_with_division.f")
+              ]
 
     def test_gh2848(self):
         r = self.module.gh2848(1, 2)
         assert r == (1, 2)
 
+    def test_common_with_division(self):
+        assert len(self.module.mortmp.ctmp) == 11
 
 class TestMarkinnerspaces:
     # gh-14118: markinnerspaces does not handle multiple quotations
@@ -190,6 +195,9 @@ class TestDimSpec(util.F2PyTest):
         ! the value of n is computed in f2py wrapper
         !f2py intent(out) n
         integer, dimension({dimspec}), intent(in) :: a
+        if (a({first}).gt.0) then
+          ! print*, "a=", a
+        endif
       end subroutine
     """)
 
@@ -210,6 +218,7 @@ class TestDimSpec(util.F2PyTest):
         )
 
     @pytest.mark.parametrize("dimspec", all_dimspecs)
+    @pytest.mark.slow
     def test_array_size(self, dimspec):
 
         count = self.all_dimspecs.index(dimspec)
@@ -257,7 +266,7 @@ class TestEval(util.F2PyTest):
 
         assert eval_scalar('123', {}) == '123'
         assert eval_scalar('12 + 3', {}) == '15'
-        assert eval_scalar('a + b', dict(a=1, b=2)) == '3'
+        assert eval_scalar('a + b', {"a": 1, "b": 2}) == '3'
         assert eval_scalar('"123"', {}) == "'123'"
 
 
@@ -276,6 +285,7 @@ class TestFortranReader(util.F2PyTest):
         assert mod[0]['name'] == 'foo'
 
 
+@pytest.mark.slow
 class TestUnicodeComment(util.F2PyTest):
     sources = [util.getpath("tests", "src", "crackfortran", "unicode_comment.f90")]
 
@@ -323,10 +333,10 @@ class TestNameArgsPatternBacktracking:
             good_version_of_adversary = repeated_adversary + '@)@'
             assert nameargspattern.search(good_version_of_adversary)
 
-
 class TestFunctionReturn(util.F2PyTest):
     sources = [util.getpath("tests", "src", "crackfortran", "gh23598.f90")]
 
+    @pytest.mark.slow
     def test_function_rettype(self):
         # gh-23598
         assert self.module.intproduct(3, 4) == 12
@@ -342,9 +352,70 @@ class TestFortranGroupCounters(util.F2PyTest):
             assert False, f"'crackfortran.crackfortran' raised an exception {exc}"
 
 
-class TestF77CommonBlockReader():
+class TestF77CommonBlockReader:
     def test_gh22648(self, tmp_path):
         fpath = util.getpath("tests", "src", "crackfortran", "gh22648.pyf")
         with contextlib.redirect_stdout(io.StringIO()) as stdout_f2py:
             mod = crackfortran.crackfortran([str(fpath)])
         assert "Mismatch" not in stdout_f2py.getvalue()
+
+class TestParamEval:
+    # issue gh-11612, array parameter parsing
+    def test_param_eval_nested(self):
+        v = '(/3.14, 4./)'
+        g_params = {"kind": crackfortran._kind_func,
+                "selected_int_kind": crackfortran._selected_int_kind_func,
+                "selected_real_kind": crackfortran._selected_real_kind_func}
+        params = {'dp': 8, 'intparamarray': {1: 3, 2: 5},
+                  'nested': {1: 1, 2: 2, 3: 3}}
+        dimspec = '(2)'
+        ret = crackfortran.param_eval(v, g_params, params, dimspec=dimspec)
+        assert ret == {1: 3.14, 2: 4.0}
+
+    def test_param_eval_nonstandard_range(self):
+        v = '(/ 6, 3, 1 /)'
+        g_params = {"kind": crackfortran._kind_func,
+                "selected_int_kind": crackfortran._selected_int_kind_func,
+                "selected_real_kind": crackfortran._selected_real_kind_func}
+        params = {}
+        dimspec = '(-1:1)'
+        ret = crackfortran.param_eval(v, g_params, params, dimspec=dimspec)
+        assert ret == {-1: 6, 0: 3, 1: 1}
+
+    def test_param_eval_empty_range(self):
+        v = '6'
+        g_params = {"kind": crackfortran._kind_func,
+                "selected_int_kind": crackfortran._selected_int_kind_func,
+                "selected_real_kind": crackfortran._selected_real_kind_func}
+        params = {}
+        dimspec = ''
+        pytest.raises(ValueError, crackfortran.param_eval, v, g_params, params,
+                      dimspec=dimspec)
+
+    def test_param_eval_non_array_param(self):
+        v = '3.14_dp'
+        g_params = {"kind": crackfortran._kind_func,
+                "selected_int_kind": crackfortran._selected_int_kind_func,
+                "selected_real_kind": crackfortran._selected_real_kind_func}
+        params = {}
+        ret = crackfortran.param_eval(v, g_params, params, dimspec=None)
+        assert ret == '3.14_dp'
+
+    def test_param_eval_too_many_dims(self):
+        v = 'reshape((/ (i, i=1, 250) /), (/5, 10, 5/))'
+        g_params = {"kind": crackfortran._kind_func,
+                "selected_int_kind": crackfortran._selected_int_kind_func,
+                "selected_real_kind": crackfortran._selected_real_kind_func}
+        params = {}
+        dimspec = '(0:4, 3:12, 5)'
+        pytest.raises(ValueError, crackfortran.param_eval, v, g_params, params,
+                      dimspec=dimspec)
+
+@pytest.mark.slow
+class TestLowerF2PYDirective(util.F2PyTest):
+    sources = [util.getpath("tests", "src", "crackfortran", "gh27697.f90")]
+    options = ['--lower']
+
+    def test_no_lower_fail(self):
+        with pytest.raises(ValueError, match='aborting directly') as exc:
+            self.module.utils.my_abort('aborting directly')

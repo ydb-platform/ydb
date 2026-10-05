@@ -12,6 +12,7 @@
 #include <ydb/core/util/source_location.h>
 
 #include <ydb/library/actors/core/event.h>  // for TEventHandler
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
@@ -97,7 +98,6 @@ public:
     TSchemeShard* SS;
     const TActorContext& Ctx;
     TSideEffects& OnComplete;
-    TMemoryChanges& MemChanges;
     TStorageChanges& DbChanges;
 
     TMaybe<NACLib::TUserToken> UserToken;
@@ -114,12 +114,11 @@ public:
     TOperationContext(
             TSchemeShard* ss,
             NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
-            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange,
+            TSideEffects& onComplete, TStorageChanges& dbChange,
             TMaybe<NACLib::TUserToken>&& userToken)
         : SS(ss)
         , Ctx(ctx)
         , OnComplete(onComplete)
-        , MemChanges(memChanges)
         , DbChanges(dbChange)
         , UserToken(userToken)
         , Txc(txc)
@@ -127,8 +126,8 @@ public:
     TOperationContext(
             TSchemeShard* ss,
             NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
-            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange)
-        : TOperationContext(ss, txc, ctx, onComplete, memChanges, dbChange, Nothing())
+            TSideEffects& onComplete, TStorageChanges& dbChange)
+        : TOperationContext(ss, txc, ctx, onComplete, dbChange, Nothing())
     {}
 
     NTable::TDatabase& GetDB(const NKikimr::NCompat::TSourceLocation& location = NKikimr::NCompat::TSourceLocation::current()) {
@@ -179,13 +178,70 @@ public:
     }
 };
 
-using TProposeRequest = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction;
-using TProposeResponse = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult;
-using TTxTransaction = NKikimrSchemeOp::TModifyScheme;
+// Propose-phase-only context: the only way to reach TMemoryChanges.
+//
+// TMemoryChanges::UnDo is wired exclusively to AbortOperationPropose, which runs
+// only inside the propose transaction (TTxOperationPropose / IgniteOperation).
+// ProgressState and HandleReply execute in separate progress/reply transactions
+// where UnDo is never invoked, so a Grab* there is inert. Keeping MemChanges out
+// of the base context makes such improper uses a compilation error.
+struct TProposeContext : TOperationContext {
+    TMemoryChanges& MemChanges;
 
+    TProposeContext(
+            TSchemeShard* ss,
+            NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
+            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange,
+            TMaybe<NACLib::TUserToken>&& userToken)
+        : TOperationContext(ss, txc, ctx, onComplete, dbChange, std::move(userToken))
+        , MemChanges(memChanges)
+    {}
+    TProposeContext(
+            TSchemeShard* ss,
+            NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
+            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange)
+        : TProposeContext(ss, txc, ctx, onComplete, memChanges, dbChange, Nothing())
+    {}
+};
+
+// Log context for suboperations and their states.
+//
+// Every YDB_LOG_* call inside suboperation methods (Propose, AbortPropose,
+// ProgressState, HandleReply) automatically inherits a set of attributes
+// provided by YDB_LOG_CREATE_CONTEXT at the call sites in schemeshard__operation.cpp.
+// These attributes are pushed onto a thread-local log context stack and
+// merged into every nested log call — no need to pass them manually.
+//
+// Provided context attributes:
+//
+//   subop           Suboperation class name (ISubOperation::Name())
+//   subopId         Suboperation id (TOperationId)
+//   subopPhase      "Propose" | "AbortPropose" | "Run"
+//   subopState      State class name (TSubOperationState::Name()), only for Run
+//   subopStatePhase "ProgressState" | "HandleReply", only for Run
+//   event           Reply event type name, only for HandleReply
+//   schemeshard     Schemeshard tablet id
+//
+// Name() contract:
+//   - ISubOperationState::Name() returns the state class name without namespace
+//     (e.g. "TConfigureParts", "TProposedWaitParts", "TDone").
+//   - ISubOperation::Name() returns the suboperation class name without namespace
+//     (e.g. "TAlterTable", "TCreateTable").
+//   - Both use the prototype: const char* Name() const override
+//
+// Logging rules for wrapped methods:
+//   - Do NOT re-log attributes already in the context (schemeshard, subopId,
+//     subop, subopState, subopStatePhase, event).
+//   - Do NOT repeat subop/subopState/phase/event in the message string.
+//   - If after cleanup the message becomes empty, leave it as "" — the
+//     context attributes alone are valuable; do NOT remove the log call.
+//   - AbortUnsafe is NOT yet wrapped in YDB_LOG_CREATE_CONTEXT and keeps its
+//     inline schemeshard/operationId attributes until its context is added.
 class ISubOperationState {
 public:
     virtual ~ISubOperationState() = default;
+
+    virtual const char* Name() const = 0;
 
     template <EventBasePtr TEvPtr>
     static TString DebugReply(const TEvPtr& ev);
@@ -200,10 +256,7 @@ public:
 };
 
 class TSubOperationState: public ISubOperationState {
-    TString LogHint;
     TSet<ui32> MsgToIgnore;
-
-    virtual TString DebugHint() const = 0;
 
 public:
     using TPtr = THolder<TSubOperationState>;
@@ -214,24 +267,31 @@ public:
     SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
 #undef DefaultHandleReply
 
-    void IgnoreMessages(TString debugHint, TSet<ui32> mgsIds);
+    void IgnoreMessages(TSet<ui32> mgsIds);
 };
+
+// Simplifications for suboperation writers
+using TProposeResponse = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult;
+using TTxTransaction = NKikimrSchemeOp::TModifyScheme;
 
 class ISubOperation: public TSimpleRefCount<ISubOperation>, public ISubOperationState {
 public:
     using TPtr = TIntrusivePtr<ISubOperation>;
 
-    virtual THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) = 0;
+    virtual const char* Name() const = 0;
+    virtual const char* CurrentStateName() const = 0;
+
+    virtual THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) = 0;
 
     // call it inside multipart operations after failed propose
-    virtual void AbortPropose(TOperationContext& context) = 0;
+    virtual void AbortPropose(TProposeContext& context) = 0;
 
     // call it only before execute ForceDrop operation for path
     virtual void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) = 0;
 
     // getters
-    virtual const TOperationId& GetOperationId() const = 0;
-    virtual const TTxTransaction& GetTransaction() const = 0;
+    virtual const TOperationId GetId() const = 0;
+    virtual const NKikimrSchemeOp::TModifyScheme& GetModifyScheme() const = 0;
 };
 
 class TSubOperationBase: public ISubOperation {
@@ -251,11 +311,11 @@ public:
     {
     }
 
-    const TOperationId& GetOperationId() const override final {
+    const TOperationId GetId() const override final {
         return OperationId;
     }
 
-    const TTxTransaction& GetTransaction() const override final {
+    const NKikimrSchemeOp::TModifyScheme& GetModifyScheme() const override final {
         return Transaction;
     }
 };
@@ -279,6 +339,10 @@ protected:
         if (state != TTxState::Invalid) {
             context.OnComplete.ActivateTx(OperationId);
         }
+    }
+
+    virtual const char* CurrentStateName() const override final {
+        return (StateFunc ? StateFunc->Name() : "none");
     }
 
 public:
@@ -739,7 +803,7 @@ ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId
 // ChangePathState
 TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx);
-ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
+ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state, TOperationContext& context);
 
 // Incremental restore path-state lock/unlock ops. Propose-only; fan out to TChangePathState sub-ops.
 TVector<ISubOperation::TPtr> CreateIncrementalRestoreLockTargets(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
@@ -773,7 +837,7 @@ ISubOperation::TPtr CreateDropSysView(TOperationId id, TTxState::ETxState state)
 
 // Secret
 // Create
-ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateNewSecret(TOperationId id, TTxState::ETxState state);
 // Alter
 ISubOperation::TPtr CreateAlterSecret(TOperationId id, const TTxTransaction& tx);
@@ -805,7 +869,6 @@ inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& working
     NKikimrSchemeOp::TModifyScheme tx;
     tx.SetWorkingDir(workingDir);
     tx.SetOperationType(type);
-
     return tx;
 }
 

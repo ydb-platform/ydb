@@ -176,7 +176,7 @@ TEST(TReadersTest, SkiffBadFormat)
         CreateTupleSchema({
             CreateVariant8Schema({
                 CreateSimpleTypeSchema(EWireType::Nothing),
-                CreateSimpleTypeSchema(EWireType::Int32)
+                CreateSimpleTypeSchema(EWireType::Int64)
             })
         })
     });
@@ -184,7 +184,35 @@ TEST(TReadersTest, SkiffBadFormat)
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         TSkiffTableReader(proxy, schema).GetRow(),
         yexception,
-        "Tag for 'variant8<nothing,int32>' expected to be 0 or 1");
+        "Tag for 'variant8<nothing,int64>' expected to be 0 or 1");
+}
+
+TEST(TReadersTest, SkiffRejectsUnsupportedWireType)
+{
+    auto proxy = ::MakeIntrusive<TRetryEmulatingRawTableReader>("");
+
+    TSkiffSchemaPtr requiredSchema = CreateVariant16Schema({
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Int32)
+        })
+    });
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        TSkiffTableReader(proxy, requiredSchema),
+        yexception,
+        "Expected column schema to be of a supported type");
+
+    TSkiffSchemaPtr optionalSchema = CreateVariant16Schema({
+        CreateTupleSchema({
+            CreateVariant8Schema({
+                CreateSimpleTypeSchema(EWireType::Nothing),
+                CreateSimpleTypeSchema(EWireType::Int32)
+            })
+        })
+    });
+    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+        TSkiffTableReader(proxy, optionalSchema),
+        yexception,
+        "Expected schema of form 'variant8<nothing, supported-type>'");
 }
 
 TEST(TReadersTest, ProtobufGood)

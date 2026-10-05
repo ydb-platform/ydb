@@ -841,6 +841,8 @@ struct Schema : NIceDb::Schema {
         struct ServerlessComputeResourcesMode : Column<31, NScheme::NTypeIds::Uint32> { using Type = EServerlessComputeResourcesMode; };
         struct ColumnTableColumnsLimit : Column<32, NScheme::NTypeIds::Uint64> {};
         struct SmallBlobsQuotaExceeded : Column<33, NScheme::NTypeIds::Bool> {};
+        struct TablesMetricsLevel : Column<34, NScheme::NTypeIds::Uint32> { using Type = ETablesMetricsLevel; };
+        struct StorageSpaceExhausted : Column<35, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -876,7 +878,9 @@ struct Schema : NIceDb::Schema {
             AuditSettings,
             ServerlessComputeResourcesMode,
             ColumnTableColumnsLimit,
-            SmallBlobsQuotaExceeded
+            SmallBlobsQuotaExceeded,
+            TablesMetricsLevel,
+            StorageSpaceExhausted
         >;
     };
 
@@ -919,6 +923,7 @@ struct Schema : NIceDb::Schema {
         struct ExportsLimit : Column<27, NScheme::NTypeIds::Uint64> {};
         struct ImportsLimit : Column<28, NScheme::NTypeIds::Uint64> {};
         struct ColumnTableColumnsLimit : Column<29, NScheme::NTypeIds::Uint64> {};
+        struct TablesMetricsLevel : Column<30, NScheme::NTypeIds::Uint32> { using Type = ETablesMetricsLevel; };
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -950,7 +955,8 @@ struct Schema : NIceDb::Schema {
             TableCdcStreamsLimit,
             ExportsLimit,
             ImportsLimit,
-            ColumnTableColumnsLimit
+            ColumnTableColumnsLimit,
+            TablesMetricsLevel
         >;
     };
 
@@ -1209,6 +1215,10 @@ struct Schema : NIceDb::Schema {
         struct PlanStep : Column<15, NScheme::NTypeIds::Uint64> { using Type = TStepId; };
         struct NeedUpdateObject : Column<16, NScheme::NTypeIds::Bool> {};
         struct NeedSyncHive : Column<17, NScheme::NTypeIds::Bool> {};
+        // Split/merge ops only: whether this op deepens the by-load split lineage
+        // (propagates LoadSplitLineageDepth at op completion). Absent (pre-upgrade
+        // rows) = false = does not deepen.
+        struct LoadSplitLineage : Column<18, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TxId, TxPartId>;
         using TColumns = TableColumns<
@@ -1228,7 +1238,8 @@ struct Schema : NIceDb::Schema {
             SourceLocalPathId,
             PlanStep,
             NeedUpdateObject,
-            NeedSyncHive
+            NeedSyncHive,
+            LoadSplitLineage
         >;
     };
 
@@ -1494,6 +1505,8 @@ struct Schema : NIceDb::Schema {
         struct RowIdColumnBuildId : Column<56, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct RowIdUniqueBuildId : Column<57, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct ParentBuildId : Column<58, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        struct IsRebuild : Column<59, NScheme::NTypeIds::Bool> {};
+        struct RebuildIndexName : Column<60, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1554,7 +1567,9 @@ struct Schema : NIceDb::Schema {
             AutoUniqueIndexName,
             RowIdColumnBuildId,
             RowIdUniqueBuildId,
-            ParentBuildId
+            ParentBuildId,
+            IsRebuild,
+            RebuildIndexName
         >;
     };
 
@@ -1640,6 +1655,14 @@ struct Schema : NIceDb::Schema {
         struct FirstTokenRows : Column<18, NScheme::NTypeIds::Uint64> {};
         struct LastTokenRows : Column<19, NScheme::NTypeIds::Uint64> {};
 
+        // For prefixed fulltext_relevance indexes
+        struct FirstPrefix : Column<20, NScheme::NTypeIds::String> {};
+        struct FirstPrefixDocCount : Column<21, NScheme::NTypeIds::Uint64> {};
+        struct FirstPrefixSumDocLength : Column<22, NScheme::NTypeIds::Uint64> {};
+        struct LastPrefix : Column<23, NScheme::NTypeIds::String> {};
+        struct LastPrefixDocCount : Column<24, NScheme::NTypeIds::Uint64> {};
+        struct LastPrefixSumDocLength : Column<25, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<Id, OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
             Id,
@@ -1660,7 +1683,13 @@ struct Schema : NIceDb::Schema {
             FirstToken,
             LastToken,
             FirstTokenRows,
-            LastTokenRows
+            LastTokenRows,
+            FirstPrefix,
+            FirstPrefixDocCount,
+            FirstPrefixSumDocLength,
+            LastPrefix,
+            LastPrefixDocCount,
+            LastPrefixSumDocLength
         >;
     };
 
@@ -2369,9 +2398,10 @@ struct Schema : NIceDb::Schema {
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
         struct Properties : Column<4, NScheme::NTypeIds::String> {};
+        struct OperationOwnerActorId : Column<5, NScheme::NTypeIds::ActorId> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties, OperationOwnerActorId>;
     };
 
     struct ForcedCompactions : Table<130> {
@@ -2644,6 +2674,9 @@ struct Schema : NIceDb::Schema {
         struct IsCancelled :            Column<14, NScheme::NTypeIds::Bool>   { static constexpr bool Default = false; };
         struct CancellationReason :     Column<15, NScheme::NTypeIds::Utf8>   {};
 
+        struct DomainOwnerId :          Column<16, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct DomainLocalId :          Column<17, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,
@@ -2660,7 +2693,9 @@ struct Schema : NIceDb::Schema {
             StartTime,
             EndTime,
             IsCancelled,
-            CancellationReason
+            CancellationReason,
+            DomainOwnerId,
+            DomainLocalId
         >;
     };
 

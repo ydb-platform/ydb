@@ -19,13 +19,6 @@
 
 #include <util/generic/hash_set.h>
 
-#define TXLOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
-#define TXLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
-#define TXLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
-#define TXLOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
-#define TXLOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
-#define TXLOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
-
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -44,6 +37,7 @@ public:
     TAlterTableRPC(IRequestOpCtx* msg)
         : TBase(msg)
         , DatabaseName(Request_->GetDatabaseName().GetOrElse(""))
+        , TablePath(Request_->NormalizePath(GetProtoRequest()->path()))
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -82,10 +76,12 @@ public:
             return;
 
         case EOp::AddIndex:
+        case EOp::RebuildIndex:
             if (!BuildAlterTableAddIndexRequest(req, &IndexBuildSettings, 0, code, error)) {
                 Reply(code, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 return;
             }
+            IndexBuildSettings.set_source_path(TablePath);
 
             PrepareAlterTableWithTxId();
             break;
@@ -93,7 +89,7 @@ public:
         case EOp::Attribute:
         case EOp::AddChangefeed:
         case EOp::DropChangefeed:
-            Navigate(GetProtoRequest()->path());;
+            Navigate(TablePath);
             break;
 
         case EOp::DropIndex:
@@ -105,6 +101,7 @@ public:
                 Reply(code, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 return;
             }
+            ForcedCompactionSettings.set_source_path(TablePath);
 
             PrepareAlterTableWithTxId();
             break;
@@ -113,6 +110,7 @@ public:
                 Reply(code, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 return;
             }
+            SetColumnConstraintSettings.SetTablePath(TablePath);
 
             PrepareAlterTableWithTxId();
             break;
@@ -145,9 +143,7 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
-            "TAlterTableRPC: cannot deliver config request to Configs Dispatcher"
-            " (empty default profile is available only)");
+        YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::GRPC_PROXY, "TAlterTableRPC: cannot deliver config request to Configs Dispatcher (empty default profile is available only)");
         AlterTable(ctx);
         Become(&TAlterTableRPC::AlterStateWork);
     }
@@ -163,7 +159,7 @@ private:
     void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         switch (ev->Get()->Tag) {
         case WakeupTagGetConfig: {
-            LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, "TAlterTableRPC: cannot get table profiles (timeout)");
+            YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::GRPC_PROXY, "TAlterTableRPC: cannot get table profiles (timeout)");
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue("Tables profiles config not available."));
             return Reply(StatusIds::UNAVAILABLE, issues, ctx);
@@ -187,13 +183,14 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        TXLOG_D("Handle TEvTxUserProxy::TEvAllocateTxIdResult");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Handle TEvTxUserProxy::TEvAllocateTxIdResult",
+            {"logPrefix", LogPrefix});
 
         const auto* msg = ev->Get();
         TxId = msg->TxId;
         LogPrefix = TStringBuilder() << "[AlterTable" << OpType << ' ' << SelfId() << " TxId# " << TxId << "] ";
 
-        Navigate(GetProtoRequest()->path());
+        Navigate(TablePath);
     }
 
     void Navigate(const TString& path) {
@@ -239,8 +236,9 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        TXLOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-                    << ", errors# " << ev->Get()->Request.Get()->ErrorCount);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"logPrefix", LogPrefix},
+            {"errors", ev->Get()->Request.Get()->ErrorCount});
 
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
@@ -255,7 +253,8 @@ private:
             }
 
             TString error(builder);
-            TXLOG_E(error);
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_PROXY, error,
+                {"logPrefix", LogPrefix});
             Request_->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, error));
             return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
         }
@@ -299,7 +298,7 @@ private:
                 }
 
                 const auto& child = list->Children.at(0);
-                AlterTable(ctx, CanonizePath(ChildPath(NKikimr::SplitPath(GetProtoRequest()->path()), child.Name)));
+                AlterTable(ctx, CanonizePath(ChildPath(NKikimr::SplitPath(TablePath), child.Name)));
             } else {
                 Navigate(entry.TableId);
             }
@@ -313,7 +312,8 @@ private:
                 return std::make_unique<NSchemeShard::TEvSetColumnConstraint::TEvCreateRequest>(TxId, DatabaseName, std::move(SetColumnConstraintSettings));
             });
         default:
-            TXLOG_E("Got unexpected cache response");
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_PROXY, "Got unexpected cache response",
+                {"logPrefix", LogPrefix});
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
         }
     }
@@ -328,7 +328,8 @@ private:
             return true;
         }
 
-        TXLOG_W("Access check failed");
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_PROXY, "Access check failed",
+            {"logPrefix", LogPrefix});
         Reply(Ydb::StatusIds::UNAUTHORIZED,
             TStringBuilder() << "Access denied"
                 << " for# " << UserToken->GetUserSID()
@@ -345,7 +346,8 @@ private:
 
         const auto& domainInfo = entry.DomainInfo;
         if (!domainInfo) {
-            TXLOG_E("Got empty domain info");
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_PROXY, "Got empty domain info",
+                {"logPrefix", LogPrefix});
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
         }
 
@@ -372,10 +374,11 @@ private:
             return issues.ToString();
         };
 
-        TXLOG_D("Handle TEvIndexBuilder::TEvCreateResponse"
-            << ", status# " << status
-            << ", issues# " << getDebugIssues()
-            << ", Id# " << response.GetIndexBuild().GetId());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Handle TEvIndexBuilder::TEvCreateResponse",
+            {"logPrefix", LogPrefix},
+            {"status", status},
+            {"issues", getDebugIssues()},
+            {"id", response.GetIndexBuild().GetId()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
             if (response.HasSchemeStatus() && response.GetSchemeStatus() == NKikimrScheme::EStatus::StatusAlreadyExists) {
@@ -405,10 +408,11 @@ private:
             return issues.ToString();
         };
 
-        TXLOG_D("Handle TEvForcedCompaction::TEvCreateResponse"
-            << ", status# " << status
-            << ", issues# " << getDebugIssues()
-            << ", Id# " << response.GetForcedCompaction().GetId());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Handle TEvForcedCompaction::TEvCreateResponse",
+            {"logPrefix", LogPrefix},
+            {"status", status},
+            {"issues", getDebugIssues()},
+            {"id", response.GetForcedCompaction().GetId()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
             if (GetOperationMode() == Ydb::Operations::OperationParams::SYNC) {
@@ -453,7 +457,9 @@ private:
     void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        TXLOG_D("Handle TEvIndexBuilder::TEvGetResponse: record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Handle TEvIndexBuilder::TEvGetResponse",
+            {"logPrefix", LogPrefix},
+            {"record", record.ShortDebugString()});
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             Request_->ReplyWithYdbStatus(record.GetStatus());
@@ -468,7 +474,9 @@ private:
     void Handle(NSchemeShard::TEvForcedCompaction::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        TXLOG_D("Handle TEvForcedCompaction::TEvGetResponse: record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Handle TEvForcedCompaction::TEvGetResponse",
+            {"logPrefix", LogPrefix},
+            {"record", record.ShortDebugString()});
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             Request_->ReplyWithYdbStatus(record.GetStatus());
@@ -481,13 +489,33 @@ private:
     }
 
     void AlterTable(const TActorContext &ctx, const TMaybe<TString>& overridePath = {}) {
-        const auto req = GetProtoRequest();
+        const auto* req = GetProtoRequest();
+        Ydb::Table::AlterTableRequest requestWithNormalizedPaths;
+        if ((req->has_set_ttl_settings() && req->set_ttl_settings().has_tiered_ttl())
+            || req->add_columns_size() || req->alter_columns_size()) {
+            requestWithNormalizedPaths.CopyFrom(*req);
+            if (req->has_set_ttl_settings() && req->set_ttl_settings().has_tiered_ttl()) {
+                NormalizeTtlStoragePaths(*requestWithNormalizedPaths.mutable_set_ttl_settings(), *Request_);
+            }
+            const auto normalizeSequences = [this](auto& columns) {
+                for (auto& column : columns) {
+                    if (column.has_from_sequence()) {
+                        auto* sequence = column.mutable_from_sequence();
+                        sequence->set_name(Request_->NormalizePath(sequence->name()));
+                    }
+                }
+            };
+            normalizeSequences(*requestWithNormalizedPaths.mutable_add_columns());
+            normalizeSequences(*requestWithNormalizedPaths.mutable_alter_columns());
+            req = &requestWithNormalizedPaths;
+        }
+
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         auto modifyScheme = proposeRequest->Record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetAllowAccessToPrivatePaths(overridePath.Defined());
         Ydb::StatusIds::StatusCode code;
         TString error;
-        if (!BuildAlterTableModifyScheme(overridePath.GetOrElse(req->path()), req, modifyScheme, Profiles, ResolvedPathId, code, error)) {
+        if (!BuildAlterTableModifyScheme(overridePath.GetOrElse(TablePath), req, modifyScheme, Profiles, ResolvedPathId, code, error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);
@@ -498,6 +526,7 @@ private:
 
     ui64 TxId = 0;
     const TString DatabaseName;
+    const TString TablePath;
     TString LogPrefix;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TPathId ResolvedPathId;

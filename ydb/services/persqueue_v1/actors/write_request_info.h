@@ -1,6 +1,10 @@
 #pragma once
-#include <ydb/library/wilson_ids/wilson.h>
+
+#include "helpers.h"
+
 #include <ydb/core/persqueue/deferred_publish/constants.h>
+#include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -56,9 +60,9 @@ std::pair<TString, TString> TWriteRequestInfoImpl<TEvWrite>::GetTransactionId() 
 {
     AFL_ENSURE(!UserWriteRequests.empty());
 
-    static constexpr bool UseMigrationProtocol = !std::is_same_v<TEvWrite, TEvPQProxy::TEvTopicWrite>;
+    static constexpr EProtocol Protocol = std::is_same_v<TEvWrite, TEvPQProxy::TEvTopicWrite> ? EProtocol::Topic : EProtocol::PQv1;
 
-    if constexpr (UseMigrationProtocol) {
+    if constexpr (Protocol == EProtocol::PQv1) {
         return {"", ""};
     } else {
         auto& request = UserWriteRequests.front().Write->Request.write_request();
@@ -78,9 +82,9 @@ TMaybe<NPQ::TDeferredPublishWriterOpts> TWriteRequestInfoImpl<TEvWrite>::GetDefe
 {
     AFL_ENSURE(!UserWriteRequests.empty());
 
-    static constexpr bool UseMigrationProtocol = !std::is_same_v<TEvWrite, TEvPQProxy::TEvTopicWrite>;
+    static constexpr EProtocol Protocol = std::is_same_v<TEvWrite, TEvPQProxy::TEvTopicWrite> ? EProtocol::Topic : EProtocol::PQv1;
 
-    if constexpr (UseMigrationProtocol) {
+    if constexpr (Protocol == EProtocol::PQv1) {
         return Nothing();
     } else {
         auto& request = UserWriteRequests.front().Write->Request.write_request();
@@ -91,7 +95,9 @@ TMaybe<NPQ::TDeferredPublishWriterOpts> TWriteRequestInfoImpl<TEvWrite>::GetDefe
         const auto& deferredPublish = request.deferred_publish();
         return NPQ::TDeferredPublishWriterOpts{
             deferredPublish.int_publication_id(),
-            deferredPublish.ext_publication_id(),
+            deferredPublish.has_ext_publication_id()
+                ? TMaybe<TString>(deferredPublish.ext_publication_id())
+                : Nothing(),
         };
     }
 }

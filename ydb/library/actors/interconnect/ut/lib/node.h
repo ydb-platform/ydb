@@ -71,6 +71,8 @@ public:
         common->Settings.TotalInflightAmountOfData = inflight;
         common->Settings.TCPSocketBufferSize = 2048 * 1024;
         common->Settings.SocketSendOptimization = sendOpt;
+        // Keep XDC coverage enabled in test clusters unless explicitly overridden.
+        common->Settings.EnableExternalDataChannel = true;
         common->OutgoingHandshakeInflightLimit = 3;
         if (settingsCustomizer) {
             settingsCustomizer(nodeId, common->Settings);

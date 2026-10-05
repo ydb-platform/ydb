@@ -16,6 +16,13 @@
 #include <algorithm>
 
 namespace NYdb::NConsoleClient {
+
+// Names of index implementation tables for one index directory.
+// A failed ListDirectory throws; a successful empty directory uses the type's assumed names.
+TVector<TString> IndexImplTablesFromDirectory(
+    const NScheme::TListDirectoryResult& list,
+    const NTable::TIndexDescription& index);
+
 namespace {
 
 using namespace NScheme;
@@ -89,22 +96,7 @@ void AppendIndexImplObjects(
         const TString indexName = TString{index.GetIndexName()};
         const TString indexPath = Join('/', tablePath, indexName);
         const auto list = schemeClient.ListDirectory(indexPath).ExtractValueSync();
-
-        TVector<TString> implTables;
-        if (list.IsSuccess() && !list.GetChildren().empty()) {
-            for (const auto& child : list.GetChildren()) {
-                const TString childName = TString{child.Name};
-                if (IsTransientIndexImplTable(childName)) {
-                    continue;
-                }
-                if (child.Type == ESchemeEntryType::Table || child.Type == ESchemeEntryType::Unknown) {
-                    implTables.push_back(childName);
-                }
-            }
-        }
-        if (implTables.empty()) {
-            implTables = IndexImplTableNames(index);
-        }
+        const TVector<TString> implTables = IndexImplTablesFromDirectory(list, index);
 
         for (const auto& implTable : implTables) {
             if (tableRel == ".") {
@@ -170,7 +162,35 @@ TVector<TString> ListObjects(
     return result;
 }
 
+TVector<TString> ListedIndexImplTables(const std::vector<NScheme::TSchemeEntry>& children) {
+    TVector<TString> implTables;
+    for (const auto& child : children) {
+        const TString childName = TString{child.Name};
+        if (IsTransientIndexImplTable(childName)) {
+            continue;
+        }
+        if (child.Type == ESchemeEntryType::Table || child.Type == ESchemeEntryType::Unknown) {
+            implTables.push_back(childName);
+        }
+    }
+    return implTables;
+}
+
 } // namespace
+
+TVector<TString> IndexImplTablesFromDirectory(
+    const NScheme::TListDirectoryResult& list,
+    const NTable::TIndexDescription& index)
+{
+    // An API error is not an empty directory. Guessing names here would write a manifest
+    // that does not match the scheme.
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(list);
+    TVector<TString> implTables = ListedIndexImplTables(list.GetChildren());
+    if (implTables.empty()) {
+        implTables = IndexImplTableNames(index);
+    }
+    return implTables;
+}
 
 TCommandListObjects::TCommandListObjects()
     : TYdbCommand("list-objects", {},

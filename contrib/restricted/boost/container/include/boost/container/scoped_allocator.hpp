@@ -790,10 +790,6 @@ class scoped_allocator_adaptor
    //!    <code>OUTERMOST_ALLOC_TRAITS(*this):: construct(OUTERMOST(*this), p, allocator_arg,
    //!    inner_allocator(), std::forward<Args>(args)...)</code>.
    //!
-   //! [<b>Note</b>: In compilers without advanced decltype SFINAE support, <code>is_constructible</code> can't
-   //! be implemented so that condition will be replaced by
-   //! constructible_with_allocator_prefix<T>::value. -end note]
-   //!
    //! 3) Otherwise, if uses_allocator<T, inner_allocator_type>::value is true and
    //!    <code>is_constructible<T, Args..., inner_allocator_type>:: value</code> is true, calls
    //!    <code>OUTERMOST_ALLOC_TRAITS(*this):: construct(OUTERMOST(*this), p,

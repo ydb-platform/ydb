@@ -1,8 +1,11 @@
 #include "ut_helpers.h"
+#include "ydb_metrics_mapper.h"
 
 #include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/protos/counters_detailed_datashard.pb.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_app.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -841,5 +844,165 @@ R"json(
             expectedJson,
             "Expected JSON:" << Endl << expectedJson
         );
+    }
+
+    /**
+     * Verify that MakeYdbMetricName correctly transforms metric names for Aggregate scope.
+     */
+    Y_UNIT_TEST(MakeYdbMetricNameAggregate) {
+        // Aggregate scope should return the name unchanged
+        UNIT_ASSERT_EQUAL(
+            MakeYdbMetricName("table.datashard.row_count", EYdbMetricNameScope::Aggregate),
+            "table.datashard.row_count");
+        UNIT_ASSERT_EQUAL(
+            MakeYdbMetricName("table.datashard.read.rows", EYdbMetricNameScope::Aggregate),
+            "table.datashard.read.rows");
+    }
+
+    /**
+     * Verify that MakeYdbMetricName correctly transforms metric names for Partition scope.
+     */
+    Y_UNIT_TEST(MakeYdbMetricNamePartition) {
+        // Partition scope should insert "partition." after the second dot
+        UNIT_ASSERT_EQUAL(
+            MakeYdbMetricName("table.datashard.row_count", EYdbMetricNameScope::Partition),
+            "table.datashard.partition.row_count");
+        UNIT_ASSERT_EQUAL(
+            MakeYdbMetricName("table.datashard.read.rows", EYdbMetricNameScope::Partition),
+            "table.datashard.partition.read.rows");
+        UNIT_ASSERT_EQUAL(
+            MakeYdbMetricName("table.datashard.consumed_cpu_us", EYdbMetricNameScope::Partition),
+            "table.datashard.partition.consumed_cpu_us");
+    }
+
+    /**
+     * Verify that MakeYdbMetricName produces the correct Partition scope names
+     * for all metrics in the three detailed counters descriptors.
+     */
+    Y_UNIT_TEST(MakeYdbMetricNameForAllDetailedCounters) {
+        // Check simple counters
+        const auto* simpleOpts = NAux::GetAppOpts<NDataShard::ESimpleDetailedCounters_descriptor, false>();
+        for (size_t i = 0; i < simpleOpts->Size; ++i) {
+            const TString name = simpleOpts->GetNames()[i];
+            UNIT_ASSERT(name.StartsWith("table.datashard."));
+
+            // Aggregate scope returns unchanged
+            UNIT_ASSERT_EQUAL(MakeYdbMetricName(name, EYdbMetricNameScope::Aggregate), name);
+
+            // Partition scope inserts "partition."
+            const TString partitionName = MakeYdbMetricName(name, EYdbMetricNameScope::Partition);
+            UNIT_ASSERT(partitionName.StartsWith("table.datashard.partition."));
+            UNIT_ASSERT_EQUAL(partitionName, "table.datashard.partition." + name.substr(16)); // 16 = strlen("table.datashard.")
+        }
+
+        // Check cumulative counters
+        const auto* cumulativeOpts = NAux::GetAppOpts<NDataShard::ECumulativeDetailedCounters_descriptor, false>();
+        for (size_t i = 0; i < cumulativeOpts->Size; ++i) {
+            const TString name = cumulativeOpts->GetNames()[i];
+            UNIT_ASSERT(name.StartsWith("table.datashard."));
+
+            // Aggregate scope returns unchanged
+            UNIT_ASSERT_EQUAL(MakeYdbMetricName(name, EYdbMetricNameScope::Aggregate), name);
+
+            // Partition scope inserts "partition."
+            const TString partitionName = MakeYdbMetricName(name, EYdbMetricNameScope::Partition);
+            UNIT_ASSERT(partitionName.StartsWith("table.datashard.partition."));
+            UNIT_ASSERT_EQUAL(partitionName, "table.datashard.partition." + name.substr(16));
+        }
+
+        // Check percentile counters
+        const auto* percentileOpts = NAux::GetAppOpts<NDataShard::EPercentileDetailedCounters_descriptor, false>();
+        for (size_t i = 0; i < percentileOpts->Size; ++i) {
+            const TString name = percentileOpts->GetNames()[i];
+            UNIT_ASSERT(name.StartsWith("table.datashard."));
+
+            // Aggregate scope returns unchanged
+            UNIT_ASSERT_EQUAL(MakeYdbMetricName(name, EYdbMetricNameScope::Aggregate), name);
+
+            // Partition scope inserts "partition."
+            const TString partitionName = MakeYdbMetricName(name, EYdbMetricNameScope::Partition);
+            UNIT_ASSERT(partitionName.StartsWith("table.datashard.partition."));
+            UNIT_ASSERT_EQUAL(partitionName, "table.datashard.partition." + name.substr(16));
+        }
+    }
+
+    /**
+     * Verify that the mapper correctly uses Partition-scope names and skips LeaderOnly metrics for followers.
+     */
+    Y_UNIT_TEST(PartitionMapperWithFollowerSkipsLeaderOnly) {
+        // Create source counters using low-level layout: type=DataShard -> category -> sensor
+        auto sourceRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto typeGroup = sourceRoot->GetSubgroup("type", "DataShard");
+        auto executorGroup = typeGroup->GetSubgroup("category", "executor");
+        auto appGroup = typeGroup->GetSubgroup("category", "app");
+
+        // Populate with a few key low-level counters (SUM of row_count is LeaderOnly, ConsumedCPU is not)
+        executorGroup->GetNamedCounter("sensor", "SUM(DbUniqueRowsTotal)", false)->Set(1000);
+        executorGroup->GetNamedCounter("sensor", "ConsumedCPU", true)->Set(500);
+
+        // Create target group for Partition scope with follower source
+        auto targetCountersGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto mapper = CreateYdbMetricsMapperByTabletType(
+            TTabletTypes::DataShard,
+            targetCountersGroup,
+            sourceRoot,
+            EYdbMetricNameScope::Partition,
+            /*isFollowerSource=*/true);
+
+        mapper->TransferCounterValues();
+
+        // Verify that LeaderOnly metric (row_count) is NOT created in the target
+        UNIT_ASSERT(!targetCountersGroup->FindNamedCounter("name", "table.datashard.partition.row_count"));
+
+        // Verify that non-LeaderOnly metric (consumed_cpu_us) IS created with Partition name and correct value
+        auto cpuCounter = targetCountersGroup->FindNamedCounter("name", "table.datashard.partition.consumed_cpu_us");
+        UNIT_ASSERT(cpuCounter);
+        UNIT_ASSERT_EQUAL(cpuCounter->Val(), 500);
+
+        // Verify that NO targets exist under Aggregate names (only Partition)
+        UNIT_ASSERT(!targetCountersGroup->FindNamedCounter("name", "table.datashard.row_count"));
+        UNIT_ASSERT(!targetCountersGroup->FindNamedCounter("name", "table.datashard.consumed_cpu_us"));
+    }
+
+    /**
+     * Verify that the mapper creates all Partition-scope names for leader source.
+     */
+    Y_UNIT_TEST(PartitionMapperWithLeaderCreatesAllMetrics) {
+        // Create source counters using low-level layout
+        auto sourceRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto typeGroup = sourceRoot->GetSubgroup("type", "DataShard");
+        auto executorGroup = typeGroup->GetSubgroup("category", "executor");
+        auto appGroup = typeGroup->GetSubgroup("category", "app");
+
+        // Populate with low-level counters
+        executorGroup->GetNamedCounter("sensor", "SUM(DbUniqueRowsTotal)", false)->Set(1000);
+        executorGroup->GetNamedCounter("sensor", "ConsumedCPU", true)->Set(500);
+
+        // Create target group for Partition scope with leader source (isFollowerSource=false)
+        auto targetCountersGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto mapper = CreateYdbMetricsMapperByTabletType(
+            TTabletTypes::DataShard,
+            targetCountersGroup,
+            sourceRoot,
+            EYdbMetricNameScope::Partition,
+            /*isFollowerSource=*/false);
+
+        mapper->TransferCounterValues();
+
+        // Verify that LeaderOnly metric (row_count) IS created with Partition name
+        auto rowCountCounter = targetCountersGroup->FindNamedCounter("name", "table.datashard.partition.row_count");
+        UNIT_ASSERT(rowCountCounter);
+        UNIT_ASSERT_EQUAL(rowCountCounter->Val(), 1000);
+
+        // Verify that non-LeaderOnly metric (consumed_cpu_us) IS created with Partition name
+        auto cpuCounter = targetCountersGroup->FindNamedCounter("name", "table.datashard.partition.consumed_cpu_us");
+        UNIT_ASSERT(cpuCounter);
+        UNIT_ASSERT_EQUAL(cpuCounter->Val(), 500);
+
+        // Verify that NO targets exist under Aggregate names (only Partition)
+        UNIT_ASSERT(!targetCountersGroup->FindNamedCounter("name", "table.datashard.row_count"));
+        UNIT_ASSERT(!targetCountersGroup->FindNamedCounter("name", "table.datashard.consumed_cpu_us"));
     }
 }

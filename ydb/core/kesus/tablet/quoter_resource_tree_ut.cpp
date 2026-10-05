@@ -36,6 +36,7 @@ public:
     UNIT_TEST(TestInactiveMultiresourceSessionDisconnectsAndThenConnectsAgain)
     UNIT_TEST(TestParentUpdateDoesNotClampLeafFreeResource)
     UNIT_TEST(TestParentUpdateDoesNotNotifyUnchangedLeaf)
+    UNIT_TEST(TestSessionCountersInitializedOnDetailedCountersModeEnabled)
     UNIT_TEST_SUITE_END();
 
     void SetUp() override {
@@ -254,10 +255,10 @@ public:
         auto& updateSend =
             EXPECT_CALL(*session.Sink, OnSend(_, 0.0, _))
                 .After(oldSettingsAllocation)
-                .WillOnce(Invoke([](ui64, double, const NKikimrKesus::TStreamingQuoterResource* props) {
+                .WillOnce([](ui64, double, const NKikimrKesus::TStreamingQuoterResource* props) {
                     UNIT_ASSERT(props != nullptr);
                     UNIT_ASSERT_DOUBLES_EQUAL(props->GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(), 400, 0.001);
-                }));
+                });
         EXPECT_CALL(*session.Sink, OnSend(_, DoubleNear(40, 0.01), nullptr))
             .After(updateSend);
 
@@ -709,6 +710,34 @@ public:
         EXPECT_CALL(*session.Sink, OnSend(_, Gt(0.0), nullptr))
             .Times(AnyNumber());
         ProcessTicks(3);
+    }
+
+    void TestSessionCountersInitializedOnDetailedCountersModeEnabled() {
+        auto quoterCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        Resources->SetQuoterCounters(quoterCounters);
+
+        AddResource("/Root", 100);
+        auto* leaf = AddResource("/Root/Leaf", 100);
+
+        // Non-root resources have no counters until detailed mode is enabled.
+        auto activeSession = CreateSession(leaf, true, 10);
+        auto inactiveSession = CreateSession(leaf, false, 0);
+        UNIT_ASSERT(!leaf->GetCounters().ResourceCounters);
+
+        Resources->EnableDetailedCountersMode(true);
+        UNIT_ASSERT(leaf->GetCounters().ResourceCounters);
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().Sessions->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().ActiveSessions->Val(), 1);
+
+        // Closing sessions that existed before the counters were bound must not
+        // drive the gauges below zero.
+        Resources->CloseSession(activeSession.Session->GetClientId(), leaf->GetResourceId());
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().Sessions->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().ActiveSessions->Val(), 0);
+
+        DisconnectSession(inactiveSession.Session);
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().Sessions->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().ActiveSessions->Val(), 0);
     }
 
 private:

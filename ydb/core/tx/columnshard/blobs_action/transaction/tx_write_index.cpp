@@ -5,7 +5,10 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -26,7 +29,11 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
         AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, Self->GetLastTxSnapshot()));
-        LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
+        YDB_LOG_DEBUG("apply",
+            {"step", "write"},
+            {"tabletTxNo", TabletTxNo},
+            {"changes", changes->TypeString()},
+            {"tabletId", Self->TabletID()});
         NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot);
         changes->WriteIndexOnExecute(Self, context);
 
@@ -40,13 +47,21 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         changes->MutableBlobsAction().OnExecuteTxAfterAction(*Self, blobsDb, false);
         for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
             const auto* portion = changes->GetWritePortionInfo(i);
-            LOG_S_WARN(
-                TxPrefix() << "(" << changes->TypeString() << ":" << portion->DebugString() << ") blob cannot apply changes: " << TxSuffix());
+            YDB_LOG_WARN("blob cannot apply",
+                {"step", "write"},
+                {"tabletTxNo", TabletTxNo},
+                {"changes", changes->TypeString()},
+                {"portion", portion->DebugString()},
+                {"tabletId", Self->TabletID()});
         }
         NOlap::TChangesFinishContext context(
             "cannot write index blobs: " + ::ToString(Ev->Get()->GetPutStatus()) + ", error: " + Ev->Get()->ErrorMessage);
         changes->Abort(*Self, context);
-        LOG_S_ERROR(TxPrefix() << " (" << changes->TypeString() << ") cannot write index blobs" << TxSuffix());
+        YDB_LOG_ERROR("cannot write index blobs",
+            {"step", "write"},
+            {"tabletTxNo", TabletTxNo},
+            {"changes", changes->TypeString()},
+            {"tabletId", Self->TabletID()});
     }
 
     Self->EnqueueProgressTx(ctx);

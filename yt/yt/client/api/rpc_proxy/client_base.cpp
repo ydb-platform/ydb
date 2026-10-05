@@ -8,7 +8,7 @@
 #include "journal_reader.h"
 #include "journal_writer.h"
 #include "private.h"
-#include "request_info.h"
+#include "request_tags.h"
 #include "table_reader.h"
 #include "table_writer.h"
 #include "transaction.h"
@@ -37,6 +37,8 @@
 #include <yt/yt/library/auth/credentials_injecting_channel.h>
 
 #include <yt/yt/core/net/address.h>
+
+#include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/core/ytree/attribute_filter.h>
 
@@ -704,7 +706,7 @@ TFuture<IFileReaderPtr> TClientBase::CreateFileReader(
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
-    SetReadFileRequestInfo(req, *req);
+    req->Annotate().With(MakeReadFileRequestTags(*req));
 
     return NRpcProxy::CreateFileReader(std::move(req));
 }
@@ -727,7 +729,7 @@ IFileWriterPtr TClientBase::CreateFileWriter(
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
 
-    SetWriteFileRequestInfo(req, path, *req);
+    req->Annotate().With(MakeWriteFileRequestTags(path, *req));
 
     return NRpcProxy::CreateFileWriter(std::move(req));
 }
@@ -787,6 +789,8 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     const TRichYPath& path,
     const TTableReaderOptions& options)
 {
+    NProfiling::TWallTimer totalTimer;
+
     auto proxy = CreateApiServiceProxy();
     PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
     auto req = proxy.ReadTable();
@@ -794,11 +798,11 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
 
     FillRequest(req.Get(), path, /*format*/ std::nullopt, options);
 
-    SetReadTableRequestInfo(req, path, *req);
+    req->Annotate().With(MakeReadTableRequestTags(path, *req));
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
-        .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
-            return NRpcProxy::CreateTableReader(std::move(inputStream));
+        .AsUnique().Apply(BIND([totalTimer] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
+            return NRpcProxy::CreateTableReader(std::move(inputStream), totalTimer);
         }));
 }
 
@@ -818,7 +822,7 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
 
     ToProto(req->mutable_transactional_options(), options);
 
-    SetWriteTableRequestInfo(req, path);
+    req->Annotate().With(MakeWriteTableRequestTags(path));
 
     auto schema = New<TTableSchema>();
     return NRpc::CreateRpcClientOutputStream(
@@ -849,7 +853,7 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
     auto req = proxy.StartDistributedWriteSession();
     FillRequest(req.Get(), path, options);
 
-    SetStartDistributedWriteSessionRequestInfo(req, path);
+    req->Annotate().With(MakeStartDistributedWriteSessionRequestTags(path));
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
@@ -877,7 +881,7 @@ TFuture<void> TClientBase::PingDistributedWriteSession(
 
     FillRequest(req.Get(), session, options);
 
-    SetPingDistributedWriteSessionRequestInfo(req, session);
+    req->Annotate().With(MakePingDistributedWriteSessionRequestTags(session));
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
@@ -894,7 +898,7 @@ TFuture<void> TClientBase::FinishDistributedWriteSession(
 
     FillRequest(req.Get(), sessionWithResults, options);
 
-    SetFinishDistributedWriteSessionRequestInfo(req, sessionWithResults.Session);
+    req->Annotate().With(MakeFinishDistributedWriteSessionRequestTags(sessionWithResults.Session));
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
@@ -914,7 +918,7 @@ TFuture<TDistributedWriteFileSessionWithCookies> TClientBase::StartDistributedWr
     auto req = proxy.StartDistributedWriteFileSession();
     FillRequest(req.Get(), path, options);
 
-    SetStartDistributedWriteFileSessionRequestInfo(req, path);
+    req->Annotate().With(MakeStartDistributedWriteFileSessionRequestTags(path));
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
@@ -942,7 +946,7 @@ TFuture<void> TClientBase::PingDistributedWriteFileSession(
 
     FillRequest(req.Get(), session, options);
 
-    SetPingDistributedWriteFileSessionRequestInfo(req, session);
+    req->Annotate().With(MakePingDistributedWriteFileSessionRequestTags(session));
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
@@ -959,7 +963,7 @@ TFuture<void> TClientBase::FinishDistributedWriteFileSession(
 
     FillRequest(req.Get(), session, options);
 
-    SetFinishDistributedWriteFileSessionRequestInfo(req, session.Session);
+    req->Annotate().With(MakeFinishDistributedWriteFileSessionRequestTags(session.Session));
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 

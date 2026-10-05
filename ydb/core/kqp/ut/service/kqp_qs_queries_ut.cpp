@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/testlib/common_helper.h>
@@ -6196,6 +6197,83 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(R"([[240000u]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST_TWIN(ExecuteQueryOnlyComments, PerStatementExecution) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableAstCache(true);
+        app.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(PerStatementExecution);
+        auto kikimr = DefaultKikimrRunner({}, app);
+        auto db = kikimr.GetQueryClient();
+
+        const TVector<TString> queries = {
+            "-- Only a comment",
+            "/* Multi-line\n   comment */",
+            "-- First comment\n-- Second comment\n-- Third comment",
+            "-- Single-line\n/* Multi-line */\n-- Another single-line",
+            "   -- comment\n  ",
+            "   \n\t  ",
+            ";; /* SELECT 1 */;",
+        };
+        const TVector<NYdb::NQuery::TTxControl> txControls = {
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+        };
+        for (const auto& txControl : txControls) {
+            for (const auto& query : queries) {
+                auto result = db.ExecuteQuery(query, txControl).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetResultSets().empty());
+            }
+        }
+
+        for (const auto& query : {"/* Unterminated comment", "-- comment\nSELECT FROM;"}) {
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+        }
+
+        auto emptyResult = db.ExecuteQuery("", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(emptyResult.GetStatus(), EStatus::BAD_REQUEST, emptyResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExecuteDataQueryOnlyCommentsRejected) {
+        auto kikimr = DefaultKikimrRunner();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        for (const auto& query : {"-- empty query", "/* Multi-line\n   comment */"}) {
+            auto result = session.ExecuteDataQuery(query,
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::YQL_NO_STATEMENTS),
+                query << ": " << result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ParseStatementsPreservesSyntaxErrors) {
+        const TVector<TString> queries = {
+            "/* Unterminated comment",
+            "-- comment\nSELECT (1 + );",
+            "SELECT 1;\n/* Unterminated comment",
+        };
+        for (const auto& query : queries) {
+            TKqpTranslationSettingsBuilder settingsBuilder(NYql::EKikimrQueryType::Query, "cluster", query,
+                NSQLTranslation::EBindingsMode::DISABLED, {});
+            const auto wholeQuery = ParseStatements(query, /*syntax=*/{}, /*isSql=*/true,
+                settingsBuilder, /*perStatementExecution=*/false);
+            const auto perStatement = ParseStatements(query, /*syntax=*/{}, /*isSql=*/true,
+                settingsBuilder, /*perStatementExecution=*/true);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(wholeQuery.size(), 1, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(perStatement.size(), 1, query);
+            const auto& expected = *wholeQuery.front().Ast;
+            const auto& actual = *perStatement.front().Ast;
+            UNIT_ASSERT_C(!expected.IsOk(), query << ": " << expected.Issues.ToString());
+            UNIT_ASSERT_C(!actual.IsOk(), query << ": " << actual.Issues.ToString());
+            UNIT_ASSERT_C(!expected.Issues.Empty(), query);
+            // The formatted issues include positions, severity, codes and nested diagnostics.
+            UNIT_ASSERT_VALUES_EQUAL_C(actual.Issues.ToString(), expected.Issues.ToString(), query);
+        }
+    }
+
 }
 
 } // namespace NKqp

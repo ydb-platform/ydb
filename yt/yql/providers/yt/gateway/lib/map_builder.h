@@ -88,6 +88,7 @@ public:
         mapJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
         mapJob->SetLangVer(execCtx->Options_.LangVer());
         mapJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
+        mapJob->SetBridgeMode(execCtx->Options_.BridgeMode());
     }
 
     template<class ExecCtxPtr>

@@ -74,15 +74,15 @@ protected:
 
     TTabletInfoOwnerCache TabletInfoOwnerCache_;
 
-    virtual void InvalidateTable(const TTableMountInfoPtr& tableInfo) = 0;
-
     virtual void RegisterCell(NYTree::INodePtr cellDescriptor);
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
     TTableMountCacheConfigPtr Config_;
 
-    TTabletInfoPtr FindTabletInfo(TTabletId tabletId);
+    TTabletInfoPtr FindTabletInfo(
+        TTabletId tabletId,
+        std::optional<NHydra::TRevision> mountRevision = {});
 
     void SetTableInfos(std::vector<TTableMountInfoPtr> clonedTableInfos);
 

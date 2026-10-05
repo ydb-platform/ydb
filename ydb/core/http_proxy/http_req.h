@@ -2,6 +2,7 @@
 
 #include "events.h"
 
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/http_proxy/authorization/signature.h>
@@ -52,7 +53,7 @@ struct THttpResponseData {
     TString Body;
 };
 
-struct THttpRequestContext {
+struct THttpRequestContext : public NPQ::TLogPrefix {
     THttpRequestContext(const NKikimrConfig::TServerlessProxyConfig& config,
                         NHttp::THttpIncomingRequestPtr request,
                         NActors::TActorId sender,
@@ -85,8 +86,10 @@ struct THttpRequestContext {
     TString SerializedUserToken;
     TString UserName;
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "http request [" << MethodName << "] requestId [" << RequestId << "]";
+    NPQ::TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"methodName", MethodName},
+            {"requestId", RequestId});
     }
 
     THolder<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();

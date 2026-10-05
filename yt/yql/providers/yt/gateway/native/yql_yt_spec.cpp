@@ -23,6 +23,29 @@ namespace NNative {
 
 namespace {
 
+TStaticFileWithMd5 ResolveMrJobBinary(const TYtStaticGatewayConfig& config, const TString& label) {
+    if (label.empty()) {
+        TStaticFileWithMd5 binary;
+        binary.SetFile(config.GetMrJobBin());
+        if (config.HasMrJobBinMd5()) {
+            binary.SetMd5(config.GetMrJobBinMd5());
+        }
+        return binary;
+    }
+
+    const TStaticFileWithMd5* selectedBinary = nullptr;
+    for (const auto& entry : config.GetMrJobBinaries()) {
+        const auto& binaryLabel = entry.GetLabel();
+        YQL_ENSURE(!binaryLabel.empty(), "MrJob binary label must not be empty");
+        YQL_ENSURE(!entry.GetBinary().GetFile().empty(), "MrJob binary path is empty for label '" << binaryLabel << "'");
+        if (binaryLabel == label) {
+            selectedBinary = &entry.GetBinary();
+        }
+    }
+    YQL_ENSURE(selectedBinary, "Unknown MrJob label '" << label << "'");
+    return *selectedBinary;
+}
+
 ui64 GetCombiningDataSizePerJob(ui64 dataSizePerJob, TMaybe<ui64> minChunkSize) {
     static const ui64 DefaultCombineChunkSize = 1_GB;
     ui64 result = dataSizePerJob;
@@ -239,9 +262,24 @@ void FillSpec(NYT::TNode& spec,
         spec["description"] = *val;
     }
 
-    if (!opProps.HasFlags(EYtOpProp::IntermediateData)) {
-        if (auto val = settings->MaxJobCount.Get(cluster)) {
-            spec["max_job_count"] = static_cast<i64>(*val);
+    if (auto val = settings->MaxJobCount.Get(cluster)) {
+        const bool applyToIntermediate = settings->ApplyMaxJobCountToAll.Get(cluster).GetOrElse(DEFAULT_APPLY_MAX_JOB_COUNT_TO_ALL) ||
+            opProps.HasFlags(EYtOpProp::ForceApplyMaxJobCount);
+        TMaybe<TStringBuf> settingName;
+        if (!opProps.HasFlags(EYtOpProp::IntermediateData)) {
+            settingName = "max_job_count";
+        } else if (applyToIntermediate) {
+            if (opProps.HasAnyOfFlags(EYtOpProp::WithReducer)) {
+                // mapreduce: apply even if map stage is empty
+                settingName = "max_map_job_count";
+            } else {
+                // sort
+                settingName = "max_partition_job_count";
+            }
+        }
+        if (settingName) {
+            YQL_ENSURE(!settingName->empty());
+            spec[*settingName] = static_cast<i64>(*val);
         }
     }
 
@@ -624,14 +662,17 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
     ui64 fileMemUsage,
     ui64 llvmMemUsage,
     bool localRun,
-    const TString& cmdPrefix)
+    const TString& cmdPrefix,
+    NKikimr::NUdf::EBridgeMode bridgeMode,
+    const TString& bridgeBinaryPath)
 {
     auto cluster = execCtx.Cluster_;
-    auto mrJobBin = execCtx.StaticConfig_->GetMrJobBin();
+    const auto mrJobBinary = ResolveMrJobBinary(*execCtx.StaticConfig_, execCtx.Session_->MrJobLabel_);
+    auto mrJobBin = mrJobBinary.GetFile();
     TMaybe<TString> mrJobBinMd5;
     if (!mrJobBin.empty()) {
-        if (execCtx.StaticConfig_->HasMrJobBinMd5()) {
-            mrJobBinMd5 = execCtx.StaticConfig_->GetMrJobBinMd5();
+        if (mrJobBinary.HasMd5()) {
+            mrJobBinMd5 = mrJobBinary.GetMd5();
         } else {
             YQL_CLOG(WARN, ProviderYt) << "MrJobBin without MD5";
         }
@@ -737,6 +778,15 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
             spec.AddLocalFile(file.first, opts);
         }
         fileMemUsage += binSize;
+    }
+
+    if (bridgeMode == NKikimr::NUdf::EBridgeMode::OutProcess && !bridgeBinaryPath.empty()) {
+        const auto bridgeSize = TFileStat(bridgeBinaryPath).Size;
+        YQL_ENSURE(bridgeSize != 0, "udf_bridge binary not found or empty: " << bridgeBinaryPath);
+        fileMemUsage += bridgeSize;
+        NYT::TAddLocalFileOptions opts;
+        opts.PathInJob("udf_bridge");
+        spec.AddLocalFile(bridgeBinaryPath, opts);
     }
 
     auto defaultMemoryLimit = settings->DefaultMemoryLimit.Get(cluster).GetOrElse(0);

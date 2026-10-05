@@ -72,7 +72,9 @@ namespace NKikimr {
             // save freePagePos before updating index
             ui32 freePagePos = FreePagePos();
             if (firstPageFirstLsn <= LastRealLsn) {
-                // remove or update last index rec
+                // the first page rewrites the last (partially filled) page; drop the
+                // superseded copy from the index. The one-page gap this leaves also
+                // breaks adjacency, so AppendPages will not merge into the last record
                 TDiskIndexRecord &lastRec = Index.back();
                 Y_DEBUG_ABORT_UNLESS(lastRec.PagesNum >= 1);
                 if (lastRec.PagesNum > 1) {
@@ -92,7 +94,24 @@ namespace NKikimr {
             ui32 s = pages.size();
             Y_DEBUG_ABORT_UNLESS(s > 0);
             LastRealLsn = pages[s - 1].GetLastLsn();
-            for (ui32 i = 0; i < s; i += indexBulk) {
+
+            ui32 i = 0;
+            if (Index.size() > 0) {
+                auto& lastIndexRec = Index.back();
+                ui32 lastIndexRecPage = lastIndexRec.OffsetInPages + lastIndexRec.PagesNum;
+
+                // merge only a batch physically adjacent to the last record (an overlap
+                // rewrite in UpdateIndex drops the superseded page and breaks adjacency)
+                // and only while the record has room; PagesNum may exceed indexBulk if
+                // the entry point was written with a larger IndexBulk
+                if (freePagePos == lastIndexRecPage && lastIndexRec.PagesNum < indexBulk) {
+                    const ui32 pagesToMerge = Min(s, indexBulk - lastIndexRec.PagesNum);
+                    lastIndexRec.PagesNum += pagesToMerge;
+                    i += pagesToMerge;
+                }
+            }
+
+            for (; i < s; i += indexBulk) {
                 ui64 firstLsn = pages[i].GetFirstLsn();
                 ui32 pagesNum = Min(s - i, indexBulk);
                 TDiskIndexRecord rec(firstLsn, freePagePos + i, pagesNum);

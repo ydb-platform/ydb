@@ -394,3 +394,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -31,12 +31,19 @@ struct TEvPrivate {
         EvResolveSecretResult,
         EvResolveResourceIdResult,
         EvAlterDstResult,
+        EvSchemaChangeDstAlterResult,
+        EvSchemaChangeDstAlterTxId,
+        EvSchemaChangeDstAlterTxIdSaved,
         EvRemoveWorker,
+        EvCompleteWorkerSet,
+        EvResumeDeferredAlter,
         EvDescribeTargetsResult,
         EvRequestCreateStream,
         EvAllowCreateStream,
         EvRequestDropStream,
         EvAllowDropStream,
+        EvPrepareAttachDst,
+        EvPrepareAttachDstResult,
 
         EvEnd,
     };
@@ -153,6 +160,20 @@ struct TEvPrivate {
         TString ToString() const override;
     };
 
+    struct TEvPrepareAttachDst: public TEventLocal<TEvPrepareAttachDst, EvPrepareAttachDst> {
+        const ui64 ReplicationId;
+        const ui64 TargetId;
+        const TPathId DstPathId;
+
+        explicit TEvPrepareAttachDst(ui64 rid, ui64 tid, const TPathId& dstPathId);
+        TString ToString() const override;
+    };
+
+    struct TEvPrepareAttachDstResult: public TEventLocal<TEvPrepareAttachDstResult, EvPrepareAttachDstResult> {
+        TEvPrepareAttachDstResult() = default;
+        TString ToString() const override;
+    };
+
     struct TEvDropDstResult: public TGenericSchemeResult<TEvDropDstResult, EvDropDstResult> {
         explicit TEvDropDstResult(ui64 rid, ui64 tid,
             NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
@@ -223,10 +244,55 @@ struct TEvPrivate {
         TString ToString() const override;
     };
 
+    struct TEvSchemaChangeDstAlterResult
+        : public TGenericSchemeResult<TEvSchemaChangeDstAlterResult, EvSchemaChangeDstAlterResult>
+    {
+        const ui64 DstAlterTxId;
+
+        explicit TEvSchemaChangeDstAlterResult(ui64 rid, ui64 tid, ui64 dstAlterTxId,
+            NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
+        TString ToString() const override;
+    };
+
+    struct TEvSchemaChangeDstAlterTxId
+        : public TEventLocal<TEvSchemaChangeDstAlterTxId, EvSchemaChangeDstAlterTxId>
+    {
+        const ui64 ReplicationId;
+        const ui64 TargetId;
+        const ui64 TxId;
+
+        TEvSchemaChangeDstAlterTxId(ui64 rid, ui64 tid, ui64 txId);
+        TString ToString() const override;
+    };
+
+    struct TEvSchemaChangeDstAlterTxIdSaved
+        : public TEventLocal<TEvSchemaChangeDstAlterTxIdSaved, EvSchemaChangeDstAlterTxIdSaved>
+    {
+        const ui64 TxId;
+
+        explicit TEvSchemaChangeDstAlterTxIdSaved(ui64 txId);
+        TString ToString() const override;
+    };
+
+    struct TEvResumeDeferredAlter: public TEventLocal<TEvResumeDeferredAlter, EvResumeDeferredAlter> {
+        const ui64 ReplicationId;
+
+        explicit TEvResumeDeferredAlter(ui64 rid);
+        TString ToString() const override;
+    };
+
     struct TEvRemoveWorker: public TEventLocal<TEvRemoveWorker, EvRemoveWorker> {
         const TWorkerId Id;
 
         explicit TEvRemoveWorker(ui64 rid, ui64 tid, ui64 wid);
+        TString ToString() const override;
+    };
+
+    struct TEvCompleteWorkerSet: public TEventLocal<TEvCompleteWorkerSet, EvCompleteWorkerSet> {
+        ui64 ReplicationId;
+        ui64 TargetId;
+
+        TEvCompleteWorkerSet(ui64 rid, ui64 tid);
         TString ToString() const override;
     };
 

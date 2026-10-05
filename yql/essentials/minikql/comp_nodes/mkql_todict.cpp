@@ -2000,8 +2000,6 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
     // However, this invariant does not hold when PROFILE_MEMORY_ALLOCATIONS is enabled
     const bool isCompact = TAlignedPagePool::IsDefaultAllocatorUsed() ? false : AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 2U))->AsValue().Get<bool>();
 
-    const auto payloadSelectorNode = callable.GetInput(callable.GetInputsCount() - 4U);
-
     const bool isOptional = keyType->IsOptional();
     const auto unwrappedKeyType = isOptional ? AS_TYPE(TOptionalType, keyType)->GetItemType() : keyType;
 

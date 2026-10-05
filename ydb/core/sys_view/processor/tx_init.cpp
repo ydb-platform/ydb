@@ -1,6 +1,8 @@
 #include "processor_impl.h"
 #include <ydb/core/base/feature_flags.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -46,9 +48,10 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
         }
 
-        SVLOG_D("[" << Self->TabletID() << "] Loading results: "
-            << "table# " << TSchema::TableId
-            << ", result count# " << results.size());
+        YDB_LOG_DEBUG("TTxInit::LoadQueryResults: loaded persisted results",
+            {"tabletId", Self->TabletID()},
+            {"tableId", TSchema::TableId},
+            {"resultCount", results.size()});
 
         return true;
     };
@@ -77,9 +80,10 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
         }
 
-        SVLOG_D("[" << Self->TabletID() << "] Loading results: "
-            << "table# " << S::TableId
-            << ", result count# " << results.size());
+        YDB_LOG_DEBUG("TTxInit::LoadPartitionResults: loaded persisted partition results",
+            {"tabletId", Self->TabletID()},
+            {"tableId", S::TableId},
+            {"resultCount", results.size()});
 
         return true;
     };
@@ -114,7 +118,9 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                         Self->PartitionTopByTliHour.emplace_back(std::move(partition));
                         break;
                     default:
-                        SVLOG_CRIT("[" << Self->TabletID() << "] ignoring unexpected partition stats type: " << type);
+                        YDB_LOG_CRIT("TTxInit::LoadIntervalPartitionTops: ignoring unexpected partition stats type",
+                            {"tabletId", Self->TabletID()},
+                            {"statsType", type});
                 }
                 ++partCount;
             }
@@ -122,18 +128,20 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             if (!rowset.Next()) {
                 return false;
             }
-        }        
+        }
 
-        SVLOG_D("[" << Self->TabletID() << "] Loading results: "
-            << "table# " << S::TableId
-            << ", partCount count# " << partCount);
+        YDB_LOG_DEBUG("TTxInit::LoadIntervalPartitionTops: loaded interval partition tops",
+            {"tabletId", Self->TabletID()},
+            {"tableId", S::TableId},
+            {"partitionCount", partCount});
 
         return true;
     }
 
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        SVLOG_D("[" << Self->TabletID() << "] TTxInit::Execute");
+        YDB_LOG_DEBUG("TTxInit::Execute",
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -144,7 +152,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             auto intervalTopsRowset = db.Table<Schema::IntervalTops>().Range().Select();
             auto nodesToRequestRowset = db.Table<Schema::NodesToRequest>().Range().Select();
             auto metricsOneMinuteRowset = db.Table<Schema::MetricsOneMinute>().Range().Select();
-            auto metricsOneHourRowset = db.Table<Schema::MetricsOneHour>().Range().Select();
             auto durationOneMinuteRowset = db.Table<Schema::TopByDurationOneMinute>().Range().Select();
             auto durationOneHourRowset = db.Table<Schema::TopByDurationOneHour>().Range().Select();
             auto readBytesOneMinuteRowset = db.Table<Schema::TopByDurationOneMinute>().Range().Select();
@@ -164,7 +171,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 !intervalTopsRowset.IsReady() ||
                 !nodesToRequestRowset.IsReady() ||
                 !metricsOneMinuteRowset.IsReady() ||
-                !metricsOneHourRowset.IsReady() ||
                 !durationOneMinuteRowset.IsReady() ||
                 !durationOneHourRowset.IsReady() ||
                 !readBytesOneMinuteRowset.IsReady() ||
@@ -196,20 +202,35 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 switch (id) {
                     case Schema::SysParam_Database:
                         Self->Database = value;
-                        SVLOG_D("[" << Self->TabletID() << "] Loading database: " << Self->Database);
+                        YDB_LOG_DEBUG("TTxInit::Execute: loaded database sys param",
+                            {"tabletId", Self->TabletID()},
+                            {"database", Self->Database});
                         break;
                     case Schema::SysParam_CurrentStage: {
                         auto stage = FromString<ui64>(value);
                         Self->CurrentStage = static_cast<EStage>(stage);
-                        SVLOG_D("[" << Self->TabletID() << "] Loading stage: " << stage);
+                        YDB_LOG_DEBUG("TTxInit::Execute: loaded current stage sys param",
+                            {"tabletId", Self->TabletID()},
+                            {"stage", stage});
                         break;
                     }
                     case Schema::SysParam_IntervalEnd:
                         Self->IntervalEnd = TInstant::MicroSeconds(FromString<ui64>(value));
-                        SVLOG_D("[" << Self->TabletID() << "] Loading interval end: " << Self->IntervalEnd);
+                        YDB_LOG_DEBUG("TTxInit::Execute: loaded interval end sys param",
+                            {"tabletId", Self->TabletID()},
+                            {"intervalEnd", Self->IntervalEnd});
+                        break;
+                    case Schema::SysParam_LastMergedQueryMetricsIntervalEnd:
+                        Self->LastFinalizedQueryMetricsIntervalEnd =
+                            TInstant::MicroSeconds(FromString<ui64>(value));
+                        YDB_LOG_DEBUG("Loading last merged query metrics interval end",
+                            {"tabletId", Self->TabletID()},
+                            {"lastFinalizedIntervalEnd", Self->LastFinalizedQueryMetricsIntervalEnd});
                         break;
                     default:
-                        SVLOG_CRIT("[" << Self->TabletID() << "] Unexpected SysParam id: " << id);
+                        YDB_LOG_CRIT("TTxInit::Execute: unexpected sys param id",
+                            {"tabletId", Self->TabletID()},
+                            {"sysParamId", id});
                 }
 
                 if (!rowset.Next()) {
@@ -251,10 +272,11 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 Self->ByCpu.emplace(query.Cpu, queryHash);
             }
 
-            SVLOG_D("[" << Self->TabletID() << "] Loading interval summaries: "
-                << "query count# " << Self->Queries.size()
-                << ", node ids count# " << Self->SummaryNodes.size()
-                << ", total count# " << totalNodeIdsCount);
+            YDB_LOG_DEBUG("TTxInit::Execute: loaded interval summaries",
+                {"tabletId", Self->TabletID()},
+                {"queryCount", Self->Queries.size()},
+                {"summaryNodeCount", Self->SummaryNodes.size()},
+                {"totalNodeEntryCount", totalNodeIdsCount});
         }
 
         // IntervalMetrics
@@ -280,8 +302,41 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                     return false;
                 }
             }
-            SVLOG_D("[" << Self->TabletID() << "] Loading interval metrics: "
-                << "query count# " << Self->QueryMetrics.size());
+            YDB_LOG_DEBUG("TTxInit::Execute: loaded interval metrics",
+                {"tabletId", Self->TabletID()},
+                {"queryCount", Self->QueryMetrics.size()});
+        }
+
+        // IntervalMetricsOneHour
+        {
+            Self->CurrentHourMetrics.clear();
+            Self->CurrentHourEnd = EndOfQueryMetricsHourInterval(Self->IntervalEnd);
+
+            auto rowset = db.Table<Schema::IntervalMetricsOneHour>()
+                .Prefix(Self->CurrentHourEnd.MicroSeconds())
+                .Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TQueryHash queryHash = rowset.GetValue<Schema::IntervalMetricsOneHour::QueryHash>();
+                TString data = rowset.GetValue<Schema::IntervalMetricsOneHour::Data>();
+
+                if (data) {
+                    Y_PROTOBUF_SUPPRESS_NODISCARD
+                        Self->CurrentHourMetrics[queryHash].ParseFromString(data);
+                }
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            YDB_LOG_DEBUG("Loading hour query metrics",
+                {"tabletId", Self->TabletID()},
+                {"hourEnd", Self->CurrentHourEnd},
+                {"queryCount", Self->CurrentHourMetrics.size()});
         }
 
         // IntervalTops
@@ -340,7 +395,9 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                         Self->ByRequestUnitsHour.emplace_back(std::move(query));
                         break;
                     default:
-                        SVLOG_CRIT("[" << Self->TabletID() << "] ignoring unexpected query stats type: " << type);
+                        YDB_LOG_CRIT("TTxInit::Execute: ignoring unexpected query stats type",
+                            {"tabletId", Self->TabletID()},
+                            {"statsType", type});
                 }
 
                 ++queryCount;
@@ -358,14 +415,15 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             std::sort(Self->ByRequestUnitsMinute.begin(), Self->ByRequestUnitsMinute.end(), TopQueryCompare);
             std::sort(Self->ByRequestUnitsHour.begin(), Self->ByRequestUnitsHour.end(), TopQueryCompare);
 
-            SVLOG_D("[" << Self->TabletID() << "] Loading interval query tops: "
-                << "total query count# " << queryCount);
+            YDB_LOG_DEBUG("TTxInit::Execute: loaded interval query tops",
+                {"tabletId", Self->TabletID()},
+                {"queryCount", queryCount});
         }
 
         // NodesToRequest
         {
             Self->NodesToRequest.clear();
-            Self->NodesInFlight.clear();
+            Self->RequestsInFlight.clear();
 
             auto rowset = db.Table<Schema::NodesToRequest>().Range().Select();
             if (!rowset.IsReady()) {
@@ -373,8 +431,25 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
 
             size_t totalHashesCount = 0;
+            size_t staleRequestsCount = 0;
             while (!rowset.EndOfSet()) {
                 TNodeId nodeId = rowset.GetValue<Schema::NodesToRequest::NodeId>();
+                const bool hasIntervalEnd = rowset.HaveValue<Schema::NodesToRequest::IntervalEnd>();
+                const ui64 requestIntervalEndUs = hasIntervalEnd
+                    ? rowset.GetValue<Schema::NodesToRequest::IntervalEnd>()
+                    : Self->IntervalEnd.MicroSeconds();
+                if (!hasIntervalEnd) {
+                    db.Table<Schema::NodesToRequest>().Key(nodeId).Update(
+                        NIceDb::TUpdate<Schema::NodesToRequest::IntervalEnd>(requestIntervalEndUs));
+                }
+                if (requestIntervalEndUs != Self->IntervalEnd.MicroSeconds()) {
+                    db.Table<Schema::NodesToRequest>().Key(nodeId).Delete();
+                    ++staleRequestsCount;
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
                 TString hashes = rowset.GetValue<Schema::NodesToRequest::QueryHashes>();
                 TString textsToGet = rowset.GetValue<Schema::NodesToRequest::TextsToGet>();
                 TString byDuration = rowset.GetValue<Schema::NodesToRequest::ByDuration>();
@@ -403,9 +478,11 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                     return false;
                 }
             }
-            SVLOG_D("[" << Self->TabletID() << "] Loading nodes to request: "
-                << "nodes count# " << Self->NodesToRequest.size()
-                << ", hashes count# " << totalHashesCount);
+            YDB_LOG_DEBUG("TTxInit::Execute: loaded nodes to request",
+                {"tabletId", Self->TabletID()},
+                {"nodeCount", Self->NodesToRequest.size()},
+                {"totalHashCount", totalHashesCount},
+                {"staleRequestsDeleted", staleRequestsCount});
         }
 
         // Metrics...
@@ -478,6 +555,9 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         auto deadline = Self->IntervalEnd + Self->TotalInterval;
         if (ctx.Now() >= deadline) {
+            if (Self->CurrentStage == AGGREGATE) {
+                Self->PersistQueryResults(db);
+            }
             Self->Reset(db, ctx);
         }
 
@@ -485,7 +565,8 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        SVLOG_D("[" << Self->TabletID() << "] TTxInit::Complete");
+        YDB_LOG_DEBUG("TTxInit::Complete",
+            {"tabletId", Self->TabletID()});
 
         if (Self->CurrentStage == COLLECT) {
             Self->ScheduleAggregate();
@@ -497,13 +578,16 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         }
 
         if (AppData()->FeatureFlags.GetEnableDbCounters()) {
-            Self->ScheduleApplyCounters();
             Self->ScheduleApplyLabeledCounters();
+        }
+        if (AppData()->FeatureFlags.GetEnableDbCounters() || AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+            Self->ScheduleApplyCounters();
             Self->SendNavigate();
         }
 
         Self->SignalTabletActive(ctx);
         Self->Become(&TThis::StateWork);
+        Self->ScheduleCleanupHourMetrics();
     }
 };
 

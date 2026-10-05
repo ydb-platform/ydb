@@ -87,9 +87,9 @@ std::string TYPathRequest::GetService() const
     return FromProto<std::string>(Header_.service());
 }
 
-const std::string& TYPathRequest::GetRequestInfo() const
+const NLogging::TLoggingTagList& TYPathRequest::GetLoggingTags() const
 {
-    static const std::string Empty;
+    static const NLogging::TLoggingTagList Empty;
     return Empty;
 }
 

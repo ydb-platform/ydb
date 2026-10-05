@@ -12,7 +12,7 @@ IF (SANITIZER_TYPE OR NOT OPENSOURCE)
 ENDIF()
 
 IF (SANITIZER_TYPE)
-    TIMEOUT(1800)
+    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat sb:ttl=2)
 ELSE()
@@ -32,7 +32,6 @@ ENDIF()
     )
     DATA(
         arcadia/yql/essentials/tests/sql/suites
-        arcadia/yql/essentials/mount
         arcadia/yql/essentials/cfg/tests
     )
     PEERDIR(

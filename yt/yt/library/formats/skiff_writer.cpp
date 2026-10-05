@@ -776,7 +776,8 @@ public:
                             return CreateComplexValueConverter(std::move(descriptor), skiffField.Schema(), isSparse);
                         }
                         case ELogicalMetatype::Tagged:
-                            // Don't expect tagged type in denullified logical type
+                        case ELogicalMetatype::AggregateState:
+                            // Don't expect tagged types in denullified logical type.
                             break;
                     }
                     YT_ABORT();

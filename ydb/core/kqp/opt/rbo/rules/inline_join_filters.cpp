@@ -1,19 +1,13 @@
 #include "kqp_rules_include.h"
 
-#include <ydb/core/kqp/opt/rbo/map_renames.h>
-
 namespace {
 
 using namespace NKikimr::NKqp;
-using namespace NKikimr::NKqp::NMapRenames;
 
-bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TVector<TInfoUnit>& columns) {
+bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TOrderedIUs<>& columns) {
     auto itemType = input->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    for (const auto & column : columns) {
-        const auto* columnType = itemType->FindItemType(column.GetFullName());
-        // A key column may be absent from the row type when downstream alias rewrites have renamed
-        // it but the propagated KeyColumns metadata still references the old name. In that case we
-        // cannot prove the key is non-null (nor build a valid join on it), so bail out of the rewrite.
+    for (const auto & column : columns.Items()) {
+        const auto* columnType = itemType->FindItemType(ToString(column));
         if (!columnType || columnType->IsOptionalOrNull()) {
             return false;
         }
@@ -33,8 +27,6 @@ bool TInlineJoinFiltersRule::QuickMatch(const TIntrusivePtr<IOperator>& input) c
 // Inline join filters. Temporarily inline join filters only of there are no equi-join conditions in the join
 
 TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(props);
     if (input->Kind != EOperator::Join) {
         return input;
     }
@@ -44,21 +36,33 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         return input;
     }
 
+    // Inner with empty keys - cross.
+    const bool isRealCrossJoin = join->JoinKind == "Cross" || (join->JoinKind == "Inner" && join->JoinKeys.Items().empty());
+    const bool usingBlockJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin();
+    const bool usingBlockCrossJoin = usingBlockJoin && ctx.KqpCtx.Config->GetUseBlockHashJoinForCross();
+    const bool forceInlining = ctx.KqpCtx.Config->GetEnableInlineJoinFiltersAfterCBO();
+
+    // Do not inline filters for cross join, unless we force the inlining with a flag
+    if (isRealCrossJoin && usingBlockCrossJoin && !forceInlining) {
+        join->JoinKind = "Cross";
+        return join;
+    }
+
     // We inline join filters in the following cases:
     // - There implementation is a lookup join or reverse lookup join
     // - There are no equi-join conditions in the join
     // - We're not using BlockJoin, which supports join filters
 
-    bool usingBlockJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin();
-    bool isLookupJoin = join->Props.JoinAlgo == EJoinAlgoType::LookupJoin || join->Props.JoinAlgo == EJoinAlgoType::LookupJoinReverse;
-    bool containsEquiJoinConditions = !join->JoinKeys.empty();
+    // Lookup join is not supported for join filters.
+    const bool isLookupJoin = join->Props.JoinAlgo == EJoinAlgoType::LookupJoin || join->Props.JoinAlgo == EJoinAlgoType::LookupJoinReverse;
+    bool containsEquiJoinConditions = !join->JoinKeys.Items().empty();
     for (const auto& f : join->JoinFilters) {
         if (f.MaybeEquiJoinCondition()) {
             containsEquiJoinConditions = true;
         }
     }
 
-    if (usingBlockJoin && !isLookupJoin && containsEquiJoinConditions) {
+    if (!isRealCrossJoin && usingBlockJoin && !isLookupJoin && containsEquiJoinConditions && !forceInlining) {
         return input;
     }
 
@@ -70,7 +74,7 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         join->JoinFilters = {};
 
         // Now that we pushed the filters out of the join, the join might turn into a cross-join
-        if (join->JoinKeys.empty()) {
+        if (join->JoinKeys.Items().empty()) {
             join->JoinKind = "Cross";
         }
 
@@ -83,38 +87,28 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         return input;
     }
 
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> usedIUs;
-    AddUsedIUs(usedIUs, join->GetLeftInput()->GetOutputIUs());
-    AddUsedIUs(usedIUs, join->GetRightInput()->GetOutputIUs());
-    for (const auto& [leftKey, rightKey] : join->JoinKeys) {
-        usedIUs.insert(leftKey);
-        usedIUs.insert(rightKey);
-    }
-    for (const auto& joinFilter : join->JoinFilters) {
-        AddUsedIUs(usedIUs, joinFilter.GetInputIUs(false, true));
-    }
+    // The inner join reads the left input again: a Replicate port gives it its own IDs,
+    // so we can join on the same columns again without conflicts
+    auto hub = TReplicate::Create(join->GetLeftInput(), join->Pos, props.InfoUnitRegistry);
+    auto outerLeftInput = hub->AddOutput();
+    auto innerLeftInput = hub->AddOutput();
+    const auto renameMap = innerLeftInput->GetRebindings();
 
-    // Build an inner join, but in case of LeftSemi and LeftOnly, the right side may contain duplicate IUs
-    // which will break the plan. So we rename them
-    auto commonIUs = IUSetIntersect(join->GetLeftInput()->GetOutputIUs(), join->GetRightInput()->GetOutputIUs());
-    auto rightRenameMap = MakeRenameMap(commonIUs, props.InternalVarIdx, usedIUs);
-    auto innerJoin = MakeJoinWithRightRenames(
-        join->GetLeftInput(), join->GetRightInput(), join->Pos, "Inner", join->JoinKeys, {}, rightRenameMap, ctx.ExprCtx, props);
-    auto filterExpr = MakeConjunction(join->JoinFilters);
+    // Build an inner join
+    const auto joinKind = join->JoinKeys.Items().empty() ? "Cross" : "Inner";
+    TJoinIUs innerJoinKeys;
+    for (const auto& [leftKey, rightKey, equalNulls] : join->JoinKeys.Items()) {
+        innerJoinKeys.Add({renameMap.At(leftKey), rightKey, equalNulls});
+    }
+    auto innerJoin = MakeIntrusive<TOpJoin>(innerLeftInput, join->GetRightInput(), join->Pos, joinKind, innerJoinKeys);
+    auto filterExpr = MakeConjunction(join->JoinFilters).ApplyRenames(renameMap);
 
     auto newFilter = MakeIntrusive<TOpFilter>(innerJoin, input->Pos, filterExpr);
-
-    // We need to remap the appropriate side of the output columns, so we can join on the same columns again
-    // without confilcts
-
-    auto topCommonIUs = IUSetIntersect(join->GetLeftInput()->GetOutputIUs(), innerJoin->GetOutputIUs());
-
-    auto renameMap = MakeRenameMap(topCommonIUs, props.InternalVarIdx, usedIUs);
 
     // The join will be on the keys of lhs, we just need to check that all the keys are non-null
     // We don't support nullable keys at this stage
     auto keyColumns = join->GetLeftInput()->Props.Metadata->KeyColumns;
-    if (keyColumns.empty()) {
+    if (keyColumns.Items().empty()) {
         Y_ENSURE(false, "No key columns when inlining join filter");
     }
 
@@ -122,13 +116,18 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         Y_ENSURE(false, "During join filter inlining the keys on the left side cannot be null");
     }
 
-    TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;
-    for (const auto & column : keyColumns) {
-        newJoinKeys.push_back(std::make_pair(column, column));
+    TJoinIUs newJoinKeys;
+    for (const auto & column : keyColumns.Items()) {
+        newJoinKeys.Add(column, renameMap.At(column));
     }
 
-    auto result = MakeJoinWithRightRenames(join->GetLeftInput(), newFilter, join->Pos, join->JoinKind, newJoinKeys, {}, renameMap, ctx.ExprCtx, props);
-    
+    // Subplans called from the join filters now read the inner left input.
+    for (const auto call : join->GetSubplanIUs(props.Subplans)) {
+        props.Subplans.RebindInputs(call, renameMap);
+    }
+
+    auto result = MakeIntrusive<TOpJoin>(outerLeftInput, newFilter, join->Pos, join->JoinKind, newJoinKeys);
+
     return result;
 }
 }

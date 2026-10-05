@@ -4,6 +4,8 @@
 
 #include <ydb/library/actors/async/continuation.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr::NDataShard {
 
 using namespace NLongTxService;
@@ -76,9 +78,16 @@ public:
     // If we have to wait for another lock to be released, ignore them, the conflicts will be
     // re-checked when we retry.
     TVector<ui64> ReadConflicts;
+    const ui64 LockId;
+    // Set when we skip an uncommitted delta written by our own lock. This may happen
+    // when earlier in this transaction we wrote a key without acquiring pessimistic
+    // locks first (e.g. writes with KqpDisablePessimisticLocks pragma). Such keys
+    // must not be treated as absent when skipping absent rows.
+    bool OwnUncommitted = false;
 
-    TLockRowsTxObserver(TDataShard& self)
-        : Self(self)
+    TLockRowsTxObserver(TDataShard& self, ui64 lockId)
+        : LockId(lockId)
+        , Self(self)
     {}
 
     void OnSkipUncommitted(ui64 txId) override {
@@ -87,8 +96,10 @@ public:
                 VolatileVersion = Max(VolatileVersion, info->Version);
                 Self.SysLocksTable().AddVolatileDependency(txId);
             }
-        } else {
+        } else if (txId != LockId) {
             ReadConflicts.push_back(txId);
+        } else {
+            OwnUncommitted = true;
         }
     }
 
@@ -247,12 +258,12 @@ TLockInfo::TPtr TDataShard::FindValidLockOwner(ui64 lockId) {
 
 void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr ev) {
     auto* msg = ev->Get();
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-        "Handle TEvLockRows: at tablet# " << TabletID()
-        << ", sender: " << ev->Sender
-        << ", RequestId: " << msg->Record.GetRequestId()
-        << ", LockId: " << msg->Record.GetLockId()
-        << ", LockNode: " << msg->Record.GetLockNodeId());
+    YDB_LOG_TRACE("Handle TEvLockRows",
+        {"tabletId", TabletID()},
+        {"sender", ev->Sender},
+        {"requestId", msg->Record.GetRequestId()},
+        {"lockId", msg->Record.GetLockId()},
+        {"lockNode", msg->Record.GetLockNodeId()});
 
     TLockRowsRequestId requestId(ev->Sender, msg->Record.GetRequestId());
 
@@ -626,7 +637,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
 
                 // This observer will detect conflicts with uncommitted
                 // changes, including undecided volatile transactions.
-                auto observer = MakeIntrusive<TLockRowsTxObserver>(*this);
+                auto observer = MakeIntrusive<TLockRowsTxObserver>(*this, lockId);
 
                 ui32 uniqueColumnCount = userTablePtr->UniqueIndexKeySize;
                 TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(key, uniqueColumnCount);
@@ -774,7 +785,12 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                 // is not there. If we already locked the key, this means that previously in this
                 // transaction we inserted the row, so it should be able to do other operations
                 // to it, and we shouldn't skip even if no committed row exists.
-                if (skipAbsent && (row.Ready == NTable::EReady::Gone || row.RowOp == NTable::ERowOp::Erase)) {
+                // Note: we also don't skip rows that have uncommitted changes written by our own
+                // lock. Previously in this transaction we wrote this key (e.g. an INSERT with
+                // disabled pessimistic locks), so we need to lock it and let the caller process it.
+                if (skipAbsent && !observer->OwnUncommitted &&
+                    (row.Ready == NTable::EReady::Gone || row.RowOp == NTable::ERowOp::Erase))
+                {
                     pendingResult->Record.AddSkippedAbsentKeys(processedKeys);
                     runtimeLock.Reset();
                     ++processedKeys;
@@ -1037,3 +1053,7 @@ TConstArrayRef<TCell> GetUniqueIndexKey(TConstArrayRef<TCell> cells, ui32 count)
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -84,7 +84,7 @@ TString TWithKeysAggregationOption::DebugString() const {
     return sb;
 }
 
-TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor::DoExecute(
+TConclusion<TExecutionResult> TWithKeysAggregationProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     CH::GroupByOptions funcOpts;
     funcOpts.assigns.reserve(AggregationKeys.size() + Aggregations.size());
@@ -150,7 +150,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor:
             return TConclusionStatus::Fail("Incorrect column id from name: " + assign.result_column);
         }
     }
-    return IResourceProcessor::EExecutionResult::Success;
+    return TExecutionResult::Done();
 }
 
 TConclusion<std::shared_ptr<TWithKeysAggregationProcessor>> TWithKeysAggregationProcessor::TBuilder::Finish() {
@@ -195,13 +195,13 @@ TConclusionStatus TWithKeysAggregationProcessor::TBuilder::AddGroupBy(
     return TConclusionStatus::Success();
 }
 
-TConclusion<arrow::Datum> TAggregateFunction::Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const {
+TConclusion<TFunctionResult> TAggregateFunction::Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const {
     if (context.GetColumns().size() == 0 && AggregationType == NAggregation::EAggregate::NumRows) {
         auto rc = resources.GetRecordsCountActualOptional();
         if (!rc) {
             return TConclusionStatus::Fail("resources hasn't info about records count actual");
         } else {
-            return arrow::Datum(std::make_shared<arrow::UInt64Scalar>(*rc));
+            return TFunctionResult(std::make_shared<arrow::UInt64Scalar>(*rc));
         }
     } else {
         return TBase::Call(context, resources);

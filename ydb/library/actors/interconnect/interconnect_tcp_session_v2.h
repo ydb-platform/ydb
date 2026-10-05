@@ -60,7 +60,7 @@ namespace NActors {
         const TSessionParams& GetParams() const override { return Params; }
         const TIntrusivePtr<NInterconnect::TStreamSocket>& GetSocket() const override { return Socket; }
         ui64 GetTotalOutputQueueSize() const override;
-        std::optional<ui8> GetXDCFlags() const override { return std::nullopt; }
+        std::optional<ui8> GetXDCFlags() const override;
         TDuration GetPingRTT() const override { return TDuration::FromValue(PingRTT->load()); }
         i64 GetClockSkew() const override { return ClockSkew->load(); }
         void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) override;

@@ -14,13 +14,13 @@ ui64 CalculateBlockChecksum(TRope::TConstIterator it, size_t numBytes) {
     Y_ABORT_UNLESS(numBytes > 0);
     Y_ABORT_UNLESS((numBytes & (IntegrityUnitSize - 1)) == 0);
 
-    // Fast path: the block is fully contiguous (always true for TEvWrite payloads, and common for PB
-    // ones), so a single one-shot hash call avoids the XXH3 streaming state overhead.
+    // Fast path: when the block is fully contiguous, a single one-shot hash call avoids the
+    // XXH3 streaming state overhead.
     if (it.Valid() && it.ContiguousSize() >= numBytes) {
         return XXH3_64bits(it.ContiguousData(), numBytes);
     }
 
-    XXH3_state_t state;
+    XXH3_state_t state{};
     XXH3_64bits_reset(&state);
     for (; numBytes && it.Valid(); it.AdvanceToNextContiguousBlock()) {
         const size_t n = Min(numBytes, it.ContiguousSize());
@@ -61,7 +61,7 @@ ui64 CalculateRawChecksumZeroedField(const void* data, size_t size, size_t field
     Y_ABORT_UNLESS(fieldOffset + fieldSize <= size);
     const char* bytes = static_cast<const char*>(data);
 
-    XXH3_state_t state;
+    XXH3_state_t state{};
     XXH3_64bits_reset(&state);
     if (fieldOffset) {
         XXH3_64bits_update(&state, bytes, fieldOffset);

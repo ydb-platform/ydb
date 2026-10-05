@@ -10,6 +10,7 @@
 
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
@@ -72,7 +73,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
             Group = group;
             group->AddVSlot(this);
         }
-        pdisk->NumActiveSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
+        pdisk->NumActiveDynamicSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
     }
 }
 
@@ -160,7 +161,7 @@ bool TBlobStorageController::TGroupInfo::FillInGroupParameters(NKikimrBlobStorag
 }
 
 bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb,
-        bool countMaxSlots) const {
+        bool useExpectedSlotCount) const {
     // count minimum params for each of slots assuming they are shared fairly between all the slots (expected or currently created)
     std::optional<ui64> size;
     std::optional<double> iops;
@@ -175,21 +176,25 @@ bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGr
         const TPDiskInfo *pdisk = vslot->PDisk;
         const auto& metrics = pdisk->Metrics;
 
-        const ui32 maxSlots = pdisk->GetEffectiveExpectedSlotCount();
+        const ui32 expectedSlotCount = pdisk->GetEffectiveExpectedSlotCount();
 
         ui64 vdiskSlotSize = 0;
         const ui32 weight = pdisk->GetOwnerWeight(GroupSizeInUnits);
         if (metrics.HasEnforcedDynamicSlotSize()) {
             vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize() * weight;
         } else if (metrics.GetTotalSize()) {
-            const ui32 shareFactor = (countMaxSlots && maxSlots) ? maxSlots : pdisk->NumActiveSlots;
+            const ui32 shareFactor = (useExpectedSlotCount && expectedSlotCount)
+                ? expectedSlotCount
+                : pdisk->NumActiveDynamicSlots + pdisk->StaticSlotUsage;
             vdiskSlotSize = metrics.GetTotalSize() / shareFactor * weight;
         }
         if (vdiskSlotSize) {
             size = Min(size.value_or(Max<ui64>()), vdiskSlotSize);
         }
 
-        const ui32 shareFactor = (countMaxSlots && maxSlots) ? maxSlots : pdisk->VSlotsOnPDisk.size();
+        const ui32 shareFactor = (useExpectedSlotCount && expectedSlotCount)
+            ? expectedSlotCount
+            : pdisk->VSlotsOnPDisk.size() + pdisk->StaticSlotUsage;
         if (metrics.HasMaxIOPS()) {
             iops = Min(iops.value_or(Max<double>()), metrics.GetMaxIOPS() * 100 / shareFactor * 0.01);
         }
@@ -902,17 +907,17 @@ void TBlobStorageController::ValidateInternalState() {
     // here we compare different structures to ensure that the memory state is sane
 #ifndef NDEBUG
     for (const auto& [pdiskId, pdisk] : PDisks) {
-        ui32 numActiveSlots = 0;
+        ui32 numActiveDynamicSlots = 0;
         for (const auto& [vslotId, vslot] : pdisk->VSlotsOnPDisk) {
             Y_ABORT_UNLESS(vslot == FindVSlot(TVSlotId(pdiskId, vslotId)));
             Y_ABORT_UNLESS(vslot->PDisk == pdisk.Get());
             if (!vslot->IsBeingDeleted()) {
                 const TGroupInfo* group = FindGroup(vslot->GroupId);
                 Y_ABORT_UNLESS(group);
-                numActiveSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
+                numActiveDynamicSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
             }
         }
-        Y_ABORT_UNLESS(pdisk->NumActiveSlots == numActiveSlots);
+        Y_ABORT_UNLESS(pdisk->NumActiveDynamicSlots == numActiveDynamicSlots);
     }
     for (const auto& [vslotId, vslot] : VSlots) {
         Y_ABORT_UNLESS(vslot->VSlotId == vslotId);
@@ -1035,6 +1040,7 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvGetBlockResult, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerDistconfRequest, Handle);
         fFunc(TEvBlobStorage::EvControllerShredRequest, EnqueueIncomingEvent);
+        fFunc(TEvBlobStorage::EvControllerSubscribeDatabaseSpace, EnqueueIncomingEvent);
         cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
@@ -1122,6 +1128,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerProposeGroupKey:              return 1;
         case TEvBlobStorage::EvControllerGetGroup:                     return 1;
         case TEvBlobStorage::EvControllerGroupDecommittedNotify:       return 1;
+        case TEvBlobStorage::EvControllerSubscribeDatabaseSpace:       return 1;
 
         // auxiliary messages that are not usually urgent (also includes RW transactions in TConfigRequest and UpdateDiskStatus)
         case TEvPrivate::EvDropDonor:                                  return 2;
@@ -1154,6 +1161,15 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                 if (TVSlotInfo *slot = FindVSlot(vslotId); slot && slot->GetStatus() > item.GetStatus()) {
                     return 1;
                 } else if (const auto it = StaticVSlots.find(vslotId); it != StaticVSlots.end() && it->second.VDiskStatus > item.GetStatus()) {
+                    return 1;
+                }
+            }
+            for (const auto& m : record.GetVDisksMetrics()) {
+                // space color getting worse is essential for blocking database writes in time
+                if (!m.HasStatusFlags()) {
+                    continue;
+                } else if (const TVSlotInfo *slot = FindVSlot(VDiskIDFromVDiskID(m.GetVDiskId())); slot &&
+                        StatusFlagToSpaceColor(m.GetStatusFlags()) > StatusFlagToSpaceColor(slot->Metrics.GetStatusFlags())) {
                     return 1;
                 }
             }
@@ -1217,6 +1233,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMoveDDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kPopulatePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteSpecificGroups:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateStoragePoolSettings:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

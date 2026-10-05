@@ -140,16 +140,39 @@ namespace NKikimr {
 
     TOutOfSpaceLogic::~TOutOfSpaceLogic() {}
 
-    bool TOutOfSpaceLogic::AllowVPutLikeWrite(const TActorContext& /*ctx*/, bool ignoreBlock, bool isZeroEntry, ui32 size,
-            NKikimrBlobStorage::TDataKind::E dataKind) const {
-        const ESpaceColor color = GetSpaceColor();
-        const bool system = dataKind == NKikimrBlobStorage::TDataKind::SYSTEM;
-        auto& stat = Stat->Lookup(system ? TStat::SystemPut : TStat::UserPut, color).HandleMsg(size);
+    // Local gate for a blob put: USER must not walk this disk into ORANGE,
+    // SYSTEM must not walk it into RED. `color` is the projected local color.
+    bool TOutOfSpaceLogic::AllowByLocalColor(ESpaceColor color, bool system, bool unavoidable) {
+        switch (color) {
+            case TSpaceColor::GREEN:
+            case TSpaceColor::CYAN:
+            case TSpaceColor::LIGHT_YELLOW:
+            case TSpaceColor::YELLOW:
+            case TSpaceColor::LIGHT_ORANGE:
+                return true;
 
-        // Restore-first reads and garbage collection zero entries: tiny writes a tablet cannot avoid
-        // and the only way out of an out-of-space state, so they outlive the ordinary writes of the
-        // same kind by one color.
-        const bool unavoidable = ignoreBlock || isZeroEntry;
+            case TSpaceColor::PRE_ORANGE:
+            case TSpaceColor::ORANGE:
+                return system || unavoidable;
+
+            case TSpaceColor::RED:
+                return system && unavoidable;
+
+            case TSpaceColor::BLACK:
+                return false;
+
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
+                Y_ABORT();
+        }
+    }
+
+    // Neighbors: current color only, never projected. USER stops when any disk is
+    // already in the orange zone; SYSTEM is not held back by a peer.
+    bool TOutOfSpaceLogic::AllowByGlobalColor(ESpaceColor color, bool system, bool unavoidable) {
+        if (system) {
+            return true;
+        }
 
         switch (color) {
             case TSpaceColor::GREEN:
@@ -157,22 +180,42 @@ namespace NKikimr {
             case TSpaceColor::LIGHT_YELLOW:
             case TSpaceColor::YELLOW:
             case TSpaceColor::LIGHT_ORANGE:
-                return stat.Allow();
+                return true;
 
             case TSpaceColor::PRE_ORANGE:
             case TSpaceColor::ORANGE:
-                return stat.Pass(system || unavoidable);
+                return unavoidable;
 
             case TSpaceColor::RED:
-                return stat.Pass(system && unavoidable);
-
             case TSpaceColor::BLACK:
-                return stat.NotAllow();
+                return false;
 
             case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
             case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                 Y_ABORT();
         }
+    }
+
+    bool TOutOfSpaceLogic::AllowVPutLikeWrite(const TActorContext& /*ctx*/, bool ignoreBlock, bool isZeroEntry, ui32 size,
+            NKikimrBlobStorage::TDataKind::E dataKind) const {
+        const bool system = dataKind == NKikimrBlobStorage::TDataKind::SYSTEM;
+        auto& oos = VCtx->GetOutOfSpaceState();
+        const ESpaceColor color = Max(oos.GetLocalColor(), oos.GetGlobalColor());
+        auto& stat = Stat->Lookup(system ? TStat::SystemPut : TStat::UserPut, color).HandleMsg(size);
+        return stat.Pass(WouldAllowVPutLikeWrite(ignoreBlock, isZeroEntry, dataKind));
+    }
+
+    bool TOutOfSpaceLogic::WouldAllowVPutLikeWrite(bool ignoreBlock, bool isZeroEntry,
+            NKikimrBlobStorage::TDataKind::E dataKind) const {
+        // Restore-first reads and garbage collection zero entries: tiny writes a tablet cannot avoid
+        // and the only way out of an out-of-space state, so they outlive the ordinary writes of the
+        // same kind by one color.
+        const bool unavoidable = ignoreBlock || isZeroEntry;
+        const bool system = dataKind == NKikimrBlobStorage::TDataKind::SYSTEM;
+
+        auto& oos = VCtx->GetOutOfSpaceState();
+        return AllowByLocalColor(oos.GetLocalColor(), system, unavoidable)
+            && AllowByGlobalColor(oos.GetGlobalColor(), system, unavoidable);
     }
 
     bool TOutOfSpaceLogic::Allow(const TActorContext& ctx, TEvBlobStorage::TEvVPut::TPtr &ev) const {
@@ -181,7 +224,27 @@ namespace NKikimr {
             record.GetDataKind());
     }
 
-    bool TOutOfSpaceLogic::Allow(const TActorContext& /*ctx*/, TEvBlobStorage::TEvVBlock::TPtr &ev) const {
+    // AllowByLocalColor() lets USER through LIGHT_ORANGE (an unavoidable write through ORANGE) and
+    // SYSTEM through ORANGE (an unavoidable one through RED); refusing at the next color keeps both.
+    ESpaceColor TOutOfSpaceLogic::FreshRefuseAtColorForPut(NKikimrBlobStorage::TDataKind::E dataKind,
+            bool unavoidable) {
+        if (dataKind == NKikimrBlobStorage::TDataKind::SYSTEM) {
+            return unavoidable ? TSpaceColor::BLACK : TSpaceColor::RED;
+        }
+        return unavoidable ? TSpaceColor::RED : TSpaceColor::PRE_ORANGE;
+    }
+
+    // Allow(TEvVBlock) lets a block through ORANGE, and through RED when it updates an entry that exists.
+    ESpaceColor TOutOfSpaceLogic::FreshRefuseAtColorForBlock(bool hasExistingEntry) {
+        return hasExistingEntry ? TSpaceColor::BLACK : TSpaceColor::RED;
+    }
+
+    // Allow(TEvVCollectGarbage) lets garbage collection through RED: it is what gives space back.
+    ESpaceColor TOutOfSpaceLogic::FreshRefuseAtColorForGC() {
+        return TSpaceColor::BLACK;
+    }
+
+    bool TOutOfSpaceLogic::Allow(const TActorContext& /*ctx*/, TEvBlobStorage::TEvVBlock::TPtr &ev, bool hasExistingEntry) const {
         const ESpaceColor color = GetSpaceColor();
         auto &stat = Stat->Lookup(TStat::Block, color).HandleMsg(ev->Get()->GetCachedByteSize());
         switch (color) {
@@ -195,7 +258,7 @@ namespace NKikimr {
                 return stat.Allow();
             case TSpaceColor::RED: {
                 // FIXME: handle complete removal only
-                return stat.NotAllow();
+                return stat.Pass(hasExistingEntry);
             }
             case TSpaceColor::BLACK:
                 return stat.NotAllow();
@@ -206,10 +269,13 @@ namespace NKikimr {
     }
 
     bool TOutOfSpaceLogic::Allow(const TActorContext& /*ctx*/, TEvBlobStorage::TEvVCollectGarbage::TPtr &ev) const {
-        // FIXME: accept hard barriers in red color
+        // Garbage collection is the only thing that gives chunks back, so it outlives
+        // the ordinary writes by one color and keeps running in RED, where a tablet
+        // may still delete its data. Only BLACK, which asks for manual intervention,
+        // refuses it. The barrier record it writes is tiny next to what it frees.
         const ESpaceColor color = GetSpaceColor();
         auto &stat = Stat->Lookup(TStat::CollectGarbage, color).HandleMsg(ev->Get()->GetCachedByteSize());
-        return stat.Pass(DefaultAllow(color));
+        return stat.Pass(color <= TSpaceColor::RED);
     }
 
     bool TOutOfSpaceLogic::Allow(const TActorContext& /*ctx*/, TEvLocalSyncData::TPtr &ev) const {

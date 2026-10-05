@@ -46,33 +46,33 @@ REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://devtools-reg
 PLATFORM_MAP = {
     "data": {
         "win32": {
-            "md5": "63403a707fd594abb03765f0920a9ffd",
+            "md5": "61fd5aad83ad944ee554ab2befc9346c",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/13303375069"
+                f"{REGISTRY_ENDPOINT}/13904429248"
             ]
         },
         "darwin": {
-            "md5": "303a8f584d8ee9cbc3ee727bf5602839",
+            "md5": "f8c4ff010882b68ab59d637665fb54a6",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/13303372739"
+                f"{REGISTRY_ENDPOINT}/13904426184"
             ]
         },
         "darwin-arm64": {
-            "md5": "79c9f88f69f6661a855d95128f3f6f75",
+            "md5": "e7871292da121ddb28658506615d07e1",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/13303370081"
+                f"{REGISTRY_ENDPOINT}/13904422593"
             ]
         },
         "linux-aarch64": {
-            "md5": "f147aac3ad83748db9696a763ada1f38",
+            "md5": "f9f2afa7c0e516cd5bcbe25f4a0d373a",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/13303368056"
+                f"{REGISTRY_ENDPOINT}/13904419724"
             ]
         },
         "linux": {
-            "md5": "0d85bea35d380f6906e394fb9369f70b",
+            "md5": "02bc3e778fa1ebcecd3fce3c0cbc70db",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/13303377026"
+                f"{REGISTRY_ENDPOINT}/13904432191"
             ]
         }
     }
@@ -221,7 +221,15 @@ def _atomic_fetch(url, into, md5):
         if real_md5 != md5:
             # Treat checksum mismatch as a network problem: it means the transfer was corrupted or truncated
             raise YaBinDownloadError('MD5 mismatched: %s differs from %s' % (real_md5, md5))
-        os.rename(tmp_dest, into)
+        try:
+            os.rename(tmp_dest, into)
+        except OSError as e:
+            import errno
+            # EEXIST - windows: a concurrent ya has already fetched the same file.
+            # The name is the md5 of the content, so the existing file is identical - keep it.
+            # On POSIX rename() replaces the target silently and never gets here.
+            if e.errno != errno.EEXIST:
+                raise
         sys.stderr.write('OK\n')
     except Exception as e:
         sys.stderr.write('ERROR: ' + str(e) + '\n')

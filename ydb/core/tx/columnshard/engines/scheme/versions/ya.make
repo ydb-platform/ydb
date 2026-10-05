@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/abstract
     ydb/core/tx/columnshard/engines/scheme/common
     ydb/core/tx/columnshard/data_sharing/protos
+    ydb/library/actors/core
 )
 
 END()

@@ -9,7 +9,6 @@
             "Bison-Exception",
             "Bison-exception-2.2",
             "BouncyCastle-MIT",
-            "BSD-3-Clause-Clear",
             "BSD-3-Clause-Open-MPI",
             "BSD-4-Clause-Shortened",
             "Bsd-New-Tcpdump",
@@ -170,6 +169,7 @@
         "default": [
             "0BSD",
             "AML",
+            "AOMPL-1.0",
             "Apache-1.0",
             "Apache-1.1",
             "Apache-2.0",
@@ -197,6 +197,7 @@
             "BSD-3-Clause WITH Google-Patent-License",
             "BSD-3-Clause WITH Google-Patent-License-Webm",
             "BSD-3-Clause WITH Google-Patent-License-Webrtc",
+            "BSD-3-Clause-Clear",
             "BSD-3-Clause-LBNL",
             "BSD-4-Clause",
             "BSD-4-Clause-UC",

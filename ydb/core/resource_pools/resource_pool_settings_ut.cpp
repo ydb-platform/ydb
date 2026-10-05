@@ -87,6 +87,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolTest) {
         settings.QueryCancelAfter = TDuration::Seconds(15);
         settings.QueryMemoryLimitPercentPerNode = 0.5;
         settings.TotalMemoryLimitPercentPerNode = 75.0;
+        settings.TotalCpuGuaranteePercentPerNode = 30.0;
         auto propertiesMap = settings.GetPropertiesMap();
 
         TPoolSettings::TExtractor extractor;
@@ -95,6 +96,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolTest) {
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["query_cancel_after_seconds"]), "15");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["query_memory_limit_percent_per_node"]), "0.5");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["total_memory_limit_percent_per_node"]), "75");
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["total_cpu_guarantee_percent_per_node"]), "30");
     }
 
     Y_UNIT_TEST(SettingsValidation) {
@@ -110,10 +112,49 @@ Y_UNIT_TEST_SUITE(ResourcePoolTest) {
             UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold");
         }
 
-        {  // QueryMemoryLimitPercentPerNode not supported yet
+        {  // QueryMemoryLimitPercentPerNode not supported
             TPoolSettings settings;
             settings.QueryMemoryLimitPercentPerNode = 50;
-            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "query_memory_limit_percent_per_node is not supported yet. Use total_memory_limit_percent_per_node for pool-wide memory limit");
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "query_memory_limit_percent_per_node is not supported");
+        }
+
+        {  // TotalMemoryLimitPercentPerNode not supported
+            TPoolSettings settings;
+            settings.TotalMemoryLimitPercentPerNode = 50;
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "total_memory_limit_percent_per_node is not supported");
+        }
+
+        {  // QueryCpuLimitPercentPerNode not supported
+            TPoolSettings settings;
+            settings.QueryCpuLimitPercentPerNode = 50;
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "query_cpu_limit_percent_per_node is not supported");
+        }
+
+        {  // ResourceWeight not supported
+            TPoolSettings settings;
+            settings.ResourceWeight = 100;
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "resource_weight is not supported");
+        }
+
+        {  // TotalCpuGuaranteePercentPerNode exceeds TotalCpuLimitPercentPerNode
+            TPoolSettings settings;
+            settings.TotalCpuGuaranteePercentPerNode = 60;
+            settings.TotalCpuLimitPercentPerNode = 50;
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "Invalid resource pool configuration, total_cpu_guarantee_percent_per_node is 60, that exceeds total_cpu_limit_percent_per_node in 50");
+        }
+
+        {  // TotalCpuGuaranteePercentPerNode within TotalCpuLimitPercentPerNode
+            TPoolSettings settings;
+            settings.TotalCpuGuaranteePercentPerNode = 50;
+            settings.TotalCpuLimitPercentPerNode = 50;
+            UNIT_ASSERT(!settings.Validate());
+        }
+
+        {  // TotalCpuGuaranteePercentPerNode without TotalCpuLimitPercentPerNode
+            TPoolSettings settings;
+            settings.TotalCpuGuaranteePercentPerNode = 60;
+            UNIT_ASSERT(!settings.Validate());
+            UNIT_ASSERT(settings.IsWorkloadServiceRequired());
         }
     }
 }

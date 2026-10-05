@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/public/lib/ydb_cli/commands/topic_workload)
 
 SRCS(
+    topic_workload_keyed_writer_producer_ut.cpp
     topic_workload_params_ut.cpp
     topic_workload_writer_producer_ut.cpp
 )

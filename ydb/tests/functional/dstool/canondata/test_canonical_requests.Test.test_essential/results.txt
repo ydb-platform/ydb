@@ -50,6 +50,8 @@ dstool
 │     └─ reconfigure                    Create virtual group backed by BlobDepot
 ├─ pool
 │  ├─ list                              List pools
+│  ├─ set                               Set storage pool settings that are not 
+│  │                                    part of the pool definition
 │  └─ create
 │     └─ virtual                        Create pool suitable for virtual groups
 ├─ box
@@ -87,12 +89,22 @@ dstool
 │  ├─ get                               Get cluster wide settings
 │  ├─ set                               Set cluster wide settings
 │  ├─ workload
-│  │  └─ run                            Create workload to stress failure model
+│  │  ├─ run                            Create workload to stress failure model
+│  │  └─ nbs-dbg-like                   Manage dedicated NbsDbgLike load tablets
+│  │                                     and recoverable gRPC runs
+│  │     ├─ create
+│  │     ├─ list
+│  │     ├─ describe
+│  │     ├─ delete
+│  │     ├─ run
+│  │     ├─ results
+│  │     └─ stop
 │  └─ list                              List cluster
 └─ nbs
    └─ partition
       ├─ create                         Create NBS 2.0 partition
       ├─ delete                         Delete NBS 2.0 partition
+      ├─ resize                         Grow an NBS 2.0 partition
       ├─ get-load-actor-adapter-actor-id
       │                                 Get LoadActorAdapter actor id for NBS 
       │                                 2.0 partition
@@ -122,8 +134,6 @@ Server access options:
   --http-timeout HTTP_TIMEOUT         Timeout for blocking socket I/O operations
                                        during HTTP(s) queries
   --insecure                          Allow insecure HTTPS fetching
-  --use-ip                            Use IP addresses instead of hostnames when
-                                       connecting to endpoints
 
 Free args: min: 1 max: unlimited
   <subcommand>  device, pdisk, vdisk, group, pool, box, node, cluster, nbs

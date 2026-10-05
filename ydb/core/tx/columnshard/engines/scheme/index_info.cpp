@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
@@ -233,6 +234,9 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
     }
     if (optionsProto.HasDeduplicationEnabled()) {
         DeduplicationEnabled = optionsProto.GetDeduplicationEnabled();
+    }
+    if (optionsProto.HasCacheBlobsAfterWrite()) {
+        CacheBlobsAfterWrite = optionsProto.GetCacheBlobsAfterWrite();
     }
     if (optionsProto.HasInsertOptions()) {
         const auto& options = optionsProto.GetInsertOptions();

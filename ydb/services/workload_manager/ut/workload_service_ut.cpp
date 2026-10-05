@@ -631,7 +631,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             ALTER RESOURCE POOL )" << poolId << R"( SET (
                 CONCURRENT_QUERY_LIMIT=0
             );
-        )", EStatus::PRECONDITION_FAILED, "Can not change property concurrent_query_limit for default pool");
+        )", EStatus::PRECONDITION_FAILED, "Cannot change property concurrent_query_limit for default pool");
     }
 
     Y_UNIT_TEST(TestAlterResourcePool) {
@@ -940,6 +940,43 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             CREATE RESOURCE POOL MyResourcePool WITH (
                 QUEUE_SIZE=1
             );)", EStatus::SCHEME_ERROR, "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                TOTAL_CPU_LIMIT_PERCENT_PER_NODE=50,
+                TOTAL_CPU_GUARANTEE_PERCENT_PER_NODE=60
+            );)", EStatus::SCHEME_ERROR, "Invalid resource pool configuration, total_cpu_guarantee_percent_per_node is 60, that exceeds total_cpu_limit_percent_per_node in 50");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                TOTAL_CPU_LIMIT_PERCENT_PER_NODE=50,
+                TOTAL_CPU_GUARANTEE_PERCENT_PER_NODE=30
+            );)");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL MyResourcePool
+                SET (TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 20);
+            )", EStatus::SCHEME_ERROR, "Invalid resource pool configuration, total_cpu_guarantee_percent_per_node is 30, that exceeds total_cpu_limit_percent_per_node in 20");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL AnotherResourcePool WITH (
+                TOTAL_CPU_GUARANTEE_PERCENT_PER_NODE=80
+            );)", EStatus::SCHEME_ERROR, "total_cpu_guarantee_percent_per_node of all resource pools is 110, that exceeds 100");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL AnotherResourcePool WITH (
+                TOTAL_CPU_GUARANTEE_PERCENT_PER_NODE=70
+            );)");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL MyResourcePool
+                SET (TOTAL_CPU_GUARANTEE_PERCENT_PER_NODE = 40);
+            )", EStatus::SCHEME_ERROR, "total_cpu_guarantee_percent_per_node of all resource pools is 110, that exceeds 100");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL MyResourcePool
+                SET (TOTAL_CPU_GUARANTEE_PERCENT_PER_NODE = 20);
+            )");
     }
 
     Y_UNIT_TEST(TestDoubleCreateResourcePool) {
@@ -955,7 +992,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
 
         ydb->ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL MyResourcePool WITH (
-                TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=50
+                CONCURRENT_QUERY_LIMIT=20
             );)", EStatus::GENERIC_ERROR, "path exist");
     }
 
@@ -981,8 +1018,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         ydb->ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL MyResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT=20,
-                QUEUE_SIZE=1000,
-                TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=80
+                QUEUE_SIZE=1000
             );)");
 
         auto resourcePoolDesc = ydb->Navigate(".metadata/workload_manager/pools/MyResourcePool");
@@ -991,10 +1027,9 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         UNIT_ASSERT(resourcePool.ResourcePoolInfo);
         UNIT_ASSERT_VALUES_EQUAL(resourcePool.ResourcePoolInfo->Description.GetName(), "MyResourcePool");
         const auto& properties = resourcePool.ResourcePoolInfo->Description.GetProperties().GetProperties();
-        UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(properties.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
         UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "1000");
-        UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "80");
     }
 
     Y_UNIT_TEST(TestAlterResourcePoolProperties) {
@@ -1003,19 +1038,19 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         ydb->ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL MyResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT=20,
-                TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=70
+                TOTAL_CPU_LIMIT_PERCENT_PER_NODE=70
             );)");
 
         auto resourcePoolDesc = ydb->Navigate(".metadata/workload_manager/pools/MyResourcePool");
         const auto& properties = resourcePoolDesc->ResultSet.at(0).ResourcePoolInfo->Description.GetProperties().GetProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
-        UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "70");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("total_cpu_limit_percent_per_node"), "70");
 
         ydb->ExecuteSchemeQuery(R"(
             ALTER RESOURCE POOL MyResourcePool
                 SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
-                RESET (TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE);
+                RESET (TOTAL_CPU_LIMIT_PERCENT_PER_NODE);
             )");
 
         resourcePoolDesc = ydb->Navigate(".metadata/workload_manager/pools/MyResourcePool");
@@ -1023,7 +1058,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         UNIT_ASSERT_VALUES_EQUAL(propertiesAfter.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(propertiesAfter.at("concurrent_query_limit"), "30");
         UNIT_ASSERT_VALUES_EQUAL(propertiesAfter.at("queue_size"), "100");
-        UNIT_ASSERT_VALUES_EQUAL(propertiesAfter.at("total_memory_limit_percent_per_node"), "-1");
+        UNIT_ASSERT_VALUES_EQUAL(propertiesAfter.at("total_cpu_limit_percent_per_node"), "-1");
     }
 
     Y_UNIT_TEST(TestDropResourcePoolScheme) {
@@ -1060,7 +1095,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             auto result = ydb->ExecuteQuery("DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier", settings);
 
             errorString = result.GetIssues().ToOneLineString();
-            return result.GetStatus() == EStatus::GENERIC_ERROR && errorString.Contains("You don't have access permissions for database Root");
+            return result.GetStatus() == EStatus::GENERIC_ERROR && errorString.Contains("You don't have access permissions for database /Root");
         });
 
         auto createResult = ydb->ExecuteQuery(TStringBuilder() << R"(
@@ -1070,7 +1105,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             );
         )", settings);
         UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToOneLineString(), "You don't have access permissions for database Root");
+        UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToOneLineString(), "You don't have access permissions for database /Root");
 
         auto alterResult = ydb->ExecuteQuery(R"(
             ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier SET (
@@ -1078,7 +1113,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             );
         )", settings);
         UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::GENERIC_ERROR, alterResult.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(alterResult.GetIssues().ToOneLineString(), "You don't have access permissions for database Root");
+        UNIT_ASSERT_STRING_CONTAINS(alterResult.GetIssues().ToOneLineString(), "You don't have access permissions for database /Root");
     }
 
     void CreateSampleResourcePoolClassifier(TIntrusivePtr<IYdbSetup> ydb, const TString& classifierId, const TQueryRunnerSettings& settings, const TString& poolId) {

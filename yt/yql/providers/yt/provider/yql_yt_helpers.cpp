@@ -223,7 +223,8 @@ IGraphTransformer::TStatus EstimateDataSize(IYtGateway::TPathStatResult& result,
             }
         }
 
-        if (useColumnarStat) {
+        const bool hasRLS = pathInfo->Table->Meta && pathInfo->Table->Meta->HasRLS;
+        if (useColumnarStat && !hasRLS) {
             TMaybe<TVector<TString>> overrideColumns;
             if (columns && pathInfo->Table->RowSpec && (pathInfo->Table->RowSpec->StrictSchema || nullptr == FindPtr(*columns, YqlOthersColumnName))) {
                 overrideColumns = columns;
@@ -442,6 +443,22 @@ TExprNode::TListType GetNodesToCalculateImpl(const TExprNode::TPtr& input, bool 
                                     }
                                 }
                             }
+                        }
+                    }
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+        else if (auto maybePublish = TMaybeNode<TYtPublish>(node)) {
+            TYtPublish publish = maybePublish.Cast();
+            for (auto setting: publish.Settings()) {
+                switch (FromString<EYtSettingType>(setting.Name().Value())) {
+                case EYtSettingType::UserAttrs:
+                    if (uniqNodes.insert(setting.Value().Cast().Raw()).second) {
+                        if (NeedCalc(setting.Value().Cast())) {
+                            needCalc.push_back(setting.Value().Cast().Ptr());
                         }
                     }
                     break;
@@ -939,6 +956,8 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
             .RuntimeLogLevel(state->Types->RuntimeLogLevel)
             .LangVer(state->Types->LangVer)
             .RuntimeSettings(state->Types->RuntimeSettings)
+            .BridgeMode(state->Types->BridgeMode)
+            .BridgeBinaryPath(state->Types->UdfBridgeBinaryPath)
         );
     return WrapFutureCallback(future, [state, calcNodes](const IYtGateway::TCalcResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         YQL_ENSURE(res.Data.size() == calcNodes.size());
@@ -1595,6 +1614,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         TYtPathInfo pathInfo(path);
         const bool hasRowSpec = !!pathInfo.Table->RowSpec;
         const bool tableHasAux = hasRowSpec && pathInfo.Table->RowSpec->HasAuxColumns();
+        const bool tableHasNonNativeDescSort = hasRowSpec && pathInfo.Table->RowSpec->HasNonNativeDescendingSort();
         TMaybe<NYT::TNode> currentNativeType;
         if (hasRowSpec) {
             currentNativeType = pathInfo.GetNativeYtType();
@@ -1605,7 +1625,8 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         }
         const bool needTableMap = pathInfo.RequiresRemap() || bool(sysColumns)
             || outTable.RowSpec->GetNativeYtTypeFlags() != pathInfo.GetNativeYtTypeFlags()
-            || currentNativeType != outNativeType;
+            || currentNativeType != outNativeType
+            || (tableHasNonNativeDescSort && useNativeDescSort);
         useExplicitColumns = useExplicitColumns || !pathInfo.Table->IsTemp || (tableHasAux && pathInfo.HasColumns());
         needMap = needMap || needTableMap;
         hasAux = hasAux || tableHasAux;
@@ -1646,7 +1667,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                 }
                 sortIsChanged = outTable.RowSpec->CopySortness(ctx, *rowSpecs[i].first, useNativeYtDefaultColumnOrder, mode);
             } else {
-                sortIsChanged = outTable.RowSpec->MakeCommonSortness(ctx, *rowSpecs[i].first) || sortIsChanged;
+                sortIsChanged = outTable.RowSpec->MakeCommonSortness(ctx, *rowSpecs[i].first, useNativeDescSort) || sortIsChanged;
                 if (rowSpecs[i].second && !sortConstraintEnabled) {
                     sortIsChanged = outTable.RowSpec->KeepPureSortOnly(ctx) || sortIsChanged;
                 }

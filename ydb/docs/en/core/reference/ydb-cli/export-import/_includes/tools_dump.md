@@ -12,7 +12,7 @@ The `admin cluster dump` command dumps the cluster' metadata to the client file 
 
 {% include [dump-options.md](./dump-options.md) %}
 
-A [cluster configuration](../../../../maintenance/manual/config-overview.md) is dumped separately using the `{{ ydb-cli }} admin cluster config fetch` command.
+A [cluster configuration](../../../../devops/configuration-management/configuration-v1/config-overview.md) is dumped separately using the `{{ ydb-cli }} admin cluster config fetch` command.
 
 ## Database {#db}
 
@@ -30,7 +30,7 @@ The `admin database dump` command dumps the database' data and metadata to the c
 
 {% include [dump-options.md](./dump-options.md) %}
 
-A [database configuration](../../../../maintenance/manual/config-overview.md) is dumped separately using the `{{ ydb-cli }} admin database config fetch` command.
+A [database configuration](../../../../devops/configuration-management/configuration-v1/config-overview.md) is dumped separately using the `{{ ydb-cli }} admin database config fetch` command.
 
 ## Schema objects {#schema-objects}
 
@@ -118,5 +118,4 @@ To a specific directory:
 ```bash
 {{ ydb-cli }} --profile quickstart tools dump -p dir1 --scheme-only
 ```
-
 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS()
 
@@ -13,6 +13,7 @@ RECURSE(
     llvm16
     no_llvm
     hash_join_utils
+    operator_memory_quota
 )
 
 RECURSE_FOR_TESTS(

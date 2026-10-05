@@ -131,7 +131,7 @@ void TKafkaDescribeConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
         ctx.Register(new TKafkaDescribeTopicActor(
             SelfId(),
-            Context->UserToken,
+            Context->Token.UserToken,
             resource.ResourceName.value(),
             Context->DatabasePath
         ));

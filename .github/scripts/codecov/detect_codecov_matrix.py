@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from codecov_suites import suites_from_paths
+from codecov_suites import SUITES, suites_from_paths
 
 
 def write_output(name: str, value: str) -> None:
@@ -38,6 +38,11 @@ def main() -> int:
         default="",
         help="File with newline-separated changed paths",
     )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Select every suite (used for a self-contained main baseline)",
+    )
     args = parser.parse_args()
 
     files: list[str] = []
@@ -47,7 +52,7 @@ def main() -> int:
     elif args.changed_files:
         files = [ln.strip() for ln in args.changed_files.splitlines() if ln.strip()]
 
-    suites = suites_from_paths(files)
+    suites = sorted(SUITES) if args.all else suites_from_paths(files)
 
     matrix = json.dumps(suites)
     should_run = "true" if suites else "false"

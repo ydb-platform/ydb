@@ -1,5 +1,6 @@
 #include "metric_registry.h"
 
+#include <library/cpp/monlib/consumers/collecting_consumer.h>
 #include <library/cpp/monlib/encode/protobuf/protobuf.h>
 #include <library/cpp/monlib/encode/json/json.h>
 #include <library/cpp/resource/resource.h>
@@ -38,6 +39,16 @@ void Out<NMonitoring::NProto::TSingleSample::ValueCase>(IOutputStream& os, NMoni
 }
 
 namespace {
+    class TStartTimeCollectingConsumer final: public TCollectingConsumer {
+    public:
+        void OnStartTimeSeconds(ui32 startTimeSeconds) override {
+            StartTimeSeconds.push_back(startTimeSeconds);
+            TCollectingConsumer::OnStartTimeSeconds(startTimeSeconds);
+        }
+
+        TVector<ui32> StartTimeSeconds;
+    };
+
     template<typename F>
     auto EnsureIdempotent(F&& f) {
         auto firstResult = f();
@@ -158,11 +169,18 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
         ui64 val = 0;
 
+        const auto beforeCreation = static_cast<ui32>(TInstant::Now().Seconds());
         TLazyRate* r = EnsureIdempotent([&] { return registry.LazyRate({{"my", "rate"}}, [&val](){return val;}); });
+        const auto afterCreation = static_cast<ui32>(TInstant::Now().Seconds());
 
         UNIT_ASSERT_VALUES_EQUAL(r->Get(), 0);
+        UNIT_ASSERT_GE(r->StartTimeSeconds(), beforeCreation);
+        UNIT_ASSERT_LE(r->StartTimeSeconds(), afterCreation);
         val = 42;
         UNIT_ASSERT_VALUES_EQUAL(r->Get(), 42);
+
+        TLazyRate rateWithExplicitStartTime{[&val](){return val;}, 42};
+        UNIT_ASSERT_VALUES_EQUAL(rateWithExplicitStartTime.StartTimeSeconds(), 42);
     }
 
     Y_UNIT_TEST(DoubleCounter) {
@@ -467,5 +485,36 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
                 {{"some", "histogram_rate"}},
                 ExponentialHistogram(5, 2)),
                 yexception);
+    }
+
+    Y_UNIT_TEST(RateStartTimeSeconds) {
+        TMetricRegistry registry;
+        const auto beforeCreation = static_cast<ui32>(TInstant::Now().Seconds());
+        auto* rate = registry.Rate({{"some", "rate"}});
+        auto* histogramRate = registry.HistogramRate(
+            {{"some", "histogram_rate"}},
+            ExponentialHistogram(5, 2));
+        registry.HistogramCounter(
+            {{"some", "histogram_counter"}},
+            ExponentialHistogram(5, 2));
+        const auto afterCreation = static_cast<ui32>(TInstant::Now().Seconds());
+
+        UNIT_ASSERT_GE(rate->StartTimeSeconds(), beforeCreation);
+        UNIT_ASSERT_LE(rate->StartTimeSeconds(), afterCreation);
+        UNIT_ASSERT_VALUES_EQUAL(registry.Rate({{"some", "rate"}})->StartTimeSeconds(), rate->StartTimeSeconds());
+        UNIT_ASSERT_GE(histogramRate->StartTimeSeconds(), beforeCreation);
+        UNIT_ASSERT_LE(histogramRate->StartTimeSeconds(), afterCreation);
+        UNIT_ASSERT_VALUES_EQUAL(
+            registry.HistogramRate({{"some", "histogram_rate"}}, ExponentialHistogram(5, 2))->StartTimeSeconds(),
+            histogramRate->StartTimeSeconds());
+
+        TStartTimeCollectingConsumer consumer;
+        registry.Accept(TInstant::Now(), &consumer);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.StartTimeSeconds.size(), 2u);
+        UNIT_ASSERT(Find(consumer.StartTimeSeconds, rate->StartTimeSeconds()) != consumer.StartTimeSeconds.end());
+        UNIT_ASSERT(Find(consumer.StartTimeSeconds, histogramRate->StartTimeSeconds()) != consumer.StartTimeSeconds.end());
+
+        TRate rateWithExplicitStartTime{0, 42};
+        UNIT_ASSERT_VALUES_EQUAL(rateWithExplicitStartTime.StartTimeSeconds(), 42);
     }
 }

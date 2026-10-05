@@ -209,7 +209,7 @@ struct TSourceDb {
             return {true, nullptr};
         }
 
-        const TSharedData* TryGetPage(const NTable::TPart*, TPageId, TGroupId) override {
+        const TSharedData* TryGetPage(const NTable::TPart*, const TPageLocation&, TGroupId) override {
             return nullptr;
         }
     };

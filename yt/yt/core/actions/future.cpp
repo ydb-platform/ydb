@@ -29,7 +29,29 @@ public:
     }
 };
 
-constinit NDetail::TOKPromiseState OKPromiseState;
+struct TOKFutureGlobals
+{
+    TOKPromiseState PromiseState;
+    const TFuture<void> Future{TOKFutureTag(), &PromiseState};
+};
+
+// OKFuture is intended to be initialized at compile time so other global
+// constructors would already have an access to it. But at the same time
+// it should not be destroyed because it may be accessed at static destruction
+// phase. Wrap it into a union to satisfy both conditions.
+union TOKFutureGlobalsStorage
+{
+    constexpr TOKFutureGlobalsStorage()
+        : Globals()
+    { }
+
+    ~TOKFutureGlobalsStorage()
+    { }
+
+    TOKFutureGlobals Globals;
+};
+
+constinit TOKFutureGlobalsStorage OKFutureGlobalsStorage;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -306,7 +328,7 @@ void TFutureState<void>::OnLastPromiseRefLost()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const TFuture<void> OKFuture(NDetail::TOKFutureTag(), &NDetail::OKPromiseState);
+constinit const TFuture<void>& OKFuture = NDetail::OKFutureGlobalsStorage.Globals.Future;
 
 ////////////////////////////////////////////////////////////////////////////////
 

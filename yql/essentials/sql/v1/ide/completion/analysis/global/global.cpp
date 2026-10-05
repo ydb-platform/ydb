@@ -7,13 +7,10 @@
 #include "parser.h"
 #include "use.h"
 
-#include <yql/essentials/sql/v1/ide/completion/syntax/ansi.h>
-
 #include <yql/essentials/sql/v1/ide/analysis/named_node_resolution.h>
+#include <yql/essentials/utils/meta/out.h>
 
 #include <library/cpp/iterator/functools.h>
-
-#include <util/string/join.h>
 
 namespace NSQLComplete {
 
@@ -117,13 +114,8 @@ TColumnContext TColumnContext::Asterisk() {
     return {.Columns = {{.Name = "*"}}};
 }
 
-class TSpecializedGlobalAnalysis final: public IGlobalAnalysis {
+class TGlobalAnalysis final: public IGlobalAnalysis {
 public:
-    explicit TSpecializedGlobalAnalysis(IParser::TPtr parser)
-        : Parser_(std::move(parser))
-    {
-    }
-
     TGlobalContext Analyze(TCompletionInput input, TEnvironment env) const override {
         TParsedInput parsed = Parser_->Parse(input);
 
@@ -151,32 +143,7 @@ private:
         }
     }
 
-    IParser::TPtr Parser_;
-};
-
-class TGlobalAnalysis: public IGlobalAnalysis {
-public:
-    TGlobalAnalysis()
-        : DefaultAnalysis_(MakeParser(/* isAnsiLexer = */ false))
-        , AnsiAnalysis_(MakeParser(/* isAnsiLexer = */ true))
-    {
-    }
-
-    TGlobalContext Analyze(TCompletionInput input, TEnvironment env) const override {
-        const bool isAnsiLexer = IsAnsiQuery(TString(input.Text));
-        return GetSpecialized(isAnsiLexer).Analyze(input, std::move(env));
-    }
-
-private:
-    const IGlobalAnalysis& GetSpecialized(bool isAnsiLexer) const {
-        if (isAnsiLexer) {
-            return AnsiAnalysis_;
-        }
-        return DefaultAnalysis_;
-    }
-
-    TSpecializedGlobalAnalysis DefaultAnalysis_;
-    TSpecializedGlobalAnalysis AnsiAnalysis_;
+    IParser::TPtr Parser_ = MakeParser();
 };
 
 IGlobalAnalysis::TPtr MakeGlobalAnalysis() {
@@ -185,36 +152,6 @@ IGlobalAnalysis::TPtr MakeGlobalAnalysis() {
 
 } // namespace NSQLComplete
 
-template <>
-void Out<NSQLComplete::TClusterContext>(IOutputStream& out, const NSQLComplete::TClusterContext& value) {
-    if (!value.Provider.empty()) {
-        out << value.Provider << ":";
-    }
-    out << value.Name;
-}
-
-template <>
-void Out<NSQLComplete::TFunctionContext>(IOutputStream& out, const NSQLComplete::TFunctionContext& value) {
-    out << "TFunctionContext { ";
-    out << "Name: " << value.Name;
-    out << ", ArgN: " << value.ArgumentNumber;
-    out << ", Arg0: " << value.Arg0.GetOrElse("None");
-    out << ", Cluster: " << value.Cluster;
-    out << " }";
-}
-
-template <>
-void Out<NSQLComplete::TColumnContext>(IOutputStream& out, const NSQLComplete::TColumnContext& value) {
-    out << "TColumnContext { ";
-    out << "Tables: " << JoinSeq(", ", value.Tables);
-    out << ", Columns: " << JoinSeq(", ", value.Columns);
-
-    if (!value.WithoutByTableAlias.empty()) {
-        out << ", WithoutByTableAlias: ";
-        for (const auto& [tableAlias, columns] : value.WithoutByTableAlias) {
-            out << tableAlias << ".[" << JoinSeq(", ", columns) << "], ";
-        }
-    }
-
-    out << " }";
-}
+YQL_DERIVE_OUT_SPEC(NSQLComplete::TClusterContext);
+YQL_DERIVE_OUT_SPEC(NSQLComplete::TFunctionContext);
+YQL_DERIVE_OUT_SPEC(NSQLComplete::TColumnContext);

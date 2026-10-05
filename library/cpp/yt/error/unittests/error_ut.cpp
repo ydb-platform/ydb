@@ -84,7 +84,6 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 template <class T>
 void SetErrorAttribute(TError* error, const std::string& key, const T& value)
 {
@@ -92,7 +91,6 @@ void SetErrorAttribute(TError* error, const std::string& key, const T& value)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
 
 TEST(TErrorTest, Wrap)
 {
@@ -226,6 +224,42 @@ TEST(TErrorTest, WithIf)
     EXPECT_TRUE(skipped.InnerErrors().empty());
 }
 
+TEST(TErrorTest, WithIfLazy)
+{
+    int calls = 0;
+
+    auto attached = TError("Error")
+        .WithIf(true, "key", YT_LAZY((++calls, 1)));
+    EXPECT_EQ(calls, 1);
+    EXPECT_EQ(attached.Attributes().Get<int>("key"), 1);
+
+    auto skipped = TError("Error")
+        .WithIf(false, "key", YT_LAZY((++calls, 1)));
+    EXPECT_EQ(calls, 1);
+    EXPECT_FALSE(skipped.Attributes().Contains("key"));
+}
+
+TEST(TErrorTest, WithIfLazyInnerError)
+{
+    int calls = 0;
+    auto makeInnerError = [&] {
+        ++calls;
+        return TError("Inner error");
+    };
+
+    // NB: A named error exercises the |const&| overload.
+    const auto error = TError("Error");
+
+    auto attached = error.WithIf(true, YT_LAZY(makeInnerError()));
+    EXPECT_EQ(calls, 1);
+    ASSERT_EQ(attached.InnerErrors().size(), 1u);
+    EXPECT_EQ(attached.InnerErrors()[0].GetMessage(), "Inner error");
+
+    auto skipped = error.WithIf(false, YT_LAZY(makeInnerError()));
+    EXPECT_EQ(calls, 1);
+    EXPECT_TRUE(skipped.InnerErrors().empty());
+}
+
 TEST(TErrorTest, WithIfGuardsOKInnerError)
 {
     TError okError;
@@ -301,46 +335,44 @@ TEST(TErrorTest, AddOverwritesAttribute)
     EXPECT_EQ(error.Attributes().Get<int>("key"), 2);
 }
 
-TEST(TErrorTest, AddOKInnerErrorDeath)
+TEST(TErrorTest, AddDropsOKInnerError)
 {
-    EXPECT_DEATH(
-        {
-            auto error = TError("Outer error");
-            error.Add(TError());
-        },
-        "YT_VERIFY");
+    auto error = TError("Outer error");
+    error
+        .Add(TError())
+        .Add(TError("Inner error"))
+        .Add(TError());
+
+    ASSERT_EQ(error.InnerErrors().size(), 1u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "Inner error");
 }
 
-TEST(TErrorTest, AddOKInnerErrorRangeDeath)
+TEST(TErrorTest, AddDropsOKInnerErrorRange)
 {
-    // NB: Inside EXPECT_DEATH the braced initializer would split on its comma.
-    std::vector innerErrors{TError(), TError("Inner error")};
-    EXPECT_DEATH(
-        {
-            auto error = TError("Outer error");
-            error.Add(innerErrors);
-        },
-        "YT_VERIFY");
+    std::vector innerErrors{TError(), TError("Inner error"), TError()};
+
+    auto error = TError("Outer error");
+    error.Add(innerErrors);
+
+    ASSERT_EQ(error.InnerErrors().size(), 1u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "Inner error");
 }
 
-TEST(TErrorTest, WithOKInnerErrorDeath)
+TEST(TErrorTest, WithDropsOKInnerError)
 {
-    EXPECT_DEATH(
-        {
-            Y_UNUSED(TError("Outer error").With(TError()));
-        },
-        "YT_VERIFY");
+    auto error = TError("Outer error").With(TError());
+
+    EXPECT_TRUE(error.InnerErrors().empty());
 }
 
-TEST(TErrorTest, WithOKInnerErrorRangeDeath)
+TEST(TErrorTest, WithDropsOKInnerErrorRange)
 {
-    // NB: Inside EXPECT_DEATH the braced initializer would split on its comma.
-    std::vector innerErrors{TError(), TError("Inner error")};
-    EXPECT_DEATH(
-        {
-            Y_UNUSED(TError("Outer error").With(innerErrors));
-        },
-        "YT_VERIFY");
+    std::vector innerErrors{TError(), TError("Inner error"), TError()};
+
+    auto error = TError("Outer error").With(innerErrors);
+
+    ASSERT_EQ(error.InnerErrors().size(), 1u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "Inner error");
 }
 
 TEST(TErrorTest, WrapOKError)

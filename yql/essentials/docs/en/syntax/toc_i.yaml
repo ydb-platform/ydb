@@ -3,6 +3,7 @@ items:
 - { name: Lexical structure,            href: lexer.md }
 - { name: Expressions,                  href: expressions.md }
 - { name: ACTION,                       href: action.md }
+- { name: COMBINE,                      href: combine.md }
 - { name: COMMIT,                       href: commit.md }
 - { name: DECLARE,                      href: declare.md }
 - { name: DISCARD,                      href: discard.md }

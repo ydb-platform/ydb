@@ -6,7 +6,7 @@
 #include <memory>
 #include <utility>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 struct TProducerSettings : public TWriteSessionSettings {
     using TSelf = TProducerSettings;
@@ -199,4 +199,4 @@ private:
     std::shared_ptr<IProducer> Impl_;
 };
 
-} // namespace NYdb::NTopic
+} // namespace NYdb::inline Dev::NTopic

@@ -40,7 +40,7 @@ namespace NKikimr {
     public:
         TBufferedChunkWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize,
                              ui32 appendBlockSize, ui32 writeBlockSize, ui32 chunkIdx,
-                             TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue)
+                             TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue, ui32 baseOffset = 0)
             : Consumer(std::move(consumer))
             , Owner(owner)
             , OwnerRound(ownerRound)
@@ -53,6 +53,7 @@ namespace NKikimr {
             , Buffer(TMemoryConsumer(Consumer))
             , MsgQueue(msgQueue)
             , DiskPartOffset(0)
+            , BaseOffset(baseOffset)
             , Finished(false)
             , HasBuffer(false)
         {
@@ -109,7 +110,7 @@ namespace NKikimr {
         }
 
         TDiskPart GetDiskPartForBookmark() const {
-            return {ChunkIdx, DiskPartOffset, Offset - DiskPartOffset};
+            return {ChunkIdx, BaseOffset + DiskPartOffset, Offset - DiskPartOffset};
         }
 
         ui32 GetBlockSize() const {
@@ -119,7 +120,7 @@ namespace NKikimr {
     private:
         void CreateChunkWriteMsg() {
             if (Buffer.Size()) {
-                ui32 offsetInChunk = Offset - Buffer.Size();
+                ui32 offsetInChunk = BaseOffset + Offset - Buffer.Size();
                 Y_ABORT_UNLESS(offsetInChunk % AppendBlockSize == 0);
                 Y_ABORT_UNLESS(ChunkIdx);
                 NPDisk::TEvChunkWrite::TPartsPtr parts(new NPDisk::TEvChunkWrite::TBufBackedUpParts(std::move(Buffer)));
@@ -143,8 +144,144 @@ namespace NKikimr {
         TTrackableBuffer Buffer;
         TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& MsgQueue;
         ui32 DiskPartOffset;
+        const ui32 BaseOffset;
         bool Finished;
         bool HasBuffer;
+    };
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // TSstSpaceModel
+    // The chunk arithmetic of one SST being written: where in-place data lands and how many chunks the SST takes
+    // once one more record is in. TWriter enforces it; compaction planning replays it record by record without
+    // writing anything, which is what makes the planned number of chunks exact.
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+    template <class TKey, class TMemRec>
+    class TSstSpaceModel {
+        using TRec = TIndexRecord<TKey, TMemRec>;
+
+    public:
+        TSstSpaceModel(ui32 chunkSize, ui32 appendBlockSize, ui32 chunksToUse)
+            : ChunkSize(chunkSize)
+            , AppendBlockSize(appendBlockSize)
+            , ChunksToUse(chunksToUse)
+        {}
+
+        // Accounts for the record and returns true when it fits into this SST; returns false and changes nothing
+        // when the SST has to be finished and the record written into the next one.
+        bool Push(ui32 inplacedDataSize, ui32 numAddedOuts) {
+            ui32 chunks = 0;
+            ui32 intermSize = 0;
+            DataUsageAfterPush(ChunkSize, AppendBlockSize, DataChunkIndex, DataOffset, inplacedDataSize, &chunks,
+                &intermSize);
+            if (IndexUsageAfterPush(ChunkSize, Items + 1, Outbound + numAddedOuts, chunks, intermSize) > ChunksToUse) {
+                return false;
+            }
+            if (inplacedDataSize) {
+                PlaceData(ChunkSize, &DataChunkIndex, &DataOffset, inplacedDataSize);
+            }
+            ++Items;
+            // A single huge part lives in the record itself; only several of them go to the outbound area. The usage
+            // check above charges them all the same, as TWriter::CheckSpace does.
+            Outbound += numAddedOuts > 1 ? numAddedOuts : 0;
+            return true;
+        }
+
+        bool Empty() const {
+            return !Items;
+        }
+
+        // Where in-place data of `size` bytes goes: at `*offset` of chunk `*chunkIndex` of the SST, or at the start of
+        // the next chunk when it does not fit into this one. Returns the offset it goes at and advances past it.
+        static ui32 PlaceData(ui32 chunkSize, ui32 *chunkIndex, ui32 *offset, ui32 size) {
+            const ui32 alignedSize = AlignUp(size, 4U);
+            if (*offset + alignedSize > chunkSize) {
+                *offset = 0;
+                ++*chunkIndex;
+            }
+            const ui32 res = *offset;
+            *offset += alignedSize;
+            return res;
+        }
+
+        // Chunks the in-place data takes once `size` more bytes are placed, and how far into the last of them it goes.
+        static void DataUsageAfterPush(ui32 chunkSize, ui32 appendBlockSize, ui32 chunkIndex, ui32 offset, ui32 size,
+                ui32 *chunks, ui32 *intermSize) {
+            *chunks = chunkIndex + (offset ? 1 : 0);
+            *intermSize = offset ? offset : chunkSize;
+
+            if (const ui32 alignedSize = AlignUp(size, 4U)) {
+                *intermSize += alignedSize;
+                if (*intermSize > chunkSize) {
+                    // if we'd start a new chunk
+                    ++*chunks;
+                    *intermSize = alignedSize;
+                }
+            }
+
+            *intermSize = AlignUpAppendBlockSize(*intermSize, appendBlockSize);
+        }
+
+        // Chunks the whole SST takes with `items` index records and `outs` outbound parts after data that takes
+        // `chunks` chunks and `intermSize` bytes of the last one.
+        static ui32 IndexUsageAfterPush(ui32 chunkSize, ui32 items, ui32 outs, ui32 chunks, ui32 intermSize) {
+            const ui32 numRecsPerChunk = (chunkSize - sizeof(TIdxDiskLinker)) / sizeof(TRec);
+            const ui32 numDiskPartsPerChunk = (chunkSize - sizeof(TIdxDiskLinker)) / sizeof(TDiskPart);
+
+            // if linker record doesn't fit in current chunk, we start a new one
+            if (intermSize + sizeof(TIdxDiskLinker) > chunkSize) {
+                ++chunks;
+                intermSize = 0;
+            }
+
+            if (intermSize) {
+                const ui32 numItems = (chunkSize - (sizeof(TIdxDiskLinker) + intermSize)) / sizeof(TRec);
+                if (items <= numItems) {
+                    intermSize += items * sizeof(TRec);
+                    items = 0;
+                } else {
+                    items -= numItems;
+                    ++chunks;
+                    intermSize = 0;
+                }
+            }
+            if (items) {
+                Y_DEBUG_ABORT_UNLESS(!intermSize);
+                chunks += items / numRecsPerChunk;
+                intermSize += (items % numRecsPerChunk) * sizeof(TRec);
+            }
+
+            if (intermSize) {
+                const ui32 numOuts = (chunkSize - (sizeof(TIdxDiskLinker) + intermSize)) / sizeof(TDiskPart);
+                if (outs <= numOuts) {
+                    intermSize += outs * sizeof(TDiskPart);
+                    outs = 0;
+                } else {
+                    outs -= numOuts;
+                    ++chunks;
+                    intermSize = 0;
+                }
+            }
+            if (outs) {
+                Y_DEBUG_ABORT_UNLESS(!intermSize);
+                chunks += outs / numDiskPartsPerChunk;
+                intermSize += (outs % numDiskPartsPerChunk) * sizeof(TDiskPart);
+            }
+
+            if (intermSize + sizeof(TIdxDiskPlaceHolder) > chunkSize) {
+                ++chunks;
+            }
+
+            return chunks;
+        }
+
+    private:
+        const ui32 ChunkSize;
+        const ui32 AppendBlockSize;
+        const ui32 ChunksToUse;
+        ui32 DataChunkIndex = 0;
+        ui32 DataOffset = 0;
+        ui32 Items = 0;
+        ui32 Outbound = 0;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -156,7 +293,7 @@ namespace NKikimr {
     public:
         TBaseWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize,
                     ui32 appendBlockSize, ui32 writeBlockSize, TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue,
-                    TDeque<TChunkIdx>& rchunks)
+                    TDeque<TChunkIdx>& rchunks, ui32 baseOffset = 0)
             : Consumer(std::move(consumer))
             , Owner(owner)
             , OwnerRound(ownerRound)
@@ -166,6 +303,7 @@ namespace NKikimr {
             , WriteBlockSize(writeBlockSize)
             , MsgQueue(msgQueue)
             , RChunks(rchunks)
+            , BaseOffset(baseOffset)
             , UsedChunks()
         {}
 
@@ -181,7 +319,7 @@ namespace NKikimr {
                 RChunks.pop_front();
 
                 ChunkWriter = std::make_unique<TBufferedChunkWriter>(TMemoryConsumer(Consumer), Owner, OwnerRound,
-                    Priority, ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue);
+                    Priority, ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue, BaseOffset);
 
                 UsedChunks.push_back(chunkIdx);
             }
@@ -256,6 +394,7 @@ namespace NKikimr {
         const ui32 WriteBlockSize;
         TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& MsgQueue;
         TDeque<ui32>& RChunks;
+        const ui32 BaseOffset;
         TVector<ui32> UsedChunks;
         std::unique_ptr<TBufferedChunkWriter> ChunkWriter;
     };
@@ -315,7 +454,7 @@ namespace NKikimr {
     public:
         TDataWriter(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
                     ui32 appendBlockSize, ui32 writeBlockSize, TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue,
-                    TDeque<TChunkIdx>& rchunks)
+                    TDeque<TChunkIdx>& rchunks, ui32 baseOffset = 0)
             : TBase(TMemoryConsumer(WriterDataTypeToMemConsumer(vctx, type, true)),
                     owner,
                     ownerRound,
@@ -324,25 +463,20 @@ namespace NKikimr {
                     appendBlockSize,
                     writeBlockSize,
                     msgQueue,
-                    rchunks)
+                    rchunks,
+                    baseOffset)
             , Finished(false)
             , RChunksIndex(0)
             , Offset(0)
         {}
 
         TDiskPart Preallocate(ui32 size) {
-            const ui32 alignedSize = AlignUp(size, 4U);
-            if (Offset + alignedSize > ChunkSize) {
-                Offset = 0;
-                ++RChunksIndex;
-                Y_ABORT_UNLESS(RChunksIndex < UsedChunks.size() + RChunks.size());
-            }
+            const ui32 offset = TSstSpaceModel<TKey, TMemRec>::PlaceData(ChunkSize, &RChunksIndex, &Offset, size);
+            Y_ABORT_UNLESS(RChunksIndex < UsedChunks.size() + RChunks.size());
 
             const TChunkIdx chunkIdx = RChunksIndex < UsedChunks.size() ? UsedChunks[RChunksIndex]
                 : RChunks[RChunksIndex - UsedChunks.size()];
-            TDiskPart location(chunkIdx, Offset, size);
-            Offset += alignedSize;
-            return location;
+            return TDiskPart(chunkIdx, TBase::BaseOffset + offset, size);
         }
 
         TDiskPart Push(const TRope& buffer) {
@@ -378,19 +512,8 @@ namespace NKikimr {
         }
 
         void GetUsageAfterPush(ui32 size, ui32 *chunks, ui32 *intermSize) const {
-            *chunks = RChunksIndex + (Offset ? 1 : 0);
-            *intermSize = Offset ? Offset : ChunkSize;
-
-            if (const ui32 alignedSize = AlignUp(size, 4U)) {
-                *intermSize += alignedSize;
-                if (*intermSize > ChunkSize) {
-                    // if we'd start a new chunk
-                    ++*chunks;
-                    *intermSize = alignedSize;
-                }
-            }
-
-            *intermSize = AlignUpAppendBlockSize(*intermSize, AppendBlockSize);
+            TSstSpaceModel<TKey, TMemRec>::DataUsageAfterPush(ChunkSize, AppendBlockSize, RChunksIndex, Offset, size,
+                chunks, intermSize);
         }
 
         using TBase::GetUsedChunks;
@@ -418,7 +541,8 @@ namespace NKikimr {
     public:
         TIndexBuilder(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
                       ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl,
-                      TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue, TDeque<TChunkIdx>& rchunks)
+                      TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue, TDeque<TChunkIdx>& rchunks,
+                      ui32 baseOffset = 0)
             : Consumer(TMemoryConsumer(WriterDataTypeToMemConsumer(vctx, type, false)))
             , Owner(owner)
             , OwnerRound(ownerRound)
@@ -428,6 +552,7 @@ namespace NKikimr {
             , WriteBlockSize(writeBlockSize)
             , MsgQueue(msgQueue)
             , RChunks(rchunks)
+            , BaseOffset(baseOffset)
             , RecsPos(0)
             , OutboundPos(0)
             , InplaceDataTotalSize(0)
@@ -444,8 +569,6 @@ namespace NKikimr {
             , Finished(false)
             , CreatedByRepl(createdByRepl)
             , PendingOp(EPendingOperation::NONE)
-            , NumRecsPerChunk((ChunkSize - sizeof(TIdxDiskLinker)) / sizeof(TRec))
-            , NumDiskPartsPerChunk((ChunkSize - sizeof(TIdxDiskLinker)) / sizeof(TDiskPart))
             , LevelSegment(new TLevelSegment(vctx))
         {
             Recs.reserve(ChunkSize / sizeof(TRec)); // reserve for one chunk
@@ -456,54 +579,9 @@ namespace NKikimr {
         }
 
         ui32 GetUsageAfterPush(ui32 chunks, ui32 intermSize, ui32 numAddedOuts) const {
-            ui32 items = Items + 1; // + 1 for the record being added
-            ui32 outs = Outbound.size() + numAddedOuts;
-
-            // if linker record doesn't fit in current chunk, we start a new one
-            if (intermSize + sizeof(TIdxDiskLinker) > ChunkSize) {
-                ++chunks;
-                intermSize = 0;
-            }
-
-            if (intermSize) {
-                const ui32 numItems = (ChunkSize - (sizeof(TIdxDiskLinker) + intermSize)) / sizeof(TRec);
-                if (items <= numItems) {
-                    intermSize += items * sizeof(TRec);
-                    items = 0;
-                } else {
-                    items -= numItems;
-                    ++chunks;
-                    intermSize = 0;
-                }
-            }
-            if (items) {
-                Y_DEBUG_ABORT_UNLESS(!intermSize);
-                chunks += items / NumRecsPerChunk;
-                intermSize += (items % NumRecsPerChunk) * sizeof(TRec);
-            }
-
-            if (intermSize) {
-                const ui32 numOuts = (ChunkSize - (sizeof(TIdxDiskLinker) + intermSize)) / sizeof(TDiskPart);
-                if (outs <= numOuts) {
-                    intermSize += outs * sizeof(TDiskPart);
-                    outs = 0;
-                } else {
-                    outs -= numOuts;
-                    ++chunks;
-                    intermSize = 0;
-                }
-            }
-            if (outs) {
-                Y_DEBUG_ABORT_UNLESS(!intermSize);
-                chunks += outs / NumDiskPartsPerChunk;
-                intermSize += (outs % NumDiskPartsPerChunk) * sizeof(TDiskPart);
-            }
-
-            if (intermSize + sizeof(TIdxDiskPlaceHolder) > ChunkSize) {
-                ++chunks;
-            }
-
-            return chunks;
+            // + 1 for the record being added
+            return TSstSpaceModel<TKey, TMemRec>::IndexUsageAfterPush(ChunkSize, Items + 1,
+                Outbound.size() + numAddedOuts, chunks, intermSize);
         }
 
         void Push(const TKey &key, const TMemRec &memRec, const TDataMerger *dataMerger) {
@@ -608,6 +686,7 @@ namespace NKikimr {
         const ui32 WriteBlockSize;
         TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& MsgQueue;
         TDeque<TChunkIdx>& RChunks;
+        const ui32 BaseOffset;
         ui32 RecsPos;
         ui32 OutboundPos;
         ui64 InplaceDataTotalSize;
@@ -626,9 +705,6 @@ namespace NKikimr {
         bool Finished; // just for VERIFY, i.e. internal consistency checking
         bool CreatedByRepl;
         EPendingOperation PendingOp;
-
-        const ui32 NumRecsPerChunk;
-        const ui32 NumDiskPartsPerChunk;
 
         // resulting LevelSegment as if it would be loaded
         TIntrusivePtr<TLevelSegment> LevelSegment;
@@ -725,7 +801,7 @@ namespace NKikimr {
 
             // create new writer
             Writer = std::make_unique<TBufferedChunkWriter>(TMemoryConsumer(Consumer), Owner, OwnerRound, Priority,
-                ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue);
+                ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue, BaseOffset);
 
             // bookmark start of index data
             Writer->SetBookmark();
@@ -824,10 +900,11 @@ namespace NKikimr {
     public:
         TWriter(TVDiskContextPtr vctx, EWriterDataType type, ui32 chunksToUse, ui8 owner, ui64 ownerRound,
                 ui32 chunkSize, ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl,
-                TDeque<TChunkIdx>& rchunks, TRopeArena& arena, EBlobHeaderMode blobHeaderMode)
-            : DataWriter(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, MsgQueue, rchunks)
+                TDeque<TChunkIdx>& rchunks, TRopeArena& arena, EBlobHeaderMode blobHeaderMode, ui32 baseOffset = 0)
+            : DataWriter(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, MsgQueue, rchunks,
+                    baseOffset)
             , IndexBuilder(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, sstId,
-                    createdByRepl, MsgQueue, rchunks)
+                    createdByRepl, MsgQueue, rchunks, baseOffset)
             , ChunksToUse(chunksToUse)
             , ChunkSize(chunkSize)
             , Arena(arena)

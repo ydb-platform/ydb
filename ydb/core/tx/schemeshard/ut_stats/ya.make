@@ -24,6 +24,7 @@ PEERDIR(
 
 SRCS(
     ut_stats.cpp
+    ut_stats_parser_actor.cpp
 )
 
 YQL_LAST_ABI_VERSION()

@@ -31,8 +31,8 @@ namespace filesystem {
 
 inline std::FILE* fopen(filesystem::path const& p, const char* mode)
 {
-#if defined(__CYGWIN__) || (defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR) && defined(__STRICT_ANSI__))
-    // Cygwin and MinGW32 in strict ANSI mode do not declare _wfopen
+#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR) && defined(__STRICT_ANSI__)
+    // MinGW32 in strict ANSI mode does not declare _wfopen
     return std::fopen(p.string().c_str(), mode);
 #else
     // mode should only contain ASCII characters and is likely short

@@ -26,6 +26,8 @@ public:
 
     TRichYPath LockFile(const TRichYPath& path);
 
+    void LockCacheDirectory(const TYPath& path);
+
     TOperationId StartOperation(
         TOperation* operation,
         EOperationType type,
@@ -124,6 +126,7 @@ private:
     int GetFileCacheReplicationFactor() const;
     TFileWriterOptions GetFileCacheWriterOptions() const;
 
+    bool ShouldLockFileStorage() const;
     void CreateStorage() const;
 
     void CreateFileInCypress(const TString& path) const;

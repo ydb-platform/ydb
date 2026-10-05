@@ -117,11 +117,36 @@ TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFea
     return std::optional<TString>(policy);
 }
 
+TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TString& value) {
+    NYql::NPq::NProto::StreamingDisposition result;
+
+    if (const auto mode = to_lower(value); mode == "earliest") {
+        result.mutable_oldest();
+    } else if (mode == "latest") {
+        result.mutable_fresh();
+    } else {
+        ui64 timestamp;
+        if (!TryFromString(value, timestamp)) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "READ_FROM must be EARLIEST, LATEST or an expression of type Timestamp");
+        }
+
+        *result.mutable_from_time()->mutable_timestamp() = NProtoInterop::CastToProto(TInstant::MicroSeconds(timestamp));
+    }
+
+    return result;
+}
+
 [[nodiscard]] TYqlConclusionStatus FillStreamingQueryDesc(NKikimrSchemeOp::TStreamingQueryDescription& streamingQueryDesc, const TString& name, const NYql::TObjectSettingsImpl& settings, TActorSystem* actorSystem) {
+    if (!actorSystem) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Object operation needs an actor system. Please contact internal support");
+    }
+
     streamingQueryDesc.SetName(name);
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();
     auto& properties = *streamingQueryDesc.MutableProperties()->MutableProperties();
+    const auto readFrom = featuresExtractor.Extract(TStreamingQueryConfig::TProperties::ReadFrom);
+    const auto outputFrom = featuresExtractor.Extract(TStreamingQueryConfig::TProperties::OutputFrom);
 
     // Validation of features values will be performed on execution step
     for (const auto& property : {
@@ -143,13 +168,48 @@ TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFea
         return streamingDispositionStatus;
     }
 
-    if (const auto streamingDisposition = streamingDispositionStatus.DetachResult()) {
-        if (!actorSystem) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Object operation needs an actor system. Please contact internal support");
+    auto streamingDisposition = streamingDispositionStatus.DetachResult();
+    if (streamingDisposition) {
+        if (readFrom) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "READ_FROM and STREAMING_DISPOSITION are mutually exclusive");
+        }
+        if (outputFrom) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "OUTPUT_FROM cannot be combined with STREAMING_DISPOSITION");
         }
         if (!AppData(actorSystem)->FeatureFlags.GetEnableStreamingQueryDisposition()) {
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
         }
+    }
+
+    if (readFrom) {
+        if (!AppData(actorSystem)->FeatureFlags.GetEnableStreamingQueryReadFrom()) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query READ_FROM is disabled. Please contact your system administrator to enable it");
+        }
+
+        auto disposition = ParseReadFrom(*readFrom);
+        if (disposition.IsFail()) {
+            return disposition;
+        }
+
+        streamingDisposition = disposition.DetachResult();
+    }
+
+    if (outputFrom) {
+        if (!AppData(actorSystem)->FeatureFlags.GetEnableStreamingQueryStateRecompute()) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query OUTPUT_FROM is disabled. Please contact your system administrator to enable state recomputation");
+        }
+
+        ui64 timestamp;
+        if (!TryFromString(*outputFrom, timestamp)) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "OUTPUT_FROM must be an expression of type Timestamp");
+        }
+        if (!streamingDisposition) {
+            streamingDisposition.emplace();
+        }
+        *streamingDisposition->mutable_output_start_time() = NProtoInterop::CastToProto(TInstant::MicroSeconds(timestamp));
+    }
+
+    if (streamingDisposition) {
         properties.emplace(TStreamingQueryConfig::TProperties::StreamingDisposition, streamingDisposition->SerializeAsString());
     }
 
@@ -166,19 +226,6 @@ TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFea
     }
 
     return TYqlConclusionStatus::Success();
-}
-
-TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& queryName, const TString& database, bool createDir) {
-    if (!queryName) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Streaming query name should not be empty");
-    }
-
-    std::pair<TString, TString> pathPair;
-    TString error;
-    if (!NSchemeHelpers::SplitTablePath(queryName, database, pathPair, error, createDir)) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid streaming query path: " << error);
-    }
-    return pathPair;
 }
 
 class TObjectOperationController : public IStreamingQueryOperationController {
@@ -241,6 +288,19 @@ private:
 
 }  // anonymous namespace
 
+TYqlConclusion<std::pair<TString, TString>> TStreamingQueryManager::SplitPath(const TString& queryName, const TString& database, const bool createDir) {
+    if (!queryName) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Streaming query name should not be empty");
+    }
+
+    std::pair<TString, TString> pathPair;
+    TString error;
+    if (!NSchemeHelpers::SplitTablePath(queryName, database, pathPair, error, createDir)) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid streaming query path: " << error);
+    }
+    return pathPair;
+}
+
 TAsyncStatus TStreamingQueryManager::DoModify(const NYql::TObjectSettingsImpl& settings, ui32 nodeId, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
     NKqpProto::TKqpSchemeOperation schemeOperation;
     if (const auto& status = DoPrepare(schemeOperation, settings, manager, context); status.IsFail()) {
@@ -273,7 +333,7 @@ TYqlConclusionStatus TStreamingQueryManager::DoPrepare(NKqpProto::TKqpSchemeOper
 
 TYqlConclusionStatus TStreamingQueryManager::PrepareCreateStreamingQuery(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) {
     if (settings.GetExistingOk() && settings.GetReplaceIfExists()) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Options 'OR REPLACE' and 'IF NOT EXISTS' can not be used together for STREAMING_QUERY objects");
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Options 'OR REPLACE' and 'IF NOT EXISTS' cannot be used together for STREAMING_QUERY objects");
     }
 
     const auto& externalContext = context.GetExternalData();
@@ -341,11 +401,17 @@ TAsyncStatus TStreamingQueryManager::ExecutePrepared(const NKqpProto::TKqpScheme
 
     return ChainFeatures(validationFeature, [schemeOperation, nodeId, manager, context]() {
         auto promise = NThreading::NewPromise<TYqlConclusionStatus>();
-        context.GetActorSystem()->Send(NMetadata::NProvider::MakeServiceId(nodeId),  new NMetadata::NProvider::TEvObjectsOperation(
+        context.GetActorSystem()->Send(NMetadata::NProvider::MakeServiceId(nodeId), new NMetadata::NProvider::TEvObjectsOperation(
             std::make_shared<TObjectOperationCommand>(schemeOperation, manager, std::make_shared<TObjectOperationController>(promise), context)
         ));
         return promise.GetFuture();
     });
+}
+
+TAsyncStatus TStreamingQueryManager::TrackObjectOperation(const TString& objectId, const TOperationTrackContext& context) const {
+    auto promise = NThreading::NewPromise<TYqlConclusionStatus>();
+    DoTrackStreamingQueryOperation(objectId, std::make_shared<TObjectOperationController>(promise), context);
+    return promise.GetFuture();
 }
 
 }  // namespace NKikimr::NKqp

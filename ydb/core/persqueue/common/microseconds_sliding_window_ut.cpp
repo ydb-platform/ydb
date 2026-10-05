@@ -49,6 +49,61 @@ Y_UNIT_TEST(Basic) {
     UNIT_ASSERT_EQUAL(sw.GetValue(), 60'000'000);
 }
 
+Y_UNIT_TEST(CapsValueAndIgnoresInWindowAdvances) {
+    TMicrosecondsSlidingWindow sw(4, TDuration::Seconds(4));
+    const TInstant t0 = TInstant::MicroSeconds(1'000'000'000);
+
+    UNIT_ASSERT_EQUAL(sw.Update(t0), 0);
+    UNIT_ASSERT_EQUAL(sw.Update(10'000'000, t0), 4'000'000);
+    UNIT_ASSERT_EQUAL(sw.GetValue(), 4'000'000);
+
+    UNIT_ASSERT_EQUAL(sw.Update(t0 + TDuration::MilliSeconds(500)), 4'000'000);
+}
+
+Y_UNIT_TEST(IgnoresTimestampInsideCurrentWindow) {
+    TMicrosecondsSlidingWindow sw(4, TDuration::Seconds(4));
+    const TInstant t0 = TInstant::MicroSeconds(5'000'000'000);
+
+    UNIT_ASSERT_EQUAL(sw.Update(1'000'000, t0), 1'000'000);
+    UNIT_ASSERT_EQUAL(sw.Update(t0 - TDuration::MicroSeconds(1)), 1'000'000);
+    UNIT_ASSERT_EQUAL(sw.GetValue(), 1'000'000);
+}
+
+Y_UNIT_TEST(ExpiresWholeWindow) {
+    TMicrosecondsSlidingWindow sw(4, TDuration::Seconds(4));
+    const TInstant t0 = TInstant::MicroSeconds(2'000'000'000);
+    sw.Update(1'000'000, t0);
+    UNIT_ASSERT(sw.GetValue() > 0);
+    UNIT_ASSERT_EQUAL(sw.Update(t0 + TDuration::Seconds(10)), 0);
+    UNIT_ASSERT_EQUAL(sw.GetValue(), 0);
+}
+
+Y_UNIT_TEST(AdvancesAcrossBucketsAndWraps) {
+    TMicrosecondsSlidingWindow sw(4, TDuration::Seconds(4));
+    const TInstant t0 = TInstant::MicroSeconds(3'000'000'000);
+
+    sw.Update(4'000'000, t0);
+    sw.Update(1'000'000, t0 + TDuration::Seconds(1));
+    sw.Update(t0 + TDuration::Seconds(3));
+    UNIT_ASSERT(sw.GetValue() <= 4'000'000);
+
+    sw.Update(500'000, t0 + TDuration::Seconds(4));
+    sw.Update(t0 + TDuration::Seconds(5));
+    UNIT_ASSERT(sw.GetValue() <= 4'000'000);
+}
+
+Y_UNIT_TEST(ClearsFirstNonZeroThenFindsWrappedBucket) {
+    TMicrosecondsSlidingWindow sw(4, TDuration::Seconds(4));
+    const TInstant t0 = TInstant::MicroSeconds(4'000'000'000);
+
+    sw.Update(3'000'000, t0);
+    sw.Update(2'000'000, t0 + TDuration::Seconds(1));
+    sw.Update(t0 + TDuration::Seconds(2));
+    sw.Update(t0 + TDuration::Seconds(3));
+    sw.Update(t0 + TDuration::Seconds(4));
+    UNIT_ASSERT(sw.GetValue() <= 3'000'000);
+}
+
 } //Y_UNIT_TEST_SUITE
 
 } // namespace NKikimr::NPQ

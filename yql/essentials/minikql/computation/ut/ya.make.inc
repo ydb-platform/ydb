@@ -16,6 +16,7 @@ SRCDIR(yql/essentials/minikql/computation)
 
 SRCS(
     mkql_block_trimmer_ut.cpp
+    mkql_bridge_ut.cpp
     mkql_computation_node_holders_ut.cpp
     mkql_computation_node_pack_ut.cpp
     mkql_computation_node_list_ut.cpp

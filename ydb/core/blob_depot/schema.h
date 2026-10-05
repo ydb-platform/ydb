@@ -41,6 +41,7 @@ namespace NKikimr::NBlobDepot {
             struct IssuerGuid : Column<3, NScheme::NTypeIds::Uint64> {};
             struct IssueTimestamp : Column<4, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
             struct IssuedByNode : Column<5, NScheme::NTypeIds::Uint32> {};
+            struct Version : Column<6, NScheme::NTypeIds::Uint32> {};
 
             using TKey = TableKey<TabletId>;
             using TColumns = TableColumns<
@@ -48,7 +49,8 @@ namespace NKikimr::NBlobDepot {
                 BlockedGeneration,
                 IssuerGuid,
                 IssueTimestamp,
-                IssuedByNode
+                IssuedByNode,
+                Version
             >;
         };
 

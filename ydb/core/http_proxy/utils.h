@@ -17,9 +17,18 @@ TString LogHttpRequestResponseCommonInfoString(const THttpRequestContext& httpCo
 
 // host is the HTTP Host / :authority value. headers is the raw header blob.
 // tlsSecure is true when the connection to http_proxy itself is TLS.
-// Prefers the first X-Forwarded-Host token when it is a host[:port] without '/', '#' or '?';
-// otherwise uses host. Unknown X-Forwarded-Proto values fall back to tlsSecure.
+// Origin, highest wins per field:
+//   host: RFC 7239 Forwarded host= (first valid, left to right), else first X-Forwarded-Host
+//         token that is host[:port] without '/', '#' or '?', else Host.
+//   proto: Forwarded proto=, else X-Forwarded-Proto; unknown values fall back to tlsSecure.
+//   port: valid X-Forwarded-Port, then port in the chosen host, else the scheme default
+//         (80/http, 443/https). Default ports are omitted from the URL.
 TString MakeSqsRequestEndpoint(TStringBuf host, TStringBuf headers, bool tlsSecure);
 TString MakeSqsRequestEndpoint(const THttpRequestContext& httpContext);
+
+// HTTP request path used as the SQS/Kinesis database endpoint.
+// Query string is ignored; a trailing slash is treated as equivalent to no slash.
+// "/" and empty path mean "no database".
+TString ParseDatabasePathFromRequestUrl(TStringBuf url);
 
 } // namespace NKikimr::NHttpProxy

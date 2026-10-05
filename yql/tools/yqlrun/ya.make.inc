@@ -6,6 +6,10 @@ IF (OS_LINUX)
     EXPORTS_SCRIPT(${ARCADIA_ROOT}/yql/essentials/tools/exports.symlist)
 ENDIF()
 
+INCLUDE(
+    ${ARCADIA_ROOT}/yql/essentials/udfs/common/python/sanitizer_suppressions.inc
+)
+
 PEERDIR(
     yql/tools/yqlrun/http
     yql/tools/yqlrun/lib

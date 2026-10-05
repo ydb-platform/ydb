@@ -247,7 +247,7 @@
 
 - Java
 
-    Создайте таблицу для документов и их векторных представлений. Используйте `SessionRetryContext` из раздела [Подключение к {{ ydb-short-name }}]({#connect-ydb}).
+    Создайте таблицу для документов и их векторных представлений. Используйте `SessionRetryContext` из раздела [Подключение к {{ ydb-short-name }}](#connect-ydb).
 
     ```java
     import tech.ydb.common.transaction.TxMode;
@@ -502,22 +502,10 @@
 
 - Go
 
-    Функция конвертирует вектор float32 в бинарное представление и выполняет параметризованный запрос:
+    Для сериализации вектора используйте `sugar.Embedding` из Go SDK версии v3.153.0 или новее. Затем выполните параметризованный запрос:
 
     ```go
-    import (
-        "encoding/binary"
-        "math"
-    )
-
-    func convertVectorToBytes(vector []float32) []byte {
-        buf := make([]byte, len(vector)*4+1)
-        for i, v := range vector {
-        binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
-        }
-        buf[len(buf)-1] = 0x01
-        return buf
-    }
+    import "github.com/ydb-platform/ydb-go-sdk/v3/sugar"
 
     func insertItems(ctx context.Context, db *ydb.Driver, tableName string, items []Item) error {
         query := fmt.Sprintf(`
@@ -538,7 +526,7 @@
         rows = append(rows, types.StructValue(
             types.StructFieldValue("id", types.UTF8Value(item.ID)),
             types.StructFieldValue("document", types.UTF8Value(item.Document)),
-            types.StructFieldValue("embedding", types.BytesValue(convertVectorToBytes(item.Embedding))),
+            types.StructFieldValue("embedding", sugar.Embedding(item.Embedding...)),
         ))
         }
 
@@ -720,6 +708,8 @@
 
     - Рекомендуемый способ
 
+        Для сериализации векторов используйте `ydb.convert_floats_to_embedding_bytes` из Python SDK версии 3.33.1 или новее.
+
         Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста, заранее сериализованное в последовательность байт.
 
         Для использования структуры в примере ниже создается `items_struct_type = ydb.StructType()`, в котором задаются типы всех полей. Для передачи списка таких структур его необходимо обернуть в `ydb.ListType`: `ydb.ListType(items_struct_type)`.
@@ -729,13 +719,7 @@
         - Native SDK
 
             ```python
-            import struct
             import ydb
-
-
-            def convert_vector_to_bytes(vector: list[float]) -> bytes:
-                b = struct.pack("f" * len(vector), *vector)
-                return b + b"\x01"
 
             def insert_items_vector_as_bytes(
                 pool: ydb.QuerySessionPool,
@@ -768,7 +752,7 @@
                 items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
                 for item in items:
-                    item["embedding"] = convert_vector_to_bytes(item["embedding"])
+                    item["embedding"] = ydb.convert_floats_to_embedding_bytes(item["embedding"])
 
                 pool.execute_with_retries(
                     query, {"$items": (items, ydb.ListType(items_struct_type))}
@@ -780,12 +764,7 @@
         - Native SDK (Asyncio)
 
             ```python
-            import struct
             import ydb
-
-            def convert_vector_to_bytes(vector: list[float]) -> bytes:
-                b = struct.pack("f" * len(vector), *vector)
-                return b + b"\x01"
 
             async def insert_items_vector_as_bytes(
                 pool: ydb.aio.QuerySessionPool,
@@ -818,7 +797,7 @@
                 items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
                 for item in items:
-                    item["embedding"] = convert_vector_to_bytes(item["embedding"])
+                    item["embedding"] = ydb.convert_floats_to_embedding_bytes(item["embedding"])
 
                 await pool.execute_with_retries(
                     query, {"$items": (items, ydb.ListType(items_struct_type))}
@@ -1500,7 +1479,7 @@
 
         row, err := db.Query().Query(ctx, q,
         query.WithParameters(
-            ydb.ParamsBuilder().Param("$embedding").Bytes(convertVectorToBytes(embedding)).Build(),
+            ydb.ParamsBuilder().Param("$embedding").Any(sugar.Embedding(embedding...)).Build(),
         ),
         )
         if err != nil {
@@ -1723,7 +1702,7 @@
                     query,
                     {
                         "$embedding": (
-                            convert_vector_to_bytes(embedding),
+                            ydb.convert_floats_to_embedding_bytes(embedding),
                             ydb.PrimitiveType.String,
                         ),
                     },
@@ -1777,7 +1756,7 @@
                     query,
                     {
                         "$embedding": (
-                            convert_vector_to_bytes(embedding),
+                            ydb.convert_floats_to_embedding_bytes(embedding),
                             ydb.PrimitiveType.String,
                         ),
                     },

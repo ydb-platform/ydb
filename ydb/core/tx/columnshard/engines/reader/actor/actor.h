@@ -8,7 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/tracing/usage/tracing.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -30,6 +30,7 @@ private:
     std::optional<TMonotonic> FinishInstant;
     std::shared_ptr<NLWTrace::TOrbit> ScanOrbit;
     const ui64 PathId;
+    const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> SchedulerPool;
 
 public:
     virtual void PassAway() override;
@@ -45,7 +46,8 @@ public:
         ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout,
         const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
         const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
-        std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId = 0);
+        std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId = 0,
+        std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool = std::nullopt);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -118,6 +120,7 @@ private:
     bool SendResult(bool pageFault, bool lastBatch, ui64 sourceId = 0);
 
     void SendScanError(const TString& reason);
+    void SendScanAborted();
 
     void Finish(const NColumnShard::TScanCounters::EStatusFinish status);
 
@@ -133,6 +136,8 @@ private:
 private:
     const TActorId ColumnShardActorId;
     const TActorId ReadBlobsActorId;
+    // The KQP compute actor for a client scan; for an internal scan, the actor that asked for it -- the
+    // restore actor of a write, for instance. Both speak the TEvKqpCompute scan protocol.
     const TActorId ScanComputeActorId;
     const TActorId ScanDiagnosticsActorId;
     std::optional<TMonotonic> AckReceivedInstant;

@@ -35,17 +35,19 @@ using TInflightByOperation = std::array<size_t, OperationCount>;
 // (as opposed to the PBuffer operations).
 [[nodiscard]] bool IsDDiskOperation(EOperation operation);
 
+struct THostErrorsInfo
+{
+    TDuration FromFirstError;
+    TDuration FromLastError;
+    TDuration FromFirstSuccess;
+    TDuration FromLastSuccess;
+    size_t ConsecutiveErrorCount = 0;
+    size_t ConsecutiveSuccessCount = 0;
+};
+
 class THostStat
 {
 public:
-    struct TErrorsInfo
-    {
-        TDuration FromFirstError;
-        TDuration FromLastError;
-        size_t ConsecutiveErrorCount = 0;
-        size_t ConsecutiveSuccessCount = 0;
-    };
-
     // Called right before a request is sent to the host for the given
     // operation. Increments the per-operation inflight counter.
     void OnRequest(EOperation operation);
@@ -60,7 +62,7 @@ public:
 
     // Returns how much time has passed since the first error was received and
     // the number and total size of errors.
-    [[nodiscard]] TErrorsInfo GetErrorsInfo(TInstant now) const;
+    [[nodiscard]] THostErrorsInfo GetErrorsInfo(TInstant now) const;
 
     // Number of consecutive successful completions since the last error
     // (reset to 0 on the first error after a success streak).
@@ -81,6 +83,7 @@ public:
 private:
     size_t& AccessInflightCount(EOperation operation);
 
+    TInstant FirstSuccessAt;
     TInstant LastSuccessAt;
     TInstant FirstErrorAt;
     TInstant LastErrorAt;

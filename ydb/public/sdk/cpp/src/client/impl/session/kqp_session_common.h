@@ -20,7 +20,8 @@ class IServerCloseHandler {
 public:
     virtual ~IServerCloseHandler() = default;
     // called when session should be closed by server signal
-    virtual void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>) = 0;
+    virtual void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>,
+        std::string_view) = 0;
 };
 
 class TKqpSessionCommon : public TEndpointObj {
@@ -42,14 +43,15 @@ public:
     const std::string& GetId() const;
     const std::string& GetEndpoint() const;
     const TEndpointKey& GetEndpointKey() const;
-    void MarkBroken();
-    void MarkAsClosing();
-    void MarkActive();
-    void MarkIdle();
+    bool MarkBroken();
+    bool MarkAsClosing();
+    bool MarkActive();
+    bool MarkIdle();
     bool IsOwnedBySessionPool() const;
     EState GetState() const;
     void SetNeedUpdateActiveCounter(bool flag);
     bool NeedUpdateActiveCounter() const;
+    virtual std::shared_ptr<ISessionClient> GetSessionClient() const { return {}; }
     void InvalidateQueryInCache(const std::string& key);
     void InvalidateQueryCache();
     void ScheduleTimeToTouch(TDuration interval, bool updateTimeInPast);
@@ -63,7 +65,7 @@ public:
     void UpdateServerCloseHandler(IServerCloseHandler*);
 
     // Called asynchronously from grpc thread.
-    void CloseFromServer(std::weak_ptr<ISessionClient> client) noexcept;
+    void CloseFromServer(std::weak_ptr<ISessionClient> client, std::string_view reason) noexcept;
 
 public:
     std::optional<TDeadline> PropagatedDeadline_;

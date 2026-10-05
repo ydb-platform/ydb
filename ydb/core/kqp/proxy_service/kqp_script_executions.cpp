@@ -212,6 +212,34 @@ protected:
         return std::move(retryState);
     }
 
+    static std::optional<TString> ParseCompressedColumn(const TString& columnName, NYdb::TResultSetParser& result) {
+        if (std::optional<TString> resultCompressed = result.ColumnParser(TStringBuilder() << columnName << "_compressed").GetOptionalString()) {
+            if (const std::optional<TString>& resultCompressionMethod = result.ColumnParser(TStringBuilder() << columnName << "_compression_method").GetOptionalUtf8()) {
+                const TCompressor compressor(*resultCompressionMethod);
+                return compressor.Decompress(*resultCompressed);
+            }
+
+            return resultCompressed;
+        }
+
+        return std::nullopt;
+    }
+
+    std::optional<bool> ParseStateSaved(NYdb::TResultSetParser& result) {
+        const auto graph = ParseCompressedColumn("graph", result);
+        if (!graph) {
+            return false;
+        }
+
+        NKikimrKqp::TQueryPhysicalGraph physicalGraph;
+        if (!physicalGraph.ParseFromString(*graph)) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Query physical graph is corrupted");
+            return std::nullopt;
+        }
+
+        return physicalGraph.GetZeroCheckpointSaved() || physicalGraph.GetPreparedQuery().GetPhysicalQuery().GetDisableCheckpoints();
+    }
+
     std::optional<std::vector<Ydb::Query::ResultSetMeta>> ParseResultSetMetas(NYdb::TResultSetParser& result) {
         return ParseJsonArray<Ydb::Query::ResultSetMeta>(result, "result_set_metas", "Result set meta is corrupted", [](const NJson::TJsonValue& value, Ydb::Query::ResultSetMeta& dst) {
             NProtobufJson::Json2Proto(value, dst);
@@ -783,6 +811,7 @@ public:
         RunScriptActorId = Register(CreateRunScriptActor(eventProto, {
             .Database = request.GetDatabase(),
             .ExecutionId = ExecutionId,
+            .TraceId = NWilson::TTraceId(Event->TraceId),
             .LeaseGeneration = ev.Generation,
             .LeaseDuration = LeaseDuration,
             .ResultsTtl = GetDuration(meta.GetResultsTtl()),
@@ -1114,13 +1143,13 @@ private:
 
             const auto operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
             if (!operationStatus) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Can not restart execution without final status");
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Cannot restart execution without final status");
                 return;
             }
 
             const auto finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32();
             if (finalizationStatus) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Can not restart execution while finalization is not finished, current status: " << *finalizationStatus);
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Cannot restart execution while finalization is not finished, current status: " << *finalizationStatus);
                 return;
             }
 
@@ -1577,7 +1606,7 @@ public:
         , Counters(std::move(counters))
         , Settings(std::move(settings))
     {
-        Y_VALIDATE(!Settings.AllowRestart || Settings.FailOnNotFound, "Can not handle setting FailOnNotFound when restart allowed");
+        Y_VALIDATE(!Settings.AllowRestart || Settings.FailOnNotFound, "Cannot handle setting FailOnNotFound when restart allowed");
     }
 
     void Bootstrap() {
@@ -1654,10 +1683,10 @@ private:
         if (event.RetryRequired) {
             if (Settings.AllowRestart) {
                 const auto& restartActorId = Register(TRestartScriptOperationQuery::MakeRetry(SelfId(), Database, ExecutionId, event.LeaseGeneration, QueryServiceConfig, Counters));
-                YDB_LOG_NOTICE("[ScriptExecutions] Restarting script execution lease",
+                YDB_LOG_NOTICE("[ScriptExecutions] Restarting script execution",
                     {"logPrefix", LogPrefix()},
                     {"restartActorId", restartActorId},
-                    {"generation", event.LeaseGeneration});
+                    {"leaseGeneration", event.LeaseGeneration});
             } else {
                 YDB_LOG_NOTICE("[ScriptExecutions] Lease finalization skipped because script execution is waiting for retry",
                     {"logPrefix", LogPrefix()});
@@ -2336,7 +2365,8 @@ private:
                 ast,
                 ast_compressed,
                 ast_compression_method,
-                graph_compressed IS NOT NULL AS has_graph,
+                graph_compressed,
+                graph_compression_method,
                 retry_state,
                 user_token
             FROM `.metadata/script_executions`
@@ -2431,7 +2461,11 @@ private:
                 return;
             }
 
-            StateSaved = result.ColumnParser("has_graph").GetBool();
+            if (const auto stateSaved = ParseStateSaved(result)) {
+                StateSaved = *stateSaved;
+            } else {
+                return;
+            }
         }
 
         {   // Lease info
@@ -2498,19 +2532,6 @@ private:
         }, std::move(OperationIssues)), /* flags */ 0, Cookie);
     }
 
-    static std::optional<TString> ParseCompressedColumn(const TString& columnName, NYdb::TResultSetParser& result) {
-        if (std::optional<TString> resultCompressed = result.ColumnParser(TStringBuilder() << columnName << "_compressed").GetOptionalString()) {
-            if (const std::optional<TString>& resultCompressionMethod = result.ColumnParser(TStringBuilder() << columnName << "_compression_method").GetOptionalUtf8()) {
-                const TCompressor compressor(*resultCompressionMethod);
-                return compressor.Decompress(*resultCompressed);
-            }
-
-            return resultCompressed;
-        }
-
-        return std::nullopt;
-    }
-
     const NOperationId::TOperationId OperationId;
     const bool FailOnNotFound = true;
     const ui64 Cookie = 0;
@@ -2535,14 +2556,14 @@ public:
     {}
 
 private:
-    static std::pair<TInstant, TString> ParsePageToken(const TString& token) {
+    static std::optional<std::pair<TInstant, TString>> ParsePageToken(const TString& token) {
         const size_t p = token.find('|');
-        if (p == TString::npos) {
-            throw std::runtime_error("Invalid page token");
+        ui64 ts = 0;
+        if (p == TString::npos || p + 1 == token.size() || !TryFromString(TStringBuf(token).SubString(0, p), ts)) {
+            return std::nullopt;
         }
 
-        const ui64 ts = FromString(TStringBuf(token).SubString(0, p));
-        return {TInstant::MicroSeconds(ts), token.substr(p + 1)};
+        return std::make_pair(TInstant::MicroSeconds(ts), token.substr(p + 1));
     }
 
     static TString MakePageToken(const TInstant ts, const std::string& executionId) {
@@ -2615,12 +2636,16 @@ private:
 
         if (PageToken) {
             auto pageTokenParts = ParsePageToken(PageToken);
+            if (!pageTokenParts) {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "Invalid page token");
+                return;
+            }
             params
                 .AddParam("$ts")
-                    .Timestamp(pageTokenParts.first)
+                    .Timestamp(pageTokenParts->first)
                     .Build()
                 .AddParam("$execution_id")
-                    .Utf8(pageTokenParts.second)
+                    .Utf8(pageTokenParts->second)
                     .Build();
         }
 
@@ -2868,7 +2893,7 @@ private:
 // Script execution cancellation with handling runtime and retry cancellation
 // *Assumptions*:
 // 1. Retry backoff large enough to cancel script execution operation between retries
-// 2. System not under high load so data transaction can not be executed during backoff period
+// 2. System not under high load so data transaction cannot be executed during backoff period
 
 class TCancelScriptExecutionOperationActor final : public TActorBootstrapped<TCancelScriptExecutionOperationActor> {
     using TBase = TActorBootstrapped<TCancelScriptExecutionOperationActor>;
@@ -3666,7 +3691,8 @@ private:
             {"resultSetIndex", ResultSetIndex},
             {"offset", Offset},
             {"rowsLimit", RowsLimit},
-            {"savedRowCount", NumberOfSavedRows});
+            {"savedRowCount", NumberOfSavedRows},
+            {"hasMoreResults", HasMoreResults});
 
         constexpr char sql[] = R"(
             -- TGetScriptExecutionResultQuery::FetchScriptResults
@@ -3771,7 +3797,8 @@ private:
         if (status == Ydb::StatusIds::SUCCESS) {
             YDB_LOG_DEBUG("[ScriptExecutions] Successfully fetched rows",
                 {"logPrefix", LogPrefix()},
-                {"rowCount", ResultSet.rows_size()});
+                {"rowCount", ResultSet.rows_size()},
+                {"hasMoreResults", HasMoreResults});
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::move(ResultSet), HasMoreResults, std::move(issues)));
         } else {
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::nullopt, true, std::move(issues)));
@@ -3779,6 +3806,8 @@ private:
     }
 
     void CancelFetchQuery() {
+        YDB_LOG_DEBUG("[ScriptExecutions] Cancelling fetch query",
+            {"logPrefix", LogPrefix()});
         HasMoreResults = true;
         CancelStreamQuery();
     }
@@ -3939,15 +3968,28 @@ template<typename TDerived, typename TResponse>
 class TScriptFinalizationActorBase : public TQueryBase<TDerived, TResponse> {
     using TBase = TQueryBase<TDerived, TResponse>;
 
-public:
-    using TBase::TBase;
-
-protected:
     struct TLeaseFinalizationInfo {
         TString Sql;
         TDuration Backoff;
         ELeaseState NewLeaseState = ELeaseState::ScriptFinalizing;
     };
+
+public:
+    using TBase::TBase;
+
+protected:
+    void DisableRetries(const TString& reason, bool error = true) {
+        if (error) {
+            YDB_LOG_ERROR("[ScriptExecutions] Disabling retries during finalization",
+                {"logPrefix", TBase::LogPrefix()},
+                {"reason", reason});
+        } else {
+            YDB_LOG_NOTICE("[ScriptExecutions] Disabling retries during finalization",
+                {"logPrefix", TBase::LogPrefix()},
+                {"reason", reason});
+        }
+        RetryState.ClearRetryPolicyMapping();
+    }
 
     TLeaseFinalizationInfo GetLeaseFinalizationSql(TInstant now, Ydb::StatusIds::StatusCode status, NYql::TIssues& issues) {
         const auto& policy = TRetryPolicyItem::FromProto(status, RetryState);
@@ -4043,7 +4085,8 @@ private:
                 script_secret_names,
                 retry_state,
                 start_ts,
-                graph_compressed IS NOT NULL AS has_graph
+                graph_compressed,
+                graph_compression_method
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -4137,9 +4180,16 @@ private:
             OperationTtl = GetDuration(meta.GetOperationTtl());
             LeaseDuration = NProtoInterop::CastFromProto(meta.GetLeaseDuration());
 
-            if (meta.GetSaveQueryPhysicalGraph() && !result.ColumnParser("has_graph").GetBool()) {
-                // Disable retries if state not saved
-                RetryState.ClearRetryPolicyMapping();
+            if (meta.GetSaveQueryPhysicalGraph()) {
+                const auto stateSaved = ParseStateSaved(result);
+                if (!stateSaved) {
+                    return;
+                }
+                if (!*stateSaved) {
+                    DisableRetries(result.ColumnParser("graph_compressed").GetOptionalString()
+                        ? "Zero checkpoint is not saved while checkpointing is enabled"
+                        : "Query physical graph is not saved");
+                }
             }
 
             if (const auto startTs = result.ColumnParser("start_ts").GetOptionalTimestamp()) {
@@ -4210,7 +4260,7 @@ private:
         )";
 
         if (Request.CancelledByUser) {
-            RetryState.ClearRetryPolicyMapping();
+            DisableRetries("Query was cancelled by user", /* error */ false);
         }
 
         TInstant retryDeadline = TInstant::Now();
@@ -4319,7 +4369,7 @@ private:
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         if (!Response->FinalStatusAlreadySaved) {
-            YDB_LOG_DEBUG("[ScriptExecutions] Finished saving script execution operation status",
+            YDB_LOG_DEBUG("[ScriptExecutions] Finished saving script execution operation final status",
                 {"logPrefix", LogPrefix()},
                 {"status", Ydb::StatusIds::StatusCode_Name(Request.OperationStatus)},
                 {"issues", Request.Issues.ToOneLineString()});
@@ -4373,7 +4423,8 @@ private:
                 retry_state,
                 meta,
                 start_ts,
-                graph_compressed IS NOT NULL AS has_graph
+                graph_compressed,
+                graph_compression_method
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -4461,9 +4512,16 @@ private:
 
             NKikimrKqp::TScriptExecutionOperationMeta meta;
             DeserializeBinaryProto(serializedMetaJson, meta);
-            if (meta.GetSaveQueryPhysicalGraph() && !result.ColumnParser("has_graph").GetBool()) {
-                // Disable retries if state not saved
-                RetryState.ClearRetryPolicyMapping();
+            if (meta.GetSaveQueryPhysicalGraph()) {
+                const auto stateSaved = ParseStateSaved(result);
+                if (!stateSaved) {
+                    return;
+                }
+                if (!*stateSaved) {
+                    DisableRetries(result.ColumnParser("graph_compressed").GetOptionalString()
+                        ? "Zero checkpoint is not saved while checkpointing is enabled"
+                        : "Query physical graph is not saved");
+                }
             }
 
             if (const auto startTs = result.ColumnParser("start_ts").GetOptionalTimestamp()) {
@@ -4806,7 +4864,7 @@ private:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            YDB_LOG_WARN("[ScriptExecutions] Lease check failed",
+            YDB_LOG_WARN("[ScriptExecutions] Lease finalization failed",
                 {"logPrefix", LogPrefix()},
                 {"cookie", ev->Cookie},
                 {"sender", ev->Sender},
@@ -4815,9 +4873,9 @@ private:
                 {"operationsToCheck", OperationsToCheck});
 
             Success = false;
-            Issues.AddIssues(AddRootIssue(TStringBuilder() << "Lease check failed #" << ev->Cookie << " (" << status << ")", issues, true));
+            Issues.AddIssues(AddRootIssue(TStringBuilder() << "Lease finalization failed #" << ev->Cookie << " (" << status << ")", issues, true));
         } else {
-            YDB_LOG_DEBUG("[ScriptExecutions] Lease check successfully completed",
+            YDB_LOG_DEBUG("[ScriptExecutions] Lease finalization successfully completed",
                 {"logPrefix", LogPrefix()},
                 {"cookie", ev->Cookie},
                 {"sender", ev->Sender},

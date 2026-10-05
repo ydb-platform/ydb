@@ -195,6 +195,7 @@ namespace NActors {
         TMutex ProxyCreationLock;
         mutable std::vector<TActorId> DynamicProxies;
         TSubSystems SubSystems;
+        bool ExecutorThreadsPrepared = false;
         std::vector<size_t> SubSystemOrder;
 
         std::atomic_bool StartExecuted = false;
@@ -334,11 +335,17 @@ namespace NActors {
 
         float GetPoolMaxThreadsCount(ui32 poolId) const;
 
+        std::optional<TCpuMask> GetExecutorPoolAffinity(ui32 poolId) const;
+
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));
         }
 
         TVector<IExecutorPool*> GetBasicExecutorPools() const;
+
+        void PrepareExecutorThread(TThreadContext* context);
+        void InitializeExecutorThread(TThreadContext* context);
+        void CleanupExecutorThread(TThreadContext* context);
 
         template<class T>
         void RegisterSubSystem(std::unique_ptr<T>&& subsystem) {

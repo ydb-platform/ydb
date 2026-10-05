@@ -7,51 +7,52 @@
 namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 
 /*
- * +----+------+----+----+           +-----+-----+--------+
- * |    |      |    | DD | --------> | SL1 | PD1 | Node 1 |
- * |    |      | N1 +----+           +-----+-----+--------+
- * |    |      |    | PB | --------> | SL1 | PD1 | Node 2 |
- * |    | DBG1 +----+----+           +-----+-----+--------+
- * |    |      |    | DD | --------> | SL1 | PD1 |        |
- * |    |      | N2 +----+           +-----+-----+ Node 3 |
- * |    |      |    | PB | --------> | SL1 | PD2 |        |
- * | P0 +------+----+----+           +-----+-----+--------+
- * |    |      |    | DD | --------> | SL1 | PD1 |        |
- * |    |      | N1 +----+           +-----+-----+ Node 4 |
- * |    |      |    | PB | --------> | SL1 | PD2 |        |
- * |    | DBG2 +----+----+           +-----+-----+--------+
- * |    |      |    | DD | --------> | SL1 | PD1 |        |
- * |    |      | N2 +----+           +-----+-----+        |
- * |    |      |    | PB | --------> |     |     | Node 5 |
- * +----+------+----+----+           | SL1 | PD2 |        |
- * |    |      |    | DD | --------> |     |     |        |
- * |    |      | N1 +----+           +-----+-----+--------+
- * |    |      |    | PB | --------> | SL1 | PD1 | Node 6 |
- * |    | DBG1 +----+----+           +-----+-----+--------+
- * |    |      |    | DD | --------> | SL1 | PD1 |        |
- * |    |      | N2 +----+           +-----+-----+ Node 7 |
- * |    |      |    | PB | --------> | SL1 | PD2 |        |
- * | P1 +------+----+----+           +-----+-----+--------+
- * |    |      |    | DD | --------> | SL1 | PD1 |        |
- * |    |      | N1 +----+           +-----+-----+ Node 8 |
- * |    |      |    | PB | --------> | SL1 | PD2 |        |
- * |    | DBG2 +----+----+           +-----+-----+--------+
- * |    |      |    | DD | --------> | SL1 | PD1 |        |
- * |    |      | N2 +----+           +-----+-----+ Node 9 |
- * |    |      |    | PB | --------> | SL1 | PD2 |        |
- * +----+------+----+----+           +-----+-----+--------+
+ * +----+------+----+----+           +-----+-----+--------+---------+
+ * |    |      |    | DD | --------> | SL1 | PD1 | Node 1 | Online  |
+ * |    |      | N1 +----+           +-----+-----+--------+---------+
+ * |    |      |    | PB | --------> | SL1 | PD1 | Node 2 | Online  |
+ * |    | DBG1 +----+----+           +-----+-----+--------+---------+
+ * |    |      |    | DD | --------> | SL1 | PD1 |        |         |
+ * |    |      | N2 +----+           +-----+-----+ Node 3 | Online  |
+ * |    |      |    | PB | --------> | SL1 | PD2 |        |         |
+ * | P0 +------+----+----+           +-----+-----+--------+---------+
+ * |    |      |    | DD | --------> | SL1 | PD1 |        |         |
+ * |    |      | N1 +----+           +-----+-----+ Node 4 | Offline |
+ * |    |      |    | PB | --------> | SL1 | PD2 |        |         |
+ * |    | DBG2 +----+----+           +-----+-----+--------+---------+
+ * |    |      |    | DD | --------> | SL1 | PD1 |        |         |
+ * |    |      | N2 +----+           +-----+-----+        |         |
+ * |    |      |    | PB | --------> |     |     | Node 5 | Online  |
+ * +----+------+----+----+           | SL1 | PD2 |        |         |
+ * |    |      |    | DD | --------> |     |     |        |         |
+ * |    |      | N1 +----+           +-----+-----+--------+---------+
+ * |    |      |    | PB | --------> | SL1 | PD1 | Node 6 | Online  |
+ * |    | DBG1 +----+----+           +-----+-----+--------+---------+
+ * |    |      |    | DD | --------> | SL1 | PD1 |        |         |
+ * |    |      | N2 +----+           +-----+-----+ Node 7 | Online  |
+ * |    |      |    | PB | --------> | SL1 | PD2 |        |         |
+ * | P1 +------+----+----+           +-----+-----+--------+---------+
+ * |    |      |    | DD | --------> | SL1 | PD1 |        |         |
+ * |    |      | N1 +----+           +-----+-----+ Node 8 | Online  |
+ * |    |      |    | PB | --------> | SL1 | PD2 |        |         |
+ * |    | DBG2 +----+----+           +-----+-----+--------+---------+
+ * |    |      |    | DD | --------> | SL1 | PD1 |        |         |
+ * |    |      | N2 +----+           +-----+-----+ Node 9 | Online  |
+ * |    |      |    | PB | --------> | SL1 | PD2 |        |         |
+ * +----+------+----+----+           +-----+-----+--------+---------+
  */
 
 namespace {
 
 auto MakeDirectPayload()
 {
-    const auto record = [](const std::initializer_list<std::pair<
+    const auto record = [](const std::initializer_list<std::tuple<
                                std::tuple<ui32, ui32, ui32>,
-                               std::tuple<ui32, ui32, ui32>>>& ddisks)
+                               std::tuple<ui32, ui32, ui32>,
+                               NProto::EHostHealth>>& ddisks)
     {
         NProto::TDirectBlockGroupDDisks protoRecord;
-        for (const auto& [ddId, pbId]: ddisks) {
+        for (const auto& [ddId, pbId, health]: ddisks) {
             auto* ddiskIds = protoRecord.AddDDiskIds();
             {
                 auto* id = ddiskIds->MutableDDisk();
@@ -65,14 +66,27 @@ auto MakeDirectPayload()
                 id->SetPDiskId(std::get<1>(pbId));
                 id->SetDDiskSlotId(std::get<2>(pbId));
             }
+            ddiskIds->SetHealth(health);
         }
         return protoRecord;
     };
     return THashMap<std::tuple<ui64, ui64>, NProto::TDirectBlockGroupDDisks>{
-        {{0, 0}, record({{{1, 1, 1}, {2, 1, 1}}, {{3, 1, 1}, {3, 2, 1}}})},
-        {{0, 1}, record({{{4, 1, 1}, {4, 2, 1}}, {{5, 1, 1}, {5, 2, 1}}})},
-        {{1, 0}, record({{{5, 2, 1}, {6, 1, 1}}, {{7, 1, 1}, {7, 2, 1}}})},
-        {{1, 1}, record({{{8, 1, 1}, {8, 2, 1}}, {{9, 1, 1}, {9, 2, 1}}})},
+        {{0, 0},
+         record(
+             {{{1, 1, 1}, {2, 1, 1}, NProto::EHostHealth::ONLINE},
+              {{3, 1, 1}, {3, 2, 1}, NProto::EHostHealth::ONLINE}})},
+        {{0, 1},
+         record(
+             {{{4, 1, 1}, {4, 2, 1}, NProto::EHostHealth::OFFLINE},
+              {{5, 1, 1}, {5, 2, 1}, NProto::EHostHealth::ONLINE}})},
+        {{1, 0},
+         record(
+             {{{5, 2, 1}, {6, 1, 1}, NProto::EHostHealth::ONLINE},
+              {{7, 1, 1}, {7, 2, 1}, NProto::EHostHealth::ONLINE}})},
+        {{1, 1},
+         record(
+             {{{8, 1, 1}, {8, 2, 1}, NProto::EHostHealth::ONLINE},
+              {{9, 1, 1}, {9, 2, 1}, NProto::EHostHealth::ONLINE}})},
     };
 }
 
@@ -569,6 +583,105 @@ Y_UNIT_TEST_SUITE(TDbsControllerDatabaseTest)
                 }
             });
     }
+
+    Y_UNIT_TEST(ShouldReturnAffectedDBGsWithNodeCounts)
+    {
+        TTestExecutor executor;
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TDbsControllerDatabase dbsControllerDb(db);
+                dbsControllerDb.InitSchema();
+                for (const auto& [id, record]: MakeDirectPayload()) {
+                    dbsControllerDb.StoreDirectRecord(id, record);
+                }
+                for (const auto& [id, record]: MakeInversePayload()) {
+                    dbsControllerDb.StoreInverseRecord(id, record);
+                }
+            });
+
+        auto testNodesSubset =
+            [&](const TVector<ui32>& nodes,
+                const THashMap<TDbsControllerDatabase::TDirectKey, ui64>&
+                    expected,
+                const TString& note)
+        {
+            const auto comm = TStringBuilder()
+                              << "nodes = " << nodes << ", note = " << note;
+            executor.ReadTx(
+                [&](NKikimr::NTable::TDatabase& db)
+                {
+                    TDbsControllerDatabase dbsControllerDb(db);
+
+                    THashMap<TDbsControllerDatabase::TDirectKey, ui64> actual;
+
+                    const bool ok =
+                        dbsControllerDb.GetAffectedDBGsWithNodeCounts(
+                            nodes,
+                            actual);
+                    UNIT_ASSERT_C(ok, comm);
+
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        expected.size(),
+                        actual.size(),
+                        comm);
+                    for (const auto& [key, nodesCount]: expected) {
+                        UNIT_ASSERT_C(
+                            actual.contains(key),
+                            comm << ", key = " << key);
+                        UNIT_ASSERT_VALUES_EQUAL_C(
+                            nodesCount,
+                            actual.at(key),
+                            comm << ", key = " << key);
+                    }
+                });
+        };
+
+        testNodesSubset(
+            {5},
+            {
+                {{0, 1}, 0},
+                {{1, 0}, 1},
+            },
+            "Node with 2 tablets");
+
+        testNodesSubset(
+            {8, 9},
+            {
+                {{1, 1}, 0},
+            },
+            "Fully covered DBG");
+
+        testNodesSubset(
+            {3, 9},
+            {
+                {{0, 0}, 1},
+                {{1, 1}, 1},
+            },
+            "Two half-covered DBG");
+
+        testNodesSubset(
+            {1, 2},
+            {
+                {{0, 0}, 1},
+            },
+            "Two different nodes in one logical node");
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NDbsController
+
+template <>
+inline void Out<TVector<ui32>>(IOutputStream& o, const TVector<ui32>& vec)
+{
+    o << "[";
+    bool isFirst = true;
+    for (const auto& x: vec) {
+        if (!isFirst) {
+            o << ", ";
+        }
+        isFirst = false;
+        o << x;
+    }
+    o << "]";
+}

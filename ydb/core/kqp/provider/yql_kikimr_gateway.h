@@ -11,6 +11,7 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/utils/resetable_setting.h>
+#include <ydb/core/external_sources/external_source.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
@@ -27,6 +28,7 @@
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
@@ -436,6 +438,22 @@ public:
         }
     }
 
+    bool IsCompact() const {
+        switch (Type) {
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance:
+            case EType::GlobalJsonCompact:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool IsWrittenBySink(bool enableIndexStreamWrite) const {
+        return IsCompact() || enableIndexStreamWrite &&
+            (Type == EType::GlobalSync || Type == EType::GlobalSyncUnique);
+    }
+
     std::span<const std::string_view> GetImplTables() const {
         switch (Type) {
             case EType::GlobalSync:
@@ -476,6 +494,9 @@ struct TMultiColumnStatisticsDescription {
                 case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
                     Types.push_back("COUNT_MIN_SKETCH");
                     break;
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+                    Types.push_back("EQ_HEIGHT_HISTOGRAM");
+                    break;
                 default:
                     break;
             }
@@ -508,6 +529,7 @@ struct TTtlSettings {
     struct TTier {
         TDuration ApplyAfter;
         std::optional<TString> StorageName;
+        std::optional<TString> ObjectKeyPrefix;
     };
 
     TString ColumnName;
@@ -533,6 +555,7 @@ struct TTableSettings {
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
     TMaybe<ui64> ExternalDataChannelsCount;
+    TMaybe<Ydb::Table::MetricsSettings::MetricsLevel> MetricsLevel;
 
     // These parameters are only used for external sources
     TMaybe<TString> DataSourcePath;
@@ -606,7 +629,6 @@ using TColumnEncodingsList = TVector<TColumnEncoding>;
 struct TDefaultExpressionColumnInfo {
     TString ExprText;
     NYql::TExprNode::TPtr Expr; // Compiled ExprText
-    TString Context;
     TVector<TString> Dependencies;
     bool Stored = false;
 };
@@ -699,7 +721,6 @@ struct TKikimrColumnMetadata {
             const auto& defaultExpression = message->GetDefaultExpression();
             DefaultExpression = TDefaultExpressionColumnInfo{};
             DefaultExpression->ExprText = defaultExpression.GetExprText();
-            DefaultExpression->Context = defaultExpression.GetContext();
             DefaultExpression->Stored = defaultExpression.GetStored();
             DefaultExpression->Dependencies.assign(defaultExpression.GetDependencies().begin(), defaultExpression.GetDependencies().end());
         }
@@ -750,7 +771,6 @@ struct TKikimrColumnMetadata {
         if (DefaultExpression) {
             auto& defaultExpression = *message->MutableDefaultExpression();
             defaultExpression.SetExprText(DefaultExpression->ExprText);
-            defaultExpression.SetContext(DefaultExpression->Context);
             defaultExpression.SetStored(DefaultExpression->Stored);
             for (const auto& dep : DefaultExpression->Dependencies) {
                 defaultExpression.AddDependencies(dep);
@@ -823,32 +843,168 @@ enum class EStoreType : ui32 {
     Column = 1
 };
 
-enum class ESourceType : ui32 {
-    Unknown = 0,
-    ExternalTable = 1,
-    ExternalDataSource = 2
-};
 
 struct TKikimrTableMetadata;
 typedef TIntrusivePtr<TKikimrTableMetadata> TKikimrTableMetadataPtr;
 
-struct TExternalSource {
-    ESourceType SourceType = ESourceType::Unknown;
+// Config holds secret references; SecretValue holds resolved values.
+class TExternalSourceAuth {
+private:
+    struct TValueLess {};
+
+    struct TServiceAccountSecret {
+        TString Signature;
+    };
+    struct TBasicSecret {
+        TString Password;
+    };
+    struct TMdbBasicSecrets {
+        TString Signature;
+        TString Password;
+    };
+    struct TAwsSecrets {
+        TString AccessKeyId;
+        TString SecretAccessKey;
+    };
+    struct TTokenSecret {
+        TString Token;
+    };
+
+    NKikimrSchemeOp::TAuth Config;
+    std::variant<std::monostate, TValueLess, TServiceAccountSecret,
+        TBasicSecret, TMdbBasicSecrets, TAwsSecrets, TTokenSecret> SecretValue;
+
+    template <typename T>
+    const T& GetSecretValue() const {
+        Y_ENSURE(std::holds_alternative<T>(SecretValue),
+            "TExternalSourceAuth: requested secret value is not set or has unexpected type");
+        return std::get<T>(SecretValue);
+    }
+
+public:
+    explicit TExternalSourceAuth(const NKikimrSchemeOp::TAuth& config)
+        : Config(config)
+    {
+    }
+
+    // A second call is an invariant violation, even if validation failed.
+    void InitSecretValues(const std::vector<TString>& secretValues);
+
+    bool IsAws() const { return Config.has_aws(); }
+
+    THashMap<TString, TString> BuildAuthProperties() const;
+
+    TString ComposeStructuredTokenJson() const;
+
+    NKikimr::NExternalSource::TAuth MakeExternalSourceAuth() const;
+};
+
+class TExternalDataSource {
+public:
+    enum class EKind {
+        Unknown,
+        Table,
+        Topic,
+    };
+
+private:
     TString Type;
-    TString TableLocation;
-    TString TableContent;
+    EKind Kind = EKind::Unknown;
+    TString Location;
+    TString Installation;
     TString DataSourcePath;
-    TString DataSourceLocation;
-    TString DataSourceInstallation;
-    TString ServiceAccountIdSignature;
-    TString Password;
-    TString AwsAccessKeyId;
-    TString AwsSecretAccessKey;
-    TString Token;
-    NKikimrSchemeOp::TAuth DataSourceAuth;
+    TExternalSourceAuth Auth;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
-    TKikimrTableMetadataPtr UnderlyingExternalSourceMetadata;
-    ui64 WriteOperations = 0;
+
+    TExternalDataSource(
+        const NKikimrSchemeOp::TExternalDataSourceDescription& description,
+        const TString& dataSourcePath);
+
+public:
+    static TExternalDataSource CreateFromDescription(
+        const NKikimrSchemeOp::TExternalDataSourceDescription& description,
+        const TString& dataSourcePath,
+        EKind kind = EKind::Unknown);
+
+    static TExternalDataSource CreateForLocalTopic(const TString& cluster,
+        const TString& database, const TString& transientToken);
+
+    void InitSecretValues(const std::vector<TString>& secretValues) {
+        Auth.InitSecretValues(secretValues);
+    }
+
+    void ApplyInferredMetadata(const TString& type, const TString& dataSourcePath);
+    void InitObjectKind(EKind kind);
+
+    bool IsYdb() const;
+    bool IsYdbTopics() const;
+    bool IsYdbBased() const { return IsYdb() || IsYdbTopics(); }
+
+    const TString& GetType() const { return Type; }
+    const TString& GetLocation() const { return Location; }
+    const TString& GetDataSourcePath() const { return DataSourcePath; }
+    TString ComposeStructuredTokenJson() const {
+        return Auth.ComposeStructuredTokenJson();
+    }
+
+    // Resolve the provider name using the connection type and the resolved object kind.
+    TString GetProviderName(const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory) const;
+
+    TString GetDatabaseName() const;
+    bool IsTlsEnabled() const;
+
+    THashMap<TString, TString> BuildConnectorProperties() const;
+    NKikimr::NExternalSource::TMetadata MakeExternalSourceMetadata() const;
+
+};
+
+class TExternalTable {
+private:
+    struct TUnresolved {
+        TString Type;
+        TString DataSourcePath;
+    };
+
+    struct TResolved {
+        TKikimrTableMetadataPtr Metadata;
+    };
+
+    TString Location;
+    TString Content;
+    std::variant<TUnresolved, TResolved> State;
+
+    TExternalTable() = default;
+
+public:
+    static TExternalTable CreateFromDescription(const NKikimrSchemeOp::TExternalTableDescription& description);
+
+    // Allowed only once for an underlying source of the same type.
+    void InitExternalDataSource(const TKikimrTableMetadataPtr& metadata);
+
+    const TString& GetType() const {
+        if (const auto* unresolved = std::get_if<TUnresolved>(&State)) {
+            return unresolved->Type;
+        }
+        return GetUnderlyingDataSource().GetType();
+    }
+
+    const TString& GetLocation() const { return Location; }
+    const TString& GetContent() const { return Content; }
+
+    const TString& GetDataSourcePath() const {
+        if (const auto* unresolved = std::get_if<TUnresolved>(&State)) {
+            return unresolved->DataSourcePath;
+        }
+        return GetUnderlyingDataSource().GetDataSourcePath();
+    }
+
+    const TKikimrTableMetadataPtr& GetUnderlyingDataSourceMetadata() const {
+        Y_ENSURE(std::holds_alternative<TResolved>(State), "TExternalTable: underlying data source is not initialized");
+        return std::get<TResolved>(State).Metadata;
+    }
+
+    const TExternalDataSource& GetUnderlyingDataSource() const;
+
 };
 
 enum EMetaSerializationType : ui64 {
@@ -905,8 +1061,37 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
 
-    TExternalSource ExternalSource;
+    std::variant<std::monostate, TExternalTable, TExternalDataSource> ExternalSource;
     TViewPersistedData ViewPersistedData;
+
+    bool IsExternalTable() const { return std::holds_alternative<TExternalTable>(ExternalSource); }
+    bool IsExternalDataSource() const { return std::holds_alternative<TExternalDataSource>(ExternalSource); }
+
+    TExternalTable& ExternalTable() {
+        YQL_ENSURE(IsExternalTable(), "Metadata does not hold an external table");
+        return std::get<TExternalTable>(ExternalSource);
+    }
+
+    TExternalDataSource& ExternalDataSource() {
+        YQL_ENSURE(IsExternalDataSource(), "Metadata does not hold an external data source");
+        return std::get<TExternalDataSource>(ExternalSource);
+    }
+
+    const TString& GetExternalSourceType() const {
+        if (const auto* dataSource = std::get_if<TExternalDataSource>(&ExternalSource)) {
+            return dataSource->GetType();
+        }
+        YQL_ENSURE(IsExternalTable(), "Metadata does not hold an external source");
+        return std::get<TExternalTable>(ExternalSource).GetType();
+    }
+
+    const TExternalDataSource& GetResolvedExternalDataSource() const {
+        if (const auto* dataSource = std::get_if<TExternalDataSource>(&ExternalSource)) {
+            return *dataSource;
+        }
+        YQL_ENSURE(IsExternalTable(), "Metadata does not hold an external source");
+        return std::get<TExternalTable>(ExternalSource).GetUnderlyingDataSource();
+    }
 
     TVector<TString> PartitionedByColumns;
 
@@ -1078,6 +1263,7 @@ struct TAlterDatabaseSettings {
     TString DatabasePath;
     std::optional<TString> Owner;
     std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
+    std::optional<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel> TablesMetricsLevel;
 };
 
 struct TTruncateTableSettings {
@@ -1406,6 +1592,7 @@ struct TDropTransferSettings {
 struct TAnalyzeSettings {
     TString TablePath;
     TVector<TString> Columns;
+    double SampleRate = 1.0;
 };
 
 struct TBackupCollectionSettings {
@@ -1686,6 +1873,9 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropObject(const TString& cluster, const TDropObjectSettings& settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> KillSession(const TString& cluster,
+        const TString& sessionId, bool isParameter) = 0;
+
     virtual NThreading::TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterGroup(const TString& cluster, TAlterGroupSettings& settings) = 0;
@@ -1744,6 +1934,8 @@ bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type&
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
     Ydb::StatusIds::StatusCode& code, TString& error);
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);
+bool ParseTablesMetricsLevel(TStringBuf raw, Ydb::Table::MetricsSettings::MetricsLevel& out, TString& error);
+bool ParseDatabaseTablesMetricsLevel(TStringBuf raw, NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel& out, TString& error);
 
 } // namespace NYql
 

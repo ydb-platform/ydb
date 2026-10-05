@@ -22,6 +22,7 @@ from urllib.parse import urlencode
 from clickhouse_connect import common
 from clickhouse_connect.driver._backend.chdb_backend import CHDB_TRANSPORT_SETTINGS, ChdbBackend
 from clickhouse_connect.driver._backendclient import SyncBackendClient
+from clickhouse_connect.driver.common import ShowClickHouseErrors, coerce_show_clickhouse_errors
 from clickhouse_connect.driver.query import TzMode, TzSource
 from clickhouse_connect.driver.transform import NativeTransform
 
@@ -53,7 +54,7 @@ class ChdbClient(SyncBackendClient):
         query_limit: int = 0,
         tz_source: TzSource | None = None,
         tz_mode: str | None = None,
-        show_clickhouse_errors: bool | None = None,
+        show_clickhouse_errors: bool | str | None = None,
         chdb_options: dict[str, Any] | None = None,
         rename_response_column: str | None = None,
     ):
@@ -65,7 +66,8 @@ class ChdbClient(SyncBackendClient):
         :param query_limit: Default LIMIT on returned rows, 0 means no limit
         :param tz_source: See clickhouse_connect.get_client
         :param tz_mode: See clickhouse_connect.get_client
-        :param show_clickhouse_errors: Include engine error details in exceptions
+        :param show_clickhouse_errors: True for full error detail, False for a generic message,
+            or "scrub" for the SQL error without version trailer
         :param chdb_options: Extra chDB engine options appended to the connection string
         :param rename_response_column: See clickhouse_connect.get_client
 
@@ -103,12 +105,12 @@ class ChdbClient(SyncBackendClient):
             raise
 
     @property
-    def show_clickhouse_errors(self) -> bool:  # type: ignore[override]
+    def show_clickhouse_errors(self) -> ShowClickHouseErrors:
         return self._backend.show_clickhouse_errors
 
     @show_clickhouse_errors.setter
-    def show_clickhouse_errors(self, value: bool) -> None:
-        self._backend.show_clickhouse_errors = value
+    def show_clickhouse_errors(self, value: ShowClickHouseErrors | str | None) -> None:
+        self._backend.show_clickhouse_errors = coerce_show_clickhouse_errors(value)
 
     def set_client_setting(self, key: str, value: Any) -> None:
         str_value = self._validate_setting(key, value, common.get_setting("invalid_setting_action"))

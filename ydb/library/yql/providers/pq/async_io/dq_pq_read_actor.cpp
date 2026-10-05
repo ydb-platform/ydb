@@ -12,11 +12,12 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/log_backend/actor_log_backend.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
+#include <ydb/library/yql/providers/pq/common/events.h>
 #include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
@@ -78,8 +79,6 @@ struct TEvPrivate {
 
         EvSourceDataReady = EvBegin,
         EvReconnectSession,
-        EvReceivedClusters,
-        EvDescribeTopicResult,
         EvExecuteTopicEvent,
         EvPartitionIdleness,
         EvCheckPartitionTimer,
@@ -105,36 +104,6 @@ struct TEvPrivate {
     };
 
     struct TEvReconnectSession : public TEventLocal<TEvReconnectSession, EvReconnectSession> {};
-
-    struct TEvReceivedClusters : public TEventLocal<TEvReceivedClusters, EvReceivedClusters> {
-        explicit TEvReceivedClusters(std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>&& federatedClusters)
-            : FederatedClusters(std::move(federatedClusters))
-        {}
-
-        explicit TEvReceivedClusters(const std::exception& ex)
-            : ExceptionMessage(ex.what())
-        {}
-
-        std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo> FederatedClusters;
-        std::optional<std::string> ExceptionMessage;
-    };
-
-    struct TEvDescribeTopicResult : public TEventLocal<TEvDescribeTopicResult, EvDescribeTopicResult> {
-        TEvDescribeTopicResult(ui32 clusterIndex, ui32 partitionsCount)
-            : ClusterIndex(clusterIndex)
-            , PartitionsCount(partitionsCount)
-        {}
-
-        TEvDescribeTopicResult(ui32 clusterIndex, const NYdb::TStatus& status)
-            : ClusterIndex(clusterIndex)
-            , PartitionsCount(0)
-            , Status(status)
-        {}
-
-        const ui32 ClusterIndex = 0;
-        const ui32 PartitionsCount = 0;
-        TMaybe<NYdb::TStatus> Status;
-    };
 
     struct TEvExecuteTopicEvent : public TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
         using TTopicEventBase::TTopicEventBase;
@@ -170,7 +139,6 @@ struct TEvPrivate {
 } // anonymous namespace
 
 class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
-    static constexpr bool STATIC_DISCOVERY = true;
     static constexpr TDuration CHECK_HANGING_PERIOD = TDuration::Minutes(1);
 
     struct TMetrics {
@@ -270,9 +238,10 @@ public:
         ui32 topicPartitionsCount,
         bool enableStreamingQueriesCounters,
         TActorId infoAggregator,
-        TDuration checkPartitionCountPeriod)
+        TDuration checkPartitionCountPeriod,
+        TActorId controlPlaneActorId)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
-        , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
+        , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId, controlPlaneActorId)
         , Metrics(txId, taskId, counters, SourceParams, enableStreamingQueriesCounters)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
@@ -378,7 +347,6 @@ public:
         TDqPqReadActorBase::LoadState(state);
 
         Clusters.clear();
-        AsyncInit = {};
         StartClusterDiscovery();
     }
 
@@ -481,14 +449,13 @@ private:
         hFunc(TEvPrivate::TEvSourceDataReady, Handle);
         hFunc(TEvPrivate::TEvPartitionIdleness, Handle);
         hFunc(TEvPrivate::TEvReconnectSession, Handle);
-        hFunc(TEvPrivate::TEvReceivedClusters, Handle);
-        hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
         hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
         hFunc(TEvPrivate::TEvCheckPartitionTimer, Handle);
         hFunc(TEvPrivate::TEvCheckPartitionCount, Handle);
         hFunc(TEvPrivate::TEvCheckPartitionCountResult, Handle);
         hFunc(TEvPrivate::TEvRequestPartitionStatus, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
+        hFunc(TEvents::TEvInvokeResult, HandleConsumerOffsets);
     )
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
@@ -539,6 +506,7 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
+        StopConsumerOffsetInitialization();
         ClearMkqlData();
 
         for (auto& clusterState : Clusters) {
@@ -555,137 +523,44 @@ private:
     void StartClusterDiscovery() {
         Y_ENSURE(Clusters.empty());
 
-        if (STATIC_DISCOVERY) {
-            ui32 index = 0;
-            if (SourceParams.FederatedClustersSize()) {
-                for (const auto& federatedCluster : SourceParams.GetFederatedClusters()) {
-                    auto& cluster = Clusters.emplace_back(
-                        index++,
-                        NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
-                            .Name = federatedCluster.GetName(),
-                            .Endpoint = federatedCluster.GetEndpoint(),
-                            .Path = federatedCluster.GetDatabase(),
-                        },
-                        federatedCluster.GetPartitionsCount()
-                    );
-                    if (cluster.PartitionsCount == 0) {
-                        cluster.PartitionsCount = TopicPartitionsCount;
-                        SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
-                    }
-                }
-            } else {
-                Clusters.emplace_back(
+        ui32 index = 0;
+        if (SourceParams.FederatedClustersSize()) {
+            for (const auto& federatedCluster : SourceParams.GetFederatedClusters()) {
+                auto& cluster = Clusters.emplace_back(
                     index++,
                     NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
-                        .Endpoint = SourceParams.GetEndpoint(),
-                        .Path =SourceParams.GetDatabase()
+                        .Name = federatedCluster.GetName(),
+                        .Endpoint = federatedCluster.GetEndpoint(),
+                        .Path = federatedCluster.GetDatabase(),
                     },
-                    TopicPartitionsCount
+                    federatedCluster.GetPartitionsCount()
                 );
-            }
-            for (const auto& cluster : Clusters) {
-                const auto& partitionsToRead = GetPartitionsToRead(cluster);
-                for (const auto partitionId : partitionsToRead) {
-                    Partitions[MakePartitionKey(TString(cluster.Info.Name), partitionId)];
+                if (cluster.PartitionsCount == 0) {
+                    cluster.PartitionsCount = TopicPartitionsCount;
+                    SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
                 }
             }
-
-            Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
-            SchedulePartitionCountTimer();
-            return;
+        } else {
+            Clusters.emplace_back(
+                index++,
+                NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
+                    .Endpoint = SourceParams.GetEndpoint(),
+                    .Path =SourceParams.GetDatabase()
+                },
+                TopicPartitionsCount
+            );
         }
-
-        if (AsyncInit.Initialized()) {
-            return;
-        }
-
-        AsyncInit = GetFederatedTopicClient().GetAllTopicClusters();
-        AsyncInit.Subscribe([
-            actorSystem = TActivationContext::ActorSystem(),
-            selfId = SelfId()](const auto& future)
-        {
-            try {
-                auto federatedClusters = future.GetValue();
-                actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(std::move(federatedClusters)));
-            } catch (const std::exception& ex) {
-                actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(ex));
+        for (auto& cluster : Clusters) {
+            const auto& partitionsToRead = GetPartitionsToRead(cluster);
+            for (const auto partitionId : partitionsToRead) {
+                Partitions[MakePartitionKey(TString(cluster.Info.Name), partitionId)];
             }
-        });
-    }
-
-    void Handle(TEvPrivate::TEvReceivedClusters::TPtr& ev) {
-        // TODO support refresh
-        SRC_LOG_D("Got cluster info");
-        auto& federatedClusters = ev->Get()->FederatedClusters;
-        if (federatedClusters.empty()) {
-            TStringBuilder message;
-            message << "Failed to get clusters topic \"" << SourceParams.GetTopicPath() << "\"";
-            if (ev->Get()->ExceptionMessage) {
-                message << ", got exception: " << *ev->Get()->ExceptionMessage;
-            } else {
-                message << ", empty clusters list";
+            if (!WithoutConsumer) {
+                GetTopicClient(cluster);
+                InitConsumerOffsets(SelfId(), cluster.Info, cluster.TopicClient, cluster.PartitionsCount);
             }
-            TIssue issue(message);
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({issue}), NYql::NDqProto::StatusIds::BAD_REQUEST));
-            return;
         }
 
-        Clusters.reserve(federatedClusters.size());
-        ui32 index = 0;
-        for (auto& cluster : federatedClusters) {
-            auto& clusterState = Clusters.emplace_back(index, std::move(cluster), 0u);
-            SRC_LOG_D(index << " Name " << clusterState.Info.Name << " Endpoint " << clusterState.Info.Endpoint << " Path " << clusterState.Info.Path << " Status " << (int)clusterState.Info.Status);
-            std::string clusterTopicPath = SourceParams.GetTopicPath();
-            clusterState.Info.AdjustTopicPath(clusterTopicPath);
-
-            GetTopicClient(clusterState)
-                .DescribeTopic(TString(clusterTopicPath), {})
-                .Subscribe([
-                    index,
-                    actorSystem = TActivationContext::ActorSystem(),
-                    selfId = SelfId()](const auto& describeTopicFuture)
-                {
-                    try {
-                        auto& describeTopic = describeTopicFuture.GetValue();
-                        if (!describeTopic.IsSuccess()) {
-                            actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index, describeTopic));
-                            return;
-                        }
-                        auto partitionsCount = describeTopic.GetTopicDescription().GetTotalPartitionsCount();
-                        actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index, partitionsCount));
-                    } catch (const std::exception& ex) {
-                        actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index,
-                            NYdb::TStatus(NYdb::EStatus::INTERNAL_ERROR, {NYdb::NIssue::TIssue(ex.what())})
-                        ));
-                        return;
-                    }
-                });
-
-            index++;
-        }
-    }
-
-    void Handle(TEvPrivate::TEvDescribeTopicResult::TPtr& ev) {
-        auto clusterIndex = ev->Get()->ClusterIndex;
-        auto partitionsCount = ev->Get()->PartitionsCount;
-        if (auto status = ev->Get()->Status) {
-            TStringBuilder message;
-            message << "Failed to describe topic \"" << SourceParams.GetTopicPath() << "\"";
-            if (!Clusters[clusterIndex].Info.Name.empty()) {
-               message << " on cluster \"" << Clusters[clusterIndex].Info.Name << "\"";
-            }
-            SRC_LOG_E(message);
-            TIssue issue(message);
-            for (auto& subIssue : status->GetIssues()) {
-                TIssuePtr newIssue(new TIssue(NYdb::NAdapters::ToYqlIssue(subIssue)));
-                issue.AddSubIssue(newIssue);
-            }
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({issue}), NYql::NDqProto::StatusIds::BAD_REQUEST));
-            return;
-        }
-
-        SRC_LOG_D("Got partition info for cluster " << clusterIndex << " = " << partitionsCount);
-        Clusters[clusterIndex].PartitionsCount = partitionsCount;
         Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
         SchedulePartitionCountTimer();
     }
@@ -697,6 +572,10 @@ private:
             session->RequestStatus();
         }
         ScheduleStatusRequest();
+    }
+
+    void OnConsumerOffsetsInitialized() override {
+        NotifyCA();
     }
 
     void ScheduleStatusRequest() {
@@ -763,8 +642,9 @@ private:
             if (Clusters.empty()) {
                 StartClusterDiscovery();
             }
+            const bool consumerOffsetsInitialized = ConsumerOffsetsInitialized();
             for (auto& clusterState : Clusters) {
-                if (clusterState.PartitionsCount == 0) {
+                if (clusterState.PartitionsCount == 0 || !consumerOffsetsInitialized) {
                     continue;
                 }
                 auto events = GetReadSession(clusterState).GetEvents(false, std::nullopt, static_cast<size_t>(freeSpace));
@@ -903,7 +783,7 @@ private:
     }
 
     void SubscribeOnNextEvent() {
-        if (FinishedByOffsets) {
+        if (FinishedByOffsets || !ConsumerOffsetsInitialized()) {
             return;
         }
         for (auto& clusterState : Clusters) {
@@ -912,6 +792,9 @@ private:
     }
 
     void SubscribeOnNextEvent(TClusterState& clusterState) {
+        if (!clusterState.PartitionsCount) {
+            return;
+        }
         if (!clusterState.SubscribedOnEvent) {
             clusterState.SubscribedOnEvent = true;
             Metrics.InFlySubscribe->Inc();
@@ -1170,6 +1053,22 @@ private:
             }
             partitionInfo.EndWriteTime = Self.EndWriteTime;
 
+            if (!Self.SourceParams.GetStopAtCurrentEndOffsets()
+                && partitionInfo.Offset
+                && *partitionInfo.Offset > event.GetEndOffset()) {
+                TStringBuilder message;
+                message << "Requested offsets do not exist in the topic \"" << Self.SourceParams.GetTopicPath()
+                    << "\": offset " << *partitionInfo.Offset << " for partition " << partitionKey.PartitionId
+                    << " exceeds the end offset " << event.GetEndOffset()
+                    << ". The topic may have been recreated. Recreate or restart the streaming query.";
+                SRC_LOG_E("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " " << message);
+                Self.Send(Self.ComputeActorId, new TEvAsyncInputError(
+                    Self.InputIndex,
+                    TIssues({TIssue(message)}),
+                    NYql::NDqProto::StatusIds::BAD_REQUEST));
+                return;
+            }
+
             if (!partitionInfo.EndOffset) {
                 partitionInfo.EndOffset = event.GetEndOffset();
                 if (Self.EndOffset && *Self.EndOffset < *partitionInfo.EndOffset) {
@@ -1188,8 +1087,8 @@ private:
             }
 
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << "StartPartitionSessionEvent received (end offset " << event.GetEndOffset() 
-                << "), confirm StartPartitionSession with start offset " << partitionInfo.Offset
-                << ", max offset " << maxOffset);
+                << "), confirm StartPartitionSession with start offset " << (partitionInfo.Offset ? ToString(*partitionInfo.Offset) : "<null>")
+                << ", max offset " << (maxOffset ? ToString(*maxOffset) : "<null>"));
             event.Confirm(partitionInfo.Offset, std::nullopt, maxOffset);
         }
 
@@ -1297,7 +1196,6 @@ private:
     std::vector<std::tuple<TString, TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;
     IPqStaticGateway::TPtr PqGateway;
-    NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     ui32 TopicPartitionsCount = 0;
     bool WithoutConsumer = false;
     bool WakeupScheduled = false;
@@ -1364,7 +1262,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     bool enableStreamingQueriesCounters,
     i64 bufferSize,
     TActorId infoAggregator,
-    TDuration checkPartitionCountPeriod
+    TDuration checkPartitionCountPeriod,
+    TActorId controlPlaneActorId
 ) {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1393,7 +1292,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         topicPartitionsCount,
         enableStreamingQueriesCounters,
         infoAggregator,
-        checkPartitionCountPeriod
+        checkPartitionCountPeriod,
+        controlPlaneActorId
     );
 
     return {actor, actor};
@@ -1435,6 +1335,13 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             infoAggregator = ActorIdFromProto(actorIdProto);
         }
 
+        TActorId controlPlaneActorId;
+        if (const auto it = args.TaskParams.find(PqControlPlaneActorIdParam); it != args.TaskParams.end()) {
+            NActorsProto::TActorId actorIdProto;
+            YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse " << it->first);
+            controlPlaneActorId = ActorIdFromProto(actorIdProto);
+        }
+
         if (!settings.GetSharedReading()) {
             return CreateDqPqReadActor(
                 std::move(settings),
@@ -1456,7 +1363,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 enableStreamingQueriesCounters,
                 PQReadDefaultFreeSpace,
                 infoAggregator,
-                checkPartitionCountPeriod);
+                checkPartitionCountPeriod,
+                controlPlaneActorId);
         }
 
         const TStringBuf format(settings.GetFormat());
@@ -1482,7 +1390,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             PQReadDefaultFreeSpace,
             pqGateway,
             enableStreamingQueriesCounters,
-            checkPartitionCountPeriod);
+            checkPartitionCountPeriod,
+            controlPlaneActorId);
     });
 }
 

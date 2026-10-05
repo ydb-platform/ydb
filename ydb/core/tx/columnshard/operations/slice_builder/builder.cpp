@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/writer/buffer/events.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
+#include <ydb/core/tx/columnshard/tracing/write_orbit.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
@@ -84,13 +85,17 @@ private:
     std::vector<TInsertPortion> Portions;
     NColumnShard::TWriteResult WriteResult;
     TActorId DstActor;
+    ui64 BlobBytes = 0;
+    TMonotonic BsWriteStart;
 
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override {
         std::vector<NColumnShard::TInsertedPortion> portions;
         for (auto&& i : Portions) {
             portions.emplace_back(i.ExtractPortion());
         }
-        if (putResult->GetPutStatus() != NKikimrProto::OK) {
+        const bool success = putResult->GetPutStatus() == NKikimrProto::OK;
+        NColumnShard::TrackWriteToBlobStorage(WriteResult.GetWriteMeta(), TMonotonic::Now() - BsWriteStart, BlobBytes, success);
+        if (!success) {
             WriteResult.SetErrorMessage("cannot put blob (write controller): " + ::ToString(putResult->GetPutStatus()), true);
         }
         NColumnShard::TInsertedPortions pack({ WriteResult }, std::move(portions));
@@ -100,6 +105,8 @@ private:
     }
 
     virtual void DoOnStartSending() override {
+        BsWriteStart = TMonotonic::Now();
+        NColumnShard::TrackWriteToBlobStorageStart(WriteResult.GetWriteMeta(), BlobBytes);
     }
 
 public:
@@ -112,6 +119,7 @@ public:
     {
         for (auto&& p : Portions) {
             for (auto&& b : p.MutablePortion().MutableBlobs()) {
+                BlobBytes += b.GetResultBlob().size();
                 auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), action));
                 b.RegisterBlobId(p.MutablePortion(), task.GetBlobId());
             }
@@ -142,6 +150,8 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         NColumnShard::TWriteResult wResult(WriteData.GetWriteMetaPtr(), WriteData.GetSize(), nullptr, true, 0);
         NColumnShard::TInsertedPortions pack({ wResult }, {});
         WriteData.GetWriteMetaPtr()->OnStage(NEvWrite::EWriteStage::SlicesReady);
+        NColumnShard::TrackWritePrepareBlobs(WriteData.GetWriteMeta(), TDuration::Zero(), 0, TDuration::Zero(), 0);
+        NColumnShard::TrackWriteToBlobStorage(WriteData.GetWriteMeta(), TDuration::Zero(), 0, true);
         auto result = std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(
             NKikimrProto::EReplyStatus::OK, nullptr, std::move(pack));
         NActors::TActivationContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
@@ -152,19 +162,29 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), WriteData.GetData()->GetSeparationPoints());
         NColumnShard::TWriteResult wResult(WriteData.GetWriteMetaPtr(), WriteData.GetSize(), pkBatch, false, OriginalBatch->num_rows());
         std::vector<TPortionWriteController::TInsertPortion> portions;
+        ISnapshotSchema::TWriteBlobPrepareStats totalStats;
         for (auto&& batch : batches) {
             if (!batch) {
                 continue;
             }
+            ISnapshotSchema::TWriteBlobPrepareStats prepareStats;
             auto portionConclusion =
                 Context.GetActualSchema()->PrepareForWrite(Context.GetActualSchema(), WriteData.GetWriteMeta().GetPathId().InternalPathId, batch,
-                    WriteData.GetWriteMeta().GetModificationType(), Context.GetStoragesManager(), Context.GetSplitterCounters());
+                    WriteData.GetWriteMeta().GetModificationType(), Context.GetStoragesManager(), Context.GetSplitterCounters(), &prepareStats);
+            totalStats.DataDuration += prepareStats.DataDuration;
+            totalStats.DataBytes += prepareStats.DataBytes;
+            totalStats.IndexDuration += prepareStats.IndexDuration;
+            totalStats.IndexBytes += prepareStats.IndexBytes;
             if (portionConclusion.IsFail()) {
+                NColumnShard::TrackWritePrepareBlobs(
+                    WriteData.GetWriteMeta(), totalStats.DataDuration, totalStats.DataBytes, totalStats.IndexDuration, totalStats.IndexBytes);
                 ReplyError(portionConclusion.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
                 return;
             }
             portions.emplace_back(portionConclusion.DetachResult());
         }
+        NColumnShard::TrackWritePrepareBlobs(
+            WriteData.GetWriteMeta(), totalStats.DataDuration, totalStats.DataBytes, totalStats.IndexDuration, totalStats.IndexBytes);
         auto writeController = std::make_shared<NOlap::TPortionWriteController>(
             Context.GetTabletActorId(), WriteData.GetBlobsAction(), wResult, std::move(portions));
         WriteData.GetWriteMetaPtr()->OnStage(NEvWrite::EWriteStage::SlicesReady);

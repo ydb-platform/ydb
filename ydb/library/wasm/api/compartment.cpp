@@ -6,6 +6,10 @@ namespace NYdb::NWasm {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Y_WEAK is a no-op on Windows (COFF); omitting stubs avoids duplicate
+// symbols with the strong overrides in library/wasm/engine.
+#if defined(__GNUC__)
+
 Y_WEAK void IWebAssemblyCompartment::AddPrecompiledModule(const TModuleBytecode& /*bytecode*/, TStringBuf /*name*/)
 {
     YT_UNIMPLEMENTED();
@@ -45,6 +49,8 @@ Y_WEAK void SetCurrentCompartment(IWebAssemblyCompartment*)
 {
     YT_UNIMPLEMENTED();
 }
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -26,13 +26,13 @@ namespace boost { namespace charconv { namespace detail {
 
 template <typename Integer, typename Unsigned_Integer = detail::make_unsigned_t<Integer>,
           typename std::enable_if<detail::is_signed<Integer>::value, bool>::type = true>
-constexpr Unsigned_Integer apply_sign(Integer val) noexcept
+BOOST_CHARCONV_HOST_DEVICE constexpr Unsigned_Integer apply_sign(Integer val) noexcept
 {
     return -(static_cast<Unsigned_Integer>(val));
 }
 
 template <typename Unsigned_Integer, typename std::enable_if<!detail::is_signed<Unsigned_Integer>::value, bool>::type = true>
-constexpr Unsigned_Integer apply_sign(Unsigned_Integer val) noexcept
+BOOST_CHARCONV_HOST_DEVICE constexpr Unsigned_Integer apply_sign(Unsigned_Integer val) noexcept
 {
     return val;
 }

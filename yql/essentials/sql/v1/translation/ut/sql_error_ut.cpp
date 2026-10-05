@@ -8,6 +8,70 @@ using namespace NSQLTranslationV1;
 
 Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
+Y_UNIT_TEST(DottedCallWithoutExpression) {
+    auto result = SqlToYql("SELECT COLUMN. JSON_EXISTS()");
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "Unknown builtin:");
+}
+
+Y_UNIT_TEST(UnknownBuiltinSuggestsSparkAlias) {
+    const TString query = "SELECT md5('a');";
+    const TString sparkSuggestion = "consider using Spark::md5 or Pg::md5 instead.";
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::SparkTranslator.MinLangVer;
+
+    auto result = SqlToYqlWithSettings(query, settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), sparkSuggestion);
+
+    settings.LangVer = NYql::MinLangVersion;
+    result = SqlToYqlWithSettings(query, settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT(!Err2Str(result).Contains(sparkSuggestion));
+
+    settings.LangVer = NYql::NFeature::SparkTranslator.MinLangVer;
+    result = SqlToYqlWithSettings("SELECT raise_error('error');", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT(!Err2Str(result).Contains("Spark::raise_error"));
+}
+
+Y_UNIT_TEST(SparkFunctionArity) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::SparkTranslator.MinLangVer;
+
+    auto result = SqlToYqlWithSettings("SELECT Spark::lpad('a');", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "lpad expected from 2 to 3 arguments, but got: 1");
+
+    result = SqlToYqlWithSettings("SELECT Spark::lpad('a', 1, 'x', 'y');", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "lpad expected from 2 to 3 arguments, but got: 4");
+}
+
+Y_UNIT_TEST(SparkAggregatesRequireYqlSelect) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::SparkTranslator.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Disable;
+    for (const TString& name : {"count", "min", "max", "avg", "sum"}) {
+        auto result = SqlToYqlWithSettings("SELECT Spark::" + name + "(1);", settings);
+        UNIT_ASSERT(!result.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "Spark aggregate functions require YqlSelect mode");
+    }
+}
+
+Y_UNIT_TEST(SparkAggregateModes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::SparkTranslator.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+    auto result = SqlToYqlWithSettings("SELECT Spark::abs(DISTINCT 1);", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "DISTINCT can only be used in aggregation functions");
+
+    result = SqlToYqlWithSettings("SELECT Spark::sum(1) OVER ();", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "Spark aggregate functions do not support OVER");
+}
+
 Y_UNIT_TEST(UdfSyntaxSugarMissingCall) {
     auto req = "SELECT Udf(DateTime::FromString, \"foo\" as RunConfig);";
     auto res = SqlToYql(req);

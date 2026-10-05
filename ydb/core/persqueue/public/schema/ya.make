@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     add_consumer.cpp
@@ -37,4 +37,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_light
 )

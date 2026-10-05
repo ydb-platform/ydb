@@ -29,8 +29,24 @@ PEERDIR(
     ydb/library/yql/public/ydb_issue
     yql/essentials/minikql/computation
     yql/essentials/providers/common/comp_nodes
-    yql/essentials/public/udf/service/stub
+    yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
+    yql/essentials/utils/backtrace
+)
+
+CHECK_DEPENDENT_DIRS(ALLOW_ONLY PEERDIRS
+    build
+    certs
+    contrib/libs
+    contrib/proto
+    contrib/restricted
+    library
+    tools
+    util
+    ydb/core/quoter/public
+    ydb/library
+    ydb/public
+    yql/essentials
 )
 
 YQL_LAST_ABI_VERSION()

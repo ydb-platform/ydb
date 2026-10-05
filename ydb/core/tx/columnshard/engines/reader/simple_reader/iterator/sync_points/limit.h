@@ -3,20 +3,20 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-class TScanWithLimitCollection;
+class TOrderedResultWithLimitCollection;
 
 class TSyncPointLimitControl: public ISyncPoint {
 private:
     using TBase = ISyncPoint;
 
     const ui32 Limit;
-    std::shared_ptr<TScanWithLimitCollection> Collection;
+    std::shared_ptr<TOrderedResultWithLimitCollection> Collection;
     ui32 FetchedCount = 0;
     std::optional<ui32> PKPrefixSize;
 
-    virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override {
-        if (source->IsSyncSection() && source->HasStageResult()) {
-            AFL_VERIFY(!source->GetStageResult().HasResultChunk());
+    virtual bool IsSourcePrepared(const NCommon::IDataSource& source) const override {
+        if (source.IsSyncSection() && source.HasStageResult()) {
+            AFL_VERIFY(!source.GetStageResult().HasResultChunk());
             return true;
         }
         return false;
@@ -24,7 +24,7 @@ private:
 
     class TSourceIterator {
     private:
-        std::shared_ptr<NCommon::IDataSource> Source;
+        std::shared_ptr<const NCommon::IDataSource> Source;
         bool Reverse;
         int Delta = 0;
         i64 Start = 0;
@@ -50,25 +50,21 @@ private:
     public:
         TString DebugString() const;
 
-        const std::shared_ptr<NCommon::IDataSource>& GetSource() const {
-            AFL_VERIFY(Source);
-            return Source;
-        }
-
-        TSourceIterator(const std::shared_ptr<NCommon::IDataSource>& source)
-            : Source(source)
+        TSourceIterator(std::shared_ptr<const NCommon::IDataSource>&& source)
+            : Source(std::move(source))
             , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
             , Delta(Reverse ? -1 : 1)
         {
             AFL_VERIFY(Source);
-            AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion)("type", Source->GetType());
-            auto batch = Source->GetAs<TPortionDataSource>()->GetStart().GetValue().ToBatch();
+            AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion || Source->GetType() == IDataSource::EType::SimpleSysInfo)(
+                                                                                 "type", Source->GetType());
+            auto batch = Source->GetAs<IDataSource>()->GetFirstPK().ToBatch();
             SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse);
         }
 
         TSourceIterator(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& arrs,
-            const std::shared_ptr<NArrow::TColumnFilter>& filter, const std::shared_ptr<NCommon::IDataSource>& source)
-            : Source(source)
+            const std::shared_ptr<NArrow::TColumnFilter>& filter, std::shared_ptr<const NCommon::IDataSource>&& source)
+            : Source(std::move(source))
             , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
             , Delta(Reverse ? -1 : 1)
             , Start(Reverse ? (arrs.front()->GetRecordsCount() - 1) : 0)
@@ -130,20 +126,20 @@ private:
         return FetchedCount >= Limit || TBase::IsFinished();
     }
 
-    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override;
+    virtual std::unique_ptr<NCommon::TDataSourceLease> OnAddSource(std::unique_ptr<NCommon::TDataSourceLease> lease) override;
 
     virtual void DoAbort() override {
         FilledIterators.clear();
         UnfilledIterators.clear();
     }
 
-    virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override;
+    virtual ESourceAction OnSourceReady(const NCommon::TDataSourceLease& lease, TPlainReadData& reader) override;
 
     bool DrainToLimit();
 
 public:
     TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context,
-        const std::shared_ptr<TScanWithLimitCollection>& collection);
+        const std::shared_ptr<TOrderedResultWithLimitCollection>& collection);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

@@ -1,17 +1,17 @@
 {
-    "test.test[Basic]": [
+    "test.test[Basic-Results]": [
         {
-            "uri": "file://test.test_Basic_/results.txt"
+            "uri": "file://test.test_Basic-Results_/results.txt"
         }
     ],
-    "test.test[CharacterClasses]": [
+    "test.test[CharacterClasses-Results]": [
         {
-            "uri": "file://test.test_CharacterClasses_/results.txt"
+            "uri": "file://test.test_CharacterClasses-Results_/results.txt"
         }
     ],
-    "test.test[Error]": [
+    "test.test[Error-Results]": [
         {
-            "uri": "file://test.test_Error_/extracted"
+            "uri": "file://test.test_Error-Results_/extracted"
         }
     ]
 }

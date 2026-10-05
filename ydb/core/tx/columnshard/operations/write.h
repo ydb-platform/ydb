@@ -12,11 +12,16 @@
 #include <ydb/core/tx/data_events/write_data.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/signals/object_counter.h>
 
 #include <util/generic/map.h>
 
 #include <tuple>
+
+namespace NLWTrace {
+class TOrbit;
+}
 
 namespace NKikimr::NTabletFlatExecutor {
 class TTransactionContext;
@@ -74,8 +79,9 @@ public:
         const EOperationStatus& status, const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId,
         const NEvWrite::EModificationType mType, const bool isBulk);
 
-    void Start(
-        TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const NOlap::TWritingContext& context);
+    void Start(TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source,
+        const NOlap::TWritingContext& context, const std::shared_ptr<NLWTrace::TOrbit>& orbit, const ui64 txId,
+        const TMonotonic orbitStartInstant);
     void OnWriteFinish(
         NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds, const bool ephemeralFlag);
     void CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;

@@ -201,11 +201,13 @@ namespace NKikimr {
 
         hull.AddBlockCmd(ctx, TabletId, Gen, IssuerGuid, Seg.Point(), replySender);
 
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_BLOCK, "TEvVBlock",
-            {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
-            {"result", Result->ToString()},
-            {"marker", "BSVSLR04"});
-        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx, {});
+        if (Result) {
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_BLOCK, "TEvVBlock",
+                {"VDiskLogPrefix", hull.GetHullCtx()->VCtx->VDiskLogPrefix},
+                {"result", Result->ToString()},
+                {"marker", "BSVSLR04"});
+            SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx, {});
+        }
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -416,4 +418,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

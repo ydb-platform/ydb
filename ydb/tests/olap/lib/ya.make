@@ -5,6 +5,7 @@ PY3_LIBRARY()
         compaction.py
         results_processor.py
         remote_execution.py
+        tpcc_deviation.py
         ydb_cluster.py
         utils.py
         ydb_cli.py

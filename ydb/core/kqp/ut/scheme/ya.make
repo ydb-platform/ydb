@@ -18,11 +18,13 @@ SRCS(
     kqp_scheme_ut.cpp
     kqp_secrets_ut.cpp
     kqp_scheme_fulltext_ut.cpp
+    kqp_scheme_index_copy_ut.cpp
     kqp_scheme_type_info_ut.cpp
     kqp_user_management_ut.cpp
 )
 
 PEERDIR(
+    yql/essentials/types/binary_json
     library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common
@@ -36,5 +38,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(tiering_test_enums.h)
 
 END()

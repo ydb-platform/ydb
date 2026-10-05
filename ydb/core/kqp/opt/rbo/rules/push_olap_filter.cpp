@@ -14,24 +14,24 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-bool IsSuitableToPushPredicateToColumnTables(const TIntrusivePtr<IOperator>& input) {
+bool IsSuitableToPushPredicateToColumnTables(IOperator* input) {
     if (input->Kind != EOperator::Filter) {
         return false;
     }
 
     const auto filter = CastOperator<TOpFilter>(input);
-    const auto predicate = TCoLambda(filter->FilterExpr.Node).Body();
+    const auto predicate = TCoLambda(filter->GetFilterExpression().Node).Body();
     if (predicate.Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
         return false;
     }
 
-    const auto maybeRead = filter->GetInput();
+    const auto maybeRead = filter->GetInput().Get();
     if (maybeRead->Kind != EOperator::Source){
         return false;
     }
 
     const auto read = CastOperator<TOpRead>(maybeRead);
-    return read->GetTableStorageType() == NYql::EStorageType::ColumnStorage && !read->OlapFilterLambda && read->IsSingleConsumer();
+    return read->GetTableStorageType() == NYql::EStorageType::ColumnStorage && !read->OlapFilterLambda;
 }
 
 bool IsValidPredicateToKeep(TMaybeNode<TExprBase> node) {
@@ -87,24 +87,26 @@ TExprNode::TPtr ApplyPeephole(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, 
 
 bool TPushOlapFilterRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Filter &&
-        input->Children.front()->Kind == EOperator::Source;
+        input->GetChildren().front()->Kind == EOperator::Source;
 }
 
 TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    Y_UNUSED(props);
     if (!ctx.KqpCtx.Config->HasOptEnableOlapPushdown()) {
         return input;
     }
 
+    // Input expressions and their row schemas must already use IU IDs. Keep
+    // those spellings when constructing OLAP, including its embedded schemas.
     const TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->GetEnableOlapScalarApply(), ctx.KqpCtx.Config->GetEnableOlapSubstringPushdown(),
-                                           /*StripAliasPrefixForColumnName=*/true, ctx.KqpCtx.Config->GetEnableOlapPushdownRegexp());
-    if (!IsSuitableToPushPredicateToColumnTables(input)) {
+                                           /*StripAliasPrefixForColumnName=*/false, ctx.KqpCtx.Config->GetEnableOlapPushdownRegexp(),
+                                           ctx.KqpCtx.Config->GetEnableOlapFastAsciiIgnoreCase());
+    if (!IsSuitableToPushPredicateToColumnTables(input.get())) {
         return input;
     }
 
     const auto filter = CastOperator<TOpFilter>(input);
-    const auto read = CastOperator<TOpRead>(filter->GetInput());
-    const auto lambda = TCoLambda(filter->FilterExpr.Node);
+    const auto read = CastOperator<TOpRead>(filter->GetInput().Get());
+    const auto lambda = TCoLambda(filter->GetFilterExpression().Node);
     auto predicate = lambda.Body();
     auto lambdaArg = lambda.Args().Arg(0).Ptr();
 
@@ -142,7 +144,7 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
             CollectPredicates(predicate, predicateTree, &lArg.Ref(), lArg.Ptr()->GetTypeAnn(),
-                {true, pushdownOptions.PushdownSubstring, pushdownOptions.StripAliasPrefixFromColName, pushdownOptions.PushdownRegexp});
+                pushdownOptions.WithAllowOlapApply(true));
 
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
             auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);
@@ -207,14 +209,17 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     // clang-format on
     YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newOlapFilterLambda, ctx.ExprCtx);
 
-    // Saving original predicate for statistics.
-    std::optional<TExpression> originalPredicate = read->OriginalPredicate.has_value() ? read->OriginalPredicate : filter->FilterExpr;
-    const auto newRead =
-        MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(), read->Limit,
+    // Preserve the original ID-bound predicate for statistics.
+    auto originalPredicate = read->OriginalPredicate;
+    if (!originalPredicate) {
+        originalPredicate = filter->GetFilterExpression();
+    }
+    auto newRead =
+        MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(), read->Limit,
                                read->RangeInfo, originalPredicate, read->SortDir, read->Props, read->Pos);
     if (IsValidPredicateToKeep(remainingFilter)) {
         // Part of the predicate could not be pushed down and the remaining TOpFilter survives.
-        return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(remainingFilter.Cast().Ptr(), &ctx.ExprCtx, &props));
+        return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(remainingFilter.Cast().Ptr(), &ctx.ExprCtx, &props), true);
     }
 
     // The whole predicate was pushed in and no TOpFilter remains.

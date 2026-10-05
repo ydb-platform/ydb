@@ -21,7 +21,6 @@ CHECK_ONLY_PATH_PREFIXES = [".github/scripts/codecov/tests/"]
 
 SHARED_PATHS = {
     ".github/workflows/cpp_codecov.yml",
-    ".github/workflows/cpp_codecov_checks.yml",
     ".github/codecov.yml",
 }
 

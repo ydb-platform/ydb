@@ -53,6 +53,7 @@ SRCS(
     mpsc_stack_ut.cpp
     pattern_formatter_ut.cpp
     persistent_queue_ut.cpp
+    object_pool_ut.cpp
     pool_allocator_ut.cpp
     proc_ut.cpp
     random_ut.cpp

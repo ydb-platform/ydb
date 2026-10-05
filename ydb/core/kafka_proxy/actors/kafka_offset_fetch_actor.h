@@ -1,3 +1,5 @@
+#pragma once
+
 #include "actors.h"
 #include <ydb/core/kafka_proxy/kafka_consumer_protocol.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
@@ -71,7 +73,7 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvKafka::TEvCommitedOffsetsResponse, Handle);
+            HFunc(TEvKafka::TEvTopicOffsetsResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
@@ -79,7 +81,7 @@ public:
         }
     }
 
-    void Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx);
@@ -101,6 +103,7 @@ public:
                                     const TString& groupId);
     NYdb::TParamsBuilder BuildFetchAssignmentsParams(const std::vector<std::optional<TString>>& groupIds);
     void FillMapWithGroupRequests();
+    void RegisterOffsetsActor(const TString& topicName, const TActorContext& ctx);
     void ReplyError(const TActorContext& ctx);
     void Die(const TActorContext &ctx);
     TString GetMetadataDatabasePath() const;
@@ -124,6 +127,7 @@ private:
     std::unordered_map<ui32, TString> AlterTopicCookieToName;
     std::unordered_map<TString, std::vector<TTopicGroupRequest>> GroupRequests;
     std::unordered_map<TActorId, TString> CreateTopicActorIdToName;
+    std::unordered_map<TActorId, TString> OffsetsActorToTopic;
     std::unordered_set<NKafka::TTopicGroupIdAndPath, NKafka::TTopicGroupIdAndPathHash> ConsumerTopicAlterRequestAttempts;
     std::unordered_set<TString> TopicCreateRequestAttempts;
     std::unordered_set<TActorId> DependantActors;

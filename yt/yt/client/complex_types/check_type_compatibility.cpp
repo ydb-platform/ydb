@@ -595,8 +595,17 @@ TCompatibilityPair CheckTypeCompatibilityImpl(
         newMetatype == ELogicalMetatype::Optional ||
         newMetatype == ELogicalMetatype::Tagged)
     {
-        const auto [oldElement, oldNesting] = UnwrapOptionalAndTagged(oldDescriptor);
+        auto [oldElement, oldNesting] = UnwrapOptionalAndTagged(oldDescriptor);
         const auto [newElement, newNesting] = UnwrapOptionalAndTagged(newDescriptor);
+
+        if (oldElement.GetType()->GetMetatype() == ELogicalMetatype::AggregateState &&
+            newElement.GetType()->GetMetatype() != ELogicalMetatype::AggregateState)
+        {
+            auto [aggregateElement, aggregateNesting] =
+                UnwrapOptionalAndTagged(oldElement.AggregateStateElement());
+            oldElement = std::move(aggregateElement);
+            oldNesting += aggregateNesting;
+        }
 
         if (oldNesting == newNesting || oldNesting == 0 && newNesting == 1) {
             return CheckTypeCompatibilityImpl(oldElement, newElement, options);
@@ -610,6 +619,13 @@ TCompatibilityPair CheckTypeCompatibilityImpl(
     }
 
     if (oldMetatype != newMetatype) {
+        // We support promoting aggregate state to underlying type, but not the other way around.
+        // The reverse altering adds complexity due to the transitivity property, for example
+        // min(int32) -> optional(int32) -> max(int32).
+        if (oldMetatype == ELogicalMetatype::AggregateState) {
+            return CheckTypeCompatibilityImpl(oldDescriptor.AggregateStateElement(), newDescriptor, options);
+        }
+
         return CreateResultPair(ESchemaCompatibility::Incompatible, oldDescriptor, newDescriptor);
     }
 
@@ -648,6 +664,26 @@ TCompatibilityPair CheckTypeCompatibilityImpl(
             return CheckDictTypeCompatibility(oldDescriptor, newDescriptor, options);
         case ELogicalMetatype::Decimal:
             return CheckDecimalTypeCompatibility(oldDescriptor, newDescriptor);
+        case ELogicalMetatype::AggregateState: {
+            const auto& oldAggregateState = oldDescriptor.GetType()->AsAggregateStateTypeRef();
+            const auto& newAggregateState = newDescriptor.GetType()->AsAggregateStateTypeRef();
+
+            // Altering aggregating function requires complex handling, so currently we forbid it.
+            if (oldAggregateState.GetFunction() != newAggregateState.GetFunction()) {
+                return CreateResultPair(ESchemaCompatibility::Incompatible, oldDescriptor, newDescriptor);
+            }
+
+            // The state is stored as is, so it may only be altered losslessly,
+            // e.g. min(int32) -> min(int64).
+            auto elementCompatibility = CheckTypeCompatibilityImpl(
+                oldDescriptor.AggregateStateElement(),
+                newDescriptor.AggregateStateElement(),
+                options);
+            if (elementCompatibility.first != ESchemaCompatibility::FullyCompatible) {
+                return CreateResultPair(ESchemaCompatibility::Incompatible, oldDescriptor, newDescriptor);
+            }
+            return elementCompatibility;
+        }
     }
 }
 

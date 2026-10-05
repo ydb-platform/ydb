@@ -13,6 +13,7 @@ PEERDIR(
     library/cpp/yt/assert
     library/cpp/yt/memory
     library/cpp/yt/misc
+    library/cpp/yt/mpl
     library/cpp/yt/system
     library/cpp/yt/yson_string
 )

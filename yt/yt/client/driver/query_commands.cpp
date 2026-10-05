@@ -221,6 +221,20 @@ void TGetQueryCommand::Register(TRegistrar registrar)
             return command->Options.QueryTrackerStage;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::vector<std::string>>(
+        "progress_parts",
+        [] (TThis* command) -> auto& {
+            return command->Options.ProgressParts;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<ui32>>(
+        "min_progress_revision",
+        [] (TThis* command) -> auto& {
+            return command->Options.MinProgressRevision;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TGetQueryCommand::DoExecute(ICommandContextPtr context)
@@ -461,8 +475,7 @@ void TGetQueryDeclaredParametersInfoCommand::Register(TRegistrar registrar)
         "engine",
         [] (TThis* command) -> auto& {
             return command->Options.Engine;
-        })
-        .Optional(/*init*/ false);
+        });
 
     registrar.ParameterWithUniversalAccessor<TYsonString>(
         "settings",

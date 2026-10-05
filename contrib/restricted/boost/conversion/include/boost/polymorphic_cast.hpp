@@ -1,7 +1,7 @@
 //  boost polymorphic_cast.hpp header file  ----------------------------------------------//
-
-//  (C) Copyright Kevlin Henney and Dave Abrahams 1999.
-//  (C) Copyright Boris Rasin 2014.
+//  (C) Copyright Kevlin Henney and Dave Abrahams, 1999.
+//  (C) Copyright Boris Rasin, 2014.
+//  (C) Copyright Fedor Osetrov, 2025-2026.
 //  Distributed under the Boost
 //  Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -9,6 +9,7 @@
 //  See http://www.boost.org/libs/conversion for Documentation.
 
 //  Revision History
+//  08 Fed 26  introduced C++20 modules support
 //  10 Nov 14  polymorphic_pointer_downcast moved to a separate header,
 //             minor improvements to stisfy latest Boost coding style
 //  08 Nov 14  Add polymorphic_pointer_downcast (Boris Rasin)
@@ -49,24 +50,30 @@
 #ifndef BOOST_POLYMORPHIC_CAST_HPP
 #define BOOST_POLYMORPHIC_CAST_HPP
 
-#include <boost/config.hpp>
+#include <boost/conversion/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_CONVERSION_INTERFACE_UNIT)
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 #   pragma once
 #endif
 
+#if !defined(BOOST_CONVERSION_INTERFACE_UNIT)
 # include <boost/assert.hpp>
 # include <boost/throw_exception.hpp>
 
 # include <memory>  // std::addressof
 # include <typeinfo>
 # include <type_traits>
+#endif
 
 #if defined(__cpp_constexpr) && __cpp_constexpr >= 201907L
 #define BOOST_CONVERSION_IMPL_CONSTEXPR_DYN_CAST constexpr
 #else
 #define BOOST_CONVERSION_IMPL_CONSTEXPR_DYN_CAST inline
 #endif
+
+BOOST_CONVERSION_BEGIN_MODULE_EXPORT
 
 namespace boost
 {
@@ -125,8 +132,12 @@ namespace boost
         );
     }
 
+BOOST_CONVERSION_END_MODULE_EXPORT
+
 } // namespace boost
 
 #undef BOOST_CONVERSION_IMPL_CONSTEXPR_DYN_CAST
+
+#endif // !defined(BOOST_USE_MODULES) || defined(BOOST_CONVERSION_INTERFACE_UNIT)
 
 #endif  // BOOST_POLYMORPHIC_CAST_HPP

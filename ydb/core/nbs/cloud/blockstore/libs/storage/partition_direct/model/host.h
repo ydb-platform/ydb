@@ -9,8 +9,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// The index of the host in the direct block group. Hosts can only be appended
-// to the direct block group, so you can refer to the host by its index.
+// The index of the host in the direct block group. Host indices can only
+// change at a tablet restart, so you can refer to the host by its index.
 using THostIndex = ui8;
 
 constexpr THostIndex InvalidHostIndex = 0xFF;
@@ -57,7 +57,8 @@ enum class EHostHealth
     Sufferer,
     TemporaryOffline,
     Offline,
-    Broken,   // changes strictly outside of Oracle
+    Broken,    // changes strictly outside of Oracle
+    Removed,   // changes strictly outside of Oracle
 };
 
 // Determines where the data is located
@@ -93,6 +94,8 @@ IOutputStream& operator<<(IOutputStream& out, THostAndNodeId value);
 TString PrintHostIndex(THostIndex hostIndex);
 TString PrintNodeId(ui32 nodeId);
 TString PrintHostAndNodeId(THostIndex hostIndex, ui32 nodeId);
+TString PrintDbgId(ui32 dbgId);
+TString PrintVChunkId(ui32 vChunkId);
 
 ////////////////////////////////////////////////////////////////////////////////
 

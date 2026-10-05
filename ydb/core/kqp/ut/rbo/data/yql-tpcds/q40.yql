@@ -42,7 +42,7 @@ WHERE
     AND i_item_sk == cs_item_sk
     AND cs_warehouse_sk == w_warehouse_sk
     AND cs_sold_date_sk == d_date_sk
-    AND d_date BETWEEN (CAST('1998-04-08' AS Date) - DateTime::IntervalFromDays(30)) AND (CAST('1998-04-08' AS Date) + DateTime::IntervalFromDays(30))
+    AND CAST(d_date AS Date) BETWEEN (CAST('1998-04-08' AS Date) - DateTime::IntervalFromDays(30)) AND (CAST('1998-04-08' AS Date) + DateTime::IntervalFromDays(30))
 GROUP BY
     w_state,
     i_item_id

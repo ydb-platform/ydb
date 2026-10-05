@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(storage_transport.h)
 
@@ -12,6 +12,7 @@ SRCS(
     session_reply_router.cpp
     storage_transport_mock.cpp
     storage_transport.cpp
+    transport_chaos_injector.cpp
 )
 
 PEERDIR(
@@ -32,4 +33,8 @@ END()
 
 RECURSE(
     testlib
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

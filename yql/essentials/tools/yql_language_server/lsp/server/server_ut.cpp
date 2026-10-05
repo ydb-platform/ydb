@@ -9,6 +9,7 @@
 
 #include <util/random/random.h>
 #include <util/stream/str.h>
+#include <util/stream/null.h>
 #include <util/string/builder.h>
 #include <util/thread/pool.h>
 
@@ -57,7 +58,7 @@ void TestInput(TString input, TLspServerOptions options, TStringStream Serr = {}
     TStringStream Sin(input);
     TStringStream Sout;
 
-    LspServe(Sin, Sout, options, [](auto out) {
+    LspServe(Sin, Sout, Cnull, options, [](auto out) {
         return new TJsonRpcListener(std::move(out));
     });
 } catch (const TLspBaseProtocolException& e) {

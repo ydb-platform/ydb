@@ -12,7 +12,6 @@ $data = [
 <|dt:1688911000, event:"B"|>,
 ];
 
-pragma FeatureR010="prototype";
 
 SELECT *
 FROM AS_TABLE($data) MATCH_RECOGNIZE(

@@ -1647,6 +1647,47 @@ static void NavigationRequestTest(const TString& rawRequest, bool expectedNaviga
 }
 
 Y_UNIT_TEST_SUITE(Utils) {
+    Y_UNIT_TEST(CreateProxiedRequestForwardsSingleAcceptHeader) {
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest,
+            "GET /resource HTTP/1.1\r\n"
+            "Host: oidcproxy.net\r\n"
+            "Accept: multipart/form-data\r\n\r\n");
+
+        const TProxiedRequestParams params{
+            incomingRequest,
+            {},
+            false,
+            NMVP::TCrackedPage("http://" + ALLOWED_PROXY_HOST + "/resource"),
+            TOpenIdConnectSettings{},
+        };
+        const auto outgoingRequest = CreateProxiedRequest(params);
+        const NHttp::THeaders headers(outgoingRequest->Headers);
+
+        UNIT_ASSERT_VALUES_EQUAL(headers.Headers.count("Accept"), 1);
+        UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Accept"), "multipart/form-data");
+    }
+
+    Y_UNIT_TEST(CreateProxiedRequestAddsSingleDefaultAcceptHeader) {
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest,
+            "GET /resource HTTP/1.1\r\n"
+            "Host: oidcproxy.net\r\n\r\n");
+
+        const TProxiedRequestParams params{
+            incomingRequest,
+            {},
+            false,
+            NMVP::TCrackedPage("http://" + ALLOWED_PROXY_HOST + "/resource"),
+            TOpenIdConnectSettings{},
+        };
+        const auto outgoingRequest = CreateProxiedRequest(params);
+        const NHttp::THeaders headers(outgoingRequest->Headers);
+
+        UNIT_ASSERT_VALUES_EQUAL(headers.Headers.count("Accept"), 1);
+        UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Accept"), "*/*");
+    }
+
     Y_UNIT_TEST(OpenIdConnectStateRoundTrip) {
         TPortManager tp;
         auto settings = BuildBaseSettings(tp);

@@ -2,6 +2,7 @@
 
 #include "public.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
@@ -16,7 +17,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 struct TWriteRequestResponse
 {
     NProto::TError Error;
-    ui64 Lsn = 0;
+    TPBufferKey PBufferKey;
     // The PBuffer hosts where the attempt was made to write the data.
     THostMask RequestedWrites;
     // The PBuffer hosts where exactly the data was written and confirmed.
@@ -37,7 +38,7 @@ public:
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         const NWilson::TTraceId& traceId,
         TCallContextPtr callContext,
-        TBlockRange64 vchunkRange);
+        TBlockRange16 vchunkRange);
 
     // Respond via WriteClient to VChunk.
     void Reply(
@@ -53,9 +54,9 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> GetFuture();
     NWilson::TSpan& GetSpan();
     TBlockRange64 GetRange() const;
-    TBlockRange64 GetVChunkRange() const;
-    void SetLsn(ui64 lsn);
-    ui64 GetLsn() const;
+    TBlockRange16 GetVChunkRange() const;
+    void SetPBufferKey(TPBufferKey pBufferKey);
+    TPBufferKey GetPBufferKey() const;
     TGuardedSgList& GetSgList();
 
 private:
@@ -64,8 +65,8 @@ private:
     TGuardedSgList SgList;
     NWilson::TSpan Span;
     TCallContextPtr CallContext;
-    TBlockRange64 VChunkRange;
-    ui64 Lsn = 0;
+    TBlockRange16 VChunkRange;
+    TPBufferKey PBufferKey;
 
     NThreading::TPromise<TWriteBlocksLocalResponse> Promise;
 };

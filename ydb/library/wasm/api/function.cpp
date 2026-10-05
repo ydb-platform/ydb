@@ -8,6 +8,9 @@ namespace NYdb::NWasm {
 
 namespace NDetail {
 
+// Y_WEAK is a no-op on Windows (COFF); omitting the stub avoids duplicate
+// symbols with the strong override in library/wasm/engine.
+#if defined(__GNUC__)
 Y_WEAK void WavmInvoke(
     IWebAssemblyCompartment* /*compartment*/,
     TWebAssemblyRuntimeType /*runtimeType*/,
@@ -17,6 +20,7 @@ Y_WEAK void WavmInvoke(
 {
     YT_UNIMPLEMENTED();
 }
+#endif
 
 } // namespace NDetail
 

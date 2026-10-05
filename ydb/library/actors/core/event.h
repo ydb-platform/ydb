@@ -316,7 +316,11 @@ namespace NActors {
 
         TIntrusivePtr<TEventSerializedData> GetChainBuffer();
         TIntrusivePtr<TEventSerializedData> ReleaseChainBuffer();
-        void Preserialize();
+
+        // Serializes the event now and drops the IEventBase. Pass allowExternalDataChannel when the
+        // session that will transmit it can route sections over an external data channel: the retained
+        // serialization info decides whether that is still possible once the event is only a rope.
+        void Preserialize(bool allowExternalDataChannel);
 
         ui32 GetSize() const {
             if (Buffer) {

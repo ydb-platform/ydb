@@ -3,16 +3,25 @@ syntax = "proto3";
 package NYdb.NBS.PartitionDirect.NProto;
 
 message TBlockField {
-    repeated fixed32 StartAndLength = 1;
-    optional bytes BitMask = 2;
+    oneof Encoding {
+        bytes RunLengthEncoding = 1;
+        bytes BitMask = 2;
+    }
 }
 
 message TDDiskState {
-    TBlockField Ahead = 1;
     TBlockField Behind = 2;
 }
 
+message TPBufferKey {
+    uint32 Generation = 1;
+    uint64 Lsn = 2;
+}
+
 message TDirtyMapState {
-    uint32 StateGeneration = 1;
+    // The map of behind blocks.
     repeated TDDiskState DDiskStates = 2;
+    // The restore barrier of the vchunk owning this state: its PBuffer copies
+    // with a key not above the barrier are garbage and are not restored.
+    TPBufferKey RestoreBarrier = 3;
 }

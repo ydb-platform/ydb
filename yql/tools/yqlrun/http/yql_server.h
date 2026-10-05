@@ -39,7 +39,9 @@ public:
             const THashSet<TString>& sqlFlags,
             IModuleResolver::TPtr modules,
             IUdfResolver::TPtr udfResolver,
-            TFileStoragePtr fileStorage)
+            TFileStoragePtr fileStorage,
+        NSQLTranslation::TTranslatorsRegistry translatorsRegistry,
+        TMaybe<TString> syntax)
         : HttpServer(config)
         , FunctionRegistry(functionRegistry)
         , UdfIndex(udfIndex)
@@ -50,6 +52,8 @@ public:
         , Modules(modules)
         , UdfResolver(udfResolver)
         , FileStorage(fileStorage)
+        , TranslatorsRegistry(std::move(translatorsRegistry))
+        , Syntax(std::move(syntax))
     {
     }
 
@@ -77,6 +81,8 @@ public:
     IModuleResolver::TPtr Modules;
     IUdfResolver::TPtr UdfResolver;
     TFileStoragePtr FileStorage;
+    NSQLTranslation::TTranslatorsRegistry TranslatorsRegistry;
+    TMaybe<TString> Syntax;
 };
 
 TAutoPtr<TYqlServer> CreateYqlServer(
@@ -89,7 +95,9 @@ TAutoPtr<TYqlServer> CreateYqlServer(
         const THashSet<TString>& sqlFlags,
         IModuleResolver::TPtr modules = nullptr,
         IUdfResolver::TPtr udfResolver = nullptr,
-        TFileStoragePtr fileStorage = nullptr);
+        TFileStoragePtr fileStorage = nullptr,
+        NSQLTranslation::TTranslatorsRegistry translatorsRegistry = {},
+        TMaybe<TString> syntax = {});
 
 } // namspace NHttp
 } // namspace NYql

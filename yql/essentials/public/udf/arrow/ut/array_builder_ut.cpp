@@ -250,7 +250,7 @@ Y_UNIT_TEST(TestTzDateBuilder_Layout) {
 
     const auto datum = arrayBuilder->Build(true);
     UNIT_ASSERT(datum.is_array());
-    const auto array = datum.array();
+    const auto& array = datum.array();
     const auto expectedType = GetArrowType(typeInfoHelper, tzDateType);
     UNIT_ASSERT(array->type->Equals(expectedType));
     UNIT_ASSERT_VALUES_EQUAL(datum.length(), dates.size());

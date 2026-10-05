@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: clickhouse-connect
-Version: 1.6.0
+Version: 1.8.0
 Summary: ClickHouse Database Core Driver for Python, Pandas, and Superset
 Home-page: https://github.com/ClickHouse/clickhouse-connect
 Author: ClickHouse Inc.
@@ -28,7 +28,7 @@ Provides-Extra: sqlalchemy
 Requires-Dist: sqlalchemy<3.0,>=1.4.40; extra == "sqlalchemy"
 Provides-Extra: alembic
 Requires-Dist: sqlalchemy<3.0,>=1.4.40; extra == "alembic"
-Requires-Dist: alembic>=1.16; extra == "alembic"
+Requires-Dist: alembic>=1.18; extra == "alembic"
 Provides-Extra: numpy
 Requires-Dist: numpy; extra == "numpy"
 Provides-Extra: pandas
@@ -48,6 +48,8 @@ Provides-Extra: async
 Requires-Dist: aiohttp>=3.9.0; extra == "async"
 Provides-Extra: chdb
 Requires-Dist: chdb>=4.1.7; extra == "chdb"
+Provides-Extra: rust
+Requires-Dist: clickhouse-connect-core<0.3,>=0.2.0; extra == "rust"
 Dynamic: author
 Dynamic: author-email
 Dynamic: classifier
@@ -108,12 +110,13 @@ because Apache Superset currently requires `sqlalchemy>=1.4,<2`.
 Supported features include:
 - Basic query execution via SQLAlchemy Core
 - `SELECT` queries with `JOIN`s (including ClickHouse-specific strictness, `USING`, and `GLOBAL` modifiers),
-  `ARRAY JOIN` (single and multi-column), `FINAL`, and `SAMPLE`
+  `ARRAY JOIN` (single and multi-column), `FINAL`, `SAMPLE`, compound selects, and materialized CTEs
 - `VALUES` table function syntax
 - Lightweight `DELETE` statements
 - **Alembic** schema migrations (autogenerate, upgrade/downgrade, ClickHouse engine support)
 
-A small number of features require SQLAlchemy 2.x: `Values.cte()` and certain literal-rendering behaviors.
+A small number of features require SQLAlchemy 2.x. `Values.cte()` specifically requires SQLAlchemy 2.0.42 or later.
+Certain literal-rendering behaviors also require SQLAlchemy 2.x.
 All other dialect features, including those used by Superset, work on both 1.4 and 2.x.
 
 Basic ORM usage works for insert-heavy, read-focused workloads: declarative model definitions, `CREATE TABLE`,

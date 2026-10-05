@@ -1049,8 +1049,8 @@ Y_UNIT_TEST_LLVM(TestTpch) {
                                                            return {pb.NewDataLiteral<ui64>(1ULL), price, disco, items[6U], v, pb.Mul(v, pb.Add(pb.NewDataLiteral<double>(1.), items[4U]))};
                                                        },
                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
-                                                           const auto price = items[3U];
-                                                           const auto disco = items[5U];
+                                                           const auto& price = items[3U];
+                                                           const auto& disco = items[5U];
                                                            const auto v = pb.Mul(price, pb.Sub(pb.NewDataLiteral<double>(1.), disco));
                                                            return {pb.Increment(state[0U]), pb.AggrAdd(state[1U], price), pb.AggrAdd(state[2U], disco), pb.AggrAdd(state[3U], items[6U]), pb.AggrAdd(state[4U], v), pb.AggrAdd(state[5U], pb.Mul(v, pb.Add(pb.NewDataLiteral<double>(1.), items[4U])))};
                                                        },
@@ -1851,8 +1851,8 @@ Y_UNIT_TEST_LLVM(TestTpch) {
                                                            return {pb.NewDataLiteral<ui64>(1ULL), price, disco, items[6U], v, pb.Mul(v, pb.Add(pb.NewDataLiteral<double>(1.), items[4U]))};
                                                        },
                                                        [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
-                                                           const auto price = items[3U];
-                                                           const auto disco = items[5U];
+                                                           const auto& price = items[3U];
+                                                           const auto& disco = items[5U];
                                                            const auto v = pb.Mul(price, pb.Sub(pb.NewDataLiteral<double>(1.), disco));
                                                            return {pb.Increment(state[0U]), pb.AggrAdd(state[1U], price), pb.AggrAdd(state[2U], disco), pb.AggrAdd(state[3U], items[6U]), pb.AggrAdd(state[4U], v), pb.AggrAdd(state[5U], pb.Mul(v, pb.Add(pb.NewDataLiteral<double>(1.), items[4U])))};
                                                        },

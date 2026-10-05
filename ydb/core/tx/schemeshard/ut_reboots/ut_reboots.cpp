@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropIndexedTableWithReboots, 2, 1, false) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropIndexedTableWithReboots, 4, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

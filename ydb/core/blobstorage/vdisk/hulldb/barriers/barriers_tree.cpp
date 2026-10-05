@@ -1,5 +1,7 @@
 #include "barriers_tree.h"
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr {
     namespace NBarriers {
 
@@ -68,6 +70,12 @@ namespace NKikimr {
         {
             LockWrite();
 
+            if (DeadTablets.contains(key.TabletId)) {
+                // complete tablet deletion (Max generation block), ignore further barriers
+                UnlockWrite();
+                return;
+            }
+
             TIndexKey indexKey(key.TabletId, key.Channel);
             auto deadIt = Dead.find(indexKey);
             if (deadIt != Dead.end()) {
@@ -96,11 +104,64 @@ namespace NKikimr {
             UnlockWrite();
         }
 
+        void TTree::MarkTabletDeleted(ui64 tabletId) {
+            LockWrite();
+
+            if (!DeadTablets.insert(tabletId).second) {
+                UnlockWrite();
+                return;
+            }
+
+            for (ui32 channel = 0; channel < 256; ++channel) {
+                TIndexKey indexKey(tabletId, static_cast<ui8>(channel));
+                Index.erase(indexKey);
+                Dead.erase(indexKey);
+            }
+
+            UnlockWrite();
+        }
+
+        void TTree::MarkTabletsDeleted(const THashSet<ui64> &tabletIds) {
+            LockWrite();
+
+            THashSet<ui64> added;
+            for (ui64 tabletId : tabletIds) {
+                if (DeadTablets.insert(tabletId).second) {
+                    added.insert(tabletId);
+                }
+            }
+
+            if (!added.empty()) {
+                // One pass over the index, not 256 probes per tablet: this is called once per
+                // VDisk start with every tablet ever completely deleted on this group, and that
+                // set only grows.
+                EraseNodesIf(Index, [&added](const auto &item) {
+                    return added.contains(item.first.GetTabletId());
+                });
+                EraseNodesIf(Dead, [&added](const TIndexKey &key) {
+                    return added.contains(key.GetTabletId());
+                });
+            }
+
+            UnlockWrite();
+        }
+
+        bool TTree::IsTabletDeleted(ui64 tabletId) const {
+            LockRead();
+            const bool deleted = DeadTablets.contains(tabletId);
+            UnlockRead();
+            return deleted;
+        }
+
         void TTree::GetBarrier(ui64 tabletId,
                 ui8 channel,
                 TMaybe<TCurrentBarrier> &soft,
                 TMaybe<TCurrentBarrier> &hard) const
         {
+            // A completely deleted tablet (Max generation block) has no barriers here at all: the
+            // records were dropped by MarkTabletDeleted and Update ignores any that arrive later.
+            // That is a fact about the tablet, not a barrier value, so it is not made up here --
+            // IsTabletDeleted() reports it and TBarriersEssence acts on it.
             LockRead();
 
             TIndexKey indexKey(tabletId, channel);
@@ -136,6 +197,10 @@ namespace NKikimr {
             for (const auto &x : Dead) {
                 str << "{key#" << x.ToString() << "} ";
             }
+            str << "] DeadTablets# [";
+            for (const auto &x : DeadTablets) {
+                str << x << " ";
+            }
             str << "]}";
         }
 
@@ -152,6 +217,10 @@ namespace NKikimr {
                 Tree->Update(gcOnlySynced, x.first, x.second);
             }
             Log.clear();
+            for (ui64 tabletId : DeletedTabletsLog) {
+                Tree->MarkTabletDeleted(tabletId);
+            }
+            DeletedTabletsLog.clear();
         }
 
         void TMemView::TTreeWithLog::Update(
@@ -167,12 +236,30 @@ namespace NKikimr {
             }
         }
 
+        void TMemView::TTreeWithLog::MarkTabletDeleted(bool gcOnlySynced, ui64 tabletId) {
+            if (Shared()) {
+                DeletedTabletsLog.push_back(tabletId);
+            } else {
+                RollUp(gcOnlySynced);
+                Tree->MarkTabletDeleted(tabletId);
+            }
+        }
+
+        void TMemView::TTreeWithLog::MarkTabletsDeleted(bool gcOnlySynced, const THashSet<ui64> &tabletIds) {
+            if (Shared()) {
+                DeletedTabletsLog.insert(DeletedTabletsLog.end(), tabletIds.begin(), tabletIds.end());
+            } else {
+                RollUp(gcOnlySynced);
+                Tree->MarkTabletsDeleted(tabletIds);
+            }
+        }
+
         bool TMemView::TTreeWithLog::Shared() const {
             return Tree.use_count() > 1;
         }
 
         bool TMemView::TTreeWithLog::NeedRollUp() const {
-            return !Log.empty();
+            return !Log.empty() || !DeletedTabletsLog.empty();
         }
 
         TMemViewSnap TMemView::TTreeWithLog::GetSnapshot() const {
@@ -191,6 +278,22 @@ namespace NKikimr {
         void TMemView::Update(const TKeyBarrier &key, const TMemRecBarrier &memRec) {
             Active->Update(GCOnlySynced, key, memRec);
             Passive->Update(GCOnlySynced, key, memRec);
+            if (Active->Shared() && !Passive->Shared()) {
+                Active.swap(Passive);
+            }
+        }
+
+        void TMemView::MarkTabletDeleted(ui64 tabletId) {
+            Active->MarkTabletDeleted(GCOnlySynced, tabletId);
+            Passive->MarkTabletDeleted(GCOnlySynced, tabletId);
+            if (Active->Shared() && !Passive->Shared()) {
+                Active.swap(Passive);
+            }
+        }
+
+        void TMemView::MarkTabletsDeleted(const THashSet<ui64> &tabletIds) {
+            Active->MarkTabletsDeleted(GCOnlySynced, tabletIds);
+            Passive->MarkTabletsDeleted(GCOnlySynced, tabletIds);
             if (Active->Shared() && !Passive->Shared()) {
                 Active.swap(Passive);
             }

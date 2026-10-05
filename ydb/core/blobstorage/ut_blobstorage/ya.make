@@ -22,6 +22,7 @@ SRCS(
     cancellation.cpp
     counting_events.cpp
     corrupted_reads.cpp
+    database_space.cpp
     deadlines.cpp
     decommit_3dc.cpp
     defrag.cpp
@@ -34,6 +35,7 @@ SRCS(
     get.cpp
     get_block.cpp
     group_mapping.cpp
+    heap_allocator.cpp
     incorrect_queries.cpp
     index_restore_get.cpp
     main.cpp
@@ -55,6 +57,7 @@ SRCS(
     sync.cpp
     validation.cpp
     vdisk_malfunction.cpp
+    virtual_group.cpp
     group_size_in_units.cpp
     pdisk_status_flags.cpp
     retro_tracing.cpp

@@ -22,12 +22,28 @@ TKikimrRunner Kikimr(bool enableJsonIndex, bool enableJsonIndexAutoSelect) {
     return TKikimrRunner(settings);
 }
 
-TKikimrRunner KikimrJsonPrefix(bool enableJsonIndexAutoSelect) {
+TKikimrRunner KikimrJson(bool enableJsonIndexAutoSelect, bool compact) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableJsonIndex(true);
+    featureFlags.SetEnableJsonIndexAutoSelect(enableJsonIndexAutoSelect);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    if (compact) {
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+    }
+    return TKikimrRunner(settings);
+}
+
+TKikimrRunner KikimrJsonPrefix(bool enableJsonIndexAutoSelect, bool compact) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableJsonIndex(true);
     featureFlags.SetEnableFulltextIndexPrefix(true);
     featureFlags.SetEnableJsonIndexAutoSelect(enableJsonIndexAutoSelect);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    if (compact) {
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+    }
     return TKikimrRunner(settings);
 }
 

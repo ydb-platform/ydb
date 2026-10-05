@@ -5,6 +5,7 @@
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
+#include <ydb/library/vector_distance/half_distance.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
@@ -131,6 +132,14 @@ public:
                 return VectorFunc<float>(str1, str2, [](const float* v1, const float* v2, size_t len) {
                     return ::L1Distance(v1, v2, len);
                 });
+            case EFormat::Float16Vector:
+                return VectorFunc<TFloat16>(str1, str2, [](const TFloat16* v1, const TFloat16* v2, size_t len) {
+                    return NVectorDistance::L1Distance(v1, v2, len);
+                });
+            case EFormat::BFloat16Vector:
+                return VectorFunc<TBFloat16>(str1, str2, [](const TBFloat16* v1, const TBFloat16* v2, size_t len) {
+                    return NVectorDistance::L1Distance(v1, v2, len);
+                });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
                     return ::L1Distance(v1, v2, len);
@@ -164,6 +173,14 @@ public:
                 return VectorFunc<float>(str1, str2, [](const float* v1, const float* v2, size_t len) {
                     return ::L2Distance(v1, v2, len);
                 });
+            case EFormat::Float16Vector:
+                return VectorFunc<TFloat16>(str1, str2, [](const TFloat16* v1, const TFloat16* v2, size_t len) {
+                    return NVectorDistance::L2Distance(v1, v2, len);
+                });
+            case EFormat::BFloat16Vector:
+                return VectorFunc<TBFloat16>(str1, str2, [](const TBFloat16* v1, const TBFloat16* v2, size_t len) {
+                    return NVectorDistance::L2Distance(v1, v2, len);
+                });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
                     return ::L2Distance(v1, v2, len);
@@ -196,6 +213,14 @@ public:
             case EFormat::FloatVector:
                 return VectorFunc<float>(str1, str2, [](const float* v1, const float* v2, size_t len) {
                     return ::DotProduct(v1, v2, len);
+                });
+            case EFormat::Float16Vector:
+                return VectorFunc<TFloat16>(str1, str2, [](const TFloat16* v1, const TFloat16* v2, size_t len) {
+                    return NVectorDistance::DotProduct(v1, v2, len);
+                });
+            case EFormat::BFloat16Vector:
+                return VectorFunc<TBFloat16>(str1, str2, [](const TBFloat16* v1, const TBFloat16* v2, size_t len) {
+                    return NVectorDistance::DotProduct(v1, v2, len);
                 });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
@@ -235,6 +260,16 @@ public:
             case EFormat::FloatVector:
                 return VectorFunc<float>(str1, str2, [&](const float* v1, const float* v2, size_t len) {
                     const auto res = ::TriWayDotProduct(v1, v2, len);
+                    return compute(res.LL, res.LR, res.RR);
+                });
+            case EFormat::Float16Vector:
+                return VectorFunc<TFloat16>(str1, str2, [&](const TFloat16* v1, const TFloat16* v2, size_t len) {
+                    const auto res = NVectorDistance::TriWayDotProduct(v1, v2, len);
+                    return compute(res.LL, res.LR, res.RR);
+                });
+            case EFormat::BFloat16Vector:
+                return VectorFunc<TBFloat16>(str1, str2, [&](const TBFloat16* v1, const TBFloat16* v2, size_t len) {
+                    const auto res = NVectorDistance::TriWayDotProduct(v1, v2, len);
                     return compute(res.LL, res.LR, res.RR);
                 });
             case EFormat::Int8Vector:

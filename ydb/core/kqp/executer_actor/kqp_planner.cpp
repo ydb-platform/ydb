@@ -1,6 +1,9 @@
-#include "kqp_executer_stats.h"
 #include "kqp_planner.h"
+
+#include "kqp_executer_stats.h"
 #include "kqp_planner_strategy.h"
+
+#include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
@@ -91,6 +94,24 @@ bool LimitCPU(TIntrusivePtr<TUserRequestContext> ctx) {
 
 }
 
+TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext& context, TDuration progressStatsPeriod) {
+    TKqpStatsReportingSettings settings;
+    settings.CollectCurrentQueryStats = context.CurrentQueryStatsInterval != TDuration::Zero();
+    settings.WithProgressStats = progressStatsPeriod != TDuration::Zero();
+
+    if (context.IsStreamingQuery) {
+        settings.RemoteReportStatsSettings = NYql::NDq::TReportStatsSettings{
+            TDuration::Seconds(1), TDuration::Seconds(5)};
+    }
+    if (settings.CollectCurrentQueryStats) {
+        const auto interval = context.CurrentQueryStatsInterval;
+        // Remote tasks already send periodic stats. Only local tasks need an extra timer.
+        const auto minInterval = progressStatsPeriod ? Min(progressStatsPeriod, interval) : interval;
+        settings.LocalReportStatsSettings = NYql::NDq::TReportStatsSettings{minInterval, interval};
+    }
+    return settings;
+}
+
 bool TKqpPlanner::UseMockEmptyPlanner = false;
 
 // Task can allocate extra memory during execution.
@@ -104,10 +125,11 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , UserToken(args.UserToken)
     , Deadline(args.Deadline)
     , StatsMode(args.StatsMode)
-    , WithProgressStats(args.WithProgressStats)
+    , StatsReportingSettings(args.StatsReportingSettings)
     , RlPath(args.RlPath)
     , ResourcesSnapshot(std::move(args.ResourcesSnapshot))
     , ExecuterSpan(args.ExecuterSpan)
+    , Trace(args.Trace)
     , ExecuterRetriesConfig(args.ExecuterRetriesConfig)
     , TasksGraph(args.TasksGraph)
     , MkqlMemoryLimit(args.MkqlMemoryLimit)
@@ -124,6 +146,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , Query(args.Query)
     , CheckpointCoordinatorId(args.CheckpointCoordinator)
     , EnableWatermarks(args.EnableWatermarks)
+    , StreamingQueryNodesManagerId(args.StreamingQueryNodesManager)
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -257,7 +280,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
-        auto* serializedTask = TasksGraph.ArenaSerializeTaskToProto(task, true);
+        auto* serializedTask = SerializeTaskForExecution(task);
         if (ArrayBufferMinFillPercentage) {
             serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
         }
@@ -269,7 +292,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     }
 
     request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
-    request.MutableRuntimeSettings()->SetWithProgressStats(WithProgressStats);
+    request.MutableRuntimeSettings()->SetWithProgressStats(StatsReportingSettings.WithProgressStats);
     request.SetStartAllOrFail(true);
     request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::DATA);
     request.MutableRuntimeSettings()->SetUseSpilling(TasksGraph.GetMeta().AllowWithSpilling);
@@ -306,9 +329,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
 
-    if (UserRequestContext->IsStreamingQuery) {
-        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(1000);
-        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(5000);
+    if (StatsReportingSettings.RemoteReportStatsSettings) {
+        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(StatsReportingSettings.RemoteReportStatsSettings->MinInterval.MilliSeconds());
+        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(StatsReportingSettings.RemoteReportStatsSettings->MaxInterval.MilliSeconds());
     }
 
     if (UserToken) {
@@ -533,21 +556,29 @@ const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
     return TasksGraph.GetMeta().Snapshot;
 }
 
+NYql::NDqProto::TDqTask* TKqpPlanner::SerializeTaskForExecution(const TTask& task) {
+    auto* result = TasksGraph.ArenaSerializeTaskToProto(task, true);
+    if (Trace) {
+        Trace->AnnotateTask({task.StageId.TxId, task.StageId.StageId}, *result);
+    }
+    return result;
+}
+
 // optimizeProtoForLocalExecution - if we want to execute compute actor locally and don't want to serialize & then deserialize proto message
 // instead we just give ptr to proto message and after that we swap/copy it
 TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
     auto& task = TasksGraph.GetTask(taskId);
-    auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(task, true);
+    auto* taskDesc = SerializeTaskForExecution(task);
 
-    if (!TxInfo) {
+    if (!QueryQuotaManager) {
         double memoryPoolPercent = 100;
         if (UserRequestContext->PoolConfig.has_value()) {
             memoryPoolPercent = UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode;
         }
 
-        TxInfo = MakeIntrusive<NRm::TTxState>(
+        QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(
             ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, memoryPoolPercent, Database,
-            CaFactory_->GetVerboseMemoryLimitException());
+            CaFactory_->GetVerboseMemoryLimitException()));
     }
 
     if (ArrayBufferMinFillPercentage) {
@@ -562,8 +593,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 
     auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
 
-    auto rmResult = ResourceManager_->AllocateResources(
-        *TxInfo, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialMemoryLimit});
+    // the task starts with it and returns it when its compute actor terminates
+    auto rmResult = QueryQuotaManager->AllocateTasks(1, initialMemoryLimit);
 
     if (!rmResult) {
         return rmResult.GetFailReason();
@@ -576,10 +607,10 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .LockNodeId = TasksGraph.GetMeta().LockNodeId,
         .LockMode = TasksGraph.GetMeta().LockMode,
         .Task = taskDesc,
-        .TxInfo = TxInfo,
-        .TaskQuotaManager = CreateTaskQuotaManager(ResourceManager_, TxInfo, taskId, initialMemoryLimit),
+        .TxInfo = QueryQuotaManager->GetTx(),
+        .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, initialMemoryLimit),
         .ChannelQuotaManager = nullptr,
-        .ReportStatsSettings = Nothing(),
+        .ReportStatsSettings = StatsReportingSettings.LocalReportStatsSettings,
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),
         .SerializedGUCSettings = SerializedGUCSettings,
@@ -587,7 +618,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .OutputChunkMaxSize = OutputChunkMaxSize,
         .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
         .StatsMode = GetDqStatsMode(StatsMode),
-        .WithProgressStats = WithProgressStats,
+        .WithProgressStats = StatsReportingSettings.WithProgressStats,
         // Compute actor should not arm a timeout timer: in case of timeout it will receive
         // TEvAbortExecution from the executer (driven by gRPC client deadline / cancel ->
         // session actor -> executer). Matches the remote path in kqp_query_control_plane.cpp.
@@ -595,6 +626,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
         .BlockTrackingMode = BlockTrackingMode,
+        .QueryQuotaManager = QueryQuotaManager,
+        .InitialMemoryLimit = initialMemoryLimit,
         .UserToken = UserToken,
         .Database = Database,
         .Query = Query,
@@ -708,21 +741,24 @@ void TKqpPlanner::PrepareCheckpoints() {
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
-        bool isIngress = TasksGraph.IsIngress(dqTask);
+        const bool enabledCheckpoints = NDq::GetTaskCheckpointingMode(settings) != NDqProto::CHECKPOINTING_MODE_DISABLED;
+        const bool isIngress = NDq::IsIngress(settings);
         if (enabledCheckpoints && isIngress) {
             hasStreamingIngress = true;
             break;
         }
     }
+
     YDB_LOG_DEBUG("PrepareCheckpoints: checked streaming ingress",
         {"txId", TxId},
         {"ctx", *UserRequestContext},
         {"hasStreamingIngress", hasStreamingIngress});
+
     if (!hasStreamingIngress) {
         CheckpointCoordinatorId = TActorId{};
         return;
     }
+
     TasksGraph.GetMeta().CreateSuspended = hasStreamingIngress;
 }
 
@@ -748,6 +784,7 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
     auto& task = TasksGraph.GetTask(taskId);
     if (!task.ComputeActorId) {
         task.ComputeActorId = computeActor;
+        AllComputeActors.emplace(computeActor);
         PendingComputeTasks.erase(taskId);
         auto [it, success] = PendingComputeActors.try_emplace(computeActor);
         YQL_ENSURE(success);
@@ -755,8 +792,8 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
             it->second.Set(state->GetStats());
         }
 
-        if (PendingComputeTasks.empty() && CheckpointCoordinatorId) {
-            SendReadyStateToCheckpointCoordinator();
+        if (PendingComputeTasks.empty() && (CheckpointCoordinatorId || StreamingQueryNodesManagerId)) {
+            SendReadyState();
         }
         return true;
     }
@@ -843,11 +880,15 @@ void TKqpPlanner::ShiftConsumption() {
     }
 }
 
-const THashMap<TActorId, TProgressStat>& TKqpPlanner::GetPendingComputeActors() {
+const THashSet<TActorId>& TKqpPlanner::GetAllComputeActors() const {
+    return AllComputeActors;
+}
+
+const THashMap<TActorId, TProgressStat>& TKqpPlanner::GetPendingComputeActors() const {
     return PendingComputeActors;
 }
 
-const THashSet<ui64>& TKqpPlanner::GetPendingComputeTasks() {
+const THashSet<ui64>& TKqpPlanner::GetPendingComputeTasks() const {
     return PendingComputeTasks;
 }
 
@@ -966,40 +1007,48 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
     }
 }
 
-void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
-    if (CheckpointsReadyStateSent) {
+void TKqpPlanner::SendReadyState() {
+    if (ReadyStateSent) {
         return;
     }
 
     auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         if (!dqTask.ComputeActorId) {
-            YDB_LOG_WARN("Skip sending TEvReadyState to checkpoint coordinator: task has no compute actor id (node disconnected or task not started)",
+            YDB_LOG_WARN("Skip sending TEvReadyState: task has no compute actor id (node disconnected or task not started)",
                 {"txId", TxId},
                 {"ctx", *UserRequestContext},
                 {"taskId", dqTask.Id});
             return;
         }
+
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
-        bool isIngress = TasksGraph.IsIngress(dqTask);
         auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
-            dqTask.Id,
-            enabledCheckpoints,
-            isIngress,
-            TasksGraph.IsEgressTask(dqTask),
-            NYql::NDq::HasState(settings),
-            dqTask.ComputeActorId
+            .Id = dqTask.Id,
+            .IsCheckpointingEnabled = NDq::GetTaskCheckpointingMode(settings) != NDqProto::CHECKPOINTING_MODE_DISABLED,
+            .IsIngress = NDq::IsIngress(settings),
+            .IsEgress = NDq::IsEgress(settings),
+            .HasState = NDq::HasState(settings),
+            .ActorId = dqTask.ComputeActorId,
         };
         event->Tasks.emplace_back(std::move(task));
     }
-    YDB_LOG_INFO("Sending TEvReadyState to checkpoint coordinator",
+
+    YDB_LOG_INFO("Sending TEvReadyState",
         {"txId", TxId},
         {"ctx", *UserRequestContext},
-        {"checkpointCoordinatorId", CheckpointCoordinatorId});
-    TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
-    CheckpointsReadyStateSent = true;
+        {"checkpointCoordinatorId", CheckpointCoordinatorId},
+        {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId});
+    if (StreamingQueryNodesManagerId) {
+        auto managerEvent = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+        managerEvent->Tasks = event->Tasks;
+        TlsActivationContext->Send(std::make_unique<IEventHandle>(StreamingQueryNodesManagerId, ExecuterId, managerEvent.release()));
+    }
+    if (CheckpointCoordinatorId) {
+        TlsActivationContext->Send(std::make_unique<IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
+    }
+    ReadyStateSent = true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

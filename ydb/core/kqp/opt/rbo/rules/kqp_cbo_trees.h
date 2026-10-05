@@ -41,13 +41,12 @@ struct TCBOBoundaryEdge {
     };
 };
 
+// A boundary input of the CBO tree. Its output IDs are its CBO columns.
 struct TCBOLeaf {
     TIntrusivePtr<IOperator> Op;
     TCBOBoundaryEdge Edge;
     TString RelationName;
     TString SourceTableName;
-    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> ColumnsToCBO;
-    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> CBOToColumns;
 };
 
 TVector<TCBOLeaf> BuildCBOLeaves(const TOpCBOTree& cboTree);
@@ -60,6 +59,7 @@ TShuffleEliminationContext BuildShuffleEliminationContext(
 std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(
     TIntrusivePtr<TOpCBOTree>& cboTree,
     NYql::TTypeAnnotationContext& typeCtx,
+    const TColumnLineage& lineage,
     TVector<std::shared_ptr<TRelOptimizerNode>>& rels,
     const TVector<TCBOLeaf>& leaves);
 

@@ -1,14 +1,14 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
-    aligned_page_pool.cpp
-    aligned_page_pool.h
     compact_hash.cpp
     compact_hash.h
     defs.h
     mkql_alloc.cpp
     mkql_block_map_join_utils.cpp
     mkql_block_map_join_utils.h
+    mkql_bridge_mode.cpp
+    mkql_bridge_mode.h
     mkql_buffer.cpp
     mkql_buffer.h
     mkql_date_scaler.cpp
@@ -60,6 +60,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/minikql/aligned_page_pool
     contrib/libs/apache/arrow
     contrib/libs/cctz/tzdata
     library/cpp/deprecated/enum_codegen
@@ -92,11 +93,10 @@ IF (MKQL_RUNTIME_VERSION)
     )
 ENDIF()
 
-YQL_LAST_ABI_VERSION()
-
 END()
 
 RECURSE(
+    aligned_page_pool
     arrow
     codegen
     comp_nodes

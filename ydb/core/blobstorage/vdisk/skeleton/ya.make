@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    library/cpp/html/escape
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/blobstorage/vdisk/balance
@@ -33,6 +34,8 @@ SRCS(
     skeleton_compactionstate.cpp
     skeleton_compactionstate.h
     skeleton_events.h
+    skeleton_fresh_admission.cpp
+    skeleton_fresh_admission.h
     skeleton_loggedrec.cpp
     skeleton_loggedrec.h
     skeleton_mon_dbmainpage.cpp

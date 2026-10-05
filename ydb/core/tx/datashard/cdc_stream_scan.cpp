@@ -744,3 +744,7 @@ void TDataShard::Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TA
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

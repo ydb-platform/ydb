@@ -127,6 +127,7 @@ class Platform(object):
 
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
         self.is_tc32 = self.arch in ('tc32_elf',)
+        self.is_tc3xx = self.arch in ('tc3xx', )
 
         self.is_xtensa_hifi4 = self.arch == 'xtensa_hifi4'
         self.is_xtensa_hifi5 = self.arch == 'xtensa_hifi5'
@@ -163,7 +164,7 @@ class Platform(object):
         self.is_32_bit = (
             self.is_x86 or
             self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or self.is_arm_aml403 or
-            self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32 or self.is_arm_ats3089p
+            self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32 or self.is_arm_ats3089p or self.is_tc3xx
         )
         self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_armv9a or self.is_powerpc or self.is_wasm64 or self.is_riscv64 or self.is_arm64_aml403
 
@@ -203,6 +204,7 @@ class Platform(object):
 
         self.is_freertos = self.os == 'freertos'
         self.is_zephyr = self.os == 'zephyr'
+        self.is_zephyr_armv7_cortex_a35 = self.is_zephyr and self.is_armv7 and self.is_cortex_a35
 
         self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_yocto or self.is_freebsd
 
@@ -246,6 +248,7 @@ class Platform(object):
             (self.is_armv6, 'ARCH_ARM6'),
             (self.is_armv7, 'ARCH_ARM7'),
             (self.is_armv7_neon, 'ARCH_ARM7_NEON'),
+            (self.is_zephyr_armv7_cortex_a35, 'ARCH_ARMV7_CORTEX_A35'),
             (self.is_armv8, 'ARCH_ARM64'),
             (self.is_armv9a, 'ARCH_ARM64'),
             (self.is_armv8m, 'ARCH_ARM8M'),
@@ -271,6 +274,7 @@ class Platform(object):
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
             (self.is_tc32, 'ARCH_TC32'),
+            (self.is_tc3xx, 'ARCH_TC3XX'),
             (self.is_wasm32, 'ARCH_WASM32'),
             (self.is_wasm64, 'ARCH_WASM64'),
             (self.is_32_bit, 'ARCH_TYPE_32'),
@@ -564,6 +568,8 @@ def get_target_triple(target):
             (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
 
             (target.is_windows and target.is_x86_64, 'x86_64-pc-win32'),
+
+            (target.is_zephyr_armv7_cortex_a35, 'arm-none-eabi'),
         ],
     )
 
@@ -1234,6 +1240,12 @@ class GnuToolchain(Toolchain):
 
         self.env = self.tc.get_env()
 
+        if target.is_tc3xx and self.tc.is_from_arcadia:
+            as_path = self.tc.params.get('as')
+            if as_path:
+                bin_dir = os.path.dirname(as_path)
+                self.env.setdefault('PATH', []).insert(0, bin_dir)
+
         self.env_go = {}
         if self.tc.is_clang and not self.tc.is_system_cxx:
             self.env_go = {'PATH': ['{}/bin'.format(self.tc.name_marker)]}
@@ -1334,6 +1346,10 @@ class GnuToolchain(Toolchain):
             self.c_flags_platform.append('-mcpu=cortex-m33+nodsp -mfpu=fpv5-sp-d16 -mabi=aapcs -mthumb -mfloat-abi=hard')
             self.setup_actions_zephyr_sdk()
 
+        if target.is_zephyr_armv7_cortex_a35:
+            self.c_flags_platform.append('-march=armv8-a -mthumb -mabi=aapcs -mfpu=neon-fp-armv8 -mfloat-abi=hard')
+            self.setup_zephyr_armv7()
+
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
 
@@ -1417,6 +1433,9 @@ class GnuToolchain(Toolchain):
 
     def setup_actions_zephyr_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/actions_zephyr')
+
+    def setup_zephyr_armv7(self):
+        self.platform_projects.insert(0, 'build/internal/platform/zephyr_armv7')
 
     def setup_allwinner_rtos_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/allwinner_rtos')
@@ -1638,6 +1657,9 @@ class GnuCompiler(Compiler):
         if self.target.is_zephyr:
             self.c_defines.append('-D__ZEPHYR__')
 
+        if self.target.is_zephyr_armv7_cortex_a35:
+            self.c_defines.append('-D_LIBUNWIND_IS_BAREMETAL')
+
         if self.tc.is_clang and self.target.is_linux and self.target.is_x86_64:
             self.c_defines.append('-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE')
 
@@ -1686,6 +1708,9 @@ class GnuCompiler(Compiler):
                 '-Wno-pessimizing-move',
                 '-Wno-undefined-var-template',
             ]
+
+            if self.target.is_zephyr_armv7_cortex_a35:
+                self.cxx_warnings.append('-Wno-missing-designated-field-initializers')
 
         elif self.tc.is_gcc and self.host.is_riscv64_aw is None and self.host.is_arm_aml403 is None:
             self.c_foptions.append('-fno-delete-null-pointer-checks')
@@ -1808,14 +1833,14 @@ class Linker(object):
             # External (e.g. system) toolchain: disable linker selection logic
             return None
 
-        if self.build.target.is_freertos or self.build.target.is_zephyr:
+        if self.tc.is_gcc and (self.build.target.is_freertos or self.build.target.is_zephyr):
             return Linker.BFD
 
         if self.build.target.is_android:
             # Android toolchain is NDK, LLD works on all supported platforms
             return Linker.LLD
 
-        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm or self.build.target.is_freebsd:
+        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm or self.build.target.is_freebsd or self.build.target.is_zephyr:
             return Linker.LLD
 
         # There is no linker choice on Windows (link.exe)
@@ -2620,7 +2645,7 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.6.2', '12.6.3', '12.8', '12.9', '13.0'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.6.2', '12.6.3', '12.8', '12.9', '13.0', '13.2'):
             return True
         elif self.cuda_version.value in ('10.2', '11.4.19') and (target.is_linux_armv8 or target.is_linux_armv9a):
             return True

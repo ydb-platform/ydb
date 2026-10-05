@@ -1,0 +1,13 @@
+{
+  "expiry_positive": false,
+  "grpc_status": "OK",
+  "node_id_is_dynamic": false,
+  "node_id_is_zero": true,
+  "node_id_present": false,
+  "nodes_empty": true,
+  "registered_endpoint_present": false,
+  "status": "UNAUTHORIZED",
+  "ydb_log": [
+    "GRPC_SERVER DEBUG: issuing response Name# NKikimrClient.TGRpcServer/RegisterNode data# Status { Code: UNAUTHORIZED Reason: \"Cannot authorize node. Access denied\" }  peer# <peer>"
+  ]
+}

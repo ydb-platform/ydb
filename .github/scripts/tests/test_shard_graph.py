@@ -772,6 +772,25 @@ class ShardProgressTest(unittest.TestCase):
             "https://example.test/comments?page=2",
         )
 
+    def test_count_links_encode_spaces_in_the_workflow_name(self) -> None:
+        raw = "https://storage.example/ydb/Run and debug tests/1/ya-test.html"
+        encoded = "https://storage.example/ydb/Run%20and%20debug%20tests/1/ya-test.html"
+        self.assertEqual(shard_progress.href_url(raw), encoded)
+        self.assertEqual(shard_progress.href_url(encoded), encoded)
+        self.assertEqual(shard_progress.href_url(f"{raw}#FAIL"), f"{encoded}#FAIL")
+        state = _progress_state(1)
+        state["combined_url"] = raw
+        state["shards"] = {
+            "0": {
+                "result": "success",
+                "counts": {"tests": 3, "passed": 2, "errors": 0, "failed": 1, "skipped": 0, "muted": 0},
+            }
+        }
+        table = "\n".join(shard_progress.render_counts_table(state))
+        self.assertIn(f"[3]({encoded})", table)
+        self.assertIn(f"[1]({encoded}#FAIL)", table)
+        self.assertNotIn("](https://storage.example/ydb/Run and debug", table)
+
 
 class _MemComment:
     def __init__(self, comment_id: int, body: str, etag: str) -> None:

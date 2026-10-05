@@ -20,6 +20,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import quote, urlsplit, urlunsplit
 
 STATE_BEGIN = "<!-- shard-progress-state"
 STATE_END = "-->"
@@ -155,6 +156,18 @@ def sum_counts(state: dict[str, Any]) -> dict[str, int]:
     return found
 
 
+def href_url(url: str) -> str:
+    """Encode the path so spaces in github.workflow survive markdown and HTTP."""
+    if not url:
+        return url
+    parts = urlsplit(url)
+    if not parts.scheme:
+        return url
+    return urlunsplit(
+        (parts.scheme, parts.netloc, quote(parts.path, safe="/%"), parts.query, parts.fragment)
+    )
+
+
 def report_url_for(state: dict[str, Any]) -> str:
     combined = str(state.get("combined_url") or "")
     if combined:
@@ -169,10 +182,11 @@ def report_url_for(state: dict[str, Any]) -> str:
 def _count_cell(value: int, url: str, anchor: str) -> str:
     if not value:
         return "0"
-    if not url:
+    encoded = href_url(url)
+    if not encoded:
         return str(value)
     suffix = f"#{anchor}" if anchor else ""
-    return f"[{value}]({url}{suffix})"
+    return f"[{value}]({encoded}{suffix})"
 
 
 def render_counts_table(state: dict[str, Any]) -> list[str]:
@@ -741,7 +755,7 @@ def fetch_report(url: str) -> dict[str, Any] | None:
     if not url:
         return None
     try:
-        with urllib.request.urlopen(url, timeout=30) as response:
+        with urllib.request.urlopen(href_url(url), timeout=30) as response:
             payload = json.load(response)
     except (OSError, urllib.error.URLError, json.JSONDecodeError, TimeoutError, ValueError):
         return None

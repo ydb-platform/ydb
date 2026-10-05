@@ -1215,6 +1215,8 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         // The new redo event is written once per call
         UNIT_ASSERT_VALUES_EQUAL(CountRedoEvents(me.BackLog().Redo, NRedo::ERedo::RemoveTxOps), 2u);
+        // Older versions fail on such a redo chunk with an explicit ABI incompatibility
+        UNIT_ASSERT_VALUES_EQUAL(GetRedoRequiredEvolution(me.BackLog().Redo), SavepointSeqNumEvolution);
         UNIT_ASSERT_VALUES_EQUAL(DumpRolledBackTxOps(me, table1, 123), "{ [5, 6], [9, 10] }");
 
         me.To(50).Begin();

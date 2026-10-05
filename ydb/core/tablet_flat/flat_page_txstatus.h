@@ -78,7 +78,8 @@ namespace NPage {
         {
             const auto got = NPage::TLabelWrapper().Read(Raw, EPage::TxStatus);
 
-            Y_ENSURE(got == ECodec::Plain && (got.Version == 0 || got.Version == 1));
+            Y_ENSURE(got == ECodec::Plain, "Unexpected EPage::TxStatus codec");
+            Y_ENSURE(got.Version == 0 || got.Version == 1, "Unknown EPage::TxStatus version " << got.Version);
 
             Y_ENSURE(sizeof(THeader) <= got.Page.size(),
                     "NPage::TTxStatusPage header is out of page bounds");

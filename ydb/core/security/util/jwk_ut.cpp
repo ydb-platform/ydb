@@ -37,15 +37,34 @@ using TOpenSslPtr = std::unique_ptr<T, TOpenSslDeleter<Free>>;
 using TKeyPtr = TOpenSslPtr<EVP_PKEY, EVP_PKEY_free>;
 using TCertPtr = TOpenSslPtr<X509, X509_free>;
 
-TKeyPtr GenerateKey(int curve = NID_undef) {
+TKeyPtr GenerateKey(int curve = NID_undef, int bits = 2048) {
     TOpenSslPtr<EVP_PKEY_CTX, EVP_PKEY_CTX_free> ctx(
         EVP_PKEY_CTX_new_id(curve == NID_undef ? EVP_PKEY_RSA : EVP_PKEY_EC, nullptr));
     UNIT_ASSERT(ctx != nullptr);
     UNIT_ASSERT_VALUES_EQUAL(EVP_PKEY_keygen_init(ctx.get()), 1);
     if (curve == NID_undef) {
-        UNIT_ASSERT_VALUES_EQUAL(EVP_PKEY_CTX_set_rsa_keygen_bits(ctx.get(), 2048), 1);
+        UNIT_ASSERT_VALUES_EQUAL(EVP_PKEY_CTX_set_rsa_keygen_bits(ctx.get(), bits), 1);
     } else {
         UNIT_ASSERT_VALUES_EQUAL(EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx.get(), curve), 1);
+    }
+    EVP_PKEY* key = nullptr;
+    UNIT_ASSERT_VALUES_EQUAL(EVP_PKEY_keygen(ctx.get(), &key), 1);
+    return TKeyPtr(key);
+}
+
+TKeyPtr GeneratePssKey(const EVP_MD* digest = nullptr, const EVP_MD* mgf = nullptr, int saltLength = -1) {
+    TOpenSslPtr<EVP_PKEY_CTX, EVP_PKEY_CTX_free> ctx(EVP_PKEY_CTX_new_id(EVP_PKEY_RSA_PSS, nullptr));
+    UNIT_ASSERT(ctx != nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(EVP_PKEY_keygen_init(ctx.get()), 1);
+    UNIT_ASSERT_VALUES_EQUAL(EVP_PKEY_CTX_set_rsa_keygen_bits(ctx.get(), 2048), 1);
+    if (digest != nullptr) {
+        UNIT_ASSERT_VALUES_EQUAL(EVP_PKEY_CTX_set_rsa_pss_keygen_md(ctx.get(), digest), 1);
+    }
+    if (mgf != nullptr) {
+        UNIT_ASSERT_VALUES_EQUAL(EVP_PKEY_CTX_set_rsa_pss_keygen_mgf1_md(ctx.get(), mgf), 1);
+    }
+    if (saltLength >= 0) {
+        UNIT_ASSERT_VALUES_EQUAL(EVP_PKEY_CTX_set_rsa_pss_keygen_saltlen(ctx.get(), saltLength), 1);
     }
     EVP_PKEY* key = nullptr;
     UNIT_ASSERT_VALUES_EQUAL(EVP_PKEY_keygen(ctx.get(), &key), 1);
@@ -144,14 +163,25 @@ void SetChain(NJson::TJsonValue& json, std::initializer_list<X509*> certs) {
     }
 }
 
-void AssertInvalidKey(const NJson::TJsonValue& json) {
+void AssertInvalidKey(const NJson::TJsonValue& json, const TString& reason = {}) {
     const auto jwk = ParseJwk(json);
-    UNIT_ASSERT(!jwk.has_value() || !jwk.value().CalculatePublicKey().has_value());
+    if (!jwk.has_value()) {
+        UNIT_ASSERT_C(reason.empty(), "Expected a public key validation error, but JWK parsing failed");
+        return;
+    }
+    std::string error;
+    UNIT_ASSERT(!jwk.value().CalculatePublicKey(error).has_value());
+    UNIT_ASSERT(!error.empty());
+    if (!reason.empty()) {
+        UNIT_ASSERT_STRING_CONTAINS(error, reason);
+    }
 }
 
 void AssertPublicKey(const TJwk& jwk, EVP_PKEY* key) {
-    const auto publicKey = jwk.CalculatePublicKey();
-    UNIT_ASSERT(publicKey.has_value());
+    std::string error = "previous error";
+    const auto publicKey = jwk.CalculatePublicKey(error);
+    UNIT_ASSERT_C(publicKey.has_value(), error);
+    UNIT_ASSERT(error.empty());
     UNIT_ASSERT_VALUES_EQUAL(publicKey.value(), PublicKeyPem(key));
 }
 
@@ -225,49 +255,93 @@ Y_UNIT_TEST_SUITE(TParseJwkTest) {
             "key_ops": ["sign", "verify", "encrypt", "decrypt", "wrapKey", "unwrapKey", "deriveKey", "deriveBits"]
         })"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(jwk->KeyOperations.size(), 8);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[0], EJwkKeyOps::SIGN);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[1], EJwkKeyOps::VERIFY);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[2], EJwkKeyOps::ENCRYPT);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[3], EJwkKeyOps::DECRYPT);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[4], EJwkKeyOps::WRAP_KEY);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[5], EJwkKeyOps::UNWRAP_KEY);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[6], EJwkKeyOps::DERIVE_KEY);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[7], EJwkKeyOps::DERIVE_BITS);
+        UNIT_ASSERT(jwk.value().KeyOperations.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(jwk.value().KeyOperations.value().size(), 8);
+        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[0], EJwkKeyOps::SIGN);
+        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[1], EJwkKeyOps::VERIFY);
+        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[2], EJwkKeyOps::ENCRYPT);
+        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[3], EJwkKeyOps::DECRYPT);
+        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[4], EJwkKeyOps::WRAP_KEY);
+        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[5], EJwkKeyOps::UNWRAP_KEY);
+        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[6], EJwkKeyOps::DERIVE_KEY);
+        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[7], EJwkKeyOps::DERIVE_BITS);
     }
 
     Y_UNIT_TEST(KeyOpsMissing) {
         const auto jwk = ParseJwk(ParseJson(R"({"kty": "RSA"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(jwk->KeyOperations.empty());
+        UNIT_ASSERT(!jwk.value().KeyOperations.has_value());
     }
 
     Y_UNIT_TEST(KeyOpsEmpty) {
         const auto jwk = ParseJwk(ParseJson(R"({"kty": "RSA", "key_ops": []})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(jwk->KeyOperations.empty());
+        UNIT_ASSERT(jwk.value().KeyOperations.has_value());
+        UNIT_ASSERT(jwk.value().KeyOperations.value().empty());
     }
 
-    Y_UNIT_TEST(KeyOpsUnknownValuesSkipped) {
+    Y_UNIT_TEST(KeyOpsUnknownValuesRejected) {
         const auto jwk = ParseJwk(ParseJson(R"({"kty": "RSA", "key_ops": ["sign", "unknown", "verify"]})"));
-        UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(jwk->KeyOperations.size(), 2);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[0], EJwkKeyOps::SIGN);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[1], EJwkKeyOps::VERIFY);
+        UNIT_ASSERT(!jwk.has_value());
     }
 
-    Y_UNIT_TEST(KeyOpsNonStringValuesSkipped) {
+    Y_UNIT_TEST(KeyOpsNonStringValuesRejected) {
         const auto jwk = ParseJwk(ParseJson(R"({"kty": "RSA", "key_ops": ["sign", 123, "verify"]})"));
-        UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(jwk->KeyOperations.size(), 2);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[0], EJwkKeyOps::SIGN);
-        UNIT_ASSERT_EQUAL(jwk->KeyOperations[1], EJwkKeyOps::VERIFY);
+        UNIT_ASSERT(!jwk.has_value());
     }
 
     Y_UNIT_TEST(KeyOpsNotArray) {
         const auto jwk = ParseJwk(ParseJson(R"({"kty": "RSA", "key_ops": "sign"})"));
-        UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(jwk->KeyOperations.empty());
+        UNIT_ASSERT(!jwk.has_value());
+    }
+
+    Y_UNIT_TEST(KeyOpsDuplicatesRejected) {
+        const auto jwk = ParseJwk(ParseJson(R"({"kty": "RSA", "key_ops": ["verify", "verify"]})"));
+        UNIT_ASSERT(!jwk.has_value());
+    }
+
+    Y_UNIT_TEST(KeyOpsExtensionOnlyRejected) {
+        const auto jwk = ParseJwk(ParseJson(R"({"kty": "RSA", "key_ops": ["extension"]})"));
+        UNIT_ASSERT(!jwk.has_value());
+    }
+
+    Y_UNIT_TEST(KeyOpsNullRejected) {
+        UNIT_ASSERT(!ParseJwk(ParseJson(R"({"kty": "RSA", "key_ops": null})")).has_value());
+    }
+
+    Y_UNIT_TEST(ThumbprintsRequireCanonicalBase64Url) {
+        for (const auto& [name, size] : {std::pair{"x5t", 20}, std::pair{"x5t#S256", 32}}) {
+            auto json = ParseJson(R"({"kty": "RSA"})");
+            const auto canonical = Base64EncodeUrlNoPadding(std::string(size, '\xff'));
+            json[name] = canonical;
+            UNIT_ASSERT(ParseJwk(json).has_value());
+            json[name] = canonical + "=";
+            UNIT_ASSERT(!ParseJwk(json).has_value());
+            json[name] = Base64Encode(std::string(size, '\xff'));
+            UNIT_ASSERT(!ParseJwk(json).has_value());
+            auto nonCanonical = canonical;
+            nonCanonical.back() = '_'; // Nonzero unused bits, same decoded bytes.
+            json[name] = nonCanonical;
+            UNIT_ASSERT(!ParseJwk(json).has_value());
+        }
+    }
+
+    Y_UNIT_TEST(CertificateChainLengthBound) {
+        auto json = ParseJson(R"({"kty": "RSA", "x5c": []})");
+        for (size_t i = 0; i < 100; ++i) {
+            json["x5c"].AppendValue(Base64Encode("certificate"));
+        }
+        UNIT_ASSERT(ParseJwk(json).has_value());
+        json["x5c"].AppendValue(Base64Encode("certificate"));
+        UNIT_ASSERT(!ParseJwk(json).has_value());
+    }
+
+    Y_UNIT_TEST(CertificateChainLengthBoundForConstructedJwk) {
+        TJwk jwk(EJwkKeyType::RSA);
+        jwk.X509Chain.resize(101, "invalid DER");
+        std::string error;
+        UNIT_ASSERT(!jwk.CalculatePublicKey(error).has_value());
+        UNIT_ASSERT_STRING_CONTAINS(error, "between 1 and 100");
     }
 
     // RFC 7517 Section 4.4 — "alg" (Algorithm) Parameter
@@ -516,7 +590,8 @@ Y_UNIT_TEST_SUITE(TParseJwkTest) {
         UNIT_ASSERT(jwk.has_value());
         UNIT_ASSERT_EQUAL(jwk->Type, EJwkKeyType::RSA);
         UNIT_ASSERT_EQUAL(jwk->Usage.value(), EJwkUsage::SIG);
-        UNIT_ASSERT_VALUES_EQUAL(jwk->KeyOperations.size(), 2);
+        UNIT_ASSERT(jwk.value().KeyOperations.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(jwk.value().KeyOperations.value().size(), 2);
         UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), EJwkAlg::RS256);
         UNIT_ASSERT_VALUES_EQUAL(jwk->KeyId, "my-key-id");
         UNIT_ASSERT_VALUES_EQUAL(jwk->X509Url, "https://example.com/cert");
@@ -618,8 +693,9 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
 
         UNIT_ASSERT(jwkSet.has_value());
         UNIT_ASSERT_VALUES_EQUAL(jwkSet->Keys.size(), 2);
-        const auto firstPublicKey = jwkSet->Keys[0].CalculatePublicKey();
-        UNIT_ASSERT(firstPublicKey.has_value());
+        std::string error;
+        const auto firstPublicKey = jwkSet->Keys[0].CalculatePublicKey(error);
+        UNIT_ASSERT_C(firstPublicKey.has_value(), error);
         UNIT_ASSERT_STRINGS_EQUAL(
             firstPublicKey.value(),
             "-----BEGIN PUBLIC KEY-----\n"
@@ -631,8 +707,8 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
             "HKAh2/UVZ+8Gcyudgo+6ZxhFOxHEFAGVxtIISC++SMncNNPGhUgA46BvOwU2Nmbe\n"
             "6wIDAQAB\n"
             "-----END PUBLIC KEY-----\n");
-        const auto secondPublicKey = jwkSet->Keys[1].CalculatePublicKey();
-        UNIT_ASSERT(secondPublicKey.has_value());
+        const auto secondPublicKey = jwkSet->Keys[1].CalculatePublicKey(error);
+        UNIT_ASSERT_C(secondPublicKey.has_value(), error);
         UNIT_ASSERT_VALUES_EQUAL(
             secondPublicKey.value(),
             "-----BEGIN PUBLIC KEY-----\n"
@@ -656,8 +732,9 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
         })"));
 
         UNIT_ASSERT(jwk.has_value());
-        const auto publicKey = jwk->CalculatePublicKey();
-        UNIT_ASSERT(publicKey.has_value());
+        std::string error;
+        const auto publicKey = jwk->CalculatePublicKey(error);
+        UNIT_ASSERT_C(publicKey.has_value(), error);
         UNIT_ASSERT_STRINGS_EQUAL(
             publicKey.value(),
             "-----BEGIN PUBLIC KEY-----\n"
@@ -680,7 +757,9 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
         })"));
 
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(!jwk->CalculatePublicKey().has_value());
+        std::string error;
+        UNIT_ASSERT(!jwk->CalculatePublicKey(error).has_value());
+        UNIT_ASSERT(!error.empty());
     }
 
     Y_UNIT_TEST(CalculatePublicKeyWithInvalidX5CReturnsNullopt) {
@@ -691,7 +770,9 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
         })"));
 
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(!jwk->CalculatePublicKey().has_value());
+        std::string error;
+        UNIT_ASSERT(!jwk->CalculatePublicKey(error).has_value());
+        UNIT_ASSERT(!error.empty());
     }
 
     Y_UNIT_TEST(CalculatePublicKeyWithWrongSha1ThumbprintReturnsNullopt) {
@@ -705,7 +786,9 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
         })"));
 
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(!jwk->CalculatePublicKey().has_value());
+        std::string error;
+        UNIT_ASSERT(!jwk->CalculatePublicKey(error).has_value());
+        UNIT_ASSERT(!error.empty());
     }
 
     Y_UNIT_TEST(CalculatePublicKeyWithWrongSha256ThumbprintReturnsNullopt) {
@@ -719,7 +802,9 @@ Y_UNIT_TEST_SUITE(TPublicKeysTest) {
         })"));
 
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(!jwk->CalculatePublicKey().has_value());
+        std::string error;
+        UNIT_ASSERT(!jwk->CalculatePublicKey(error).has_value());
+        UNIT_ASSERT(!error.empty());
     }
 
 }
@@ -777,8 +862,9 @@ Y_UNIT_TEST_SUITE(TJwkCryptoTest) {
         const auto key = GenerateKey();
         const auto jwk = ParseJwk(KeyParameters(key.get()));
         UNIT_ASSERT(jwk.has_value());
-        const auto pem = jwk.value().CalculatePublicKey();
-        UNIT_ASSERT(pem.has_value());
+        std::string error;
+        const auto pem = jwk.value().CalculatePublicKey(error);
+        UNIT_ASSERT_C(pem.has_value(), error);
         UNIT_ASSERT_VALUES_EQUAL(pem.value(), PublicKeyPem(key.get()));
     }
 
@@ -789,7 +875,8 @@ Y_UNIT_TEST_SUITE(TJwkCryptoTest) {
             const auto key = GenerateKey(nid);
             const auto jwk = ParseJwk(KeyParameters(key.get(), curve));
             UNIT_ASSERT(jwk.has_value());
-            const auto pem = jwk.value().CalculatePublicKey();
+            std::string error;
+            const auto pem = jwk.value().CalculatePublicKey(error);
             UNIT_ASSERT_C(pem.has_value(), curve);
             UNIT_ASSERT_VALUES_EQUAL(pem.value(), PublicKeyPem(key.get()));
         }
@@ -901,12 +988,14 @@ Y_UNIT_TEST_SUITE(TJwkCryptoTest) {
         // The root and even the issuer may be omitted by an authenticated IdP.
         SetChain(json, {leaf.get(), issuer.get()});
         jwk = ParseJwk(json);
-        UNIT_ASSERT(jwk.has_value() && jwk.value().CalculatePublicKey().has_value());
+        UNIT_ASSERT(jwk.has_value());
+        AssertPublicKey(jwk.value(), key.get());
         SetChain(json, {leaf.get()});
         jwk = ParseJwk(json);
-        UNIT_ASSERT(jwk.has_value() && jwk.value().CalculatePublicKey().has_value());
+        UNIT_ASSERT(jwk.has_value());
+        AssertPublicKey(jwk.value(), key.get());
         SetChain(json, {leaf.get(), root.get(), issuer.get()});
-        AssertInvalidKey(json);
+        AssertInvalidKey(json, "certificate index 1: invalid issuer:");
         SetChain(json, {leaf.get(), issuer.get(), root.get(), root.get()});
         AssertInvalidKey(json);
         const auto wrongIssuer = MakeCertificate(rootKey.get(), "issuer", root.get(), rootKey.get(),
@@ -919,7 +1008,7 @@ Y_UNIT_TEST_SUITE(TJwkCryptoTest) {
         const auto expiredIssuer = MakeCertificate(issuerKey.get(), "issuer", root.get(), rootKey.get(),
             "critical,CA:TRUE", -7200, -3600, "keyCertSign");
         SetChain(json, {leaf.get(), expiredIssuer.get(), root.get()});
-        AssertInvalidKey(json);
+        AssertInvalidKey(json, "certificate index 1: certificate has expired (code 10)");
         const auto shortRoot = MakeCertificate(rootKey.get(), "root", nullptr, nullptr,
             "critical,CA:TRUE,pathlen:0", -3600, 3600, "keyCertSign");
         SetChain(json, {leaf.get(), issuer.get(), shortRoot.get()});
@@ -939,7 +1028,8 @@ Y_UNIT_TEST_SUITE(TJwkCryptoTest) {
         json["use"] = "enc";
         json["alg"] = "RSA-OAEP-256";
         auto jwk = ParseJwk(json);
-        UNIT_ASSERT(jwk.has_value() && jwk.value().CalculatePublicKey().has_value());
+        UNIT_ASSERT(jwk.has_value());
+        AssertPublicKey(jwk.value(), key.get());
         json.EraseValue("alg");
         json["use"] = "sig";
         AssertInvalidKey(json);
@@ -996,6 +1086,88 @@ Y_UNIT_TEST_SUITE(TJwkCryptoTest) {
         AssertInvalidKey(json);
     }
 
+    Y_UNIT_TEST(CertificateCurveMustMatchParameters) {
+        const auto key = GenerateKey(NID_X9_62_prime256v1);
+        const auto otherKey = GenerateKey(NID_secp384r1);
+        const auto cert = MakeCertificate(otherKey.get(), "P-384");
+        auto json = KeyParameters(key.get(), "P-256");
+        SetChain(json, {cert.get()});
+        AssertInvalidKey(json, "parameters do not match x5c certificate index 0");
+    }
+
+    Y_UNIT_TEST(UnsupportedCertificateCurveRejected) {
+        const auto key = GenerateKey(NID_secp256k1);
+        const auto cert = MakeCertificate(key.get(), "secp256k1");
+        auto json = ParseJson(R"({"kty": "EC"})");
+        SetChain(json, {cert.get()});
+        AssertInvalidKey(json, "Unsupported EC curve");
+    }
+
+    Y_UNIT_TEST(WeakRsaCertificateRejected) {
+        const auto key = GenerateKey(NID_undef, 1024);
+        const auto cert = MakeCertificate(key.get(), "RSA-1024");
+        auto json = ParseJson(R"({"kty": "RSA"})");
+        SetChain(json, {cert.get()});
+        AssertInvalidKey(json, "RSA modulus below 2048 bits");
+    }
+
+    Y_UNIT_TEST(RsaPssCertificates) {
+        const auto issuerKey = GenerateKey();
+        const auto issuer = MakeCertificate(issuerKey.get(), "issuer", nullptr, nullptr,
+            "critical,CA:TRUE", -3600, 3600, "keyCertSign");
+        for (const auto& [alg, digest] : {std::pair{"PS256", EVP_sha256()},
+                std::pair{"PS384", EVP_sha384()}, std::pair{"PS512", EVP_sha512()}}) {
+            for (const bool restricted : {false, true}) {
+                const auto key = restricted
+                    ? GeneratePssKey(digest, digest, EVP_MD_size(digest)) : GeneratePssKey();
+                const auto cert = MakeCertificate(key.get(), "PSS", issuer.get(), issuerKey.get());
+                auto json = ParseJson(R"({"kty": "RSA"})");
+                json["alg"] = alg;
+                SetChain(json, {cert.get(), issuer.get()});
+                auto jwk = ParseJwk(json);
+                UNIT_ASSERT(jwk.has_value());
+                AssertPublicKey(jwk.value(), key.get());
+                const auto params = KeyParameters(key.get());
+                json["n"] = params["n"];
+                json["e"] = params["e"];
+                jwk = ParseJwk(json);
+                UNIT_ASSERT(jwk.has_value());
+                AssertPublicKey(jwk.value(), key.get());
+                json["n"] = KeyParameters(issuerKey.get())["n"];
+                AssertInvalidKey(json);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(IncompatibleRsaPssRestrictionsRejected) {
+        const auto issuerKey = GenerateKey();
+        const auto issuer = MakeCertificate(issuerKey.get(), "issuer", nullptr, nullptr,
+            "critical,CA:TRUE", -3600, 3600, "keyCertSign");
+        const auto check = [&](const EVP_MD* digest, const EVP_MD* mgf, int saltLength) {
+            const auto key = GeneratePssKey(digest, mgf, saltLength);
+            const auto cert = MakeCertificate(key.get(), "PSS", issuer.get(), issuerKey.get());
+            auto json = ParseJson(R"({"kty": "RSA", "alg": "PS256"})");
+            SetChain(json, {cert.get()});
+            AssertInvalidKey(json);
+        };
+        check(EVP_sha384(), EVP_sha256(), 32);
+        check(EVP_sha256(), EVP_sha384(), 32);
+        check(EVP_sha256(), EVP_sha256(), 33);
+        const auto key = GeneratePssKey(EVP_sha256(), EVP_sha256(), 20);
+        const auto cert = MakeCertificate(key.get(), "PSS", issuer.get(), issuerKey.get());
+        auto json = ParseJson(R"({"kty": "RSA", "alg": "PS256"})");
+        SetChain(json, {cert.get()});
+        const auto jwk = ParseJwk(json);
+        UNIT_ASSERT(jwk.has_value());
+        AssertPublicKey(jwk.value(), key.get()); // Encoded salt length is a minimum.
+        for (const char* alg : {"RS256", "RSA-OAEP", "PS384", "PS512"}) {
+            json["alg"] = alg;
+            AssertInvalidKey(json);
+        }
+        json.EraseValue("alg");
+        AssertInvalidKey(json);
+    }
+
     Y_UNIT_TEST(MixedJwkSet) {
         const auto rsa = GenerateKey();
         const auto ec = GenerateKey(NID_X9_62_prime256v1);
@@ -1005,6 +1177,10 @@ Y_UNIT_TEST_SUITE(TJwkCryptoTest) {
         auto invalid = KeyParameters(rsa.get());
         invalid["n"] = "not-base64!";
         json["keys"].AppendValue(invalid);
+        auto invalidOps = KeyParameters(rsa.get());
+        invalidOps["key_ops"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+        invalidOps["key_ops"].AppendValue("extension");
+        json["keys"].AppendValue(invalidOps);
         json["keys"].AppendValue(KeyParameters(ec.get(), "P-256"));
         const auto jwks = ParseJwkSet(json);
         UNIT_ASSERT(jwks.has_value());

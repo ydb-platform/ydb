@@ -501,6 +501,8 @@ Y_UNIT_TEST(ReportsEveryIndependentError) {
 
     TMemoryStorage missing;
     AddTable(missing, "t", 2, "row\n", true);
+    missing.Put("t/metadata.json", TableMetadata(false));
+    missing.Files.erase("t/metadata.json.sha256");
     missing.Files.erase("t/data_00.csv");
     missing.Files.erase("t/data_00.csv.sha256");
     missing.Files.erase("t/data_01.csv");
@@ -550,6 +552,8 @@ Y_UNIT_TEST(FailFastStopsAtFirstError) {
 
     TMemoryStorage missing;
     AddTable(missing, "t", 2, "row\n", true);
+    missing.Put("t/metadata.json", TableMetadata(false));
+    missing.Files.erase("t/metadata.json.sha256");
     missing.Files.erase("t/data_00.csv");
     missing.Files.erase("t/data_00.csv.sha256");
     missing.Files.erase("t/data_01.csv");
@@ -557,6 +561,8 @@ Y_UNIT_TEST(FailFastStopsAtFirstError) {
     const TValidationReport missingReport = RunFast(missing, "t");
     UNIT_ASSERT_VALUES_EQUAL(missingReport.Issues.size(), 1);
     UNIT_ASSERT(HasIssue(missingReport, "t/data_00.csv", "partition 0"));
+    UNIT_ASSERT(!HasIssue(missingReport, "t/data_01.csv", "missing data file"));
+    UNIT_ASSERT(!HasIssue(missingReport, "t", "checksums are absent"));
 }
 
 Y_UNIT_TEST(FailFastSkipsChecksAfterChangefeedError) {

@@ -50,6 +50,20 @@ public:
         SideEffects.Send(Source, reply.release(), 0, Cookie);
     }
 
+    TString UnsupportedTabletTypes() const {
+        TStringBuilder types;
+        for (const auto type : Self->SeenTabletTypes) {
+            if (std::ranges::find(Self->CutHistoryDenyList, type) == Self->CutHistoryDenyList.end()) {
+                continue;
+            }
+            if (!types.empty()) {
+                types << ", ";
+            }
+            types << type;
+        }
+        return types;
+    }
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         YDB_LOG_DEBUG("THive::TTxShrinkPool::Execute shrinking storage pool",
             {"logPrefix", GetLogPrefix()});
@@ -71,6 +85,10 @@ public:
         }
         if (NewSize == 0) {
             ReplyWithError("cannot remove all groups");
+            return true;
+        }
+        if (const TString unsupported = UnsupportedTabletTypes()) {
+            ReplyWithError(TStringBuilder() << "unsupported tablet type: " << unsupported);
             return true;
         }
 

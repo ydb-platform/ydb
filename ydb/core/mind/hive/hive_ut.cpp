@@ -10715,6 +10715,37 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         makeRequest(5, NKikimrProto::OK, ++version);
     }
 
+    Y_UNIT_TEST(TestShrinkStoragePoolUnsupportedTabletType) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 5, [](TAppPrepare& app) {
+            app.HiveConfig.SetCutHistoryDenyList("Dummy,ColumnShard");
+        });
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        const TActorId senderA = runtime.AllocateEdgeActor(0);
+        const ui64 testerTablet = MakeTabletID(false, 1);
+
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, TTabletTypes::Dummy, {3, GetChannelBind("def1")}));
+        SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+
+        auto request = std::make_unique<TEvHive::TEvShrinkStoragePool>();
+        request->Record.MutableSubDomain()->SetSchemeShard(TTestTxConfig::SchemeShard);
+        request->Record.MutableSubDomain()->SetPathId(1);
+        request->Record.SetStoragePool("def1");
+        request->Record.SetNewSize(3);
+        request->Record.SetVersion(1);
+        runtime.SendToPipe(hiveTablet, senderA, request.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto response = runtime.GrabEdgeEventRethrow<TEvHive::TEvShrinkStoragePoolReply>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(response->Record.GetError(), "unsupported tablet type");
+        UNIT_ASSERT_STRING_CONTAINS(response->Record.GetError(), "Dummy");
+        UNIT_ASSERT_C(!response->Record.GetError().Contains("ColumnShard"),
+            "a denied type the hive has not seen must not be reported: " << response->Record.GetError());
+    }
+
     void TestShrinkStoragePool(TTestBasicRuntime& runtime, bool& activeZone) {
         const ui64 hiveTablet = MakeDefaultHiveID();
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);

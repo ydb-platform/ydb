@@ -1,0 +1,53 @@
+version: 1
+staging-root: .generated/sdk-snippets
+sources:
+  go:
+    repository: https://github.com/ydb-platform/ydb-go-sdk
+    ref:
+      kind: branch
+      name: docs/topic-snippets
+    include:
+    - ydb_tech/topic/main.go
+  java:
+    repository: https://github.com/ydb-platform/ydb-java-sdk
+    ref:
+      kind: branch
+      name: docs/topic-snippets
+    include:
+    - ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java
+  python:
+    repository: https://github.com/ydb-platform/ydb-python-sdk
+    ref:
+      kind: branch
+      name: docs/topic-snippets
+    include:
+    - ydb_tech/topic/sync_example.py
+    - ydb_tech/topic/async_example.py
+  dotnet:
+    repository: https://github.com/ydb-platform/ydb-dotnet-sdk
+    ref:
+      kind: branch
+      name: docs/topic-snippets
+    include:
+    - ydb_tech/topic/Program.cs
+  javascript:
+    repository: https://github.com/ydb-platform/ydb-js-sdk
+    ref:
+      kind: branch
+      name: docs/topic-snippets
+    include:
+    - ydb_tech/topic/main.ts
+  rust:
+    repository: https://github.com/ydb-platform/ydb-rs-sdk
+    ref:
+      kind: branch
+      name: docs/topic-snippets
+    include:
+    - ydb_tech/topic/main.rs
+  cpp:
+    repository: https://github.com/ydb-platform/ydb-cpp-sdk
+    ref:
+      kind: branch
+      name: docs/topic-snippets
+    include:
+    - ydb_tech/topic/main.cpp

@@ -1,0 +1,31 @@
+name: Prepare SDK snippets
+description: Download locked source files and validate documentation regions
+
+inputs:
+  docs-root:
+    description: Documentation input root containing manifest and lock
+    default: ydb/docs
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install preparation dependencies
+      shell: bash
+      env:
+        DOCS_ROOT: ${{ inputs.docs-root }}
+      run: python -m pip install -r "$DOCS_ROOT/tools/sdk_snippets/requirements.txt"
+    - uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/sdk-snippets-cache
+        key: sdk-snippets-v1-${{ hashFiles(format('{0}/sdk-snippets.lock.yaml', inputs.docs-root)) }}
+        restore-keys: sdk-snippets-v1-
+    - name: Download and validate locked snippets
+      shell: bash
+      env:
+        DOCS_ROOT: ${{ inputs.docs-root }}
+        SDK_SNIPPETS_CACHE: ${{ runner.temp }}/sdk-snippets-cache
+        GH_TOKEN: ${{ github.token }}
+      run: python "$DOCS_ROOT/tools/sdk-snippets" --manifest "$DOCS_ROOT/sdk-snippets.yaml" prepare

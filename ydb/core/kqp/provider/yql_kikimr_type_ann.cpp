@@ -3106,6 +3106,12 @@ private:
             return TStatus::Error;
         }
 
+        if (unsafe && !SessionCtx->Config().EnableUnsafeTruncateTable.Get().GetOrElse(false)) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                "TRUNCATE TABLE ... WITH (unsafe = true) requires PRAGMA kikimr.EnableUnsafeTruncateTable=\"true\" in the query"));
+            return TStatus::Error;
+        }
+
         return TStatus::Ok;
     }
 

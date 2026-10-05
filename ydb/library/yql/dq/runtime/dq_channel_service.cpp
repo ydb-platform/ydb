@@ -1448,12 +1448,17 @@ void TNodeState::SendDataEvent(THolder<TEvDqCompute::TEvChannelDataV2> ev, const
 #if !defined(NDEBUG)
     if (auto failCount = FailureLossSend.load(); failCount > 0) {
         FailureLossSend.store(failCount - 1);
+        if (flags & NActors::IEventHandle::FlagSubscribeOnSession) {
+            Subscribed.store(false); // the lost send has not subscribed
+        }
     } else {
         if (auto failCount = FailureDoubleSend.load(); failCount > 0) {
             FailureDoubleSend.store(failCount - 1);
             auto ev2 = MakeHolder<TEvDqCompute::TEvChannelDataV2>();
             ev2->Record = ev->Record;
-            ActorSystem->Send(new NActors::IEventHandle(InputNodeActorId, NodeActorId, ev2.Release(), flags, item.SeqNo));
+            // one subscription per flag: two dropped ones would bring two TEvNodeDisconnected
+            ActorSystem->Send(new NActors::IEventHandle(InputNodeActorId, NodeActorId, ev2.Release(),
+                flags & ~NActors::IEventHandle::FlagSubscribeOnSession, item.SeqNo));
         }
 #endif
         LOG_T(LogPrefix << "SEND DATA, G=" << GenMajor << '.' << GenMinor << ", SeqNo=" << item.SeqNo
@@ -1818,6 +1823,8 @@ void TNodeState::ResendUpdates() {
     if (!OutputNodeActorId) {
         return;
     }
+    // pairs with the fence in SendUpdateProgress, for a consumer which found no peer
+    std::atomic_thread_fence(std::memory_order_seq_cst);
     // after ConnectSession has published the peer: an update a consumer sends meanwhile to the previous one is
     // either before this resend under UpdateMutex, or reads the new peer itself
     for (auto& [_, descriptor] : InputDescriptors) {
@@ -2245,12 +2252,23 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
         && memoryPressure == descriptor->LastSentMemoryPressure) {
         return; // noop
     }
+
+    auto peer = ReadPeer();
+    if (!peer.ActorId) {
+        // pairs with the fence in ResendUpdates: either this sees the peer or the resend sees the update
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        peer = ReadPeer();
+    }
+    if (!peer.ActorId) {
+        // sent after the discovery, by ResendUpdates or the next pop; a send to nobody would spend FlagSubscribeOnSession
+        return;
+    }
+
     descriptor->LastSentMemoryPressure = memoryPressure;
     if (memoryPressure) {
         (*InputBufferPressureReports)++;
     }
 
-    auto peer = ReadPeer();
     auto evUpdate = MakeHolder<TEvDqCompute::TEvChannelUpdateV2>();
 
     evUpdate->Record.SetGenMajor(peer.GenMajor);
@@ -2270,7 +2288,12 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
         evUpdate->Record.SetMemoryPressure(true);
     }
 
-    ui32 flags = SendFlags(DqIcChannelControl);
+    // it may subscribe only under SubscribeMutex: a consumer runs it off the session thread and Mutex, see HandlePoison
+    std::unique_lock subscribeLock(SubscribeMutex, std::defer_lock);
+    if (!Subscribed.load()) {
+        subscribeLock.lock();
+    }
+    ui32 flags = subscribeLock.owns_lock() ? SendFlags(DqIcChannelControl) : TrackFlags(DqIcChannelControl);
 
     LOG_T(LogPrefix << "SEND UPDATE, ChannelId=" << descriptor->Info.ChannelId
         << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
@@ -2812,6 +2835,13 @@ void TDqChannelService::DropNodeSession(std::unordered_map<ui32, std::shared_ptr
 void TNodeState::HandlePoison() {
     std::lock_guard lock(Mutex);
     FailDescriptors(DropReason ? DropReason : "Node session poisoned with the channel still open");
+    // a dead subscriber lingers until the hourly liveness check. Subscribed stays set so that later sends do not
+    // resubscribe; an update which has taken the flag holds SubscribeMutex until it is sent
+    std::lock_guard subscribeLock(SubscribeMutex);
+    if (Subscribed.exchange(true)) {
+        ActorSystem->Send(new NActors::IEventHandle(ActorSystem->InterconnectProxy(NodeId), NodeActorId,
+            new NActors::TEvents::TEvUnsubscribe()));
+    }
 }
 
 // unbinded stubs

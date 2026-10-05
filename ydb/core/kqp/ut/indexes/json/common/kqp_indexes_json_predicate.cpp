@@ -11,6 +11,12 @@ struct TAtom {
     std::string Sql;
     std::function<void(NYdb::TParamsBuilder&)> AddParams;
     bool IsJsonIndexable = true;
+    bool ExpectBothPathError = false;
+    std::string ExpectedBothPathErrorSubstr;
+    std::string ExpectedIndexErrorSubstr;
+    std::optional<EJsonShape> JsonParameterShape;
+    EJsonParameterFunction JsonParameterFunction = EJsonParameterFunction::None;
+    bool IsJsonParameterComposition = false;
 };
 
 class TPredicateBatchGenerator {
@@ -40,6 +46,10 @@ public:
 
         if (Opts.EnableSqlParameters) {
             GenerateSqlParameters();
+        }
+
+        if (Opts.EnableJsonParameters) {
+            GenerateJsonParameters();
         }
 
         if (Opts.EnableRangeComparisons) {
@@ -88,6 +98,8 @@ public:
 private:
     void FillKeyPools() {
         for (const auto& row : Rows) {
+            RowsByShape[static_cast<size_t>(row.Shape)].push_back(&row);
+
             switch (row.Shape) {
                 case EJsonShape::Scalar:
                     switch (row.Key % 6) {
@@ -221,14 +233,34 @@ private:
         return TAtom{
             .Sql = "(" + a.Sql + ") AND (" + b.Sql + ")",
             .AddParams = MergeAdd(a.AddParams, b.AddParams),
-            .IsJsonIndexable = a.IsJsonIndexable || b.IsJsonIndexable};
+            .IsJsonIndexable = a.IsJsonIndexable || b.IsJsonIndexable,
+            .ExpectBothPathError = a.ExpectBothPathError || b.ExpectBothPathError,
+            .ExpectedBothPathErrorSubstr = a.ExpectBothPathError
+                ? a.ExpectedBothPathErrorSubstr
+                : b.ExpectedBothPathErrorSubstr,
+            .ExpectedIndexErrorSubstr = a.ExpectBothPathError
+                ? a.ExpectedIndexErrorSubstr
+                : b.ExpectedIndexErrorSubstr,
+            .IsJsonParameterComposition = a.IsJsonParameterComposition || b.IsJsonParameterComposition
+                || a.JsonParameterFunction != EJsonParameterFunction::None
+                || b.JsonParameterFunction != EJsonParameterFunction::None};
     }
 
     TAtom OrAtom(const TAtom& a, const TAtom& b) {
         return TAtom{
             .Sql = "(" + a.Sql + ") OR (" + b.Sql + ")",
             .AddParams = MergeAdd(a.AddParams, b.AddParams),
-            .IsJsonIndexable = a.IsJsonIndexable && b.IsJsonIndexable};
+            .IsJsonIndexable = a.IsJsonIndexable && b.IsJsonIndexable,
+            .ExpectBothPathError = a.ExpectBothPathError || b.ExpectBothPathError,
+            .ExpectedBothPathErrorSubstr = a.ExpectBothPathError
+                ? a.ExpectedBothPathErrorSubstr
+                : b.ExpectedBothPathErrorSubstr,
+            .ExpectedIndexErrorSubstr = a.ExpectBothPathError
+                ? a.ExpectedIndexErrorSubstr
+                : b.ExpectedIndexErrorSubstr,
+            .IsJsonParameterComposition = a.IsJsonParameterComposition || b.IsJsonParameterComposition
+                || a.JsonParameterFunction != EJsonParameterFunction::None
+                || b.JsonParameterFunction != EJsonParameterFunction::None};
     }
 
     void AddJ(std::string sql, std::function<void(NYdb::TParamsBuilder&)> addP = nullptr) {
@@ -243,6 +275,29 @@ private:
             .Sql = std::move(sql),
             .AddParams = std::move(addP),
             .IsJsonIndexable = false});
+    }
+
+    void AddJsonParameter(std::string sql, std::function<void(NYdb::TParamsBuilder&)> addP,
+        EJsonParameterFunction function, std::optional<EJsonShape> shape = std::nullopt)
+    {
+        JsonParameterAtoms.push_back(TAtom{
+            .Sql = std::move(sql),
+            .AddParams = std::move(addP),
+            .IsJsonIndexable = true,
+            .JsonParameterShape = shape,
+            .JsonParameterFunction = function});
+    }
+
+    void AddJBothPathErr(std::string sql, std::function<void(NYdb::TParamsBuilder&)> addP,
+        std::string errorSubstr, std::string indexErrorSubstr = {})
+    {
+        ExecutionErrorAtoms.push_back(TAtom{
+            .Sql = std::move(sql),
+            .AddParams = std::move(addP),
+            .IsJsonIndexable = true,
+            .ExpectBothPathError = true,
+            .ExpectedBothPathErrorSubstr = std::move(errorSubstr),
+            .ExpectedIndexErrorSubstr = std::move(indexErrorSubstr)});
     }
 
     void GenerateJsonExists() {
@@ -1401,6 +1456,191 @@ private:
 
             AddJErr(fmt::format(R"(NOT JSON_VALUE(Text, '{0} $.shared == $val' PASSING "shared_v"u AS val RETURNING Bool))", Mode));
             AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.shared == $val' PASSING "shared_v"u AS val RETURNING Bool) != Just(true))", Mode));
+        }
+    }
+
+    void GenerateJsonParameters() {
+        const auto addJsonParam = [](NYdb::TParamsBuilder& builder, const std::string& name, const TString& json) {
+            builder.AddParam(name).Json(json).Build();
+        };
+
+        for (size_t shape = 0; shape < kJsonCorpusNumShapes; ++shape) {
+            const auto& rows = RowsByShape[shape];
+            if (rows.empty()) {
+                continue;
+            }
+
+            const auto& row = *rows[Rng.Uniform(rows.size())];
+            if (!row.JsonText) {
+                continue;
+            }
+
+            if (Opts.EnableJsonExists) {
+                auto pn = NewPname();
+                auto vn = pn.substr(1);
+                AddJsonParameter(fmt::format(
+                    "JSON_EXISTS(Text, '{0} $ ? (@ == ${1})' PASSING {2} AS {1})",
+                    Mode, vn, pn),
+                    [pn, json = *row.JsonText, addJsonParam](NYdb::TParamsBuilder& bld) {
+                        addJsonParam(bld, pn, json);
+                    },
+                    EJsonParameterFunction::JsonExists, row.Shape);
+            }
+
+            if (Opts.EnableJsonValue) {
+                auto pn = NewPname();
+                auto vn = pn.substr(1);
+                AddJsonParameter(fmt::format(
+                    "JSON_VALUE(Text, '{0} exists($ ? (@ == ${1}))' PASSING {2} AS {1} RETURNING Bool)",
+                    Mode, vn, pn),
+                    [pn, json = *row.JsonText, addJsonParam](NYdb::TParamsBuilder& bld) {
+                        addJsonParam(bld, pn, json);
+                    },
+                    EJsonParameterFunction::JsonValue, row.Shape);
+            }
+        }
+
+        const std::array<TString, 4> edgeValues = {
+            "[]",
+            "{}",
+            R"([1, 1, true, null, "shared_v"])",
+            R"({"outer": [{"inner": 1}, [], {}], "flag": true})",
+        };
+        for (const auto& json : edgeValues) {
+            if (Opts.EnableJsonExists) {
+                auto pn = NewPname();
+                auto vn = pn.substr(1);
+                AddJsonParameter(fmt::format(
+                    "JSON_EXISTS(Text, '{0} $[*] ? (@ == ${1})' PASSING {2} AS {1})",
+                    Mode, vn, pn),
+                    [pn, json, addJsonParam](NYdb::TParamsBuilder& bld) {
+                        addJsonParam(bld, pn, json);
+                    },
+                    EJsonParameterFunction::JsonExists);
+            }
+
+            if (Opts.EnableJsonValue) {
+                auto pn = NewPname();
+                auto vn = pn.substr(1);
+                AddJsonParameter(fmt::format(
+                    "JSON_VALUE(Text, '{0} exists($[*] ? (@ == ${1}))' PASSING {2} AS {1} RETURNING Bool)",
+                    Mode, vn, pn),
+                    [pn, json, addJsonParam](NYdb::TParamsBuilder& bld) {
+                        addJsonParam(bld, pn, json);
+                    },
+                    EJsonParameterFunction::JsonValue);
+            }
+        }
+
+        if (Opts.EnableJsonExists) {
+            auto p1 = NewPname();
+            auto p2 = NewPname();
+            auto v1 = p1.substr(1);
+            auto v2 = p2.substr(1);
+            AddJsonParameter(fmt::format(
+                "JSON_EXISTS(Text, '{0} $ ? (@.shared_n == ${1} && @.shared_s == ${2})' PASSING {3} AS {1}, {4} AS {2})",
+                Mode, v1, v2, p1, p2),
+                [p1, p2, addJsonParam](NYdb::TParamsBuilder& bld) {
+                    addJsonParam(bld, p1, R"([1, 2, 3])");
+                    addJsonParam(bld, p2, R"(["shared_v", "missing"])");
+                },
+                EJsonParameterFunction::JsonExists);
+
+            auto pn = NewPname();
+            auto vn = pn.substr(1);
+            AddJsonParameter(fmt::format(
+                "JSON_EXISTS(Text, '{0} $ ? (@.shared_n == ${1} && @.shared_b == true)' PASSING {2} AS {1})",
+                Mode, vn, pn),
+                [pn, addJsonParam](NYdb::TParamsBuilder& bld) {
+                    addJsonParam(bld, pn, R"([1, 2, 3])");
+                },
+                EJsonParameterFunction::JsonExists);
+        }
+
+        if (Opts.EnableJsonValue) {
+            auto p1 = NewPname();
+            auto p2 = NewPname();
+            auto v1 = p1.substr(1);
+            auto v2 = p2.substr(1);
+            AddJsonParameter(fmt::format(
+                "JSON_VALUE(Text, '{0} exists($ ? (@.shared_n == ${1} || @.shared_s == ${2}))' PASSING {3} AS {1}, {4} AS {2} RETURNING Bool)",
+                Mode, v1, v2, p1, p2),
+                [p1, p2, addJsonParam](NYdb::TParamsBuilder& bld) {
+                    addJsonParam(bld, p1, R"([1, 2, 3])");
+                    addJsonParam(bld, p2, R"(["shared_v", "missing"])");
+                },
+                EJsonParameterFunction::JsonValue);
+
+            auto pn = NewPname();
+            auto vn = pn.substr(1);
+            AddJsonParameter(fmt::format(
+                "JSON_VALUE(Text, '{0} exists($ ? (@.shared_n == ${1} && @.shared_b == true))' PASSING {2} AS {1} RETURNING Bool)",
+                Mode, vn, pn),
+                [pn, addJsonParam](NYdb::TParamsBuilder& bld) {
+                    addJsonParam(bld, pn, R"([1, 2, 3])");
+                },
+                EJsonParameterFunction::JsonValue);
+        }
+
+        if (Opts.EnableJsonExists) {
+            auto pn = NewPname();
+            auto vn = pn.substr(1);
+            AddJBothPathErr(fmt::format(
+                "JSON_EXISTS(Text, '{0} $ ? (@ == ${1})' PASSING {2} AS {1})",
+                Mode, vn, pn),
+                [pn](NYdb::TParamsBuilder& bld) {
+                    bld.AddParam(pn).Json(R"({"broken": )").Build();
+                },
+                "Invalid Json value");
+        }
+
+        if (Opts.EnableJsonValue) {
+            auto pn = NewPname();
+            auto vn = pn.substr(1);
+            AddJBothPathErr(fmt::format(
+                "JSON_VALUE(Text, '{0} exists($ ? (@ == ${1}))' PASSING {2} AS {1} RETURNING Bool)",
+                Mode, vn, pn),
+                [pn](NYdb::TParamsBuilder& bld) {
+                    bld.AddParam(pn).Json(R"({"broken": )").Build();
+                },
+                "Invalid Json value");
+        }
+
+        if (Opts.EnableJsonExists) {
+            auto pn = NewPname();
+            auto vn = pn.substr(1);
+            AddJBothPathErr(fmt::format(
+                "JSON_EXISTS(Text, 'strict $.shared ? (@ == ${0})' PASSING {1} AS {0} ERROR ON ERROR)",
+                vn, pn),
+                [pn](NYdb::TParamsBuilder& bld) {
+                    bld.AddParam(pn).Json(R"(["v"])").Build();
+                },
+                "Error executing jsonpath",
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters");
+        }
+
+        if (Opts.EnableJsonValue) {
+            auto pn = NewPname();
+            auto vn = pn.substr(1);
+            AddJBothPathErr(fmt::format(
+                "JSON_VALUE(Text, 'strict $.shared ? (@ == ${0})' PASSING {1} AS {0} RETURNING Bool ERROR ON ERROR)",
+                vn, pn),
+                [pn](NYdb::TParamsBuilder& bld) {
+                    bld.AddParam(pn).Json(R"(["v"])").Build();
+                },
+                "Error executing jsonpath",
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters");
+
+            pn = NewPname();
+            vn = pn.substr(1);
+            AddJBothPathErr(fmt::format(
+                "JSON_VALUE(Text, 'lax $.missing ? (@ == ${0})' PASSING {1} AS {0} RETURNING Bool ERROR ON EMPTY NULL ON ERROR)",
+                vn, pn),
+                [pn](NYdb::TParamsBuilder& bld) {
+                    bld.AddParam(pn).Json("[]").Build();
+                },
+                "",
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters");
         }
     }
 
@@ -3588,6 +3828,12 @@ private:
             TBuiltPredicate p;
             p.Sql = a.Sql;
             p.ExpectExtractError = !a.IsJsonIndexable;
+            p.ExpectBothPathError = a.ExpectBothPathError;
+            p.ExpectedBothPathErrorSubstr = a.ExpectedBothPathErrorSubstr;
+            p.ExpectedIndexErrorSubstr = a.ExpectedIndexErrorSubstr;
+            p.JsonParameterShape = a.JsonParameterShape;
+            p.JsonParameterFunction = a.JsonParameterFunction;
+            p.IsJsonParameterComposition = a.IsJsonParameterComposition;
             if (a.AddParams) {
                 NYdb::TParamsBuilder builder;
                 a.AddParams(builder);
@@ -3596,6 +3842,26 @@ private:
 
             result.push_back(std::move(p));
         };
+
+        for (const auto& atom : ExecutionErrorAtoms) {
+            pushAtom(atom);
+        }
+
+        for (const auto& atom : JsonParameterAtoms) {
+            pushAtom(atom);
+        }
+
+        if (JsonParameterAtoms.size() >= 2) {
+            if (Opts.EnableAndCombinations) {
+                pushAtom(AndAtom(JsonParameterAtoms[0], JsonParameterAtoms[1]));
+            }
+            if (Opts.EnableOrCombinations) {
+                pushAtom(OrAtom(JsonParameterAtoms[0], JsonParameterAtoms[1]));
+            }
+        }
+        if (JsonParameterAtoms.size() >= 3 && Opts.EnableAndCombinations && Opts.EnableOrCombinations) {
+            pushAtom(OrAtom(AndAtom(JsonParameterAtoms[0], JsonParameterAtoms[1]), JsonParameterAtoms[2]));
+        }
 
         {
             std::vector<size_t> idx(JsonAtoms.size());
@@ -3817,8 +4083,12 @@ private:
     const std::vector<TGeneratedRow>& Rows;
 
     std::vector<TAtom> JsonAtoms;
+    std::vector<TAtom> JsonParameterAtoms;
     std::vector<TAtom> FilterAtoms;
+    std::vector<TAtom> ExecutionErrorAtoms;
     size_t ParamCount = 0;
+
+    std::array<std::vector<const TGeneratedRow*>, kJsonCorpusNumShapes> RowsByShape;
 
     std::vector<ui64> KeysWithUKey;
     std::vector<ui64> KeysWithIntUVal;

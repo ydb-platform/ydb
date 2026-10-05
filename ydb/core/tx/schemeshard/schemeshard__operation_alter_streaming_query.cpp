@@ -142,7 +142,7 @@ class TAlterStreamingQuery : public TSubOperation {
         return true;
     }
 
-    TStreamingQueryInfo::TPtr GetAlteredQueryInfo(const TPath& dstPath, const TOperationContext& context) const {
+    TStreamingQueryInfo::TPtr GetAlteredQueryInfo(const TPath& dstPath, const TString& owner, const TOperationContext& context) const {
         const auto& oldStreamingQueryInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
         AFL_ENSURE(oldStreamingQueryInfo)("path", dstPath.PathString())("path_id", dstPath->PathId);
 
@@ -301,7 +301,7 @@ public:
 
         const auto oldInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
         Y_ABORT_UNLESS(oldInfo);
-        const auto queryInfo = GetAlteredQueryInfo(dstPath, context);
+        const auto queryInfo = GetAlteredQueryInfo(dstPath, owner, context);
         RETURN_RESULT_UNLESS(IsDescriptionValid(result, oldInfo, queryInfo));
 
         // Compute delta for COUNTER_RUNNING_STREAMING_QUERY_COUNT before persisting the alter

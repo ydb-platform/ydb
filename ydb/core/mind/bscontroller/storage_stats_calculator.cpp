@@ -116,8 +116,23 @@ public:
 
         std::unordered_map<TBoxId, std::vector<const TPDiskEntry*>> boxes;
         for (const auto& kv : SystemViewsState.PDisks) {
+            NumActiveUnits[kv.first] = kv.second.GetStaticSlotUsage();
             if (kv.second.HasBoxId()) {
                 boxes[kv.second.GetBoxId()].push_back(&kv);
+            }
+        }
+
+        // Capacity units are counted independently of slot weights, including donors.
+        // Static VDisks are already covered by the explicit reservation above.
+        for (const auto& [vslotId, vslot] : SystemViewsState.VSlots) {
+            const auto groupId = TGroupId::FromValue(vslot.GetGroupId());
+            if (vslot.GetIsBeingDeleted() || TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
+                continue;
+            }
+            const auto pdiskIt = SystemViewsState.PDisks.find(vslotId.ComprisingPDiskId());
+            const auto groupIt = SystemViewsState.Groups.find(groupId);
+            if (pdiskIt != SystemViewsState.PDisks.end() && groupIt != SystemViewsState.Groups.end()) {
+                NumActiveUnits[pdiskIt->first] += Max(1u, groupIt->second.GetGroupSizeInUnits());
             }
         }
 
@@ -187,6 +202,7 @@ private:
                         .Location = location,
                         .Usable = usable,
                         .NumActiveSlots = pdisk.GetNumActiveSlots(),
+                        .NumActiveUnits = NumActiveUnits.at(pdiskId),
                         .ExpectedSlotCount = pdisk.GetExpectedSlotCount(), // either inferred or user-defined
                         .SlotSizeInUnits = pdisk.GetSlotSizeInUnits(), // either inferred or user-defined
                         .SlotSizeInBytes = pdisk.GetExpectedSlotSize(), // either inferred or user-defined, 0 if not set
@@ -194,6 +210,11 @@ private:
                         .SpaceAvailable = 0,
                         .Operational = true,
                         .Decommitted = false, // this flag applies only to group reconfiguration
+                        .CapacityUnits = pdisk.GetExpectedSlotSize()
+                            ? TGroupMapper::CalculateCapacityUnits(
+                                pdisk.HasUserChunkPoolSize() ? std::make_optional(pdisk.GetUserChunkPoolSize()) : std::nullopt,
+                                pdisk.HasEnforcedDynamicSlotSize() ? std::make_optional(pdisk.GetEnforcedDynamicSlotSize()) : std::nullopt)
+                            : std::nullopt,
                     });
                     Y_ABORT_UNLESS(ok);
                     break;
@@ -225,6 +246,9 @@ private:
                             }
                             if (pdisk.HasSlotSizeInUnits()) {
                                 pm.SetSlotSizeInUnits(pdisk.GetSlotSizeInUnits());
+                            }
+                            if (pdisk.HasUserChunkPoolSize()) {
+                                pm.SetUserChunkPoolSize(pdisk.GetUserChunkPoolSize());
                             }
                             vm.SetAllocatedSize(0);
                             disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount(), pdisk.GetExpectedSlotSize()});
@@ -273,6 +297,7 @@ private:
 private:
     TControllerSystemViewsState SystemViewsState;
     THostRecordMap HostRecordMap;
+    THashMap<TPDiskId, ui64> NumActiveUnits;
     ui32 GroupReserveMin = 0;
     ui32 GroupReservePart = 0;
 };

@@ -84,14 +84,11 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
         if (task.IsCheckpointingEnabled) {
             if (task.IsIngress) {
                 ActorsToTrigger[actorId] = transport;
-                ActorsToNotify[actorId] = transport;
-                ActorsToNotifySet.insert(actorId);
             }
-            if (task.IsEgress) {
-                ActorsToNotify[actorId] = transport;
-                ActorsToNotifySet.insert(actorId);
-            }
+
             if (task.HasState) {
+                ActorsToNotify[actorId] = transport;
+                ActorsToNotifySet.insert(actorId);
                 ActorsToWaitFor[actorId] = transport;
                 ActorsToWaitForSet.insert(actorId);
             }

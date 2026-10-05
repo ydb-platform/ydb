@@ -8,6 +8,7 @@
 #include <util/system/types.h>
 
 #include <algorithm>
+#include <array>
 
 namespace NActors {
 
@@ -81,6 +82,7 @@ namespace NActors {
             static const TLineFrontendOps descriptor{
                 .Name = "raw",
                 .ReadRange = &TRawLineFrontend<TValue>::ReadRange,
+                .ReadNumericRange = &ReadNumericRange,
             };
             return descriptor;
         }
@@ -90,6 +92,14 @@ namespace NActors {
         }
 
     private:
+        static void ReadNumericRange(const TLineSnapshot& snapshot, TInstant beginTs, TInstant endTs,
+                                     void* opaque, TLineFrontendOps::TInvokeNumericValues invoke) {
+            ForEachStoredRecordInRange(snapshot, beginTs, endTs, [&](TInstant timestamp, const TValue& value) {
+                const std::array<TLineNumericValue, 1> values = {MakeLineNumericValue(value)};
+                invoke(opaque, timestamp, values);
+            });
+        }
+
         friend class TLine<TRawLineFrontend<TValue>>;
         friend struct TOnChangeLineFrontend<TValue>;
 

@@ -13,6 +13,7 @@ from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
 from ydb.tests.olap.load.lib.clickbench import ClickbenchParallelBase
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType
+from ydb.tests.olap.lib.workload_result import WorkloadRunResult
 from ydb.tests.olap.lib.utils import get_external_param
 from threading import Thread, Event
 from datetime import datetime
@@ -139,18 +140,18 @@ class WorkloadManagerBase(LoadSuiteBase):
             sessions_pool.execute_with_retries(pool.get_create_sql())
 
     @classmethod
-    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_workload(cls, result: WorkloadRunResult):
         pass
 
     @classmethod
-    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def after_workload(cls, result: WorkloadRunResult):
         pass
 
     def test(self):
         check_thread = Thread(target=self.check_signals_thread)
         self.stop_checking.clear()
         check_thread.start()
-        overall_result = YdbCliHelper.WorkloadRunResult()
+        overall_result = WorkloadRunResult()
         try:
             qparams = self._get_query_settings()
             self.save_nodes_state()
@@ -240,12 +241,12 @@ class WorkloadManagerConcurrentQueryLimit(WorkloadManagerBase):
         return [ResourcePool('test_pool', ['testuser'], concurrent_query_limit=cls.query_limit)]
 
     @classmethod
-    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_workload(cls, result: WorkloadRunResult):
         cls.hard_query_limit = cls.query_limit + len(YdbCluster.get_cluster_nodes(db_only=True))
         cls.threads = 2 * cls.hard_query_limit
 
     @classmethod
-    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def after_workload(cls, result: WorkloadRunResult):
         assert cls.max_in_fly > 0, "detector 'max queries in fly' does't work"
 
     @classmethod
@@ -290,12 +291,12 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         <p>In this test, we average the satisfaction across all cluster nodes and over time.</p>'''
 
     @classmethod
-    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_workload(cls, result: WorkloadRunResult):
         cls.metrics = []
         cls.metrics_keys = set()
 
     @classmethod
-    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def after_workload(cls, result: WorkloadRunResult):
         metrics = list(cls.metrics)
         keys = sorted(cls.metrics_keys)
         pools = cls.get_resource_pools()
@@ -458,7 +459,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     verify_data: bool = False
     _tpcc_executions: list[tuple[str, re.LongRemoteExecution]] = []
     _tpcc_thread: Thread = None
-    _tpcc_results: dict[str, YdbCliHelper.WorkloadRunResult]
+    _tpcc_results: dict[str, WorkloadRunResult]
     _remote_cli_path: str = ''
 
     @classmethod
@@ -500,7 +501,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
             cls._tpcc_executions = []
 
     @classmethod
-    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def after_workload(cls, result: WorkloadRunResult):
         if cls._tpcc_thread is not None:
             cls.terminate_tpcc()
             cls.wait_tpcc()
@@ -528,12 +529,12 @@ class TestWorkloadManagerOltp100(WorkloadManagerOltp):
         ]
 
     @classmethod
-    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_workload(cls, result: WorkloadRunResult):
         super().before_workload(result)
         cls.run_tpcc(cls.timeout, user=f'testuser{cls.tpcc_pool_perc}')
 
     @classmethod
-    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def after_workload(cls, result: WorkloadRunResult):
         if cls._tpcc_thread is not None:
             cls.wait_tpcc()
         super().after_workload(result)
@@ -555,7 +556,7 @@ class WorkloadManagerOltpTpch20Base(WorkloadManagerTpchBase, WorkloadManagerOltp
         ]
 
     @classmethod
-    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_workload(cls, result: WorkloadRunResult):
         super().before_workload(result)
         cls.run_tpcc(cls.timeout, user='')
 
@@ -583,7 +584,7 @@ class TestWorkloadManagerOltpAdHoc(WorkloadManagerOltp):
         ]
 
     @classmethod
-    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_workload(cls, result: WorkloadRunResult):
         super().before_workload(result)
         cls.run_tpcc(cls.timeout, user='')
 

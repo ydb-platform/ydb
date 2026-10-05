@@ -645,6 +645,63 @@ struct TNullModeTest : public TOutboundTest {
     }
 };
 
+// An early finish before the peer is known must not use up the interconnect subscription (#54893): a disconnect
+// reaches both node sessions
+struct TEarlyFinishSubscribeTest : public TSessionTest {
+
+    void Prepare() override {
+        ExpectReconciliation = true;
+        TSessionTest::Prepare();
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        // not started: no discovery yet
+        Debug0 = Service0->CreateDebugNodeState(Runtime->GetNodeId(1));
+        Debug1 = Service1->CreateDebugNodeState(Runtime->GetNodeId(0));
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 10, .MinMessageSize = 10, .MaxMessageSize = 100, .ExpectEarlyFinished = true };
+        ConsumerSettings = TWorkerSettings{ .MessageCount = 0, .EarlyFinish = true };
+
+        auto producer = Runtime->Register(new TProducerActor(Service0, 1, ProducerSettings, OutputQuotaManager), NodeIndex0);
+        auto consumer = Runtime->Register(new TConsumerActor(Service1, 1, ConsumerSettings, InputQuotaManager), NodeIndex1);
+        Actors.insert(producer);
+        Actors.insert(consumer);
+        Runtime->Send(consumer, Control1, new TEvTestPrivate::TEvStart(producer), NodeIndex1, true);
+        UNIT_ASSERT_C(WaitFor([&]() {
+            auto descriptor = FindInputDescriptor(Debug1, 1);
+            return descriptor && descriptor->EarlyFinished.load();
+        }, TDuration::Seconds(10)), "the consumer did not early-finish");
+
+        Debug0->StartSession();
+        Debug1->StartSession();
+        UNIT_ASSERT_C(WaitFor([&]() {
+            auto descriptor = FindOutputDescriptor(Debug0, 1);
+            return descriptor && descriptor->EarlyFinished.load();
+        }, TDuration::Seconds(10)), "the early finish did not reach the output side");
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug0->Reconciliation.load() == 0 && Debug1->Reconciliation.load() == 0; },
+            TDuration::Seconds(5)), TStringBuilder() << "the sessions did not reconcile, log0=" << GetReconciliationLog(Debug0)
+            << ", log1=" << GetReconciliationLog(Debug1));
+
+        for (auto [from, to, control] : {std::tuple(NodeIndex0, NodeIndex1, Control0), std::tuple(NodeIndex1, NodeIndex0, Control1)}) {
+            Runtime->Send(new NActors::IEventHandle(Runtime->GetInterconnectProxy(from, to), control,
+                new NActors::TEvInterconnect::TEvPoisonSession()), from, true);
+        }
+        UNIT_ASSERT_C(WaitFor([&]() {
+            return GetReconciliationLog(Debug0).Contains("D") && GetReconciliationLog(Debug1).Contains("D");
+        }, TDuration::Seconds(10)), TStringBuilder() << "the interconnect disconnect did not reach both node sessions, log0="
+            << GetReconciliationLog(Debug0) << ", log1=" << GetReconciliationLog(Debug1));
+
+        Runtime->Send(producer, Control0, new TEvTestPrivate::TEvStart(consumer), NodeIndex0, true);
+        WaitChannel([&]() { return TStringBuilder() << "log0=" << GetReconciliationLog(Debug0) << ", log1=" << GetReconciliationLog(Debug1); });
+        CheckSensors();
+        Destroy();
+        CheckQuota();
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20Failure) {
 
     void LossTest(int count, const TFailureSettings& failures, bool expectResend = true) {
@@ -752,6 +809,12 @@ Y_UNIT_TEST_SUITE(Channels20Failure) {
 
     Y_UNIT_TEST(NullModeSenderOnly2n) {
         TNullModeTest test;
+        test.Local = false;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(EarlyFinishBeforeDiscoveryKeepsSubscription2n) {
+        TEarlyFinishSubscribeTest test;
         test.Local = false;
         test.Run();
     }

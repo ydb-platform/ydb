@@ -25,7 +25,8 @@ namespace NKikimr::NDDisk {
 
         size_t dataChunkCount = 0;
         size_t uncoveredDataChunkCount = 0;
-        for (const auto& [tabletId, chunks] : ChunkRefs) {
+        for (const auto& [tabletId, tablet] : Tablets) {
+            const auto& chunks = tablet.ChunkRefs;
             for (const auto& [vChunkIndex, chunkRef] : chunks) {
                 if (!chunkRef.ChunkIdx) {
                     continue;
@@ -124,9 +125,12 @@ namespace NKikimr::NDDisk {
             Y_ABORT_UNLESS(chunkMap.HasSnapshot());
             const auto& snapshot = chunkMap.GetSnapshot();
             for (const auto& tabletRecord : snapshot.GetTabletRecords()) {
-                auto& tabletChunkMap = ChunkRefs[tabletRecord.GetTabletId()];
+                if (tabletRecord.GetChunkRefs().empty()) {
+                    continue;
+                }
+                auto& tabletChunkMap = Tablets[tabletRecord.GetTabletId()].ChunkRefs;
                 for (const auto& chunkRef : tabletRecord.GetChunkRefs()) {
-                    tabletChunkMap[chunkRef.GetVChunkIndex()].ChunkIdx = chunkRef.GetChunkIdx();
+                    SetDataChunkMapping(tabletRecord.GetTabletId(), &tabletChunkMap[chunkRef.GetVChunkIndex()], chunkRef.GetChunkIdx());
                     ++*Counters.Chunks.ChunksOwned;
                     if (chunkRef.HasExtentRef()) {
                         const auto& ref = chunkRef.GetExtentRef();
@@ -195,8 +199,8 @@ namespace NKikimr::NDDisk {
                                     ++*Counters.Chunks.ChunksOwned;
                                 }
                                 const auto& data = increment.GetDataChunk();
-                                ChunkRefs[data.GetTabletId()][data.GetVChunkIndex()].ChunkIdx =
-                                    data.GetChunkIdx();
+                                SetDataChunkMapping(data.GetTabletId(), &Tablets[data.GetTabletId()].ChunkRefs[data.GetVChunkIndex()],
+                                    data.GetChunkIdx());
                                 ++*Counters.Chunks.ChunksOwned;
                                 if (data.HasExtentRef()) {
                                     const auto& ref = data.GetExtentRef();
@@ -240,7 +244,8 @@ namespace NKikimr::NDDisk {
         // changes it. Failed recovery cannot establish which owned chunks are orphans.
         if (!IsBroken()) {
             absl::flat_hash_set<TChunkIdx> live(PersistentBufferChunks.begin(), PersistentBufferChunks.end());
-            for (const auto& [tabletId, chunks] : ChunkRefs) {
+            for (const auto& [tabletId, tablet] : Tablets) {
+                const auto& chunks = tablet.ChunkRefs;
                 Y_UNUSED(tabletId);
                 for (const auto& [vChunkIndex, ref] : chunks) {
                     Y_UNUSED(vChunkIndex);

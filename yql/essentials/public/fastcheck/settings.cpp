@@ -34,7 +34,6 @@ struct TDefaultUdfMetaLoader {
 
 THashSet<TString> TranslationFlags() {
     return {
-        "AnsiOrderByLimitInUnionAll",
         "DisableCoalesceJoinKeysOnQualifiedAll",
         "AnsiRankForNullableKeys",
         "DisableUnorderedSubqueries",

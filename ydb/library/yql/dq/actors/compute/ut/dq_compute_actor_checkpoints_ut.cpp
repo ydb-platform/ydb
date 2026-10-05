@@ -1,5 +1,6 @@
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -23,17 +24,22 @@ struct TRestoreFixture : TDqComputeActorCheckpoints::ICallbacks {
 
     const TActorId Coordinator = Runtime.AllocateEdgeActor();
     const TActorId Storage = Runtime.AllocateEdgeActor();
+    const TIntrusivePtr<TCheckpointContext> CheckpointContext = MakeIntrusive<TCheckpointContext>();
     TActorId CheckpointsId;
     TDqComputeActorCheckpoints* Checkpoints = nullptr;
     TMaybe<TComputeActorState> LoadedState;
     TMaybe<TString> LoadError;
     bool Stopped = false;
 
-    TRestoreFixture() {
+    explicit TRestoreFixture(bool withSink = false) {
         Runtime.RegisterService(MakeCheckpointStorageID(), Storage);
         NDqProto::TDqTask task;
         task.SetId(42);
-        Checkpoints = new TDqComputeActorCheckpoints(Coordinator, ui64{1}, TDqTaskSettings(&task), this);
+        if (withSink) {
+            task.AddOutputs()->MutableSink()->SetType("MockSink");
+        }
+        Checkpoints = new TDqComputeActorCheckpoints(Coordinator, ui64{1}, TDqTaskSettings(&task), this, CheckpointContext);
+        UNIT_ASSERT_VALUES_EQUAL(CheckpointContext.Get(), Checkpoints->GetCheckpointContext().Get());
         CheckpointsId = Runtime.Register(Checkpoints);
         Checkpoints->Init(CheckpointsId, CheckpointsId);
         Runtime.Send(new IEventHandle(CheckpointsId, Coordinator,
@@ -101,6 +107,77 @@ struct TRestoreFixture : TDqComputeActorCheckpoints::ICallbacks {
         }
     }
 };
+
+struct TCheckpointContextFixture : TRestoreFixture {
+    using TRestoreFixture::TRestoreFixture;
+
+    mutable TMaybe<NDqProto::TCheckpoint> SavingCheckpoint;
+    bool FailSave = false;
+    ui32 CommitCalls = 0;
+    ui32 CommitWakeups = 0;
+
+    void SaveState(const NDqProto::TCheckpoint& checkpoint, TComputeActorState&) const override {
+        SavingCheckpoint = CheckpointContext->PendingSaveCheckpoint;
+        UNIT_ASSERT(SavingCheckpoint);
+        UNIT_ASSERT_VALUES_EQUAL(SavingCheckpoint->GetGeneration(), checkpoint.GetGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(SavingCheckpoint->GetId(), checkpoint.GetId());
+        Y_ENSURE(!FailSave, "Cannot save checkpoint");
+    }
+
+    void CommitState(const NDqProto::TCheckpoint&) override {
+        ++CommitCalls;
+    }
+
+    void ResumeExecution(EResumeSource source) override {
+        if (source == EResumeSource::CheckpointCommit) {
+            ++CommitWakeups;
+        }
+    }
+
+    void Run(std::function<void()> callback) {
+        class TCallbackActor final : public TActorBootstrapped<TCallbackActor> {
+        public:
+            TCallbackActor(std::function<void()> callback, const TActorId& replyTo)
+                : Callback(std::move(callback))
+                , ReplyTo(replyTo)
+            {}
+
+            void Bootstrap() {
+                Callback();
+                Send(ReplyTo, new TEvents::TEvWakeup());
+                PassAway();
+            }
+
+        private:
+            const std::function<void()> Callback;
+            const TActorId ReplyTo;
+        };
+
+        const auto replyTo = Runtime.AllocateEdgeActor();
+        Runtime.Register(new TCallbackActor(std::move(callback), replyTo));
+        UNIT_ASSERT(Runtime.GrabEdgeEvent<TEvents::TEvWakeup>(replyTo, TDuration::Seconds(5)));
+    }
+
+    void Commit(ui64 id, ui64 generation = 2, ui64 coordinatorGeneration = 2) {
+        Runtime.Send(new IEventHandle(CheckpointsId, Coordinator,
+            new TEvDqCompute::TEvCommitState(id, generation, coordinatorGeneration)));
+    }
+
+    void ExpectCommitted(ui64 id, ui64 generation = 2) {
+        const auto response = Runtime.GrabEdgeEvent<TEvDqCompute::TEvStateCommitted>(Coordinator, TDuration::Seconds(5));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetCheckpoint().GetId(), id);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetCheckpoint().GetGeneration(), generation);
+    }
+};
+
+NDqProto::TCheckpoint MakeCheckpoint(ui64 id, ui64 generation = 2) {
+    NDqProto::TCheckpoint checkpoint;
+    checkpoint.SetId(id);
+    checkpoint.SetGeneration(generation);
+    checkpoint.SetType(NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
+    return checkpoint;
+}
 
 TTaskPlan MakeForeignPlan() {
     TTaskPlan plan;
@@ -213,6 +290,124 @@ void CheckExplicitState(bool failLoad = false) {
 }
 
 } // anonymous namespace
+
+Y_UNIT_TEST_SUITE(TComputeActorCheckpointContext) {
+    Y_UNIT_TEST(PendingSaveIncludesSinkState) {
+        TCheckpointContextFixture fixture(true);
+        const auto context = fixture.CheckpointContext;
+        UNIT_ASSERT(!context->PendingSaveCheckpoint);
+        UNIT_ASSERT(!context->LastCommittedCheckpoint);
+        const auto checkpoint = MakeCheckpoint(7);
+        fixture.Run([&] {
+            fixture.Checkpoints->RegisterCheckpoint(checkpoint, 1);
+            fixture.Checkpoints->DoCheckpoint();
+        });
+        UNIT_ASSERT(context->PendingSaveCheckpoint);
+        UNIT_ASSERT(fixture.SavingCheckpoint);
+        UNIT_ASSERT_VALUES_EQUAL(context->PendingSaveCheckpoint->GetId(), 7);
+        fixture.Run([&] {
+            fixture.Checkpoints->OnSinkStateSaved({}, 0, checkpoint);
+        });
+        UNIT_ASSERT(fixture.Runtime.GrabEdgeEvent<TEvDqCompute::TEvSaveTaskState>(fixture.Storage, TDuration::Seconds(5)));
+        UNIT_ASSERT(!context->PendingSaveCheckpoint);
+        UNIT_ASSERT(!context->LastCommittedCheckpoint);
+    }
+
+    Y_UNIT_TEST(FailedSaveClearsPendingCheckpoint) {
+        TCheckpointContextFixture fixture;
+        fixture.FailSave = true;
+        const auto context = fixture.CheckpointContext;
+        fixture.Run([&] {
+            fixture.Checkpoints->RegisterCheckpoint(MakeCheckpoint(7), 1);
+            fixture.Checkpoints->DoCheckpoint();
+        });
+        const auto response = fixture.Runtime.GrabEdgeEvent<TEvDqCompute::TEvSaveTaskStateResult>(fixture.Coordinator, TDuration::Seconds(5));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT(response->Get()->Record.GetStatus() == NDqProto::TEvSaveTaskStateResult::INTERNAL_ERROR);
+        UNIT_ASSERT(fixture.SavingCheckpoint);
+        UNIT_ASSERT(!context->PendingSaveCheckpoint);
+    }
+
+    Y_UNIT_TEST(CommitWaitsForSinkAndWakesExecution) {
+        TCheckpointContextFixture fixture(true);
+        const auto context = fixture.CheckpointContext;
+        fixture.Commit(7);
+        fixture.Runtime.WaitFor("sink commit request", [&] { return fixture.CommitCalls == 1; }, TDuration::Seconds(5));
+        UNIT_ASSERT(!context->LastCommittedCheckpoint);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.CommitWakeups, 0);
+        fixture.Run([&] {
+            fixture.Checkpoints->OnSinkStateCommitted(0, MakeCheckpoint(7));
+        });
+        fixture.ExpectCommitted(7);
+        UNIT_ASSERT(context->LastCommittedCheckpoint);
+        UNIT_ASSERT_VALUES_EQUAL(context->LastCommittedCheckpoint->GetGeneration(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(context->LastCommittedCheckpoint->GetId(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.CommitWakeups, 1);
+    }
+
+    Y_UNIT_TEST(CommitWithoutSinksDoesNotRegress) {
+        TCheckpointContextFixture fixture;
+        const auto context = fixture.CheckpointContext;
+        for (const auto id : {7, 7, 6, 8}) {
+            fixture.Commit(id);
+            fixture.ExpectCommitted(id);
+            UNIT_ASSERT_VALUES_EQUAL(context->LastCommittedCheckpoint->GetId(), id == 8 ? 8 : 7);
+        }
+        // Recommitting an older checkpoint must not regress the generation either.
+        fixture.Commit(100, 1);
+        fixture.ExpectCommitted(100, 1);
+        UNIT_ASSERT_VALUES_EQUAL(context->LastCommittedCheckpoint->GetGeneration(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(context->LastCommittedCheckpoint->GetId(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.CommitWakeups, 2);
+    }
+
+    Y_UNIT_TEST(NewCoordinatorResetsSharedContext) {
+        TCheckpointContextFixture fixture;
+        const auto context = fixture.CheckpointContext;
+        fixture.Commit(7);
+        fixture.ExpectCommitted(7);
+        fixture.Run([&] { fixture.Checkpoints->RegisterCheckpoint(MakeCheckpoint(8), 1); });
+        fixture.Runtime.Send(new IEventHandle(fixture.CheckpointsId, fixture.Coordinator,
+            new TEvDqCompute::TEvNewCheckpointCoordinator(3, "graph")));
+        UNIT_ASSERT(fixture.Runtime.GrabEdgeEvent<TEvDqCompute::TEvNewCheckpointCoordinatorAck>(fixture.Coordinator, TDuration::Seconds(5)));
+        UNIT_ASSERT_VALUES_EQUAL(context.Get(), fixture.Checkpoints->GetCheckpointContext().Get());
+        UNIT_ASSERT(!context->PendingSaveCheckpoint);
+        UNIT_ASSERT(!context->LastCommittedCheckpoint);
+        fixture.Commit(100); // Stale coordinator event must not update the context.
+        fixture.Commit(1, 3, 3);
+        fixture.ExpectCommitted(1, 3);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.CommitCalls, 2);
+        UNIT_ASSERT_VALUES_EQUAL(context->LastCommittedCheckpoint->GetGeneration(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(context->LastCommittedCheckpoint->GetId(), 1);
+    }
+
+    Y_UNIT_TEST(RestoreDoesNotKeepCommitFromPreviousExecution) {
+        TCheckpointContextFixture fixture;
+        const auto context = fixture.CheckpointContext;
+        fixture.Commit(9);
+        fixture.ExpectCommitted(9);
+        fixture.Restore(MakeForeignPlan());
+        fixture.CheckRestoreResult();
+        UNIT_ASSERT(!context->LastCommittedCheckpoint);
+        fixture.Commit(7, 1); // Restored checkpoint keeps its original generation.
+        fixture.ExpectCommitted(7, 1);
+        UNIT_ASSERT_VALUES_EQUAL(context->LastCommittedCheckpoint->GetGeneration(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(context->LastCommittedCheckpoint->GetId(), 7);
+    }
+
+    Y_UNIT_TEST(ContextOutlivesCheckpointActor) {
+        TIntrusiveConstPtr<TCheckpointContext> context;
+        {
+            TCheckpointContextFixture fixture;
+            context = fixture.CheckpointContext;
+            fixture.Commit(7);
+            fixture.ExpectCommitted(7);
+        }
+        UNIT_ASSERT(context->LastCommittedCheckpoint);
+        UNIT_ASSERT_VALUES_EQUAL(context->LastCommittedCheckpoint->GetGeneration(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(context->LastCommittedCheckpoint->GetId(), 7);
+    }
+}
 
 Y_UNIT_TEST_SUITE(TComputeActorStateRestore) {
     Y_UNIT_TEST(ExplicitStateDoesNotReadCheckpoints) {

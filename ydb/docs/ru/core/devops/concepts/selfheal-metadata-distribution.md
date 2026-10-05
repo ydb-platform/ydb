@@ -33,7 +33,7 @@ SelfHeal подсистем распространения метаданных 
     ```yaml
     config:
         self_management_config:
-            enabled: true # Признак использования конфигурации V2
+            enabled: true # Включение распределённой конфигурации
         cms_config:
             sentinel_config:
                 enable: true # Включение Sentinel

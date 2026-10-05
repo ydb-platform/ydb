@@ -27,7 +27,9 @@ private:
     void Prepare(const TVector<TInfoUnitId>& inputs);
     ui32 IndexOf(TInfoUnitId column) const;
     const TTypeAnnotationNode* InputItemType(TInfoUnitId column) const;
+    bool IsNonOptionalAggregate(TInfoUnitId column) const;
     TExprNode::TPtr BuildOutputRowType() const;
+    TExprNode::TPtr BuildUnwrapNonOptionalAggregates(TExprNode::TPtr wideFlow) const;
 
     TVector<TExprNode::TPtr> BuildSortKeys() const;
     TExprNode::TPtr BuildKeyExtractorLambda() const;

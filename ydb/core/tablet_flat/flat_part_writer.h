@@ -251,6 +251,10 @@ namespace NTable {
                 Current.RowLocks = true;
             }
 
+            if (savepointSeqNum) {
+                Current.SavepointSeqNums = true;
+            }
+
             for (size_t groupIdx : xrange(Groups.size())) {
                 auto& g = Groups[groupIdx];
                 // N.B. non-main groups have no key
@@ -715,6 +719,9 @@ namespace NTable {
 
                 if (Current.RowLocks)
                     head = Max(head, ui32(29) /* Persistent row locks present */);
+
+                if (Current.SavepointSeqNums)
+                    head = Max(head, NTable::SavepointSeqNumEvolution /* Deltas with savepoint seq nums present */);
 
                 abi->SetTail(head);
                 abi->SetHead(ui32(NTable::ECompatibility::Edge));
@@ -1309,6 +1316,7 @@ namespace NTable {
 
             bool Versioned = false;
             bool RowLocks = false;
+            bool SavepointSeqNums = false;
         } Current;
 
         TIntrusivePtr<TSlices> Slices;

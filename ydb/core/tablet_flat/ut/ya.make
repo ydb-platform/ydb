@@ -73,6 +73,7 @@ RESOURCE(
 )
 
 PEERDIR(
+    yql/essentials/types/binary_json
     library/cpp/resource
     ydb/core/scheme
     ydb/core/tablet_flat/test/libs/exec

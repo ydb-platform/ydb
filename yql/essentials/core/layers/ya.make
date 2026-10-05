@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 SRCS(layers.cpp)
 PEERDIR(
     yql/essentials/ast

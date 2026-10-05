@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     dq_pq_control_plane_actor.cpp
@@ -36,7 +36,5 @@ PEERDIR(
     yql/essentials/public/types
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

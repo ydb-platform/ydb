@@ -9,6 +9,7 @@
 #include <library/cpp/resource/resource.h>
 #include <util/generic/xrange.h>
 #include <util/stream/file.h>
+#include <util/stream/mem.h>
 #include <util/stream/str.h>
 #include <util/string/join.h>
 
@@ -121,6 +122,18 @@ Y_UNIT_TEST_SUITE(NPage) {
         return deltas;
     }
 
+    // The least ABI evolution required to read the part, as written in its root metadata
+    ui32 GetPartRequiredEvolution(const NTest::TPartEggs& eggs) {
+        auto& part = dynamic_cast<const NTest::TPartStore&>(*eggs.Lone());
+        auto* raw = part.Store->GetMeta();
+        UNIT_ASSERT(raw);
+        NProto::TRoot root;
+        TMemoryInput stream(raw->data(), raw->size());
+        UNIT_ASSERT(root.ParseFromArcadiaStream(&stream));
+        UNIT_ASSERT(root.HasEvol());
+        return root.GetEvol().GetTail();
+    }
+
     Y_UNIT_TEST(DeltaSavepointSeqNum)
     {
         using namespace NTable::NTest;
@@ -146,6 +159,7 @@ Y_UNIT_TEST_SUITE(NPage) {
             TSet<ui16> versions;
             auto deltas = CollectDeltas(eggs, versions);
             UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", versions), "1");
+            UNIT_ASSERT_VALUES_EQUAL(GetPartRequiredEvolution(eggs), 28u /* Uncommitted deltas present */);
             UNIT_ASSERT_VALUES_EQUAL(deltas, (TVector<TDeltaInfo>{
                 { 123, 0, ELockMode::None },
                 { 234, 0, ELockMode::None },
@@ -165,6 +179,8 @@ Y_UNIT_TEST_SUITE(NPage) {
             TSet<ui16> versions;
             auto deltas = CollectDeltas(eggs, versions);
             UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", versions), "2");
+            // Older versions reject such a part on load with an explicit ABI incompatibility
+            UNIT_ASSERT_VALUES_EQUAL(GetPartRequiredEvolution(eggs), SavepointSeqNumEvolution);
             UNIT_ASSERT_VALUES_EQUAL(deltas, (TVector<TDeltaInfo>{
                 { 123, 5, ELockMode::None },
                 { 123, 0, ELockMode::None },
@@ -174,6 +190,37 @@ Y_UNIT_TEST_SUITE(NPage) {
             // Rows are still readable through the regular iterator
             TCheckIter wrap(eggs, { });
             wrap.To(1).Has(*TSchemedCookRow(*lay).Col(1_u32, "c"));
+        }
+
+        {
+            // A part spanning many pages, where only the page with a seq num delta becomes version 2
+            const TString value(100, 'x');
+            TPartCook cook(lay, conf);
+            for (ui32 key = 1; key <= 300; ++key) {
+                if (key == 10) {
+                    cook.Delta(123).AddN(key, value);
+                }
+                if (key == 150) {
+                    cook.Delta(123, 9).AddN(key, value);
+                }
+                cook.Ver().AddN(key, value);
+            }
+            auto eggs = cook.Finish();
+
+            TSet<ui16> versions;
+            auto deltas = CollectDeltas(eggs, versions);
+            UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", versions), "1,2");
+            UNIT_ASSERT_VALUES_EQUAL(GetPartRequiredEvolution(eggs), SavepointSeqNumEvolution);
+            UNIT_ASSERT_VALUES_EQUAL(deltas, (TVector<TDeltaInfo>{
+                { 123, 0, ELockMode::None },
+                { 123, 9, ELockMode::None },
+            }));
+
+            // Rows from version 1 and version 2 pages are readable through the regular iterator
+            TCheckIter wrap(eggs, { });
+            wrap.To(1).Has(*TSchemedCookRow(*lay).Col(1_u32, value));
+            wrap.To(2).Has(*TSchemedCookRow(*lay).Col(150_u32, value));
+            wrap.To(3).Has(*TSchemedCookRow(*lay).Col(300_u32, value));
         }
     }
 

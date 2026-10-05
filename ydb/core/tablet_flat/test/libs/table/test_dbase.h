@@ -120,6 +120,8 @@ namespace NTest {
 
         TDbExec& WriteTx(ui64 txId, ui32 savepointSeqNum = 0) {
             Y_ENSURE(OnTx != EOnTx::None);
+            // txId 0 would silently switch Add to committed updates, dropping the savepoint seq num
+            Y_ENSURE(txId != 0, "WriteTx requires a non-zero txId");
 
             WriteVersion = TRowVersion::Min();
             WriteTxId = txId;

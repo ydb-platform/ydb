@@ -797,7 +797,8 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
         NRedo::TWriter prefix{ };
 
         {
-            const ui32 head = ui32(ECompatibility::Head);
+            // Chunks with events unknown to older versions require a newer evolution to read
+            const ui32 head = Max(ui32(ECompatibility::Head), Redo->RequiredEvolution());
             const ui32 edge = ui32(ECompatibility::Edge);
 
             prefix.EvBegin(head, edge, Change->Serial, Change->Stamp);

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     control.cpp
@@ -59,8 +59,6 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/issue
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(kqp_tx_info.h)
 GENERATE_ENUM_SERIALIZATION(kqp_yql.h)

@@ -18,6 +18,7 @@ PEERDIR(
 )
 
 SRCS(
+    allocation_cache_ut.cpp
     actor_basic_ut.cpp
     actor_coroutine_ut.cpp
     actor_exception_ut.cpp

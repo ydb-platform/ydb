@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_pq_datasink.cpp
@@ -63,7 +63,5 @@ PEERDIR(
     yt/yql/providers/ytflow/integration/proto
     yt/yql/providers/ytflow/expr_nodes
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

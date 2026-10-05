@@ -4,7 +4,11 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 SPLIT_FACTOR(2)
 SIZE(MEDIUM)
 
-REQUIREMENTS(cpu:4)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ELSE()
+    REQUIREMENTS(cpu:4)
+ENDIF()
 
 TEST_SRCS(
     conftest.py

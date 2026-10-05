@@ -8,7 +8,11 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
-REQUIREMENTS(ram:32 cpu:2)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:2)
+ELSE()
+    REQUIREMENTS(ram:32 cpu:2)
+ENDIF()
 
 DEPENDS(
     ydb/apps/ydb

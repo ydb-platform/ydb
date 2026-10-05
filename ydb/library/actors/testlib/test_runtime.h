@@ -303,6 +303,11 @@ namespace NActors {
         static bool IsVerbose();
         static void SetVerbose(bool verbose);
         TDuration SetDispatchTimeout(TDuration timeout);
+        // Skip real waits before inspecting simulated timers and frozen mailboxes.
+        // Disable for tests that need external work to arrive before simulated time
+        // advances. Idle waits, Quiet dispatch and real-thread runtimes are unchanged.
+        // Skipped waits still count towards DispatchTimeout.
+        bool SetFastSimulatedTime(bool enabled);
         void SetDispatchedEventsLimit(ui64 limit) {
             DispatchedEventsLimit = limit;
         }
@@ -869,6 +874,7 @@ namespace NActors {
         TSet<TActorId> EdgeActors;
         THashMap<TEventMailboxId, TActorId, TEventMailboxId::THash> EdgeActorByMailbox;
         TDuration DispatchTimeout;
+        bool FastSimulatedTime = true;
         TDuration ReschedulingDelay;
         TEventObserver ObserverFunc;
         TEventObserverCollection ObserverFuncs;

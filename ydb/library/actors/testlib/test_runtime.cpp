@@ -826,6 +826,11 @@ namespace NActors {
         return oldTimeout;
     }
 
+    bool TTestActorRuntimeBase::SetFastSimulatedTime(bool enabled) {
+        TGuard<TMutex> guard(Mutex);
+        return std::exchange(FastSimulatedTime, enabled);
+    }
+
     TDuration TTestActorRuntimeBase::SetReschedulingDelay(TDuration delay) {
         TGuard<TMutex> guard(Mutex);
         TDuration oldDelay = ReschedulingDelay;
@@ -1458,6 +1463,22 @@ namespace NActors {
 
             TDuration waitDelay = TDuration::MilliSeconds(10);
             dispatchTime += waitDelay;
+            if (FastSimulatedTime && !UseRealThreads && !options.Quiet) {
+                const auto now = TInstant::MicroSeconds(CurrentTimestamp);
+                bool hasScheduledWork = false;
+                for (const auto& mbox : currentMailboxes) {
+                    if (!mbox.second->IsActive(now) || !mbox.second->IsScheduledEmpty()) {
+                        hasScheduledWork = true;
+                        break;
+                    }
+                }
+                // Preserve the inspection cadence and timeout budget, including
+                // repeated RESCHEDULE, without sleeping before modelled work.
+                // With no such work, release the mutex and wait for an external send.
+                if (hasScheduledWork) {
+                    continue;
+                }
+            }
             MailboxesHasEvents.WaitT(Mutex, waitDelay);
         }
         return false;

@@ -210,7 +210,9 @@ void TWriteTasksQueue::Enqueue(TWriteTask&& task) {
 }
 
 TWriteTasksQueue::~TWriteTasksQueue() {
-    if (CompactionOverloadReported) {
+    // ActorSystem() dereferences TlsActivationContext. This destructor also runs from mailbox
+    // cleanup on the stop thread, which has no activation context.
+    if (CompactionOverloadReported && NActors::TlsActivationContext) {
         auto* actorSystem = NActors::TActivationContext::ActorSystem();
         if (actorSystem) {
             NOverload::TOverloadManagerServiceOperator::ReportCompactionOverload(Owner->TabletID(), false);

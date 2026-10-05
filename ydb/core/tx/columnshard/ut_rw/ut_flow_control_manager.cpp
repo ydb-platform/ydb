@@ -3,11 +3,13 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_events.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_types.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
+#include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
@@ -24,8 +26,19 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <atomic>
 #include <cmath>
 #include <functional>
+
+namespace NKikimr::NColumnShard {
+
+struct TWriteTasksQueueTestAccess {
+    static void SetCompactionOverloadReported(TWriteTasksQueue& queue, bool reported) {
+        queue.CompactionOverloadReported = reported;
+    }
+};
+
+}   // namespace NKikimr::NColumnShard
 
 namespace NKikimr {
 namespace {
@@ -116,6 +129,50 @@ private:
     const ui64 WritesCount;
     const ui64 WritesSize;
     const EMode Mode;
+};
+
+struct TWriteTasksQueueShutdownState {
+    TIntrusivePtr<TTabletStorageInfo> Info;
+    std::unique_ptr<TColumnShard> Shard;
+    std::unique_ptr<TWriteTasksQueue> Queue;
+    std::atomic<bool> Ready{ false };
+};
+
+class TPrepareWriteTasksQueueActor: public TActorBootstrapped<TPrepareWriteTasksQueueActor> {
+public:
+    explicit TPrepareWriteTasksQueueActor(std::shared_ptr<TWriteTasksQueueShutdownState> state)
+        : State(std::move(state))
+    {
+    }
+
+    void Bootstrap(const TActorContext&) {
+        State->Info = MakeIntrusive<TTabletStorageInfo>(ui64(42), TTabletTypes::ColumnShard);
+        State->Shard = std::make_unique<TColumnShard>(State->Info.Get(), SelfId());
+        State->Queue = std::make_unique<TWriteTasksQueue>(State->Shard.get());
+        NColumnShard::TWriteTasksQueueTestAccess::SetCompactionOverloadReported(*State->Queue, true);
+        State->Ready.store(true);
+        PassAway();
+    }
+
+private:
+    std::shared_ptr<TWriteTasksQueueShutdownState> State;
+};
+
+class TDestroyColumnShardActor: public TActorBootstrapped<TDestroyColumnShardActor> {
+public:
+    explicit TDestroyColumnShardActor(std::shared_ptr<TWriteTasksQueueShutdownState> state)
+        : State(std::move(state))
+    {
+    }
+
+    void Bootstrap(const TActorContext&) {
+        State->Shard.reset();
+        State->Info.Reset();
+        PassAway();
+    }
+
+private:
+    std::shared_ptr<TWriteTasksQueueShutdownState> State;
 };
 
 // ---------------------------------------------------------------------------
@@ -2210,6 +2267,38 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
 
         UNIT_ASSERT_VALUES_EQUAL(NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly(), 0);
         UNIT_ASSERT(!NOverload::TOverloadManagerServiceOperator::IsWriteSideOverloaded());
+    }
+
+    // ReportCompactionOverload -> TrySendToOverloadManager from the stop thread.
+    // IsEnabled() is false without TLS, so this returns before the send; it must not dereference the activation context.
+    Y_UNIT_TEST(ReportCompactionOverloadWithoutActivationContextDoesNotCrash) {
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        runtime.GetAppData(0).FeatureFlags.SetEnableCsFlowControl(true);
+
+        UNIT_ASSERT(!TlsActivationContext);
+        UNIT_ASSERT(!NOverload::TOverloadManagerServiceOperator::ReportCompactionOverload(/*tabletId=*/42, /*overloaded=*/false));
+    }
+
+    // ~TWriteTasksQueue calls TActivationContext::ActorSystem() when a compaction-overload edge was reported.
+    // Mailbox cleanup during TActorSystem::Stop has no activation context.
+    Y_UNIT_TEST(WriteTasksQueueDestructorWithoutActivationContextDoesNotCrash) {
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        Y_UNUSED(env);
+        auto state = std::make_shared<TWriteTasksQueueShutdownState>();
+        runtime.Register(new TPrepareWriteTasksQueueActor(state), 0, runtime.GetAppData(0).UserPoolId);
+        for (int i = 0; i < 50 && !state->Ready.load(); ++i) {
+            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(state->Ready.load());
+        UNIT_ASSERT(!TlsActivationContext);
+
+        state->Queue.reset();
+
+        runtime.Register(new TDestroyColumnShardActor(state), 0, runtime.GetAppData(0).UserPoolId);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+        UNIT_ASSERT(!state->Shard);
     }
 
     Y_UNIT_TEST(OverloadManagerRefreshesNodesListOnWakeup) {

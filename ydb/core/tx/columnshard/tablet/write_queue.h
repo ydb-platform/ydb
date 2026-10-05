@@ -87,7 +87,11 @@ public:
     void FailByOverload(TColumnShard* owner, const EOverloadStatus overloadStatus, const TActorContext& ctx) const;
 };
 
+struct TWriteTasksQueueTestAccess;
+
 class TWriteTasksQueue {
+    friend struct TWriteTasksQueueTestAccess;
+
 private:
     bool WriteTasksOverloadCheckerScheduled = false;
     bool CompactionOverloadReported = false;

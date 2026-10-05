@@ -59,7 +59,6 @@
 #include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/services/metadata/service.h>
 
-#include <util/generic/object_counter.h>
 #include <util/generic/size_literals.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD

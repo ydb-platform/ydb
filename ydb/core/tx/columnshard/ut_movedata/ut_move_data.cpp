@@ -411,9 +411,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         }
     }
 
-    // The move locks with Actualization while compaction planners query with Compaction.
-    // TListPortionsLock::DoIsLocked ignores the category outright, so the separation rests
-    // entirely on LockCategoriesInteraction; assert it through the manager, both directions.
+    // DoIsLocked ignores the category, so Actualization-vs-Compaction separation rests on LockCategoriesInteraction; assert both ways.
     Y_UNIT_TEST(ActualizationLockAndCompactionExcludeEachOther) {
         using namespace NOlap::NDataLocks;
         const auto portion = MakeDefaultTierPortion(1);

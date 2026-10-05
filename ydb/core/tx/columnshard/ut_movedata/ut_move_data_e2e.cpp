@@ -285,8 +285,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         RunMoveDataToCompletion(/*moveDataEnabled=*/false);
     }
 
-    // Hive reassigns channel history first; a group still holding the latest entry keeps taking
-    // writes and could never converge, so refuse it the way keyvalue and blob_depot do.
+    // A group still holding the latest history entry keeps taking writes and can never converge, so refuse it like keyvalue does.
     Y_UNIT_TEST(MoveDataRejectsAGroupStillTakingWrites) {
         TMoveDataFixture f;
         f.Controller->DisableBackground(EBackground::TTL);

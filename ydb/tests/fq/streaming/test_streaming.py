@@ -1566,7 +1566,7 @@ FROM `{table_name}`"""
             shared=True,
         )
 
-        # YQ-5708
+        # YQ-5708, YQ-5727
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -1580,6 +1580,7 @@ FROM `{table_name}`"""
                     )
                 )
                 WHERE COALESCE(str1, str2) IS DISTINCT FROM "DONE"
+                  AND CAST(str1 AS Utf8) NOT REGEXP "foobar" -- YQ-5727
                   AND (Unwrap(COALESCE(str1, Just(ev), str2)) IS DISTINCT FROM "DONE"
                     OR ToBytes(COALESCE(CAST(str1 AS Utf8), CAST(ev AS Utf8))) IS NOT DISTINCT FROM "DONE")
                 ;
@@ -1597,6 +1598,7 @@ FROM `{table_name}`"""
         data = [
             '{"str1":null,"str2":"DONE","ev":"skipped"}',
             '{"str1":"xop","str2":"DONE","ev":"xep"}',
+            '{"str1":"foobar","str2":"DONE","ev":"xin"}',
             '{"str1":null,"str2":null,"ev":"xap"}',
             '{"str1":"xep","str2":"xip","ev":"xup"}',
         ]
@@ -1632,6 +1634,7 @@ FROM `{table_name}`"""
                     logger.debug(filter)
                     assert "`str1`" in filter
                     assert "`str2`" in filter
+                    assert " REGEXP " in filter
                     sources += 1
         assert sources > 0
 

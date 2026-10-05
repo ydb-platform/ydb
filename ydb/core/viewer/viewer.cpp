@@ -889,7 +889,7 @@ private:
                 response << "HTTP/1.1 200 Ok\r\n";
                 response << "Content-Type: " << type << "\r\n";
                 response << "Content-Length: " << blob.size() << "\r\n";
-                if (name == "/monitoring/index.html" || name == "/monitoring/static/js/metric-chart-assets.json") {
+                if (name == "/monitoring/index.html") {
                     response << "Cache-Control: no-store,max-age=0\r\n"; // do not cache
                 } else {
                     response << "Date: " << TInstant::Now().ToRfc822String() << "\r\n";

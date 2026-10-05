@@ -82,6 +82,7 @@ ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme GeneratedStored.AlterAddCoveringIndexOverGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.AlterAddIndexBuildsGeneratedKeyForExistingRows
 ydb/core/kqp/ut/scheme GeneratedStored.AlterAddNotNullDefaultColumn
+ydb/core/kqp/ut/scheme GeneratedStored.AsyncIndexesUseGeneratedColumnAsKeyAndCover
 ydb/core/kqp/ut/scheme GeneratedStored.CompileTimeDefaultsAlterDependencySetAndDrop
 ydb/core/kqp/ut/scheme GeneratedStored.CompileTimeDefaultsNonKeySerialDependency
 ydb/core/kqp/ut/scheme GeneratedStored.CompileTimeDefaultsPartialUpsertAndReplace

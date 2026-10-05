@@ -772,7 +772,7 @@ class TRcBuf {
         // Runs the destructor of the alternative T over the (already untagged) holder storage.
         template<typename T, typename TOwner>
         static void CallDtorAs(TOwner& value) {
-            if constexpr (sizeof(T) <= sizeof(TBackendHolder)) {
+            if constexpr (IsInlineBackend<T>) {
                 CallDtor(reinterpret_cast<T&>(value));
             } else {
                 CallDtor(reinterpret_cast<TObjectHolder<T>&>(value));
@@ -792,7 +792,7 @@ class TRcBuf {
             value.Data[0] = value.Data[0] & ValueMask;
             switch (type) {
                 // a TString backend is always stored holder-wrapped (see IsInlineBackend)
-                case EType::STRING:             return CallDtor(reinterpret_cast<TObjectHolder<TString>&>(value));
+                case EType::STRING:             return CallDtorAs<TString>(value);
                 case EType::SHARED_DATA:        return CallDtorAs<NActors::TSharedData>(value);
                 case EType::INTERNAL_BACKEND:   return CallDtorAs<TInternalBackend>(value);
                 case EType::EXTERNAL_BACKEND:   return CallDtorAs<IContiguousChunk::TPtr>(value);

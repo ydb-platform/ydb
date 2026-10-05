@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/services/cms)
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:1)
+    REQUIREMENTS(cpu:2)
     SIZE(MEDIUM)
 ENDIF()
 

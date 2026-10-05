@@ -2,9 +2,9 @@ UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(5)
+SPLIT_FACTOR(10)
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     kqp_arrow_in_channels_ut.cpp

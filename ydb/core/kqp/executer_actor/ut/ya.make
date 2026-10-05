@@ -1,9 +1,9 @@
 UNITTEST_FOR(ydb/core/kqp/executer_actor)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:4)
 FORK_SUBTESTS()
-SPLIT_FACTOR(8)
+SPLIT_FACTOR(9)
 
 SRCS(
     kqp_executer_stats_ut.cpp

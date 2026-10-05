@@ -16,7 +16,11 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(ram:16 cpu:1)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16 cpu:1)
+ELSE()
+    REQUIREMENTS(ram:16 cpu:2)
+ENDIF()
 
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

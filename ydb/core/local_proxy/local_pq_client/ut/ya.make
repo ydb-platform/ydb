@@ -2,7 +2,11 @@ UNITTEST_FOR(ydb/core/local_proxy/local_pq_client)
 
 FORK_SUBTESTS()
 
-REQUIREMENTS(cpu:1)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ELSE()
+    REQUIREMENTS(cpu:1)
+ENDIF()
 SIZE(MEDIUM)
 
 SRCS(

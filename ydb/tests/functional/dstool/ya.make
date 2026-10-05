@@ -1,9 +1,10 @@
 PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
+SPLIT_FACTOR(2)
 SIZE(MEDIUM)
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:4)
 
 TEST_SRCS(
     conftest.py

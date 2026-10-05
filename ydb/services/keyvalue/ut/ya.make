@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/services/keyvalue)
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(3)
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:1)
 

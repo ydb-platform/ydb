@@ -1,10 +1,10 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(16)
+SPLIT_FACTOR(21)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     kqp_rbo_decorrelation_ut.cpp

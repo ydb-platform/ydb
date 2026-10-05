@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:1)
+    REQUIREMENTS(cpu:2)
     SIZE(MEDIUM)
 ELSE()
     SIZE(SMALL)

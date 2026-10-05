@@ -7,7 +7,11 @@ DATA(
     arcadia/ydb/tests/functional/sqs/multinode
 )
 
-REQUIREMENTS(cpu:1)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:1)
+ELSE()
+    REQUIREMENTS(cpu:4)
+ENDIF()
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

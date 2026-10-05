@@ -5,9 +5,7 @@ TEST_SRCS(
     test_set_not_null_concurrency.py
 )
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:1)
-ENDIF()
+REQUIREMENTS(cpu:2)
 
 FORK_SUBTESTS()
 FORK_TEST_FILES()

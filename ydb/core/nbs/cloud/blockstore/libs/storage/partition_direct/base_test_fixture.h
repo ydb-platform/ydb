@@ -135,9 +135,9 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     }
 
     // Must be invoked on the vchunk's executor thread.
-    static void InvokeStartPersist(TVChunk& vchunk)
+    static void InvokeMaybeStartPersist(TVChunk& vchunk)
     {
-        vchunk.StartPersist();
+        vchunk.MaybeStartPersist();
     }
 
     // Must be invoked on the vchunk's executor thread.

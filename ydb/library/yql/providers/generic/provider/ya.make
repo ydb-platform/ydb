@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_generic_cluster_config.cpp
@@ -27,8 +27,6 @@ SRCS(
     yql_generic_utils.h
     yql_generic_utils.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 PEERDIR(
     contrib/libs/fmt

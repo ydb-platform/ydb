@@ -9,6 +9,4 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/table
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()

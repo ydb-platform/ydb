@@ -34,7 +34,7 @@ namespace NYT::NApi {
 /*
  *  This interface contains methods shared by IClient and ITransaction.
  *
- *  Thread affinity: single
+ *  Thread affinity: any
  */
 struct IClientBase
     : public virtual TRefCounted

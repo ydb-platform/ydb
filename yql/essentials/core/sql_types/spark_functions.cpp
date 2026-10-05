@@ -3,14 +3,27 @@
 #include <util/generic/hash.h>
 #include <util/generic/singleton.h>
 #include <util/string/cast.h>
+#include <util/system/yassert.h>
 
 namespace NYql::NSpark {
 namespace {
 
 class TFunctionRegistry {
 public:
-    const TSparkFunction* Find(const TString& name) const {
+    const TFunction* Find(const TString& name) const {
         return Functions_.FindPtr(name);
+    }
+
+    const TAggregateFunction& GetAggregate(TStringBuf name) const {
+        const auto function = AggregateFunctions_.find(name);
+        Y_ENSURE(function != AggregateFunctions_.end(), "Missing Spark aggregate implementation: " << name);
+        Y_ENSURE(function->second.Arity > 0 && function->second.YqlNames.size() == function->second.Arity,
+                 "Invalid Spark aggregate arity: " << name);
+        Y_ENSURE(function->second.Arity == 1 || !function->second.PreprocessorBinding.empty(),
+                 "Spark aggregate with multiple inputs requires a preprocessor: " << name);
+        Y_ENSURE(function->second.Arity == 1 || !function->second.PostprocessorBinding.empty(),
+                 "Spark aggregate with multiple results requires a postprocessor: " << name);
+        return function->second;
     }
 
     void Enumerate(const std::function<void(const TString& name, const TString& bindingName)>& callback) const {
@@ -20,7 +33,20 @@ public:
     }
 
 private:
-    const THashMap<TString, TSparkFunction> Functions_ = {
+    const THashMap<TStringBuf, TAggregateFunction> AggregateFunctions_ = {
+        {"count", {.YqlNames = {"count"}, .PostprocessorBinding = "aggregate_count_post"}},
+        {"min", {.YqlNames = {"min"}, .PreprocessorBinding = "aggregate_minmax_pre"}},
+        {"max", {.YqlNames = {"max"}, .PreprocessorBinding = "aggregate_minmax_pre"}},
+        {"avg", {.YqlNames = {"avg"}, .PreprocessorBinding = "aggregate_numeric_pre"}},
+        {"sum", {.Arity = 2, .YqlNames = {"checked_sum", "count"}, .PreprocessorBinding = "aggregate_sum_pre", .PostprocessorBinding = "aggregate_sum_post"}},
+    };
+
+    const THashMap<TString, TFunction> Functions_ = {
+        {"count", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"min", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"max", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"avg", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"sum", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
         {"concat", {.BindingName = "", .MinArgs = 2, .MaxArgs = Max<ui32>()}},
         {"raise_error", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1}},
         {"nullif", {.BindingName = "nullif", .MinArgs = 2, .MaxArgs = 2}},
@@ -148,11 +174,15 @@ private:
 
 } // namespace
 
-const TSparkFunction* FindFunction(const TString& name) {
+const TFunction* FindFunction(const TString& name) {
     return Singleton<TFunctionRegistry>()->Find(name);
 }
 
-TString TSparkFunction::GetBindingName(ui32 argumentCount) const {
+const TAggregateFunction& GetAggregateFunction(TStringBuf name) {
+    return Singleton<TFunctionRegistry>()->GetAggregate(name);
+}
+
+TString TFunction::GetBindingName(ui32 argumentCount) const {
     TString bindingName = BindingName;
     if (MinArgs != MaxArgs) {
         bindingName += '_';

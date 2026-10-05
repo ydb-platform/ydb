@@ -13,6 +13,12 @@ namespace NKikimr::NReplication::NController {
 Y_UNIT_TEST_SUITE(DstCreator) {
     using namespace NTestHelpers;
 
+    void PrepareAttachDst(TEnv<>& env) {
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
+        UNIT_ASSERT(ev->Get()->DstPathId);
+        env.GetRuntime().Send(ev->Sender, env.GetSender(), new TEvPrivate::TEvPrepareAttachDstResult());
+    }
+
     void CheckTableReplica(
             const TTestTableDescription& tableDesc,
             const NKikimrSchemeOp::TTableDescription& replicatedDesc,
@@ -73,6 +79,119 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
     Y_UNIT_TEST(Basic) {
         Basic("/Root/Replicated");
+    }
+
+    Y_UNIT_TEST(AttachTable) {
+        TEnv env;
+        const auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTable("/Root", *MakeTableDescription(table));
+        auto dst = table;
+        dst.Name = "Dst";
+        env.CreateTable("/Root", *MakeTableDescription(dst));
+        const auto pathId = env.GetPathId("/Root/Dst");
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global, true));
+
+        PrepareAttachDst(env);
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DstPathId, pathId);
+        CheckTableReplica(table, env.GetDescription("/Root/Dst").GetPathDescription().GetTable(),
+            EReplicationMode::ReadOnly, EConsistencyLevel::Global);
+    }
+
+    Y_UNIT_TEST(MissingAttachmentTable) {
+        TEnv env;
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, true));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusPathDoesNotExist);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "/Root/Dst");
+    }
+
+    Y_UNIT_TEST(IncompatibleAttachmentTable) {
+        TEnv env;
+        auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTable("/Root", *MakeTableDescription(table));
+        table.Name = "Dst";
+        table.Columns[0].Type = "Utf8";
+        env.CreateTable("/Root", *MakeTableDescription(table));
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, true));
+
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSchemeError);
+        UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "Column type mismatch");
+        UNIT_ASSERT(!env.GetDescription("/Root/Dst").GetPathDescription().GetTable().HasReplicationConfig());
+    }
+
+    Y_UNIT_TEST(AttachIndexTable) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        TEnv env(flags);
+        auto table = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Uint32"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTableWithIndex("/Root", *MakeTableDescription(table),
+            "by_value", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
+        table.Name = "Dst";
+        env.CreateTableWithIndex("/Root", *MakeTableDescription(table),
+            "by_value", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, true));
+        PrepareAttachDst(env);
+        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender())->Get()->IsSuccess());
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"), 1, 2, TReplication::ETargetKind::IndexTable,
+            "/Root/Source/by_value/indexImplTable", "/Root/Dst/by_value/indexImplTable",
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, true));
+        PrepareAttachDst(env);
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrScheme::StatusSuccess, ev->Get()->Error);
+        const auto desc = env.GetDescription("/Root/Dst/by_value/indexImplTable");
+        TString error;
+        UNIT_ASSERT_C(CheckReplicationConfig(desc.GetPathDescription().GetTable().GetReplicationConfig(),
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, error), error);
     }
 
     Y_UNIT_TEST(ColumnFamilies) {

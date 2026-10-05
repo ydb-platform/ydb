@@ -51,14 +51,6 @@ namespace NActors {
         ui64 CalculateWaitingTimeUs(NHPTimer::STime startTs, NHPTimer::STime finishTs) {
             return finishTs > startTs ? static_cast<ui64>(Ts2Us(finishTs - startTs)) : 0;
         }
-
-        size_t GetAsyncFrameCacheSizeBytes(const TActorSystem* actorSystem) {
-            // Unit tests construct executor threads without an actor system.
-            if (!actorSystem) {
-                return TAsyncFrameCache::DefaultSizeBytes;
-            }
-            return actorSystem->GetAsyncFrameCacheSizeBytes();
-        }
     }
 
     TExecutorThread::TExecutorThread(
@@ -68,7 +60,6 @@ namespace NActors {
             const TString& threadName)
         : ActorSystem(actorSystem)
         , Stats(1)
-        , AsyncFrameCache(GetAsyncFrameCacheSizeBytes(actorSystem))
         , ThreadCtx(workerId, executorPool, nullptr)
         , ExecutionStats()
         , ThreadName(threadName)
@@ -87,7 +78,6 @@ namespace NActors {
             ui64 softProcessingDurationTs)
         : ActorSystem(actorSystem)
         , Stats(poolCount)
-        , AsyncFrameCache(GetAsyncFrameCacheSizeBytes(actorSystem))
         , ThreadCtx(workerId, executorPool, sharedPool)
         , ExecutionStats()
         , ThreadName(threadName)
@@ -97,6 +87,12 @@ namespace NActors {
         Stats.resize(poolCount);
         ExecutionStats.Switch(&Stats[executorPool->PoolId]);
         CurrentStats.store(&Stats[executorPool->PoolId], std::memory_order_relaxed);
+    }
+
+    void TExecutorThread::Prepare() {
+        if (ActorSystem) {
+            ActorSystem->PrepareExecutorThread(&ThreadCtx);
+        }
     }
 
     void TExecutorThread::SwitchPool(TExecutorPoolBaseMailboxed* pool) {
@@ -598,21 +594,25 @@ namespace NActors {
 
         EXECUTOR_THREAD_DEBUG(EDebugLevel::Executor, "start ", ThreadName);
         ThreadCtx.ExecutionStats = &ExecutionStats;
-        ThreadCtx.AsyncFrameCache = &AsyncFrameCache;
         ThreadCtx.ActivityContext.ActorSystemIndex = ActorSystemIndex;
         ThreadCtx.ActivityContext.ElapsingActorActivity = ActorSystemIndex;
         NHPTimer::STime now = GetCycleCountFast();
         ThreadCtx.ActivityContext.StartOfProcessingEventTS = now;
         ThreadCtx.ActivityContext.ActivationStartTS = now;
         TlsThreadContext = &ThreadCtx;
+        if (ActorSystem) {
+            ActorSystem->InitializeExecutorThread(&ThreadCtx);
+        }
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);
         }
 
         ProcessExecutorPool();
         EXECUTOR_THREAD_DEBUG(EDebugLevel::Executor, "end ", ThreadName);
+        if (ActorSystem) {
+            ActorSystem->CleanupExecutorThread(&ThreadCtx);
+        }
         TlsThreadContext = nullptr;
-        ThreadCtx.AsyncFrameCache = nullptr;
         return nullptr;
     }
 
@@ -666,10 +666,6 @@ namespace NActors {
         stats.SafeParkedTicks = RelaxedLoad(&Stats[poolId].SafeParkedTicks);
         stats.CpuUs = RelaxedLoad(&Stats[poolId].CpuUs);
         stats.NotEnoughCpuExecutions = RelaxedLoad(&Stats[poolId].NotEnoughCpuExecutions);
-    }
-
-    void TExecutorThread::CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const {
-        stats.Add(AsyncFrameCache.GetCachedStats());
     }
 
     TExecutorThread::~TExecutorThread() {

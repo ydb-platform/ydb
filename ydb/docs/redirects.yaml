@@ -192,6 +192,8 @@ common:
     to: /dev/optimization/plans.md
   - from: /dev/query-execution-optimization/query-hints.md
     to: /dev/optimization/hints.md
+  - from: /dev/query-execution-optimization/parameterized-queries.md
+    to: /dev/optimization/parameterized-queries.md
   - from: /best_practices/cdc.md
     to: /dev/cdc.md
   - from: /best_practices/pk-olap-scalability.md

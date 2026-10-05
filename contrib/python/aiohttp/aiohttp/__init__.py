@@ -1,6 +1,6 @@
-__version__ = "3.11.18"
+__version__ = "3.14.3"
 
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 from . import hdrs as hdrs
 from .client import (
@@ -47,9 +47,16 @@ from .client import (
     WSServerHandshakeError,
     request,
 )
+from .client_middleware_digest_auth import DigestAuthMiddleware
+from .client_middlewares import ClientHandlerType, ClientMiddlewareType
+from .compression_utils import set_zlib_backend
+from .connector import (
+    AddrInfoType as AddrInfoType,
+    SocketFactoryType as SocketFactoryType,
+)
 from .cookiejar import CookieJar as CookieJar, DummyCookieJar as DummyCookieJar
 from .formdata import FormData as FormData
-from .helpers import BasicAuth, ChainMapProxy, ETag
+from .helpers import BasicAuth, ChainMapProxy, ETag, encode_basic_auth
 from .http import (
     HttpVersion as HttpVersion,
     HttpVersion10 as HttpVersion10,
@@ -123,9 +130,10 @@ if TYPE_CHECKING:
         GunicornWebWorker as GunicornWebWorker,
     )
 
-__all__: Tuple[str, ...] = (
+__all__: tuple[str, ...] = (
     "hdrs",
     # client
+    "AddrInfoType",
     "BaseConnector",
     "ClientConnectionError",
     "ClientConnectionResetError",
@@ -161,6 +169,7 @@ __all__: Tuple[str, ...] = (
     "ServerDisconnectedError",
     "ServerFingerprintMismatch",
     "ServerTimeoutError",
+    "SocketFactoryType",
     "SocketTimeoutError",
     "TCPConnector",
     "TooManyRedirects",
@@ -168,6 +177,9 @@ __all__: Tuple[str, ...] = (
     "NamedPipeConnector",
     "WSServerHandshakeError",
     "request",
+    # client_middleware
+    "ClientMiddlewareType",
+    "ClientHandlerType",
     # cookiejar
     "CookieJar",
     "DummyCookieJar",
@@ -176,7 +188,10 @@ __all__: Tuple[str, ...] = (
     # helpers
     "BasicAuth",
     "ChainMapProxy",
+    "DigestAuthMiddleware",
     "ETag",
+    "encode_basic_auth",
+    "set_zlib_backend",
     # http
     "HttpVersion",
     "HttpVersion10",
@@ -243,7 +258,7 @@ __all__: Tuple[str, ...] = (
 )
 
 
-def __dir__() -> Tuple[str, ...]:
+def __dir__() -> tuple[str, ...]:
     return __all__ + ("__doc__",)
 
 

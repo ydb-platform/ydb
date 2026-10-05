@@ -500,6 +500,12 @@ message TKqpFullTextSource {
     optional TIndexTable UniqueIndexImplTable = 16;
 }
 
+message TKqpReadSampling {
+    double Rate = 1;
+    uint64 Seed = 2;
+    uint32 MemtableStride = 3;
+}
+
 message TKqpReadRangesSource {
     TKqpPhyTableId Table = 1;
     repeated TKqpPhyColumnId Columns = 2;
@@ -517,6 +523,7 @@ message TKqpReadRangesSource {
     bool IsTableImmutable = 10;
     // Vector top-K pushdown for brute force vector search
     TKqpPhyVectorTopK VectorTopK = 11;
+    TKqpReadSampling Sampling = 12;
 }
 
 message TKqpSysViewSource {
@@ -634,6 +641,7 @@ message TKqpPhyResult {
 message TKqpAnalyzeOperation {
     string TablePath = 1;
     repeated string Columns = 2;
+    double SampleRate = 3;
 }
 
 message TKqpPhyMetadataOperation {
@@ -645,6 +653,13 @@ message TKqpPhyMetadataOperation {
 
     optional bool SuccessOnNotExist = 2;
     optional bool SuccessOnAlreadyExists = 3;
+}
+
+message TKqpKillSession {
+    oneof Target {
+        string SessionId = 1;
+        string SessionIdParameter = 2;
+    }
 }
 
 message TKqpSchemeOperation {
@@ -724,6 +739,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme DropSecret = 61;
         NKikimrSchemeOp.TModifyScheme TruncateTable = 62;
         NKikimrForcedCompaction.TForcedCompactionSettings CompactTable = 63;
+        TKqpKillSession KillSession = 64;
     }
 }
 
@@ -748,6 +764,7 @@ message TKqpPhyTx {
     repeated string SecretNames = 9;
     bool EnableShuffleElimination = 10;
     uint32 DqChannelVersion = 11;
+    bool HasPqSources = 12; // at least one stage has an external source of type "PqSource"
 }
 
 message TKqpTableInfo {
@@ -806,4 +823,6 @@ message TKqpPhyQuery {
     optional bool DisableCheckpoints = 17;
     optional bool EnableWatermarks = 18  [deprecated=true];
     optional EIsolationLevel DefaultTxMode = 19;
+    optional bool DisablePessimisticLocks = 20;
+    optional uint64 MaxTasksPerStage = 21;
 }

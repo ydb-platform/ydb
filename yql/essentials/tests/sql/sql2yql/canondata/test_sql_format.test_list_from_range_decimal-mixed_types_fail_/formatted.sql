@@ -1,4 +1,0 @@
-/* custom error: ListFromRange over Decimal requires Decimal Start, End, and Step arguments */
-SELECT
-    ListFromRange(Decimal('1', 3, 0), Decimal('5', 3, 0), 1)
-;

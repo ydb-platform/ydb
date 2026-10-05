@@ -39,7 +39,9 @@ public:
         const NKikimr::NUdf::ISecureParamsProvider *secureParamsProvider = nullptr,
         const NKikimr::NUdf::ILogProvider* logProvider = nullptr,
         TLangVersion langver = UnknownLangVersion,
-        const TRuntimeSettings::TConstPtr runtimeSettings = MakeRuntimeSettings());
+        const TRuntimeSettings::TConstPtr runtimeSettings = MakeRuntimeSettings(),
+        NKikimr::NUdf::EBridgeMode bridgeMode = NKikimr::NUdf::EBridgeMode::None,
+        TString bridgeBinaryPath = {});
 
     ~TLambdaBuilder();
 
@@ -114,6 +116,8 @@ protected:
     const NKikimr::NUdf::ILogProvider* LogProvider;
     const TLangVersion LangVer;
     const TRuntimeSettings::TConstPtr RuntimeSettings;
+    const NKikimr::NUdf::EBridgeMode BridgeMode;
+    const TString BridgeBinaryPath;
     /// TODO: remove?
     void SetExternalEnv(const NKikimr::NMiniKQL::TTypeEnvironment* env);
 private:
@@ -135,7 +139,9 @@ public:
         const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
         const NKikimr::NUdf::ILogProvider* logProvider = nullptr,
         TLangVersion langver = UnknownLangVersion,
-        TRuntimeSettings::TConstPtr runtimeSettings = MakeRuntimeSettings());
+        TRuntimeSettings::TConstPtr runtimeSettings = MakeRuntimeSettings(),
+        NKikimr::NUdf::EBridgeMode bridgeMode = NKikimr::NUdf::EBridgeMode::None,
+        TString bridgeBinaryPath = {});
 
     TString BuildLambdaWithIO(const NCommon::IMkqlCallableCompiler& compiler, NNodes::TCoLambda lambda,
         TExprContext& exprCtx, bool withNativeBlockIO = true);

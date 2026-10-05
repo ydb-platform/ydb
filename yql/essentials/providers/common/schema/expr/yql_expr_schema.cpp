@@ -138,7 +138,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
 
     void SaveErrorType(const TErrorExprType& errorType) {
         TBase::SaveTypeHeader("ErrorType");
-        auto err = errorType.GetError();
+        const auto& err = errorType.GetError();
         TBase::Writer_.OnListItem();
         TBase::Writer_.OnInt64Scalar(err.Position.Row);
         TBase::Writer_.OnListItem();

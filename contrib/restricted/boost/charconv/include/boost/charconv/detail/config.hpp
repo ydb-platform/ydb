@@ -20,7 +20,7 @@
 #endif
 
 // Use 128-bit integers and suppress warnings for using extensions
-#if defined(BOOST_HAS_INT128)
+#if defined(BOOST_HAS_INT128) && !(defined(BOOST_CHARCONV_ENABLE_CUDA) && defined(__CUDACC__))
 #  define BOOST_CHARCONV_HAS_INT128
 #  define BOOST_CHARCONV_INT128_MAX  static_cast<boost::int128_type>((static_cast<boost::uint128_type>(1) << 127) - 1)
 #  define BOOST_CHARCONV_INT128_MIN  (-BOOST_CHARCONV_INT128_MAX - 1)
@@ -197,9 +197,18 @@ static_assert((BOOST_CHARCONV_ENDIAN_BIG_BYTE || BOOST_CHARCONV_ENDIAN_LITTLE_BY
 
 #define BOOST_CHARCONV_LDBL_IS_FLOAT128
 #define BOOST_CHARCONV_UNSUPPORTED_LONG_DOUBLE
+// This identity holds only on GCC. clang keeps long double and __float128 as distinct types
+// even when both are IEEE binary128, and does not expose __float128 without -mfloat128.
+#if defined(__GNUC__) && !defined(__clang__)
 static_assert(std::is_same<long double, __float128>::value, "__float128 should be an alias to long double. Please open an issue at: https://github.com/boostorg/charconv");
+#endif
 
 #endif
 
+#if defined(BOOST_CHARCONV_ENABLE_CUDA) && defined(__CUDACC__)
+#  define BOOST_CHARCONV_HOST_DEVICE __host__ __device__
+#else
+#  define BOOST_CHARCONV_HOST_DEVICE
+#endif
 
 #endif // BOOST_CHARCONV_DETAIL_CONFIG_HPP

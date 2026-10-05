@@ -905,7 +905,7 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
                 continue;
             }
 
-            TFunctionalDependency fd = fds[fdIdx];
+            const TFunctionalDependency& fd = fds[fdIdx];
 
             auto applyFD = [this, &itemInfo, nodeIdx, maxInterestingOrderingSize](const TFunctionalDependency& fd, std::size_t fdIdx) {
                 if (Nodes_.size() >= MaxNFSMStates) {

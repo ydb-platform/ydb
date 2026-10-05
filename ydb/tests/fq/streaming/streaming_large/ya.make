@@ -34,7 +34,6 @@ PEERDIR(
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/tests/tools/pq_read
     yql/essentials/udfs/common/python/python3_small
 )
 

@@ -112,11 +112,10 @@ public:
             return true;
         }
 
-        if (auto it = Self->PendingTxId.rbegin(); it != Self->PendingTxId.rend()) {
+        if (auto it = Self->PendingTxId.rbegin(); it != Self->PendingTxId.rend()
+                && Self->AssignedTxIds.rbegin()->first < it->first) {
             Y_ABORT_UNLESS(std::holds_alternative<EError>(result));
             Y_ABORT_UNLESS(std::get<EError>(result) == EError::TooManyOpenTxIds);
-            Y_ABORT_UNLESS(Self->AssignedTxIds.lower_bound(it->first) == Self->AssignedTxIds.end());
-            Y_ABORT_UNLESS(!Self->AssignedTxIds.empty());
 
             auto nh = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
             db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Delete();
@@ -128,9 +127,10 @@ public:
             Self->AssignedTxIds.insert(std::move(nh));
         }
 
-        result = Process([&](const TRowVersion&) -> TAssignResult {
-            Y_ABORT_UNLESS(!Self->AssignedTxIds.empty());
-            return Self->AssignedTxIds.rbegin()->second;
+        result = Process([&](const TRowVersion& version) -> TAssignResult {
+            auto it = Self->AssignedTxIds.lower_bound(version);
+            Y_ABORT_UNLESS(it != Self->AssignedTxIds.end());
+            return it->second;
         });
 
         Y_ABORT_UNLESS(std::holds_alternative<TTxId>(result));

@@ -1,67 +1,67 @@
 {
-    "test.test[ExtractClusters]": [
+    "test.test[ExtractClusters-Results]": [
         {
-            "uri": "file://test.test_ExtractClusters_/results.txt"
+            "uri": "file://test.test_ExtractClusters-Results_/results.txt"
         }
     ],
-    "test.test[ExtractFuncs]": [
+    "test.test[ExtractFuncs-Results]": [
         {
-            "uri": "file://test.test_ExtractFuncs_/results.txt"
+            "uri": "file://test.test_ExtractFuncs-Results_/results.txt"
         }
     ],
-    "test.test[ExtractInFuncs]": [
+    "test.test[ExtractInFuncs-Results]": [
         {
-            "uri": "file://test.test_ExtractInFuncs_/results.txt"
+            "uri": "file://test.test_ExtractInFuncs-Results_/results.txt"
         }
     ],
-    "test.test[ExtractInsertHints]": [
+    "test.test[ExtractInsertHints-Results]": [
         {
-            "uri": "file://test.test_ExtractInsertHints_/results.txt"
+            "uri": "file://test.test_ExtractInsertHints-Results_/results.txt"
         }
     ],
-    "test.test[ExtractKeywords]": [
+    "test.test[ExtractKeywords-Results]": [
         {
-            "uri": "file://test.test_ExtractKeywords_/results.txt"
+            "uri": "file://test.test_ExtractKeywords-Results_/results.txt"
         }
     ],
-    "test.test[ExtractPragmas]": [
+    "test.test[ExtractPragmas-Results]": [
         {
-            "uri": "file://test.test_ExtractPragmas_/results.txt"
+            "uri": "file://test.test_ExtractPragmas-Results_/results.txt"
         }
     ],
-    "test.test[ExtractReadHints]": [
+    "test.test[ExtractReadHints-Results]": [
         {
-            "uri": "file://test.test_ExtractReadHints_/results.txt"
+            "uri": "file://test.test_ExtractReadHints-Results_/results.txt"
         }
     ],
-    "test.test[ExtractTypes]": [
+    "test.test[ExtractTypes-Results]": [
         {
-            "uri": "file://test.test_ExtractTypes_/results.txt"
+            "uri": "file://test.test_ExtractTypes-Results_/results.txt"
         }
     ],
-    "test.test[ObfuscateColumn]": [
+    "test.test[ObfuscateColumn-Results]": [
         {
-            "uri": "file://test.test_ObfuscateColumn_/results.txt"
+            "uri": "file://test.test_ObfuscateColumn-Results_/results.txt"
         }
     ],
-    "test.test[ObfuscateLiterals]": [
+    "test.test[ObfuscateLiterals-Results]": [
         {
-            "uri": "file://test.test_ObfuscateLiterals_/results.txt"
+            "uri": "file://test.test_ObfuscateLiterals-Results_/results.txt"
         }
     ],
-    "test.test[ObfuscateTable]": [
+    "test.test[ObfuscateTable-Results]": [
         {
-            "uri": "file://test.test_ObfuscateTable_/results.txt"
+            "uri": "file://test.test_ObfuscateTable-Results_/results.txt"
         }
     ],
-    "test.test[Sql2Yql]": [
+    "test.test[Sql2Yql-Results]": [
         {
-            "uri": "file://test.test_Sql2Yql_/results.txt"
+            "uri": "file://test.test_Sql2Yql-Results_/results.txt"
         }
     ],
-    "test.test[TestSyntax]": [
+    "test.test[TestSyntax-Results]": [
         {
-            "uri": "file://test.test_TestSyntax_/results.txt"
+            "uri": "file://test.test_TestSyntax-Results_/results.txt"
         }
     ]
 }

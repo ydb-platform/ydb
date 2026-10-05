@@ -1,6 +1,6 @@
 {% extends '//builtin/bag.ym' %}
 
-{% block current_version %}22.1.8{% endblock %}
+{% block current_version %}23.1.1{% endblock %}
 
 {% block current_url %}
 https://github.com/llvm/llvm-project/archive/llvmorg-{{self.version().strip()}}.tar.gz
@@ -173,6 +173,7 @@ python3 join.py common special arm
 echo ')'
 
 echo 'ELSEIF (ARCH_AARCH64)'
+echo 'CFLAGS(-DCOMPILER_RT_HAS_FLOAT16)'
 echo 'SRCS('
 ls aarch64/*.c cpu_model/aarch64.*c aarch64/*.S > special
 python3 join.py common special aarch

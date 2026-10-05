@@ -1,0 +1,14 @@
+/* custom error: No such column: total */
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    sum(x) AS total
+FROM (
+    VALUES
+        (1)
+) AS t (
+    x
+)
+ORDER BY
+    sum(total)
+;

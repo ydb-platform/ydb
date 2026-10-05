@@ -1,6 +1,7 @@
 #include "impl.h"
 #include "cluster_balancing.h"
 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/util/format.h>
 
 #include <library/cpp/json/json_writer.h>
@@ -21,6 +22,29 @@ static void RenderBytesCell(IOutputStream& out, ui64 bytes) {
             FormatHumanReadable(out, bytes, 1024, 2, DataSizeSuffix);
         }
     }
+}
+
+using ESpaceColor = NKikimrBlobStorage::TPDiskSpaceColor::E;
+
+static void RenderSpaceColor(IOutputStream& out, std::optional<ESpaceColor> color) {
+    if (!color) {
+        out << "-";
+        return;
+    }
+    const char *htmlColor = "black";
+    switch (*color) {
+        case NKikimrBlobStorage::TPDiskSpaceColor::GREEN:        htmlColor = "green";        break;
+        case NKikimrBlobStorage::TPDiskSpaceColor::CYAN:         htmlColor = "darkcyan";     break;
+        case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW: htmlColor = "goldenrod";    break;
+        case NKikimrBlobStorage::TPDiskSpaceColor::YELLOW:       htmlColor = "darkgoldenrod"; break;
+        case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE:
+        case NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE:
+        case NKikimrBlobStorage::TPDiskSpaceColor::ORANGE:       htmlColor = "darkorange";   break;
+        case NKikimrBlobStorage::TPDiskSpaceColor::RED:          htmlColor = "red";          break;
+        case NKikimrBlobStorage::TPDiskSpaceColor::BLACK:        htmlColor = "black";        break;
+        default:                                                 break;
+    }
+    out << "<font color='" << htmlColor << "'>" << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(*color) << "</font>";
 }
 
 template<typename T>
@@ -987,6 +1011,8 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
             RenderBridge(str);
         } else if (page == "VirtualGroups") {
             RenderVirtualGroups(str);
+        } else if (page == "DatabaseSpace") {
+            RenderDatabaseSpace(str);
         } else if (page == "StopGivingGroups") {
             StopGivingGroups = true;
             str << "OK";
@@ -1041,6 +1067,7 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
     out << "<a href='?TabletID=" << TabletID() << "&page=Shred'>Shred state</a><br>";
     out << "<a href='?TabletID=" << TabletID() << "&page=Bridge'>Bridge state</a><br>";
     out << "<a href='?TabletID=" << TabletID() << "&page=VirtualGroups'>Virtual groups</a><br>";
+    out << "<a href='?TabletID=" << TabletID() << "&page=DatabaseSpace'>Database space</a><br>";
     out << "<a href='?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>";
 
     HTML(out) {
@@ -1080,6 +1107,14 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
                         TABLER() {
                             TABLED() { out << "PDisk space color border"; }
                             TABLED() { out << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(PDiskSpaceColorBorder); }
+                        }
+                        TABLER() {
+                            TABLED() { out << "Database space block color"; }
+                            TABLED() { out << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(DatabaseSpace.GetBlockColor()); }
+                        }
+                        TABLER() {
+                            TABLED() { out << "Database space unblock color"; }
+                            TABLED() { out << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(DatabaseSpace.GetUnblockColor()); }
                         }
                     }
                 }
@@ -1246,7 +1281,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                 TABLEHEAD() {
                     TABLER() {
                         TAG_ATTRS(TTableH, {{"colspan", "3"}}) { out << "Box attributes"; }
-                        TAG_ATTRS(TTableH, {{"colspan", "7"}}) { out << "Storage pools"; }
+                        TAG_ATTRS(TTableH, {{"colspan", "10"}}) { out << "Storage pools"; }
                     }
                     TABLER() {
                         TABLEH() { out << "BoxId"; }
@@ -1259,6 +1294,9 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         TABLEH() { out << "VDiskKind"; }
                         TABLEH() { out << "Kind"; }
                         TABLEH() { out << "NumGroups"; }
+                        TAG_ATTRS(TTableH, {{"title", "The best space color among pool's groups"}}) { out << "Best color"; }
+                        TAG_ATTRS(TTableH, {{"title", "The worst space color among pool's groups"}}) { out << "Worst color"; }
+                        TAG_ATTRS(TTableH, {{"title", "Does the pool block writes to its database?"}}) { out << "Space exhausted"; }
                         TABLEH() { out << "Detail"; }
                     }
                 }
@@ -1282,6 +1320,10 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                                 TABLED() { out << NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(it->second.VDiskKind); }
                                 TABLED() { out << it->second.Kind; }
                                 TABLED() { out << it->second.NumGroups; }
+                                const auto poolState = DatabaseSpace.GetPoolState(it->first);
+                                TABLED() { RenderSpaceColor(out, poolState ? poolState->BestColor : std::nullopt); }
+                                TABLED() { RenderSpaceColor(out, poolState ? poolState->WorstColor : std::nullopt); }
+                                TABLED() { out << (poolState && poolState->Exhausted ? "<strong>YES</strong>" : ""); }
                                 TABLED() {
                                     out << "<a href='?TabletID=" << TabletID()
                                         << "&page=Groups&BoxId=" << boxId
@@ -1293,7 +1335,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         if (!enlistedStoragePools) {
                             TABLER() {
                                 renderBoxPart();
-                                TABLED_ATTRS({{"colspan", "7"}, {"align", "center"}}) {
+                                TABLED_ATTRS({{"colspan", "10"}, {"align", "center"}}) {
                                     out << "No storage pools";
                                 }
                             }
@@ -1326,6 +1368,131 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                             TABLED() { out << info->Kind; }
                             TABLED() { out << info->PDiskType; }
                             TABLED() { out << PrintMaybe(info->Path); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    RenderFooter(out);
+}
+
+void TBlobStorageController::RenderDatabaseSpace(IOutputStream& out) {
+    RenderHeader(out);
+
+    auto renderPoolLink = [&](const TBoxStoragePoolId& poolId, const TString& name) {
+        out << "<a href='?TabletID=" << TabletID() << "&page=Groups&BoxId=" << std::get<0>(poolId)
+            << "&StoragePoolId=" << std::get<1>(poolId) << "'>" << name << "</a>";
+    };
+
+    HTML(out) {
+        TAG(TH3) {
+            out << "Database space";
+        }
+
+        out << "<p>Writes to a database get blocked when every group of any of its storage pools is at the block "
+            "color or worse; they get unblocked when some group becomes better than the unblock color.</p>";
+
+        TABLE_CLASS("table table-condensed") {
+            TABLEBODY() {
+                const auto block = DatabaseSpace.GetBlockColor();
+                TABLER() {
+                    TABLED() { out << "Block color"; }
+                    TABLED() {
+                        if (block == NKikimrBlobStorage::TPDiskSpaceColor::GREEN) {
+                            out << "<strong>disabled</strong>";
+                        } else {
+                            RenderSpaceColor(out, block);
+                        }
+                    }
+                }
+                TABLER() {
+                    TABLED() { out << "Unblock color"; }
+                    TABLED() {
+                        RenderSpaceColor(out, DatabaseSpace.GetEffectiveUnblockColor());
+                    }
+                }
+            }
+        }
+
+        TAG(TH4) {
+            out << "Databases";
+        }
+        TABLE_CLASS("table") {
+            TABLEHEAD() {
+                TABLER() {
+                    TAG_ATTRS(TTableH, {{"title", "SchemeShardId:PathId, as in ScopeId of storage pools"}}) { out << "Database"; }
+                    TABLEH() { out << "Exhausted"; }
+                    TABLEH() { out << "Storage pool"; }
+                    TABLEH() { out << "Groups"; }
+                    TABLEH() { out << "Best color"; }
+                    TABLEH() { out << "Worst color"; }
+                    TABLEH() { out << "Pool exhausted"; }
+                    TABLEH() { out << "Subscribed nodes"; }
+                }
+            }
+            TABLEBODY() {
+                // databases with storage pools and those somebody is subscribed to
+                std::set<TDatabaseSpaceTracker::TScope> scopes;
+                for (const auto& [scope, pools] : DatabaseSpace.GetScopePools()) {
+                    scopes.insert(scope);
+                }
+                for (const auto& [scope, nodes] : DatabaseSpace.GetSubscribers()) {
+                    scopes.insert(scope);
+                }
+
+                for (const auto& scope : scopes) {
+                    const bool exhausted = DatabaseSpace.IsExhausted(scope);
+
+                    TStringBuilder nodes;
+                    if (const auto *subscribers = DatabaseSpace.GetSubscribers(scope)) {
+                        for (const TNodeId nodeId : *subscribers) {
+                            nodes << (nodes ? " " : "") << nodeId;
+                        }
+                    }
+
+                    std::vector<TBoxStoragePoolId> poolIds;
+                    if (const auto it = DatabaseSpace.GetScopePools().find(scope); it != DatabaseSpace.GetScopePools().end()) {
+                        poolIds.assign(it->second.begin(), it->second.end());
+                    }
+                    const TString rowspan = ToString(Max<size_t>(1, poolIds.size()));
+
+                    auto renderDatabasePart = [&] {
+                        TABLED_ATTRS({{"rowspan", rowspan}}) { out << scope.OwnerId << ":" << scope.LocalPathId; }
+                        TABLED_ATTRS({{"rowspan", rowspan}}) { out << (exhausted ? "<strong>YES</strong>" : "no"); }
+                    };
+
+                    if (poolIds.empty()) {
+                        TABLER() {
+                            renderDatabasePart();
+                            TABLED_ATTRS({{"colspan", "5"}, {"align", "center"}}) { out << "No storage pools"; }
+                            TABLED() { out << nodes; }
+                        }
+                    }
+                    for (size_t i = 0; i < poolIds.size(); ++i) {
+                        const TBoxStoragePoolId& poolId = poolIds[i];
+                        const auto poolState = DatabaseSpace.GetPoolState(poolId);
+                        TABLER() {
+                            if (!i) {
+                                renderDatabasePart();
+                            }
+                            TABLED() {
+                                const auto it = StoragePools.find(poolId);
+                                renderPoolLink(poolId, it != StoragePools.end() ? it->second.Name : TString("?"));
+                            }
+                            TABLED() {
+                                out << (poolState ? poolState->NumGroups : 0);
+                                if (poolState && poolState->NumIncompleteGroups) {
+                                    out << " (" << poolState->NumIncompleteGroups << " not fully reported)";
+                                }
+                            }
+                            TABLED() { RenderSpaceColor(out, poolState ? poolState->BestColor : std::nullopt); }
+                            TABLED() { RenderSpaceColor(out, poolState ? poolState->WorstColor : std::nullopt); }
+                            TABLED() { out << (poolState && poolState->Exhausted ? "<strong>YES</strong>" : "no"); }
+                            if (!i) {
+                                TABLED_ATTRS({{"rowspan", rowspan}}) { out << nodes; }
+                            }
                         }
                     }
                 }
@@ -1390,7 +1557,7 @@ void TBlobStorageController::RenderVSlotTable(IOutputStream& out, std::function<
         TABLE_CLASS("table") {
             TABLEHEAD() {
                 TABLER() {
-                    TAG_ATTRS(TTableH, {{"colspan", "10"}}) { out << "VDisk attributes"; }
+                    TAG_ATTRS(TTableH, {{"colspan", "11"}}) { out << "VDisk attributes"; }
                     TAG_ATTRS(TTableH, {{"colspan", "1"}}) { out << "Current"; }
                     TAG_ATTRS(TTableH, {{"colspan", "1"}}) { out << "Maximum"; }
                 }
@@ -1402,6 +1569,7 @@ void TBlobStorageController::RenderVSlotTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Allocated"; }
                     TABLEH() { out << "Available"; }
                     TABLEH() { out << "Status"; }
+                    TABLEH() { out << "Space color"; }
                     TABLEH() { out << "IsReady"; }
                     TABLEH() { out << "LastSeenReady"; }
                     TABLEH() { out << "ReplicationTime"; }
@@ -1437,6 +1605,9 @@ void TBlobStorageController::RenderVSlotRow(IOutputStream& out, const TVSlotInfo
             RenderBytesCell(out, vslot.Metrics.GetAllocatedSize());
             RenderBytesCell(out, vslot.Metrics.GetAvailableSize());
             TABLED() { out << vslot.GetStatusString(); }
+            TABLED() {
+                RenderSpaceColor(out, StatusFlagToValidSpaceColor(vslot.Metrics.GetStatusFlags()));
+            }
             TABLED() { out << (vslot.IsReady ? "YES" : ""); }
             TABLED() {
                 if (vslot.LastSeenReady != TInstant::Zero()) {
@@ -1490,6 +1661,7 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Layout correct"; }
                     TABLEH() { out << "Operating<br/>status"; }
                     TABLEH() { out << "Expected<br/>status"; }
+                    TAG_ATTRS(TTableH, {{"title", "The worst space color among group's VDisks"}}) { out << "Space<br/>color"; }
                     TABLEH() { out << "Donors"; }
                     TABLEH() { out << "Bridge"; }
                 }
@@ -1556,6 +1728,7 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             const auto& status = group.GetStatus(finder, BridgeInfo.get());
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus); }
+            TABLED() { RenderSpaceColor(out, StatusFlagToValidSpaceColor(group.StatusFlags.Raw)); }
             TABLED() {
                 ui32 numDonors = 0;
                 for (const auto& vdisk : group.VDisksInGroup) {

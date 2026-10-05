@@ -11,7 +11,7 @@ namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// The sharded sensors below index a fixed per-processor array by TTscp::Get() and update
+// The sharded counters and gauge below index a fixed per-processor array by the current CPU and update
 // the shard with a plain atomic. They are the default hot implementation and the fallback
 // everywhere the rseq fast path is not enabled; the rseq-backed counterparts live in
 // yt/yt/library/profiling/rseq and are selected at construction time (see registry.cpp).

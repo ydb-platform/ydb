@@ -62,7 +62,7 @@ TIntrusivePtr<TKikimrTableMetadata> TryToFindBestIndexForRightSide(const TKikimr
     return nullptr;
 }
 
-std::optional<TExpression> BuildFetchedRowFilter(const TOpRead& read, const TIntrusivePtr<TOpFilter>& filter, bool& supported) {
+std::optional<TExpression> BuildFetchedRowFilter(const TOpRead& read, TOpFilter* filter, bool& supported) {
     TVector<TExpression> conjuncts;
     if (read.RangeInfo.has_value()) {
         if (!read.OriginalPredicate.has_value()) {
@@ -73,7 +73,7 @@ std::optional<TExpression> BuildFetchedRowFilter(const TOpRead& read, const TInt
         conjuncts.insert(conjuncts.end(), original.begin(), original.end());
     }
     if (filter) {
-        const auto filters = filter->FilterExpr.SplitConjunct();
+        const auto filters = filter->GetFilterExpression().SplitConjunct();
         conjuncts.insert(conjuncts.end(), filters.begin(), filters.end());
     }
 
@@ -82,13 +82,10 @@ std::optional<TExpression> BuildFetchedRowFilter(const TOpRead& read, const TInt
     }
 
     // The filter is evaluated on a fetched row, so it can only refer to the fetched columns.
-    const auto readOutputs = MakeInfoUnitSet(read.OutputIUs);
     for (const auto& conjunct : conjuncts) {
-        for (const auto& iu : conjunct.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true)) {
-            if (!readOutputs.contains(iu)) {
-                supported = false;
-                return std::nullopt;
-            }
+        if (!conjunct.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true).IsSubsetOf(read.GetColumns())) {
+            supported = false;
+            return std::nullopt;
         }
     }
 
@@ -142,7 +139,17 @@ bool IsUsablePointPrefix(const TOpRead::TRangeInfo& ranges, const TVector<TStrin
     return ranges.ExpectedMaxPoints.Defined() && *ranges.ExpectedMaxPoints <= pointsLimit;
 }
 
-bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& node, const TVector<TJoinColumn>& joinColumns, EJoinKind joinKind, const TKqpProviderContext& ctx) {
+// A shared producer is reached through a Replicate port.
+bool IsSharedRelNode(const std::shared_ptr<IBaseOptimizerNode>& node) {
+    if (node->Kind != EOptimizerNodeKind::RelNodeType) {
+        return false;
+    }
+    const auto& op = std::static_pointer_cast<TRBORelOptimizerNode>(node)->Op;
+    return op->Kind == EOperator::Replicate;
+}
+
+bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& node, const TVector<TJoinColumn>& joinColumns, EJoinKind joinKind, const TKqpProviderContext& ctx,
+    const TColumnLineage& lineage) {
     auto rel = std::static_pointer_cast<TRBORelOptimizerNode>(node);
     auto rightInput = rel->Op;
     TIntrusivePtr<TOpFilter> rightFilter;
@@ -155,31 +162,42 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& no
         return false;
     }
 
+    auto read = CastOperator<TOpRead>(rightInput);
+    Y_ENSURE(read->Props.Metadata, "Lookup applicability requires Read metadata");
     THashSet<TString> rightJoinKeys;
     for (const auto& joinCol : joinColumns) {
-        TInfoUnit joinIU(joinCol.RelName, joinCol.AttributeName);
-        if (!rel->CBOToColumns.contains(joinIU)) {
+        const auto id = GetCBOColumnId(joinCol);
+        if (!rel->Op->GetOutputIUs().Contains(id)) {
             return false;
         }
-        auto originalIU = rel->CBOToColumns.at(joinIU);
-        rightJoinKeys.insert(originalIU.GetColumnName());
+        const auto* source = lineage.Find(id);
+        if (!source) {
+            return false;
+        }
+        rightJoinKeys.insert(source->ColumnName);
     }
 
-    auto read = CastOperator<TOpRead>(rightInput);
     if (ctx.KqpCtx.Config->IsAutoIndexSelectionForIndexLookupJoinEnabled()) {
         // We cannot change the right side, if predicate was pushed.
         if (!read->RangeInfo.has_value()) {
             const auto table = TKqpTable(read->GetTable());
             const auto& mainTableDesc = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, table.Path().Value());
 
-            if (auto index = TryToFindBestIndexForRightSide(mainTableDesc, read->Columns, rightJoinKeys)) {
+            TVector<TString> columns;
+            columns.reserve(read->GetColumns().Size());
+            for (const auto id : read->GetColumns()) {
+                const auto* source = lineage.Find(id);
+                Y_ENSURE(source, "Read column without lineage");
+                columns.push_back(source->ColumnName);
+            }
+            if (auto index = TryToFindBestIndexForRightSide(mainTableDesc, columns, rightJoinKeys)) {
                 return true;
             }
         }
     }
 
     bool filterSupported = true;
-    const auto fetchedRowFilter = BuildFetchedRowFilter(*read, rightFilter, filterSupported);
+    const auto fetchedRowFilter = BuildFetchedRowFilter(*read, rightFilter.Get(), filterSupported);
     if (!filterSupported) {
         return false;
     }
@@ -218,9 +236,15 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     const TVector<TJoinColumn>& leftJoinKeys,
     const TVector<TJoinColumn>& rightJoinKeys,
     EJoinKind joinKind,
-    TKqpProviderContext& ctx
+    TKqpProviderContext& ctx,
+    const TColumnLineage& lineage
 ) {
-    Y_UNUSED(left, leftJoinKeys);
+    Y_UNUSED(leftJoinKeys);
+
+    // We need to follow rewrite rule.
+    if (IsSharedRelNode(left)) {
+        return false;
+    }
 
     if (!(right->Stats.StorageType == NKikimr::NKqp::EStorageType::RowStorage)) {
         return false;
@@ -242,7 +266,7 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
     //     }
     // }
 
-    return IsLookupJoinApplicableDetailed(std::static_pointer_cast<TRelOptimizerNode>(right), rightJoinKeys, joinKind, ctx);
+    return IsLookupJoinApplicableDetailed(std::static_pointer_cast<TRelOptimizerNode>(right), rightJoinKeys, joinKind, ctx, lineage);
 }
 
 }
@@ -261,7 +285,7 @@ bool TRBOProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
             if ((OptLevel != 3) && (left->Stats.Nrows > 5000)) {
                 return false;
             }
-            return IsLookupJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinKind, *this);
+            return IsLookupJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinKind, *this, Lineage);
         }
         // FIXME: Don't pick reverse lookup join yet
         /*
@@ -272,7 +296,7 @@ bool TRBOProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
             if ((OptLevel != 3) && (right->Stats.Nrows > 5000)) {
                 return false;
             }
-            return IsLookupJoinApplicable(right, left, rightJoinKeys, leftJoinKeys, joinKind, *this);
+            return IsLookupJoinApplicable(right, left, rightJoinKeys, leftJoinKeys, joinKind, *this, Lineage);
         }
         */
         case EJoinAlgoType::MapJoin:

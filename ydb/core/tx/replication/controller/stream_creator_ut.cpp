@@ -61,6 +61,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         const auto& stream = streams.at(0);
         UNIT_ASSERT_VALUES_EQUAL(stream.GetMode(), NKikimrSchemeOp::ECdcStreamModeUpdate);
         UNIT_ASSERT_VALUES_EQUAL(stream.GetFormat(), NKikimrSchemeOp::ECdcStreamFormatJson);
+        UNIT_ASSERT(!stream.GetSchemaChanges());
         UNIT_ASSERT_VALUES_EQUAL(stream.GetVirtualTimestamps(), resolvedTimestamps.has_value());
         UNIT_ASSERT_VALUES_EQUAL(stream.GetResolvedTimestampsIntervalMs(), resolvedTimestamps.value_or(TDuration::Zero()).MilliSeconds());
     }
@@ -71,6 +72,28 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     Y_UNIT_TEST(WithResolvedTimestamps) {
         Basic(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST(WithoutInitialScan) {
+        TEnv env;
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+        env.GetRuntime().Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Restored"),
+            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
+            false, true, false, true));
+        auto request = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
+        env.GetRuntime().Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender())->Get()->IsSuccess());
+
+        const auto stream = env.GetDescription("/Root/Table/Stream");
+        UNIT_ASSERT_VALUES_EQUAL(stream.GetPathDescription().GetCdcStreamDescription().GetState(),
+            NKikimrSchemeOp::ECdcStreamStateReady);
     }
 
     void TopicAutoPartitioning(bool enabled) {
@@ -116,6 +139,33 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
     Y_UNIT_TEST(TopicAutoPartitioning) {
         TopicAutoPartitioning(true);
         TopicAutoPartitioning(false);
+    }
+
+    Y_UNIT_TEST(SchemaChangesDisableAutoPartitioning) {
+        TEnv env;
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+
+        env.GetRuntime().Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
+            true, true, true));
+        auto request = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
+        env.GetRuntime().Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender())->Get()->IsSuccess());
+
+        const auto table = env.GetDescription("/Root/Table");
+        const auto& stream = table.GetPathDescription().GetTable().GetCdcStreams().at(0);
+        UNIT_ASSERT(stream.GetSchemaChanges());
+
+        const auto topic = env.GetDescription("/Root/Table/Stream/streamImpl");
+        const auto& strategy = topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy();
+        UNIT_ASSERT_EQUAL(strategy.GetPartitionStrategyType(), NKikimrPQ::TPQTabletConfig::DISABLED);
     }
 }
 

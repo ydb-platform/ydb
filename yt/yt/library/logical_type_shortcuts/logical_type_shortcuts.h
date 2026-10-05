@@ -153,6 +153,11 @@ inline TLogicalTypePtr Tagged(std::string tag, const TLogicalTypePtr& element)
     return TaggedLogicalType(std::move(tag), element);
 }
 
+inline TLogicalTypePtr AggregateState(EAggregateFunction function, const TLogicalTypePtr& argumentType)
+{
+    return AggregateStateLogicalType(function, argumentType);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTableClient::NLogicalTypeShortcuts

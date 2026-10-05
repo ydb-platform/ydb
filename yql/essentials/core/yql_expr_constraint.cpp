@@ -71,8 +71,8 @@ struct TApplyCommonConstraint<TConstraint, Other...> {
     }
 };
 
-class TCallableConstraintTransformer : public TCallableTransformerBase<TCallableConstraintTransformer> {
-    using THandler = TStatus(TCallableConstraintTransformer::*)(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&) const;
+class TCallableConstraintTransformer: public TCallableTransformerBase<TCallableConstraintTransformer> {
+    using THandler = TStatus (TCallableConstraintTransformer::*)(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&) const;
 
 public:
     TCallableConstraintTransformer(TTypeAnnotationContext& types, bool instantOnly, bool subGraph)
@@ -395,7 +395,7 @@ private:
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 
-    template<bool Sort>
+    template <bool Sort>
     TStatus WideTopWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         if constexpr (Sort) {
             TSortedConstraintNode::TContainerType sorted;
@@ -473,22 +473,21 @@ private:
         try {
             set = ctx.MakeConstraintSet(NYT::NodeFromYsonString(input->Tail().Content()));
         } catch (...) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() <<
-                "Bad constraints yson-value: " << CurrentExceptionMessage()));
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Bad constraints yson-value: " << CurrentExceptionMessage()));
             return IGraphTransformer::TStatus::Error;
         }
         if (!set) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "AssumeConstraints with empty constraints set"));
             return IGraphTransformer::TStatus::Error;
         }
-        for (auto constraint: set.GetAllConstraints()) {
+        for (auto constraint : set.GetAllConstraints()) {
             if (!constraint->IsApplicableToType(*input->GetTypeAnn())) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << *constraint
-                    << " is not applicable to " << *input->GetTypeAnn()));
+                                                                                    << " is not applicable to " << *input->GetTypeAnn()));
                 return IGraphTransformer::TStatus::Error;
             }
         }
-        for (auto constr: input->Head().GetAllConstraints()) {
+        for (auto constr : input->Head().GetAllConstraints()) {
             if (!constr->GetName().starts_with("PartOf") && !set.GetConstraint(constr->GetName())) {
                 set.AddConstraint(constr);
             }
@@ -497,7 +496,7 @@ private:
         return IGraphTransformer::TStatus::Ok;
     }
 
-    template<bool Distinct, bool Strict>
+    template <bool Distinct, bool Strict>
     TStatus AssumeUniqueWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         typename TUniqueConstraintNodeBase<Distinct>::TContentType content;
         for (auto i = 1U; i < input->ChildrenSize(); ++i) {
@@ -509,12 +508,12 @@ private:
                 } else if (list->IsList()) {
                     TPartOfConstraintBase::TSetType columns;
                     columns.reserve(list->ChildrenSize());
-                    for (const auto& column: list->Children()) {
+                    for (const auto& column : list->Children()) {
                         if (column->IsAtom()) {
                             columns.insert_unique(TPartOfConstraintBase::TPathType(1U, column->Content()));
                         } else if (column->IsList()) {
                             TPartOfConstraintBase::TPathType path(column->ChildrenSize());
-                            std::transform(column->Children().cbegin(), column->Children().cend(), path.begin(), [](const TExprNode::TPtr& atom) { return atom->Content(); } );
+                            std::transform(column->Children().cbegin(), column->Children().cend(), path.begin(), [](const TExprNode::TPtr& atom) { return atom->Content(); });
                             columns.insert_unique(path);
                         }
                     }
@@ -530,13 +529,13 @@ private:
 
         auto constraint = ctx.MakeConstraint<TUniqueConstraintNodeBase<Distinct>>(std::move(content));
         if (!constraint->IsApplicableToType(*input->GetTypeAnn())) {
-            if constexpr  (Strict) {
+            if constexpr (Strict) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << *constraint
-                    << " is not applicable to " << *input->GetTypeAnn()));
+                                                                                    << " is not applicable to " << *input->GetTypeAnn()));
             } else {
                 auto issue = TIssue(ctx.GetPosition(input->Pos()),
-                    TStringBuilder() << (Distinct ? "Distinct" : "Unique") << " sql hint contains invalid column: " << Endl
-                                     << *constraint << " is not applicable to " << *input->GetTypeAnn());
+                                    TStringBuilder() << (Distinct ? "Distinct" : "Unique") << " sql hint contains invalid column: " << Endl
+                                                     << *constraint << " is not applicable to " << *input->GetTypeAnn());
                 SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_YQL_HINT_INVALID_PARAMETERS, issue);
                 if (ctx.AddWarning(issue)) {
                     output = input->HeadPtr();
@@ -569,12 +568,12 @@ private:
         for (auto i = 1U; i < input->ChildrenSize(); ++i) {
             TPartOfConstraintBase::TSetType columns;
             columns.reserve(input->Child(i)->ChildrenSize());
-            for (const auto& column: input->Child(i)->Children()) {
+            for (const auto& column : input->Child(i)->Children()) {
                 if (column->IsAtom()) {
                     columns.insert_unique(TPartOfConstraintBase::TPathType(1U, column->Content()));
                 } else if (column->IsList()) {
                     TPartOfConstraintBase::TPathType path(column->ChildrenSize());
-                    std::transform(column->Children().cbegin(), column->Children().cend(), path.begin(), [](const TExprNode::TPtr& atom) { return atom->Content(); } );
+                    std::transform(column->Children().cbegin(), column->Children().cend(), path.begin(), [](const TExprNode::TPtr& atom) { return atom->Content(); });
                     columns.insert_unique(path);
                 }
             }
@@ -584,7 +583,7 @@ private:
         const auto constraint = ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets));
         if (!constraint->IsApplicableToType(*input->GetTypeAnn())) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << *constraint
-                << " is not applicable to " << *input->GetTypeAnn()));
+                                                                                << " is not applicable to " << *input->GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -614,7 +613,7 @@ private:
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
-    template<class TConstraint>
+    template <class TConstraint>
     static void FilterFromHead(const TExprNode& input, TConstraintSet& constraints, const TPartOfConstraintBase::TPathFilter& filter, TExprContext& ctx) {
         if (const auto source = input.Head().GetConstraint<TConstraint>()) {
             if (const auto filtered = source->FilterFields(ctx, filter)) {
@@ -623,7 +622,7 @@ private:
         }
     }
 
-    template<class TConstraint, bool Simplify = false>
+    template <class TConstraint, bool Simplify = false>
     static void ReduceFromHead(const TExprNode::TPtr& input, const TPartOfConstraintBase::TPathReduce& reduce, TExprContext& ctx) {
         if (const auto source = input->Head().GetConstraint<TConstraint>()) {
             if (const auto filtered = source->RenameFields(ctx, reduce)) {
@@ -636,7 +635,7 @@ private:
         }
     }
 
-    template<class TConstraint, bool Simplify = false>
+    template <class TConstraint, bool Simplify = false>
     static void FilterFromHead(const TExprNode::TPtr& input, const TPartOfConstraintBase::TPathFilter& filter, TExprContext& ctx) {
         if (const auto source = input->Head().GetConstraint<TConstraint>()) {
             if (const auto filtered = source->FilterFields(ctx, filter)) {
@@ -649,7 +648,7 @@ private:
         }
     }
 
-    template<class TConstraint>
+    template <class TConstraint>
     static void FilterFromHeadIfMissed(const TExprNode::TPtr& input, const TPartOfConstraintBase::TPathFilter& filter, TExprContext& ctx) {
         if (!input->GetConstraint<TConstraint>()) {
             FilterFromHead<TConstraint>(input, filter, ctx);
@@ -669,7 +668,7 @@ private:
                 auto multi = input->Head().GetConstraint<TMultiConstraintNode>();
                 if (multi && multi->GetItems().back().first >= outSize) {
                     TMultiConstraintNode::TMapType filteredItems;
-                    for (auto& item: multi->GetItems()) {
+                    for (auto& item : multi->GetItems()) {
                         if (item.first < outSize) {
                             filteredItems.push_back(item);
                         }
@@ -683,7 +682,7 @@ private:
                 auto varIndex = input->Head().GetConstraint<TVarIndexConstraintNode>();
                 if (varIndex && varIndex->GetIndexMapping().back().first >= outSize) {
                     TVarIndexConstraintNode::TMapType filteredItems;
-                    for (auto& item: varIndex->GetIndexMapping()) {
+                    for (auto& item : varIndex->GetIndexMapping()) {
                         if (item.first < outSize) {
                             filteredItems.push_back(item);
                         }
@@ -694,8 +693,7 @@ private:
                     input->AddConstraint(varIndex);
                 }
             }
-        }
-        else if (outItemType->GetKind() == ETypeAnnotationKind::Struct) {
+        } else if (outItemType->GetKind() == ETypeAnnotationKind::Struct) {
             const auto filter = [outItemType](const TPartOfConstraintBase::TPathType& path) {
                 return !path.empty() && TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType);
             };
@@ -747,18 +745,15 @@ private:
 
         const auto unwrapedOutItemType = RemoveOptionalType(outItemType);
         const auto unwrapedInItemType = RemoveOptionalType(inItemType);
-        if (unwrapedInItemType->GetKind() == ETypeAnnotationKind::Variant && unwrapedOutItemType->GetKind() == ETypeAnnotationKind::Variant
-            && unwrapedOutItemType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
-
+        if (unwrapedInItemType->GetKind() == ETypeAnnotationKind::Variant && unwrapedOutItemType->GetKind() == ETypeAnnotationKind::Variant && unwrapedOutItemType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
             const auto tupleUnderInType = unwrapedInItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
             const auto tupleUnderOutType = unwrapedOutItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
             if (auto multi = input->Head().GetConstraint<TMultiConstraintNode>()) {
                 if (tupleUnderOutType->GetSize() < tupleUnderInType->GetSize()) {
                     TMultiConstraintNode::TMapType multiItems;
                     std::copy_if(multi->GetItems().cbegin(), multi->GetItems().cend(),
-                        std::back_inserter(multiItems),
-                        [&](const auto& item) { return item.first < tupleUnderOutType->GetSize(); }
-                    );
+                                 std::back_inserter(multiItems),
+                                 [&](const auto& item) { return item.first < tupleUnderOutType->GetSize(); });
                     if (!multiItems.empty()) {
                         input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
                     }
@@ -770,9 +765,8 @@ private:
                 if (tupleUnderOutType->GetSize() < tupleUnderInType->GetSize()) {
                     TVarIndexConstraintNode::TMapType filteredItems;
                     std::copy_if(varItem->GetIndexMapping().cbegin(), varItem->GetIndexMapping().cend(),
-                        std::back_inserter(filteredItems),
-                        [&](const auto& item) { return item.second < tupleUnderOutType->GetSize(); }
-                    );
+                                 std::back_inserter(filteredItems),
+                                 [&](const auto& item) { return item.second < tupleUnderOutType->GetSize(); });
                     if (!filteredItems.empty()) {
                         input->AddConstraint(ctx.MakeConstraint<TVarIndexConstraintNode>(std::move(filteredItems)));
                     }
@@ -836,12 +830,11 @@ private:
             FilterFromHead<TPartOfChoppedConstraintNode>(input, filter, ctx);
             FilterFromHead<TPartOfUniqueConstraintNode>(input, filter, ctx);
             FilterFromHead<TPartOfDistinctConstraintNode>(input, filter, ctx);
-        }
-        else if (outItemType->GetKind() == ETypeAnnotationKind::Variant) {
+        } else if (outItemType->GetKind() == ETypeAnnotationKind::Variant) {
             if (auto multi = input->Head().GetConstraint<TMultiConstraintNode>()) {
                 TMultiConstraintNode::TMapType multiItems;
                 auto tupleUnderType = outItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
-                for (auto& item: multi->GetItems()) {
+                for (auto& item : multi->GetItems()) {
                     YQL_ENSURE(item.first < tupleUnderType->GetSize());
 
                     auto& constr = multiItems[item.first];
@@ -880,60 +873,20 @@ private:
         }
 
         if constexpr (Adjacent) {
-            TSet<TStringBuf> except = {
-                TUniqueConstraintNode::Name(),
-                TDistinctConstraintNode::Name(),
-            };
-            CopyExcept(*input, *input->Child(0), except);
-
-            auto uniqueConstraint = input->Child(0)->GetConstraint<TUniqueConstraintNode>();
-            auto distinctConstraint = input->Child(0)->GetConstraint<TDistinctConstraintNode>();
-
-            TPartOfConstraintBase::TSetType keys = GetPathsToKeys<true>(input->Child(1)->Tail(), input->Child(1)->Head().Head());
-            if (!keys.empty()) {
-                TPartOfConstraintBase::TSetOfSetsType uniqueKeys;
-                for (const auto& elem : keys) {
-                    uniqueKeys.insert(TPartOfConstraintBase::TSetType{elem});
-                }
-
-                auto newUniqueConstraint = ctx.MakeConstraint<TUniqueConstraintNode>(TUniqueConstraintNode::TContentType{uniqueKeys});
-                if (uniqueConstraint) {
-                    uniqueConstraint = TUniqueConstraintNode::Merge(
-                        newUniqueConstraint,
-                        dynamic_cast<const TUniqueConstraintNode*>(uniqueConstraint),
-                        ctx);
-                } else {
-                    uniqueConstraint = newUniqueConstraint;
-                }
-
-                auto newDistinctConstraint = ctx.MakeConstraint<TDistinctConstraintNode>(TDistinctConstraintNode::TContentType{uniqueKeys});
-                if (distinctConstraint) {
-                    distinctConstraint = TDistinctConstraintNode::Merge(
-                        newDistinctConstraint,
-                        dynamic_cast<const TDistinctConstraintNode*>(distinctConstraint),
-                        ctx);
-                } else {
-                    distinctConstraint = newDistinctConstraint;
-                }
-            }
-
-            if (uniqueConstraint) {
-                input->AddConstraint(uniqueConstraint);
-            }
-            if (distinctConstraint) {
-                input->AddConstraint(distinctConstraint);
-            }
-
-            return TStatus::Ok;
+            // We could put up Unique and Distinct constraints here, but we won't.
+            // If the final Map operation with PruneAdjacentKeys does not fuse with anything else after optimizations,
+            // we expect that this will lead to more overhead on average than the speedup.
+            // So, we remove such operations at the end of optimization and any new constraints may block it.
+            return CopyAllFrom<0>(input, output, ctx);
         }
 
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TStreamingConstraintNode>(input, output, ctx);
     }
 
-    template<class TConstraint>
+    template <class TConstraint>
     static const TConstraint* GetConstraintFromWideResultLambda(const TExprNode& lambda, TExprContext& ctx);
 
-    template<class TConstraintType>
+    template <class TConstraintType>
     static const TConstraintType* GetLambdaConstraint(const TExprNode& lambda, TExprContext& ctx) {
         if (2U == lambda.ChildrenSize()) {
             return lambda.Tail().GetConstraint<TConstraintType>();
@@ -947,7 +900,7 @@ private:
         return TConstraintType::MakeCommon(constraints, ctx);
     }
 
-    template<class TConstraintType, bool WideLambda>
+    template <class TConstraintType, bool WideLambda>
     static const TConstraintType* GetConstraintFromLambda(const TExprNode& lambda, TExprContext& ctx) {
         if constexpr (WideLambda) {
             return GetConstraintFromWideResultLambda<TConstraintType>(lambda, ctx);
@@ -1027,7 +980,7 @@ private:
         return columns;
     }
 
-    template<class TConstraint, bool OrderedMap, class TInput>
+    template <class TConstraint, bool OrderedMap, class TInput>
     static void GetFromMapLambda(const TInput& input, const TConstraintSet& handler, TConstraintSet& output, bool isSingleItem, TExprContext& ctx) {
         constexpr bool isOrderConstraint = std::is_same<typename TConstraint::TMainConstraint, TSortedConstraintNode>() || std::is_same<typename TConstraint::TMainConstraint, TChoppedConstraintNode>();
         if (const auto lambda = handler.GetConstraint<TConstraint>()) {
@@ -1059,7 +1012,7 @@ private:
         }
     }
 
-    template<class TConstraint, bool OrderedMap, bool WideOutput>
+    template <class TConstraint, bool OrderedMap, bool WideOutput>
     static void GetFromMapLambda(const TExprNode::TPtr& input, bool isSingleItem, TExprContext& ctx) {
         constexpr bool isOrderConstraint = std::is_same<typename TConstraint::TMainConstraint, TSortedConstraintNode>() || std::is_same<typename TConstraint::TMainConstraint, TChoppedConstraintNode>();
         if (const auto lambda = GetConstraintFromLambda<TConstraint, WideOutput>(input->Tail(), ctx)) {
@@ -1126,8 +1079,8 @@ private:
             } else {
                 if (lambdaMulti) {
                     TVarIndexConstraintNode::TMapType remapItems;
-                    for (auto& multiItem: lambdaMulti->GetItems()) {
-                        for (auto& varItem: varIndex->GetIndexMapping()) {
+                    for (auto& multiItem : lambdaMulti->GetItems()) {
+                        for (auto& varItem : varIndex->GetIndexMapping()) {
                             remapItems.push_back(std::make_pair(multiItem.first, varItem.second));
                         }
                     }
@@ -1144,7 +1097,7 @@ private:
         const auto inputMulti = input->Head().GetConstraint<TMultiConstraintNode>();
         if (lambdaMulti && !input->Head().GetConstraint<TEmptyConstraintNode>()) {
             TMultiConstraintNode::TMapType remappedItems;
-            for (auto& item: lambdaMulti->GetItems()) {
+            for (auto& item : lambdaMulti->GetItems()) {
                 remappedItems.push_back(std::make_pair(item.first, TConstraintSet{}));
                 if (!multiInput) { // remapping one to many
                     GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, singleItem, ctx);
@@ -1155,27 +1108,26 @@ private:
                     if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
                         remappedItems.pop_back();
                     }
-                }
-                else if (lambdaVarIndex && inputMulti) {
+                } else if (lambdaVarIndex && inputMulti) {
                     const auto range = lambdaVarIndex->GetIndexMapping().equal_range(item.first);
                     switch (std::distance(range.first, range.second)) {
-                    case 0: // new index
-                        break;
-                    case 1: // remapping 1 to 1
-                        if (const auto origConstr = inputMulti->GetItem(range.first->second)) {
-                            GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
-                            GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
-                            GetFromMapLambda<TPartOfSortedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
-                            GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                        case 0: // new index
+                            break;
+                        case 1: // remapping 1 to 1
+                            if (const auto origConstr = inputMulti->GetItem(range.first->second)) {
+                                GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                                GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                                GetFromMapLambda<TPartOfSortedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
+                                GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, singleItem, ctx);
 
-                            if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
+                                if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
+                                    remappedItems.pop_back();
+                                }
+                            } else {
                                 remappedItems.pop_back();
                             }
-                        } else {
-                            remappedItems.pop_back();
-                        }
-                        break;
-                    default: // remapping many to one
+                            break;
+                        default: // remapping many to one
                         {
                             std::vector<const TConstraintSet*> nonEmpty;
                             for (auto i = range.first; i != range.second; ++i) {
@@ -1183,7 +1135,7 @@ private:
                                     nonEmpty.push_back(origConstr);
                                 }
                             }
-                            EraseIf(nonEmpty, [] (const TConstraintSet* c) { return !!c->GetConstraint<TEmptyConstraintNode>(); });
+                            EraseIf(nonEmpty, [](const TConstraintSet* c) { return !!c->GetConstraint<TEmptyConstraintNode>(); });
 
                             if (nonEmpty.empty()) {
                                 remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
@@ -1199,8 +1151,7 @@ private:
             if (remappedItems) {
                 input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(remappedItems)));
             }
-        }
-        else if (inputMulti && lambdaVarIndex) { // Many to one
+        } else if (inputMulti && lambdaVarIndex) { // Many to one
             const auto range = lambdaVarIndex->GetIndexMapping().equal_range(0);
             static const TConstraintSet DefConstr;
             std::vector<const TConstraintSet*> nonEmpty;
@@ -1211,7 +1162,7 @@ private:
                     nonEmpty.push_back(origConstr);
                 }
             }
-            EraseIf(nonEmpty, [] (const TConstraintSet* c) { return !!c->GetConstraint<TEmptyConstraintNode>(); });
+            EraseIf(nonEmpty, [](const TConstraintSet* c) { return !!c->GetConstraint<TEmptyConstraintNode>(); });
 
             if (nonEmpty.empty()) {
                 input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
@@ -1248,7 +1199,7 @@ private:
     template <bool Ordered>
     TStatus LMapWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         TConstraintNode::TListType argConstraints;
-        for (const auto c: input->Head().GetAllConstraints()) {
+        for (const auto c : input->Head().GetAllConstraints()) {
             if (Ordered || (c->GetName() != TSortedConstraintNode::Name() && c->GetName() != TChoppedConstraintNode::Name())) {
                 argConstraints.push_back(c);
             }
@@ -1344,7 +1295,7 @@ private:
                 // Check and exclude modified keys from final constraint
                 const auto resultItemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
                 std::vector<const TTypeAnnotationNode*> inputs;
-                for (const auto& child: input->Children()) {
+                for (const auto& child : input->Children()) {
                     inputs.emplace_back(child->GetTypeAnn()->Cast<TListExprType>()->GetItemType());
                 }
 
@@ -1428,7 +1379,7 @@ private:
         }
 
         if (structNode.IsCallable("AsStruct")) {
-            for (const auto& child: structNode.Children()) {
+            for (const auto& child : structNode.Children()) {
                 if (child->Head().IsAtom(memberName)) {
                     TApplyConstraintFromInput<1, TVarIndexConstraintNode>::Do(child);
                     break;
@@ -1568,7 +1519,7 @@ private:
         return TStatus::Ok;
     }
 
-    template<class TPartOfConstraint>
+    template <class TPartOfConstraint>
     static void AddPartOf(const TExprNode::TPtr& input, TExprContext& ctx) {
         typename TPartOfConstraint::TMapType map;
         if (const auto part = input->Head().GetConstraint<TPartOfConstraint>()) {
@@ -1582,7 +1533,7 @@ private:
         }
     }
 
-    template<class TPartOfConstraint>
+    template <class TPartOfConstraint>
     static void ReplacePartOf(const TExprNode::TPtr& input, TExprContext& ctx) {
         typename TPartOfConstraint::TMapType sorted;
         const auto& name = input->Child(1)->Content();
@@ -1651,17 +1602,17 @@ private:
 
     TStatus ListWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         switch (input->ChildrenSize()) {
-        case 1:
-            return FromEmpty(input, output, ctx);
-        case 2:
-            return FromSecond<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input, output, ctx);
-        default:
-            break;
+            case 1:
+                return FromEmpty(input, output, ctx);
+            case 2:
+                return FromSecond<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input, output, ctx);
+            default:
+                break;
         }
         return CommonFromChildren<1, TVarIndexConstraintNode, TMultiConstraintNode>(input, output, ctx);
     }
 
-    template<bool Ordered, bool WideInput, bool WithUnique = true>
+    template <bool Ordered, bool WideInput, bool WithUnique = true>
     static TSmallVec<TConstraintNode::TListType> GetConstraintsForInputArgument(const TExprNode& node, TExprContext& ctx) {
         TSmallVec<TConstraintNode::TListType> argsConstraints(WideInput ? node.Child(1U)->Head().ChildrenSize() : 1U);
         if constexpr (WideInput) {
@@ -1771,7 +1722,7 @@ private:
         return TStatus::Ok;
     }
 
-    template<bool IsList, bool IsFlat>
+    template <bool IsList, bool IsFlat>
     TStatus PassOrEmptyWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         if (const auto part = input->Tail().GetConstraint<TPartOfSortedConstraintNode>()) {
             if (const auto filtered = part->CompleteOnly(ctx)) {
@@ -1824,18 +1775,7 @@ private:
         } else if (1U == constraints.size()) {
             input->SetConstraints(**constraints.cbegin());
         } else {
-            TApplyCommonConstraint<TSortedConstraintNode
-                , TPartOfSortedConstraintNode
-                , TChoppedConstraintNode
-                , TPartOfChoppedConstraintNode
-                , TUniqueConstraintNode
-                , TPartOfUniqueConstraintNode
-                , TDistinctConstraintNode
-                , TPartOfDistinctConstraintNode
-                , TEmptyConstraintNode
-                , TVarIndexConstraintNode
-                , TMultiConstraintNode
-                >::Do(input, constraints, ctx);
+            TApplyCommonConstraint<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>::Do(input, constraints, ctx);
         }
         return TStatus::Ok;
     }
@@ -1848,26 +1788,19 @@ private:
 
         std::vector<const TConstraintNode::TListType> constraints;
         constraints.reserve(optionals.size());
-        std::transform(optionals.cbegin(), optionals.cend(), std::back_inserter(constraints), [](const TExprNode::TPtr& node){ return node->GetAllConstraints(); });
+        std::transform(optionals.cbegin(), optionals.cend(), std::back_inserter(constraints), [](const TExprNode::TPtr& node) { return node->GetAllConstraints(); });
 
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(lambdaIndex), ctx, constraints); status != TStatus::Ok) {
             return status;
         }
 
-        if (std::any_of(optionals.cbegin(), optionals.cend(), [] (const TExprNode::TPtr& node) { return bool(node->GetConstraint<TEmptyConstraintNode>()); })) {
+        if (std::any_of(optionals.cbegin(), optionals.cend(), [](const TExprNode::TPtr& node) { return bool(node->GetConstraint<TEmptyConstraintNode>()); })) {
             input->CopyConstraints(input->Tail());
             return TStatus::Ok;
         }
 
-        const std::vector<const TConstraintSet*> both = { &lambda->GetConstraintSet(), &input->Tail().GetConstraintSet() };
-        TApplyCommonConstraint<TPartOfSortedConstraintNode
-            , TPartOfChoppedConstraintNode
-            , TPartOfUniqueConstraintNode
-            , TPartOfDistinctConstraintNode
-            , TEmptyConstraintNode
-            , TVarIndexConstraintNode
-            , TMultiConstraintNode
-            >::Do(input, both, ctx);
+        const std::vector<const TConstraintSet*> both = {&lambda->GetConstraintSet(), &input->Tail().GetConstraintSet()};
+        TApplyCommonConstraint<TPartOfSortedConstraintNode, TPartOfChoppedConstraintNode, TPartOfUniqueConstraintNode, TPartOfDistinctConstraintNode, TEmptyConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>::Do(input, both, ctx);
         return TStatus::Ok;
     }
 
@@ -1884,6 +1817,8 @@ private:
         TStatus status = TStatus::Ok;
         TDynBitMap outFromChildren; // children, from which take a multi constraint for output
         const auto* inputStreaming = input->Head().GetConstraint<TStreamingConstraintNode>();
+        const auto* inputVarIndex = input->Head().GetConstraint<TVarIndexConstraintNode>();
+        const bool isVariantOutput = GetSeqItemType(*input->GetTypeAnn()).GetKind() == ETypeAnnotationKind::Variant;
 
         if (const auto multi = input->Head().GetConstraint<TMultiConstraintNode>()) {
             for (size_t i = 2; i < input->ChildrenSize(); ++i) {
@@ -1922,7 +1857,19 @@ private:
         } else {
             TConstraintNode::TListType argConstraintsList;
             if (GetSeqItemType(*input->Head().GetTypeAnn()).GetKind() != ETypeAnnotationKind::Variant) {
-                argConstraintsList = input->Head().GetAllConstraints();
+                if (inputVarIndex && isVariantOutput) {
+                    for (const auto* constraint : input->Head().GetAllConstraints()) {
+                        if (constraint->GetName() != TVarIndexConstraintNode::Name()) {
+                            argConstraintsList.push_back(constraint);
+                        }
+                    }
+
+                    // A handler of a non-variant input has one local alternative. Keep its VarIndex
+                    // in local coordinates and compose it with the input VarIndex below.
+                    argConstraintsList.push_back(ctx.MakeConstraint<TVarIndexConstraintNode>(1U));
+                } else {
+                    argConstraintsList = input->Head().GetAllConstraints();
+                }
             } else if (inputStreaming) {
                 argConstraintsList.push_back(inputStreaming);
             }
@@ -1937,10 +1884,9 @@ private:
             return status;
         }
 
-        const auto inputVarIndex = input->Head().GetConstraint<TVarIndexConstraintNode>();
         const bool emptyInput = input->Head().GetConstraint<TEmptyConstraintNode>();
         bool hasStreamingOutput = false;
-        if (GetSeqItemType(*input->GetTypeAnn()).GetKind() == ETypeAnnotationKind::Variant) {
+        if (isVariantOutput) {
             ui32 outIndexOffset = 0;
             TMultiConstraintNode::TMapType multiItems;
             TVarIndexConstraintNode::TMapType remapItems;
@@ -1951,7 +1897,7 @@ private:
 
                 if (inputVarIndex) {
                     if (auto varIndex = lambda->GetConstraint<TVarIndexConstraintNode>()) {
-                        for (auto& item: varIndex->GetIndexMapping()) {
+                        for (auto& item : varIndex->GetIndexMapping()) {
                             YQL_ENSURE(item.second < input->Child(i)->ChildrenSize());
                             const auto srcIndex = FromString<size_t>(input->Child(i)->Child(item.second)->Content());
                             remapItems.push_back(std::make_pair(outIndexOffset + item.first, srcIndex));
@@ -1976,7 +1922,7 @@ private:
                 if (lambdaItemType.GetKind() == ETypeAnnotationKind::Variant) {
                     if (!emptyInput && outFromChildren.Test(i + 1)) {
                         if (auto multi = lambda->GetConstraint<TMultiConstraintNode>()) {
-                            for (auto& item: multi->GetItems()) {
+                            for (auto& item : multi->GetItems()) {
                                 multiItems.insert_unique(std::make_pair(outIndexOffset + item.first, item.second));
                             }
                         }
@@ -1992,7 +1938,7 @@ private:
 
             if (inputVarIndex && !remapItems.empty()) {
                 TVarIndexConstraintNode::TMapType result;
-                for (auto& item: remapItems) {
+                for (auto& item : remapItems) {
                     auto range = inputVarIndex->GetIndexMapping().equal_range(item.second);
                     for (auto it = range.first; it != range.second; ++it) {
                         result.push_back(std::make_pair(item.first, it->second));
@@ -2051,8 +1997,8 @@ private:
                 }
                 status = status.Combine(UpdateLambdaConstraints(input->ChildRef(i + 1U), ctx, argConstraints));
                 ++i;
-            } else if (inMulti) {                // Check that we can fall to default branch
-                for (auto& item: inMulti->GetItems()) {
+            } else if (inMulti) { // Check that we can fall to default branch
+                for (auto& item : inMulti->GetItems()) {
                     if (!usedAlts.Test(item.first)) {
                         outFromChildren.Set(i);
                         break;
@@ -2084,7 +2030,7 @@ private:
                         if (outFromChildren.Test(i)) {
                             outConstraints.push_back(&input->Child(i)->GetConstraintSet());
                             if (const auto outMulti = input->Child(i)->GetConstraint<TMultiConstraintNode>()) {
-                                for (auto& item: outMulti->GetItems()) {
+                                for (auto& item : outMulti->GetItems()) {
                                     remapItems.push_back(std::make_pair(item.first, index));
                                 }
                             }
@@ -2094,8 +2040,8 @@ private:
                             outConstraints.push_back(&input->Child(i)->GetConstraintSet());
                             const auto outMulti = input->Child(i)->GetConstraint<TMultiConstraintNode>();
                             if (outMulti && inMulti) {
-                                for (auto& outItem: outMulti->GetItems()) {
-                                    for (auto& inItem: inMulti->GetItems()) {
+                                for (auto& outItem : outMulti->GetItems()) {
+                                    for (auto& inItem : inMulti->GetItems()) {
                                         if (!usedAlts.Test(inItem.first)) {
                                             remapItems.push_back(std::make_pair(outItem.first, inItem.first));
                                         }
@@ -2116,7 +2062,7 @@ private:
 
                 if (auto varIndex = input->Head().GetConstraint<TVarIndexConstraintNode>()) {
                     TVarIndexConstraintNode::TMapType varIndexItems;
-                    for (auto& item: remapItems) {
+                    for (auto& item : remapItems) {
                         const auto range = varIndex->GetIndexMapping().equal_range(item.second);
                         for (auto i = range.first; i != range.second; ++i) {
                             varIndexItems.push_back(std::make_pair(item.first, i->second));
@@ -2128,8 +2074,7 @@ private:
                     }
                 }
             }
-        }
-        else {
+        } else {
             std::vector<const TConstraintSet*> constraints;
             for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
                 if (input->Child(i)->IsAtom()) {
@@ -2159,8 +2104,7 @@ private:
                             } else {
                                 varIndexItems.push_back(std::make_pair(0, Max<ui32>()));
                             }
-                        }
-                        else {
+                        } else {
                             // 'default' branch
                             varIndexItems.push_back(std::make_pair(0, Max<ui32>()));
                         }
@@ -2189,10 +2133,9 @@ private:
             if (auto multi = input->Head().GetConstraint<TMultiConstraintNode>()) {
                 std::vector<TMultiConstraintNode::TMapType::value_type> nonEmpty;
                 std::copy_if(multi->GetItems().begin(), multi->GetItems().end(), std::back_inserter(nonEmpty),
-                    [] (const TMultiConstraintNode::TMapType::value_type& v) {
-                        return !v.second.GetConstraint<TEmptyConstraintNode>();
-                    }
-                );
+                             [](const TMultiConstraintNode::TMapType::value_type& v) {
+                                 return !v.second.GetConstraint<TEmptyConstraintNode>();
+                             });
 
                 if (nonEmpty.empty()) {
                     input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
@@ -2202,7 +2145,7 @@ private:
             }
             if (auto varIndex = input->Head().GetConstraint<TVarIndexConstraintNode>()) {
                 TVarIndexConstraintNode::TMapType varIndexItems;
-                for (auto& item: varIndex->GetIndexMapping()) {
+                for (auto& item : varIndex->GetIndexMapping()) {
                     varIndexItems.push_back(std::make_pair(0, item.second));
                 }
                 if (!varIndexItems.empty()) {
@@ -2222,7 +2165,7 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(index, target));
             if (auto varIndex = input->Head().GetConstraint<TVarIndexConstraintNode>()) {
                 TVarIndexConstraintNode::TMapType filteredItems;
-                for (auto& item: varIndex->GetIndexMapping()) {
+                for (auto& item : varIndex->GetIndexMapping()) {
                     filteredItems.push_back(std::make_pair(index, item.second));
                 }
                 input->AddConstraint(ctx.MakeConstraint<TVarIndexConstraintNode>(std::move(filteredItems)));
@@ -2248,7 +2191,7 @@ private:
             if (auto varIndex = input->Head().GetConstraint<TVarIndexConstraintNode>()) {
                 TVarIndexConstraintNode::TMapType filteredItems;
                 for (ui32 i = 0; i < underlyingType->Cast<TTupleExprType>()->GetSize(); ++i) {
-                    for (auto& item: varIndex->GetIndexMapping()) {
+                    for (auto& item : varIndex->GetIndexMapping()) {
                         filteredItems.push_back(std::make_pair(i, item.second));
                     }
                 }
@@ -2276,7 +2219,7 @@ private:
             }
             if (auto varIndex = input->Head().GetConstraint<TVarIndexConstraintNode>()) {
                 TVarIndexConstraintNode::TMapType filteredItems;
-                for (auto& item: varIndex->GetIndexMapping()) {
+                for (auto& item : varIndex->GetIndexMapping()) {
                     if (item.first == guessIndex) {
                         filteredItems.push_back(std::make_pair(0, item.second));
                     }
@@ -2300,7 +2243,7 @@ private:
                 ui32 index = 0;
                 ui32 emptyCount = 0;
                 bool hasStreaming = false;
-                for (auto& child: input->Head().Children()) {
+                for (auto& child : input->Head().Children()) {
                     if (!child->GetConstraint<TEmptyConstraintNode>()) {
                         items.push_back(std::make_pair(index, child->GetConstraintSet()));
                         hasStreaming = hasStreaming || !!child->GetConstraint<TStreamingConstraintNode>();
@@ -2354,8 +2297,7 @@ private:
 
         if (input->Head().IsList()) {
             input->CopyConstraints(*input->Head().Child(FromString<ui32>(input->Child(1)->Content())));
-        }
-        else if (input->Head().IsCallable("Demux")) {
+        } else if (input->Head().IsCallable("Demux")) {
             if (auto multi = input->Head().Head().GetConstraint<TMultiConstraintNode>()) {
                 if (auto c = multi->GetItem(FromString<ui32>(input->Child(1)->Content()))) {
                     input->SetConstraints(*c);
@@ -2379,17 +2321,17 @@ private:
                 emptyInputs.push_back(i);
             }
             if (const auto err = labels.Add(ctx, input->Child(i)->Tail(),
-                GetSeqItemType(*list.GetTypeAnn()).Cast<TStructExprType>(),
-                GetDetailed(list.GetConstraint<TUniqueConstraintNode>(), *list.GetTypeAnn(), ctx),
-                GetDetailed(list.GetConstraint<TDistinctConstraintNode>(), *list.GetTypeAnn(), ctx),
-                list.GetConstraint<TStreamingConstraintNode>())) {
+                                            GetSeqItemType(*list.GetTypeAnn()).Cast<TStructExprType>(),
+                                            GetDetailed(list.GetConstraint<TUniqueConstraintNode>(), *list.GetTypeAnn(), ctx),
+                                            GetDetailed(list.GetConstraint<TDistinctConstraintNode>(), *list.GetTypeAnn(), ctx),
+                                            list.GetConstraint<TStreamingConstraintNode>())) {
                 ctx.AddError(*err);
                 return TStatus::Error;
             }
         }
 
         const auto joinTree = input->Child(numLists);
-        for (auto i: emptyInputs) {
+        for (auto i : emptyInputs) {
             if (IsRequiredSide(joinTree, labels, i).first) {
                 input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
                 break;
@@ -2460,10 +2402,10 @@ private:
         return result;
     }
 
-    template<bool ForDict = false>
+    template <bool ForDict = false>
     static TPartOfConstraintBase::TPathReduce GetRenames(const TExprNode& renames) {
         std::unordered_map<std::string_view, std::string_view> map(renames.ChildrenSize() >> 1U);
-        for (auto i = 0U; i < renames.ChildrenSize(); ++++i) {
+        for (auto i = 0U; i < renames.ChildrenSize(); i += 2U) {
             map.emplace(renames.Child(i)->Content(), renames.Child(i + 1U)->Content());
         }
         return [map](const TPartOfConstraintBase::TPathType& path) -> std::vector<TPartOfConstraintBase::TPathType> {
@@ -2573,7 +2515,7 @@ private:
         return core.Input().Ptr();
     }
 
-    template<typename GraceJoinCoreType>
+    template <typename GraceJoinCoreType>
     TStatus GraceJoinCoreWrapImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         Y_UNUSED(output);
         const GraceJoinCoreType core(input);
@@ -2595,7 +2537,7 @@ private:
         bool rigthAny = false;
         core.Flags().Ref().ForEachChild([&](const TExprNode& flag) {
             if (flag.IsAtom("LeftAny")) {
-               leftAny = true;
+                leftAny = true;
             } else if (flag.IsAtom("RightAny")) {
                 rigthAny = true;
             }
@@ -2680,9 +2622,9 @@ private:
         return GraceJoinCoreWrapImpl<TCoGraceSelfJoinCore>(input, output, ctx);
     }
 
-    template<bool Distinct>
+    template <bool Distinct>
     static const TUniqueConstraintNodeBase<Distinct>* GetForPayload(const TExprNode& input, TExprContext& ctx) {
-        if (const auto constraint = input.GetConstraint<TUniqueConstraintNodeBase<Distinct>>())  {
+        if (const auto constraint = input.GetConstraint<TUniqueConstraintNodeBase<Distinct>>()) {
             return constraint->RenameFields(ctx, [&ctx](const TPartOfConstraintBase::TPathType& path) -> std::vector<TPartOfConstraintBase::TPathType> {
                 if (path.empty() || path.front() != ctx.GetIndexAsString(1U)) {
                     return {};
@@ -2804,14 +2746,14 @@ private:
             .Combine(UpdateLambdaConstraints(input->ChildRef(TCoIsKeySwitch::idx_StateKeyExtractor), ctx, stateConstraints));
     }
 
-    template<bool Wide>
+    template <bool Wide>
     static TPartOfConstraintBase::TSetType GetSimpleKeys(const TExprNode& node, const TExprNode::TChildrenType& args, TExprContext& ctx) {
         TPartOfConstraintBase::TSetType keys;
         if (node.IsCallable("AggrNotEquals")) {
             const TExprNode& body = node.Head().IsCallable("StablePickle") ? node.Head() : node;
             if (body.Head().IsList() && body.Tail().IsList() && body.Head().ChildrenSize() == body.Tail().ChildrenSize()) {
                 keys.reserve(body.Tail().ChildrenSize());
-                for (auto i = 0U; i < body.Head().ChildrenSize(); ++i){
+                for (auto i = 0U; i < body.Head().ChildrenSize(); ++i) {
                     if (auto l = GetPathToKey(*body.Head().Child(i), args), r = GetPathToKey(*body.Tail().Child(i), args); l && r && *l == *r) {
                         if constexpr (Wide) {
                             auto path = r->first;
@@ -2842,7 +2784,7 @@ private:
         return keys;
     }
 
-    template<bool Wide>
+    template <bool Wide>
     static TPartOfConstraintBase::TSetType GetSimpleKeys(const TExprNode& selector, TExprContext& ctx) {
         YQL_ENSURE(selector.IsLambda() && 2U == selector.ChildrenSize());
         const auto& body = selector.Tail();
@@ -2851,7 +2793,7 @@ private:
                 const TCoIsKeySwitch keySwitch(&body);
                 const auto& i = GetPathsToKeys(*ctx.ReplaceNode(keySwitch.ItemKeyExtractor().Body().Ptr(), keySwitch.ItemKeyExtractor().Args().Arg(0).Ref(), keySwitch.Item().Ptr()), keySwitch.Item().Ref());
                 const auto& s = GetPathsToKeys(*ctx.ReplaceNode(keySwitch.StateKeyExtractor().Body().Ptr(), keySwitch.StateKeyExtractor().Args().Arg(0).Ref(), keySwitch.State().Ptr()), keySwitch.Item().Ref());
-                return i == s  ? i : TPartOfConstraintBase::TSetType();
+                return i == s ? i : TPartOfConstraintBase::TSetType();
             }
         }
 
@@ -2882,14 +2824,15 @@ private:
         argsConstraints.emplace_back(initState->GetAllConstraints());
 
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(2), ctx, argsConstraints)
-            .Combine(UpdateLambdaConstraints(input->TailRef(), ctx, argsConstraints)); status != TStatus::Ok) {
+                                    .Combine(UpdateLambdaConstraints(input->TailRef(), ctx, argsConstraints));
+            status != TStatus::Ok) {
             return status;
         }
 
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 
-    template<class TConstraint, bool Wide>
+    template <class TConstraint, bool Wide>
     static void GetCommonFromBothLambdas(const TExprNode::TPtr& input, const typename TConstraint::TMainConstraint* original, TExprContext& ctx) {
         if (original) {
             if (const auto initPart = GetConstraintFromLambda<TConstraint, Wide>(*input->Child(1), ctx)) {
@@ -2906,7 +2849,7 @@ private:
         }
     }
 
-    template<bool Wide>
+    template <bool Wide>
     TStatus Condense1Wrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         auto argsConstraints = GetConstraintsForInputArgument<true, Wide, false>(*input, ctx);
         const auto initLambda = input->Child(1);
@@ -2961,7 +2904,8 @@ private:
         }
 
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(2), ctx, argsConstraints)
-            .Combine(UpdateLambdaConstraints(input->TailRef(), ctx, argsConstraints)); status != TStatus::Ok) {
+                                    .Combine(UpdateLambdaConstraints(input->TailRef(), ctx, argsConstraints));
+            status != TStatus::Ok) {
             return status;
         }
 
@@ -2970,7 +2914,7 @@ private:
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 
-    template<class TConstraint, bool Wide>
+    template <class TConstraint, bool Wide>
     static void GetCommonFromBothLambdas(const TExprNode::TPtr& input, TExprContext& ctx) {
         if (const auto original = input->Head().GetConstraint<typename TConstraint::TMainConstraint>()) {
             if (const auto initPart = GetConstraintFromLambda<TConstraint, Wide>(*input->Child(1), ctx)) {
@@ -2987,7 +2931,7 @@ private:
         }
     }
 
-    template<bool Wide>
+    template <bool Wide>
     TStatus Chain1MapWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         auto argsConstraints = GetConstraintsForInputArgument<true, Wide>(*input, ctx);
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(1), ctx, argsConstraints); status != TStatus::Ok) {
@@ -3011,7 +2955,7 @@ private:
         return FromFirst<TEmptyConstraintNode, TStreamingConstraintNode>(input, output, ctx);
     }
 
-    template<bool Distinct>
+    template <bool Distinct>
     static void GetUniquesForPayloads(const TExprNode::TPtr& input, TExprContext& ctx) {
         typename TUniqueConstraintNodeBase<Distinct>::TContentType content{TPartOfConstraintBase::TSetOfSetsType{TPartOfConstraintBase::TSetType{TPartOfConstraintBase::TPathType{ctx.GetIndexAsString(0U)}}}};
         if (const auto lambda = GetConstraintFromLambda<TPartOfConstraintNode<TUniqueConstraintNodeBase<Distinct>>, false>(*input->Child(2), ctx)) {
@@ -3048,7 +2992,7 @@ private:
         return FromFirst<TPartOfUniqueConstraintNode, TPartOfDistinctConstraintNode, TEmptyConstraintNode>(input, output, ctx);
     }
 
-    template<bool Keys>
+    template <bool Keys>
     TStatus DictHalfWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         const auto& side = ctx.GetIndexAsString(Keys ? 0U : 1U);
         const auto reduce = [&side](const TPartOfConstraintBase::TPathType& path) -> std::vector<TPartOfConstraintBase::TPathType> {
@@ -3067,7 +3011,7 @@ private:
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 
-    template<bool Partitions>
+    template <bool Partitions>
     TStatus ShuffleByKeysWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         using TCoBase = std::conditional_t<Partitions, TCoPartitionByKeyBase, TCoShuffleByKeys>;
         if (const auto status = UpdateLambdaConstraints(*input->Child(TCoBase::idx_KeySelectorLambda)); status != TStatus::Ok) {
@@ -3136,8 +3080,8 @@ private:
             } else {
                 if (lambdaMulti) {
                     TVarIndexConstraintNode::TMapType remapItems;
-                    for (auto& multiItem: lambdaMulti->GetItems()) {
-                        for (auto& varItem: varIndex->GetIndexMapping()) {
+                    for (auto& multiItem : lambdaMulti->GetItems()) {
+                        for (auto& varItem : varIndex->GetIndexMapping()) {
                             remapItems.push_back(std::make_pair(multiItem.first, varItem.second));
                         }
                     }
@@ -3153,7 +3097,7 @@ private:
 
         if (lambdaMulti && !input->Head().GetConstraint<TEmptyConstraintNode>()) {
             TMultiConstraintNode::TMapType remappedItems;
-            for (const auto& item: lambdaMulti->GetItems()) {
+            for (const auto& item : lambdaMulti->GetItems()) {
                 remappedItems.push_back(std::make_pair(item.first, TConstraintSet{}));
                 if (!multiInput) { // remapping one to many
                     if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
@@ -3166,29 +3110,28 @@ private:
                             remappedItems.back().second.AddConstraint(distinct);
                         }
                     }
-                }
-                else if (lambdaVarIndex && multi) {
+                } else if (lambdaVarIndex && multi) {
                     const auto range = lambdaVarIndex->GetIndexMapping().equal_range(item.first);
                     switch (std::distance(range.first, range.second)) {
-                    case 0: // new index
-                        break;
-                    case 1: // remapping 1 to 1
-                        if (auto origConstr = multi->GetItem(range.first->second)) {
-                            if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
-                                remappedItems.pop_back();
+                        case 0: // new index
+                            break;
+                        case 1: // remapping 1 to 1
+                            if (auto origConstr = multi->GetItem(range.first->second)) {
+                                if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
+                                    remappedItems.pop_back();
+                                } else {
+                                    if (const auto unique = item.second.template GetConstraint<TUniqueConstraintNode>()) {
+                                        remappedItems.back().second.AddConstraint(unique);
+                                    }
+                                    if (const auto distinct = item.second.template GetConstraint<TDistinctConstraintNode>()) {
+                                        remappedItems.back().second.AddConstraint(distinct);
+                                    }
+                                }
                             } else {
-                                if (const auto unique = item.second.template GetConstraint<TUniqueConstraintNode>()) {
-                                    remappedItems.back().second.AddConstraint(unique);
-                                }
-                                if (const auto distinct = item.second.template GetConstraint<TDistinctConstraintNode>()) {
-                                    remappedItems.back().second.AddConstraint(distinct);
-                                }
+                                remappedItems.pop_back();
                             }
-                        } else {
-                            remappedItems.pop_back();
-                        }
-                        break;
-                    default: // remapping many to one
+                            break;
+                        default: // remapping many to one
                         {
                             std::vector<const TConstraintSet*> nonEmpty;
                             for (auto i = range.first; i != range.second; ++i) {
@@ -3196,7 +3139,7 @@ private:
                                     nonEmpty.push_back(origConstr);
                                 }
                             }
-                            EraseIf(nonEmpty, [] (const TConstraintSet* c) { return !!c->GetConstraint<TEmptyConstraintNode>(); });
+                            EraseIf(nonEmpty, [](const TConstraintSet* c) { return !!c->GetConstraint<TEmptyConstraintNode>(); });
 
                             if (nonEmpty.empty()) {
                                 remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
@@ -3212,8 +3155,7 @@ private:
             if (remappedItems) {
                 input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(remappedItems)));
             }
-        }
-        else if (multi && lambdaVarIndex) { // Many to one
+        } else if (multi && lambdaVarIndex) { // Many to one
             const auto range = lambdaVarIndex->GetIndexMapping().equal_range(0);
             std::vector<const TConstraintSet*> nonEmpty;
             for (auto i = range.first; i != range.second; ++i) {
@@ -3221,7 +3163,7 @@ private:
                     nonEmpty.push_back(origConstr);
                 }
             }
-            EraseIf(nonEmpty, [] (const TConstraintSet* c) { return !!c->GetConstraint<TEmptyConstraintNode>(); });
+            EraseIf(nonEmpty, [](const TConstraintSet* c) { return !!c->GetConstraint<TEmptyConstraintNode>(); });
 
             if (nonEmpty.empty()) {
                 input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
@@ -3245,12 +3187,7 @@ private:
 
     template <bool Final>
     TStatus AggregateWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        if (const auto* c = input->Head().GetConstraint<TStreamingConstraintNode>()) {
-            if (!HasSetting(input->Tail(), "hopping")) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Aggregation of streaming input without windows is not supported"));
-                return TStatus::Error;
-            }
-
+        if (const auto* c = input->Head().GetConstraint<TStreamingConstraintNode>(); c && input->IsCallable("Aggregate")) {
             input->AddConstraint(c);
         }
 
@@ -3273,7 +3210,7 @@ private:
                 if (allKeysInOutput) {
                     std::vector<std::string_view> columns;
                     columns.reserve(size);
-                    for (const auto& child: input->Child(1)->Children()) {
+                    for (const auto& child : input->Child(1)->Children()) {
                         columns.emplace_back(child->Content());
                     }
                     input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
@@ -3305,10 +3242,8 @@ private:
             std::remove_if(
                 stateConstraints.begin(),
                 stateConstraints.end(),
-                [](const TConstraintNode* c) { return c->GetName() == TEmptyConstraintNode::Name(); }
-            ),
-            stateConstraints.end()
-        );
+                [](const TConstraintNode* c) { return c->GetName() == TEmptyConstraintNode::Name(); }),
+            stateConstraints.end());
 
         TConstraintNode::TListType argConstraints;
         if (const auto status = UpdateLambdaConstraints(input->TailRef(), ctx, {argConstraints, stateConstraints}); status != TStatus::Ok) {
@@ -3369,10 +3304,9 @@ private:
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode, TStreamingConstraintNode>(input, output, ctx);
     }
 
-
     template <class TConstraintContainer>
     static void CopyExcept(TConstraintContainer& dst, const TConstraintContainer& from, const TSet<TStringBuf>& except) {
-        for (auto c: from.GetAllConstraints()) {
+        for (auto c : from.GetAllConstraints()) {
             if (!except.contains(c->GetName())) {
                 dst.AddConstraint(c);
             }
@@ -3381,7 +3315,7 @@ private:
 
     template <class TConstraintContainer>
     static void CopyExcept(TConstraintContainer& dst, const TConstraintContainer& from, TStringBuf except) {
-        for (auto c: from.GetAllConstraints()) {
+        for (auto c : from.GetAllConstraints()) {
             if (c->GetName() != except) {
                 dst.AddConstraint(c);
             }
@@ -3397,7 +3331,7 @@ private:
         ExtractSimpleKeys(body, arg, columns);
     }
 
-    template<class TConstraintWithFields>
+    template <class TConstraintWithFields>
     static const TConstraintWithFields* GetDetailed(const TConstraintWithFields* constraint, const TTypeAnnotationNode& type, TExprContext& ctx) {
         return constraint ? constraint->GetComplicatedForType(type, ctx) : nullptr;
     }
@@ -3423,10 +3357,10 @@ private:
     }
 
     static const TVarIndexConstraintNode* GetVarIndexOverVarIndexConstraint(const TVarIndexConstraintNode& inputVarIndex,
-        const TVarIndexConstraintNode& varIndex, TExprContext& ctx)
+                                                                            const TVarIndexConstraintNode& varIndex, TExprContext& ctx)
     {
         TVarIndexConstraintNode::TMapType result;
-        for (auto& item: varIndex.GetIndexMapping()) {
+        for (auto& item : varIndex.GetIndexMapping()) {
             auto range = inputVarIndex.GetIndexMapping().equal_range(item.second);
             for (auto it = range.first; it != range.second; ++it) {
                 result.push_back(std::make_pair(item.first, it->second));
@@ -3452,7 +3386,8 @@ private:
     std::unordered_map<std::string_view, THandler> Functions_;
 };
 
-template<> const TPartOfSortedConstraintNode*
+template <>
+const TPartOfSortedConstraintNode*
 TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TPartOfSortedConstraintNode>(const TExprNode& lambda, TExprContext& ctx) {
     TPartOfSortedConstraintNode::TMapType sorted;
 
@@ -3465,7 +3400,8 @@ TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TPartOfSortedC
     return sorted.empty() ? nullptr : ctx.MakeConstraint<TPartOfSortedConstraintNode>(std::move(sorted));
 }
 
-template<> const TPartOfChoppedConstraintNode*
+template <>
+const TPartOfChoppedConstraintNode*
 TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TPartOfChoppedConstraintNode>(const TExprNode& lambda, TExprContext& ctx) {
     TPartOfChoppedConstraintNode::TMapType chopped;
 
@@ -3478,7 +3414,8 @@ TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TPartOfChopped
     return chopped.empty() ? nullptr : ctx.MakeConstraint<TPartOfChoppedConstraintNode>(std::move(chopped));
 }
 
-template<> const TPartOfUniqueConstraintNode*
+template <>
+const TPartOfUniqueConstraintNode*
 TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TPartOfUniqueConstraintNode>(const TExprNode& lambda, TExprContext& ctx) {
     TPartOfUniqueConstraintNode::TMapType uniques;
 
@@ -3491,7 +3428,8 @@ TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TPartOfUniqueC
     return uniques.empty() ? nullptr : ctx.MakeConstraint<TPartOfUniqueConstraintNode>(std::move(uniques));
 }
 
-template<> const TPartOfDistinctConstraintNode*
+template <>
+const TPartOfDistinctConstraintNode*
 TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TPartOfDistinctConstraintNode>(const TExprNode& lambda, TExprContext& ctx) {
     TPartOfDistinctConstraintNode::TMapType uniques;
 
@@ -3504,7 +3442,8 @@ TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TPartOfDistinc
     return uniques.empty() ? nullptr : ctx.MakeConstraint<TPartOfDistinctConstraintNode>(std::move(uniques));
 }
 
-template<> const TVarIndexConstraintNode*
+template <>
+const TVarIndexConstraintNode*
 TCallableConstraintTransformer::TCallableConstraintTransformer::GetConstraintFromWideResultLambda<TVarIndexConstraintNode>(const TExprNode& lambda, TExprContext& ctx) {
     TVector<const TConstraintSet*> structConstraints;
     structConstraints.reserve(lambda.ChildrenSize() - 1U);
@@ -3516,10 +3455,13 @@ TCallableConstraintTransformer::TCallableConstraintTransformer::GetConstraintFro
     return TVarIndexConstraintNode::MakeCommon(structConstraints, ctx);
 }
 
-template<class TConstraint> const TConstraint*
-TCallableConstraintTransformer::GetConstraintFromWideResultLambda(const TExprNode&, TExprContext&) { return nullptr; }
+template <class TConstraint>
+const TConstraint*
+TCallableConstraintTransformer::GetConstraintFromWideResultLambda(const TExprNode&, TExprContext&) {
+    return nullptr;
+}
 
-class TDefaultCallableConstraintTransformer : public TSyncTransformerBase {
+class TDefaultCallableConstraintTransformer: public TSyncTransformerBase {
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         Y_UNUSED(output);
@@ -3531,8 +3473,8 @@ public:
     }
 };
 
-template<bool DisableCheck>
-class TConstraintTransformer : public TGraphTransformerBase {
+template <bool DisableCheck>
+class TConstraintTransformer: public TGraphTransformerBase {
 public:
     TConstraintTransformer(TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types)
         : CallableTransformer_(callableTransformer)
@@ -3616,38 +3558,38 @@ private:
             }
 
             switch (start->GetState()) {
-            case TExprNode::EState::Initial:
-            case TExprNode::EState::TypeInProgress:
-            case TExprNode::EState::TypePending:
-                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
-            case TExprNode::EState::TypeComplete:
-                break;
-            case TExprNode::EState::ConstrInProgress:
-                return IGraphTransformer::TStatus::Async;
-            case TExprNode::EState::ConstrPending:
-                if (start->Type() == TExprNode::Lambda) {
-                    if (start->Head().GetState() != TExprNode::EState::ConstrComplete) {
-                        return TStatus::Ok;
-                    } else if (start->Head().ChildrenSize() == 0) {
+                case TExprNode::EState::Initial:
+                case TExprNode::EState::TypeInProgress:
+                case TExprNode::EState::TypePending:
+                    return TStatus(TStatus::Repeat, /*hasRestart=*/true);
+                case TExprNode::EState::TypeComplete:
+                    break;
+                case TExprNode::EState::ConstrInProgress:
+                    return IGraphTransformer::TStatus::Async;
+                case TExprNode::EState::ConstrPending:
+                    if (start->Type() == TExprNode::Lambda) {
+                        if (start->Head().GetState() != TExprNode::EState::ConstrComplete) {
+                            return TStatus::Ok;
+                        } else if (start->Head().ChildrenSize() == 0) {
+                            break;
+                        }
+                    }
+
+                    if (start->Type() == TExprNode::Arguments || start->Type() == TExprNode::Argument) {
                         break;
                     }
-                }
 
-                if (start->Type() == TExprNode::Arguments || start->Type() == TExprNode::Argument) {
-                    break;
-                }
-
-                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
-            case TExprNode::EState::ConstrComplete:
-            case TExprNode::EState::ExecutionInProgress:
-            case TExprNode::EState::ExecutionRequired:
-            case TExprNode::EState::ExecutionPending:
-            case TExprNode::EState::ExecutionComplete:
-                return TStatus::Ok;
-            case TExprNode::EState::Error:
-                return TStatus::Error;
-            default:
-                YQL_ENSURE(false, "Unknown state");
+                    return TStatus(TStatus::Repeat, /*hasRestart=*/true);
+                case TExprNode::EState::ConstrComplete:
+                case TExprNode::EState::ExecutionInProgress:
+                case TExprNode::EState::ExecutionRequired:
+                case TExprNode::EState::ExecutionPending:
+                case TExprNode::EState::ExecutionComplete:
+                    return TStatus::Ok;
+                case TExprNode::EState::Error:
+                    return TStatus::Error;
+                default:
+                    YQL_ENSURE(false, "Unknown state");
             }
         }
 
@@ -3657,39 +3599,39 @@ private:
                 TStringBuilder str;
                 str << "At ";
                 switch (input->Type()) {
-                case TExprNode::Callable:
-                    if (!CurrentFunctions_.empty() && CurrentFunctions_.top().second) {
-                        return nullptr;
-                    }
+                    case TExprNode::Callable:
+                        if (!CurrentFunctions_.empty() && CurrentFunctions_.top().second) {
+                            return nullptr;
+                        }
 
-                    if (!CurrentFunctions_.empty()) {
-                        CurrentFunctions_.top().second = true;
-                    }
+                        if (!CurrentFunctions_.empty()) {
+                            CurrentFunctions_.top().second = true;
+                        }
 
-                    str << "function: " << input->Content();
-                    break;
-                case TExprNode::List:
-                    if (CurrentFunctions_.empty()) {
-                        str << "tuple";
-                    } else if (!CurrentFunctions_.top().second) {
-                        CurrentFunctions_.top().second = true;
-                        str << "function: " << CurrentFunctions_.top().first;
-                    } else {
-                        return nullptr;
-                    }
-                    break;
-                case TExprNode::Lambda:
-                    if (CurrentFunctions_.empty()) {
-                        str << "lambda";
-                    } else if (!CurrentFunctions_.top().second) {
-                        CurrentFunctions_.top().second = true;
-                        str << "function: " << CurrentFunctions_.top().first;
-                    } else {
-                        return nullptr;
-                    }
-                    break;
-                default:
-                    str << "unknown";
+                        str << "function: " << input->Content();
+                        break;
+                    case TExprNode::List:
+                        if (CurrentFunctions_.empty()) {
+                            str << "tuple";
+                        } else if (!CurrentFunctions_.top().second) {
+                            CurrentFunctions_.top().second = true;
+                            str << "function: " << CurrentFunctions_.top().first;
+                        } else {
+                            return nullptr;
+                        }
+                        break;
+                    case TExprNode::Lambda:
+                        if (CurrentFunctions_.empty()) {
+                            str << "lambda";
+                        } else if (!CurrentFunctions_.top().second) {
+                            CurrentFunctions_.top().second = true;
+                            str << "function: " << CurrentFunctions_.top().first;
+                        } else {
+                            return nullptr;
+                        }
+                        break;
+                    default:
+                        str << "unknown";
                 }
 
                 return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), str);
@@ -3709,173 +3651,168 @@ private:
 
             TStatus retStatus = TStatus::Error;
             switch (input->GetState()) {
-            case TExprNode::EState::Initial:
-            case TExprNode::EState::TypeInProgress:
-            case TExprNode::EState::TypePending:
-                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
-            case TExprNode::EState::TypeComplete:
-            case TExprNode::EState::ConstrPending:
-                break;
-            case TExprNode::EState::ConstrInProgress:
-                return IGraphTransformer::TStatus::Async;
-            case TExprNode::EState::ConstrComplete:
-            case TExprNode::EState::ExecutionInProgress:
-            case TExprNode::EState::ExecutionRequired:
-            case TExprNode::EState::ExecutionPending:
-            case TExprNode::EState::ExecutionComplete:
-                return TStatus::Ok;
-            case TExprNode::EState::Error:
-                return TStatus::Error;
-            default:
-                YQL_ENSURE(false, "Unknown state");
+                case TExprNode::EState::Initial:
+                case TExprNode::EState::TypeInProgress:
+                case TExprNode::EState::TypePending:
+                    return TStatus(TStatus::Repeat, /*hasRestart=*/true);
+                case TExprNode::EState::TypeComplete:
+                case TExprNode::EState::ConstrPending:
+                    break;
+                case TExprNode::EState::ConstrInProgress:
+                    return IGraphTransformer::TStatus::Async;
+                case TExprNode::EState::ConstrComplete:
+                case TExprNode::EState::ExecutionInProgress:
+                case TExprNode::EState::ExecutionRequired:
+                case TExprNode::EState::ExecutionPending:
+                case TExprNode::EState::ExecutionComplete:
+                    return TStatus::Ok;
+                case TExprNode::EState::Error:
+                    return TStatus::Error;
+                default:
+                    YQL_ENSURE(false, "Unknown state");
             }
 
             input->SetState(TExprNode::EState::ConstrPending);
             switch (input->Type()) {
-            case TExprNode::Atom:
-            case TExprNode::World:
-                input->SetState(TExprNode::EState::ConstrComplete);
-                CheckExpected(*input);
-                return TStatus::Ok;
-
-            case TExprNode::List:
-            {
-                retStatus = TransformChildren(input, output, ctx);
-                if (retStatus == TStatus::Ok) {
-                    retStatus = CallableTransformer_->Transform(input, output, ctx);
-                    if (retStatus == TStatus::Ok) {
-                        input->SetState(TExprNode::EState::ConstrComplete);
-                        CheckExpected(*input);
-                        break;
-                    }
-                }
-
-                if (retStatus != TStatus::Error && input != output) {
-                    processedPair.first->second = output;
-                }
-                break;
-            }
-
-            case TExprNode::Lambda:
-            {
-                YQL_ENSURE(input->ChildrenSize() > 0U);
-                TExprNode::TPtr out;
-                auto argStatus = TransformNode(input->HeadPtr(), out, ctx);
-                UpdateStatusIfChanged(argStatus, input->HeadPtr(), out);
-                if (argStatus.Level == TStatus::Error) {
-                    input->SetState(TExprNode::EState::Error);
-                    return argStatus;
-                }
-
-                if (argStatus.Level == TStatus::Repeat) {
-                    return TStatus::Ok;
-                }
-
-                TStatus bodyStatus = TStatus::Ok;
-                TExprNode::TListType newBody;
-                newBody.reserve(input->ChildrenSize() - 1U);
-                bool updatedChildren = false;
-                for (ui32 i = 1U; i < input->ChildrenSize(); ++i) {
-                    const auto child = input->ChildPtr(i);
-                    TExprNode::TPtr newChild;
-                    auto childStatus = TransformNode(child, newChild, ctx);
-                    UpdateStatusIfChanged(childStatus, child, newChild);
-                    updatedChildren = updatedChildren || (newChild != child);
-                    bodyStatus = bodyStatus.Combine(childStatus);
-                    newBody.emplace_back(std::move(newChild));
-                }
-
-                retStatus = argStatus.Combine(bodyStatus);
-                if (retStatus != TStatus::Ok) {
-                    if (retStatus.Level == TStatus::Error) {
-                        input->SetState(TExprNode::EState::Error);
-                    }
-                    else if (updatedChildren) {
-                        output = ctx.DeepCopyLambda(*input, std::move(newBody));
-                        processedPair.first->second = output;
-                        HasRenames_ = true;
-                    }
-                } else {
-                    if (input->ChildrenSize() != 2U) {
-                        input->SetState(TExprNode::EState::ConstrComplete);
-                    } else {
-                        input->CopyConstraints(input->Tail());
-                    }
-                    CheckExpected(*input);
-                }
-                break;
-            }
-
-            case TExprNode::Argument:
-                if (input->GetState() != TExprNode::EState::ConstrComplete) {
-                    return TStatus::Repeat;
-                }
-
-                return TStatus::Ok;
-
-            case TExprNode::Arguments:
-            {
-                if (input->Children().empty()) {
-                    if (TExprNode::EState::ConstrComplete == input->GetState()) {
-                        return TStatus::Ok;
-                    }
-                    return TStatus::Repeat;
-                }
-
-                retStatus = TStatus::Ok;
-                for (auto& child : input->Children()) {
-                    TExprNode::TPtr tmp;
-                    auto childStatus = TransformNode(child, tmp, ctx);
-                    UpdateStatusIfChanged(childStatus, child, tmp);
-                    YQL_ENSURE(tmp == child);
-                    retStatus = retStatus.Combine(childStatus);
-                }
-
-                if (retStatus != TStatus::Ok) {
-                    if (retStatus.Level == TStatus::Error) {
-                        input->SetState(TExprNode::EState::Error);
-                    }
-                } else {
+                case TExprNode::Atom:
+                case TExprNode::World:
                     input->SetState(TExprNode::EState::ConstrComplete);
-                }
-                return retStatus;
-            }
+                    CheckExpected(*input);
+                    return TStatus::Ok;
 
-            case TExprNode::Callable:
-            {
-                retStatus = TransformChildren(input, output, ctx);
-                if (retStatus != TStatus::Ok) {
+                case TExprNode::List: {
+                    retStatus = TransformChildren(input, output, ctx);
+                    if (retStatus == TStatus::Ok) {
+                        retStatus = CallableTransformer_->Transform(input, output, ctx);
+                        if (retStatus == TStatus::Ok) {
+                            input->SetState(TExprNode::EState::ConstrComplete);
+                            CheckExpected(*input);
+                            break;
+                        }
+                    }
+
                     if (retStatus != TStatus::Error && input != output) {
                         processedPair.first->second = output;
                     }
                     break;
                 }
 
-                CurrentFunctions_.top().second = true;
-                retStatus = CallableTransformer_->Transform(input, output, ctx);
-                if (retStatus == TStatus::Error) {
-                    input->SetState(TExprNode::EState::Error);
-                } else if (retStatus == TStatus::Ok) {
-                    // Sanity check
-                    for (size_t i = 0; i < input->ChildrenSize(); ++i) {
-                        YQL_ENSURE(input->Child(i)->GetState() >= TExprNode::EState::ConstrComplete,
-                            "Child with index " << i << " of callable " << TString{input->Content()}.Quote() << " has bad state after constraint transform");
+                case TExprNode::Lambda: {
+                    YQL_ENSURE(input->ChildrenSize() > 0U);
+                    TExprNode::TPtr out;
+                    auto argStatus = TransformNode(input->HeadPtr(), out, ctx);
+                    UpdateStatusIfChanged(argStatus, input->HeadPtr(), out);
+                    if (argStatus.Level == TStatus::Error) {
+                        input->SetState(TExprNode::EState::Error);
+                        return argStatus;
                     }
-                    input->SetState(TExprNode::EState::ConstrComplete);
-                    CheckExpected(*input);
-                } else if (retStatus == TStatus::Async) {
-                    CallableInputs_.push_back(input);
-                    input->SetState(TExprNode::EState::ConstrInProgress);
-                } else {
-                    if (output != input.Get()) {
-                        processedPair.first->second = output;
-                        HasRenames_ = true;
+
+                    if (argStatus.Level == TStatus::Repeat) {
+                        return TStatus::Ok;
                     }
+
+                    TStatus bodyStatus = TStatus::Ok;
+                    TExprNode::TListType newBody;
+                    newBody.reserve(input->ChildrenSize() - 1U);
+                    bool updatedChildren = false;
+                    for (ui32 i = 1U; i < input->ChildrenSize(); ++i) {
+                        const auto child = input->ChildPtr(i);
+                        TExprNode::TPtr newChild;
+                        auto childStatus = TransformNode(child, newChild, ctx);
+                        UpdateStatusIfChanged(childStatus, child, newChild);
+                        updatedChildren = updatedChildren || (newChild != child);
+                        bodyStatus = bodyStatus.Combine(childStatus);
+                        newBody.emplace_back(std::move(newChild));
+                    }
+
+                    retStatus = argStatus.Combine(bodyStatus);
+                    if (retStatus != TStatus::Ok) {
+                        if (retStatus.Level == TStatus::Error) {
+                            input->SetState(TExprNode::EState::Error);
+                        } else if (updatedChildren) {
+                            output = ctx.DeepCopyLambda(*input, std::move(newBody));
+                            processedPair.first->second = output;
+                            HasRenames_ = true;
+                        }
+                    } else {
+                        if (input->ChildrenSize() != 2U) {
+                            input->SetState(TExprNode::EState::ConstrComplete);
+                        } else {
+                            input->CopyConstraints(input->Tail());
+                        }
+                        CheckExpected(*input);
+                    }
+                    break;
                 }
-                break;
-            }
-            default:
-                YQL_ENSURE(false, "Unknown type");
+
+                case TExprNode::Argument:
+                    if (input->GetState() != TExprNode::EState::ConstrComplete) {
+                        return TStatus::Repeat;
+                    }
+
+                    return TStatus::Ok;
+
+                case TExprNode::Arguments: {
+                    if (input->Children().empty()) {
+                        if (TExprNode::EState::ConstrComplete == input->GetState()) {
+                            return TStatus::Ok;
+                        }
+                        return TStatus::Repeat;
+                    }
+
+                    retStatus = TStatus::Ok;
+                    for (auto& child : input->Children()) {
+                        TExprNode::TPtr tmp;
+                        auto childStatus = TransformNode(child, tmp, ctx);
+                        UpdateStatusIfChanged(childStatus, child, tmp);
+                        YQL_ENSURE(tmp == child);
+                        retStatus = retStatus.Combine(childStatus);
+                    }
+
+                    if (retStatus != TStatus::Ok) {
+                        if (retStatus.Level == TStatus::Error) {
+                            input->SetState(TExprNode::EState::Error);
+                        }
+                    } else {
+                        input->SetState(TExprNode::EState::ConstrComplete);
+                    }
+                    return retStatus;
+                }
+
+                case TExprNode::Callable: {
+                    retStatus = TransformChildren(input, output, ctx);
+                    if (retStatus != TStatus::Ok) {
+                        if (retStatus != TStatus::Error && input != output) {
+                            processedPair.first->second = output;
+                        }
+                        break;
+                    }
+
+                    CurrentFunctions_.top().second = true;
+                    retStatus = CallableTransformer_->Transform(input, output, ctx);
+                    if (retStatus == TStatus::Error) {
+                        input->SetState(TExprNode::EState::Error);
+                    } else if (retStatus == TStatus::Ok) {
+                        // Sanity check
+                        for (size_t i = 0; i < input->ChildrenSize(); ++i) {
+                            YQL_ENSURE(input->Child(i)->GetState() >= TExprNode::EState::ConstrComplete,
+                                       "Child with index " << i << " of callable " << TString{input->Content()}.Quote() << " has bad state after constraint transform");
+                        }
+                        input->SetState(TExprNode::EState::ConstrComplete);
+                        CheckExpected(*input);
+                    } else if (retStatus == TStatus::Async) {
+                        CallableInputs_.push_back(input);
+                        input->SetState(TExprNode::EState::ConstrInProgress);
+                    } else {
+                        if (output != input.Get()) {
+                            processedPair.first->second = output;
+                            HasRenames_ = true;
+                        }
+                    }
+                    break;
+                }
+                default:
+                    YQL_ENSURE(false, "Unknown type");
             }
 
             if (retStatus.Level != TStatus::Repeat || retStatus.HasRestart) {
@@ -3903,8 +3840,7 @@ private:
         if (combinedStatus != TStatus::Ok) {
             if (combinedStatus.Level == TStatus::Error) {
                 input->SetState(TExprNode::EState::Error);
-            }
-            else if (updatedChildren) {
+            } else if (updatedChildren) {
                 output = ctx.ChangeChildren(*input, std::move(newChildren));
                 HasRenames_ = true;
             }
@@ -3924,15 +3860,15 @@ private:
         }
 
         if (const auto it = Types_.ExpectedConstraints.find(input.UniqueId()); it != Types_.ExpectedConstraints.cend()) {
-            for (const auto expectedConstr: it->second) {
+            for (const auto expectedConstr : it->second) {
                 if (!Types_.DisableConstraintCheck.contains(expectedConstr->GetName())) {
                     if (auto newConstr = input.GetConstraint(expectedConstr->GetName())) {
                         if (expectedConstr->GetName() == TMultiConstraintNode::Name()) {
                             YQL_ENSURE(static_cast<const TMultiConstraintNode*>(newConstr)->FilteredIncludes(*expectedConstr, Types_.DisableConstraintCheck), "Rewrite error, unequal " << *newConstr
-                                << " constraint in node " << input.Content() << ", previous was " << *expectedConstr);
+                                                                                                                                                                                        << " constraint in node " << input.Content() << ", previous was " << *expectedConstr);
                         } else {
                             YQL_ENSURE(newConstr->Includes(*expectedConstr), "Rewrite error, unequal " << *newConstr
-                                << " constraint in node " << input.Content() << ", previous was " << *expectedConstr);
+                                                                                                       << " constraint in node " << input.Content() << ", previous was " << *expectedConstr);
                         }
                     } else {
                         if (expectedConstr->GetName() == TMultiConstraintNode::Name()) {
@@ -3958,9 +3894,7 @@ private:
 
 TAutoPtr<IGraphTransformer> CreateConstraintTransformer(TTypeAnnotationContext& types, bool instantOnly, bool subGraph, bool disableCheck) {
     TAutoPtr<IGraphTransformer> callableTransformer(new TCallableConstraintTransformer(types, instantOnly, subGraph));
-    return disableCheck ?
-        static_cast<IGraphTransformer*>(new TConstraintTransformer<true>(callableTransformer, types)):
-        static_cast<IGraphTransformer*>(new TConstraintTransformer<false>(callableTransformer, types));
+    return disableCheck ? static_cast<IGraphTransformer*>(new TConstraintTransformer<true>(callableTransformer, types)) : static_cast<IGraphTransformer*>(new TConstraintTransformer<false>(callableTransformer, types));
 }
 
 TAutoPtr<IGraphTransformer> CreateDefCallableConstraintTransformer() {
@@ -3969,7 +3903,7 @@ TAutoPtr<IGraphTransformer> CreateDefCallableConstraintTransformer() {
 
 IGraphTransformer::TStatus UpdateLambdaConstraints(const TExprNode& lambda) {
     const auto args = lambda.Child(0);
-    for (const auto& arg: args->Children()) {
+    for (const auto& arg : args->Children()) {
         if (arg->GetState() == TExprNode::EState::TypeComplete || arg->GetState() == TExprNode::EState::ConstrPending) {
             arg->SetState(TExprNode::EState::ConstrComplete);
         }
@@ -3993,15 +3927,15 @@ IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExp
 
     YQL_ENSURE(args->ChildrenSize() == constraints.size(), "Expected " << args->ChildrenSize() << " constraints, got " << constraints.size());
     size_t i = 0;
-    for (const auto& constrList: constraints) {
+    for (const auto& constrList : constraints) {
         const auto arg = args->Child(i++);
         if (arg->GetState() == TExprNode::EState::TypeComplete || arg->GetState() == TExprNode::EState::ConstrPending) {
-            for (const auto c: constrList) {
+            for (const auto c : constrList) {
                 arg->AddConstraint(c);
             }
             arg->SetState(TExprNode::EState::ConstrComplete);
         } else {
-            if (constrList.size() != arg->GetAllConstraints().size() || !AllOf(constrList, [arg] (const TConstraintNode* c) { return arg->GetConstraint(c->GetName()) == c; })) {
+            if (constrList.size() != arg->GetAllConstraints().size() || !AllOf(constrList, [arg](const TConstraintNode* c) { return arg->GetConstraint(c->GetName()) == c; })) {
                 updateArgs = true;
             }
         }
@@ -4012,11 +3946,11 @@ IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExp
         TExprNode::TListType argsChildren;
         argsChildren.reserve(constraints.size());
         i = 0;
-        for (const auto& constrList: constraints) {
+        for (const auto& constrList : constraints) {
             const auto arg = args->Child(i++);
             const auto newArg = ctx.ShallowCopy(*arg);
             newArg->SetTypeAnn(arg->GetTypeAnn());
-            for (const auto c: constrList) {
+            for (const auto c : constrList) {
                 newArg->AddConstraint(c);
             }
             newArg->SetState(TExprNode::EState::ConstrComplete);

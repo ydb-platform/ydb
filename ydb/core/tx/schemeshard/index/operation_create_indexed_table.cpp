@@ -7,6 +7,8 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTableIndex;
@@ -174,15 +176,15 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         ++shardsToCreate;
     }
 
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TCreateTableIndex construct operation "
-                    << " table path: " << baseTablePath.PathString()
-                    << " domain path id: " << baseTablePath.GetPathIdForDomain()
-                    << " domain path: " << TPath::Init(baseTablePath.GetPathIdForDomain(), context.SS).PathString()
-                    << " shardsToCreate: " << shardsToCreate
-                    << " shardsPerPath: " << totalCounts.ShardsPerPath
-                    << " GetShardsInside: " << domainInfo->GetShardsInside()
-                    << " MaxShards: " << domainInfo->GetSchemeLimits().MaxShards);
+    YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateTableIndex construct operation",
+        {"tablePath", baseTablePath.PathString()},
+        {"subdomainPathId", baseTablePath.GetPathIdForDomain()},
+        {"subdomainPath", TPath::Init(baseTablePath.GetPathIdForDomain(), context.SS).PathString()},
+        {"shardsToCreate", shardsToCreate},
+        {"shardsPerPath", totalCounts.ShardsPerPath},
+        {"shardsInside", domainInfo->GetShardsInside()},
+        {"maxShards", domainInfo->GetSchemeLimits().MaxShards},
+    );
 
     if (indexCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
         auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"
@@ -503,10 +505,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 }
 
+                auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames());
                 result.push_back(createIndexImplTable(CalcFulltextCompactImplTableDesc(
                     baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                    userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType,
-                        NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()), false),
+                    userIndexDesc, &indexDescription.GetFulltextIndexDescription(), indexType, prefixColumns, false),
                     THashSet<TString>{NTableIndex::NFulltext::GenSequence}));
 
                 // Create the sequence
@@ -525,7 +527,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
                     const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
                     result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc, indexDescription.GetFulltextIndexDescription())));
-                    result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));
+                    result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc, prefixColumns)));
                 }
                 break;
             }
@@ -550,12 +552,12 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition);
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                auto prefixColumns = NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames());
                 result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
-                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType,
-                    NTableIndex::GetFulltextPrefixColumns(indexDescription.GetKeyColumnNames()))));
+                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType, prefixColumns)));
                 result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc, indexDescription.GetFulltextIndexDescription())));
                 result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
-                result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));
+                result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc, prefixColumns)));
                 break;
             }
             default:
@@ -581,3 +583,5 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

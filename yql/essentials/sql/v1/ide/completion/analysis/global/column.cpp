@@ -163,10 +163,11 @@ public:
             return {};
         }
 
-        const TNamedNode* node = Nodes_->Resolve(*ref);
-        if (!node) {
+        INamedNodeDef::TPtr definition = Nodes_->Definition(*ref);
+        if (!definition) {
             return {};
         }
+        const TNamedNode& node = definition->Value();
 
         if (Resolving_.contains(ref->Name)) {
             return {};
@@ -190,7 +191,7 @@ public:
             }
 
             return nullptr;
-        }, *node);
+        }, node);
 
         if (!rule) {
             return {};

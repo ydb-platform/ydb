@@ -8,6 +8,8 @@
 
 ## Tests
 
+C++ `ut/` (its `ya.make` and sources): same framework as existing tests (`UNITTEST` or `GTEST`); if none yet, prefer **GTEST**. Types and how to run: [`agents/TESTS.md`](../../agents/TESTS.md).
+
 When changing topic read/write/offset/blob logic, cover:
 
 * **Small and large messages.** Large = >512 KiB (split into parts).
@@ -25,5 +27,4 @@ When changing topic read/write/offset/blob logic, cover:
 ## Monorepo
 
 [`agents/CODESTYLE.md`](../../agents/CODESTYLE.md) ·
-[`agents/GUIDE.md`](../../agents/GUIDE.md) ·
-[`agents/GTEST_PREFER.md`](../../agents/GTEST_PREFER.md)
+[`agents/GUIDE.md`](../../agents/GUIDE.md)

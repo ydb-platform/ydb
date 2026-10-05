@@ -59,8 +59,6 @@ Y_UNIT_TEST_LLVM(TestFilterNullMembersMultiOptional) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto justNothing = pb.NewOptional(pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<i32>::Id));
-
     using TOpt = TMaybe<TMaybe<i32>>;
     using TInRow = NTest::TStructType<NTest::TStructMember<"Key", TOpt>,
                                       NTest::TStructMember<"Payload", TOpt>>;

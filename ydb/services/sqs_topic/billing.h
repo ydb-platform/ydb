@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/metering/stream_ru_calculator.h>
+
 #include <util/generic/size_literals.h>
 #include <util/system/types.h>
 
@@ -23,25 +25,20 @@ namespace NKikimr::NSqsTopic::V1::NBilling {
     constexpr double WRITE_BASE_COST = 2.0;
     constexpr double READ_BASE_COST = 2.0;
     constexpr double DELETE_BASE_COST = 2.0;
+    // Flat RU cost for SQS-over-topic methods that are not payload-metered.
+    constexpr double DEFAULT_REQUEST_COST = 2.0;
 
     // RU cost charged per payload block (see WRITE_BLOCK_SIZE / READ_BLOCK_SIZE).
     constexpr double WRITE_COST_PER_BLOCK = 1.0;
     constexpr double READ_COST_PER_BLOCK = 1.0;
 
-    // FIFO ordering and content-based deduplication require extra work on the
-    // server side, so the corresponding requests are charged more.
+    // FIFO ordering requires extra work on the server side, so the
+    // corresponding requests are charged more. Content-based deduplication
+    // does not add an extra RU.
     constexpr double FIFO_COST_ADJUNCT = 1.0;
-    constexpr double DEDUP_COST_ADJUNCT = 1.0;
 
-    inline double CostAdjunct(bool fifo, bool dedup) {
-        double adjunct = 0.0;
-        if (fifo) {
-            adjunct += FIFO_COST_ADJUNCT;
-        }
-        if (dedup) {
-            adjunct += DEDUP_COST_ADJUNCT;
-        }
-        return adjunct;
+    inline double CostAdjunct(bool fifo) {
+        return fifo ? FIFO_COST_ADJUNCT : 0.0;
     }
 
     // Rounds a floating-point RU amount to the whole number of Request Units
@@ -53,11 +50,18 @@ namespace NKikimr::NSqsTopic::V1::NBilling {
         return static_cast<ui64>(std::llround(ru));
     }
 
-    // payloadBlocks is the block-based consumption produced by
-    // TRlHelpers::CalcRuConsumption(payloadSize). 
-    inline ui64 CalcRu(ui64 payloadBlocks, double baseCost, double costPerBlock, bool fifo, bool dedup) {
-        const double ru = baseCost
-                + payloadBlocks * costPerBlock + CostAdjunct(fifo, dedup);
+    // One-shot mapping of a payload onto RU blocks. Matches
+    // TStreamRequestUnitsCalculator on a freshly constructed actor
+    // (Remainder == blockSize): the first blockSize bytes add 0 extra blocks.
+    inline ui64 PayloadBlocks(ui64 payloadSize, ui64 blockSize) {
+        NKikimr::NMetering::TStreamRequestUnitsCalculator calculator(blockSize);
+        return calculator.CalcConsumption(payloadSize);
+    }
+
+    // payloadBlocks is the block-based consumption produced by PayloadBlocks
+    // (historically TRlHelpers::CalcRuConsumption after RL context is set).
+    inline ui64 CalcRu(ui64 payloadBlocks, double baseCost, double costPerBlock, bool fifo = false) {
+        const double ru = baseCost + payloadBlocks * costPerBlock + CostAdjunct(fifo);
         return RoundRu(ru);
     }
 

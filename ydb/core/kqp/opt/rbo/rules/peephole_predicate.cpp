@@ -6,13 +6,13 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-bool IsSuitableToApplyPeephole(const TIntrusivePtr<IOperator>& input) {
+bool IsSuitableToApplyPeephole(IOperator* input) {
     if (input->Kind != EOperator::Filter) {
         return false;
     }
 
     const auto filter = CastOperator<TOpFilter>(input);
-    const auto lambda = TCoLambda(filter->FilterExpr.Node);
+    const auto lambda = TCoLambda(filter->GetFilterExpression().Node);
     auto peepholeIsNeeded = [&](const TExprNode::TPtr& node) -> bool {
         // Here is a list of Callables for which peephole is needed.
         if (node->IsCallable({"SqlIn"})) {
@@ -35,12 +35,12 @@ bool TPeepholePredicate::QuickMatch(const TIntrusivePtr<IOperator>& input) const
 
 TIntrusivePtr<IOperator> TPeepholePredicate::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
-    if (!IsSuitableToApplyPeephole(input)) {
+    if (!IsSuitableToApplyPeephole(input.get())) {
         return input;
     }
 
     const auto filter = CastOperator<TOpFilter>(input);
-    const auto lambda = TCoLambda(filter->FilterExpr.Node);
+    const auto lambda = TCoLambda(filter->GetFilterExpression().Node);
     TVector<const TTypeAnnotationNode*> argTypes{lambda.Args().Arg(0).Ptr()->GetTypeAnn()};
     // Closure an original predicate, we cannot call `Peephole` for free args.
     // clang-format off
@@ -79,7 +79,8 @@ TIntrusivePtr<IOperator> TPeepholePredicate::SimpleMatchAndApply(const TIntrusiv
     .Done().Ptr();
     // clang-format on
 
-    auto newFilterExpr = TExpression(newLambda, filter->FilterExpr.Ctx, filter->FilterExpr.PlanProps);
+    const auto& filterExpr = filter->GetFilterExpression();
+    auto newFilterExpr = TExpression(newLambda, filterExpr.Ctx, filterExpr.PlanProps);
     return MakeIntrusive<TOpFilter>(filter->GetInput(), input->Pos, newFilterExpr);
 }
 }

@@ -75,6 +75,7 @@ public:
         : Ctx(CreateExecutionContext(request, settings, queryServiceConfig))
         , QueryRequest(CreateQueryRequest(request, settings, queryServiceConfig))
         , QueryServiceConfig(std::move(queryServiceConfig))
+        , TraceId(std::move(settings.TraceId))
     {}
 
     void Bootstrap() {
@@ -145,6 +146,8 @@ private:
     )
 
     void HandleCreatingFinished() {
+        CreationFinished = true;
+
         if (FinishInfo.IsFinished()) {
             YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Script execution metadata saved after failure, continue finishing",
                 {"logPrefix", LogPrefix()});
@@ -157,7 +160,7 @@ private:
         Become(&TThis::StateFuncInitialize);
 
         ScriptLeaseWatcherActor.Id = RegisterWithSameMailbox(CreateScriptLeaseWatcherActor(Ctx));
-        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Started",
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Started script lease watcher actor",
             {"logPrefix", LogPrefix()},
             {"scriptLeaseWatcherActor", ScriptLeaseWatcherActor.Id});
 
@@ -169,13 +172,20 @@ private:
     }
 
     void HandleCreatingFailed() {
-        Finish(Ydb::StatusIds::INTERNAL_ERROR, "Failed to save script execution entry");
+        if (!CreationFinished) {
+            // Failed to save script execution entry into database
+            YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Failed to save script execution entry",
+                {"logPrefix", LogPrefix()});
+            PassAway();
+        } else {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Failed to save script execution entry");
+        }
     }
 
     void HandleCancellation(TEvKqp::TEvCancelScriptExecutionRequest::TPtr& ev) {
-        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got cancel",
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got cancel request",
             {"logPrefix", LogPrefix()},
-            {"request", ev->Sender});
+            {"sender", ev->Sender});
 
         CancelRequests.emplace_front(std::move(ev));
 
@@ -185,9 +195,9 @@ private:
     }
 
     void HandleCheckAlive(TEvCheckAliveRequest::TPtr& ev) {
-        YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Lease was expired in database, checker",
+        YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Lease was expired in database",
             {"logPrefix", LogPrefix()},
-            {"actor", ev->Sender});
+            {"sender", ev->Sender});
         Send(ev->Sender, new TEvCheckAliveResponse());
     }
 
@@ -205,10 +215,10 @@ private:
         const auto& record = ev->Get()->Record;
         if (const auto status = record.GetYdbStatus(); status != Ydb::StatusIds::SUCCESS) {
             const auto resourceExhausted = record.GetResourceExhausted();
-            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Create new session resource",
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Create new session failed",
                 {"logPrefix", LogPrefix()},
-                {"failed", status},
-                {"exhausted", resourceExhausted});
+                {"status", status},
+                {"resourceExhausted", resourceExhausted});
 
             auto error = TStringBuilder() << "Create new session failed with " << status;
 
@@ -234,7 +244,7 @@ private:
         }
 
         if (session.GetNodeId() != SelfId().NodeId()) {
-            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "New session started on unexpected",
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "New session started on unexpected node",
                 {"logPrefix", LogPrefix()},
                 {"node", session.GetNodeId()});
             Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Session created on wrong node " << session.GetNodeId() << ", expected local session on node " << SelfId().NodeId());
@@ -245,15 +255,15 @@ private:
 
         const auto& physicalGraph = QueryRequest->GetQueryPhysicalGraph();
         ScriptResultHandlerActor.Id = RegisterWithSameMailbox(CreateScriptResultHandlerActor(Ctx, physicalGraph ? std::optional(*physicalGraph) : std::nullopt, QueryServiceConfig));
-        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Started starting query, has physical",
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Started query",
             {"logPrefix", LogPrefix()},
             {"scriptResultHandlerActor", ScriptResultHandlerActor.Id},
-            {"graph", (physicalGraph ? "YES" : "NO")});
+            {"hasPhysicalGraph", (physicalGraph ? "YES" : "NO")});
 
         Ctx->UserRequestContext->RunScriptActorId = ScriptResultHandlerActor.Id;
         QueryRequest->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(*Ctx->UserRequestContext)); // Make copy of context, because it may be changed
         ActorIdToProto(ScriptResultHandlerActor.Id, QueryRequest->Record.MutableRequestActorId());
-        Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release());
+        Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release(), 0, 0, NWilson::TTraceId(TraceId));
     }
 
     void HandleLeaseWatcherFinished(TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished::TPtr& ev) {
@@ -261,16 +271,16 @@ private:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS || !FinishInfo.IsFinished()) {
             const auto& issues = ev->Get()->Issues;
-            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got lease watcher with status",
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got lease watcher fail",
                 {"logPrefix", LogPrefix()},
-                {"finished", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
             Finish(status == Ydb::StatusIds::SUCCESS ? Ydb::StatusIds::INTERNAL_ERROR : status, AddRootIssue("Script lease watcher error", issues));
         } else {
-            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got lease watcher",
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got lease watcher finish",
                 {"logPrefix", LogPrefix()},
-                {"finished", ev->Sender});
+                {"sender", ev->Sender});
             Finish();
         }
     }
@@ -291,7 +301,7 @@ private:
             const auto& response = record.GetResponse();
             NYql::TIssues issues;
             NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
-            YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Ignored query response from execution already finished",
+            YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Ignored query response, execution already finished",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},
                 {"status", record.GetYdbStatus()},
@@ -299,7 +309,7 @@ private:
             return;
         }
 
-        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Forward query response from to result handler",
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Forward query response to result handler",
             {"logPrefix", LogPrefix()},
             {"sender", ev->Sender});
         Forward(ev, ScriptResultHandlerActor.Id);
@@ -309,15 +319,15 @@ private:
         ScriptResultHandlerActor.Id = {};
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got result handler with status",
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got result handler fail",
                 {"logPrefix", LogPrefix()},
-                {"finished", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
         } else {
-            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got result handler",
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got result handler finish",
                 {"logPrefix", LogPrefix()},
-                {"finished", ev->Sender});
+                {"sender", ev->Sender});
         }
 
         ExecutionInfo = std::move(ev->Get()->Info);
@@ -343,13 +353,13 @@ private:
         const auto& issues = ev->Get()->Issues;
         const auto& info = ev->Get()->Info;
         if (status != Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got with status",
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got script execution finalization fail",
                 {"logPrefix", LogPrefix()},
                 {"finalize", ev->Sender},
                 {"status", status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
         } else {
-            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got already execution entry",
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got script execution finalization finish",
                 {"logPrefix", LogPrefix()},
                 {"finalize", ev->Sender},
                 {"finished", info.AlreadyStopped},
@@ -468,12 +478,14 @@ private:
     const TScriptExecutionContext::TPtr Ctx;
     std::unique_ptr<TEvKqp::TEvQueryRequest> QueryRequest;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    const NWilson::TTraceId TraceId;
     TFinishInfo FinishInfo;
     TExecutionInfo ExecutionInfo;
     TSessionState SessionState;
     TActorState ScriptLeaseWatcherActor;
     TActorState ScriptResultHandlerActor;
     std::forward_list<TEvKqp::TEvCancelScriptExecutionRequest::TPtr> CancelRequests;
+    bool CreationFinished = false;
     bool WaitFinalizationRequest = false;
 };
 

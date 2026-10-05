@@ -1,7 +1,10 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/core/protos/config.pb.h>
 #include <util/datetime/base.h>
+
+namespace NKikimrConfig {
+    class TInternalRequestConfig;
+}
 
 namespace NKikimr::NMetadata::NRequest {
 

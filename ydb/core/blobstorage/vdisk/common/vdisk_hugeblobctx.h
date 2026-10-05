@@ -68,6 +68,7 @@ namespace NKikimr {
         const TString VDiskLogPrefix;
         const std::shared_ptr<const THugeSlotsMap> HugeSlotsMap;
         const EBlobHeaderMode BlobHeaderMode;
+        const ui32 ChunkSize = 0;
 
         // check whether this NEW blob is huge one; userPartSize doesn't include any metadata stored along with blob
         bool IsHugeBlob(TBlobStorageGroupType gtype, const TLogoBlobID& fullId, ui32 minHugeBlobInBytes) const;
@@ -75,10 +76,12 @@ namespace NKikimr {
         THugeBlobCtx(
                 const TString& logPrefix,
                 const std::shared_ptr<const THugeSlotsMap> &hugeSlotsMap,
-                EBlobHeaderMode blobHeaderMode)
+                EBlobHeaderMode blobHeaderMode,
+                ui32 chunkSize = 0)
             : VDiskLogPrefix(logPrefix)
             , HugeSlotsMap(hugeSlotsMap)
             , BlobHeaderMode(blobHeaderMode)
+            , ChunkSize(chunkSize)
         {}
     };
 

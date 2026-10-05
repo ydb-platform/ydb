@@ -34,4 +34,4 @@ TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TStr
     return LoadRichMetadata(resolver, blocks, storage, logLevel);
 }
 
-}
+} // namespace NYql

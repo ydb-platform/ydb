@@ -17,6 +17,7 @@ namespace NKikimr::NDDisk {
             IS_BARRIER = 1,
             IS_ERASE = 2,
             IS_ERASE_COMPACT = 4,
+            CHECKSUMS_DISABLED = 8,
         };
 
         ui8 Signature[16];
@@ -31,8 +32,11 @@ namespace NKikimr::NDDisk {
         ui32 PDiskId;
         ui32 SlotId;
         ui32 BatchSize;
-
-        ui32 Reserved[13];
+        // Number of bytes at the start of this sector (starting from Signature) that are actually
+        // meaningful and therefore covered by Checksum.
+        ui32 HeaderDataSize;
+        ui64 HeaderUniqueId;
+        ui32 Reserved[10];
     };
 
     static_assert(sizeof(TPersistentBufferHeader) == 128);

@@ -43,7 +43,7 @@ def simple(
             ((x/xscale - 1.0)**2 / 0.2 + (y/yscale - 0.0)**2 / 0.1) < 1.0,
             ((x/xscale - 0.2)**2 / 0.02 + (y/yscale - 0.45)**2 / 0.08) < 1.0,
         )
-        z = np.ma.array(z, mask=mask)  # type: ignore[no-untyped-call]
+        z = np.ma.array(z, mask=mask)
 
     return x, y, z
 
@@ -73,6 +73,6 @@ def random(
     if mask_fraction > 0.0:
         mask_fraction = min(mask_fraction, 0.99)
         mask = rng.uniform(size=shape) < mask_fraction
-        z = np.ma.array(z, mask=mask)  # type: ignore[no-untyped-call]
+        z = np.ma.array(z, mask=mask)
 
     return x, y, z

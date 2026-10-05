@@ -5,6 +5,8 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <util/string/cast.h>
 
+#include <cstring>
+
 namespace NYql {
 
     using namespace NNodes;
@@ -177,7 +179,7 @@ namespace NYql {
                 return false;
             }
 
-            const auto toBytesExpr = TExprBase(toBytes.Ref().Child(0));
+            const auto toBytesExpr = TExprBase(toBytes.Ref().ChildPtr(0));
             auto typeAnnotation = toBytesExpr.Ref().GetTypeAnn();
             if (!typeAnnotation) {
                 ctx.Err << "expected non empty type annotation for ToBytes";
@@ -208,7 +210,7 @@ namespace NYql {
                 return false;
             }
 
-            const auto toStringExpr = TExprBase(toString.Ref().Child(0));
+            const auto toStringExpr = TExprBase(toString.Ref().ChildPtr(0));
             auto typeAnnotation = toStringExpr.Ref().GetTypeAnn();
             if (!typeAnnotation) {
                 ctx.Err << "expected non empty type annotation for ToString";
@@ -255,6 +257,28 @@ namespace NYql {
             return SerializeExpression(lambda.Body(), dstProto->mutable_then_expression(), ctx, depth + 1);
         }
 
+        bool SerializeUuid(const TCoUuid& uuid, TExpression* proto, TSerializationContext& ctx, ui64 /*depth*/) {
+            const auto literal = uuid.Literal().StringValue();
+            if (literal.size() != 16) {
+                ctx.Err << "Uuid: expected 16-byte literal, got size " << literal.size();
+                return false;
+            }
+            auto* value = proto->mutable_typed_value();
+            value->mutable_type()->set_type_id(Ydb::Type::UUID);
+            // Byte-by-byte copy to avoid endianness issues.
+            // low_128 = bytes 0..7, high_128 = bytes 8..15 (little-endian interpretation).
+            ui64 low = 0;
+            ui64 high = 0;
+            for (int i = 0; i < 8; ++i) {
+                low |= static_cast<ui64>(static_cast<unsigned char>(literal[i])) << (8 * i);
+                high |= static_cast<ui64>(static_cast<unsigned char>(literal[8 + i])) << (8 * i);
+            }
+            auto* v = value->mutable_value();
+            v->set_low_128(low);
+            v->set_high_128(high);
+            return true;
+        }
+
         bool SerializeDecimal(const TCoDecimal& coDecimal, TExpression* proto, TSerializationContext& /*ctx*/, ui64 /*depth*/) {
             auto* protoTypedValue = proto->mutable_typed_value();
             auto* protoDecimalType = protoTypedValue->mutable_type()->mutable_decimal_type();
@@ -298,7 +322,7 @@ namespace NYql {
     if (auto maybeExpr = expression.Maybe<Y_CAT(TCo, OpType)>()) {                                  \
         auto expr = maybeExpr.Cast();                                                               \
         auto* exprProto = proto->Y_CAT(mutable_, op_name)();                                        \
-        const auto child = expression.Ptr()->Child(0);                                              \
+        const auto child = expression.Ptr()->ChildPtr(0);                                           \
         if (!SerializeExpression(TExprBase(child), exprProto->mutable_operand(), ctx, depth + 1)) { \
             return false;                                                                           \
         }                                                                                           \
@@ -357,6 +381,9 @@ namespace NYql {
             }
             if (auto decimal = expression.Maybe<TCoDecimal>()) {
                 return SerializeDecimal(decimal.Cast(), proto, ctx, depth);
+            }
+            if (auto uuid = expression.Maybe<TCoUuid>()) {
+                return SerializeUuid(uuid.Cast(), proto, ctx, depth);
             }
             if (auto compare = expression.Maybe<TCoCompare>()) {
                 return SerializeCompare(compare.Cast(), proto->mutable_predicate(), ctx, depth);
@@ -553,8 +580,8 @@ namespace NYql {
             }
             TPredicate::TComparison* proto = predicateProto->mutable_comparison();
             proto->set_operation(!invert ? TPredicate::TComparison::IND : TPredicate::TComparison::ID);
-            return SerializeExpression(TExprBase(predicate.Ref().Child(0)), proto->mutable_left_value(), ctx, depth + 1)
-                && SerializeExpression(TExprBase(predicate.Ref().Child(1)), proto->mutable_right_value(), ctx, depth + 1);
+            return SerializeExpression(TExprBase(predicate.Ref().ChildPtr(0)), proto->mutable_left_value(), ctx, depth + 1)
+                && SerializeExpression(TExprBase(predicate.Ref().ChildPtr(1)), proto->mutable_right_value(), ctx, depth + 1);
         }
 
         bool SerializeAnd(const TCoAnd& andExpr, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {

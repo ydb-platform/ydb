@@ -446,15 +446,22 @@ class TCompletionChunkReadRaw : public TCompletionAction {
     TRcBuf Buffer;
     TActorId Sender;
     ui64 Cookie;
+    std::function<void()> OnDestroy;
     NWilson::TSpan Span;
 
 public:
-    TCompletionChunkReadRaw(size_t bytesToRead, TActorId sender, ui64 cookie, NWilson::TSpan span)
+    TCompletionChunkReadRaw(size_t bytesToRead, TActorId sender, ui64 cookie,
+            std::function<void()> onDestroy, NWilson::TSpan span)
         : Buffer(TRcBuf::UninitializedPageAligned(bytesToRead))
         , Sender(sender)
         , Cookie(cookie)
+        , OnDestroy(std::move(onDestroy))
         , Span(std::move(span))
     {}
+
+    ~TCompletionChunkReadRaw() override {
+        OnDestroy();
+    }
 
     void *GetBuffer() {
         return Buffer.GetDataMut();
@@ -481,15 +488,22 @@ class TCompletionChunkWriteRaw : public TCompletionAction {
     TRcBuf Buffer; // just to retain ownership while data is being written
     TActorId Sender;
     ui64 Cookie;
+    std::function<void()> OnDestroy;
     NWilson::TSpan Span;
 
 public:
-    TCompletionChunkWriteRaw(TRcBuf&& buffer, TActorId sender, ui64 cookie, NWilson::TSpan span)
+    TCompletionChunkWriteRaw(TRcBuf&& buffer, TActorId sender, ui64 cookie,
+            std::function<void()> onDestroy, NWilson::TSpan span)
         : Buffer(std::move(buffer))
         , Sender(sender)
         , Cookie(cookie)
+        , OnDestroy(std::move(onDestroy))
         , Span(std::move(span))
     {}
+
+    ~TCompletionChunkWriteRaw() override {
+        OnDestroy();
+    }
 
     bool CanHandleResult() const override {
         return true;

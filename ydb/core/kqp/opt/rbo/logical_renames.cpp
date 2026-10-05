@@ -1,258 +1,161 @@
 #include "kqp_operator.h"
-#include "kqp_rbo_utils.h"
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 namespace {
 
-TInfoUnit RenameInfoUnit(const TInfoUnit& iu, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-    const auto it = renameMap.find(iu);
-    return it == renameMap.end() ? iu : it->second;
-}
-
-bool RenameInfoUnitInPlace(TInfoUnit& iu, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-    const auto renamed = RenameInfoUnit(iu, renameMap);
-    if (renamed == iu) {
-        return false;
-    }
-
-    iu = renamed;
-    return true;
-}
-
-bool RenameInfoUnits(TVector<TInfoUnit>& ius, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-    bool changed = false;
-    for (auto& iu : ius) {
-        changed |= RenameInfoUnitInPlace(iu, renameMap);
-    }
-    return changed;
-}
-
-void RenameMapRenameSources(TOpMap& map, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-    for (auto& el : map.MapElements) {
-        if (!el.IsRename()) {
-            continue;
+// Substitution is simultaneous: visit each original position once. Repeated
+// IDs, directions, external labels and child positions retain their contracts.
+template <class TValue>
+void Substitute(TOrderedIUs<TValue>& columns, const TSubstitutions& substitutions) {
+    for (size_t i = 0; i < columns.Items().size(); ++i) {
+        const auto& entry = columns.Items()[i];
+        if constexpr (std::is_void_v<TValue>) {
+            columns.ReplaceAt(i, Substitute(entry, substitutions));
+        } else {
+            columns.ReplaceAt(i, Substitute(entry.first, substitutions), entry.second);
         }
-
-        const auto from = el.GetRename();
-        const auto it = renameMap.find(from);
-        if (it == renameMap.end()) {
-            continue;
-        }
-
-        auto expr = el.GetExpression();
-        el.SetExpression(MakeColumnAccess(it->second, map.Pos, expr.Ctx, expr.PlanProps));
     }
 }
 
-void RenameSubplanLocalReferences(
-    const TIntrusivePtr<IOperator>& op,
-    const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap,
-    TExprContext& ctx)
-{
-    if (op->Kind == EOperator::CBOTree) {
-        for (const auto& treeOp : CastOperator<TOpCBOTree>(op)->TreeNodes) {
-            RenameSubplanLocalReferences(treeOp, renameMap, ctx);
-        }
-        return;
-    }
-
-    op->RenameProducedIUs(renameMap, ctx);
-    op->RenameUsedIUs(renameMap, ctx);
-
-    if (op->Kind == EOperator::Map) {
-        RenameMapRenameSources(*CastOperator<TOpMap>(op), renameMap);
-    }
+void Substitute(TUnorderedIUs& columns, const TSubstitutions& substitutions) {
+    const auto ids = columns | std::views::transform([&](auto id) { return Substitute(id, substitutions); });
+    TUnorderedIUs result;
+    result.Assign(ids);
+    columns = std::move(result);
 }
 
-bool RenameExternalSubplanReferences(
-    const TIntrusivePtr<IOperator>& op,
-    const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap,
-    TExprContext& ctx)
-{
-    if (!op) {
-        return false;
-    }
-
-    if (op->Kind == EOperator::AddDependencies) {
-        auto addDeps = CastOperator<TOpAddDependencies>(op);
-        return RenameInfoUnits(addDeps->Dependencies, renameMap);
-    }
-
-    bool hasRenamedExternalChild = false;
-    for (const auto& child : op->Children) {
-        hasRenamedExternalChild |= RenameExternalSubplanReferences(child, renameMap, ctx);
-    }
-
-    if (hasRenamedExternalChild) {
-        RenameSubplanLocalReferences(op, renameMap, ctx);
-    }
-
-    return hasRenamedExternalChild;
+template <typename TPair>
+void Substitute(TPairedIUCollection<TPair>& pairs, const TSubstitutions& substitutions) {
+    const auto entries = pairs.Items() | std::views::transform([&](const auto& pair) {
+        auto result = pair;
+        result.first = Substitute(pair.first, substitutions);
+        result.second = Substitute(pair.second, substitutions);
+        return result;
+    });
+    pairs = TPairedIUCollection<TPair>(entries.begin(), entries.end());
 }
 
 } // anonymous namespace
 
-bool TSubplans::RenameReferences(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    if (renameMap.empty() || PlanMap.empty()) {
-        return false;
-    }
+void IOperator::RenameUsedIUs(const TSubstitutions&) {}
 
-    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> renamedPlanMap;
-    TVector<TInfoUnit> renamedOrderedList;
-    renamedOrderedList.reserve(OrderedList.size());
-    bool changed = false;
-
-    for (const auto& iu : OrderedList) {
-        auto entry = PlanMap.at(iu);
-        const auto renamedIU = RenameInfoUnit(iu, renameMap);
-
-        changed |= renamedIU != iu;
-
-        const auto renamedEntryIU = RenameInfoUnit(entry.IU, renameMap);
-        changed |= renamedEntryIU != entry.IU;
-        entry.IU = renamedEntryIU;
-
-        changed |= RenameInfoUnits(entry.Tuple, renameMap);
-        changed |= RenameInfoUnits(entry.DependentIUs, renameMap);
-        changed |= RenameExternalSubplanReferences(CastOperator<IOperator>(entry.Plan), renameMap, ctx);
-
-        const auto inserted = renamedPlanMap.emplace(renamedIU, std::move(entry)).second;
-        Y_ENSURE(inserted, "Subplan rename produced duplicate binding " << renamedIU.GetFullName());
-        renamedOrderedList.push_back(renamedIU);
-    }
-
-    PlanMap = std::move(renamedPlanMap);
-    OrderedList = std::move(renamedOrderedList);
-    return changed;
-}
-
-void IOperator::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(renameMap);
-    Y_UNUSED(ctx);
-}
-
-void IOperator::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(renameMap);
-    Y_UNUSED(ctx);
-}
-
-void TOpRead::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-    RenameInfoUnits(OutputIUs, renameMap);
-}
-
-void TOpMap::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-
-    for (auto& el : MapElements) {
-        const auto it = renameMap.find(el.GetElementName());
-        if (it != renameMap.end()) {
-            el.SetElementName(it->second);
-        }
+void TOpMap::RenameUsedIUs(const TSubstitutions& substitutions) {
+    // Every RHS reads the original input, including direct copies.
+    // Replacing values keeps the map structure and its iterators.
+    for (const auto& [id, element] : MapElements.Items()) {
+        SetMapElementExpression(id, element.GetExpression().ApplyRenames(substitutions));
     }
 }
 
-void TOpMap::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-
-    for (auto& el : MapElements) {
-        if (!el.IsRename()) {
-            el.SetExpression(el.GetExpression().ApplyRenames(renameMap));
-        }
-    }
+void TOpFilter::RenameUsedIUs(const TSubstitutions& substitutions) {
+    SetFilterExpression(FilterExpr.ApplyRenames(substitutions));
 }
 
-void TOpAddDependencies::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-    RenameInfoUnits(Dependencies, renameMap);
-}
-
-void TOpFilter::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-    FilterExpr = FilterExpr.ApplyRenames(renameMap);
-}
-
-void TOpJoin::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-
-    for (auto& k : JoinKeys) {
-        if (renameMap.contains(k.first)) {
-            k.first = renameMap.at(k.first);
-        }
-        if (renameMap.contains(k.second)) {
-            k.second = renameMap.at(k.second);
-        }
-    }
-
+void TOpJoin::RenameUsedIUs(const TSubstitutions& substitutions) {
+    Substitute(JoinKeys, substitutions);
     for (auto& filter : JoinFilters) {
-        filter = filter.ApplyRenames(renameMap);
+        filter = filter.ApplyRenames(substitutions);
+    }
+    // CBO's shuffle keys name join inputs too.
+    for (auto* shuffleBy : {&Props.LeftShuffleBy, &Props.RightShuffleBy}) {
+        if (*shuffleBy) {
+            Substitute(**shuffleBy, substitutions);
+        }
     }
 }
 
-void TOpUnionAll::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-    RenameInfoUnits(Columns, renameMap);
+void TOpUnionAll::RenameUsedIUs(const TSubstitutions& substitutions) {
+    for (const auto& [id, row] : Columns.Items()) {
+        auto rebound = row;
+        for (auto& input : rebound.Inputs) {
+            input = Substitute(input, substitutions);
+        }
+        Columns.Replace(id, std::move(rebound));
+    }
 }
 
-void TOpLimit::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-    LimitCond = LimitCond.ApplyRenames(renameMap);
+void TOpLimit::RenameUsedIUs(const TSubstitutions& substitutions) {
+    LimitCond = LimitCond.ApplyRenames(substitutions);
     if (OffsetCond) {
-        OffsetCond = OffsetCond->ApplyRenames(renameMap);
+        OffsetCond = OffsetCond->ApplyRenames(substitutions);
     }
 }
 
-void TOpSort::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-
-    for (auto& element : SortElements) {
-        const auto it = renameMap.find(element.SortColumn);
-        if (it != renameMap.end()) {
-            element.SortColumn = it->second;
-        }
-    }
-
-    if (LimitCond.has_value()) {
-        LimitCond = LimitCond->ApplyRenames(renameMap);
+void TOpSort::RenameUsedIUs(const TSubstitutions& substitutions) {
+    Substitute(SortElements, substitutions);
+    if (LimitCond) {
+        LimitCond = LimitCond->ApplyRenames(substitutions);
     }
 }
 
-void TOpAggregate::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(ctx);
+void TOpAggregate::RenameUsedIUs(const TSubstitutions& substitutions) {
+    Substitute(KeyColumns, substitutions);
+    for (const auto& [id, traits] : Aggregations.Items()) {
+        auto rebound = traits;
+        rebound.Input = Substitute(traits.Input, substitutions);
+        Aggregations.Replace(id, std::move(rebound));
+    }
+    Props.OutputIUs.reset();
+}
 
-    const auto oldKeyColumns = DistinctAll ? KeyColumns : TVector<TInfoUnit>{};
-    RenameInfoUnits(KeyColumns, renameMap);
-    for (auto& trait : AggregationTraitsList) {
-        if (DistinctAll && ContainsInfoUnit(oldKeyColumns, trait.OriginalColName)) {
-            RenameInfoUnitInPlace(trait.OriginalColName, renameMap);
-        }
-        if (renameMap.contains(trait.ResultColName)) {
-            trait.ResultColName = renameMap.at(trait.ResultColName);
-        }
+void TOpGroupingSets::RenameUsedIUs(const TSubstitutions& substitutions) {
+    for (auto& keys : GroupingSets) {
+        Substitute(keys, substitutions);
+    }
+    for (const auto& [output, input] : Columns.Items()) {
+        Columns.Replace(output, Substitute(input, substitutions));
+    }
+    for (const auto& [output, input] : GroupingIndicators.Items()) {
+        GroupingIndicators.Replace(output, Substitute(input, substitutions));
     }
 }
 
-void TOpAggregate::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-
-    if (DistinctAll) {
-        return;
-    }
-
-    for (auto& trait : AggregationTraitsList) {
-        if (renameMap.contains(trait.OriginalColName)) {
-            trait.OriginalColName = renameMap.at(trait.OriginalColName);
-        }
+void TOpWindow::RenameUsedIUs(const TSubstitutions& substitutions) {
+    Substitute(PartitionKeys, substitutions);
+    Substitute(SortElements, substitutions);
+    for (const auto& [id, function] : WindowFuncs.Items()) {
+        auto rebound = function;
+        Substitute(rebound.Arguments, substitutions);
+        WindowFuncs.Replace(id, std::move(rebound));
     }
 }
 
-void TOpCBOTree::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    Y_UNUSED(renameMap);
-    Y_UNUSED(ctx);
-    Y_ENSURE(false, "TOpCBOTree::RenameProducedIUs must not be used directly");
+void TOpAddDependencies::RenameUsedIUs(const TSubstitutions& substitutions) {
+    RebindCaptures(substitutions);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+void TOpDependentJoin::RenameUsedIUs(const TSubstitutions& substitutions) {
+    Substitute(Dependencies, substitutions);
+    TSubstitutions domainColumns;
+    for (const auto& [parameter, column] : DomainColumns.Items()) {
+        domainColumns.Add(Substitute(parameter, substitutions), Substitute(column, substitutions));
+    }
+    DomainColumns = std::move(domainColumns);
+}
+
+void TOpTableLookup::RenameUsedIUs(const TSubstitutions& substitutions) {
+    Substitute(LookupKeys, substitutions);
+    if (Prefix) {
+        Substitute(Prefix->Equalities, substitutions);
+    }
+    Substitute(ResidualJoinKeys, substitutions);
+    if (FetchedRowFilter) {
+        FetchedRowFilter = FetchedRowFilter->ApplyRenames(substitutions);
+    }
+}
+
+void TOpIndexLookupJoin::RenameUsedIUs(const TSubstitutions& substitutions) {
+    Substitute(JoinKeys, substitutions);
+}
+
+// Substitution changes bindings, never the external field names.
+void TOpTableEffect::RenameUsedIUs(const TSubstitutions& substitutions) {
+    Substitute(Columns_, substitutions);
+}
+
+void TOpRoot::RenameUsedIUs(const TSubstitutions& substitutions) {
+    Substitute(Columns_, substitutions);
+}
+
+} // namespace NKikimr::NKqp

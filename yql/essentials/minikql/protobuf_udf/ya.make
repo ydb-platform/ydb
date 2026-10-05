@@ -1,6 +1,4 @@
-LIBRARY()
-
-YQL_ABI_VERSION(2 9 0)
+YQL_LIBRARY()
 
 SRCS(
     proto_builder.cpp

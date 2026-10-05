@@ -28,6 +28,7 @@ using namespace NYdb;
 namespace {
 
 const TString PEER_NAME = "192.168.0.101";
+const TString REQUEST_ID = "scheme-request-test-request-id";
 
 } // namespace
 
@@ -296,7 +297,7 @@ void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& nam
         runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = token,
             .Database = database,
-            .PeerName = PEER_NAME,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
         })), 0);
 
         Cerr << __FUNCTION__ << " call ticket_parser" << Endl;
@@ -344,7 +345,7 @@ void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& na
         runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = token,
             .Database = database,
-            .PeerName = PEER_NAME,
+            .TraceContext = {PEER_NAME, REQUEST_ID},
         })), 0);
 
         Cerr << __FUNCTION__ << " call ticket_parser" << Endl;

@@ -47,6 +47,7 @@ public:
     void SetDataEnded(bool value);
 
     void SetHeartbeat(const TRowVersion& value);
+    void ClearHeartbeat();
     bool HasHeartbeat() const;
     const TRowVersion& GetHeartbeat() const;
 

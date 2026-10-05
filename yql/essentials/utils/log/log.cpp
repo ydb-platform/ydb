@@ -36,8 +36,7 @@ public:
     {
     }
 
-    ~TLimitedLogBackend() final {
-    }
+    ~TLimitedLogBackend() final = default;
 
     void ReopenLog() final {
         Backend_->ReopenLog();
@@ -68,8 +67,7 @@ public:
     {
     }
 
-    ~TEmergencyLogOutput() override {
-    }
+    ~TEmergencyLogOutput() override = default;
 
 private:
     [[nodiscard]] inline size_t Avail() const noexcept {

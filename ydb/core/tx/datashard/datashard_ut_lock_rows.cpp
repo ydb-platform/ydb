@@ -2238,6 +2238,69 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             "");
     }
 
+    Y_UNIT_TEST(SkipAbsentWithOwnUncommittedWrite) {
+        TPortManager pm;
+
+        auto [runtime, server, sender] = TestCreateServer(pm);
+
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const auto& columns = opts.Columns_;
+        const ui64 shard = shards.at(0);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (2, 200);
+            )"),
+            "<empty>");
+
+        const ui64 lockTxId = 1234567890001;
+        const ui64 lockNodeId = runtime.GetNodeId(0);
+        TLockHandle lock(lockTxId, runtime.GetActorSystem(0));
+
+        // Uncommitted upsert of key 5 by our lock, without any pessimistic row lock
+        // (similar to writes with the KqpDisablePessimisticLocks pragma).
+        UncommittedWrite(runtime, sender, shard, tableId, columns, lockTxId, lockNodeId, 5, 500, 0, 0);
+
+        TTestPipe pipe(runtime, shards.at(0));
+        TLockRowsHelper lockRows(runtime, pipe);
+
+        // Lock keys 1, 3, 5, 6 with skipAbsent:
+        // - key 1 is present and must be locked
+        // - key 3 is absent and must be skipped
+        // - key 5 has our own uncommitted write and must be locked, not skipped
+        // - key 6 is absent and must be skipped
+        auto req = lockRows.SendRequest(
+            lock, tableId, TKeysBuilder().Add(1).Add(3).Add(5).Add(6).Build(),
+            [](NEvents::TDataEvents::TEvLockRows* ev) {
+                ev->Record.SetSkipAbsent(true);
+            });
+        auto res = lockRows.ExpectResult(req);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            JoinSeq(",", res->Record.GetLockedKeys()),
+            "0,2");
+        UNIT_ASSERT_VALUES_EQUAL(
+            JoinSeq(",", res->Record.GetSkippedAbsentKeys()),
+            "1,3");
+
+        // A subsequent request for key 5 must hit the fast path for keys already
+        // locked by the same lock.
+        auto req2 = lockRows.SendRequest(
+            lock, tableId, TKeysBuilder().Add(5).Build(),
+            [](NEvents::TDataEvents::TEvLockRows* ev) {
+                ev->Record.SetSkipAbsent(true);
+            });
+        auto res2 = lockRows.ExpectResult(req2);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            JoinSeq(",", res2->Record.GetLockedKeys()),
+            "0");
+        UNIT_ASSERT_VALUES_EQUAL(
+            JoinSeq(",", res2->Record.GetSkippedAbsentKeys()),
+            "");
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardLockRows)
 
 } // namespace NKikimr

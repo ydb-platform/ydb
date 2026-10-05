@@ -15,7 +15,7 @@ import library.python.resource as rs
 from urllib3.exceptions import HTTPWarning
 
 from ydb.tools.cfg.walle import NopHostsInformationProvider
-from ydb.tools.ydbd_slice import nodes, handlers, cluster_description, yaml_configurator
+from ydb.tools.ydbd_slice import nodes, handlers, cluster_description, yaml_configurator, process_profiles
 from ydb.tools.ydbd_slice.kube import handlers as kube_handlers, docker
 
 # warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -570,6 +570,19 @@ def yaml_config_path_args():
     return args
 
 
+def process_profiles_args():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--process-profiles",
+        dest="process_profiles",
+        action="store_true",
+        default=False,
+        help="Generate per-process YAML from process_profiles overlays "
+             "(storage_profile / dynamic_profiles on hosts)",
+    )
+    return args
+
+
 def cluster_type_args():
     args = argparse.ArgumentParser(add_help=False)
     available_erasure_types = [
@@ -621,6 +634,16 @@ def add_explain_mode(modes, walle_provider):
             kikimr_compressed_bin,
             walle_provider
         )
+        enable_process_profiles = getattr(args, 'process_profiles', False)
+        configuration.enable_process_profiles = enable_process_profiles
+        process_profiles.require_flag_if_used(cluster_details.template, enable_process_profiles)
+        if enable_process_profiles:
+            catalog = process_profiles.parse_process_profiles(cluster_details.template)
+            process_profiles.validate_host_profiles(
+                cluster_details.template,
+                catalog,
+                len(cluster_details.dynamic_slots),
+            )
 
         if 'kikimr' in components:
             static = configuration.create_static_cfg()
@@ -631,7 +654,7 @@ def add_explain_mode(modes, walle_provider):
 
     mode = modes.add_parser(
         "explain",
-        parents=[cluster_description_args(), binaries_args(), component_args()],
+        parents=[cluster_description_args(), binaries_args(), component_args(), process_profiles_args()],
         description="Just dump generated cfg into --out-cfg."
     )
     mode.add_argument(
@@ -658,6 +681,7 @@ def dispatch_run(func, args, walle_provider, need_confirmation=False):
     configurator = None
 
     kikimr_bin, kikimr_compressed_bin = deduce_kikimr_bin_from_args(args)
+    enable_process_profiles = getattr(args, 'process_profiles', False)
     if args.yaml_config:
         configurator = yaml_configurator.YamlConfigurator(
             args.cluster,
@@ -674,6 +698,21 @@ def dispatch_run(func, args, walle_provider, need_confirmation=False):
             kikimr_compressed_bin=kikimr_compressed_bin,
             walle_provider=walle_provider
         )
+
+    configurator.enable_process_profiles = enable_process_profiles
+    generates_cfg = func in (
+        handlers.Slice.slice_install,
+        handlers.Slice.slice_update,
+    )
+    if generates_cfg:
+        process_profiles.require_flag_if_used(cluster_details.template, enable_process_profiles)
+        if enable_process_profiles:
+            catalog = process_profiles.parse_process_profiles(cluster_details.template)
+            process_profiles.validate_host_profiles(
+                cluster_details.template,
+                catalog,
+                len(cluster_details.dynamic_slots),
+            )
 
     # Always compute components after cluster_details
     components = deduce_components_from_args(args, cluster_details)
@@ -739,6 +778,7 @@ def add_install_mode(modes, walle_provider):
             direct_nodes_args(),
             cluster_description_args(),
             yaml_config_path_args(),
+            process_profiles_args(),
             binaries_args(),
             component_args(),
             log_args(),
@@ -764,6 +804,7 @@ def add_update_mode(modes, walle_provider):
             direct_nodes_args(),
             cluster_description_args(),
             yaml_config_path_args(),
+            process_profiles_args(),
             binaries_args(),
             component_args(),
             log_args(),

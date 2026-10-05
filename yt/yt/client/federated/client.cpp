@@ -286,13 +286,13 @@ public:
         const TVersionedLookupRowsOptions&) override;
     TFuture<TPullRowsResult> PullRows(const NYPath::TYPath&, const TPullRowsOptions&) override;
 
-    TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
+    TFuture<TPullQueueResult> PullQueue(
         const NYPath::TRichYPath&,
         i64,
         int,
         const NQueueClient::TQueueRowBatchReadOptions&,
         const TPullQueueOptions&) override;
-    TFuture<NQueueClient::IQueueRowsetPtr> PullQueueConsumer(
+    TFuture<TPullQueueResult> PullQueueConsumer(
         const NYPath::TRichYPath&,
         const NYPath::TRichYPath&,
         std::optional<i64>,
@@ -384,6 +384,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, AlterReplicationCard, (NChaosClient::TReplicationCardId, const TAlterReplicationCardOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IPrerequisitePtr>, StartChaosLease, (const TChaosLeaseStartOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (NChaosClient::TChaosLeaseId, const TChaosLeaseAttachOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, PingChaosLease, (NChaosClient::TChaosLeaseId, const TChaosLeasePingOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, SetUserBanned, (const std::string&, bool, const TSetUserBannedOptions&));
     UNIMPLEMENTED_METHOD(TFuture<bool>, GetUserBanned, (const std::string&, const TGetUserBannedOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<std::string>>, ListBannedUsers, (const TListBannedUsersOptions&));
@@ -403,6 +404,8 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, TruncateJournal, (const NYPath::TYPath&, i64, const TTruncateJournalOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (const std::string&, const TGetFileFromCacheOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (const NYPath::TYPath&, const std::string&, const TPutFileToCacheOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TFilePartitions>, PartitionFile, (const NYPath::TYPath&, const std::vector<TFileReadRange>&, const TPartitionFileOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<IFileReaderPtr>, CreateFilePartitionReader, (const TFilePartitionCookiePtr&, const TReadFilePartitionOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AddMember, (const std::string&, const std::string&, const TAddMemberOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, RemoveMember, (const std::string&, const std::string&, const TRemoveMemberOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (const std::string&, const NYPath::TYPath&, NYTree::EPermission, const TCheckPermissionOptions&));
@@ -747,8 +750,8 @@ CLIENT_METHOD_IMPL(TSelectRowsResult, SelectRows, (const std::string&, const TSe
 CLIENT_METHOD_IMPL(std::vector<TUnversionedLookupRowsResult>, MultiLookupRows, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
 CLIENT_METHOD_IMPL(TVersionedLookupRowsResult, VersionedLookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
 CLIENT_METHOD_IMPL(TPullRowsResult, PullRows, (const NYPath::TYPath&, const TPullRowsOptions&));
-CLIENT_METHOD_IMPL(NQueueClient::IQueueRowsetPtr, PullQueue, (const NYPath::TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueOptions&));
-CLIENT_METHOD_IMPL(NQueueClient::IQueueRowsetPtr, PullQueueConsumer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, std::optional<i64>, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueConsumerOptions&));
+CLIENT_METHOD_IMPL(TPullQueueResult, PullQueue, (const NYPath::TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueOptions&));
+CLIENT_METHOD_IMPL(TPullQueueResult, PullQueueConsumer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, std::optional<i64>, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueConsumerOptions&));
 CLIENT_METHOD_IMPL(NYson::TYsonString, ExplainQuery, (const std::string&, const TExplainQueryOptions&));
 CLIENT_METHOD_IMPL(NYson::TYsonString, GetNode, (const NYPath::TYPath&, const TGetNodeOptions&));
 CLIENT_METHOD_IMPL(NYson::TYsonString, ListNode, (const NYPath::TYPath&, const TListNodeOptions&));

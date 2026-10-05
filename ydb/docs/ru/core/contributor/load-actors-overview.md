@@ -22,6 +22,7 @@
 | [KqpLoad](load-actors-kqp.md)                   | Подает нагрузку на слой Query Processor и нагружает все компоненты кластера.       |
 | [KeyValueLoad](load-actors-key-value.md)        | Нагружает Key-value таблетку.                                                      |
 | [StorageLoad](load-actors-storage.md)           | Нагружает Distributed Storage без задействования слоев таблеток и Query Processor. |
+| [NbsDbgLikeLoad](load-actors-nbs-dbg-like.md) | Генерирует блочную нагрузку, подобную NBS, через персистентную нагружающую таблетку, группы прямого блочного доступа (DBG), PersistentBuffer и DDisk. |
 | [VDiskLoad](load-actors-vdisk.md)               | Тестирует производительность записи на VDisk.                                      |
 | [PDiskWriteLoad](load-actors-pdisk-write.md)                           | Тестирует производительность записи на PDisk.                                      |
 | [PDiskReadLoad](load-actors-pdisk-read.md)      | Тестирует производительность чтения с PDisk.                                       |

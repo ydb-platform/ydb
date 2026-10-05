@@ -65,9 +65,9 @@
 
 {{ ydb-cli }} [global options...] <command> [options...] [arguments...]
 
-* `global options` — [глобальные параметры](commands/global-options.md).
-* `options` — [параметры подкоманды](#options).
-* `arguments` — аргументы команды (опишите каждый).
+- `global options` — [глобальные параметры](commands/global-options.md).
+- `options` — [параметры подкоманды](#options).
+- `arguments` — аргументы команды (опишите каждый).
 ```
 
 **Примеры:**

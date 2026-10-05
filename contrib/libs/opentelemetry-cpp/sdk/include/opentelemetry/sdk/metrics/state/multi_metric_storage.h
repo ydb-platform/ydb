@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
 #include <vector>

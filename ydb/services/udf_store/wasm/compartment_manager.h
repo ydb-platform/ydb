@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bridge_node_table.h"
 #include "module_catalog.h"
 
 #include <ydb/library/wasm/api/compartment.h>
@@ -19,6 +20,16 @@ struct TQueryCompartmentHandle : public TNonCopyable {
     THashMap<TString, void*> Exports;
     // Monotonic id for this acquire; TypeConfig callables recreate objects on change.
     ui64 Generation = 0;
+    //! Host UnboxedValue nodes exposed to guest as bridge handles.
+    std::unique_ptr<TWasmBridgeNodeTable> BridgeNodes;
+    //! Nesting of BridgeRun calls. Lives here rather than on the invocation
+    //! context because a callable can lead back into another WASM UDF, and
+    //! that opens a fresh context whose own counter would start over.
+    ui32 BridgeRunDepth = 0;
+    //! Bytes materialized into linear memory for those nodes (pins, per-Run
+    //! scratch, guest-owned blocks). Declared last: it holds compartment
+    //! offsets and node values, so it must die before both.
+    std::unique_ptr<TCompartmentResidentCache> Resident;
 };
 
 using TQueryCompartmentHandlePtr = std::unique_ptr<TQueryCompartmentHandle>;

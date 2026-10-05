@@ -263,7 +263,7 @@ Y_UNIT_TEST(SingleVarRepeatedAndCheckRanges) {
                 UNIT_ASSERT_C(match, i);
                 auto vars = match->Vars;
                 UNIT_ASSERT_VALUES_EQUAL_C(1, vars.size(), i);
-                auto var = vars[0];
+                const auto& var = vars[0];
                 UNIT_ASSERT_VALUES_EQUAL_C(1, var.size(), i);
                 if (auto expectedToIter = Find(expectedTo, var[0].To());
                     expectedToIter != expectedTo.end()) {

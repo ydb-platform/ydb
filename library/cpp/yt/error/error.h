@@ -11,6 +11,7 @@
 
 #include <library/cpp/yt/logging/tag.h>
 
+#include <library/cpp/yt/misc/lazy.h>
 #include <library/cpp/yt/misc/property.h>
 
 #include <util/system/compiler.h>
@@ -230,6 +231,7 @@ public:
     [[nodiscard]] TError With(TAnyMergeableDictionaryRef attributes) const &;
     [[nodiscard]] TError&& With(TAnyMergeableDictionaryRef attributes) &&;
 
+    //! NB: OK errors are dropped as they carry no diagnostics and cannot become inner ones.
     [[nodiscard]] TError With(const TError& innerError) const &;
     [[nodiscard]] TError&& With(const TError& innerError) &&;
     [[nodiscard]] TError With(TError&& innerError) const &;
@@ -241,7 +243,7 @@ public:
     [[nodiscard]] TError&& With(TRange&& innerErrors) &&;
 
     //! Forwards to #With only when #condition holds.
-    //! NB: The operands are evaluated either way.
+    //! NB: The operands are evaluated either way unless wrapped in |YT_LAZY|.
     template <class... TArgs>
     [[nodiscard]] TError WithIf(bool condition, TArgs&&... args) const &;
     template <class... TArgs>

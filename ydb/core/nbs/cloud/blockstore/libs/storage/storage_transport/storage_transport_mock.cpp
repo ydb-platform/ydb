@@ -31,6 +31,32 @@ TEvConnectResult TStorageTransportMock::MakeConnectResult(
     return result;
 }
 
+TStorageTransportMock::TEvListPersistentBufferResult
+TStorageTransportMock::MakeListing(
+    const TVector<TPBufferKey>& keys,
+    ui32 vChunkIndex)
+{
+    TEvListPersistentBufferResult result;
+    result.SetStatus(TReplyStatus::OK);
+    for (const auto& key: keys) {
+        auto* record = result.AddRecords();
+        record->SetGeneration(key.Generation);
+        record->SetLsn(key.Lsn);
+        record->MutableSelector()->SetVChunkIndex(vChunkIndex);
+        record->MutableSelector()->SetOffsetInBytes(0);
+        record->MutableSelector()->SetSize(DefaultBlockSize);
+    }
+    return result;
+}
+
+void TStorageTransportMock::SetPBufferListing(
+    const TVector<TPBufferKey>& keys,
+    ui32 vChunkIndex)
+{
+    ListPBufferEntriesResult =
+        NThreading::MakeFuture(MakeListing(keys, vChunkIndex));
+}
+
 TStorageTransportMock::TConnectPromise TStorageTransportMock::SetPendingConnect(
     EConnectionType type,
     const TDDiskId& ddiskId)
@@ -135,12 +161,12 @@ NThreading::TFuture<TEvReadPersistentBufferResult>
 TStorageTransportMock::ReadFromPBuffer(
     const THostConnection& connection,
     const NKikimr::NDDisk::TBlockSelector& selector,
-    const ui64 lsn,
+    const TPBufferKey pBufferKey,
     const NKikimr::NDDisk::TReadInstruction instruction,
     const TGuardedSgList& data,
     NWilson::TSpan* span)
 {
-    Y_UNUSED(connection, selector, lsn, instruction, data, span);
+    Y_UNUSED(connection, selector, pBufferKey, instruction, data, span);
 
     TEvReadPersistentBufferResult result;
     result.SetStatus(ReadFromPBufferStatus);
@@ -256,10 +282,10 @@ NThreading::TFuture<TEvSyncResult> TStorageTransportMock::SyncWithPBuffer(
     const THostConnection& pbufferConnection,
     const THostConnection& ddiskConnection,
     TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-    TVector<ui64> lsns,
+    TVector<TPBufferKey> pBufferKeys,
     NWilson::TSpan* span)
 {
-    Y_UNUSED(pbufferConnection, ddiskConnection, lsns, span);
+    Y_UNUSED(pbufferConnection, ddiskConnection, pBufferKeys, span);
 
     TEvSyncResult result;
     result.SetStatus(SyncWithPBufferStatus);
@@ -274,10 +300,10 @@ NThreading::TFuture<TEvSyncResult> TStorageTransportMock::SyncWithPBuffer(
 NThreading::TFuture<TEvErasePersistentBufferResult>
 TStorageTransportMock::BatchEraseFromPBuffer(
     const THostConnection& connection,
-    TVector<ui64> lsns,
+    TVector<TPBufferKey> pBufferKeys,
     NWilson::TSpan* span)
 {
-    Y_UNUSED(connection, lsns, span);
+    Y_UNUSED(connection, pBufferKeys, span);
 
     Y_ABORT("BatchEraseFromPBuffer is not expected in this test");
 }
@@ -288,15 +314,22 @@ TStorageTransportMock::BarrierEraseFromPBuffer(
     ui64 lsn,
     NWilson::TSpan* span)
 {
-    Y_UNUSED(connection, lsn, span);
+    Y_UNUSED(span);
 
-    Y_ABORT("BarrierEraseFromPBuffer is not expected in this test");
+    BarrierErases.emplace_back(connection.DDiskId.NodeId, lsn);
+    TEvErasePersistentBufferResult result;
+    result.SetStatus(TReplyStatus::OK);
+    return NThreading::MakeFuture(std::move(result));
 }
 
 NThreading::TFuture<TEvListPersistentBufferResult>
 TStorageTransportMock::ListPBufferEntries(const THostConnection& connection)
 {
     Y_UNUSED(connection);
+
+    if (ListPBufferEntriesResult.Initialized()) {
+        return ListPBufferEntriesResult;
+    }
 
     TEvListPersistentBufferResult result;
     result.SetStatus(TReplyStatus::OK);

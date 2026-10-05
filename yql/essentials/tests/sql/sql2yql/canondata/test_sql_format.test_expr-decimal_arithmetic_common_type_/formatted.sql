@@ -1,5 +1,3 @@
-PRAGMA config.flags('DecimalCommonTypeConversionMode', 'with_common_type_fixup');
-
 SELECT
     Decimal('10', 10, 3) + Decimal('10', 10, 2) AS add,
     Decimal('10', 10, 2) - Decimal('3', 10, 3) AS sub,

@@ -67,6 +67,26 @@ public:                                                                         
 
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TLsmCompactionRankGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TLsmCompactionRankGroup : public TBase {
+        public:
+            // Gauges are expressed in percent: a rank of 1.0 is reported as 100.
+            static constexpr ui64 RankScale = 100;
+
+            GROUP_CONSTRUCTOR(TLsmCompactionRankGroup)
+            {
+                COUNTER_INIT(Rank0, false);
+                COUNTER_INIT(Rank1_16, false);
+                Rank17Plus_ = GroupCounters->GetCounter("Rank17_", false);
+            }
+
+            COUNTER_DEF(Rank0);
+            COUNTER_DEF(Rank1_16);
+            COUNTER_DEF(Rank17Plus);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TLsmHullGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TLsmHullGroup : public TBase {
@@ -472,6 +492,8 @@ public:                                                                         
                     VDiskStates[i] = GroupCounters->GetCounter(name + "_" + NKikimrWhiteboard::EVDiskState_Name(i), false);
                 }
                 COUNTER_INIT_IF_EXTENDED(VDiskLocalRecoveryState, false);
+                COUNTER_INIT(HeapAllocatorSizeClass, false);
+                COUNTER_INIT(HeapAllocatorStripe, false);
             }
 
             void VDiskState(NKikimrWhiteboard::EVDiskState s) {
@@ -485,6 +507,18 @@ public:                                                                         
             }
 
             COUNTER_DEF(VDiskLocalRecoveryState);
+            COUNTER_DEF(HeapAllocatorSizeClass);
+            COUNTER_DEF(HeapAllocatorStripe);
+
+            void SetHeapAllocatorStripe(bool stripe) {
+                HeapAllocatorSizeClass() = stripe ? 0 : 1;
+                HeapAllocatorStripe() = stripe ? 1 : 0;
+            }
+
+            void ClearHeapAllocatorMode() {
+                HeapAllocatorSizeClass() = 0;
+                HeapAllocatorStripe() = 0;
+            }
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

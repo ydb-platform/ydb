@@ -38,12 +38,9 @@ private:
     TActorId Worker;
     TActorId SchemeShardPipe;
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder()
-                << "[OffloadActor]"
-                << "[" << TabletActorId << "]"
-                << "[" << Partition << "]"
-                << SelfId() << " ";
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"partition", Partition});
     }
 
 public:
@@ -91,9 +88,10 @@ public:
     }
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvGone",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"toString", ev->Get()->ToString()});
+        LOG_D(
+            "Handle TEvGone",
+            {"toString", ev->Get()->ToString()}
+        );
         if (ev->Get()->Status == TEvWorker::TEvGone::DONE) {
             NotifySchemeShard();
         }
@@ -117,18 +115,20 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvClientDestroyed",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"toString", ev->Get()->ToString()});
+        LOG_D(
+            "Handle TEvClientDestroyed",
+            {"toString", ev->Get()->ToString()}
+        );
         if (SchemeShardPipe == ev->Get()->ClientId) {
             OnPipeDestroyed();
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvClientConnected",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"toString", ev->Get()->ToString()});
+        LOG_D(
+            "Handle TEvClientConnected",
+            {"toString", ev->Get()->ToString()}
+        );
 
         if (SchemeShardPipe == ev->Get()->ClientId && ev->Get()->Status != NKikimrProto::OK) {
             NTabletPipe::CloseClient(SelfId(), SchemeShardPipe);
@@ -155,10 +155,12 @@ public:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         default:
-            YDB_LOG_WARN("Unhandled event",
-                {"logPrefix", NPQ_LOG_PREFIX},
+            LOG_W(
+                "Unhandled event",
                 {"type", ev->GetTypeRewrite()},
-                {"event", ev->ToString()});
+                            {"event",
+                ev->ToString()}
+            );
         }
     }
 };

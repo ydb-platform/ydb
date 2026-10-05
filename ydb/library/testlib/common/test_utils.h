@@ -19,8 +19,8 @@ class TTestActorRuntimeBase;
 namespace NTestUtils {
 
 // Wait until predicate is true or timeout is reached 
-void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString& info)> predicate);
-void WaitFor(TDuration timeout, const TString& description, std::function<bool()> predicate);
+void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString& info)> predicate, TDuration initialDelay = TDuration::MilliSeconds(1), bool throwException = false);
+void WaitFor(TDuration timeout, const TString& description, std::function<bool()> predicate, TDuration initialDelay = TDuration::MilliSeconds(1), bool throwException = false);
 
 void SetupSignalHandlers();
 

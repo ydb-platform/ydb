@@ -34,6 +34,7 @@ struct TFakeNodeInfo {
     TMap<TTabletId, NKikimrWhiteboard::TTabletStateInfo> TabletStateInfo;
     TMap<TString, NKikimrWhiteboard::TNodeStateInfo> NodeStateInfo;
     TMap<ui32, NKikimrWhiteboard::TPDiskStateInfo> PDiskStateInfo;
+    TVector<NKikimrWhiteboard::TDDiskStateInfo> DDiskStateInfo;
     TMap<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, TVDiskIDComparator> VDiskStateInfo;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     bool Connected = true;
@@ -212,6 +213,11 @@ public:
     WaitForDDiskInfo(ui64 tabletId, ui64 revision, TDuration timeout = TDuration::Seconds(30));
     NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult RequestBSControllerDDiskInfoList();
     NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult RequestBSControllerDDiskInfo(ui64 tabletId);
+
+    NKikimrCms::TDDiskTabletListResponse RequestDDiskTabletList(
+        const NKikimrCms::TDDiskTabletListRequest &request = {});
+    NKikimrCms::TDDiskDiskListResponse RequestDDiskDiskList(
+        const NKikimrCms::TDDiskDiskListRequest &request = {});
 
     void ConfigureDDiskPool(ui32 numGroups = 1);
     NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult

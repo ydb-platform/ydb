@@ -1,4 +1,5 @@
 #include "harmonizer.h"
+#include "harmonizer_metrics.h"
 #include "cpu_consumption.h"
 #include "debug.h"
 #include <library/cpp/testing/unittest/registar.h>
@@ -6,6 +7,8 @@
 #include <ydb/library/actors/core/executor_pool_shared.h>
 #include <ydb/library/actors/core/executor_thread_ctx.h>
 #include <ydb/library/actors/helpers/pool_stats_collector.h>
+#include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 using namespace NActors;
 
@@ -206,6 +209,127 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         auto stats = harmonizer->GetPoolStats(0);
         Y_UNUSED(stats);
         UNIT_ASSERT_VALUES_EQUAL(mockPool->ThreadCount, 4);  // Should start with default
+    }
+
+    Y_UNIT_TEST(TestInMemoryMetricsAndPreStop) {
+        for (bool stopBeforeFirstHarmonize : {false, true}) {
+            TTestActorRuntimeBase runtime;
+            runtime.SetupNodeSubSystems = [](ui32, TActorSystemSetup* setup) {
+                setup->RegisterSubSystem(MakeInMemoryMetricsRegistry({
+                    .MemoryBytes = 16384,
+                    .ChunkSizeBytes = 256,
+                    .MaxLines = 32,
+                    .AllowedMetricPrefixes = {"harmonizer."},
+                }));
+            };
+            runtime.Initialize();
+            auto* actorSystem = runtime.GetActorSystem(0);
+            auto* registry = GetInMemoryMetrics(*actorSystem);
+            UNIT_ASSERT(registry);
+            auto mockPool = std::make_unique<TMockExecutorPool>();
+            auto harmonizer = MakeHarmonizer(Us2Ts(1'000'000));
+            harmonizer->AddPool(mockPool.get());
+            harmonizer->SetActorSystem(actorSystem);
+            if (stopBeforeFirstHarmonize) {
+                actorSystem->Stop();
+                harmonizer->Harmonize(Us2Ts(1'000'000));
+                UNIT_ASSERT(!registry->RequestSnapshot(runtime.AllocateEdgeActor()));
+                continue;
+            }
+            harmonizer->Harmonize(Us2Ts(1'000'000));
+            // The first report registers lines; delivery is asynchronous.
+            const auto edge = runtime.AllocateEdgeActor();
+            UNIT_ASSERT(registry->RequestSnapshot(edge));
+            runtime.GrabEdgeEventRethrow<TEvInMemoryMetricsSnapshot>(edge, TDuration::Seconds(5));
+            harmonizer->Harmonize(Us2Ts(2'000'000));
+
+            THarmonizerStats stats;
+            harmonizer->GetStats(stats);
+            const auto poolStats = harmonizer->GetPoolStats(0);
+            UNIT_ASSERT(registry->RequestSnapshot(edge));
+            auto response = runtime.GrabEdgeEventRethrow<TEvInMemoryMetricsSnapshot>(edge, TDuration::Seconds(5));
+            auto captured = response->Get()->Snapshot;
+            using namespace NHarmonizerMetrics;
+            static_assert(sizeof(TGlobalFrontend::TStorageRecord) == 40);
+            static_assert(sizeof(TPoolFrontend::TStorageRecord) == 32);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Stats.Lines, 6);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Stats.CommittedBytes, 184);
+            const auto checkCaptured = [&](const TSnapshotView& snapshot) {
+                UNIT_ASSERT_VALUES_EQUAL(snapshot.LinesSize(), 6);
+                snapshot.ForEachLine([&](const TLineSnapshot& line) {
+                    UNIT_ASSERT(!line.Closed);
+                    if (line.Name.StartsWith("harmonizer.pool.")) {
+                        UNIT_ASSERT_VALUES_EQUAL(line.Labels.size(), 2);
+                        UNIT_ASSERT_VALUES_EQUAL(line.Labels[0].Name, "pool");
+                        UNIT_ASSERT_VALUES_EQUAL(line.Labels[0].Value, "MockPool");
+                        UNIT_ASSERT_VALUES_EQUAL(line.Labels[1].Name, "pool_id");
+                        UNIT_ASSERT_VALUES_EQUAL(line.Labels[1].Value, "0");
+                    } else {
+                        UNIT_ASSERT(line.Labels.empty());
+                    }
+                    if (line.Name == TGlobal::Name) {
+                        const auto records = TGlobalFrontend::ReadRecords(line);
+                        UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
+                        const auto& values = records.front().Value;
+                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TAvgAwakeningTimeUs>(), stats.AvgAwakeningTimeUs);
+                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TAvgWakingUpTimeUs>(), stats.AvgWakingUpTimeUs);
+                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TBudget>(), stats.Budget);
+                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TGlobal::TSharedFreeCpu>(), stats.SharedFreeCpu);
+                        const auto fields = line.Meta.Frontend->Fields;
+                        UNIT_ASSERT_VALUES_EQUAL(fields.size(), 4);
+                        UNIT_ASSERT_VALUES_EQUAL(fields[0].Name, "harmonizer.avg_awakening_time_us");
+                        UNIT_ASSERT_VALUES_EQUAL(fields[1].Name, "harmonizer.avg_waking_up_time_us");
+                        UNIT_ASSERT_VALUES_EQUAL(fields[2].Name, "harmonizer.budget");
+                        UNIT_ASSERT_VALUES_EQUAL(fields[3].Name, "harmonizer.shared_free_cpu");
+                    } else if (line.Name == TPool::Name) {
+                        const auto records = TPoolFrontend::ReadRecords(line);
+                        UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
+                        const auto& values = records.front().Value;
+                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TPool::TAvgUsedCpu>(), poolStats.AvgUsedCpu);
+                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TPool::TAvgElapsedCpu>(), poolStats.AvgElapsedCpu);
+                        UNIT_ASSERT_VALUES_EQUAL(values.Get<TPool::TPotentialMaxThreadCount>(), poolStats.PotentialMaxThreadCount);
+                        const auto fields = line.Meta.Frontend->Fields;
+                        UNIT_ASSERT_VALUES_EQUAL(fields.size(), 3);
+                        UNIT_ASSERT_VALUES_EQUAL(fields[0].Name, "harmonizer.pool.avg_used_cpu");
+                        UNIT_ASSERT_VALUES_EQUAL(fields[1].Name, "harmonizer.pool.avg_elapsed_cpu");
+                        UNIT_ASSERT_VALUES_EQUAL(fields[2].Name, "harmonizer.pool.potential_max_thread_count");
+                    } else if (line.Name.StartsWith("harmonizer.pool.is_")) {
+                        const auto values = line.ReadValuesAs<bool>();
+                        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+                        if (line.Name == "harmonizer.pool.is_needy") {
+                            UNIT_ASSERT_VALUES_EQUAL(values.front(), poolStats.IsNeedy);
+                        } else if (line.Name == "harmonizer.pool.is_starved") {
+                            UNIT_ASSERT_VALUES_EQUAL(values.front(), poolStats.IsStarved);
+                        } else {
+                            UNIT_ASSERT_VALUES_EQUAL(line.Name, "harmonizer.pool.is_hoggish");
+                            UNIT_ASSERT_VALUES_EQUAL(values.front(), poolStats.IsHoggish);
+                        }
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(line.Name, "harmonizer.pool.shared_cpu_quota");
+                        const auto values = line.ReadValuesAs<float>();
+                        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+                        UNIT_ASSERT_VALUES_EQUAL(values.front(), poolStats.SharedCpuQuota);
+                    }
+                });
+            };
+            captured.Read(checkCaptured);
+
+            harmonizer->Harmonize(Us2Ts(3'000'000));
+            const std::span<const TLabel> noLabels;
+            UNIT_ASSERT(registry->RequestLineSnapshot(edge, TGlobal::Name, noLabels));
+            auto selected = runtime.GrabEdgeEventRethrow<TEvInMemoryMetricsSnapshot>(edge, TDuration::Seconds(5));
+            selected->Get()->Snapshot.Read([&](const TSnapshotView& snapshot) {
+                UNIT_ASSERT_VALUES_EQUAL(snapshot.LinesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(TGlobalFrontend::ReadRecords(snapshot.GetLine(0)).size(), 2);
+            });
+            captured.Read(checkCaptured); // The earlier prefix stays immutable.
+
+            actorSystem->Stop();
+            harmonizer->Harmonize(Us2Ts(4'000'000));
+            UNIT_ASSERT(!registry->RequestSnapshot(edge));
+            captured.Read(checkCaptured); // Data and metadata survive shutdown.
+
+        }
     }
 
     Y_UNIT_TEST(TestDefaultNeedyCpuWindowIsOneSecond) {

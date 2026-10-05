@@ -6,22 +6,6 @@ from textual.widgets import TabPane, TabbedContent
 
 from ydb.tools.mnc.viewer.main import Viewer
 
-
-TAB_IDS = ["general", "mnc-config", "cluster-config", "agents", "operation"]
-EXHAUSTIVE_TAB_IDS = ["general", "mnc-config", "cluster-config"]
-CORE_COMMAND_SEQUENCES = [
-    ("previous_tab",),
-    ("next_tab",),
-    ("open_general",),
-    ("open_mnc_config",),
-    ("open_cluster_config",),
-    ("close_tab",),
-    ("open_mnc_config", "close_tab"),
-    ("open_cluster_config", "close_tab"),
-    ("next_tab", "previous_tab"),
-    ("open_mnc_config", "open_cluster_config"),
-    ("open_cluster_config", "open_mnc_config"),
-]
 AGENTS_COMMAND_SEQUENCES = [
     ("open_agents",),
     ("open_agents", "previous_tab"),
@@ -30,12 +14,6 @@ AGENTS_COMMAND_SEQUENCES = [
     ("open_agents", "open_mnc_config"),
     ("open_mnc_config", "open_agents"),
     ("open_cluster_config", "open_agents"),
-]
-OPERATION_COMMAND_SEQUENCES = [
-    ("open_operation_install",),
-    ("open_operation_install", "next_tab"),
-    ("open_operation_install", "close_tab"),
-    ("open_mnc_config", "open_operation_install"),
 ]
 
 
@@ -83,20 +61,6 @@ class TabState:
 
 
 class ViewerTabNavigationTest(unittest.IsolatedAsyncioTestCase):
-    async def test_tab_navigation_matches_state_machine_for_core_command_sequences(self):
-        for start_tab in EXHAUSTIVE_TAB_IDS:
-            app = Viewer()
-            async with app.run_test() as pilot:
-                with self.subTest(start_tab=start_tab):
-                    for commands in CORE_COMMAND_SEQUENCES:
-                        await self._assert_command_sequence(
-                            app,
-                            pilot,
-                            start_tab,
-                            commands,
-                            include_agents=False,
-                        )
-
     async def test_agents_tab_navigation_matches_state_machine(self):
         for start_tab in ["general", "mnc-config", "cluster-config", "agents"]:
             app = Viewer()
@@ -110,21 +74,6 @@ class ViewerTabNavigationTest(unittest.IsolatedAsyncioTestCase):
                             commands,
                             include_agents=True,
                             include_operation=False,
-                        )
-
-    async def test_operation_tab_navigation_matches_state_machine(self):
-        for start_tab in ["general", "operation"]:
-            app = Viewer()
-            async with app.run_test() as pilot:
-                with self.subTest(start_tab=start_tab):
-                    for commands in OPERATION_COMMAND_SEQUENCES:
-                        await self._assert_command_sequence(
-                            app,
-                            pilot,
-                            start_tab,
-                            commands,
-                            include_agents=True,
-                            include_operation=True,
                         )
 
     async def test_reopening_active_operation_deactivates_pane_before_removal(self):

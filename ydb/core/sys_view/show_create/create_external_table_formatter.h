@@ -1,6 +1,6 @@
 #pragma once
 
-#include "formatters_common.h"
+#include "formatters/formatters_common.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 

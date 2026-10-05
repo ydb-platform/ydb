@@ -62,7 +62,18 @@ namespace NKikimr {
         bool IsBlockedLegacy(ui64 tabletId, TBlockedGen gen, ui32 *actualGen = nullptr) const;
         bool HasRecord(ui64 tabletId) const;
         bool Find(ui64 tabletId, ui32 *outGen) const;
+        std::tuple<ui32, ui64> FindMax(ui64 tabletId) const;
         bool IsInFlight() const { return !InFlightBlocks.empty() || !InFlightBlocksQueue.empty(); }
+
+        template <typename TCallback>
+        void ForEachDeletedTablet(TCallback&& callback) const {
+            Y_ABORT_UNLESS(Initialized);
+            for (const auto& [tabletId, gen] : PersistentBlocks) {
+                if (NGc::CompleteDelBlock(gen.Generation)) {
+                    callback(tabletId);
+                }
+            }
+        }
 
         void UpdateLegacy(ui64 tabletId, TBlockedGen gen) { UpdatePersistent(tabletId, gen); }
         // for log replay

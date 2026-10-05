@@ -2975,7 +2975,7 @@ Y_UNIT_TEST(FulltextIndexCreateTableNonIntegerPkRequiresUniqueIndexFeature) {
 }
 
 Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithUint32Key, Compact) {
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3021,7 +3021,7 @@ Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithUint32Key, Compact) {
 }
 
 Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithInt32Key, Compact) {
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3070,7 +3070,7 @@ Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithInt32Key, Compact) {
 
 Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithSerialKey, Compact) {
     // Serial / Serial4 -> Int32 backend
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3117,7 +3117,7 @@ Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithSerialKey, Compact) {
 
 Y_UNIT_TEST_TWIN(FulltextIndexCreateTableWithBigSerialKey, Compact) {
     // Serial8 / BigSerial -> Int64 backend
-    auto kikimr = Compact ? KikimrWithCompact() : Kikimr();
+    auto kikimr = KikimrWithCompact(Compact);
     auto db = kikimr.GetQueryClient();
 
     {
@@ -3233,6 +3233,263 @@ Y_UNIT_TEST(FulltextIndexCreateTableWithCompositeKeyTwoColumns) {
         auto resultSet = result.GetResultSet(0);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
     }
+}
+
+Y_UNIT_TEST(FulltextRowIdCompositePkMultiShardLifecycle) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    auto tableClient = kikimr.GetTableClient();
+    auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+    auto exec = [&](const TString& query) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    };
+
+    // Start with two deterministic main-table shards. A composite PK forces the index to
+    // auto-provision __ydb_row_id as its document id.
+    exec(R"sql(
+        CREATE TABLE `/Root/RowIdTopology` (
+            Category Utf8,
+            Id Uint64,
+            Text Utf8,
+            Data Utf8,
+            PRIMARY KEY (Category, Id)
+        ) WITH (
+            PARTITION_AT_KEYS = (("m"u))
+        );
+    )sql");
+    exec(R"sql(
+        UPSERT INTO `/Root/RowIdTopology` (Category, Id, Text, Data) VALUES
+            ("alpha"u, 1, "cats before split"u, "a"u),
+            ("beta"u,  2, "dogs before split"u, "b"u),
+            ("zeta"u,  3, "cats upper shard"u,  "z"u);
+    )sql");
+    exec(R"sql(
+        ALTER TABLE `/Root/RowIdTopology` ADD INDEX fulltext_idx
+            GLOBAL USING fulltext_plain ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql");
+
+    using TLogicalKey = std::pair<TString, ui64>;
+    auto readRowIds = [&]() {
+        auto result = db.ExecuteQuery(R"sql(
+            SELECT Category, Id, __ydb_row_id FROM `/Root/RowIdTopology`
+            ORDER BY Category, Id;
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        TMap<TLogicalKey, ui64> rowIds;
+        TSet<ui64> uniqueRowIds;
+        TResultSetParser parser(result.GetResultSet(0));
+        while (parser.TryNextRow()) {
+            const TString category(*parser.ColumnParser("Category").GetOptionalUtf8());
+            const ui64 id = *parser.ColumnParser("Id").GetOptionalUint64();
+            const ui64 rowId = parser.ColumnParser("__ydb_row_id").GetUint64();
+            UNIT_ASSERT_C(uniqueRowIds.insert(rowId).second, "duplicate __ydb_row_id " << rowId);
+            rowIds.emplace(TLogicalKey{category, id}, rowId);
+        }
+        return rowIds;
+    };
+    auto search = [&](const TString& term) {
+        auto result = db.ExecuteQuery(TStringBuilder() << R"sql(
+            SELECT Category, Id FROM `/Root/RowIdTopology` VIEW `fulltext_idx`
+            WHERE FulltextMatch(Text, ")sql" << term << R"sql(")
+            ORDER BY Category, Id;
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        TVector<TLogicalKey> keys;
+        TResultSetParser parser(result.GetResultSet(0));
+        while (parser.TryNextRow()) {
+            keys.emplace_back(TString(*parser.ColumnParser("Category").GetOptionalUtf8()),
+                *parser.ColumnParser("Id").GetOptionalUint64());
+        }
+        return keys;
+    };
+
+    const auto beforeDmlRowIds = readRowIds();
+    UNIT_ASSERT_VALUES_EQUAL(beforeDmlRowIds.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(search("cats").size(), 2);
+
+    // Exercise both sides of the "m" partition boundary. UPDATE and DELETE also verify that
+    // postings continue to use the stable pre-build row id when maintaining the index.
+    exec(R"sql(
+        UPSERT INTO `/Root/RowIdTopology` (Category, Id, Text, Data) VALUES
+            ("aardvark"u, 10, "cats lower shard"u,  "aa"u),
+            ("kiwi"u,     11, "cats middle shard"u, "kk"u),
+            ("omega"u,    12, "cats upper shard"u,  "oo"u);
+        UPDATE `/Root/RowIdTopology` SET Text = "cats moved token"u
+            WHERE Category = "beta"u AND Id = 2;
+        DELETE FROM `/Root/RowIdTopology`
+            WHERE Category = "alpha"u AND Id = 1;
+    )sql");
+
+    const auto afterDmlRowIds = readRowIds();
+    UNIT_ASSERT_VALUES_EQUAL(afterDmlRowIds.size(), 5);
+    UNIT_ASSERT_VALUES_EQUAL(afterDmlRowIds.at({"beta", 2}), beforeDmlRowIds.at({"beta", 2}));
+    UNIT_ASSERT_VALUES_EQUAL(afterDmlRowIds.at({"zeta", 3}), beforeDmlRowIds.at({"zeta", 3}));
+
+    const TVector<TLogicalKey> expectedCats = {
+        {"aardvark", 10}, {"beta", 2}, {"kiwi", 11}, {"omega", 12}, {"zeta", 3},
+    };
+    UNIT_ASSERT_VALUES_EQUAL(search("cats"), expectedCats);
+    UNIT_ASSERT(search("dogs").empty());
+
+    // Exactly one generated column and one row-id unique index must serve the multi-shard table.
+    auto describe = tableSession.DescribeTable("/Root/RowIdTopology").ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+    size_t rowIdColumns = 0;
+    for (const auto& column : describe.GetTableDescription().GetColumns()) {
+        rowIdColumns += column.Name == NTableIndex::NFulltext::RowIdColumn;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(rowIdColumns, 1);
+    size_t rowIdIndexes = 0;
+    size_t fulltextIndexes = 0;
+    for (const auto& index : describe.GetTableDescription().GetIndexDescriptions()) {
+        rowIdIndexes += index.GetIndexName() == NTableIndex::NFulltext::RowIdUniqueIndexName;
+        fulltextIndexes += index.GetIndexName() == "fulltext_idx";
+    }
+    UNIT_ASSERT_VALUES_EQUAL(rowIdIndexes, 1);
+    UNIT_ASSERT_VALUES_EQUAL(fulltextIndexes, 1);
+}
+
+Y_UNIT_TEST(FulltextRowIdSequenceConcurrentInsertRollbackRetry) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    auto exec = [&](const TString& query) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    };
+    exec(R"sql(
+        CREATE TABLE `/Root/RowIdSequenceConcurrency` (
+            Category Utf8,
+            Id Uint64,
+            Text Utf8,
+            Data Utf8,
+            PRIMARY KEY (Category, Id),
+            INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        ) WITH (
+            PARTITION_AT_KEYS = (("m"u))
+        );
+    )sql");
+
+    // Launch all requests before waiting for any result. Every transaction is multi-row and crosses
+    // the main-table partition boundary, while row ids are allocated by the shared sequence.
+    TVector<NYdb::NQuery::TAsyncExecuteQueryResult> insertFutures;
+    for (ui64 i = 0; i < 8; ++i) {
+        insertFutures.push_back(db.ExecuteQuery(TStringBuilder() << R"sql(
+            INSERT INTO `/Root/RowIdSequenceConcurrency` (Category, Id, Text, Data) VALUES
+                ("a)sql" << i << R"sql("u, )sql" << i << R"sql(, "parallel cats"u, "low"u),
+                ("z)sql" << i << R"sql("u, )sql" << i << R"sql(, "parallel cats"u, "high"u);
+        )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()));
+    }
+    for (auto& future : insertFutures) {
+        auto result = future.ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    using TLogicalKey = std::pair<TString, ui64>;
+    auto readRowIds = [&](const TString& predicate = {}) {
+        TStringBuilder query;
+        query << R"sql(
+            SELECT Category, Id, __ydb_row_id FROM `/Root/RowIdSequenceConcurrency`
+        )sql";
+        if (predicate) {
+            query << " WHERE " << predicate;
+        }
+        query << " ORDER BY Category, Id;";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        TMap<TLogicalKey, ui64> rowIds;
+        TSet<ui64> unique;
+        TResultSetParser parser(result.GetResultSet(0));
+        while (parser.TryNextRow()) {
+            const auto key = TLogicalKey{
+                TString(*parser.ColumnParser("Category").GetOptionalUtf8()),
+                *parser.ColumnParser("Id").GetOptionalUint64()};
+            const ui64 rowId = parser.ColumnParser("__ydb_row_id").GetUint64();
+            UNIT_ASSERT_C(unique.insert(rowId).second, "duplicate __ydb_row_id " << rowId);
+            rowIds.emplace(key, rowId);
+        }
+        return rowIds;
+    };
+
+    const auto afterConcurrentInserts = readRowIds();
+    UNIT_ASSERT_VALUES_EQUAL(afterConcurrentInserts.size(), 16);
+    TSet<ui64> committedRowIds;
+    for (const auto& [key, rowId] : afterConcurrentInserts) {
+        Y_UNUSED(key);
+        committedRowIds.insert(rowId);
+    }
+
+    // Updating ordinary columns must not obtain another sequence value or change the document id.
+    exec(R"sql(
+        UPDATE `/Root/RowIdSequenceConcurrency` SET Data = "updated"u
+        WHERE (Category = "a0"u AND Id = 0) OR (Category = "z7"u AND Id = 7);
+    )sql");
+    const auto afterUpdates = readRowIds();
+    UNIT_ASSERT_VALUES_EQUAL(afterUpdates, afterConcurrentInserts);
+
+    auto session = db.GetSession().GetValueSync().GetSession();
+    auto insertResult = session.ExecuteQuery(R"sql(
+        INSERT INTO `/Root/RowIdSequenceConcurrency` (Category, Id, Text, Data) VALUES
+            ("rollback-low"u, 100, "retry cats"u, "low"u),
+            ("rollback-high"u, 101, "retry cats"u, "high"u);
+    )sql", NYdb::NQuery::TTxControl::BeginTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), EStatus::SUCCESS, insertResult.GetIssues().ToString());
+    UNIT_ASSERT(insertResult.GetTransaction());
+    auto transaction = *insertResult.GetTransaction();
+
+    auto insideTx = session.ExecuteQuery(R"sql(
+        SELECT Category, __ydb_row_id FROM `/Root/RowIdSequenceConcurrency`
+        WHERE Category IN ("rollback-low"u, "rollback-high"u) ORDER BY Category;
+    )sql", NYdb::NQuery::TTxControl::Tx(transaction)).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(insideTx.GetStatus(), EStatus::SUCCESS, insideTx.GetIssues().ToString());
+    UNIT_ASSERT(insideTx.GetTransaction());
+    transaction = *insideTx.GetTransaction();
+    TSet<ui64> rolledBackRowIds;
+    TResultSetParser insideParser(insideTx.GetResultSet(0));
+    while (insideParser.TryNextRow()) {
+        rolledBackRowIds.insert(insideParser.ColumnParser("__ydb_row_id").GetUint64());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(rolledBackRowIds.size(), 2);
+    auto rollback = transaction.Rollback().ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(rollback.GetStatus(), EStatus::SUCCESS, rollback.GetIssues().ToString());
+
+    UNIT_ASSERT(readRowIds("Category IN (\"rollback-low\"u, \"rollback-high\"u)").empty());
+
+    // Retry the same logical rows. Sequence values consumed by the aborted transaction are not reused.
+    exec(R"sql(
+        INSERT INTO `/Root/RowIdSequenceConcurrency` (Category, Id, Text, Data) VALUES
+            ("rollback-low"u, 100, "retry cats"u, "low"u),
+            ("rollback-high"u, 101, "retry cats"u, "high"u);
+    )sql");
+    const auto retried = readRowIds("Category IN (\"rollback-low\"u, \"rollback-high\"u)");
+    UNIT_ASSERT_VALUES_EQUAL(retried.size(), 2);
+    for (const auto& [key, rowId] : retried) {
+        Y_UNUSED(key);
+        UNIT_ASSERT(!rolledBackRowIds.contains(rowId));
+        UNIT_ASSERT(!committedRowIds.contains(rowId));
+    }
+
+    // The generated column remains protected even after concurrent allocations and rollback/retry.
+    auto explicitRowId = db.ExecuteQuery(R"sql(
+        INSERT INTO `/Root/RowIdSequenceConcurrency`
+            (Category, Id, Text, Data, __ydb_row_id)
+        VALUES ("illegal"u, 999, "cats"u, "bad"u, 42);
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(!explicitRowId.IsSuccess(), explicitRowId.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(explicitRowId.GetIssues().ToString(), "generated server-side");
+
+    auto searchResult = db.ExecuteQuery(R"sql(
+        SELECT COUNT(*) AS Cnt FROM `/Root/RowIdSequenceConcurrency` VIEW `fulltext_idx`
+        WHERE FulltextMatch(Text, "cats");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(searchResult.GetStatus(), EStatus::SUCCESS, searchResult.GetIssues().ToString());
+    TResultSetParser searchParser(searchResult.GetResultSet(0));
+    UNIT_ASSERT(searchParser.TryNextRow());
+    UNIT_ASSERT_VALUES_EQUAL(searchParser.ColumnParser("Cnt").GetUint64(), 18);
 }
 
 Y_UNIT_TEST(FulltextIndexCreateTableWithCompositeKeyThreeColumns) {
@@ -3418,9 +3675,11 @@ Y_UNIT_TEST(NoBulkUpsertOfRowIdForFulltextTable) {
         "__ydb_row_id is generated server-side for tables with fulltext indexes");
 }
 
-TTtlNotAllowedIndexTestConfig MakeFulltextTtlNotAllowedConfig(bool isRelevance) {
+TTtlNotAllowedIndexTestConfig MakeFulltextTtlNotAllowedConfig(TKikimrRunner& kikimr, bool isRelevance) {
+    const bool compact = kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableCompactFulltextIndex();
     const char* indexType = isRelevance ? "relevance" : "plain";
-    const char* enumType = isRelevance ? "EIndexTypeGlobalFulltextRelevance" : "EIndexTypeGlobalFulltextPlain";
+    const char* enumType = compact ? (isRelevance ? "EIndexTypeGlobalFulltextCompactRelevance" : "EIndexTypeGlobalFulltextCompact")
+        : (isRelevance ? "EIndexTypeGlobalFulltextRelevance" : "EIndexTypeGlobalFulltextPlain");
     return {
         .IndexInCreateTable = std::format(
             "INDEX fulltext_idx GLOBAL USING fulltext_{} ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true),",
@@ -3435,27 +3694,27 @@ TTtlNotAllowedIndexTestConfig MakeFulltextTtlNotAllowedConfig(bool isRelevance) 
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_Both, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedBoth(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedBoth(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterTtl, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterIndex, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterTtlIndex, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterIndexTtl, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 }

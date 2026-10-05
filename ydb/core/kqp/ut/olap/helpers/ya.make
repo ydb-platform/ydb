@@ -6,7 +6,7 @@ SRCS(
     typed_local.cpp
     writer.cpp
     get_value.cpp
-    aggregation.cpp
+    test_case.cpp
     plan_step.cpp
 )
 

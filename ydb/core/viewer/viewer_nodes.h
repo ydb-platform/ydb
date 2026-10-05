@@ -4,6 +4,7 @@
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "wb_group.h"
+#include "ddisk_info.h"
 
 namespace NKikimr::NViewer {
 
@@ -187,6 +188,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::optional<std::size_t> MaximumSlotsPerDisk;
     ui32 SpaceUsageProblem = 90; // %
     bool OffloadMerge = true;
+    bool IncludeDDisks = false;
     size_t OffloadMergeAttempts = 2;
     size_t OffloadMergeBatchSize = 200;
 
@@ -199,6 +201,7 @@ class TJsonNodes : public TViewerPipeClient {
         std::vector<NKikimrSysView::TPDiskEntry> SysViewPDisks;
         std::vector<NKikimrWhiteboard::TVDiskStateInfo> VDisks;
         std::vector<NKikimrSysView::TVSlotEntry> SysViewVDisks;
+        THashMap<std::pair<ui32, ui32>, NKikimrWhiteboard::TDDiskStateInfo> DDisks;
         std::vector<NKikimrViewer::TTabletStateInfo> Tablets;
         std::vector<NKikimrWhiteboard::TNodeStateInfo> Peers; // information about sessions from this node
         std::vector<NKikimrWhiteboard::TNodeStateInfo> ReversePeers; // information about sessions to this node
@@ -217,6 +220,7 @@ class TJsonNodes : public TViewerPipeClient {
         NKikimrWhiteboard::TNodeStateInfo NetworkStateInfo;
         bool Disconnected = false;
         bool HasDisks = false;
+        bool HasPDiskWhiteboardResponse = false;
         bool GotDatabaseFromDatabaseBoardInfo = false;
         bool GotDatabaseFromResourceBoardInfo = false;
         std::optional<int> UptimeSeconds = 0;
@@ -388,11 +392,12 @@ class TJsonNodes : public TViewerPipeClient {
             CalcUptimeSeconds(TInstant::Now());
         }
 
-        void RemapDisks() {
+        void RemapPDisks() {
             if (PDisks.empty() && !SysViewPDisks.empty()) {
                 for (const auto& entry : SysViewPDisks) {
                     const auto& pdisk(entry.GetInfo());
                     auto& pDiskState = PDisks.emplace_back();
+                    pDiskState.SetHasWhiteboardData(false);
                     NKikimrBlobStorage::EDriveStatus driveStatus = NKikimrBlobStorage::EDriveStatus::UNKNOWN;
                     if (NKikimrBlobStorage::EDriveStatus_Parse(pdisk.GetStatusV2(), &driveStatus)) {
                         switch (driveStatus) {
@@ -415,10 +420,18 @@ class TJsonNodes : public TViewerPipeClient {
                     pDiskState.SetExpectedSlotSize(pdisk.GetExpectedSlotSize());
                 }
             }
+        }
+
+        void RemapDisks(bool includeDDisks) {
+            RemapPDisks();
             if (VDisks.empty() && !SysViewVDisks.empty()) {
                 for (const auto& entry : SysViewVDisks) {
                     const auto& vdisk(entry.GetInfo());
+                    if (includeDDisks && vdisk.GetDDisk()) {
+                        continue;
+                    }
                     auto& vDiskState = VDisks.emplace_back();
+                    vDiskState.SetHasWhiteboardData(false);
                     vDiskState.MutableVDiskId()->SetGroupID(vdisk.GetGroupId());
                     vDiskState.MutableVDiskId()->SetGroupGeneration(vdisk.GetGroupGeneration());
                     vDiskState.MutableVDiskId()->SetRing(vdisk.GetFailRealm());
@@ -894,6 +907,7 @@ class TJsonNodes : public TViewerPipeClient {
     TString FilterGroup;
     bool NeedFilter = false;
     bool NeedGroup = false;
+    bool NeedFilterGroupBy = false;
     bool NeedSort = false;
     bool NeedLimit = false;
     ui64 TotalNodes = 0;
@@ -901,6 +915,7 @@ class TJsonNodes : public TViewerPipeClient {
     bool NoRack = false;
     bool NoDC = false;
     std::vector<TString> Problems;
+    TString InvalidParamError;
 
     void AddProblem(const TString& problem) {
         for (const auto& p : Problems) {
@@ -935,10 +950,6 @@ class TJsonNodes : public TViewerPipeClient {
             result = ENodeFields::CPU;
         } else if (field == "LoadAverage") {
             result = ENodeFields::LoadAverage;
-        } else if (field == "Missing") {
-            result = ENodeFields::Missing;
-        } else if (field == "DiskSpaceUsage") {
-            result = ENodeFields::DiskSpaceUsage;
         } else if (field == "DisconnectTime") {
             result = ENodeFields::DisconnectTime;
         } else if (field == "Database") {
@@ -947,22 +958,14 @@ class TJsonNodes : public TViewerPipeClient {
             result = ENodeFields::SubDomainKey;
         } else if (field == "SystemState") {
             result = ENodeFields::SystemState;
-        } else if (field == "PDisks") {
-            result = ENodeFields::PDisks;
-        } else if (field == "VDisks") {
-            result = ENodeFields::VDisks;
         } else if (field == "Tablets") {
             result = ENodeFields::Tablets;
-        } else if (field == "Peers") {
-            result = ENodeFields::Peers;
         } else if (field == "Connections") {
             result = ENodeFields::Connections;
         } else if (field == "SendThroughput") {
             result = ENodeFields::SendThroughput;
         } else if (field == "ReceiveThroughput") {
             result = ENodeFields::ReceiveThroughput;
-        } else if (field == "ReversePeers") {
-            result = ENodeFields::ReversePeers;
         } else if (field == "ConnectStatus") {
             result = ENodeFields::ConnectStatus;
         } else if (field == "NetworkUtilization") {
@@ -973,16 +976,32 @@ class TJsonNodes : public TViewerPipeClient {
             result = ENodeFields::ClockSkew;
         } else if (field == "PileName") {
             result = ENodeFields::PileName;
+        }
+
+        // Cluster-level fields (storage topology, peer graphs): hidden from strict database-only users
+        // via FieldsHiddenFromStrictDatabaseUsers — add new names here and update that mask.
+        if (field == "PDisks") {
+            result = ENodeFields::PDisks;
+        } else if (field == "VDisks") {
+            result = ENodeFields::VDisks;
+        } else if (field == "Peers") {
+            result = ENodeFields::Peers;
+        } else if (field == "ReversePeers") {
+            result = ENodeFields::ReversePeers;
+        } else if (field == "Missing") {
+            result = ENodeFields::Missing;
+        } else if (field == "DiskSpaceUsage") {
+            result = ENodeFields::DiskSpaceUsage;
         } else if (field == "MaxPDiskUsage") {
             result = ENodeFields::MaxPDiskUsage;
-        } else if (field == "MaxVDiskRawUsage") {
-            result = ENodeFields::MaxVDiskRawUsage;
         } else if (field == "MaxVDiskSlotUsage") {
             result = ENodeFields::MaxVDiskSlotUsage;
-        } else if (field == "CapacityAlert") {
-            result = ENodeFields::CapacityAlert;
+        } else if (field == "MaxVDiskRawUsage") {
+            result = ENodeFields::MaxVDiskRawUsage;
         } else if (field == "MaxNormalizedOccupancy") {
             result = ENodeFields::MaxNormalizedOccupancy;
+        } else if (field == "CapacityAlert") {
+            result = ENodeFields::CapacityAlert;
         }
         return result;
     }
@@ -1013,6 +1032,139 @@ class TJsonNodes : public TViewerPipeClient {
         }
     }
 
+    void ResetSortParams() {
+        NeedSort = false;
+        SortBy = ENodeFields::NodeId;
+        ReverseSort = false;
+    }
+
+    bool ParsePresentationNodeField(TStringBuf paramName, TStringBuf fieldValue, ENodeFields& outField) {
+        outField = ParseENodeFields(fieldValue);
+        if (outField == ENodeFields::COUNT) {
+            InvalidParamError = TStringBuilder() << "unknown " << paramName << " field: " << fieldValue;
+            return false;
+        }
+        return true;
+    }
+
+    static void AddGroupByFieldToRequired(TFieldsType& fieldsRequired, const ENodeFields groupByField) {
+        fieldsRequired.set(+groupByField);
+        if (groupByField == ENodeFields::Uptime) {
+            fieldsRequired.set(+ENodeFields::DisconnectTime);
+        }
+    }
+
+    // Cluster-level node fields: omitted from JSON for IsStrictDatabaseOnlyRequest() (see ParseENodeFields).
+    // When adding a new cluster-level API name, keep ParseENodeFields, this mask and swagger in sync.
+    // Internal fetches are unchanged – handler may still request these fields.
+    static inline const TFieldsType FieldsHiddenFromStrictDatabaseUsers = TFieldsType()
+                                                                             .set(+ENodeFields::PDisks)
+                                                                             .set(+ENodeFields::VDisks)
+                                                                             .set(+ENodeFields::Peers)
+                                                                             .set(+ENodeFields::ReversePeers)
+                                                                             .set(+ENodeFields::Missing)
+                                                                             .set(+ENodeFields::DiskSpaceUsage)
+                                                                             .set(+ENodeFields::MaxPDiskUsage)
+                                                                             .set(+ENodeFields::MaxVDiskSlotUsage)
+                                                                             .set(+ENodeFields::MaxVDiskRawUsage)
+                                                                             .set(+ENodeFields::MaxNormalizedOccupancy)
+                                                                             .set(+ENodeFields::CapacityAlert);
+
+    TFieldsType GetFieldsAvailableForResponse() {
+        if (IsStrictDatabaseOnlyRequest()) {
+            return FieldsAvailable & ~FieldsHiddenFromStrictDatabaseUsers;
+        }
+        return FieldsAvailable;
+    }
+
+    TFieldsType GetFieldsRequiredForResponse() {
+        if (IsStrictDatabaseOnlyRequest()) {
+            return FieldsRequired & ~FieldsHiddenFromStrictDatabaseUsers;
+        }
+        return FieldsRequired;
+    }
+
+    bool IsNodeFieldHiddenFromStrictDatabaseUsers(ENodeFields field) {
+        return IsStrictDatabaseOnlyRequest() && IsClusterLevelNodeField(field);
+    }
+
+    bool ShouldRenderNodeField(ENodeFields field) {
+        return !IsNodeFieldHiddenFromStrictDatabaseUsers(field);
+    }
+
+    bool IsNodeFieldRequestedForResponse(ENodeFields field) {
+        return ShouldRenderNodeField(field)
+            && FieldsAvailable.test(+field)
+            && FieldsRequested.test(+field);
+    }
+
+    bool IsClusterLevelNodeField(ENodeFields field) const {
+        return field != ENodeFields::COUNT && FieldsHiddenFromStrictDatabaseUsers.test(+field);
+    }
+
+    void DenyStrictDatabaseOnlyQueryParam(const TStringBuf queryParam, const TString& message) {
+        YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER,
+            "Access denied: query parameter is not allowed for database-level users",
+            {"logPrefix", GetLogPrefix()},
+            {"user", GetUserSID()},
+            {"database", Database},
+            {"queryParam", queryParam});
+        TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", message), "Access denied");
+    }
+
+    // Returns true if an error response has already been sent.
+    bool DenyStrictDatabaseOnlyUnsafeQueryParams() {
+        static constexpr std::array<TStringBuf, 5> ForbiddenQueryParams = {
+            "storage_pool",
+            "pool",
+            "group_id",
+            "node_id",
+            "with",
+        };
+
+        // Restricted query parameters
+        for (TStringBuf forbiddenParam : ForbiddenQueryParams) {
+            if (Params.Has(forbiddenParam)) {
+                DenyStrictDatabaseOnlyQueryParam(forbiddenParam,
+                    TStringBuilder() << forbiddenParam << " must not be set for database-level users");
+                return true;
+            }
+        }
+
+        if (NeedGroup && IsClusterLevelNodeField(GroupBy)) {
+            DenyStrictDatabaseOnlyQueryParam("group",
+                "group must not use cluster-level field names for database-level users");
+            return true;
+        }
+        if (NeedFilterGroupBy && IsClusterLevelNodeField(FilterGroupBy)) {
+            DenyStrictDatabaseOnlyQueryParam("filter_group_by",
+                "filter_group_by must not use cluster-level field names for database-level users");
+            return true;
+        }
+        if (NeedSort && IsClusterLevelNodeField(SortBy)) {
+            DenyStrictDatabaseOnlyQueryParam("sort",
+                "sort must not use cluster-level field names for database-level users");
+            return true;
+        }
+
+        // Query parameters with restricted allowed values
+        const TStringBuf filterPeerRole = Params.Get("filter_peer_role");
+        if (filterPeerRole && filterPeerRole != "database") {
+            YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER,
+                "Access denied: filter_peer_role is not allowed for database-level users",
+                {"logPrefix", GetLogPrefix()},
+                {"user", GetUserSID()},
+                {"database", Database},
+                {"filterPeerRole", filterPeerRole});
+            TBase::ReplyAndPassAway(
+                GETHTTPACCESSDENIED("text/plain",
+                    "filter_peer_role must be omitted or set to \"database\""),
+                "Access denied");
+            return true;
+        }
+        return false;
+    }
+
 public:
     TJsonNodes(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev, "/viewer/nodes")
@@ -1035,15 +1187,17 @@ public:
         if (FilterPath == Database) {
             FilterPath.clear();
         }
-        if (Params.Has("filter_group") && Params.Has("filter_group_by")) {
-            FilterGroup = Params.Get("filter_group");
-            FilterGroupBy = ParseENodeFields(Params.Get("filter_group_by"));
-            FieldsRequired.set(+FilterGroupBy);
-            if (FilterGroupBy == ENodeFields::Uptime) {
-                FieldsRequired.set(+ENodeFields::DisconnectTime);
+        if (TStringBuf filterGroupByParam = Params.Get("filter_group_by"); filterGroupByParam) {
+            NeedFilterGroupBy = true;
+            if (!ParsePresentationNodeField("filter_group_by", filterGroupByParam, FilterGroupBy)) {
+                return;
+            }
+            if (TStringBuf filterGroupParam = Params.Get("filter_group"); filterGroupParam) {
+                FilterGroup = filterGroupParam;
             }
         }
 
+        IncludeDDisks = FromStringWithDefault<bool>(Params.Get("include_ddisks"), false);
         OffloadMerge = FromStringWithDefault(Params.Get("offload_merge"), OffloadMerge);
         OffloadMergeAttempts = FromStringWithDefault(Params.Get("offload_merge_attempts"), OffloadMergeAttempts);
         OffloadMergeBatchSize = FromStringWithDefault(Params.Get("offload_merge_batch_size"), OffloadMergeBatchSize);
@@ -1116,13 +1270,23 @@ public:
         }
         TStringBuf sort = Params.Get("sort");
         if (sort) {
-            NeedSort = true;
-            if (sort.StartsWith("-") || sort.StartsWith("+")) {
-                ReverseSort = (sort[0] == '-');
-                sort.Skip(1);
+            TStringBuf sortField = sort;
+            if (sortField.StartsWith("-") || sortField.StartsWith("+")) {
+                ReverseSort = (sortField[0] == '-');
+                sortField.Skip(1);
             }
-            SortBy = ParseENodeFields(sort);
-            FieldsRequired.set(+SortBy);
+            if (!ParsePresentationNodeField("sort", sortField, SortBy)) {
+                return;
+            }
+            NeedSort = true;
+        }
+        TStringBuf group = Params.Get("group");
+        if (group) {
+            if (!ParsePresentationNodeField("group", group, GroupBy)) {
+                return;
+            }
+            NeedGroup = true;
+            ResetSortParams();
         }
         TString fieldsRequired = Params.Get("fields_required");
         if (!fieldsRequired.empty()) {
@@ -1140,18 +1304,19 @@ public:
         } else {
             FieldsRequired.set(+ENodeFields::SystemState);
         }
-        TStringBuf group = Params.Get("group");
-        if (group) {
-            NeedGroup = true;
-            GroupBy = ParseENodeFields(group);
-            FieldsRequired.set(+GroupBy);
-            if (GroupBy == ENodeFields::Uptime) {
-                FieldsRequired.set(+ENodeFields::DisconnectTime);
-            }
-            NeedSort = false;
+        if (NeedGroup) {
+            AddGroupByFieldToRequired(FieldsRequired, GroupBy);
             NeedLimit = false;
+        } else if (NeedSort) {
+            FieldsRequired.set(+SortBy);
+        }
+        if (!FilterGroup.empty()) {
+            AddGroupByFieldToRequired(FieldsRequired, FilterGroupBy);
         }
         FieldsRequested = FieldsRequired; // no dependent fields
+        if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
+            FieldsRequired.set(+ENodeFields::PDisks);
+        }
         for (auto field = +ENodeFields::NodeId; field != +ENodeFields::COUNT; ++field) {
             if (FieldsRequired.test(field)) {
                 auto itDependentFields = DependentFields.find(static_cast<ENodeFields>(field));
@@ -1168,6 +1333,23 @@ public:
     void Bootstrap() override {
         if (TBase::NeedToRedirect()) {
             return;
+        }
+        if (!InvalidParamError.empty()) {
+            YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER,
+                "Bad request: invalid /viewer/nodes query parameter",
+                {"logPrefix", GetLogPrefix()},
+                {"error", InvalidParamError});
+            TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", InvalidParamError), "BadRequest");
+            return;
+        }
+        if (IsStrictDatabaseOnlyRequest()) {
+            if (DenyStrictDatabaseOnlyUnsafeQueryParams()) {
+                return;
+            }
+            // Omitted filter_peer_role leaves the constructor default (Any); force database peers only.
+            if (!Params.Get("filter_peer_role")) {
+                FilterPeerRole = EPeerRole::Database;
+            }
         }
         if (IsDatabaseRequest() && !Viewer->CheckAccessViewer(TBase::GetRequest())) {
             auto nodes = GetDatabaseNodes();
@@ -1187,7 +1369,7 @@ public:
         if (!FilterDatabase && OffloadMerge && FieldsNeeded(FieldsSystemState)) {
             FieldsRequired.set(+ENodeFields::SubDomainKey);
         }
-        if (!FilterStoragePools.empty() || !FilterGroupIds.empty()) {
+        if ((!FilterStoragePools.empty() || !FilterGroupIds.empty()) && !IsStrictDatabaseOnlyRequest()) {
             FilterDatabase = false; // we disable database filter if we're filtering by pool or group
         }
         if (FilterDatabase) {
@@ -1269,7 +1451,7 @@ public:
         if (TNode* node = FindNode(nodeId)) {
             node->DisconnectNode();
             if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
-                node->RemapDisks();
+                node->RemapDisks(IncludeDDisks);
             }
         }
     }
@@ -1283,6 +1465,28 @@ public:
     }
 
     void ApplyFilter() {
+        // Access restrictions must precede filters that can wait for asynchronous responses.
+        // Otherwise a timeout could render nodes outside the authorized database.
+        if (RestrictToDatabaseNodes && FieldsAvailable.test(+ENodeFields::NodeId)) {
+            if (RestrictedNodeIds.empty()) {
+                YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Empty response: the database has no nodes to show",
+                    {"logPrefix", GetLogPrefix()},
+                    {"database", Database});
+            }
+            TNodeView nodeView;
+            for (TNode* node : NodeView) {
+                if (RestrictedNodeIds.count(node->GetNodeId()) > 0) {
+                    nodeView.push_back(node);
+                }
+            }
+            NodeView.swap(nodeView);
+            FoundNodes = TotalNodes = NodeView.size();
+            InvalidateNodes();
+            RestrictedNodeIds.clear();
+            RestrictToDatabaseNodes = false;
+            AddEvent("Restricted Filter Applied");
+        }
+
         // database pre-filter, affects TotalNodes count
         if (FilterDatabase) {
             if (FilterSubDomainKey && FieldsAvailable.test(+ENodeFields::SubDomainKey)) {
@@ -1371,25 +1575,6 @@ public:
             Type = EType::Any;
             InvalidateNodes();
             AddEvent("Type Filter Applied");
-        }
-        if (RestrictToDatabaseNodes && FieldsAvailable.test(+ENodeFields::NodeId)) {
-            if (RestrictedNodeIds.empty()) {
-                YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Empty response: the database has no nodes to show",
-                    {"logPrefix", GetLogPrefix()},
-                    {"database", Database});
-            }
-            TNodeView nodeView;
-            for (TNode* node : NodeView) {
-                if (RestrictedNodeIds.count(node->GetNodeId()) > 0) {
-                    nodeView.push_back(node);
-                }
-            }
-            NodeView.swap(nodeView);
-            FoundNodes = TotalNodes = NodeView.size();
-            InvalidateNodes();
-            RestrictedNodeIds.clear();
-            RestrictToDatabaseNodes = false;
-            AddEvent("Restricted Filter Applied");
         }
 
         // storage/nodes pre-filter, affects TotalNodes count
@@ -1908,7 +2093,9 @@ public:
                     }
                 }
             }
-            FilterDatabase = false; // switching filter from database to storage pools
+            if (!IsStrictDatabaseOnlyRequest()) {
+                FilterDatabase = false; // switching filter from database to storage pools
+            }
         }
     }
 
@@ -2075,7 +2262,7 @@ public:
             PathNavigateProcessed = true;
         }
 
-        if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsDone() && TotalNodes > 0 && !DatabaseBoardInfoProcessed) {
+        if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsDone() && !DatabaseBoardInfoProcessed) {
             if (DatabaseBoardInfoResponse->IsOk() && DatabaseBoardInfoResponse->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
                 TString database = GetDatabaseFromEndpointsBoardPath(DatabaseBoardInfoResponse->Get()->Path);
                 for (const auto& entry : DatabaseBoardInfoResponse->Get()->InfoEntries) {
@@ -2095,7 +2282,7 @@ public:
             DatabaseBoardInfoProcessed = true;
         }
 
-        if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsDone() && TotalNodes > 0 && !ResourceBoardInfoProcessed) {
+        if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsDone() && !ResourceBoardInfoProcessed) {
             if (ResourceBoardInfoResponse->IsOk() && ResourceBoardInfoResponse->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
                 TString database = GetDatabaseFromEndpointsBoardPath(ResourceBoardInfoResponse->Get()->Path);
                 for (const auto& entry : ResourceBoardInfoResponse->Get()->InfoEntries) {
@@ -2317,16 +2504,21 @@ public:
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kNormalizedOccupancyFieldNumber);
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kVDiskRawUsageFieldNumber);
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kCapacityAlertFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kGroupSizeInUnitsFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kDetailedReplicationStatusFieldNumber);
         }
     }
 
     template<>
     void InitWhiteboardRequest(NKikimrWhiteboard::TEvPDiskStateRequest* request) {
+        request->SetIncludeDDiskState(IncludeDDisks);
         if (AllWhiteboardFields) {
             request->AddFieldsRequired(-1);
         } else {
             request->MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>());
             request->AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kPDiskUsageFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kSlotSizeInUnitsFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kPDiskCapacityAlertFieldNumber);
         }
     }
 
@@ -2684,7 +2876,7 @@ public:
                     for (const auto& vDiskState : vDiskResponse.GetVDiskStateInfo()) {
                         TNode* node = FindNode(vDiskState.GetNodeId());
                         if (node) {
-                            node->VDisks.emplace_back(vDiskState);
+                            node->VDisks.emplace_back(vDiskState).SetHasWhiteboardData(true);
                             node->CalcVDisks();
                         }
                     }
@@ -2696,7 +2888,7 @@ public:
                     TNode* node = FindNode(nodeId);
                     if (node) {
                         for (const auto& protoVDiskState : vDiskState.GetVDiskStateInfo()) {
-                            node->VDisks.emplace_back(protoVDiskState);
+                            node->VDisks.emplace_back(protoVDiskState).SetHasWhiteboardData(true);
                         }
                         node->CalcVDisks();
                     }
@@ -2707,11 +2899,23 @@ public:
         if (FieldsNeeded(FieldsPDisks)) {
             for (auto& [nodeId, response] : PDiskViewerResponse) {
                 if (response.IsOk()) {
+                    for (TNodeId respondedNodeId : response.Get()->Record.GetLocationResponded().GetNodeId()) {
+                        if (TNode* node = FindNode(respondedNodeId)) {
+                            node->HasPDiskWhiteboardResponse = true;
+                        }
+                    }
                     auto& pDiskResponse(*(response.Get()->Record.MutablePDiskResponse()));
+                    for (const auto& sample : pDiskResponse.GetDDiskStateInfo()) {
+                        if (TNode* node = FindNode(sample.GetNodeId())) {
+                            auto& ddisk = node->DDisks[std::make_pair(sample.GetPDiskId(), sample.GetDDiskSlotId())];
+                            ddisk.CopyFrom(sample);
+                            ddisk.SetHasWhiteboardData(true);
+                        }
+                    }
                     for (const auto& pDiskState : pDiskResponse.GetPDiskStateInfo()) {
                         TNode* node = FindNode(pDiskState.GetNodeId());
                         if (node) {
-                            node->PDisks.emplace_back(pDiskState);
+                            node->PDisks.emplace_back(pDiskState).SetHasWhiteboardData(true);
                             node->CalcPDisks();
                         }
                     }
@@ -2722,11 +2926,22 @@ public:
                     const auto& pDiskState(response.Get()->Record);
                     TNode* node = FindNode(nodeId);
                     if (node) {
+                        for (const auto& sample : pDiskState.GetDDiskStateInfo()) {
+                            auto& ddisk = node->DDisks[std::make_pair(sample.GetPDiskId(), sample.GetDDiskSlotId())];
+                            ddisk.CopyFrom(sample);
+                            ddisk.SetHasWhiteboardData(true);
+                        }
+                        node->HasPDiskWhiteboardResponse = true;
                         for (const auto& protoPDiskState : pDiskState.GetPDiskStateInfo()) {
-                            node->PDisks.emplace_back(protoPDiskState);
+                            node->PDisks.emplace_back(protoPDiskState).SetHasWhiteboardData(true);
                         }
                         node->CalcPDisks();
                     }
+                }
+            }
+            for (TNode* node : NodeView) {
+                if (!node->HasPDiskWhiteboardResponse) {
+                    node->RemapPDisks();
                 }
             }
             FieldsAvailable |= FieldsPDisks;
@@ -3321,8 +3536,8 @@ public:
             jsonBatch->SetHasStaticNodes(batch.HasStaticNodes);
         }
         json.SetVersion(Viewer->GetCapabilityVersion("/viewer/nodes"));
-        json.SetFieldsAvailable(FieldsAvailable.to_string());
-        json.SetFieldsRequired(FieldsRequired.to_string());
+        json.SetFieldsAvailable(GetFieldsAvailableForResponse().to_string());
+        json.SetFieldsRequired(GetFieldsRequiredForResponse().to_string());
         if (NeedFilter) {
             json.SetNeedFilter(true);
         }
@@ -3373,22 +3588,22 @@ public:
                 if (node->CpuUsage && FieldsRequested.test(+ENodeFields::CPU)) {
                     jsonNode.SetCpuUsage(node->CpuUsage);
                 }
-                if (node->DiskSpaceUsage && FieldsRequested.test(+ENodeFields::DiskSpaceUsage)) {
+                if (node->DiskSpaceUsage && IsNodeFieldRequestedForResponse(ENodeFields::DiskSpaceUsage)) {
                     jsonNode.SetDiskSpaceUsage(node->DiskSpaceUsage);
                 }
-                if (FieldsAvailable.test(+ENodeFields::MaxPDiskUsage) && FieldsRequested.test(+ENodeFields::MaxPDiskUsage)) {
+                if (IsNodeFieldRequestedForResponse(ENodeFields::MaxPDiskUsage)) {
                     jsonNode.SetMaxPDiskUsage(node->MaxPDiskUsage);
                 }
-                if (FieldsAvailable.test(+ENodeFields::MaxVDiskSlotUsage) && FieldsRequested.test(+ENodeFields::MaxVDiskSlotUsage)) {
+                if (IsNodeFieldRequestedForResponse(ENodeFields::MaxVDiskSlotUsage)) {
                     jsonNode.SetMaxVDiskSlotUsage(node->MaxVDiskSlotUsage);
                 }
-                if (FieldsAvailable.test(+ENodeFields::MaxVDiskRawUsage) && FieldsRequested.test(+ENodeFields::MaxVDiskRawUsage)) {
+                if (IsNodeFieldRequestedForResponse(ENodeFields::MaxVDiskRawUsage)) {
                     jsonNode.SetMaxVDiskRawUsage(node->MaxVDiskRawUsage);
                 }
-                if (FieldsAvailable.test(+ENodeFields::MaxNormalizedOccupancy) && FieldsRequested.test(+ENodeFields::MaxNormalizedOccupancy)) {
+                if (IsNodeFieldRequestedForResponse(ENodeFields::MaxNormalizedOccupancy)) {
                     jsonNode.SetMaxNormalizedOccupancy(node->MaxNormalizedOccupancy);
                 }
-                if (FieldsAvailable.test(+ENodeFields::CapacityAlert) && FieldsRequested.test(+ENodeFields::CapacityAlert)) {
+                if (IsNodeFieldRequestedForResponse(ENodeFields::CapacityAlert)) {
                     jsonNode.SetCapacityAlert(NKikimrBlobStorage::TPDiskSpaceColor::E_Name(node->CapacityAlert));
                 }
                 if (FieldsAvailable.test(+ENodeFields::Connections) && FieldsRequested.test(+ENodeFields::Connections)) {
@@ -3426,21 +3641,65 @@ public:
                 }
                 if ((FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) && (FieldsRequested & FieldsSystemState).any()) {
                     *jsonNode.MutableSystemState() = std::move(node->SystemState);
+                    if (IsStrictDatabaseOnlyRequest()) {
+                        // Hide identities of peers outside the database; metadata of its own nodes remains visible.
+                        jsonNode.MutableSystemState()->ClearMaxClockSkewPeerId();
+                    }
                 }
                 if (FieldsAvailable.test(+ENodeFields::PileName) && FieldsRequested.test(+ENodeFields::PileName)) {
                     if (node->GetPileName()) {
                         jsonNode.SetPileName(node->GetPileName());
                     }
                 }
-                if (FieldsAvailable.test(+ENodeFields::PDisks) && FieldsRequested.test(+ENodeFields::PDisks)) {
+                if (IsNodeFieldRequestedForResponse(ENodeFields::PDisks)) {
+                    std::unordered_map<ui32, const NKikimrSysView::TPDiskInfo*> sysViewPDisks;
+                    for (const auto& entry : node->SysViewPDisks) {
+                        sysViewPDisks.emplace(entry.GetKey().GetPDiskId(), &entry.GetInfo());
+                    }
                     std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
                         return a.path() < b.path();
                     });
                     for (NKikimrWhiteboard::TPDiskStateInfo& pDisk : node->PDisks) {
-                        (*jsonNode.AddPDisks()) = std::move(pDisk);
+                        auto& jsonPDisk = *jsonNode.AddPDisks();
+                        jsonPDisk = std::move(pDisk);
+                        if (auto it = sysViewPDisks.find(jsonPDisk.GetPDiskId()); it != sysViewPDisks.end()) {
+                            const auto& info = *it->second;
+                            if (info.HasStatusV2()) {
+                                jsonPDisk.SetStatus(info.GetStatusV2());
+                            }
+                            if (info.HasDecommitStatus()) {
+                                jsonPDisk.SetDecommitStatus(info.GetDecommitStatus());
+                            }
+                            if (info.HasMaintenanceStatus()) {
+                                jsonPDisk.SetMaintenanceStatus(info.GetMaintenanceStatus());
+                            }
+                        }
                     }
                 }
-                if (FieldsAvailable.test(+ENodeFields::VDisks) && FieldsRequested.test(+ENodeFields::VDisks)) {
+                if (IsNodeFieldRequestedForResponse(ENodeFields::VDisks)) {
+                    if (IncludeDDisks) {
+                        for (const auto& entry : node->SysViewVDisks) {
+                            if (entry.GetInfo().GetDDisk()) {
+                                const auto& key = entry.GetKey();
+                                auto& ddisk = node->DDisks[std::make_pair(key.GetPDiskId(), key.GetVSlotId())];
+                                ddisk.SetPDiskId(key.GetPDiskId());
+                                ddisk.SetDDiskSlotId(key.GetVSlotId());
+                                ddisk.SetGroupId(entry.GetInfo().GetGroupId());
+                                if (!ddisk.HasHasWhiteboardData()) {
+                                    ddisk.SetHasWhiteboardData(false);
+                                }
+                            }
+                        }
+                        for (auto& [key, ddisk] : node->DDisks) {
+                            FillDDiskIdentity(ddisk, node->GetNodeId());
+                            jsonNode.AddDDisks()->Swap(&ddisk);
+                        }
+                        auto* resultDDisks = jsonNode.MutableDDisks();
+                        std::sort(resultDDisks->begin(), resultDDisks->end(), [](const auto& a, const auto& b) {
+                            return std::make_pair(a.GetPDiskId(), a.GetDDiskSlotId())
+                                < std::make_pair(b.GetPDiskId(), b.GetDDiskSlotId());
+                        });
+                    }
                     std::sort(node->VDisks.begin(), node->VDisks.end(), [](const NKikimrWhiteboard::TVDiskStateInfo& a, const NKikimrWhiteboard::TVDiskStateInfo& b) {
                         return VDiskIDFromVDiskID(a.vdiskid()) < VDiskIDFromVDiskID(b.vdiskid());
                     });
@@ -3456,7 +3715,7 @@ public:
                         (*jsonNode.AddTablets()) = std::move(tablet);
                     }
                 }
-                if (FieldsRequested.test(+ENodeFields::Peers)) {
+                if (IsNodeFieldRequestedForResponse(ENodeFields::Peers)) {
                     std::sort(node->Peers.begin(), node->Peers.end(), [](const NKikimrWhiteboard::TNodeStateInfo& a, const NKikimrWhiteboard::TNodeStateInfo& b) {
                         return a.peernodeid() < b.peernodeid();
                     });
@@ -3464,7 +3723,7 @@ public:
                         (*jsonNode.AddPeers()) = std::move(peer);
                     }
                 }
-                if (FieldsRequested.test(+ENodeFields::ReversePeers)) {
+                if (IsNodeFieldRequestedForResponse(ENodeFields::ReversePeers)) {
                     std::sort(node->ReversePeers.begin(), node->ReversePeers.end(), [](const NKikimrWhiteboard::TNodeStateInfo& a, const NKikimrWhiteboard::TNodeStateInfo& b) {
                         return a.nodeid() < b.nodeid();
                     });
@@ -3498,6 +3757,14 @@ public:
                 summary: To get information about nodes
                 description: Information about nodes
                 parameters:
+                  - name: include_ddisks
+                    in: query
+                    description: >
+                        Return DDisks separately instead of legacy VDisk fallback entries (requires VDisks).
+                        DDisks are omitted for database-level users, like VDisks.
+                    required: false
+                    type: boolean
+                    default: false
                   - name: database
                     in: query
                     description: database name
@@ -3510,17 +3777,26 @@ public:
                     type: string
                   - name: node_id
                     in: query
-                    description: node id
+                    description: >
+                        node id. Forbidden for database-level tokens (403).
                     required: false
                     type: integer
                   - name: group_id
                     in: query
-                    description: group id
+                    description: >
+                        group id. Forbidden for database-level tokens (403).
                     required: false
                     type: integer
                   - name: pool
                     in: query
-                    description: storage pool name
+                    description: >
+                        storage pool name. Forbidden for database-level tokens (403).
+                    required: false
+                    type: string
+                  - name: storage_pool
+                    in: query
+                    description: >
+                        alias for `pool`. Forbidden for database-level tokens (403).
                     required: false
                     type: string
                   - name: type
@@ -3551,6 +3827,15 @@ public:
                     description: return only nodes with less uptime in sec.
                     required: false
                     type: integer
+                  - name: with
+                    in: query
+                    description: >
+                        filter nodes:
+                          * `missing` — nodes with missing disks
+                          * `space` — nodes with disk space problems
+                        Forbidden for database-level tokens (403 if present).
+                    required: false
+                    type: string
                   - name: filter
                     in: query
                     description: filter nodes by id or host
@@ -3585,6 +3870,9 @@ public:
                           * `MaxVDiskSlotUsage`
                           * `MaxVDiskRawUsage`
                           * `CapacityAlert`
+                        When `group` is set, sorting is disabled and fields needed only for sorting
+                        are not fetched. `sort` is still validated; unknown fields return HTTP 400.
+                        Database-level tokens must not use cluster-level fields for active sorting (403).
                     required: false
                     type: string
                   - name: group
@@ -3607,6 +3895,7 @@ public:
                           * `ClockSkew`
                           * `PingTime`
                           * `CapacityAlert`
+                        Database-level tokens must not use cluster-level field names in `group` (403).
                     required: false
                     type: string
                   - name: filter_group_by
@@ -3629,6 +3918,10 @@ public:
                           * `ClockSkew`
                           * `PingTime`
                           * `CapacityAlert`
+                        The filter is applied only when `filter_group` is also set; `filter_group_by`
+                        alone is parsed but does not filter nodes or extend `fields_required`.
+                        Database-level tokens must not use cluster-level field names in `filter_group_by` (403),
+                        even without `filter_group`.
                     required: false
                     type: string
                   - name: filter_group
@@ -3644,6 +3937,7 @@ public:
                           * `static`
                           * `other`
                           * `any`
+                        Database-level tokens must omit this parameter or set it to `database` (otherwise 403).
                     required: false
                     type: string
                   - name: fields_required
@@ -3683,6 +3977,12 @@ public:
                           * `MaxVDiskRawUsage`
                           * `CapacityAlert`
                           * `MaxNormalizedOccupancy`
+                        Database-level users never receive `PDisks`, `VDisks`, `Peers`, `ReversePeers`,
+                        `Missing`, `DiskSpaceUsage`, `MaxPDiskUsage`, `MaxVDiskSlotUsage`, `MaxVDiskRawUsage`,
+                        `MaxNormalizedOccupancy` or `CapacityAlert` in node objects (metadata bitsets hide these too).
+                        Peer graph arrays are hidden; per-node interconnect aggregates (`Connections`, `PingTime`,
+                        `SendThroughput`, etc.) remain available for the database Network UI.
+                        `SystemState.MaxClockSkewPeerId` is also omitted, including with `all_whiteboard_fields`.
                     required: false
                     type: string
                   - name: offset

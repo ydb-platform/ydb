@@ -9,10 +9,12 @@ Main topics:
 * [{#T}](./capacity-planning.md)
 * [{#T}](./versioning.md)
 * [{#T}](./maintenance-without-downtime.md)
+* [{#T}](./selfheal.md)
+* [{#T}](./node-authorization.md)
 
 See also:
 
 * [{#T}](../deployment-options/index.md)
 * [{#T}](../configuration-management/index.md)
 * [{#T}](../observability/index.md)
-* [{#T}](../backup-and-recovery.md)
+* [{#T}](../backup-and-recovery/index.md)

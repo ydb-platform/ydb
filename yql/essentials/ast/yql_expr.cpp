@@ -1636,7 +1636,7 @@ bool CompileLibrary(const TAstNode& root, TContext& ctx) {
 
 TExprNode::TListType Compile(const TAstNode& node, TContext& ctx) {
     if (node.IsAtom()) {
-        const auto foundNode = ctx.FindBinding(node.GetContent());
+        auto foundNode = ctx.FindBinding(node.GetContent());
         if (foundNode.empty()) {
             ctx.AddError(node, TStringBuilder() << "Name not found: " << node.GetContent());
             return {};

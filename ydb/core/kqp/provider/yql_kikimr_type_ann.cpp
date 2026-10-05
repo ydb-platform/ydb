@@ -4,6 +4,7 @@
 #include "yql_kikimr_type_ann_pg.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/docapi/traits.h>
@@ -54,6 +55,30 @@ static const TSet<TString> REPLICATION_AND_TRANSFER_SECRETS_SETTINGS = [] {
 // Its value must never be supplied by the user, so DML may not name it explicitly.
 bool IsSystemGeneratedColumn(const std::string_view name) {
     return name == NKikimr::NTableIndex::NFulltext::RowIdColumn;
+}
+
+bool CheckEqHeightHistogramColumnTypes(
+    const TVector<TString>& columnNames,
+    const TMap<TString, TKikimrColumnMetadata>& columns,
+    TPositionHandle pos,
+    TExprContext& ctx)
+{
+    for (const auto& name : columnNames) {
+        auto it = columns.find(name);
+        if (it == columns.end()) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "Statistics column: " << name << " was not found in the table"));
+            return false;
+        }
+        const auto& col = it->second;
+        if (!NKikimr::NScheme::NTypeIds::IsPresortEncodable(col.TypeInfo.GetTypeId())) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "EQ_HEIGHT_HISTOGRAM is not supported for column '" << name
+                << "' of type " << col.Type));
+            return false;
+        }
+    }
+    return true;
 }
 
 void MaybeAutoBindRowIdSequence(NYql::TKikimrTableMetadata& meta) {
@@ -220,7 +245,7 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription
             continue;
         }
 
-        const TString generatedQuery = AssembleGeneratedQuery(col.DefaultExpression->Context, col.DefaultExpression->ExprText);
+        const TString generatedQuery = AssembleGeneratedQuery(col.DefaultExpression->ExprText);
         NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
             sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
         settingsBuilder.SetFromConfig(sessionCtx.Config());
@@ -683,6 +708,11 @@ namespace {
             return IGraphTransformer::TStatus::Ok;
         }
 
+        if (!sessionCtx.Config().GetEnableIndexStreamWrite()) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), "Generated columns require EnableIndexStreamWrite"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         THashSet<TString> keyColumns(meta.KeyColumnNames.begin(), meta.KeyColumnNames.end());
 
         // Row struct type used to type-check every generated expression
@@ -732,7 +762,7 @@ namespace {
             }
 
             // Recompile the stored SQL text into (lambda '(row) <expr>)
-            const TString generatedQuery = AssembleGeneratedQuery(columnMeta.DefaultExpression->Context, columnMeta.DefaultExpression->ExprText);
+            const TString generatedQuery = AssembleGeneratedQuery(columnMeta.DefaultExpression->ExprText);
             NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
                 sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
             settingsBuilder.SetFromConfig(sessionCtx.Config());
@@ -889,7 +919,6 @@ namespace {
             YQL_ENSURE(generatedValue.ChildrenSize() >= 3);
 
             columnMeta.DefaultExpression = TDefaultExpressionColumnInfo{};
-            columnMeta.DefaultExpression->Context = TString(generatedValue.Child(0)->Content());
             columnMeta.DefaultExpression->ExprText = TString(generatedValue.Child(1)->Content());
             columnMeta.DefaultExpression->Stored = generatedValue.Child(2)->Content() == "stored";
             columnMeta.SetDefaultFromExpression();
@@ -1389,6 +1418,12 @@ private:
 
         if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
             return TStatus::Error;
+        }
+
+        if (auto status = CompileGeneratedLambdas(*table, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
+            status != TStatus::Ok)
+        {
+            return status;
         }
 
         auto rowType = table->SchemeNode;
@@ -1892,12 +1927,17 @@ private:
             }
             for (const auto& type : statistics.Types()) {
                 const auto typeName = to_upper(TString(type.Value()));
-                if (typeName != "COUNT_MIN_SKETCH") {
+                if (typeName != "COUNT_MIN_SKETCH" && typeName != "EQ_HEIGHT_HISTOGRAM") {
                     ctx.AddError(TIssue(ctx.GetPosition(type.Pos()), TStringBuilder()
                         << "Unknown statistic type: " << TString(type.Value())));
                     return TStatus::Error;
                 }
                 statisticsDesc.Types.push_back(typeName);
+            }
+            if (IsIn(statisticsDesc.Types, "EQ_HEIGHT_HISTOGRAM")
+                    && !CheckEqHeightHistogramColumnTypes(
+                        statisticsDesc.Columns, meta->Columns, statistics.Pos(), ctx)) {
+                return TStatus::Error;
             }
 
             meta->MultiColumnStatistics.push_back(statisticsDesc);
@@ -2167,12 +2207,37 @@ private:
                 meta->TableSettings.ExternalDataChannelsCount = FromString<ui32>(
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 );
+            } else if (name == "setMetricsLevel") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics is off"));
+                    return TStatus::Error;
+                }
+                auto raw = TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                Ydb::Table::MetricsSettings::MetricsLevel level;
+                TString error;
+                if (!ParseTablesMetricsLevel(raw, level, error)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), error));
+                    return TStatus::Error;
+                }
+                meta->TableSettings.MetricsLevel = level;
+            } else if (name == "resetMetricsLevel") {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    "Can't reset METRICS_LEVEL"));
+                return TStatus::Error;
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     TStringBuilder() << "Unknown table profile setting: " << name));
                 return TStatus::Error;
             }
         }
+
+        if (meta->StoreType == EStoreType::Column && meta->TableSettings.MetricsLevel) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()),
+                "METRICS_LEVEL is not supported for column tables"));
+            return TStatus::Error;
+        }
+
         return TStatus::Ok;
     }
 
@@ -2555,12 +2620,64 @@ private:
                         "Column FAMILY is not supported for column tables"));
                     return TStatus::Error;
                 }
+            } else if (name == "addStatistics") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                        "Multi-column statistics support is disabled"));
+                    return TStatus::Error;
+                }
+                auto listNode = action.Value().Cast<TExprList>();
+                TVector<TString> columnNames;
+                TVector<TString> typeNames;
+                TPositionHandle columnsPos = action.Pos();
+                for (size_t i = 0; i < listNode.Size(); ++i) {
+                    auto item = listNode.Item(i).Cast<TExprList>();
+                    auto itemName = TString(item.Item(0).Cast<TCoAtom>().Value());
+                    if (itemName == "statisticsColumns") {
+                        auto columnList = item.Item(1).Cast<TCoAtomList>();
+                        columnsPos = columnList.Pos();
+                        for (auto column : columnList) {
+                            TString columnName(column.Value());
+                            if (!table->Metadata->Columns.contains(columnName)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(column.Pos()), TStringBuilder()
+                                    << "Statistics column: " << columnName << " was not found in the table"));
+                                return TStatus::Error;
+                            }
+                            columnNames.push_back(std::move(columnName));
+                        }
+                    } else if (itemName == "statisticsTypes") {
+                        auto typeList = item.Item(1).Cast<TCoAtomList>();
+                        for (auto type : typeList) {
+                            const auto typeName = to_upper(TString(type.Value()));
+                            if (typeName != "COUNT_MIN_SKETCH" && typeName != "EQ_HEIGHT_HISTOGRAM") {
+                                ctx.AddError(TIssue(ctx.GetPosition(type.Pos()), TStringBuilder()
+                                    << "Unknown statistic type: " << TString(type.Value())));
+                                return TStatus::Error;
+                            }
+                            typeNames.push_back(typeName);
+                        }
+                    }
+                }
+                if (IsIn(typeNames, "EQ_HEIGHT_HISTOGRAM")
+                        && !CheckEqHeightHistogramColumnTypes(
+                            columnNames, table->Metadata->Columns, columnsPos, ctx)) {
+                    return TStatus::Error;
+                }
+            } else if (name == "setTableSettings" && table->Metadata->IsOlap()) {
+                auto listNode = action.Value().Cast<TCoNameValueTupleList>();
+                for (const auto& setting : listNode) {
+                    auto settingName = setting.Name().Value();
+                    if (settingName == "setMetricsLevel" || settingName == "resetMetricsLevel") {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                            "METRICS_LEVEL is not supported for column tables"));
+                        return TStatus::Error;
+                    }
+                }
             } else if (name != "setTableSettings"
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
                     && name != "renameIndexTo"
                     && name != "alterIndex"
-                    && name != "addStatistics"
                     && name != "dropStatistics"
                     && name != "rebuildIndex"
                     && name != "compact")
@@ -2581,36 +2698,43 @@ private:
         for (const auto& setting : settings) {
             auto name = setting.Name().Value();
             if (name == "setMeteringMode") {
-                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
-                    return false;
-                }
-                auto val = to_lower(TString(setting.Value().template Cast<TCoAtom>().Value()));
+                const auto val = to_lower(TString(
+                    setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()));
                 Ydb::Topic::MeteringMode meteringMode;
-                auto result = GetTopicMeteringModeFromString(val, meteringMode);
-                if (!result) {
+                if (!GetTopicMeteringModeFromString(val, meteringMode)) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
                                         TStringBuilder() << "unknown metering_mode: " << val));
-                }
-
-            } else if (name == "setMinPartitions") {
-                ui32 value = FromString<ui32>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
-                );
-                minParts = value;
-                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
-            } else if (name == "setMaxPartitions") {
-                ui32 value = FromString<ui32>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
-                );
-                maxPartitions = value;
-                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
-            } else if (name == "setContentBasedDeduplication") {
-                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
                     return false;
                 }
+            } else if (name == "setMinPartitions" || name == "setMaxPartitions") {
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value();
+                ui32 value = 0;
+                if (!TryFromString<ui32>(literal, value)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                        TStringBuilder() << (name == "setMinPartitions" ? "min_active_partitions" : "max_active_partitions")
+                            << " value is out of Uint32 range: " << literal));
+                    return false;
+                }
+                if (name == "setMinPartitions") {
+                    minParts = value;
+                } else {
+                    maxPartitions = value;
+                }
+                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
+            } else if (name == "resetMetricsLevel"
+                    || name == "resetRetentionPeriod"
+                    || name == "resetRetentionStorage"
+                    || name == "resetPartitionWriteSpeed"
+                    || name == "resetPartitionWriteBurstSpeed"
+                    || name == "resetSupportedCodecs"
+                    || name == "resetContentBasedDeduplication"
+                    || name == "resetAutoPartitioningStabilizationWindow"
+                    || name == "resetAutoPartitioningUpUtilizationPercent"
+                    || name == "resetAutoPartitioningDownUtilizationPercent") {
+                // Applied in execution: native Topic API reset or SET of the default value.
             } else if (name.StartsWith("reset")) {
                 ctx.AddError(TIssue(
-                        errorPos,
+                        ctx.GetPosition(setting.Name().Pos()),
                         TStringBuilder() << "RESET is currently not supported for topic options")
                 );
                 return false;
@@ -2656,7 +2780,7 @@ private:
     }
 
     virtual TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
-        if (!CheckTopicSettings(node.Settings(), ctx)) {
+        if (!CheckTopicSettings(node.TopicSettings(), ctx) || !CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;
         }
 
@@ -2732,7 +2856,7 @@ private:
     }
 
     virtual TStatus HandleAlterTopic(TKiAlterTopic node, TExprContext& ctx) override {
-        if (!CheckTopicSettings(node.Settings(), ctx)) {
+        if (!CheckTopicSettings(node.TopicSettings(), ctx) || !CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;
         }
        THashSet<TString> allConsumers;
@@ -2975,7 +3099,7 @@ private:
         }
 
         static const THashSet<TString> supportedSettings = {
-            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR"
+            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR", "TABLES_METRICS_LEVEL"
         };
 
         for (const auto& setting : node.Settings()) {
@@ -3008,6 +3132,24 @@ private:
             }
             if (name == "MAX_CHILDREN_IN_DIR") {
                 if (!ValidateInteger(ctx, value, name)) {
+                    return TStatus::Error;
+                }
+            }
+            if (name == "TABLES_METRICS_LEVEL") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "TABLES_METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics is off"));
+                    return TStatus::Error;
+                }
+                if (!value.Maybe<TCoDataCtor>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Value of the TABLES_METRICS_LEVEL must be a string or an integer."));
+                    return TStatus::Error;
+                }
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel metricsLevel;
+                TString error;
+                if (!ParseDatabaseTablesMetricsLevel(value.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value(), metricsLevel, error)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), error));
                     return TStatus::Error;
                 }
             }
@@ -3154,6 +3296,22 @@ private:
             return status;
         }
 
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleKillSession(TKiKillSession node, TExprContext& ctx) override {
+        if (!EnsureWorldType(node.World().Ref(), ctx)
+            || !EnsureSpecificDataSink(node.DataSink().Ref(), KikimrProviderName, ctx)
+            || !EnsureSpecificDataType(node.SessionId().Ref(), EDataSlot::Utf8, ctx))
+        {
+            return TStatus::Error;
+        }
+        if (!node.SessionId().Maybe<TCoUtf8>() && !node.SessionId().Maybe<TCoParameter>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.SessionId().Pos()),
+                "KILL SESSION expects a session identifier or an Utf8 parameter"));
+            return TStatus::Error;
+        }
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
@@ -3366,6 +3524,19 @@ private:
     }
 
     virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) override {
+        if (auto sampleRate = node.SampleRate(); sampleRate) {
+            if (!sampleRate.Maybe<TCoDouble>()) {
+                ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                    "ANALYZE SAMPLE rate must evaluate to Double"));
+                return TStatus::Error;
+            }
+            if (!SessionCtx->Config().FeatureFlags.GetEnableAnalyzeSampling()) {
+                ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                    "ANALYZE sampling is disabled"));
+                return TStatus::Error;
+            }
+        }
+
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);
         if (!table) {
             return TStatus::Error;

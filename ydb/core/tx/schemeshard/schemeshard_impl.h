@@ -13,6 +13,7 @@
 #include "schemeshard_forced_compaction.h"
 #include "schemeshard_import.h"
 #include "schemeshard_info_types.h"
+#include "schemeshard_db_ref_map.h"
 #include "schemeshard_path.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_private.h"
@@ -30,6 +31,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/blob_depot/events.h>
+#include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -263,6 +265,10 @@ public:
 
     // In RO mode we don't accept any modifications from users but process all in-flight operations in normal way
     bool IsReadOnlyMode = false;
+    // Set at the start of destruction so TPathDbRef::Release() during member
+    // teardown does not touch already-destroyed members (PathsById,
+    // CleanDroppedPathsCandidates, ...).
+    bool IsBeingDestroyed = false;
 
     bool IsDomainSchemeShard = false;
 
@@ -284,7 +290,12 @@ public:
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
 
-    THashMap<TPathId, TTableInfo::TPtr> Tables;
+    // Every TDbRefMap below registers here from its constructor (it takes
+    // `this` and this list), so Clear() disarms+drops them all by iteration and
+    // a map cannot be declared without being registered.
+    TVector<IDbRefMap*> DbRefMaps;
+
+    TDbRefMap<TTableInfo::TPtr> Tables{"Tables", this, DbRefMaps};
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
 
     // Batch processing for conditional erase responses
@@ -294,11 +305,11 @@ public:
     TDuration CondEraseResponseBatchMaxTime = TDuration::MilliSeconds(100);
     ui32 MaxTTLShardsInFlight = 0;
 
-    THashMap<TPathId, TTableIndexInfo::TPtr> Indexes;
-    THashMap<TPathId, TCdcStreamInfo::TPtr> CdcStreams;
-    THashMap<TPathId, TSequenceInfo::TPtr> Sequences;
-    THashMap<TPathId, TReplicationInfo::TPtr> Replications;
-    THashMap<TPathId, TBlobDepotInfo::TPtr> BlobDepots;
+    TDbRefMap<TTableIndexInfo::TPtr> Indexes{"Indexes", this, DbRefMaps};
+    TDbRefMap<TCdcStreamInfo::TPtr> CdcStreams{"CdcStreams", this, DbRefMaps};
+    TDbRefMap<TSequenceInfo::TPtr> Sequences{"Sequences", this, DbRefMaps};
+    TDbRefMap<TReplicationInfo::TPtr> Replications{"Replications", this, DbRefMaps};
+    TDbRefMap<TBlobDepotInfo::TPtr> BlobDepots{"BlobDepots", this, DbRefMaps};
 
     THashMap<TPathId, TTxId> TablesWithSnapshots;
     THashMap<TTxId, TSet<TPathId>> SnapshotTables;
@@ -306,24 +317,24 @@ public:
 
     THashMap<TPathId, TTxId> LockedPaths;
 
-    THashMap<TPathId, TTopicInfo::TPtr> Topics;
-    THashMap<TPathId, TRtmrVolumeInfo::TPtr> RtmrVolumes;
-    THashMap<TPathId, TSolomonVolumeInfo::TPtr> SolomonVolumes;
-    THashMap<TPathId, TSubDomainInfo::TPtr> SubDomains;
-    THashMap<TPathId, TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes;
-    THashMap<TPathId, TFileStoreInfo::TPtr> FileStoreInfos;
-    THashMap<TPathId, TKesusInfo::TPtr> KesusInfos;
-    THashMap<TPathId, TOlapStoreInfo::TPtr> OlapStores;
-    THashMap<TPathId, TExternalTableInfo::TPtr> ExternalTables;
-    THashMap<TPathId, TExternalDataSourceInfo::TPtr> ExternalDataSources;
-    THashMap<TPathId, TViewInfo::TPtr> Views;
-    THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
-    THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
-    THashMap<TPathId, TSysViewInfo::TPtr> SysViews;
-    THashMap<TPathId, TSecretInfo::TPtr> Secrets;
-    THashMap<TPathId, TStreamingQueryInfo::TPtr> StreamingQueries;
+    TDbRefMap<TTopicInfo::TPtr> Topics{"Topics", this, DbRefMaps};
+    TDbRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes{"RtmrVolumes", this, DbRefMaps};
+    TDbRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes{"SolomonVolumes", this, DbRefMaps};
+    TDbRefMap<TSubDomainInfo::TPtr> SubDomains{"SubDomains", this, DbRefMaps};
+    TDbRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes{"BlockStoreVolumes", this, DbRefMaps};
+    TDbRefMap<TFileStoreInfo::TPtr> FileStoreInfos{"FileStoreInfos", this, DbRefMaps};
+    TDbRefMap<TKesusInfo::TPtr> KesusInfos{"KesusInfos", this, DbRefMaps};
+    TDbRefMap<TOlapStoreInfo::TPtr> OlapStores{"OlapStores", this, DbRefMaps};
+    TDbRefMap<TExternalTableInfo::TPtr> ExternalTables{"ExternalTables", this, DbRefMaps};
+    TDbRefMap<TExternalDataSourceInfo::TPtr> ExternalDataSources{"ExternalDataSources", this, DbRefMaps};
+    TDbRefMap<TViewInfo::TPtr> Views{"Views", this, DbRefMaps};
+    TDbRefMap<TResourcePoolInfo::TPtr> ResourcePools{"ResourcePools", this, DbRefMaps};
+    TDbRefMap<TBackupCollectionInfo::TPtr> BackupCollections{"BackupCollections", this, DbRefMaps};
+    TDbRefMap<TSysViewInfo::TPtr> SysViews{"SysViews", this, DbRefMaps};
+    TDbRefMap<TSecretInfo::TPtr> Secrets{"Secrets", this, DbRefMaps};
+    TDbRefMap<TStreamingQueryInfo::TPtr> StreamingQueries{"StreamingQueries", this, DbRefMaps};
     THashSet<TPathId> TableInBackupCollections;
-    THashMap<TPathId, TTestShardSetInfo::TPtr> TestShardSets;
+    TDbRefMap<TTestShardSetInfo::TPtr> TestShardSets{"TestShardSets", this, DbRefMaps};
 
     TTempDirsState TempDirsState;
 
@@ -336,6 +347,7 @@ public:
     THashMap<TTxId, TOperation::TPtr> Operations;
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
+    THashMap<TPathId, TPathDbRef> OwnDbRefs; // path's own type info record ref
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
 
     // Simplified state tracking for sequential incremental restore
@@ -412,6 +424,7 @@ public:
     bool EnableMoveIndex = true;
     bool EnableAlterDatabaseCreateHiveFirst = false;
     bool EnableStatistics = false;
+    bool EnableWasmCompileController = false;
     bool EnableServerlessExclusiveDynamicNodes = false;
     bool EnableAddColumsWithDefaults = false;
     bool EnableReplaceIfExistsForExternalEntities = false;
@@ -455,6 +468,8 @@ public:
     bool TablePersistStatsPending = false;
     TStatsQueue<TEvDataShard::TEvPeriodicTableStats> TableStatsQueue;
 
+    TActorId StatsParserActorId;
+
     bool TopicStatsBatchScheduled = false;
     bool TopicPersistStatsPending = false;
     TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats> TopicStatsQueue;
@@ -490,16 +505,16 @@ public:
     };
     TTablePartitionsFormatSweepState TablePartitionsFormatSweep;
 
-    THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
+    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TProposeContext& context);
     bool ProcessOperationParts(
         const TVector<ISubOperation::TPtr>& parts,
         const TTxId& txId,
         const NKikimrScheme::TEvModifySchemeTransaction& record,
         bool prevProposeUndoSafe,
         TOperation::TPtr& operation,
-        THolder<TProposeResponse>& response,
-        TOperationContext& context);
-    void AbortOperationPropose(const TTxId txId, TOperationContext& context);
+        THolder<TEvSchemeShard::TEvModifySchemeTransactionResult>& response,
+        TProposeContext& context);
+    void AbortOperationPropose(const TTxId txId, TProposeContext& context);
 
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const;
@@ -730,7 +745,7 @@ public:
     bool CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr, std::optional<TPathElement::EPathType> pathType = {});
     bool CheckLocks(const TPathId pathId, const TTxId lockTxId, TString& errStr) const;
     bool CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr) const;
-    bool CheckInFlightLimit(TTxState::ETxType txType, TString& errStr) const;
+    bool CheckInFlightLimit(TTxState::ETxType txType, TString& errStr, ui64 count = 1) const;
     bool CheckInFlightLimit(NKikimrSchemeOp::EOperationType opType, TString& errStr) const;
     bool CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKikimrScheme::EStatus& status, TString& errStr) const;
 
@@ -801,8 +816,13 @@ public:
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, TString& value, TString defValue = TString());
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, ui64& value, ui64 defVal = 0);
 
+    void AcquireOwnDbRef(const TPathId& pathId, TRefLabel reason);
+    void ReleaseOwnDbRef(const TPathId& pathId);
     void IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
     void DecrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
+
+    // Debug-only: assert every self-ref map is consistent with PathsById.
+    void DebugCheckDbRefIntegrity() const;
 
     // incompatible changes
     void BumpIncompatibleChanges(NIceDb::TNiceDb& db, ui64 incompatibleChange);
@@ -1032,6 +1052,7 @@ public:
     // StreamingQuery
     void PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
+    void ResumeStreamingQueriesOperations(const TVector<TPathId>& ids);
 
     // TestShardSet
     void PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
@@ -1090,6 +1111,7 @@ public:
         TVector<TPathId> RestoreTablesToUnmark;
         TVector<ui64> IncrementalBackupIds;
         TVector<ui64> FullBackupIds;
+        TVector<TPathId> StreamingQueriesOperations;
     };
 
     void SubscribeToTempTableOwners();
@@ -1556,6 +1578,8 @@ public:
     void ScheduleTableStatsBatch(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPersistTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvPeriodicTableStatsParsed::TPtr& ev, const TActorContext& ctx);
+    void HandlePeriodicTableStats(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx);
 
     void ExecuteTopicStatsBatch(const TActorContext& ctx);
@@ -1881,6 +1905,7 @@ public:
     bool PersistBuildIndexSampleForgetAll(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexSampleToClusters(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
     void PersistBuildIndexClustersToSample(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexClusterSize(NIceDb::TNiceDb& db, const TIndexBuildInfo& info, ui32 i);
     void PersistBuildIndexClustersUpdate(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexClustersForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     bool PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
@@ -1914,6 +1939,7 @@ public:
         struct TTxReplyValidateUniqueIndex;
         struct TTxReplyFulltextIndex;
         struct TTxReplyFulltextDict;
+        struct TTxReplyStatistics;
 
         struct TTxPipeReset;
         struct TTxBilling;
@@ -1946,6 +1972,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& response);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildFulltextDictResponse::TPtr& response);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr& response);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
     NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
 
@@ -1966,6 +1993,7 @@ public:
     void Handle(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildFulltextDictResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);
 
@@ -2187,7 +2215,17 @@ public:
     void InitRootShred();
     void RunRootShred();
 
+    // storage space state of the database's storage pools, reported by BS_CONTROLLER through the local NodeWarden
+    std::map<TPathId, std::set<TPathId>> DatabaseSpaceScopes; // database key -> hosted domains with this key
+    bool DatabaseSpaceSubscriptionsActive = false; // subscriptions are maintained once the schemeshard is active
+    struct TTxUpdateStorageSpaceState;
+    void UnsubscribeFromDatabaseSpace();
+    void Handle(TEvBlobStorage::TEvControllerDatabaseSpaceState::TPtr& ev, const TActorContext& ctx);
+
 public:
+    // to be called when the set of hosted domains changes (subscribes to space state of the databases)
+    void UpdateDatabaseSpaceSubscriptions();
+
     void ChangeStreamShardsCount(i64 delta) override;
     void ChangeStreamShardsQuota(i64 delta) override;
     void ChangeStreamReservedStorageCount(i64 delta) override;
@@ -2247,6 +2285,7 @@ public:
     }
 
     TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info);
+    ~TSchemeShard();
 
     //TTabletId TabletID() const { return TTabletId(ITablet::TabletID()); }
     TTabletId SelfTabletId() const { return TTabletId(ITablet::TabletID()); }

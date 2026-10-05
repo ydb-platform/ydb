@@ -2,10 +2,12 @@
 
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/core/base/hive.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
@@ -19,6 +21,33 @@ void Out<Ydb::Table::AnalyzeState_State>(IOutputStream& o, Ydb::Table::AnalyzeSt
 
 namespace NKikimr {
 namespace NStat {
+
+namespace {
+
+void SetMatchingWholeTableScanMaxBytes(NKikimrConfig::TStatisticsConfig* cfg, bool columnShard, ui64 value) {
+    if (columnShard) {
+        cfg->SetAnalyzeColumnTableWholeTableScanMaxBytes(value);
+    } else {
+        cfg->SetAnalyzeRowTableWholeTableScanMaxBytes(value);
+    }
+}
+
+void SetOtherWholeTableScanMaxBytes(NKikimrConfig::TStatisticsConfig* cfg, bool columnShard, ui64 value) {
+    if (columnShard) {
+        cfg->SetAnalyzeRowTableWholeTableScanMaxBytes(value);
+    } else {
+        cfg->SetAnalyzeColumnTableWholeTableScanMaxBytes(value);
+    }
+}
+
+TTableInfo PrepareFourShardTable(TTestEnv& env, bool columnShard) {
+    if (columnShard) {
+        return PrepareColumnTable(env, "Database", "Table", /*shardCount=*/4);
+    }
+    return PrepareUniformTableWithData(env, "Database", "Table");
+}
+
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(AnalyzeOpList) {
 
@@ -228,24 +257,15 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
     }
 
     Y_UNIT_TEST_TWIN(ProgressIntermediate, ColumnShard) {
-        // The AnalyzeActor reports progress to the Statistics Aggregator as each
-        // shard's scan completes. Verify that intermediate progress is reflected
-        // by GetAnalyzeOperation while the analyze is still in flight.
-        TTestEnv env(1, 1);
+        // Threshold 0: per-shard (column) or per-range (row) scans so progress is visible.
+        TTestEnv env(1, 1, /*useRealThreads=*/false,
+            [](Tests::TServerSettings& settings) {
+                SetMatchingWholeTableScanMaxBytes(
+                    settings.AppConfig->MutableStatisticsConfig(), ColumnShard, 0);
+            });
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
-
-        // ColumnTable dispatches one scan actor per shard, so shardsTotal equals
-        // the shard count and intermediate progress is observable. DataShard
-        // dispatches a single scan actor for the whole table (shardsTotal = 1),
-        // so only 0% is observable before completion.
-        TTableInfo tableInfo;
-        if constexpr (ColumnShard) {
-            constexpr int kShardCount = 4;
-            tableInfo = PrepareColumnTable(env, "Database", "Table", kShardCount);
-        } else {
-            tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
-        }
+        const auto tableInfo = PrepareFourShardTable(env, ColumnShard);
 
         const ui64 saTabletId = tableInfo.SaTabletId;
         const TPathId pathId = tableInfo.PathId;
@@ -257,9 +277,9 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
 
         // Block progress events at or above the cap (shardsTotal - 1) so the SA
         // stores the last unblocked ShardsDone value while the analyze is mid-flight.
-        const ui32 blockThreshold = ColumnShard ? 3 : 1;
+        constexpr ui32 blockThreshold = 3;
         TBlockEvents<TEvStatistics::TEvAnalyzeActorProgress> blockHigh(runtime,
-            [blockThreshold](auto& ev) {
+            [](auto& ev) {
                 return ev->Get()->ShardsDone >= blockThreshold;
             });
 
@@ -281,17 +301,89 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         UNIT_ASSERT_VALUES_EQUAL_C(op.GetState(),
             Ydb::Table::AnalyzeState::STATE_IN_PROGRESS,
             "Expected STATE_IN_PROGRESS while analyze is mid-flight");
-        if constexpr (ColumnShard) {
-            // 4 shards, 2 done → 50%.
-            UNIT_ASSERT_DOUBLES_EQUAL(op.GetProgress(), 50.0f, 0.01f);
-        } else {
-            // 1 shard, 0 done → 0%.
-            UNIT_ASSERT_DOUBLES_EQUAL(op.GetProgress(), 0.0f, 0.01f);
-        }
+        // 4 shards/subranges, 2 done → 50%.
+        UNIT_ASSERT_DOUBLES_EQUAL(op.GetProgress(), 50.0f, 0.01f);
         // The active table appears in InProgressPaths while traversal is running.
         UNIT_ASSERT_VALUES_EQUAL(op.InProgressPathsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(op.GetInProgressPaths(0), tableInfo.Path);
         UNIT_ASSERT_VALUES_EQUAL(op.DonePathsSize(), 0);
+    }
+
+    Y_UNIT_TEST_TWIN(SmallTableWholeTableScan, ColumnShard) {
+        // Default 10 GiB threshold: one whole-table scan, no Hive. Other type's knob is 0.
+        TTestEnv env(1, 1, /*useRealThreads=*/false,
+            [](Tests::TServerSettings& settings) {
+                SetOtherWholeTableScanMaxBytes(
+                    settings.AppConfig->MutableStatisticsConfig(), ColumnShard, 0);
+            });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareFourShardTable(env, ColumnShard);
+        WaitForSchemeShardStatsUpdate(runtime, tableInfo.PathId.OwnerId, /*requireFull=*/true);
+
+        ui32 hiveDistributionRequests = 0;
+        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>(
+            [&](auto&) { ++hiveDistributionRequests; });
+
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, "opWhole", "/Root/Database");
+
+        UNIT_ASSERT_VALUES_EQUAL(hiveDistributionRequests, 0);
+        ValidateStatistics(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST_TWIN(PerShardOrRangeScanWhenSizeUnknown, ColumnShard) {
+        // Missing BytesSize must not be treated as 0 (small); use partitioned scans.
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+
+        bool statsSeen = false;
+        auto stripBytesSize = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>(
+            [&](auto& ev) {
+                NKikimrStat::TSchemeShardStats statRecord;
+                if (!statRecord.ParseFromString(ev->Get()->Record.GetStats())) {
+                    return;
+                }
+                for (auto& entry : *statRecord.MutableEntries()) {
+                    entry.ClearBytesSize();
+                }
+                TString stats;
+                UNIT_ASSERT(statRecord.SerializeToString(&stats));
+                ev->Get()->Record.SetStats(stats);
+                statsSeen = true;
+            });
+
+        const auto tableInfo = PrepareFourShardTable(env, ColumnShard);
+        runtime.WaitFor("SchemeShard stats without BytesSize", [&]{ return statsSeen; });
+
+        ui32 hiveDistributionRequests = 0;
+        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>(
+            [&](auto&) { ++hiveDistributionRequests; });
+
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, "opUnknownSize", "/Root/Database");
+
+        UNIT_ASSERT_GT(hiveDistributionRequests, 0);
+        ValidateStatistics(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST_TWIN(PerShardOrRangeScanWhenThresholdDisabled, ColumnShard) {
+        TTestEnv env(1, 1, /*useRealThreads=*/false,
+            [](Tests::TServerSettings& settings) {
+                SetMatchingWholeTableScanMaxBytes(
+                    settings.AppConfig->MutableStatisticsConfig(), ColumnShard, 0);
+            });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareFourShardTable(env, ColumnShard);
+
+        ui32 hiveDistributionRequests = 0;
+        auto observer = runtime.AddObserver<TEvHive::TEvRequestTabletDistribution>(
+            [&](auto&) { ++hiveDistributionRequests; });
+
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}}, "opPerShard", "/Root/Database");
+
+        UNIT_ASSERT_GT(hiveDistributionRequests, 0);
+        ValidateStatistics(runtime, tableInfo.PathId);
     }
 
     Y_UNIT_TEST_TWIN(ForgetTerminal, ColumnShard) {

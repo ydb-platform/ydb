@@ -5,10 +5,14 @@ from urllib.parse import urlencode
 import pytest
 import requests
 
+from ydb.tests.functional.security.lib.cluster_config import create_ydb_configurator
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.functional.security.lib.security_test_helpers import (
     DATABASE,
     grant_describe_schema_provided,
     grants_provided,
+    mon_base_url,
+    wait_for_viewer_ready,
     with_topic,
 )
 
@@ -31,7 +35,7 @@ def _assert_status(base_url, path, token, status, method=EndpointMethod.GET):
         response = requests.get(base_url + path, headers=headers, verify=False, timeout=5)
     else:
         response = requests.post(base_url + path, headers=headers, verify=False, timeout=5)
-    assert response.status_code == status
+    assert response.status_code == status, response.text
 
 
 def _assert_viewer_query_post(base_url, token, status=200, database=DATABASE):
@@ -522,3 +526,46 @@ def test_viewer_tabletinfo_path_with_node_id_for_strict_database_token(
             database=tenant_database,
         )
         _assert_status(base, allowed_path, 'database@builtin', 200)
+
+
+@pytest.fixture(scope='module', params=[False, True], ids=['observe', 'enforce'])
+def database_access_cluster(request, certificates):
+    configurator = create_ydb_configurator(certificates, enforce_user_token_requirement=True)
+    flags = configurator.yaml_config.setdefault('feature_flags', {})
+    flags['enable_database_access_check_for_http_monitoring'] = request.param
+    # Test HTTP enforcement independently of the older gRPC connect check.
+    flags['check_database_access_permission'] = False
+    security = configurator.yaml_config['domains_config']['security_config']
+    security['database_allowed_sids'] = ['database_with_connect@builtin', 'database_without_connect@builtin']
+    security['register_dynamic_node_allowed_sids'] = ['root@builtin']
+    security['default_access'] = [
+        '+F:root@builtin',
+        '+(DS|ConnDB):database_with_connect@builtin',
+        '+(DS):database_without_connect@builtin',
+        '+(DS):viewer@builtin',
+        '+(DS):monitoring@builtin',
+    ]
+    cluster = KiKiMR(configurator)
+    try:
+        cluster.start()
+        base_url = mon_base_url(cluster)
+        wait_for_viewer_ready(base_url)
+        yield base_url, request.param
+    finally:
+        cluster.stop()
+
+
+def test_http_database_access_enforcement(database_access_cluster):
+    base_url, enforce = database_access_cluster
+    for endpoint in ['/viewer/feature_flags', '/viewer/json/feature_flags']:
+        path = _build_endpoint_path(endpoint, with_database_cgi=True)
+        _assert_status(base_url, path, 'database_with_connect@builtin', 200)
+
+        # Enforce rejects in auth (403); observe reaches viewer parameter validation (400).
+        _assert_status(base_url, path, 'database_without_connect@builtin', 403 if enforce else 200)
+        _assert_status(base_url, endpoint, 'database_with_connect@builtin', 403 if enforce else 400)
+
+        # Higher access levels retain their HTTP access without a connect grant.
+        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+            _assert_status(base_url, path, token, 200)
+            _assert_status(base_url, endpoint, token, 200)

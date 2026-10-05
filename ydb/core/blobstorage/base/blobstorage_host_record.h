@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <util/generic/hash_multi_map.h>

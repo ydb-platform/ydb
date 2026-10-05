@@ -276,7 +276,7 @@ void FillInputValue(
     TString scratch;
     auto reflection = source->GetReflection();
     for (ui32 i = 0; i < mappings.size(); ++i) {
-        auto mapping = mappings[i];
+        const auto& mapping = mappings[i];
         if (!mapping.Field) {
             YQL_ENSURE(timestampColumn && mapping.Name == *timestampColumn);
             destination[i] = TUnboxedValuePod(timeProvider->Now().MicroSeconds());
@@ -793,7 +793,7 @@ public:
             // its own destruction. So we're using our own reference to the scoped alloc. That reference is alive
             // because scoped alloc destroyed after computation graph.
             auto unguard = Unguard(ScopedAlloc_);
-            Underlying_.Destroy();
+            Underlying_.reset();
         }
     }
 

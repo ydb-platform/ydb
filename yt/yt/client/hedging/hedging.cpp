@@ -83,8 +83,8 @@ public:
     RETRYABLE_METHOD(TFuture<TUnversionedLookupRowsResult>, LookupRows, (const TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TLookupRowsOptions&));
     RETRYABLE_METHOD(TFuture<TVersionedLookupRowsResult>, VersionedLookupRows, (const TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
     RETRYABLE_METHOD(TFuture<TSelectRowsResult>, SelectRows, (const std::string&, const TSelectRowsOptions&));
-    RETRYABLE_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueue, (const TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueOptions&));
-    RETRYABLE_METHOD(TFuture<NQueueClient::IQueueRowsetPtr>, PullQueueConsumer, (const TRichYPath&, const TRichYPath&, std::optional<i64>, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueConsumerOptions&));
+    RETRYABLE_METHOD(TFuture<TPullQueueResult>, PullQueue, (const TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueOptions&));
+    RETRYABLE_METHOD(TFuture<TPullQueueResult>, PullQueueConsumer, (const TRichYPath&, const TRichYPath&, std::optional<i64>, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueConsumerOptions&));
     RETRYABLE_METHOD(TFuture<void>, RegisterQueueConsumer, (const TRichYPath&, const TRichYPath&, bool, const TRegisterQueueConsumerOptions&));
     RETRYABLE_METHOD(TFuture<void>, UnregisterQueueConsumer, (const TRichYPath&, const TRichYPath&, const TUnregisterQueueConsumerOptions&));
     RETRYABLE_METHOD(TFuture<std::vector<TListQueueConsumerRegistrationsResult>>, ListQueueConsumerRegistrations, (const std::optional<TRichYPath>&, const std::optional<TRichYPath>&, const TListQueueConsumerRegistrationsOptions&));
@@ -149,6 +149,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, AlterReplicationCard, (NChaosClient::TReplicationCardId, const TAlterReplicationCardOptions&));
     UNSUPPORTED_METHOD(TFuture<IPrerequisitePtr>, StartChaosLease, (const TChaosLeaseStartOptions&));
     UNSUPPORTED_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (NChaosClient::TChaosLeaseId, const TChaosLeaseAttachOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, PingChaosLease, (NChaosClient::TChaosLeaseId, const TChaosLeasePingOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, SetUserBanned, (const std::string&, bool, const TSetUserBannedOptions&));
     UNSUPPORTED_METHOD(TFuture<bool>, GetUserBanned, (const std::string&, const TGetUserBannedOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<std::string>>, ListBannedUsers, (const TListBannedUsersOptions&));
@@ -169,6 +170,8 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, TruncateJournal, (const TYPath&, i64, const TTruncateJournalOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (const std::string&, const TGetFileFromCacheOptions&));
     UNSUPPORTED_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (const TYPath&, const std::string&, const TPutFileToCacheOptions&));
+    UNSUPPORTED_METHOD(TFuture<TFilePartitions>, PartitionFile, (const TYPath&, const std::vector<TFileReadRange>&, const TPartitionFileOptions&));
+    UNSUPPORTED_METHOD(TFuture<IFileReaderPtr>, CreateFilePartitionReader, (const TFilePartitionCookiePtr&, const TReadFilePartitionOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetCurrentUserResult>, GetCurrentUser, (const TGetCurrentUserOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AddMember, (const std::string&, const std::string&, const TAddMemberOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, RemoveMember, (const std::string&, const std::string&, const TRemoveMemberOptions&));

@@ -356,6 +356,23 @@ bool TryPQGetPartInfo(ui64 expectedStartOffset, ui64 expectedEndOffset, TTestCon
     return false;
 }
 
+ui64 GetLastWriteTimestamp(i32 partitionId, TTestContext& tc) {
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, new TEvPersQueue::TEvStatus(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvStatusResponse>(handle);
+    UNIT_ASSERT(result);
+
+    for (const auto& partition : result->Record.GetPartResult()) {
+        if (partition.GetPartition() == partitionId) {
+            return partition.GetLastWriteTimestampMs();
+        }
+    }
+
+    UNIT_FAIL("Partition " << partitionId << " is missing in status response");
+    return 0;
+}
+
 void WaitRetentionCleanup(TTestContext& tc,
                           ui64 expectedStartOffset,
                           ui64 expectedEndOffset,
@@ -4001,7 +4018,58 @@ Y_UNIT_TEST(TestWriteTimeStampEstimate) {
 
 }
 
+Y_UNIT_TEST(TestWriteTimestampAfterRestart) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
 
+    tc.Runtime->SetScheduledLimit(150);
+    tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
+
+    PQTabletPrepare({.partitions = 1, .AddDefaultConsumer = false}, {}, tc);
+
+    const TInstant writeTimestamp = TInstant::MilliSeconds(1'000'000);
+    tc.Runtime->UpdateCurrentTime(writeTimestamp);
+
+    TVector<std::pair<ui64, TString>> data{{1, "abacaba"}};
+    CmdWrite(0, "sourceid0", data, tc);
+
+    UNIT_ASSERT_VALUES_EQUAL(GetLastWriteTimestamp(0, tc), writeTimestamp.MilliSeconds());
+
+    tc.Runtime->UpdateCurrentTime(TInstant::MilliSeconds(5'000'000));
+    PQTabletRestart(tc);
+
+    PQGetPartInfo(0, 1, tc);
+    UNIT_ASSERT_VALUES_EQUAL(GetLastWriteTimestamp(0, tc), writeTimestamp.MilliSeconds());
+}
+
+Y_UNIT_TEST(TestWriteTimestampAfterRestartOfCleanedUpPartition) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+
+    SetEnableTopicRetentionDeleteLastBlob(tc);
+    tc.Runtime->SetScheduledLimit(500);
+    tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
+
+    constexpr ui32 retentionSeconds = 5;
+    PQTabletPrepare({.deleteTime = retentionSeconds, .partitions = 1, .AddDefaultConsumer = false}, {}, tc);
+
+    const TInstant writeTimestamp = TInstant::MilliSeconds(1'000'000);
+    tc.Runtime->UpdateCurrentTime(writeTimestamp);
+
+    TVector<std::pair<ui64, TString>> data{{1, "abacaba"}};
+    CmdWrite(0, "sourceid0", data, tc);
+
+    UNIT_ASSERT_VALUES_EQUAL(GetLastWriteTimestamp(0, tc), writeTimestamp.MilliSeconds());
+
+    WaitRetentionCleanup(tc, 1, 1, retentionSeconds);
+    PQTabletRestart(tc);
+
+    PQGetPartInfo(1, 1, tc);
+    UNIT_ASSERT_VALUES_EQUAL(GetLastWriteTimestamp(0, tc), writeTimestamp.MilliSeconds());
+}
 
 Y_UNIT_TEST(TestWriteTimeLag) {
     TTestContext tc;

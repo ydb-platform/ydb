@@ -1097,8 +1097,7 @@ public:
     {
     }
 
-    ~TComputationValueBaseNotSupportedStub() override {
-    }
+    ~TComputationValueBaseNotSupportedStub() override = default;
 
 private:
     bool HasFastListLength() const override;
@@ -1163,8 +1162,7 @@ public:
     {
     }
 
-    ~TComputationValueBase() override {
-    }
+    ~TComputationValueBase() override = default;
 
     TString DebugString() const {
         return TypeName<TDerived>();

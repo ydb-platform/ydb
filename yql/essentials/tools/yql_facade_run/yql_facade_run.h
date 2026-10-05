@@ -89,6 +89,7 @@ public:
 
     NSQLTranslation::TExtendedSqlFlags SqlFlags;
     ui16 SyntaxVersion = 1;
+    TMaybe<TString> Syntax;
     bool AnsiLexer = false;
     bool TestAntlr4 = false;
     bool AssumeYdbOnClusterWithSlash = false;
@@ -130,6 +131,7 @@ public:
     TString UdfResolverLog;
     bool UdfResolverFilterSyscalls = false;
     bool ScanUdfs = false;
+    TString UdfBridgePath;
     THolder<NYqlMountConfig::TMountConfig> MountConfig;
     THolder<TGatewaysConfig> GatewaysConfig;
     THolder<TStaticGatewaysConfig> StaticGatewaysConfig;

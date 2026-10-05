@@ -325,7 +325,7 @@ have to be in donor state.
 ## Do things with groups
 
 Group is a collection of vdisks that constitute basic storage unit in YDB. Every read/write operation in distributed storage
-is actually a read/write opeartion within a certain group. Group by design provides the following:
+is actually a read/write operation within a certain group. Group by design provides the following:
 
 * redundancy
 * persistence
@@ -402,7 +402,7 @@ user@host:~$ ydb-dstool --dry-run -e ydbd.endpoint group add --pool-name /Root:n
 ```
 
 The above command adds ten groups to the pool ```/Root:nvme``` without actually adding them. It might be useful
-in capacity assesment scenarios.
+in capacity assessment scenarios.
 
 ## Do things with pools
 
@@ -452,7 +452,7 @@ user@host:~$ ydb-dstool -e ydbd.endpoint pool list --show-vdisk-estimated-usage
 
 The above command shows:
 
-* ```GroupsForEstimatedUsage@85``` - how many groups are neccessary to make disk usage at about 85 percent.
+* ```GroupsForEstimatedUsage@85``` - how many groups are necessary to make disk usage at about 85 percent.
 * ```EstimatedUsage``` -  TODO
 
 ## Do things with boxes
@@ -489,7 +489,7 @@ The above command lists all boxes of a cluster along with their space usage in a
 ## Do things with nodes
 
 A node is a basic working unit in a YDB cluster. The basic building blocks like pdisk and vdisk are run on nodes.
-In terms of implementation, a node is a a YDB process running on one of cluster's machines.
+In terms of implementation, a node is a YDB process running on one of cluster's machines.
 
 ### List nodes
 
@@ -540,7 +540,7 @@ acquires one of the following statuses:
 * DEGRADED (loss of one more vdisk within the group will make the group DISINTEGRATED)
 * DISINTEGRATED (group can't process read/write requests)
 
-Self-healing enables automatic eviction of vdisks along with the neccessary data recovery for groups where there is a single
+Self-healing enables automatic eviction of vdisks along with the necessary data recovery for groups where there is a single
 failed vdisk within a group.
 
 To enable self-healing on a cluster, run the following command:
@@ -612,3 +612,50 @@ The above command performs various
 
 operations until user terminates the process (e.g. by entering ```Ctrl + c```). The operations are created so that they don't
 break failure model of any groups.
+
+The workload can also be configured with YAML:
+
+```bash
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster workload run --config-file workload.yaml
+```
+
+For example:
+
+```yaml
+sleep_between_rounds: 2s
+check_fail_model: true
+random_seed: 42
+
+actions:
+  wipe_vdisk:
+    - weight: 1
+  evict_vdisk:
+    - weight: 1
+  restart_node:
+    - weight: 2
+      signal: KILL
+      ask_cms:
+        availability_mode: MODE_KEEP_AVAILABLE
+      filter:
+        only_types:
+          types: [STORAGE_NODE]
+```
+
+Each entry in `actions` is selected by its relative positive `weight`, which defaults to `1`. An action can be listed more
+than once with different weights, filters, or CMS settings. Supported actions are `wipe_vdisk`, `evict_vdisk`,
+`set_read_only`, `restart_node`, `change_pdisk_key`, `restart_pdisk`, `obliterate_pdisk`, `kill_tablet`, `switch_pile`,
+`disconnect_pile`, and `disconnect_socket`.
+
+Node restarts are unlimited by default. Set `max_node_restarts_per_minute` to apply a rolling aggregate rate limit across
+all `restart_node` configurations. Tenant filters match the single tenant path of each dynamic node; serverless databases
+are out of scope.
+
+Field and enum names are case-insensitive and separators are ignored, so names such as `WipeVDisk`, `wipe_vdisk`, and
+`wipe-vdisk` are equivalent. Durations use protobuf duration syntax, for example `0.5s`, `2s`, or `1.5s`. Unknown fields,
+invalid values, and duplicate fields are rejected before the workload connects to the cluster. When `--config-file` is set,
+the legacy workload-specific options are ignored. The workload intentionally rejects the global `--dry-run` option because
+several actions cannot be simulated safely. See [`protos/cluster_workload.proto`](protos/cluster_workload.proto) for the complete
+field and filter schema.
+
+`change_pdisk_key` and `obliterate_pdisk` use the Berkanavt test-cluster paths shown by the existing workload tooling and are
+intended for that deployment layout. `change_pdisk_key` refuses to run unless the node uses the expected PDisk key file.

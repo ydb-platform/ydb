@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
+#include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <util/string/join.h>
@@ -321,8 +322,10 @@ public:
 
 TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr,
     const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
-    const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {
+    const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,
+    TWriteBlobPrepareStats* prepareStats) const {
     AFL_VERIFY(incomingBatch->num_rows());
+    const TMonotonic dataStart = TMonotonic::Now();
     auto itIncoming = incomingBatch->schema()->fields().begin();
     auto itIncomingEnd = incomingBatch->schema()->fields().end();
     auto itIndex = GetIndexInfo().ArrowSchema().begin();
@@ -371,20 +374,46 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     const ui64 totalBlobBytes = slice.GetPackedSize();
     THashMap<ui32, std::shared_ptr<IPortionDataChunk>> inplaceChunks;
     std::vector<TSplittedBlob> blobs;
-    if (GetIndexInfo().GetInsertOptions().ShouldBuildIndexesOnInsert(mType, totalBlobBytes) && GetIndexInfo().GetIndexes().size()) {
+    const bool buildIndexes =
+        GetIndexInfo().GetInsertOptions().ShouldBuildIndexesOnInsert(mType, totalBlobBytes) && GetIndexInfo().GetIndexes().size();
+    if (buildIndexes) {
+        if (prepareStats) {
+            prepareStats->DataDuration = TMonotonic::Now() - dataStart;
+            prepareStats->DataBytes = totalBlobBytes;
+        }
+        const TMonotonic indexStart = TMonotonic::Now();
         auto dataWithSecondaryConclusion = GetIndexInfo().AppendIndexes(
             slice.GetPortionChunksToHash(), storagesManager, slice.GetRecordsCount(), IStoragesManager::DefaultStorageId);
         if (dataWithSecondaryConclusion.IsFail()) {
+            if (prepareStats) {
+                prepareStats->IndexDuration = TMonotonic::Now() - indexStart;
+            }
             return dataWithSecondaryConclusion;
         }
         auto secondaryResult = dataWithSecondaryConclusion.DetachResult();
         inplaceChunks = secondaryResult.DetachSecondaryInplaceData();
         TGeneralSerializedSlice sliceWithIndexes(secondaryResult.GetExternalData(), schemaDetails, splitterCounters);
-        if (!sliceWithIndexes.GroupBlobs(blobs, groups)) {
+        const ui64 indexedPackedSize = sliceWithIndexes.GetPackedSize();
+        const bool grouped = sliceWithIndexes.GroupBlobs(blobs, groups);
+        if (prepareStats) {
+            prepareStats->IndexDuration = TMonotonic::Now() - indexStart;
+            prepareStats->IndexBytes = indexedPackedSize > totalBlobBytes ? indexedPackedSize - totalBlobBytes : 0;
+            for (auto&& [_, chunk] : inplaceChunks) {
+                prepareStats->IndexBytes += chunk->GetPackedSize();
+            }
+        }
+        if (!grouped) {
             return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
         }
-    } else if (!slice.GroupBlobs(blobs, groups)) {
-        return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
+    } else {
+        const bool grouped = slice.GroupBlobs(blobs, groups);
+        if (prepareStats) {
+            prepareStats->DataDuration = TMonotonic::Now() - dataStart;
+            prepareStats->DataBytes = totalBlobBytes;
+        }
+        if (!grouped) {
+            return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
+        }
     }
     auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
         std::move(blobs), std::move(inplaceChunks), pathId, GetVersion(), GetSnapshot(), storagesManager, EPortionType::Written, GetIndexInfo());

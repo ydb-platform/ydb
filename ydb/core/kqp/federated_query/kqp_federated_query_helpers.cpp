@@ -81,7 +81,7 @@ namespace {
                     if (describePathResult.GetStatus() == NYdb::EStatus::CLIENT_UNAUTHENTICATED && !addRoot) {
                         return GetSchemeEntryTypeImpl(actorSystem, f, endpoint, database, useTls, credentialsProviderFactory, p, true);
                     }
-                    TString message = TStringBuilder() <<  "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
+                    TString message = TStringBuilder() << "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
                     YDB_LOG_WARN_CTX(*actorSystem, message,
                         {"issues", describePathResult.GetIssues()});
                     auto rootIssue = NYql::TIssue(message);
@@ -211,8 +211,7 @@ namespace {
     }
 
     bool IsValidExternalDataSourceType(const TString& type) {
-        static auto allTypes = NYql::GetAllExternalDataSourceTypes();
-        return allTypes.contains(type);
+        return NYql::IsValidAvailableExternalDataSourceType(type);
     }
 
     void IKqpFederatedQuerySetupFactory::Cleanup() {
@@ -236,6 +235,7 @@ namespace {
         SolomonGatewayConfig = queryServiceConfig.GetSolomon();
 
         S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
+        S3ReadActorFactoryConfig.EnableScheduling = appConfig.GetFeatureFlags().GetEnableS3Scheduling();
 
         YtGatewayConfig = queryServiceConfig.GetYt();
         YtGateway = MakeYtGateway(appData->FunctionRegistry, queryServiceConfig);
@@ -416,21 +416,27 @@ namespace {
         const TString& structuredTokenJson,
         const TString& path) {
         if (!federatedQuerySetup || !federatedQuerySetup->Driver || !endpoint || !database) {
-            YDB_LOG_NOTICE_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path in external YDB database with endpoint",
+            YDB_LOG_NOTICE_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path in external YDB database",
                 {"path", path},
                 {"database", database},
                 {"endpoint", endpoint});
             return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table});
         }
-        return GetSchemeEntryTypeImpl(
-                NActors::TActivationContext::ActorSystem(),
-                federatedQuerySetup,
-                endpoint,
-                NKikimr::CanonizePath(database),
-                useTls,
-                federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson),
-                path,
-                false);
+        try {
+            return GetSchemeEntryTypeImpl(
+                    NActors::TActivationContext::ActorSystem(),
+                    federatedQuerySetup,
+                    endpoint,
+                    NKikimr::CanonizePath(database),
+                    useTls,
+                    federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson),
+                    path,
+                    false);
+        } catch (const std::exception& e) {
+            TGetSchemeEntryResult result;
+            result.Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Failed to get scheme entry type: " << e.what()));
+            return NThreading::MakeFuture<TGetSchemeEntryResult>(result);
+        }
     };
 
     std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {

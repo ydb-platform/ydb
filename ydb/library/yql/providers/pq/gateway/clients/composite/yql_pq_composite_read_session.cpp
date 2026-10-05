@@ -578,7 +578,7 @@ public:
         LogPrefix = TStringBuilder() << "[" << __func__ << "] TxId: " << settings.TxId << ", TaskId: " << settings.TaskId << ", Cluster: " << settings.Cluster << ", TopicPath: " << topic.Path_ << ". ";
 
         const auto& partitions = topic.PartitionIds_;
-        Y_VALIDATE(partitions.size() > 0, "Can not start read session without partitions");
+        Y_VALIDATE(partitions.size() > 0, "Cannot start read session without partitions");
         SRC_LOG_AS_I("Created"
             << ", MaxPartitionReadSkew: " << MaxPartitionReadSkew
             << ", IdleTimeout: " << settings.IdleTimeout

@@ -1,0 +1,20 @@
+{
+  "module_type": "module",
+  "module_kind": "wasm",
+  "module_name": "BridgeDict",
+  "module_extension": "wasm",
+  "required_libraries": [
+    "sdk"
+  ],
+  "functions": [
+    {
+      "name": "Lookup",
+      "export": "dict_lookup",
+      "argument_types": [
+        "Dict<String, Int64>",
+        "Optional<String>"
+      ],
+      "result_type": "Optional<Int64>"
+    }
+  ]
+}

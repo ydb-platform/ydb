@@ -145,7 +145,95 @@ void TestChildClosure(bool WithCollect) {
     AssertUnboxedValueElementEqual(graph->GetValue(), TVector<bool>{false, true, false});
 }
 
+template <bool LLVM>
+void TestRecursiveCallablePreservesArgs(i64 n, i64 expected) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto unwrap = [&pb](TRuntimeNode x) {
+        return pb.Unwrap(x, NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0);
+    };
+
+    const auto erasedType = pb.AsErased(pb.NewNull()).GetStaticType();
+    const auto int64Type = NTest::ConvertValueToLiteralNode(pb, i64(0)).GetStaticType();
+
+    const auto callableType = TCallableTypeBuilder(pb.GetTypeEnvironment(), "", int64Type)
+                                  .Add(erasedType)
+                                  .Add(int64Type)
+                                  .Build();
+
+    const auto one = NTest::ConvertValueToLiteralNode(pb, i64(1));
+    const auto two = NTest::ConvertValueToLiteralNode(pb, i64(2));
+
+    const auto fibImpl = pb.Callable(callableType, [&](const TArrayRef<const TRuntimeNode>& args) {
+        const auto self = args[0];
+        const auto n = args[1];
+        const auto impl = unwrap(pb.PeekErased(self, callableType));
+        const auto rec1 = pb.Apply(impl, {self, pb.Sub(n, one)});
+        const auto rec2 = pb.Apply(impl, {self, pb.Sub(n, two)});
+        return pb.If(pb.LessOrEqual(n, one), one, pb.Add(rec1, rec2));
+    });
+
+    const auto self = pb.AsErased(fibImpl);
+    const auto implTop = unwrap(pb.PeekErased(self, callableType));
+    const auto pgmReturn = pb.Apply(implTop, {self, NTest::ConvertValueToLiteralNode(pb, n)});
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    AssertUnboxedValueElementEqual(graph->GetValue(), expected);
+}
+
+template <bool LLVM>
+void TestThunkCapturesFactoryArg() {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto unwrap = [&pb](TRuntimeNode x) {
+        return pb.Unwrap(x, NTest::ConvertValueToLiteralNode(pb, TStringBuf("")), "", 0, 0);
+    };
+
+    const auto erasedType = pb.AsErased(pb.NewNull()).GetStaticType();
+    const auto optInt32Type = pb.NewOptionalType(NTest::ConvertValueToLiteralNode(pb, i32(0)).GetStaticType());
+
+    const auto thunkType = TCallableTypeBuilder(pb.GetTypeEnvironment(), "", optInt32Type).Build();
+    const auto factoryType = TCallableTypeBuilder(pb.GetTypeEnvironment(), "", erasedType)
+                                 .Add(optInt32Type)
+                                 .Build();
+
+    const auto factory = pb.Callable(factoryType, [&](const TArrayRef<const TRuntimeNode>& args) {
+        const auto n = args[0];
+        const auto thunk = pb.Callable(thunkType, [&](const TArrayRef<const TRuntimeNode>&) {
+            return n;
+        });
+        return pb.AsErased(thunk);
+    });
+
+    const auto erasedThunk = pb.Apply(factory, {pb.NewEmptyOptional(optInt32Type)});
+    const auto thunk = unwrap(pb.PeekErased(erasedThunk, thunkType));
+    const auto thunkResult = pb.Apply(thunk, {});
+
+    const auto pgmReturn = pb.Exists(thunkResult);
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    AssertUnboxedValueElementEqual(graph->GetValue(), false);
+}
+
 }; // namespace
+
+Y_UNIT_TEST_SUITE(TMiniKQLCallableThunkCaptureTest) {
+Y_UNIT_TEST_LLVM(ThunkCapturesFactoryArg) {
+    TestThunkCapturesFactoryArg<LLVM>();
+}
+} // Y_UNIT_TEST_SUITE(TMiniKQLCallableThunkCaptureTest)
+
+Y_UNIT_TEST_SUITE(TMiniKQLCallableRecursionArgTest) {
+Y_UNIT_TEST_LLVM(RecursiveCallablePreservesArgsShallow) {
+    TestRecursiveCallablePreservesArgs<LLVM>(5, 8);
+}
+
+Y_UNIT_TEST_LLVM(RecursiveCallablePreservesArgsDeep) {
+    TestRecursiveCallablePreservesArgs<LLVM>(10, 89);
+}
+} // Y_UNIT_TEST_SUITE(TMiniKQLCallableRecursionArgTest)
 
 Y_UNIT_TEST_SUITE(TMiniKQLCallableTest) {
 Y_UNIT_TEST_LLVM(SimpleClosureWithoutCollect) {

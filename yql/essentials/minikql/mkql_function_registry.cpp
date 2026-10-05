@@ -40,9 +40,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry {
     struct TUdfLibrary: public TThrRefBase {
         ui32 AbiVersion = 0;
         TDynamicLibrary Lib;
-        TUdfLibrary()
-        {
-        }
+        TUdfLibrary() = default;
     };
     using TUdfLibraryPtr = TIntrusivePtr<TUdfLibrary>;
 
@@ -125,8 +123,7 @@ public:
     {
     }
 
-    ~TMutableFunctionRegistry() override {
-    }
+    ~TMutableFunctionRegistry() override = default;
 
     void AllowUdfPatch() override {
     }

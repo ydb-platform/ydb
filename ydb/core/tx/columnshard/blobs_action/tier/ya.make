@@ -5,6 +5,7 @@ SRCS(
     gc.cpp
     gc_actor.cpp
     gc_info.cpp
+    object_key.cpp
     write.cpp
     read.cpp
     storage.cpp
@@ -22,3 +23,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

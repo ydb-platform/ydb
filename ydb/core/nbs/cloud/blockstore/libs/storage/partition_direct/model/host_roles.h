@@ -33,7 +33,7 @@ public:
 
     bool operator==(const THostRoles& other) const = default;
 
-    [[nodiscard]] TString DebugPrint() const;
+    [[nodiscard]] TString DebugPrint(bool brief) const;
 
 private:
     std::array<EHostRole, MaxHostCount> Assignments{};

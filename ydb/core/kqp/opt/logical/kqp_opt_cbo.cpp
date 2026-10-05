@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
+#include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -361,6 +362,78 @@ bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TJoinColumn>& joi
     return true;
 }
 
+const TMultiColumnStatistics* FindJoinKeyTupleStats(const TOptimizerStatistics& stats, const TVector<TJoinColumn>& joinKeys) {
+    if (!stats.ColumnStatistics || joinKeys.size() < 2) {
+        return nullptr;
+    }
+
+    THashSet<TString> keyNames;
+    for (const auto& key : joinKeys) {
+        keyNames.insert(key.AttributeName);
+    }
+    if (keyNames.size() != joinKeys.size()) {
+        return nullptr;
+    }
+
+    for (const auto& [_, multiColumnStats] : stats.ColumnStatistics->MultiData) {
+        if (!multiColumnStats.EqHeightHistogram || multiColumnStats.Columns.size() != keyNames.size()) {
+            continue;
+        }
+        if (AllOf(multiColumnStats.Columns, [&keyNames](const TString& column) { return keyNames.contains(column); })) {
+            return &multiColumnStats;
+        }
+    }
+
+    return nullptr;
+}
+
+TMaybe<ui64> GetOverlappingCardinality(const NKikimr::TEqHeightHistogram& pkHistogram, const NKikimr::TEqHeightHistogram& fkHistogram) {
+    const auto fkBuckets = fkHistogram.GetNumBuckets();
+    if (!fkBuckets || !pkHistogram.GetNumBuckets()) {
+        return Nothing();
+    }
+
+    const auto domainStart = fkHistogram.GetBucket(0).UpperBound;
+    const auto domainEnd = fkHistogram.GetBucket(fkBuckets - 1).UpperBound;
+    return pkHistogram.EstimateRangeGreaterOrEqualLessOrEqual(domainStart, domainEnd);
+}
+
+TMaybe<double> ComputeTupleSelectivityCorrection(
+    const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats,
+    const TVector<TJoinColumn>& leftJoinKeys, const TVector<TJoinColumn>& rightJoinKeys) {
+
+    if (leftJoinKeys.size() != rightJoinKeys.size() || leftStats.Nrows <= 0.0) {
+        return Nothing();
+    }
+
+    const auto* leftTuple = FindJoinKeyTupleStats(leftStats, leftJoinKeys);
+    const auto* rightTuple = FindJoinKeyTupleStats(rightStats, rightJoinKeys);
+
+    if (!leftTuple || !rightTuple || leftTuple->Types != rightTuple->Types) {
+        return Nothing();
+    }
+
+    THashMap<TString, TString> rightKeyByLeftKey;
+    for (size_t i = 0; i < leftJoinKeys.size(); ++i) {
+        rightKeyByLeftKey[leftJoinKeys[i].AttributeName] = rightJoinKeys[i].AttributeName;
+    }
+
+    for (size_t i = 0; i < leftTuple->Columns.size(); ++i) {
+        const auto it = rightKeyByLeftKey.find(leftTuple->Columns[i]);
+        if (it == rightKeyByLeftKey.end() || it->second != rightTuple->Columns[i]) {
+            return Nothing();
+        }
+    }
+
+    auto overlapCard = GetOverlappingCardinality(*leftTuple->EqHeightHistogram, *rightTuple->EqHeightHistogram);
+    if (!overlapCard.Defined() || overlapCard.GetRef() == 0) {
+        return Nothing();
+    }
+
+    auto selectivityCorrection = leftStats.Nrows / std::max(static_cast<double>(overlapCard.GetRef()), 1.0);
+    return std::min(selectivityCorrection, 1.0);
+}
+
 TMaybe<double> ComputeSelectivityCorrection(
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
@@ -368,7 +441,12 @@ TMaybe<double> ComputeSelectivityCorrection(
     const TVector<TJoinColumn>& rightJoinKeys
 ) {
     if (leftStats.Type == EStatisticsType::BaseTable && leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
-        // composite join keys are violated
+        // Equi-height histogram-based correction over the whole key tuple.
+        if (auto tupleCorrection = ComputeTupleSelectivityCorrection(leftStats, rightStats, leftJoinKeys, rightJoinKeys)) {
+            return tupleCorrection;
+        }
+
+        // Note, leftHist is PK and rightHist is FK. For a composite key only the first column is used.
         auto lhs = leftJoinKeys[0].AttributeName;
         auto rhs = rightJoinKeys[0].AttributeName;
 

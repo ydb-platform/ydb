@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 IF (ARCH_X86_64)
     CFLAGS(
@@ -20,7 +20,7 @@ PEERDIR(
     yql/essentials/ast
     yql/essentials/utils
     yql/essentials/public/issue/protos
-    yql/essentials/parser/proto_ast/antlr3
+    yql/essentials/parser/proto_ast/antlr4
     yql/essentials/parser/proto_ast/gen/jsonpath
 )
 

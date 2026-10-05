@@ -12,6 +12,16 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 class TVChunkConfig
 {
 public:
+    enum class EHostHumanReadableState
+    {
+        Primary,    // DDisk-OK and PBuffer-OK
+        Fresh,      // DDisk-Fresh and PBuffer-OK
+        HandOff,    // PBuffer-OK
+        Rotten,     // DDisk-Rotten and PBuffer-Disabled
+        Disabled,   // PBuffer-Disabled
+        Demoted,    // Not used for DDisk or PBuffer at all
+    };
+
     static TVChunkConfig
     MakeDefault(ui32 vChunkIndex, size_t hostCount, size_t primaryCount);
 
@@ -19,9 +29,11 @@ public:
         ui32 vChunkIndex,
         THostRoles pbufferHosts,
         THostRoles ddiskHosts,
-        THostMask enabledHosts,
-        TVector<std::optional<ui64>> watermarks);
+        THostMask enabledHosts);
 
+    [[nodiscard]] EHostHumanReadableState GetHostHumanReadableState(
+        THostIndex hostIndex,
+        bool fresh) const;
     [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t GetHostCount() const;
     [[nodiscard]] ui32 GetVChunkIndex() const;
@@ -48,7 +60,6 @@ public:
     TString DemoteHost(THostIndex hostIndex);
     // Adds ddisk to the host.
     void PromoteHost(THostIndex hostIndex);
-    TString PromoteHostIfNeeded();
 
     [[nodiscard]] EHostRole GetPBufferRole(THostIndex hostIndex) const;
     [[nodiscard]] EHostRole GetDDiskRole(THostIndex hostIndex) const;
@@ -67,21 +78,6 @@ public:
     [[nodiscard]] THostMask GetDDisks() const;
     // Get a list of all enabled DDisks.
     [[nodiscard]] THostMask GetEnabledDDisks() const;
-    // Get a list of all DDisks with full data (enabled or not).
-    [[nodiscard]] THostMask GetFullDDisks() const;
-    // Get a list of all healthy DDisks (enabled and full filed).
-    [[nodiscard]] THostMask GetHealthyDDisks() const;
-
-    // If std::nullopt is set, it means that the disk is fully filled with data
-    // and the waterline value is higher than the disk size. If the waterline
-    // value is set, it means that disk blocks less than this value can be read,
-    // and those that are equal to or higher than this value are not yet filled.
-    // In other words, if the value is 0, no disk blocks can be read.
-    void SetWatermark(
-        THostIndex hostIndex,
-        std::optional<ui64> watermarkBlockCount);
-    [[nodiscard]] std::optional<ui64> GetWatermark(THostIndex hostIndex) const;
-
     [[nodiscard]] THostMask GetDisabledHosts() const;
 
     [[nodiscard]] bool IsValid() const;
@@ -97,12 +93,15 @@ private:
     THostRoles PBufferHosts;
     THostRoles DDiskHosts;
     THostMask EnabledHosts;
-    TVector<std::optional<ui64>> Watermarks;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 using TVChunkConfigs = TMap<ui32, TVChunkConfig>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString Print(TVChunkConfig::EHostHumanReadableState state, bool brief);
 
 ////////////////////////////////////////////////////////////////////////////////
 

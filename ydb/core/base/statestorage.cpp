@@ -1,6 +1,7 @@
 #include "statestorage.h"
 #include "tabletid.h"
 #include <ydb/core/blobstorage/base/utility.h>
+#include <ydb/core/protos/config.pb.h>
 #include <util/generic/xrange.h>
 #include <util/generic/mem_copy.h>
 #include <util/generic/algorithm.h>

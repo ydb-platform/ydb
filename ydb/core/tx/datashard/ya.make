@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     datashard.h
@@ -19,6 +19,7 @@ SRCS(
     datashard_txs.h
     datashard_user_db.h
     datashard_user_table.h
+    cdc_schema_change.h
     defs.h
     execution_unit.h
     execution_unit_ctors.h
@@ -41,6 +42,7 @@ SRCS(
     cdc_stream_scan.cpp
     change_collector_cdc_stream.cpp
     change_record_cdc_serializer.cpp
+    cdc_schema_change.cpp
     change_sender.cpp
     change_sender_async_index.cpp
     change_sender_cdc_stream.cpp
@@ -160,6 +162,7 @@ JOIN_SRCS(
     all_datashard_read.cpp
     datashard__read_columns.cpp
     datashard__read_iterator.cpp
+    read_iterator_sampling.cpp
 )
 
 JOIN_SRCS(
@@ -479,6 +482,7 @@ PEERDIR(
     ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/actors/http
+    ydb/library/backup/proto
     ydb/library/chunks_limiter
     ydb/library/protobuf_printer
     ydb/library/yql/dq/actors/compute
@@ -493,8 +497,6 @@ PEERDIR(
     ydb/core/io_formats/cell_maker
     ydb/core/io_formats/json
 )
-
-YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     CFLAGS(
@@ -534,6 +536,7 @@ RECURSE_FOR_TESTS(
     ut_kqp_scan
     ut_lock_rows
     ut_locks
+    ut_locks_transfer
     ut_minikql
     ut_minstep
     ut_object_storage_listing

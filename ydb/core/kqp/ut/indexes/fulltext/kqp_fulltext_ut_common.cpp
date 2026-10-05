@@ -31,14 +31,14 @@ TKikimrRunner Kikimr() {
     return TKikimrRunner(settings);
 }
 
-TKikimrRunner KikimrWithCompact(bool enableIndexStreamWrite) {
+TKikimrRunner KikimrWithCompact(bool compact) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableCompactFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
     featureFlags.SetEnableJsonIndex(true);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
     return TKikimrRunner(settings);
 }
 

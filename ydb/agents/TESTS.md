@@ -38,10 +38,19 @@ Upgrade/downgrade tests live under `ydb/tests/compatibility/`.
 ## Running tests
 
 ```bash
-./ya make --build relwithdebinfo -tA <folder>
-./ya make --build relwithdebinfo -tA <folder> -F *test-filter*
+./ya make --build relwithdebinfo -tA <folder>               # all tests
+./ya make --build relwithdebinfo -tA <folder> -F <filter>   # matching tests
+./ya make -t <folder> -L                                    # list full test names
 ```
 
 CLI tests (`ya make -tA`) run only on Linux.
+
+`<filter>` is a full test name, its suffix, or a `*` glob (`*part*`):
+
+- C++ (`UNITTEST`, `GTEST`): `TMySuite::MyTest`; `TMySuite` runs the whole suite.
+- Python (pytest, `unittest`): `test_foo.py::TestClass::test_bar[param]`, no class
+  part for module-level tests; `test_foo.py` runs the whole module,
+  `test_foo.py::TestClass::*` the whole class. `test_foo.py::TestClass` without
+  `::*` matches nothing and still reports `Ok`.
 
 Build rules: [`GUIDE.md`](GUIDE.md).

@@ -1,9 +1,14 @@
 #include "shuffle_client.h"
 
+#include <yt/yt/client/signature/signature.h>
+
 #include <yt/yt/client/table_client/schema.h>
+
+#include <yt/yt/core/ytree/convert.h>
 
 namespace NYT::NApi {
 
+using namespace NYTree;
 using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -12,7 +17,8 @@ void FormatValue(TStringBuilderBase* builder, const TShuffleHandlePtr& shuffleHa
 {
     builder->AppendFormat(
         "{TransactionId: %v, CoordinatorAddress: %v, Account: %v, MediumName: %v, "
-        "PartitionCount: %v, ReplicationFactor: %v, UsePushBasedShuffle: %v, HasSchema: %v}",
+        "PartitionCount: %v, ReplicationFactor: %v, UsePushBasedShuffle: %v, HasSchema: %v, "
+        "Codec: %v}",
         shuffleHandle->TransactionId,
         shuffleHandle->CoordinatorAddress,
         shuffleHandle->Account,
@@ -20,7 +26,22 @@ void FormatValue(TStringBuilderBase* builder, const TShuffleHandlePtr& shuffleHa
         shuffleHandle->PartitionCount,
         shuffleHandle->ReplicationFactor,
         shuffleHandle->UsePushBasedShuffle,
-        static_cast<bool>(shuffleHandle->Schema));
+        static_cast<bool>(shuffleHandle->Schema),
+        shuffleHandle->Codec);
+}
+
+void ValidateShuffleHandleCodec(
+    const TSignedShuffleHandlePtr& signedHandle,
+    NCompression::ECodec requestedCodec)
+{
+    auto handle = ConvertTo<TShuffleHandlePtr>(TYsonStringBuf(signedHandle.Underlying()->Payload()));
+    THROW_ERROR_EXCEPTION_IF(
+        handle->Codec != requestedCodec,
+        "Shuffle handle has codec %Qlv instead of the requested %Qlv; the coordinator or proxy is "
+        "too old to support the codec option; the shuffle has already been started and will be "
+        "released when the parent transaction ends",
+        handle->Codec,
+        requestedCodec);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -39,7 +60,9 @@ void TShuffleHandle::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("schema", &TThis::Schema)
         .Default();
-    registrar.Parameter("push_config", &TThis::PushConfig)
+    registrar.Parameter("codec", &TThis::Codec)
+        .Default(NCompression::ECodec::None);
+    registrar.Parameter("config", &TThis::Config)
         .Default();
 }
 

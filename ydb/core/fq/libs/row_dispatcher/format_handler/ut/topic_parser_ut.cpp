@@ -821,11 +821,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": "key1"})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": 2})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3", "nested": 2222})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": "key1"})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": 2})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3", "nested": 2222})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
         });
     }
 

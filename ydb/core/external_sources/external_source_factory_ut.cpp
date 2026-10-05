@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(YdbExternalSourceFactory) {
         UNIT_ASSERT(NYql::GetAllExternalDataSourceTypes().contains("YdbExternal"));
         UNIT_ASSERT(NYql::GetAllExternalDataSourceDatabaseTypes().contains(NYql::EDatabaseType::YdbExternal));
         UNIT_ASSERT(NYql::DatabaseTypeFromString("YdbExternal") == NYql::EDatabaseType::YdbExternal);
-        UNIT_ASSERT_VALUES_EQUAL(NYql::DatabaseTypeToDataSourceKind(NYql::EDatabaseType::Ydb), NYql::EGenericDataSourceKind::YDB);
+        UNIT_ASSERT(NYql::DatabaseTypeToDataSourceKind(NYql::EDatabaseType::Ydb) == NYql::EGenericDataSourceKind::YDB);
         UNIT_ASSERT_EXCEPTION_CONTAINS(NYql::DatabaseTypeToDataSourceKind(NYql::EDatabaseType::YdbExternal),
             yexception, "Unknown database type: YdbExternal");
     }

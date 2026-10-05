@@ -1927,6 +1927,8 @@ message TIndexBuildConfig {
     optional TIndexCreationConfig Index = 2;
     optional bool IsRebuild = 3 [ default = false ];
     optional string RebuildIndexName = 4;
+    // Internal replica index creation: data comes from source CDC, without destination backfill.
+    optional bool ForReplication = 5 [default = false];
 }
 
 message TIndexBuildControl {
@@ -1935,6 +1937,7 @@ message TIndexBuildControl {
     optional uint64 SnapshotTxId = 3;
     optional uint64 BuildIndexId = 4;
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 5;
+    optional bool ForReplication = 6 [default = false];
 }
 
 message TLockConfig {

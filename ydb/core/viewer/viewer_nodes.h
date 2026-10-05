@@ -91,7 +91,11 @@ class TJsonNodes : public TViewerPipeClient {
     bool DatabaseBoardInfoProcessed = false;
     bool ResourceBoardInfoProcessed = false;
     bool PDisksProcessed = false;
+    bool DDiskStoragePoolsProcessed = false;
+    bool DDiskGroupsProcessed = false;
 
+    THashMap<std::pair<ui64, ui64>, TString> DDiskStoragePoolNames;
+    THashMap<ui32, std::pair<ui64, ui64>> DDiskGroupPools;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> StoragePoolsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GroupsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse>> VSlotsResponse;
@@ -1393,6 +1397,14 @@ public:
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::VSlots;
         }
+        if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
+            if (!StoragePoolsResponse) {
+                StoragePoolsResponse = MakeCachedRequestBSControllerPools();
+            }
+            if (!GroupsResponse) {
+                GroupsResponse = MakeCachedRequestBSControllerGroups();
+            }
+        }
         if (With != EWith::Everything || (!FilterDatabase && Type == EType::Storage)) {
             if (!PDisksResponse) {
                 PDisksResponse = MakeCachedRequestBSControllerPDisks();
@@ -2371,6 +2383,23 @@ public:
                 }
             }
             HiveNodeStatsProcessed = true;
+        }
+
+        if (IncludeDDisks && StoragePoolsResponse && StoragePoolsResponse->IsDone() && !DDiskStoragePoolsProcessed) {
+            if (StoragePoolsResponse->IsOk()) {
+                for (const auto& entry : StoragePoolsResponse->Get()->Record.GetEntries()) {
+                    DDiskStoragePoolNames[std::make_pair(entry.GetKey().GetBoxId(), entry.GetKey().GetStoragePoolId())] = entry.GetInfo().GetName();
+                }
+            }
+            DDiskStoragePoolsProcessed = true;
+        }
+        if (IncludeDDisks && GroupsResponse && GroupsResponse->IsDone() && !DDiskGroupsProcessed) {
+            if (GroupsResponse->IsOk()) {
+                for (const auto& entry : GroupsResponse->Get()->Record.GetEntries()) {
+                    DDiskGroupPools[entry.GetKey().GetGroupId()] = {entry.GetInfo().GetBoxId(), entry.GetInfo().GetStoragePoolId()};
+                }
+            }
+            DDiskGroupsProcessed = true;
         }
 
         if (FilterStorageStage == EFilterStorageStage::Pools && StoragePoolsResponse && StoragePoolsResponse->IsDone()) {
@@ -3685,6 +3714,13 @@ public:
                                 ddisk.SetPDiskId(key.GetPDiskId());
                                 ddisk.SetDDiskSlotId(key.GetVSlotId());
                                 ddisk.SetGroupId(entry.GetInfo().GetGroupId());
+                                const auto group = DDiskGroupPools.find(ddisk.GetGroupId());
+                                if (group != DDiskGroupPools.end()) {
+                                    const auto pool = DDiskStoragePoolNames.find(group->second);
+                                    if (pool != DDiskStoragePoolNames.end()) {
+                                        ddisk.SetStoragePoolName(pool->second);
+                                    }
+                                }
                                 if (!ddisk.HasHasWhiteboardData()) {
                                     ddisk.SetHasWhiteboardData(false);
                                 }

@@ -2,6 +2,8 @@
 
 #include "antlr_token.h"
 
+#include <yql/essentials/utils/yql_paths.h>
+
 namespace NSQLTranslationV1 {
 
 bool TIdentityTranslation::PasswordParameter(const TRule_password_option& passwordOption, TUserParameters& result) {
@@ -551,6 +553,11 @@ TNodePtr TIdentityTranslation::Build(const TRule_grant_permissions_stmt& node) {
     for (const auto& item : node.GetBlock5()) {
         schemaPaths.emplace_back(Ctx_.Pos(), Id(item.GetRule_an_id_schema2(), *this));
     }
+    if (Ctx_.Scoped->ActivePragmas.contains(std::make_pair(TString(), TString("relativepathprefix")))) {
+        for (auto& path : schemaPaths) {
+            path = TDeferredAtom(Ctx_.Pos(), BuildTablePath(Ctx_.GetPrefixPath(service, cluster), *path.GetLiteral()));
+        }
+    }
 
     TVector<TDeferredAtom> roleNames;
     const bool allowSystemRoles = false;
@@ -591,6 +598,11 @@ TNodePtr TIdentityTranslation::Build(const TRule_revoke_permissions_stmt& node) 
     schemaPaths.emplace_back(Ctx_.Pos(), Id(node.GetRule_an_id_schema5(), *this));
     for (const auto& item : node.GetBlock6()) {
         schemaPaths.emplace_back(Ctx_.Pos(), Id(item.GetRule_an_id_schema2(), *this));
+    }
+    if (Ctx_.Scoped->ActivePragmas.contains(std::make_pair(TString(), TString("relativepathprefix")))) {
+        for (auto& path : schemaPaths) {
+            path = TDeferredAtom(Ctx_.Pos(), BuildTablePath(Ctx_.GetPrefixPath(service, cluster), *path.GetLiteral()));
+        }
     }
 
     TVector<TDeferredAtom> roleNames;

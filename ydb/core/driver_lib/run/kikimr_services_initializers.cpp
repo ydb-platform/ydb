@@ -301,6 +301,8 @@
 
 #include <util/system/hostname.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NKikimrServicesInitializers {
 
 struct TAwsApiGuard {
@@ -2744,8 +2746,11 @@ TGeneralCachePortionsMetadataInitializer::TGeneralCachePortionsMetadataInitializ
 void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetPortionsMetadataCache());
     if (serviceConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse portions metadata cache config")("action", "default_usage")(
-            "error", serviceConfig.GetErrorMessage())("default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse portions metadata cache config"},
+            {"action", "default_usage"},
+            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
     AFL_VERIFY(!serviceConfig.IsFail());
@@ -2768,8 +2773,11 @@ TGeneralCacheColumnDataInitializer::TGeneralCacheColumnDataInitializer(const TKi
 void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetColumnDataCache());
     if (serviceConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse column data cache config")("action", "default_usage")(
-            "error", serviceConfig.GetErrorMessage())("default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse column data cache config"},
+            {"action", "default_usage"},
+            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
     AFL_VERIFY(!serviceConfig.IsFail());
@@ -2904,8 +2912,9 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
         }
         auto overlaid = NConveyorComposite::NConfig::TConfig::OverlayYamlOnDefaults(result, Config.GetCompositeConveyorConfig());
         if (overlaid.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot overlay composite conveyor config")(
-                "error", overlaid.GetErrorMessage())("action", "keeping synthesized composite conveyor defaults");
+            YDB_LOG_ERROR("Cannot overlay composite conveyor config",
+                {"error", overlaid.GetErrorMessage()},
+                {"action", "keeping synthesized composite conveyor defaults"});
             return result;
         }
         return overlaid.DetachResult();
@@ -2913,8 +2922,11 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
 
     auto serviceConfig = NConveyorComposite::NConfig::TConfig::BuildFromProto(protoConfig);
     if (serviceConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse composite conveyor config")("action", "default_usage")(
-            "error", serviceConfig.GetErrorMessage())("default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse composite conveyor config"},
+            {"action", "default_usage"},
+            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString()});
         serviceConfig = NConveyorComposite::NConfig::TConfig::BuildDefault();
     }
     AFL_VERIFY(!serviceConfig.IsFail());

@@ -9,6 +9,11 @@ TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
     THashSet<uint32_t> uniqueEntityIds;
     std::vector<std::shared_ptr<IFetchLogic>> logic;
     for (auto&& [_, i] : DataAddresses) {
+        // Apply a fetcher left behind by a skipped assembler before deciding what is already loaded.
+        auto applied = source.ApplyPendingFetcher(context, i.GetColumnId());
+        if (applied.IsFail()) {
+            return applied;
+        }
         auto acc = context.GetResources().GetAccessorOptional(i.GetColumnId());
         THashSet<NAccessor::NSubColumns::TCanonicalSubColumnName> subColumnsToFetch;
         for (auto&& sc : i.GetSubColumnNames(true)) {

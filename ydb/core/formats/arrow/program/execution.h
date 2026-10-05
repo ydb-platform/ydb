@@ -310,6 +310,12 @@ private:
     virtual TConclusion<TExecutionResult> DoStartFetch(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchers) = 0;
 
+    // A previous fetch of this entity can still sit in the scan stage after an AND/OR short-circuit skipped its
+    // assembler. Default is a no-op: in-memory sources have no such leftover.
+    virtual TConclusionStatus DoApplyPendingFetcher(const TProcessorContext& /*context*/, const ui32 /*entityId*/) {
+        return TConclusionStatus::Success();
+    }
+
     virtual TConclusion<TExecutionResult> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& /*context*/,
         const THashMap<ui32, IDataSource::TDataAddress>& /*columns*/, const THashMap<ui32, IDataSource::TFetchIndexContext>& /*indexes*/,
         const THashMap<ui32, IDataSource::TFetchHeaderContext>& /*headers*/,
@@ -358,6 +364,10 @@ public:
 
     TConclusionStatus AssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
         return DoAssembleAccessor(context, columnId, subColumnName);
+    }
+
+    TConclusionStatus ApplyPendingFetcher(const TProcessorContext& context, const ui32 entityId) {
+        return DoApplyPendingFetcher(context, entityId);
     }
 };
 

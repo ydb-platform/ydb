@@ -153,6 +153,8 @@ private:
     virtual TConclusion<TExecutionResult> DoStartFetch(const NArrow::NSSA::TProcessorContext& context,
         const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
 
+    virtual TConclusionStatus DoApplyPendingFetcher(const NArrow::NSSA::TProcessorContext& context, const ui32 entityId) override;
+
     virtual TExecutionResult DoStartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 

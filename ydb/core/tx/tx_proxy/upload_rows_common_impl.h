@@ -371,6 +371,9 @@ private:
                                          const TVector<std::pair<TString, Ydb::Type>>& reqColumns) {
         THashSet<TString> allColumnsLeft;
         for (auto&& [_, colInfo] : entry.Columns) {
+            if (colInfo.IsDefaultFromExpression() && !colInfo.DefaultExpression->Stored) {
+                continue;
+            }
             allColumnsLeft.insert(colInfo.Name);
         }
 

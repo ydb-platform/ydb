@@ -312,6 +312,11 @@ enum ESimpleCounters {
     COUNTER_WASM_COMPILE_CONTROLLER_COUNT = 240           [(CounterOpts) = {Name: "WasmCompileControllers"}];
 
     COUNTER_STORAGE_SPACE_EXHAUSTED = 241                 [(CounterOpts) = {Name: "StorageSpaceExhausted"}];
+
+    // Current available CPU time budget for split/merge decisions, in milliseconds
+    COUNTER_SPLIT_MERGE_BUDGET_TOKENS_MS = 242          [(CounterOpts) = {Name: "SplitMergeBudgetTokensMs"}];
+    // Maximum accumulated CPU time budget for split/merge decisions (burst cap), in milliseconds
+    COUNTER_SPLIT_MERGE_BUDGET_MAX_TOKENS_MS = 243      [(CounterOpts) = {Name: "SplitMergeBudgetMaxTokensMs"}];
 }
 
 enum ECumulativeCounters {
@@ -516,6 +521,9 @@ enum ECumulativeCounters {
 
     // Total time spent in TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats), in nanoseconds.
     COUNTER_PERIODIC_TABLE_STATS_HANDLE_TIME_NS = 151 [(CounterOpts) = {Name: "PeriodicTableStatsHandleTimeNs"}];
+
+    // Number of times split/merge decisions were skipped because the CPU time budget was exceeded
+    COUNTER_SPLIT_MERGE_BUDGET_EXCEEDED = 152 [(CounterOpts) = {Name: "SplitMergeBudgetExceeded"}];
 }
 
 enum EPercentileCounters {

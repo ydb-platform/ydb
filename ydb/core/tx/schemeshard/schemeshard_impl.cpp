@@ -9027,6 +9027,33 @@ void TSchemeShard::ConfigureStatsOperations(const NKikimrConfig::TSchemeShardCon
             {"limit", it->second},
         );
     }
+
+    // Configure split/merge CPU time budget
+    double share = config.GetSplitMergeMaxCpuUsageShare();
+    TDuration windowSize = TDuration::MilliSeconds(config.GetSplitMergeCpuBudgetWindowMs());
+
+    // Validate configuration range [0.01, 1.0]
+    if (share < 0.01 || share > 1.0) {
+        YDB_LOG_ERROR_CTX(ctx, "Invalid SplitMergeMaxCpuUsageShare, using default",
+            {"configured", share},
+            {"default", 0.7},
+            {"validRange", "0.01 to 1.0"},
+        );
+        share = 0.7;
+    }
+
+    if (share >= 1.0) {
+        YDB_LOG_NOTICE_CTX(ctx, "Split/merge CPU throttling disabled (share = 1.0)");
+        // Budget will always allow (no limiting)
+    }
+
+    SplitMergeBudget.Configure(share, windowSize);
+
+    YDB_LOG_NOTICE_CTX(ctx, "Split/merge CPU budget configured",
+        {"maxCpuShare", share},
+        {"windowMs", windowSize.MilliSeconds()},
+        {"maxBurstMs", SplitMergeBudget.MaxTokens.MilliSeconds()},
+    );
 }
 
 void TSchemeShard::ConfigureCompactionQueues(

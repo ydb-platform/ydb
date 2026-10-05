@@ -591,6 +591,34 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
+    // Save CPU resources when split/merge decisions have already consumed
+    // the configured share of the main thread time.
+    if (!Self->SplitMergeBudget.Allow()) {
+        Self->TabletCounters->Cumulative()[COUNTER_SPLIT_MERGE_BUDGET_EXCEEDED].Increment(1);
+        YDB_LOG_DEBUG_CTX(ctx, "Do not consider split-merge: time budget exceeded",
+            {"availableTokensMs", Self->SplitMergeBudget.Tokens.MilliSeconds()},
+            {"maxTokensMs", Self->SplitMergeBudget.MaxTokens.MilliSeconds()},
+            {"share", Self->SplitMergeBudget.Share},
+        );
+        return true;
+    }
+
+    // Publish current budget state to monitoring
+    Self->TabletCounters->Simple()[COUNTER_SPLIT_MERGE_BUDGET_TOKENS_MS].Set(
+        Self->SplitMergeBudget.Tokens.MilliSeconds());
+    Self->TabletCounters->Simple()[COUNTER_SPLIT_MERGE_BUDGET_MAX_TOKENS_MS].Set(
+        Self->SplitMergeBudget.MaxTokens.MilliSeconds());
+
+    // Account time spent on split/merge decisions (checks and proposals)
+    // to the CPU time budget on every exit path below.
+    struct TSplitMergeTimeAccounter {
+        TSchemeShard::TTxTimeBudget& Budget;
+        TMonotonic Start = TMonotonic::Now();
+        ~TSplitMergeTimeAccounter() {
+            Budget.Account(TMonotonic::Now() - Start);
+        }
+    } splitMergeTimeAccounter{Self->SplitMergeBudget};
+
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
     TVector<TShardIdx> shardsToMerge;
     TString mergeReason;

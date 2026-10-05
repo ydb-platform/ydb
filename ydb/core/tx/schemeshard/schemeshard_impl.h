@@ -463,6 +463,58 @@ public:
     ui32 StatsMaxBatchSize = 0;
     absl::flat_hash_map<TTxState::ETxType, ui32> InFlightLimits;
 
+    // Token bucket rate limiter for split/merge CPU time budgeting.
+    // Limits the fraction of the main thread time that can be spent
+    // on automatic split/merge decisions during stats processing.
+    struct TTxTimeBudget {
+        TMonotonic LastUpdate = TMonotonic::Zero();
+        TDuration Tokens = TDuration::Zero();      // Available CPU time budget (may go negative, i.e. debt)
+        TDuration MaxTokens = TDuration::Zero();   // Maximum accumulated budget (burst cap)
+        double Share = 0.7;                         // Target CPU share (default 70%)
+        TDuration WindowSize = TDuration::Seconds(1);
+        bool Initialized = false;
+
+        void Init() {
+            MaxTokens = TDuration::MicroSeconds(WindowSize.MicroSeconds() * Share); // e.g. 700ms per 1s window
+            Tokens = MaxTokens;               // Start with full budget
+            LastUpdate = TMonotonic::Now();
+            Initialized = true;
+        }
+
+        bool Allow() {
+            if (!Initialized) {
+                Init();
+            }
+
+            TMonotonic now = TMonotonic::Now();
+            TDuration elapsed = now - LastUpdate;
+
+            // Refill tokens: earn Share of elapsed time, capped at MaxTokens.
+            // Example: if idle for 10s, earn 10s * 0.7 = 7s, but capped at 0.7s (MaxTokens)
+            TDuration refill = TDuration::MicroSeconds(elapsed.MicroSeconds() * Share);
+            Tokens = Min(Tokens + refill, MaxTokens);
+            LastUpdate = now;
+
+            // Allow if we have at least 1ms budget (prevents starvation)
+            return Tokens >= TDuration::MilliSeconds(1);
+        }
+
+        void Account(TDuration duration) {
+            Tokens -= duration;
+            // Tokens can go negative (debt), will be repaid by refill
+        }
+
+        void Configure(double share, TDuration windowSize) {
+            Share = share;
+            WindowSize = windowSize;
+            MaxTokens = TDuration::MicroSeconds(WindowSize.MicroSeconds() * Share);
+            Initialized = false;  // Will re-init on next Allow()
+        }
+    };
+
+    // Token bucket for split/merge CPU time budgeting
+    TTxTimeBudget SplitMergeBudget;
+
     // time when we opened the batch
     bool TableStatsBatchScheduled = false;
     bool TablePersistStatsPending = false;

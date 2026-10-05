@@ -26,9 +26,8 @@ bool TExpandWholePartitionWindowRule::QuickMatch(const TIntrusivePtr<IOperator>&
     return HasWholePartitionAggregates(*input);
 }
 
-// f(x) OVER (PARTITION BY p) over the whole partition is the same as
-// SELECT * FROM input JOIN (SELECT p, f(x) FROM input GROUP BY p) USING (p),
-// which spills, unlike materializing every partition into a list.
+// f(x) OVER (PARTITION BY p) becomes input JOIN (SELECT p, f(x) FROM input GROUP BY p) USING (p),
+// since aggregation and join can spill and the window cannot.
 TIntrusivePtr<IOperator> TExpandWholePartitionWindowRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx,
                                                                               TPlanProps& props) {
     if (!rboCtx.KqpCtx.Config->GetWindowFunctionsV2() || !HasWholePartitionAggregates(*input)) {

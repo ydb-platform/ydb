@@ -83,12 +83,7 @@ void TPortionInfo::SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, 
         *proto.MutableRemoveSnapshot() = GetRemoveSnapshotVerified().SerializeToProto();
     }
 
-    // Removal is serialized separately; metadata keeps the original physical type.
-    auto produced = GetProduced();
-    if (produced == NPortion::EProduced::INACTIVE) {
-        produced = GetPortionType() == EPortionType::Compacted ? NPortion::EProduced::SPLIT_COMPACTED : NPortion::EProduced::INSERTED;
-    }
-    *proto.MutableMeta() = Meta.SerializeToProto(blobIds, produced);
+    *proto.MutableMeta() = Meta.SerializeToProto(blobIds, GetProduced());
 }
 
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {

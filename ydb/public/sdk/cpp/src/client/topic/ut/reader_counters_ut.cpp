@@ -223,11 +223,18 @@ namespace NYdb::inline Dev::NTopic::NTests {
 
         ~TReaderMetricsTestPeer() {
             Processor->Clear();
-            Reader->Abort();
-            Reader->ClearAllPartitionStreamEvents();
-            Queue->ClearAllEvents();
-            Context->Cancel();
-            Reader.reset();
+            DestroyReaderForTests();
+        }
+
+        void DestroyReaderForTests() {
+            if (Reader) {
+                Reader->Abort();
+                Reader->ClearAllPartitionStreamEvents();
+                Queue->ClearAllEvents();
+                Context->Cancel();
+                Reader.reset();
+                Queue.reset();
+            }
         }
 
         void AddPartition(ui64 id, const std::string& topic = "topic", ui64 committed = 0) {
@@ -1993,6 +2000,88 @@ namespace NYdb::inline Dev::NTopic::NTests {
 
             session->Close(TDuration::Seconds(5));
             session.reset();
+            driver.Stop(true);
+        }
+
+        Y_UNIT_TEST(AcknowledgedCallbackKeepsQueueAliveUntilDeferredWaiterIsSignalled) {
+            TReaderMetricsTestPeer peer;
+            peer.AddPartition(1);
+            peer.CommitRangeForTests(1, 0, 1);
+            const std::weak_ptr<TReadSessionEventsQueue<false>> queue = peer.Queue;
+            const std::weak_ptr<TSingleClusterReadSessionImpl<false>> reader = peer.Reader;
+            auto ready = peer.Queue->WaitEvent();
+            UNIT_ASSERT(!ready.HasValue());
+            bool signalledWhileAlive = false;
+            ready.Subscribe([&](const auto&) {
+                signalledWhileAlive = !queue.expired() && !reader.expired();
+            });
+            auto acknowledged = peer.Counter("commit.acknowledged");
+            acknowledged->OnAdd = [&] {
+                // Cancel drops the context's ownership; no test fixture owner
+                // may keep the session or queue alive for the deferred waiter.
+                peer.DestroyReaderForTests();
+                // Stop the negative control before it dereferences a freed queue.
+                // Counter callbacks swallow exceptions, so use a fatal assertion.
+                Y_ABORT_UNLESS(!queue.expired(), "ACK deferred waiter outlived its event queue");
+                Y_ABORT_UNLESS(!ready.HasValue(), "ACK waiter was signalled before metric export completed");
+            };
+
+            peer.ReplyCommitAcknowledgement(1, 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(acknowledged->Value(), 1);
+            UNIT_ASSERT(ready.HasValue());
+            UNIT_ASSERT(signalledWhileAlive);
+            UNIT_ASSERT(reader.expired());
+            UNIT_ASSERT(queue.expired());
+        }
+
+        Y_UNIT_TEST(RealReaderCanBeDestroyedFromAcknowledgedCounter) {
+            TTopicSdkTestSetup setup("CommitAcknowledged.ReentrantDestroy");
+            setup.Write("payload");
+            auto registry = std::make_shared<TRecordingMetricRegistry>();
+            auto config = setup.MakeDriverConfig();
+            config.SetMetricRegistry(registry);
+            TDriver driver(std::move(config));
+            TTopicClient client(driver);
+            const std::string reader = "destroy-in-ack-reader";
+            auto session = client.CreateReadSession(
+                TReadSessionSettings()
+                    .ConsumerName(setup.GetConsumerName())
+                    .ReaderName(reader)
+                    .AppendTopics(TTopicReadSettings(setup.GetTopicPath())));
+            auto acknowledged = registry->Find(
+                "ydb.topic.reader.commit.acknowledged",
+                MakeLabels(setup, setup.GetTopicPath(), setup.GetConsumerName(), reader));
+            UNIT_ASSERT(acknowledged);
+
+            UNIT_ASSERT(session->WaitEvent().Wait(TDuration::Seconds(5)));
+            auto startEvent = session->GetEvent(false);
+            UNIT_ASSERT(startEvent);
+            auto* start = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*startEvent);
+            UNIT_ASSERT(start);
+            start->Confirm();
+            UNIT_ASSERT(session->WaitEvent().Wait(TDuration::Seconds(5)));
+            auto dataEvent = session->GetEvent(false);
+            UNIT_ASSERT(dataEvent);
+            auto* data = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*dataEvent);
+            UNIT_ASSERT(data);
+            UNIT_ASSERT_VALUES_EQUAL(data->GetMessagesCount(), 1);
+
+            auto ready = session->WaitEvent();
+            UNIT_ASSERT(!ready.HasValue());
+            const std::weak_ptr<IReadSession> lifetime = session;
+            auto destroyed = NThreading::NewPromise<void>();
+            acknowledged->OnAdd = [owner = std::move(session), destroyed]() mutable {
+                owner.reset();
+                destroyed.TrySetValue();
+            };
+            data->Commit();
+
+            Y_ABORT_UNLESS(destroyed.GetFuture().Wait(TDuration::Seconds(10)),
+                "Destroying the last Reader owner from the acknowledged counter deadlocked");
+            Y_ABORT_UNLESS(ready.Wait(TDuration::Seconds(5)), "Deferred ACK waiter was not signalled");
+            UNIT_ASSERT(lifetime.expired());
+            UNIT_ASSERT_VALUES_EQUAL(acknowledged->Value(), 1);
             driver.Stop(true);
         }
 

@@ -1055,8 +1055,12 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ReadFromProcessorImpl(
                          // Capture message & processor not to read in freed memory.
                          serverMessage = ServerMessage,
                          processor = Processor](NYdbGrpc::TGrpcStatus&& grpcStatus) {
+            // Deferred waiters refer to the session's queue. Keep it alive through
+            // their execution, but release the cancellation borrow before callbacks.
+            typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPtr owner;
             TDeferredActions<UseMigrationProtocol> deferred;
             if (auto borrowedSelf = cbContext->LockShared()) {
+                owner = cbContext->TryGet();
                 borrowedSelf->OnReadDone(std::move(grpcStatus), connectionGeneration, deferred);
             }
         };

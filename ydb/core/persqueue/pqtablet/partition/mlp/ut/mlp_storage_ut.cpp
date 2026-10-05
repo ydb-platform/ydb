@@ -3439,25 +3439,24 @@ Y_UNIT_TEST(StdWithGrouplessMessages) {
     UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
 }
 
-Y_UNIT_TEST(StdByOffsetPolicyReturnsAscendingOffsets) {
-    // With EReadSelectionPolicy::ByOffset the STD read path ignores group fairness and returns messages by
-    // increasing offset, exactly like the legacy scan, even when several messages share one group.
+Y_UNIT_TEST(StdGrouplessReturnsAscendingOffsets) {
+    // No inflight message has a MessageGroupId, so Next keeps the legacy ascending-offset scan.
     TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
-    storage.AddMessage(0, true, 7, TInstant::Now());
-    storage.AddMessage(1, true, 7, TInstant::Now());
-    storage.AddMessage(2, true, 7, TInstant::Now());
-    storage.AddMessage(3, true, 9, TInstant::Now());
+    storage.AddMessage(0, false, 0, TInstant::Now());
+    storage.AddMessage(1, false, 0, TInstant::Now());
+    storage.AddMessage(2, false, 0, TInstant::Now());
+    storage.AddMessage(3, false, 0, TInstant::Now());
 
     TStorage::TPosition position;
     std::vector<ui64> seen;
     for (int i = 0; i < 4; ++i) {
-        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT_C(result.has_value(), i);
         seen.push_back(result->Offset);
     }
     UNIT_ASSERT_VALUES_EQUAL(seen, (std::vector<ui64>{0, 1, 2, 3}));
 
-    auto empty = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+    auto empty = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(!empty.has_value());
 }
 
@@ -3863,58 +3862,116 @@ Y_UNIT_TEST(StdSlowZoneMiddleUnlinkKeepsTheChain) {
     UNIT_ASSERT_VALUES_EQUAL(candidates, (TSet<ui64>{0, 2, 10}));
 }
 
-Y_UNIT_TEST(StdByOffsetSkipsLockedHole) {
+Y_UNIT_TEST(StdGrouplessSkipsLockedHole) {
     TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
-    storage.AddMessage(0, true, 1, TInstant::Now());
-    storage.AddMessage(1, true, 2, TInstant::Now());
-    storage.AddMessage(2, true, 1, TInstant::Now());
+    storage.AddMessage(0, false, 0, TInstant::Now());
+    storage.AddMessage(1, false, 0, TInstant::Now());
+    storage.AddMessage(2, false, 0, TInstant::Now());
 
     {
         TStorage::TPosition position;
-        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
         UNIT_ASSERT_VALUES_EQUAL(result->Offset, 0);
     }
 
     TStorage::TPosition position;
-    auto first = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+    auto first = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(first.has_value());
     UNIT_ASSERT_VALUES_EQUAL(first->Offset, 1);
-    auto second = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+    auto second = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(second.has_value());
     UNIT_ASSERT_VALUES_EQUAL(second->Offset, 2);
 }
 
-Y_UNIT_TEST(StdByOffsetReadsSlowZoneBeforeFast) {
+Y_UNIT_TEST(StdGrouplessReadsSlowZoneBeforeFast) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     TStorage storage(timeProvider, TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = false});
     auto now = timeProvider->Now();
-    storage.AddMessage(0, true, 1, now);
-    storage.AddMessage(1, true, 1, now);
-    UNIT_ASSERT(storage.AddMessage(8, true, 2, now));
+    storage.AddMessage(0, false, 0, now);
+    storage.AddMessage(1, false, 0, now);
+    UNIT_ASSERT(storage.AddMessage(8, false, 0, now));
 
     TStorage::TPosition position;
     std::vector<ui64> seen;
     for (int i = 0; i < 3; ++i) {
-        auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+        auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
         seen.push_back(result->Offset);
     }
     UNIT_ASSERT_VALUES_EQUAL(seen, (std::vector<ui64>{0, 1, 8}));
 }
 
-Y_UNIT_TEST(StdByOffsetSkipsRetentionExpired) {
+Y_UNIT_TEST(StdGrouplessSkipsRetentionExpired) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = false});
     storage.SetRetentionPeriod(TDuration::Seconds(5));
-    storage.AddMessage(0, true, 1, timeProvider->Now());
-    storage.AddMessage(1, true, 2, timeProvider->Now() + TDuration::Seconds(20));
+    storage.AddMessage(0, false, 0, timeProvider->Now());
+    storage.AddMessage(1, false, 0, timeProvider->Now() + TDuration::Seconds(20));
     timeProvider->Tick(TDuration::Seconds(6));
 
     TStorage::TPosition position;
-    auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position, {}, EReadSelectionPolicy::ByOffset);
+    auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(result.has_value());
     UNIT_ASSERT_VALUES_EQUAL(result->Offset, 1);
+}
+
+Y_UNIT_TEST(StdSwitchesToFairnessWhenGroupedMessageAppears) {
+    // Groupless reads use ascending offsets. Group maps stay filled, so one grouped message switches Next to fairness:
+    // the group is served before the groupless messages that were already stored.
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
+    storage.AddMessage(0, false, 0, TInstant::Now());
+    storage.AddMessage(1, false, 0, TInstant::Now());
+    storage.AddMessage(2, false, 0, TInstant::Now());
+
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT(result.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 0);
+    }
+
+    storage.AddMessage(3, true, 7, TInstant::Now());
+
+    TStorage::TPosition position;
+    auto grouped = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+    UNIT_ASSERT(grouped.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(grouped->Offset, 3);
+
+    TSet<ui64> groupless;
+    for (int i = 0; i < 2; ++i) {
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT(result.has_value());
+        groupless.insert(result->Offset);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(groupless, (TSet<ui64>{1, 2}));
+}
+
+Y_UNIT_TEST(StdOffsetOrderResumesAfterLastGroupedMessageRemoved) {
+    // A grouped message kept in the slow zone is deleted on commit. After that no inflight message has a
+    // MessageGroupId, and the messages that remain are returned by ascending offset.
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    TStorage storage(timeProvider, TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = false});
+    auto now = timeProvider->Now();
+    storage.AddMessage(0, true, 7, now);
+    storage.AddMessage(1, false, 0, now);
+    UNIT_ASSERT(storage.AddMessage(10, false, 0, now));
+
+    {
+        TStorage::TPosition position;
+        auto grouped = storage.Next(now + TDuration::Seconds(1), position);
+        UNIT_ASSERT(grouped.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(grouped->Offset, 0);
+    }
+    UNIT_ASSERT(storage.Commit(0) == EOperationResult::Success);
+
+    TStorage::TPosition position;
+    auto first = storage.Next(now + TDuration::Seconds(1), position);
+    auto second = storage.Next(now + TDuration::Seconds(1), position);
+    UNIT_ASSERT(first.has_value());
+    UNIT_ASSERT(second.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(first->Offset, 1);
+    UNIT_ASSERT_VALUES_EQUAL(second->Offset, 10);
 }
 
 Y_UNIT_TEST(StdUnlockMakesMessageReadableAgain) {

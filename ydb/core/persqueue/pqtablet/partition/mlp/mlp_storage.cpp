@@ -244,15 +244,15 @@ TStorage::TNextMessageResult TStorage::SearchForEligibleMessage(const std::optio
     };
 };
 
-std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups, EReadSelectionPolicy policy) {
+std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups) {
     const std::optional<ui32> retentionDeadlineDelta = GetRetentionDeadlineDelta();
 
     if (!position.SlowPosition) {
         position.SlowPosition = SlowMessages.begin();
     }
 
-    // FIFO always uses the ordered/group-based path. STD uses it only when fairness is requested.
-    if (KeepMessageOrder || policy == EReadSelectionPolicy::ByMessageGroupFairness) {
+    // If any of messages has a MessageGroupId, then use fairness selection, otherwise use a sequential offset scan
+    if (!MessageGroups.Groups.empty()) {
         TNextMessageResult nextMessage = SearchForEligibleMessage(retentionDeadlineDelta, skipMessageGroups);
         if (nextMessage.Message) {
             MessageGroups.RotateGroupsOrder(nextMessage.OrderIterator);
@@ -413,8 +413,7 @@ std::deque<TReadMessage> TStorage::Read(
     TPosition& position,
     const absl::flat_hash_set<ui32>& skipMessageGroups,
     size_t maxCount,
-    const TString& receiveAttemptId,
-    EReadSelectionPolicy policy
+    const TString& receiveAttemptId
 ) {
     std::deque<TReadMessage> messages;
 
@@ -443,7 +442,7 @@ std::deque<TReadMessage> TStorage::Read(
     }
 
     for (size_t count = maxCount; count; --count) {
-        auto result = Next(visibilityDeadline, position, skipMessageGroups, policy);
+        auto result = Next(visibilityDeadline, position, skipMessageGroups);
         if (!result) {
             break;
         }

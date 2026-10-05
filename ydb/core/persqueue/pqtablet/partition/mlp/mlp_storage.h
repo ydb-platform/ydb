@@ -43,14 +43,6 @@ namespace NKikimr::NPQ::NMLP {
     };
 
 
-// Selects how TStorage::Next picks the next message to return.
-enum class EReadSelectionPolicy {
-    // Return the oldest available message (smallest offset). Legacy scan order.
-    ByOffset,
-    // Pick a message whose MessageGroupId has not been served for the longest time, with fairness.
-    ByMessageGroupFairness,
-};
-
 class TStorage {
     static constexpr size_t MAX_MESSAGES = 120000;
     static constexpr size_t MIN_MESSAGES = 100;
@@ -290,7 +282,9 @@ public:
     // deadline - time for processing visibility
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
-    std::optional<TReadMessage> Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups = {}, EReadSelectionPolicy policy = EReadSelectionPolicy::ByMessageGroupFairness);
+    // When no inflight message belongs to a group, the oldest available offset is returned.
+    // Otherwise a group that has waited longest is chosen. Group maps are updated either way.
+    std::optional<TReadMessage> Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups = {});
     // Read up to maxCount messages. When receiveAttemptId is set, repeated reads with the same
     // attempt id within ReceiveAttemptIdPeriod replay the same message set (SQS FIFO semantics).
     std::deque<TReadMessage> Read(
@@ -299,8 +293,7 @@ public:
         TPosition& position,
         const absl::flat_hash_set<ui32>& skipMessageGroups,
         size_t maxCount,
-        const TString& receiveAttemptId,
-        EReadSelectionPolicy policy = EReadSelectionPolicy::ByMessageGroupFairness
+        const TString& receiveAttemptId
     );
     EOperationResult Commit(ui64 message);
     EOperationResult Unlock(ui64 message);

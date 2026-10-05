@@ -3554,37 +3554,22 @@ Y_UNIT_TEST(FairnessNormalInterleaved) {
 }
 
 Y_UNIT_TEST(FairnessGrouplessAlwaysAvailable) {
+    // FIFO still blocks the rest of a group while its head is in flight. Groupless messages stay readable
+    // and every message is delivered. The mix order is not asserted.
     TFairnessModel model;
-    model.AddMessage(0, /*hasGroup*/ false); // 0
+    model.AddMessage(1, /*hasGroup*/ true);  // 0
     model.AddMessage(1, /*hasGroup*/ true);  // 1
     model.AddMessage(0, /*hasGroup*/ false); // 2
-    model.AddMessage(1, /*hasGroup*/ true);  // 3
-    model.AddMessage(2, /*hasGroup*/ true);  // 4
-    model.AddMessage(0, /*hasGroup*/ false); // 5
+    model.AddMessage(0, /*hasGroup*/ false); // 3
 
-    // Lock the heads of both grouped groups; their second messages become blocked.
-    auto v = model.Next(2);
-    UNIT_ASSERT_VALUES_EQUAL(v.size(), 2);
-
-    // Even though groups A and B are busy, all three groupless messages must still be drainable now.
-    auto g = model.Next(3);
-    UNIT_ASSERT_VALUES_EQUAL_C(g.size(), 3, "all groupless messages must be available while grouped ones are busy");
-    for (auto& m : g) {
-        UNIT_ASSERT_C(m.Offset == 0 || m.Offset == 2 || m.Offset == 5, LabeledOutput(m.Offset));
-    }
-
-    // Commit everything drained so far, then finish the remaining grouped tails.
-    for (auto& m : v) {
-        model.Commit(m.Offset);
-    }
-    for (auto& m : g) {
-        model.Commit(m.Offset);
-    }
-    for (int i = 0; i < 4; ++i) {
-        for (auto& m : model.Next(1)) {
-            model.Commit(m.Offset);
+    TSet<ui64> seen;
+    for (int i = 0; i < 8; ++i) {
+        for (auto& message : model.Next(1)) {
+            seen.insert(message.Offset);
+            model.Commit(message.Offset);
         }
     }
+    UNIT_ASSERT_VALUES_EQUAL(seen, (TSet<ui64>{0, 1, 2, 3}));
 }
 
 // Collects the set of offsets that Next may return in the current storage state by repeatedly locking them and
@@ -3665,33 +3650,41 @@ Y_UNIT_TEST(StdFairnessOneGroupManyMessages) {
     UNIT_ASSERT(!storage.Next(deadline, position).has_value());
 }
 
-Y_UNIT_TEST(StdFairnessGroupsBeforeGroupless) {
-    // Selected strategy, shared with FIFO: an eligible group is returned before any groupless message.
-    // Groupless offsets are still returned once no eligible group remains, and their mutual order is not fixed.
+Y_UNIT_TEST(StdGrouplessNotStarvedByOneGroup) {
+    // One eligible group must not take every read while groupless messages are waiting, and the groupless
+    // pool must not take every read while that group still has a message. The order itself is not fixed.
     TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
-    storage.AddMessage(0, false, 0, TInstant::Now());
-    storage.AddMessage(1, true, 7, TInstant::Now());
-    storage.AddMessage(2, true, 7, TInstant::Now());
-    storage.AddMessage(3, false, 0, TInstant::Now());
-
-    TStorage::TPosition position;
-    auto first = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
-    UNIT_ASSERT(first.has_value());
-    UNIT_ASSERT_VALUES_EQUAL(first->Offset, 1);
-    auto second = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
-    UNIT_ASSERT(second.has_value());
-    UNIT_ASSERT_VALUES_EQUAL(second->Offset, 2);
-
+    constexpr ui64 Count = 8;
     TSet<ui64> groupless;
-    for (int i = 0; i < 2; ++i) {
+    TSet<ui64> grouped;
+    for (ui64 offset = 0; offset < Count; ++offset) {
+        storage.AddMessage(offset, false, 0, TInstant::Now());
+        groupless.insert(offset);
+    }
+    for (ui64 offset = Count; offset < 2 * Count; ++offset) {
+        storage.AddMessage(offset, true, 7, TInstant::Now());
+        grouped.insert(offset);
+    }
+
+    size_t lockedGroupless = 0;
+    size_t lockedGrouped = 0;
+    bool grouplessWhileGroupRemains = false;
+    bool groupedWhileGrouplessRemains = false;
+    while (lockedGroupless < Count && lockedGrouped < Count) {
+        TStorage::TPosition position;
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
-        groupless.insert(result->Offset);
+        if (groupless.contains(result->Offset)) {
+            ++lockedGroupless;
+            grouplessWhileGroupRemains = true;
+        } else {
+            UNIT_ASSERT(grouped.contains(result->Offset));
+            ++lockedGrouped;
+            groupedWhileGrouplessRemains = true;
+        }
     }
-    UNIT_ASSERT_VALUES_EQUAL(groupless, (TSet<ui64>{0, 3}));
-
-    auto empty = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
-    UNIT_ASSERT(!empty.has_value());
+    UNIT_ASSERT(grouplessWhileGroupRemains);
+    UNIT_ASSERT(groupedWhileGrouplessRemains);
 }
 
 Y_UNIT_TEST(StdFairnessRestoredFromSnapshotThenNext) {
@@ -3902,6 +3895,26 @@ Y_UNIT_TEST(StdGrouplessReadsSlowZoneBeforeFast) {
     UNIT_ASSERT_VALUES_EQUAL(seen, (std::vector<ui64>{0, 1, 8}));
 }
 
+Y_UNIT_TEST(StdFairnessSkipsExpiredGroupless) {
+    // An expired groupless offset is not returned. The fresh groupless message and the grouped one both are.
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = false});
+    storage.SetRetentionPeriod(TDuration::Seconds(5));
+    storage.AddMessage(0, false, 0, timeProvider->Now());
+    storage.AddMessage(1, true, 7, timeProvider->Now() + TDuration::Seconds(20));
+    storage.AddMessage(2, false, 0, timeProvider->Now() + TDuration::Seconds(20));
+    timeProvider->Tick(TDuration::Seconds(6));
+
+    TSet<ui64> seen;
+    for (int i = 0; i < 2; ++i) {
+        TStorage::TPosition position;
+        auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT(result.has_value());
+        seen.insert(result->Offset);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(seen, (TSet<ui64>{1, 2}));
+}
+
 Y_UNIT_TEST(StdGrouplessSkipsRetentionExpired) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = false});
@@ -3917,8 +3930,8 @@ Y_UNIT_TEST(StdGrouplessSkipsRetentionExpired) {
 }
 
 Y_UNIT_TEST(StdSwitchesToFairnessWhenGroupedMessageAppears) {
-    // Groupless reads use ascending offsets. Group maps stay filled, so one grouped message switches Next to fairness:
-    // the group is served before the groupless messages that were already stored.
+    // With no group, Next is ascending offset. Once a grouped message arrives, fairness is used and
+    // every still-unprocessed message, grouped or not, is delivered. The mix order is not asserted.
     TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = false});
     storage.AddMessage(0, false, 0, TInstant::Now());
     storage.AddMessage(1, false, 0, TInstant::Now());
@@ -3933,18 +3946,14 @@ Y_UNIT_TEST(StdSwitchesToFairnessWhenGroupedMessageAppears) {
 
     storage.AddMessage(3, true, 7, TInstant::Now());
 
-    TStorage::TPosition position;
-    auto grouped = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
-    UNIT_ASSERT(grouped.has_value());
-    UNIT_ASSERT_VALUES_EQUAL(grouped->Offset, 3);
-
-    TSet<ui64> groupless;
-    for (int i = 0; i < 2; ++i) {
+    TSet<ui64> seen;
+    for (int i = 0; i < 3; ++i) {
+        TStorage::TPosition position;
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
-        UNIT_ASSERT(result.has_value());
-        groupless.insert(result->Offset);
+        UNIT_ASSERT_C(result.has_value(), i);
+        seen.insert(result->Offset);
     }
-    UNIT_ASSERT_VALUES_EQUAL(groupless, (TSet<ui64>{1, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(seen, (TSet<ui64>{1, 2, 3}));
 }
 
 Y_UNIT_TEST(StdOffsetOrderResumesAfterLastGroupedMessageRemoved) {
@@ -3956,13 +3965,6 @@ Y_UNIT_TEST(StdOffsetOrderResumesAfterLastGroupedMessageRemoved) {
     storage.AddMessage(0, true, 7, now);
     storage.AddMessage(1, false, 0, now);
     UNIT_ASSERT(storage.AddMessage(10, false, 0, now));
-
-    {
-        TStorage::TPosition position;
-        auto grouped = storage.Next(now + TDuration::Seconds(1), position);
-        UNIT_ASSERT(grouped.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(grouped->Offset, 0);
-    }
     UNIT_ASSERT(storage.Commit(0) == EOperationResult::Success);
 
     TStorage::TPosition position;

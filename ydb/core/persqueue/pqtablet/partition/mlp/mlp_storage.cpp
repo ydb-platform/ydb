@@ -253,31 +253,41 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
 
     // If any of messages has a MessageGroupId, then use fairness selection, otherwise use a sequential offset scan
     if (!MessageGroups.Groups.empty()) {
-        TNextMessageResult nextMessage = SearchForEligibleMessage(retentionDeadlineDelta, skipMessageGroups);
-        if (nextMessage.Message) {
+        auto takeGroup = [&]() -> std::optional<TReadMessage> {
+            TNextMessageResult nextMessage = SearchForEligibleMessage(retentionDeadlineDelta, skipMessageGroups);
+            if (!nextMessage.Message) {
+                return std::nullopt;
+            }
             MessageGroups.RotateGroupsOrder(nextMessage.OrderIterator);
-            if (!KeepMessageOrder) {
+            if (!KeepMessageOrder && nextMessage.Message->HasMessageGroupId) {
                 RotateStdMessageGroupPastReturned(nextMessage.Offset, *nextMessage.Message);
             }
             DoLock(nextMessage.Offset, *nextMessage.Message, deadline);
             return ConvertToReadMessage(nextMessage.Offset, *nextMessage.Message);
-        }
-
-        auto tryReturn = [&](ui64 offset, const char* desc) -> std::optional<TReadMessage> {
-            TTryGetMessageResult result = TryGetMessage(offset, retentionDeadlineDelta, skipMessageGroups, desc);
-            if (!result.Usable) {
-                return std::nullopt;
-            }
-            DoLock(offset, *result.Message, deadline);
-            return ConvertToReadMessage(offset, *result.Message);
         };
-
-        for (ui64 offset : MessageGroups.UnorderedOffsets) [[unlikely]] {
-            if (auto result = tryReturn(offset, "unordered")) {
-                return result;
+        auto takeGroupless = [&]() -> std::optional<TReadMessage> {
+            for (ui64 offset : MessageGroups.UnorderedOffsets) {
+                TTryGetMessageResult result = TryGetMessage(offset, retentionDeadlineDelta, skipMessageGroups, "unordered");
+                if (!result.Usable) {
+                    continue;
+                }
+                DoLock(offset, *result.Message, deadline);
+                return ConvertToReadMessage(offset, *result.Message);
             }
+            return std::nullopt;
+        };
+        const bool grouplessFirst = (FairnessClassTurn++) % 2 == 0;
+        if (grouplessFirst) { // handle mixed case of groupless and grouped messages in the same queue
+            if (auto message = takeGroupless()) {
+                return message;
+            }
+            return takeGroup();
+        } else {
+            if (auto message = takeGroup()) {
+                return message;
+            }
+            return takeGroupless();
         }
-        return std::nullopt;
     }
 
     for(; position.SlowPosition != SlowMessages.end(); ++position.SlowPosition.value()) {
@@ -546,6 +556,7 @@ bool TStorage::Purge(ui64 endOffset) {
     DLQQueue.clear();
     DLQMessages.clear();
     MessageGroups.Clear();
+    FairnessClassTurn = 0;
     ClearReceiveAttempts();
 
     FirstOffset = endOffset;

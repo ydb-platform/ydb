@@ -283,7 +283,7 @@ public:
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
     // When no inflight message belongs to a group, the oldest available offset is returned.
-    // Otherwise a group that has waited longest is chosen. Group maps are updated either way.
+    // Otherwise a group that has waited longest is chosen
     std::optional<TReadMessage> Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups = {});
     // Read up to maxCount messages. When receiveAttemptId is set, repeated reads with the same
     // attempt id within ReceiveAttemptIdPeriod replay the same message set (SQS FIFO semantics).
@@ -419,6 +419,8 @@ private:
     ui64 FirstOffset = 0;
     ui64 FirstUncommittedOffset = 0;
     ui64 FirstUnlockedOffset = 0;
+    // Incremented on each fairness Next. IntHash of this value chooses which class is tried first.
+    ui32 FairnessClassTurn = 0;
 
     TInstant BaseDeadline;
     TInstant BaseWriteTimestamp;

@@ -1,35 +1,73 @@
 # Validating a backup
 
-The `tools validate` command checks integrity of a backup created by [`export s3`](./export-s3.md) or [`export nfs`](./export-nfs.md). The check runs in this process and does not restore data into a database, so a {{ ydb-short-name }} connection is not required.
+The `tools validate` command validates the integrity of a backup created by [`export s3`](./export-s3.md) or [`export nfs`](./export-nfs.md), including its file set, metadata, and checksums. The command reads the backup files directly from S3 or the file system. It does not load anything into the database and does not require a connection to {{ ydb-short-name }}.
 
 ```bash
 {{ ydb-cli }} tools validate s3 [options]
 {{ ydb-cli }} tools validate nfs [options]
 ```
 
-`s3` and `nfs` differ only in how the backup is read. File layout is described in [File structure of data export](./file-structure.md).
+The `s3` and `nfs` subcommands differ only in where the backup is located. The backup file format is described in [File structure of data export](./file-structure.md).
+
+{% note warning %}
+
+Successful validation means that the backup files are intact and mutually consistent. It does not guarantee that the backup can be imported: the command neither parses the contents of CSV and Parquet files nor checks them against the table schema.
+
+{% endnote %}
+
+## What can be validated {#layouts}
+
+The command supports three input types.
+
+**A full backup** is produced when `export s3` is run with `--destination-prefix` or `export nfs` is run with `--fs-path`, and `--item` is not used. Its root contains a `metadata.json` file with `"kind": "SimpleExportV0"` and a `SchemaMapping` directory that lists the exported objects. The command checks every object from that list. Schema files that are present in the backup but not listed in `SchemaMapping` are reported as errors.
+
+**An item export** is produced by an export command that uses `--item src=...,dst=...`. It has no top-level `metadata.json` or `SchemaMapping`. The specified path or prefix contains directories for the exported objects. The command identifies these directories by schema files such as `scheme.pb` and `create_view.sql`. It checks every object it finds, including index tables within a table directory even if they are not listed in the table metadata. Without [`--expected-objects`](#expected-objects), the command cannot determine whether the backup is complete or detect an object omitted from the backup. It prints a warning, and successful validation means only that the objects it found are intact.
+
+**A single object** is a path to a directory containing one exported object, such as a table, view, or topic. For a table, the command also checks the indexes and changefeeds listed in its `metadata.json`, as well as the index tables found in its directory.
+
+The command automatically detects the input type. It treats a path as a full backup if its `metadata.json` contains `"kind": "SimpleExportV0"` or if a `SchemaMapping` directory is present. Otherwise, it treats the path as an item export or a single object, depending on its contents. If `metadata.json` exists but has a different `kind`, the command reports an error. The `--format` parameter sets the input type explicitly:
+
+- `auto` (default) — detect the input type automatically as described above;
+- `full` — treat the path as a full backup. The command reports an error if `metadata.json` is missing or unreadable, or if its `kind` differs;
+- `item` — treat the path as an item export without using `SchemaMapping` to check completeness. If the path appears to be a full backup, the command prints a warning.
+
+## List of expected objects {#expected-objects}
+
+To check whether an item export is complete, use `--expected-objects` to specify a text file containing the list of expected objects. Each nonempty line must contain an object name relative to the path being validated, such as `dir1/table1`. The command reports a warning for an object that is present in the backup but absent from the file. It reports an error for an object that is listed in the file but missing from the backup. Index tables inside the directory of a listed object count as part of that object and do not need to be listed separately. For a full backup, `--expected-objects` has no effect because the object list comes from `SchemaMapping`.
+
+Use the `tools list-objects` command to generate this list. It prints the names of the schema objects under the specified database path: tables, column-oriented tables, views, and topics. Each name is printed on its own line, in the format accepted by `--expected-objects`:
+
+```bash
+{{ ydb-cli }} [connection options] tools list-objects [options]
+```
+
+Unlike `tools validate`, this command requires a connection to the database.
+
+| Parameter | Description |
+| --- | --- |
+| `-p`, `--path PATH` | Path to a directory or an object in the database, either relative to the database root or a full path that starts with the database path. Default: `.`, the database root. |
+| `--include-index-data` | Also list the index tables that an export with `--include-index-data` writes as separate objects. |
+| `-o`, `--output PATH` | Write the list to a file. By default, the list is printed to standard output. |
+
+Names are printed relative to `--path`. If `--path` points to a single table, the output is `.`, and its index tables (with `--include-index-data`) are printed as `index_name/indexImplTable`.
 
 ## What is checked {#checks}
 
-The path is a full backup when its `metadata.json` has `"kind": "SimpleExportV0"`. The command then checks `SchemaMapping` and every object listed there. This metadata is written when the export uses `--destination-prefix` or `--fs-path`.
+Metadata files, including `scheme.pb`, `permissions.pb`, `metadata.json`, changefeed and topic descriptions, SQL and protobuf schema files, and files in `SchemaMapping`, must be readable and contain the required fields that describe the object. For a table, this means a non-empty column list, a type for every column, and a primary key made up of columns from that list.
 
-Exports created with `--item src=...,dst=...` do not write that file or `SchemaMapping`. The destination prefix is a directory of exported objects (`scheme.pb`, `create_view.sql`, and the other schema files). The command finds those objects and checks each of them, including index implementation tables stored under a table even when the table metadata does not list indexes.
+The number of `data_...` files must match the partition count set in `scheme.pb`. `uniform_partitions` specifies the partition count directly. With `partition_at_keys`, the partition count is the number of `split_points` plus one. If neither field is set, the table has one partition and must contain a single data file, `data_00`. File numbers must run from `0` to `N-1` with no gaps, duplicates, or extra files. File names use forms such as `data_00.csv` and `data_01.parquet`. The sequence number must contain at least two digits, and compressed files have an additional `.zst` suffix.
 
-`--expected-objects FILE` supplies the missing manifest for this layout. Each line is an object name relative to the validated path. An object found in the backup and absent from the file is printed as a warning and does not fail the command. An object listed in the file and absent from the backup is an error and the command exits with code 1. An index implementation table stored under a listed object is treated as part of that object.
+Each checksum file is stored next to the file it covers. For both `data_00.csv` and its compressed form, `data_00.csv.zst`, the checksum file is named `data_00.csv.sha256`. It holds the SHA-256 checksum of the uncompressed contents. Checksums of metadata and schema files are always verified. Unless `--scheme-only` is set, the command also verifies data checksums. It reads each data file as a stream, decompresses Zstandard-compressed data when necessary, and computes the hash incrementally, so the entire file is never loaded into memory. With `--scheme-only`, data files are not read; the command checks only that each file has a checksum file containing a SHA-256 checksum encoded in hexadecimal.
 
-Any other path is one exported object (a table, a view, a topic, and so on). A path to one table checks that table, including indexes and changefeeds recorded in its `metadata.json` and index tables found under it. A path to a full backup checks the whole backup.
+Data checksums can be verified only for backups whose checksums were computed during export. Starting with version 25.3, checksums are computed by default. Such backups have `"checksum": "sha256"` in the backup `metadata.json` and `"version": 1` in the object metadata. If the checksum files are absent, validation without `--scheme-only` fails.
 
-Metadata files (`scheme.pb`, `permissions.pb`, `metadata.json`, changefeed and topic descriptions, schema SQL and proto files, `SchemaMapping`) must be readable and contain the minimum fields required to describe the object. For a table this includes a non-empty column list, a type for every column, and a primary key that is a subset of those columns.
+The command does not validate encrypted backups. It reports `.enc` files and the `encryption` field in the backup's `metadata.json` as errors. The command does not decrypt files. `--encryption-key-file` is accepted only for compatibility with the import commands; `tools validate` does not use the key. If a key is provided but the backup contains no encrypted files, the command prints a warning.
 
-The partition count in `scheme.pb` must match the set of `data_...` files. `uniform_partitions` is that count. `partition_at_keys` means `split_points` plus one. If neither is set, the table has one partition, `data_00`. Indexes must be `0 .. N-1` with no gaps, duplicates, or extra files. Canonical names are `data_00.csv`, `data_01.parquet`, and so on (at least two digits), optionally with `.zst`.
+After an I/O error, the command retries the read, gradually increasing the delay between attempts from 100 ms to 2 s. The number of attempts is set by `--retries`.
 
-Without `--scheme-only`, data file contents are checked too. Export checksums are SHA-256 of uncompressed plaintext, stored in a sidecar such as `data_00.csv.sha256` (the same name is used when the object is `data_00.csv.zst`). The hash is updated as each chunk of the object arrives, including after zstd decompression, so the whole data file is not loaded into memory. The same streaming read is used for S3 and for a filesystem. Metadata and schema sidecars are checked in both modes. In `--scheme-only` mode data bytes are not read; the command only checks that each data sidecar exists and contains a SHA-256 hex digest.
+## Errors and warnings {#errors}
 
-Content validation requires those sidecars. Exports created with checksums (the default since 25.3) write `"checksum": "sha256"` in the backup `metadata.json` and `"version": 1` in object metadata. If the sidecars are absent, validation without `--scheme-only` fails.
-
-Encrypted backups (`.enc` objects or an `encryption` field in the backup metadata) are detected and rejected. The command accepts the same encryption key options as `import`, but it does not decrypt backup files.
-
-By default the command keeps going after an error and prints every error it finds. `--fail-fast` stops at the first error, including the remaining `--item` paths. Work already running on other `--threads` can still finish. A warning does not stop the check. The process exits with code 1 when at least one error was reported.
+By default, the command continues after an error and reports every problem it finds. `--fail-fast` stops validation after the first error: the remaining `--item` paths are not checked, but checks already running in other threads continue to completion. Warnings neither stop validation nor affect the exit code.
 
 ## Command line parameters {#pars}
 
@@ -37,40 +75,44 @@ By default the command keeps going after an error and prints every error it find
 
 | Parameter | Description |
 | --- | --- |
-| `--scheme-only` | Check file composition and metadata structure only. Do not read data file contents. |
-| `--fail-fast` | Stop at the first error. By default every error is reported. Warnings do not stop the check. |
-| `--threads NUM` | Maximum number of threads used to validate data and metadata. Several objects are checked at once, and within one object several data files are checked at once. Default: one less than the number of available processors, but at least 1. Same rule as [`import file csv`](./import-file.md). |
-| `--retries NUM` | Attempts to read a backup file after an I/O error. Default: `10`. |
-| `--encryption-key-file PATH` | Path to the encryption key file, same encoding as [`import s3`](./import-s3.md) / [`import nfs`](./import-nfs.md). The key can also be passed in `YDB_ENCRYPTION_KEY` as a hexadecimal string, or the file path in `YDB_ENCRYPTION_KEY_FILE`. Encrypted files are still rejected. |
-| `--item PROPERTY=VALUE,...` | Object to validate. Can be repeated. Properties: `source` (`src`, `s`) is the backup path; `destination` (`dst`, `d`) is accepted for compatibility with `import` and ignored. |
-| `--expected-objects PATH` | Text file with expected object names for a backup created with `--item`, one name per line, relative to the validated path. Empty lines are ignored. Extra objects in the backup are warnings. Names missing from the backup are errors. |
+| `--format FORMAT` | Expected [input type](#layouts): `auto`, `full`, or `item`. Default: `auto`. |
+| `--scheme-only` | Check only the set of files, the metadata structure, and the presence of checksum files. Data files are not read. |
+| `--fail-fast` | Stop at the first error. By default, every error is reported. |
+| `--threads NUM` | Maximum number of threads. Different objects, as well as the data files of a single object, are checked in parallel. Default: one less than the number of available processors, with a minimum of one. This is the same default used by [`import file csv`](./import-file.md). |
+| `--retries NUM` | Number of attempts to read a backup file on I/O errors. Default: `10`. |
+| `--encryption-key-file PATH` | Accepted for compatibility with [`import s3`](./import-s3.md) and [`import nfs`](./import-nfs.md); the key is not used. As with those commands, the key can be passed as a hexadecimal string in the `YDB_ENCRYPTION_KEY` environment variable, or as a file path in `YDB_ENCRYPTION_KEY_FILE`. Encrypted files are reported as errors regardless. |
+| `--item PROPERTY=VALUE,...` | Object to check; repeat this parameter to check multiple objects. The `source` property (aliases: `src`, `s`) specifies the path to the backup or object. The `destination` property (aliases: `dst`, `d`) is accepted for compatibility with the import commands and is ignored. |
+| `--expected-objects PATH` | File with the [list of expected objects](#expected-objects) for an item export. |
 
 ### S3 parameters {#s3}
 
-Connection parameters match [`import s3`](./import-s3.md). See [Connecting to and authenticating with S3](./auth-s3.md).
+Connection parameters are the same as for [`import s3`](./import-s3.md); see [Connecting to and authenticating with S3](./auth-s3.md).
 
 | Parameter | Description |
 | --- | --- |
 | `--s3-endpoint ENDPOINT` | S3 endpoint. Required. |
 | `--scheme SCHEME` | `http` or `https`. Default: `https`. |
 | `--bucket BUCKET` | Bucket name. Required. |
-| `--access-key STRING` | AWS access key id. Environment variable: `AWS_ACCESS_KEY_ID`. |
+| `--access-key STRING` | AWS access key ID. Environment variable: `AWS_ACCESS_KEY_ID`. |
 | `--secret-key STRING` | AWS secret key. Environment variable: `AWS_SECRET_ACCESS_KEY`. |
-| `--aws-profile STRING` | Named profile in `~/.aws/credentials`. Environment variable: `AWS_PROFILE`. Default: `default`. |
-| `--use-virtual-addressing BOOL` | `true` — virtual-hosted-style URL (default). `false` — path-style URL. |
-| `--source-prefix PREFIX` | Key prefix of a full backup or one object. Used when `--item` is omitted. |
+| `--aws-profile STRING` | Profile name in `~/.aws/credentials`. Environment variable: `AWS_PROFILE`. Default: `default`. |
+| `--use-virtual-addressing BOOL` | Bucket addressing style: `true` — virtual-hosted-style (default), `false` — path-style. |
+| `--source-prefix PREFIX` | Key prefix of a full backup or a single object. Used when `--item` is not set. |
 
-With `--item`, `source` is a full key prefix in the bucket, same as `ydb import s3`. It is not appended to `--source-prefix`.
+With `--item`, the `source` property specifies a full key prefix in the bucket, as it does for `import s3`. The value of `--source-prefix` is not prepended.
 
 ### NFS parameters {#nfs}
 
 | Parameter | Description |
 | --- | --- |
-| `--fs-path PATH` | Directory that contains the backup. Required. Without `--item`, this directory is validated. With `--item`, each `source` is relative to this directory, same as `ydb import nfs`. |
+| `--fs-path PATH` | Directory that contains the backup. Required. Without `--item`, the command checks the directory itself. With `--item`, the `source` property of each item is relative to this directory, as it is for `import nfs`. |
 
 ## Result {#result}
 
-A valid backup prints `Backup validation succeeded` and the process exits with code 0. Each problem is printed as `path: message`. When any problem is found, the process exits with code 1.
+Each error and warning is printed to standard error on a separate line as `path: message`; warning lines are prefixed with `warning:`. A summary line is printed at the end:
+
+- `Backup validation succeeded: checked N object(s)` — no errors; exit code `0`. If there were warnings, their number is included in the same line.
+- `Backup validation failed: N issue(s), checked M object(s)` — at least one error was found; exit code `1`.
 
 ## Examples {#examples}
 
@@ -82,7 +124,7 @@ Validate a full backup in S3:
   --source-prefix backup/2026-10-01
 ```
 
-Validate only one exported table, without reading data bytes:
+Validate a single exported table without reading the data files:
 
 ```bash
 {{ ydb-cli }} tools validate s3 \
@@ -91,13 +133,13 @@ Validate only one exported table, without reading data bytes:
   --scheme-only
 ```
 
-Validate a backup directory on a mounted filesystem:
+Validate a backup on a mounted file system:
 
 ```bash
 {{ ydb-cli }} tools validate nfs --fs-path /mnt/backup/2026-10-01
 ```
 
-Validate one table under that directory:
+Validate a single table from that backup:
 
 ```bash
 {{ ydb-cli }} tools validate nfs \
@@ -105,10 +147,11 @@ Validate one table under that directory:
   --item source=dir1/table1
 ```
 
-Validate an `--item` export and require a known set of objects. `objects.txt` contains one relative name per line, for example `dir1/table1`:
+Check whether a backup created with `--item` is complete. First, use `tools list-objects` to save the list of objects under the database directory `dir1` to `objects.txt`. The command uses the `quickstart` profile to connect to the database (see [{#T}](../profile/create.md#quickstart)). Then use `tools validate` to compare the backup with that list:
 
 ```bash
+{{ ydb-cli }} -p quickstart tools list-objects --path dir1 --output objects.txt
 {{ ydb-cli }} tools validate nfs \
-  --fs-path /mnt/backup/2026-10-01 \
+  --fs-path /mnt/backup/2026-10-01/dir1 \
   --expected-objects objects.txt
 ```

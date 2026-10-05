@@ -281,6 +281,8 @@ namespace {
                 COUNTER(DirectIO, RunningCount, false)
             },
             .PersistentBuffer = {
+                COUNTER(PersistentBuffer, RegisteredTablets, false)
+                COUNTER(PersistentBuffer, RegisteredTabletsLimit, false)
                 COUNTER(PersistentBuffer, AllocatedChunks, false)
                 COUNTER(PersistentBuffer, TotalBytes, false)
                 COUNTER(PersistentBuffer, PendingEventsQueueSize, false)
@@ -296,6 +298,12 @@ namespace {
                 COUNTER(Checksums, IntegrityLostWriteDetected, true)
             },
         };
+
+        if (IsPersistentBufferActor) {
+            *Counters.PersistentBuffer.RegisteredTablets = 0;
+            *Counters.PersistentBuffer.RegisteredTabletsLimit =
+                ui64(PersistentBufferFormat.MaxBarriersLimit) * TPersistentBufferBarriers::MaxBarriersPerHeader;
+        }
 
 #undef COUNTER_VALUE
 #undef HISTOGRAM_VALUE

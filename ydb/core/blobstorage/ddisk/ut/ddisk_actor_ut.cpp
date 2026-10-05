@@ -1050,6 +1050,17 @@ TIntrusivePtr<NMonitoring::TDynamicCounters> GetDirectIoCounters(TTestContext& c
         ->GetSubgroup("subsystem", "direct_io");
 }
 
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetPersistentBufferCounters(TTestContext& ctx, const TDiskHandle& disk) {
+    return ctx.Counters
+        ->GetSubgroup("counters", "ddisks")
+        ->GetSubgroup("ddiskPool", "ddisk_pool")
+        ->GetSubgroup("group", Sprintf("%09u", 0u))
+        ->GetSubgroup("orderNumber", Sprintf("%02u", 0u))
+        ->GetSubgroup("pdisk", Sprintf("%09u", disk.PDiskId))
+        ->GetSubgroup("media", "nvme")
+        ->GetSubgroup("subsystem", "persistent_buffer");
+}
+
 bool IsIntegrityUringWrite(NPDisk::TUringOperationBase* op) {
     UNIT_ASSERT(op->GetOperationType() == NPDisk::TUringOperationBase::EWRITE);
     UNIT_ASSERT(op->GetOperationBytes() >= sizeof(ui64));
@@ -3455,7 +3466,13 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TTestContext ctx;
         NDDisk::TPersistentBufferFormat format;
         format.RegistrationTimeoutMilliseconds = 100;
+        format.MaxBarriersLimit = 3;
         const auto disk = ctx.CreateDDisk(97, 1, format);
+        const auto counters = GetPersistentBufferCounters(ctx, disk);
+        const auto count = counters->GetCounter("RegisteredTablets", false);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("RegisteredTabletsLimit", false)->Val(),
+            ui64(format.MaxBarriersLimit) * NDDisk::TPersistentBufferBarriers::MaxBarriersPerHeader);
         const auto creds = Connect(ctx, disk.PBServiceId, 100, 1, 7, false);
         ctx.Runtime.Schedule(TDuration::Seconds(10), new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
         WaitFromDDisk<TEvents::TEvWakeup>(ctx);
@@ -3499,6 +3516,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(ctx, disk.PBServiceId,
             new NDDisk::TEvListPersistentBuffer(other)), TReplyStatus::INCORRECT_REQUEST);
 
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 1);
+        Connect(ctx, disk.PBServiceId, 100, 1, 8);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 2);
+        Connect(ctx, disk.PBServiceId, 100, 2, 8);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 2);
         const auto phantomToken = GetRegistrationToken(ctx, disk.PBServiceId, creds);
         SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvUnregisterPersistentBuffer(creds));
         auto close = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
@@ -3506,6 +3528,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const auto* closed = reinterpret_cast<const NDDisk::TPersistentBufferBarriers*>(closedData.data());
         UNIT_ASSERT_VALUES_EQUAL(closed->Barriers[0].Generation, Max<ui32>());
         UNIT_ASSERT_VALUES_EQUAL(closed->Barriers[0].Lsn, Max<ui64>());
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 2);
         const auto closeTime = ctx.Runtime.GetClock();
         ctx.SendPDiskResponse(disk, *close, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(ctx, disk.PBServiceId,
@@ -3520,6 +3543,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         AssertNoClientReplyBeforeSentinel(ctx, "removal must wait for durable barrier deletion");
         ctx.SendPDiskResponse(disk, *removal, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         AssertStatus(WaitFromDDisk<NDDisk::TEvUnregisterPersistentBufferResult>(ctx), TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 1);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
             new NDDisk::TEvRegisterPersistentBuffer(creds, phantomToken)), TReplyStatus::OUTDATED);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(ctx, disk.PBServiceId,
@@ -7389,6 +7413,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         // Write the legacy checksum-formatted record.
         const TDiskHandle disk1 = ctx.CreateDDisk(PDiskId, SlotId);
         const NDDisk::TQueryCredentials creds1 = Connect(ctx, disk1.PBServiceId, TabletId, 1);
+        // This namespace has a durable registration but no records to replay.
+        Connect(ctx, disk1.PBServiceId, TabletId, 1, 7);
+        UNIT_ASSERT_VALUES_EQUAL(GetPersistentBufferCounters(ctx, disk1)->GetCounter("RegisteredTablets", false)->Val(), 2);
         chunkData = ctx.RegistrationImages.at(disk1.PBServiceId);
         write(disk1, creds1, 1, firstPayload);
         for (ui32 i = 0; i < PersistentBufferInitChunks; ++i) {
@@ -7402,6 +7429,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TDiskHandle disk2 = CreateDDiskWithRestoredChunkData(ctx, PDiskId, SlotId,
             persistentBufferChunks, persistentBufferUniqueId, chunkData, indexFormat);
         const NDDisk::TQueryCredentials creds2 = Connect(ctx, disk2.PBServiceId, TabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetPersistentBufferCounters(ctx, disk2)->GetCounter("RegisteredTablets", false)->Val(), 2);
         readRestored(disk2, creds2, 1, firstPayload);
         write(disk2, creds2, 2, secondPayload);
         stopDDisk(disk2);
@@ -7410,6 +7438,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TDiskHandle disk3 = CreateDDiskWithRestoredChunkData(ctx, PDiskId, SlotId,
             persistentBufferChunks, persistentBufferUniqueId, chunkData, indexFormat);
         const NDDisk::TQueryCredentials creds3 = Connect(ctx, disk3.PBServiceId, TabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetPersistentBufferCounters(ctx, disk3)->GetCounter("RegisteredTablets", false)->Val(), 2);
         readRestored(disk3, creds3, 1, firstPayload);
         readRestored(disk3, creds3, 2, secondPayload);
         write(disk3, creds3, 3, thirdPayload);
@@ -7420,6 +7449,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TDiskHandle disk4 = CreateDDiskWithRestoredChunkData(ctx, PDiskId, SlotId,
             persistentBufferChunks, persistentBufferUniqueId, chunkData);
         const NDDisk::TQueryCredentials creds4 = Connect(ctx, disk4.PBServiceId, TabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetPersistentBufferCounters(ctx, disk4)->GetCounter("RegisteredTablets", false)->Val(), 2);
         readRestored(disk4, creds4, 1, firstPayload);
         readRestored(disk4, creds4, 2, secondPayload);
         readRestored(disk4, creds4, 3, thirdPayload);

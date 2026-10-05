@@ -782,6 +782,7 @@ namespace NKikimr::NDDisk {
             PersistentBufferDataSectorsInfo.clear();
 
             PersistentBufferBarriersManager.RestoreBarriers(PersistentBuffers, PersistentBufferSpaceAllocator);
+            *Counters.PersistentBuffer.RegisteredTablets = PersistentBufferBarriersManager.PersistentBufferBarriersLocation.size();
             // Without an ownership marker, remnants of a retired registration are not live data.
             std::erase_if(PersistentBuffers, [this](const auto& item) {
                 return !PersistentBufferBarriersManager.HasBarrier(item.first.TabletId, item.first.DirectBlockGroupIndex);
@@ -2184,6 +2185,8 @@ namespace NKikimr::NDDisk {
         auto [oldChunkIdx, oldSectorIdx, barrier] = operation == TPersistentBufferDiskOperationInFlight::EBarrierOperation::Remove
             ? PersistentBufferBarriersManager.RemoveBarrier(creds.TabletId, sectors[0], static_cast<ui8>(creds.DirectBlockGroupIndex))
             : PersistentBufferBarriersManager.MoveBarrier(creds.TabletId, creds.Generation, lsn, sectors[0], static_cast<ui8>(creds.DirectBlockGroupIndex));
+
+        *Counters.PersistentBuffer.RegisteredTablets = PersistentBufferBarriersManager.PersistentBufferBarriersLocation.size();
 
         if (oldChunkIdx != Max<ui32>()) {
             inflightRecord->second.Records[0].Sectors.push_back({.ChunkIdx = oldChunkIdx, .SectorIdx = oldSectorIdx});

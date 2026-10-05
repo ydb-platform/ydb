@@ -211,6 +211,9 @@ namespace NKikimr::NDDisk {
             } DirectIO;
 
             struct {
+                // Registrations are keyed by (TabletId, DirectBlockGroupIndex), including empty ones.
+                NMonitoring::TDynamicCounters::TCounterPtr RegisteredTablets;
+                NMonitoring::TDynamicCounters::TCounterPtr RegisteredTabletsLimit;
                 NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunks;
                 NMonitoring::TDynamicCounters::TCounterPtr TotalBytes;
                 NMonitoring::TDynamicCounters::TCounterPtr PendingEventsQueueSize;

@@ -209,15 +209,10 @@ public:
                     "WriteTxId cannot be specified for row consistency");
                 return false;
             }
-        } else {
-            if (writeTxId == 0) {
-                Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
-                    NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
-                    NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                    "Non-zero WriteTxId must be specified for global consistency");
-                return false;
-            }
         }
+
+        // Global replicas also accept immediate writes during index initial
+        // scan. The replication protocol chooses when to use WriteTxId.
 
         TSerializedCellVec keyCellVec;
         if (!TSerializedCellVec::TryParse(change.GetKey(), keyCellVec) ||

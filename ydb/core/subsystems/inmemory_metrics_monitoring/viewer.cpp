@@ -208,7 +208,7 @@ TString RenderPage() {
 
 </div>
 <script type='module'>
-import {createMetricChart,seriesStats,defaultChartSettings,formatMetricValue,formatSeriesName} from '../static/metric-chart/chart.js';
+import {createMetricChart,createMetricChartCursorGroup,seriesStats,defaultChartSettings,formatMetricValue,formatSeriesName} from '../static/metric-chart/chart.js';
 import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metric-chart/client.js';
 (() => {
  const $=id=>document.getElementById('imm-'+id);
@@ -219,6 +219,7 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  const numeric=v=>v===null||v===undefined?null:Number.isFinite(Number(v))?Number(v):null;
  const visible=()=>series.map(s=>({...s,...lineSettings.get(s.key)})).map(s=>({...s,display:formatSeriesName(s,s.format??settingsFor(s.queryId).format)})).filter(s=>(s.display+' '+s.metric+' '+s.name+' '+s.labels).toLowerCase().includes($('filter').value.toLowerCase()));
  const client=createInMemoryMetricsClient({endpoint:location.pathname});
+ const cursorGroup=createMetricChartCursorGroup();
  let charts=[],chartSettings={...defaultChartSettings,legend:true};
  const querySettings=new Map(),lineSettings=new Map();
  const settingsFor=id=>$('separate').checked?{...chartSettings,...querySettings.get(id)}:chartSettings;
@@ -326,7 +327,7 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  function drawChart(element,group){
   const active=visible().filter(s=>!hidden.has(s.key)&&(group.id===null||s.queryId===group.id));
   const host=document.createElement('div');element.append(host);
-  const chart=createMetricChart(host,{settings:settingsFor(group.id),onPin:()=>{$('auto').checked=false;clearTimeout(timer);},onRangeChange:({from,to})=>{fixed=[from,to];$('auto').checked=false;clearTimeout(timer);draw();}});charts.push(chart);
+  const chart=createMetricChart(host,{cursorGroup,settings:settingsFor(group.id),onPin:()=>{$('auto').checked=false;clearTimeout(timer);},onRangeChange:({from,to})=>{fixed=[from,to];$('auto').checked=false;clearTimeout(timer);draw();}});charts.push(chart);
   chart.setData({series:active,begin,end,title:group.title,emptyText:!appliedQueries.length?'No applied queries. Use Apply queries.':!series.length?'No lines match the applied query.':active.length?'No retained numeric samples in this interval':'No visible series. Select rows in the legend.'});
  }
  async function refresh(){

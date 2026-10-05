@@ -101,3 +101,24 @@ Import `createAllocationBar` from `static/metric-chart/allocation.js` and load `
 Overview uses `lines[].chunks` from the viewer JSON endpoint: retained snapshot chunks per storage line, including shared group fields only once. Counts describe the current snapshot and do not depend on the history interval. Reserved or retiring chunks absent from the line snapshot appear as unattributed allocation. Registry statistics and line capture can differ during concurrent writes; the bar scales to the larger observed total rather than creating negative segments.
 
 Set `legend:false` when the owner table acts as the legend. `getColor(key)` returns the displayed owner color (including the aggregate color for omitted owners), and `highlight(key)` highlights its bar segment. The bar tooltip uses a body portal, flips at viewport edges, lists bounded owner values and percentages, and can be pinned by clicking a segment.
+
+### Shared cursor
+
+Use one cursor group for charts with the same time interval:
+
+```js
+import {createMetricChart, createMetricChartCursorGroup} from './chart.js';
+const cursorGroup = createMetricChartCursorGroup();
+const chart = createMetricChart(host, {cursorGroup, plotLeft: 100});
+chart.setData({series, begin, end, title: 'Metrics'});
+```
+
+The active chart updates the other charts by timestamp. Moving to another chart
+releases the previous pinned tooltip, so only one timestamp is selected in the
+group. `destroy()` removes the chart from the group. `plotLeft` reserves a common
+minimum width for the Y axis; use the same value on aligned dashboard charts.
+Charts without a cursor group keep independent pinned tooltips.
+
+Pointer positions use the SVG's screen transform. Layout width is measured
+before replacing content, to avoid measuring the temporary disappearance of a
+page scrollbar during redraw.

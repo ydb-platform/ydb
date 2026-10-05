@@ -119,7 +119,7 @@ public:
         throw TMisuseException() << "HeadObject error: " << error.GetMessage();
     }
 
-    TString GetObject(const TString& key) override {
+    void GetObject(const TString& key, const std::function<void(TStringBuf)>& onChunk) override {
         auto response = Client->GetObject(Aws::S3::Model::GetObjectRequest()
             .WithBucket(Bucket)
             .WithKey(key));
@@ -127,13 +127,13 @@ public:
             throw TMisuseException() << "GetObject error: " << response.GetError().GetMessage();
         }
         auto& body = response.GetResult().GetBody();
-        TString result;
-        char buf[1 << 16];
+        TString buf;
+        buf.resize(1 << 20);
         while (body) {
-            body.read(buf, sizeof(buf));
+            body.read(buf.begin(), buf.size());
             const auto read = body.gcount();
             if (read > 0) {
-                result.append(buf, static_cast<size_t>(read));
+                onChunk(TStringBuf(buf.data(), static_cast<size_t>(read)));
             }
             if (body.eof()) {
                 break;
@@ -142,7 +142,6 @@ public:
                 throw TMisuseException() << "GetObject error: failed to read object body";
             }
         }
-        return result;
     }
 
 private:

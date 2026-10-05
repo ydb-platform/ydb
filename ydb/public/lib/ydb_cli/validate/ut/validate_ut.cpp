@@ -47,7 +47,12 @@ public:
         return it->second;
     }
 
-    void ReadChunks(const TString& key, const std::function<void(TStringBuf)>& onChunk) const override {
+    void ReadChunks(
+        const TString& key,
+        const std::function<void()>& beginAttempt,
+        const std::function<void(TStringBuf)>& onChunk) const override
+    {
+        beginAttempt();
         const TString data = Read(key);
         if (data) {
             onChunk(data);
@@ -172,6 +177,38 @@ Y_UNIT_TEST(Sha256Empty) {
     UNIT_ASSERT_VALUES_EQUAL(
         MakeChecksumSidecar("abc", "data_00.csv"),
         Sha256Hex("abc") + " data_00.csv\n");
+}
+
+Y_UNIT_TEST(DataFilesAreHashedInChunks) {
+    class TChunkStorage : public TMemoryStorage {
+    public:
+        TString Read(const TString& key) const override {
+            if (key.Contains("data_") && !key.EndsWith(".sha256")) {
+                ythrow yexception() << "data file must be streamed: " << key;
+            }
+            return TMemoryStorage::Read(key);
+        }
+
+        void ReadChunks(
+            const TString& key,
+            const std::function<void()>& beginAttempt,
+            const std::function<void(TStringBuf)>& onChunk) const override
+        {
+            beginAttempt();
+            const TString data = TMemoryStorage::Read(key);
+            for (size_t offset = 0; offset < data.size(); ++offset) {
+                onChunk(TStringBuf(data.data() + offset, 1));
+            }
+        }
+    };
+
+    TChunkStorage plain;
+    AddTable(plain, "", 1, "row\n", true);
+    UNIT_ASSERT_C(Run(plain, "").Ok(), Issues(Run(plain, "")));
+
+    TChunkStorage compressed;
+    AddTable(compressed, "t", 1, "row\n", true, true);
+    UNIT_ASSERT_C(Run(compressed, "t").Ok(), Issues(Run(compressed, "t")));
 }
 
 Y_UNIT_TEST(TableFullAndSchemeOnly) {
@@ -525,11 +562,15 @@ Y_UNIT_TEST(FailFastStopsAtFirstError) {
             return TMemoryStorage::Read(key);
         }
 
-        void ReadChunks(const TString& key, const std::function<void(TStringBuf)>& onChunk) const override {
+        void ReadChunks(
+            const TString& key,
+            const std::function<void()>& beginAttempt,
+            const std::function<void(TStringBuf)>& onChunk) const override
+        {
             if (Armed && key.StartsWith("b/")) {
                 ythrow yexception() << "read past the first error: " << key;
             }
-            TMemoryStorage::ReadChunks(key, onChunk);
+            TMemoryStorage::ReadChunks(key, beginAttempt, onChunk);
         }
     };
 
@@ -575,11 +616,15 @@ Y_UNIT_TEST(FailFastSkipsChecksAfterChangefeedError) {
             return TMemoryStorage::Read(key);
         }
 
-        void ReadChunks(const TString& key, const std::function<void(TStringBuf)>& onChunk) const override {
+        void ReadChunks(
+            const TString& key,
+            const std::function<void()>& beginAttempt,
+            const std::function<void(TStringBuf)>& onChunk) const override
+        {
             if (key.Contains("indexImplTable")) {
                 ythrow yexception() << "index must not be read after the first error: " << key;
             }
-            TMemoryStorage::ReadChunks(key, onChunk);
+            TMemoryStorage::ReadChunks(key, beginAttempt, onChunk);
         }
     };
 

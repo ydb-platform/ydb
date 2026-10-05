@@ -54,6 +54,7 @@ Y_UNIT_TEST_SUITE(TTransportChaosInjectorTest)
             {},
             NKikimr::NDDisk::TWriteInstruction(0),
             {},
+            /*checksums=*/{},
             nullptr);
 
         UNIT_ASSERT(
@@ -79,6 +80,7 @@ Y_UNIT_TEST_SUITE(TTransportChaosInjectorTest)
                                   {},
                                   NKikimr::NDDisk::TWriteInstruction(0),
                                   {},
+                                  /*checksums=*/{},
                                   nullptr)
                               .GetValueSync());
         AssertUndelivered(
@@ -98,6 +100,7 @@ Y_UNIT_TEST_SUITE(TTransportChaosInjectorTest)
             {},
             NKikimr::NDDisk::TWriteInstruction(0),
             {},
+            /*checksums=*/{},
             nullptr);
 
         UNIT_ASSERT(result.GetValueSync().GetStatus() == TReplyStatus::OK);
@@ -125,6 +128,7 @@ Y_UNIT_TEST_SUITE(TTransportChaosInjectorTest)
             persistentBufferIds,
             TDuration::Seconds(1),
             {},
+            /*checksums=*/{},
             nullptr,
             [&callbackCount, &response](const auto& result, auto)
             {

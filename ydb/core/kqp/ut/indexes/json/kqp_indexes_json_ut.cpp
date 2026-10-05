@@ -2044,6 +2044,361 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         });
     }
 
+    Y_UNIT_TEST_TWIN(JsonPassingParameterMatrix, IsJsonDocument) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::nullopt, [](TQueryClient& db, const auto&) {
+            struct TJsonParamCase {
+                TString Json;
+                std::optional<TString> ExpectedRootKeys;
+            };
+
+            const TVector<TJsonParamCase> jsonParams = {
+                {"null", std::nullopt},
+                {"true", "[[[3u]]]"},
+                {"false", "[[[4u]]]"},
+                {"-0", std::nullopt},
+                {"0", std::nullopt},
+                {"1", "[[[2u]]]"},
+                {"1.0", std::nullopt},
+                {"1e0", std::nullopt},
+                {"-1.5", std::nullopt},
+                {"1e-300", std::nullopt},
+                {"1e308", std::nullopt},
+                {"9007199254740993", std::nullopt},
+                {R"("")", std::nullopt},
+                {R"("1")", "[[[5u]]]"},
+                {R"("escaped\nvalue")", std::nullopt},
+                {R"("\"quoted\"")", std::nullopt},
+                {R"("backslash\\slash\/")", std::nullopt},
+                {R"("привет")", std::nullopt},
+                {R"("\u043f\u0440\u0438\u0432\u0435\u0442")", std::nullopt},
+                {"[]", std::nullopt},
+                {"{}", std::nullopt},
+                {R"([1, 1, 2])", std::nullopt},
+                {R"(  [ null, true, false, 1, -1.5, "1", [2], {"k": 3} ]  )", std::nullopt},
+                {R"({"k1": 1})", std::nullopt},
+                {R"({"k1": [1, true, null], "nested": {"key": "value"}})", std::nullopt},
+                {R"({"deep": [[[{"value": "привет"}]]], "empty": [{}, []]})", std::nullopt},
+                {R"({"dup": "first", "dup": "second"})", std::nullopt},
+            };
+
+            for (TStringBuf mode : {TStringBuf("lax"), TStringBuf("strict")}) {
+                for (const auto& testCase : jsonParams) {
+                    auto params = TParamsBuilder()
+                        .AddParam("$p").Json(testCase.Json).Build()
+                        .Build();
+
+                    const auto jsonExists = std::format(
+                        "JSON_EXISTS(Text, '{} $ ? (@ == $value)' PASSING $p AS value)", mode);
+                    const auto jsonValue = std::format(
+                        "JSON_VALUE(Text, '{} exists($ ? (@ == $value))' PASSING $p AS value RETURNING Bool)", mode);
+                    if (mode == "strict" && testCase.ExpectedRootKeys) {
+                        ValidatePredicateKeys(db, jsonExists, *testCase.ExpectedRootKeys, params);
+                        ValidatePredicateKeys(db, jsonValue, *testCase.ExpectedRootKeys, params);
+                    } else {
+                        ValidatePredicate(db, jsonExists, params);
+                        ValidatePredicate(db, jsonValue, params);
+                    }
+                }
+
+                auto collectionParams = TParamsBuilder()
+                    .AddParam("$values").Json(R"([null, true, false, 1, "1", [], {}, [2], {"k1": 1}])").Build()
+                    .Build();
+                ValidatePredicate(db,
+                    std::format("JSON_EXISTS(Text, '{} $[*] ? (@ == $value)' PASSING $values AS value)", mode),
+                    collectionParams);
+                ValidatePredicate(db,
+                    std::format("JSON_VALUE(Text, '{} exists($[*] ? (@ == $value))' PASSING $values AS value RETURNING Bool)", mode),
+                    collectionParams);
+
+                auto compoundParams = TParamsBuilder()
+                    .AddParam("$first").Json(R"([null, 1, true, "1"])").Build()
+                    .AddParam("$second").Json(R"(["22", "missing"])").Build()
+                    .Build();
+                ValidatePredicate(db,
+                    std::format("JSON_EXISTS(Text, '{} $ ? (@.k1 == $v1 && @.k2 == $v2)' PASSING $first AS v1, $second AS v2)", mode),
+                    compoundParams);
+                ValidatePredicate(db,
+                    std::format("JSON_EXISTS(Text, '{} $ ? (@.k1 == $v1 || @.k2 == $v2)' PASSING $first AS v1, $second AS v2)", mode),
+                    compoundParams);
+                ValidatePredicate(db,
+                    std::format("JSON_VALUE(Text, '{} exists($ ? (@.k1 == $v1 && @.k2 == $v2))' PASSING $first AS v1, $second AS v2 RETURNING Bool)", mode),
+                    compoundParams);
+                ValidatePredicate(db,
+                    std::format("JSON_VALUE(Text, '{} exists($ ? (@.k1 == $v1 || @.k2 == $v2))' PASSING $first AS v1, $second AS v2 RETURNING Bool)", mode),
+                    compoundParams);
+            }
+        });
+    }
+
+    Y_UNIT_TEST_TWIN(JsonPassingEmptyContainersAreNotComparable, IsJsonDocument) {
+        const TString jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+        TestSelectJsonWithIndex(jsonType, std::nullopt, [&](TQueryClient& db, const auto&) {
+            ExecuteJsonStatement(db, TStringBuilder()
+                << "UPSERT INTO TestTable (Key, Text) VALUES "
+                << "(100u, " << jsonType << "('[[], {}]')), "
+                << "(101u, " << jsonType << "('{\"k1\": []}')), "
+                << "(102u, " << jsonType << "('{\"k1\": {}}'))");
+
+            const TVector<TString> predicates = {
+                R"(JSON_EXISTS(Text, 'lax $[*] ? (@ == $value)' PASSING $p AS value))",
+                R"(JSON_VALUE(Text, 'lax exists($[*] ? (@ == $value))' PASSING $p AS value RETURNING Bool))",
+                R"(JSON_EXISTS(Text, 'lax $.k1 ? (@ == $value)' PASSING $p AS value))",
+                R"(JSON_VALUE(Text, 'lax exists($.k1 ? (@ == $value))' PASSING $p AS value RETURNING Bool))",
+            };
+
+            for (TStringBuf json : {TStringBuf("[]"), TStringBuf("{}")}) {
+                const auto params = TParamsBuilder()
+                    .AddParam("$p").Json(TString(json)).Build()
+                    .Build();
+                for (const auto& predicate : predicates) {
+                    ValidatePredicateKeys(db, predicate, "[]", params);
+                }
+            }
+        });
+    }
+
+    Y_UNIT_TEST_TWIN(JsonPassingParameterErrors, IsJsonDocument) {
+        TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::nullopt, [](TQueryClient& db, const auto&) {
+            const auto invalidJson = TParamsBuilder()
+                .AddParam("$p").Json(R"({"broken": )").Build()
+                .Build();
+            ValidatePredicateError(db,
+                R"(JSON_EXISTS(Text, 'lax $ ? (@ == $value)' PASSING $p AS value))",
+                invalidJson,
+                "Invalid Json value");
+            ValidatePredicateError(db,
+                R"(JSON_VALUE(Text, 'lax exists($ ? (@ == $value))' PASSING $p AS value RETURNING Bool))",
+                invalidJson,
+                "Invalid Json value");
+
+            const auto tupleParam = TParamsBuilder()
+                .AddParam("$p")
+                    .BeginTuple()
+                    .AddElement().Int32(1)
+                    .AddElement().Int32(2)
+                    .EndTuple()
+                .Build()
+                .Build();
+            ValidatePredicateError(db,
+                R"(JSON_EXISTS(Text, 'lax $ ? (@ == $value)' PASSING $p AS value))",
+                tupleParam,
+                "Expected data or optional of data");
+            ValidatePredicateError(db,
+                R"(JSON_VALUE(Text, 'lax exists($ ? (@ == $value))' PASSING $p AS value RETURNING Bool))",
+                tupleParam,
+                "Expected data or optional of data");
+
+            const auto emptyJsonParam = TParamsBuilder()
+                .AddParam("$p").Json("[]").Build()
+                .Build();
+            const TString indexError = "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters";
+
+            const auto validateErrorHandler = [&](const TString& predicate, const TString& primaryError = {}) {
+                const auto query = [&](TStringBuf view) {
+                    return std::format("SELECT Key FROM TestTable VIEW {} WHERE {} ORDER BY Key", view, predicate);
+                };
+
+                auto primary = db.ExecuteQuery(query("PRIMARY KEY"), TTxControl::NoTx(), emptyJsonParam).ExtractValueSync();
+                UNIT_ASSERT_C(!primary.IsSuccess(), "PRIMARY KEY unexpectedly succeeded for predicate: " << predicate);
+                if (!primaryError.empty()) {
+                    UNIT_ASSERT_STRING_CONTAINS_C(primary.GetIssues().ToString(), primaryError, predicate);
+                }
+
+                auto index = db.ExecuteQuery(query("json_idx"), TTxControl::NoTx(), emptyJsonParam).ExtractValueSync();
+                UNIT_ASSERT_C(!index.IsSuccess(), "json_idx unexpectedly succeeded for predicate: " << predicate);
+                UNIT_ASSERT_STRING_CONTAINS_C(index.GetIssues().ToString(), indexError, predicate);
+            };
+
+            validateErrorHandler(
+                R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR))",
+                "Error executing jsonpath");
+            validateErrorHandler(
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Bool NULL ON EMPTY ERROR ON ERROR))",
+                "Error executing jsonpath");
+            validateErrorHandler(
+                R"(JSON_VALUE(Text, 'lax $.missing ? (@ == $value)' PASSING $p AS value RETURNING Bool ERROR ON EMPTY NULL ON ERROR))");
+
+            // The unsafe branch is ignored only while extracting index tokens.
+            // It must remain in the residual filter and fail at execution time
+            // for rows found through the safe branch.
+            ValidatePredicateError(db,
+                R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR) AND JSON_EXISTS(Text, '$.k1'))",
+                emptyJsonParam,
+                "Error executing jsonpath");
+            ValidatePredicateError(db,
+                R"(JSON_VALUE(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value RETURNING Bool NULL ON EMPTY ERROR ON ERROR) AND JSON_EXISTS(Text, '$.k1'))",
+                emptyJsonParam,
+                "Error executing jsonpath");
+        });
+    }
+
+    Y_UNIT_TEST_TWIN(JsonPassingArrayParameterOverlap, Compact) {
+        auto kikimr = KikimrJson(/* enableJsonIndexAutoSelect */ false, Compact);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteJsonStatement(db, R"(
+            CREATE TABLE `/Root/rent_rule` (
+                rule_id Uint64,
+                daily_schedules Json,
+                PRIMARY KEY (rule_id)
+            );
+        )");
+        ExecuteJsonStatement(db, R"(
+            UPSERT INTO `/Root/rent_rule` (rule_id, daily_schedules) VALUES
+                (1u, Json('["7/0", "6/1"]')),
+                (2u, Json('["7/0"]')),
+                (3u, Json('["5/2"]')),
+                (4u, Json('[]')),
+                (5u, Json('[1, true, "shared"]')),
+                (6u, Json('[2, false]'));
+        )");
+        ExecuteJsonStatement(db, R"(
+            ALTER TABLE `/Root/rent_rule`
+                ADD INDEX schedules_json GLOBAL USING json ON (daily_schedules);
+        )");
+
+        const TString indexQuery = R"(
+            DECLARE $schedules AS Json;
+            SELECT r.rule_id
+            FROM `/Root/rent_rule` VIEW schedules_json AS r
+            WHERE JSON_EXISTS(
+                r.daily_schedules,
+                '$[*] ? (@ == $schedules)'
+                PASSING $schedules AS schedules
+            )
+            ORDER BY rule_id;
+        )";
+        const TString primaryQuery = R"(
+            DECLARE $schedules AS Json;
+            SELECT r.rule_id
+            FROM `/Root/rent_rule` VIEW PRIMARY KEY AS r
+            WHERE JSON_EXISTS(
+                r.daily_schedules,
+                '$[*] ? (@ == $schedules)'
+                PASSING $schedules AS schedules
+            )
+            ORDER BY rule_id;
+        )";
+        const TString indexValueQuery = R"(
+            DECLARE $schedules AS Json;
+            SELECT r.rule_id
+            FROM `/Root/rent_rule` VIEW schedules_json AS r
+            WHERE JSON_VALUE(
+                r.daily_schedules,
+                'exists($[*] ? (@ == $schedules))'
+                PASSING $schedules AS schedules
+                RETURNING Bool
+            )
+            ORDER BY rule_id;
+        )";
+        const TString primaryValueQuery = R"(
+            DECLARE $schedules AS Json;
+            SELECT r.rule_id
+            FROM `/Root/rent_rule` VIEW PRIMARY KEY AS r
+            WHERE JSON_VALUE(
+                r.daily_schedules,
+                'exists($[*] ? (@ == $schedules))'
+                PASSING $schedules AS schedules
+                RETURNING Bool
+            )
+            ORDER BY rule_id;
+        )";
+
+        const auto execute = [&](const TString& query, TStringBuf schedules, EStatsMode statsMode = EStatsMode::None) {
+            auto params = TParamsBuilder()
+                .AddParam("$schedules").Json(TString(schedules)).Build()
+                .Build();
+            auto settings = TExecuteQuerySettings().StatsMode(statsMode);
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx(), params, settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        const auto validate = [&](TStringBuf schedules, TStringBuf expected) {
+            auto primary = execute(primaryQuery, schedules);
+            auto indexed = execute(indexQuery, schedules);
+            CompareYson(TString(expected), FormatResultSetYson(primary.GetResultSet(0)));
+            CompareYson(TString(expected), FormatResultSetYson(indexed.GetResultSet(0)));
+
+            auto primaryValue = execute(primaryValueQuery, schedules);
+            auto indexedValue = execute(indexValueQuery, schedules);
+            CompareYson(TString(expected), FormatResultSetYson(primaryValue.GetResultSet(0)));
+            CompareYson(TString(expected), FormatResultSetYson(indexedValue.GetResultSet(0)));
+        };
+
+        validate(R"(["7/0", "6/1", "7/0"])", "[[[1u]];[[2u]]]");
+        validate(R"(["missing"])", "[]");
+        validate(R"([1, true])", "[[[5u]]]");
+
+        for (TStringBuf schedules : {TStringBuf("[]"), TStringBuf("[[], {}]")}) {
+            auto primary = execute(primaryQuery, schedules);
+            auto indexed = execute(indexQuery, schedules, EStatsMode::Basic);
+            auto primaryValue = execute(primaryValueQuery, schedules);
+            auto indexedValue = execute(indexValueQuery, schedules, EStatsMode::Basic);
+
+            CompareYson("[]", FormatResultSetYson(primary.GetResultSet(0)));
+            CompareYson("[]", FormatResultSetYson(indexed.GetResultSet(0)));
+            CompareYson("[]", FormatResultSetYson(primaryValue.GetResultSet(0)));
+            CompareYson("[]", FormatResultSetYson(indexedValue.GetResultSet(0)));
+            AssertTableStats(indexed, "/Root/rent_rule", {
+                .ExpectedReads = 0,
+            });
+            AssertTableStats(indexed, "/Root/rent_rule/schedules_json/indexImplTable", {
+                .ExpectedReads = 0,
+            });
+            AssertTableStats(indexedValue, "/Root/rent_rule", {
+                .ExpectedReads = 0,
+            });
+            AssertTableStats(indexedValue, "/Root/rent_rule/schedules_json/indexImplTable", {
+                .ExpectedReads = 0,
+            });
+        }
+
+        TStringBuilder manyValues;
+        manyValues << '[';
+        for (ui32 i = 0; i < 256; ++i) {
+            if (i) {
+                manyValues << ',';
+            }
+            manyValues << '"' << "missing-" << i << '"';
+        }
+        manyValues << ",\"7/0\"]";
+        const TString manyValuesJson = manyValues;
+        validate(manyValuesJson, "[[[1u]];[[2u]]]");
+
+        auto indexed = execute(indexQuery, R"(["7/0", "6/1", "7/0"])", EStatsMode::Basic);
+        CompareYson("[[[1u]];[[2u]]]", FormatResultSetYson(indexed.GetResultSet(0)));
+        AssertTableStats(indexed, "/Root/rent_rule", {
+            .ExpectedReads = 2,
+        });
+        AssertTableStats(indexed, "/Root/rent_rule/schedules_json/indexImplTable", {
+            .ExpectedReads = Compact ? 2u : 3u,
+        });
+
+        auto indexedValue = execute(indexValueQuery, R"(["7/0", "6/1", "7/0"])", EStatsMode::Basic);
+        CompareYson("[[[1u]];[[2u]]]", FormatResultSetYson(indexedValue.GetResultSet(0)));
+        AssertTableStats(indexedValue, "/Root/rent_rule", {
+            .ExpectedReads = 2,
+        });
+        AssertTableStats(indexedValue, "/Root/rent_rule/schedules_json/indexImplTable", {
+            .ExpectedReads = Compact ? 2u : 3u,
+        });
+
+        auto explainParams = TParamsBuilder()
+            .AddParam("$schedules").Json(R"(["7/0", "6/1"])").Build()
+            .Build();
+        auto explain = db.ExecuteQuery(indexQuery, TTxControl::NoTx(), explainParams,
+            TExecuteQuerySettings().ExecMode(EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+        UNIT_ASSERT_C(explain.GetStats() && explain.GetStats()->GetPlan(), "Explain plan is missing");
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(*explain.GetStats()->GetPlan(), &planJson, true), "Failed to parse explain plan");
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Index", "schedules_json"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Name", "TableFullScan"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Node Type", "TableFullScan"), 0);
+    }
+
     Y_UNIT_TEST(SelectJsonIndex_Top) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             static constexpr const char* where = R"(JSON_EXISTS(Text, '$.k1'))";

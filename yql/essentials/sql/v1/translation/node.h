@@ -25,6 +25,7 @@
 
 #include <array>
 #include <functional>
+#include <optional>
 #include <utility>
 #include <variant>
 
@@ -1308,6 +1309,7 @@ struct TIndexDescription {
         GlobalAsync,
         GlobalSyncUnique,
         GlobalVectorKmeansTree,
+        GlobalHnsw,
         GlobalFulltextPlain,
         GlobalFulltextRelevance,
         LocalBloomFilter,
@@ -1758,7 +1760,15 @@ TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) 
     return {};
 }
 
-void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer)>& callback);
+struct TFuncInfo {
+    TString Kind;
+    TMaybe<size_t> ArgCount;
+    TMaybe<size_t> OptionalArgCount;
+    NYql::TLangVersion MinLangVer = NYql::UnknownLangVersion;
+    NYql::TLangVersion MaxLangVer = NYql::UnknownLangVersion;
+};
+
+void EnumerateBuiltins(const std::function<void(std::string_view name, const TFuncInfo& info)>& callback);
 bool Parseui32(TNodePtr from, ui32& to);
 TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
 const TString* DeriveCommonSourceName(const TVector<TNodePtr>& nodes);

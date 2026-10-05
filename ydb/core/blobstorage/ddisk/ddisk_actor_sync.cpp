@@ -23,6 +23,7 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         TSyncIt syncIt = SyncsInFlight.end();
         counters.Request(0);
+        CountTabletIo(creds.TabletId, ETabletOperation::Sync, 1, 0);
 
         if (TabletChunkDeletionsInFlight.contains(creds.TabletId)) {
             counters.Reply(false);
@@ -188,6 +189,7 @@ namespace NKikimr::NDDisk {
                     Y_ABORT_UNLESS(requestId == sync.FirstRequestId + sync.Requests.size());
                 }
 
+                CountTabletIo(creds.TabletId, ETabletOperation::Sync, 0, selector.Size);
                 sync.Requests.emplace_back(TSyncReadRequest{
                     .Status=NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
                     .Selector=selector
@@ -354,7 +356,7 @@ namespace NKikimr::NDDisk {
             }
         }
 
-        TChunkRef& chunkRef = ChunkRefs[sync.Creds.TabletId][sync.VChunkIndex];
+        TChunkRef& chunkRef = Tablets[sync.Creds.TabletId].ChunkRefs[sync.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
             // Park first: IssueChunkAllocation may place the extent synchronously from the
             // reserve and OpenDataChunkWritePath only drains already-queued events.

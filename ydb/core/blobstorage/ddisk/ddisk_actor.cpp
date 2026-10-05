@@ -348,7 +348,9 @@ namespace {
             StartRestorePersistentBuffer();
         } else {
             Become(&TThis::StateFuncDDisk);
+            TabletStatsActor = Register(CreateTabletStatsActor(SelfId()));
             RegisterMonPage();
+            InitMemoryMetrics();
             if (!Config.EnableChecksums) {
                 YDB_LOG_NOTICE("TDDiskActor booting with integrity checksums disabled",
                     {"marker", "BSDD55"},
@@ -612,6 +614,8 @@ namespace {
 
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
+            hFunc(TEvCollectTabletStats, Handle)
+            hFunc(TEvGetTabletStats, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
@@ -763,7 +767,8 @@ namespace {
 
     void TDDiskActor::RejectPendingDDiskQueries(
             NKikimrBlobStorage::NDDisk::TReplyStatus::E status, const TString& reason) {
-        for (auto& [tabletId, chunks] : ChunkRefs) {
+        for (auto& [tabletId, tablet] : Tablets) {
+            auto& chunks = tablet.ChunkRefs;
             Y_UNUSED(tabletId);
             for (auto& [vChunkIndex, chunk] : chunks) {
                 Y_UNUSED(vChunkIndex);
@@ -882,6 +887,8 @@ namespace {
             cFunc(TEvPrivate::EvCompleteStop, CompleteStop)
             cFunc(TEvPrivate::EvStopIoTimeout, HandleStopIoTimeout)
             hFunc(NPDisk::TEvChunkReserveResult, HandleStopping)
+            hFunc(TEvCollectTabletStats, Handle)
+            hFunc(TEvGetTabletStats, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvGetPersistentBufferInfo, Handle)
             default:
@@ -906,6 +913,7 @@ namespace {
             return;
         }
         Stopping = true;
+        MemoryMetric.Close();
         PersistentBufferRegistrationTokens.clear();
         Become(&TThis::StateFuncStopping);
         YDB_LOG_NOTICE("DDisk stopping", {"DDiskId", DDiskId}, {"reason", reason});
@@ -960,6 +968,9 @@ namespace {
             }
         } else {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvents::TEvGone());
+        }
+        if (TabletStatsActor) {
+            Send(TabletStatsActor, new TEvents::TEvPoison());
         }
         TActorBootstrapped::PassAway();
     }

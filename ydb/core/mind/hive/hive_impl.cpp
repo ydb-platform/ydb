@@ -4664,6 +4664,18 @@ bool THive::ReassignInactiveGroups(TStoragePoolInfo& pool) {
 }
 
 bool THive::MoveDataInactiveGroups(TStoragePoolInfo& pool) {
+    struct TShrinkPoolMoveDataCallback : IMoveDataCallback {
+        TString PoolName;
+
+        virtual IEventBase* MakeEvent(bool success, ui64) override {
+            return new TEvPrivate::TEvMoveDataComplete(PoolName, success);
+        }
+
+        TShrinkPoolMoveDataCallback(const TString& poolName)
+            : PoolName(poolName)
+        {}
+    };
+
     std::unordered_set<TStorageGroupId> inactiveGroups(pool.InactiveGroups.begin(), pool.InactiveGroups.end());
     std::vector<TTabletId> tabletsToMoveData;
     if (pool.RemainingHistory.empty()) {
@@ -4698,7 +4710,7 @@ bool THive::MoveDataInactiveGroups(TStoragePoolInfo& pool) {
             {"tabletsToMoveDataCount", tabletsToMoveData.size()},
             {"remainingHistoryCount", pool.RemainingHistory.size()});
         UpdateCounterShrinkRemainingHistory();
-        StartMoveDataActor(std::move(tabletsToMoveData), pool.InactiveGroups, pool.Name);
+        StartMoveDataActor(std::move(tabletsToMoveData), pool.InactiveGroups, SelfId(), 1, TStringBuilder() << "shrink pool " << pool.Name, std::make_unique<TShrinkPoolMoveDataCallback>(pool.Name), true);
         return true;
     }
 }

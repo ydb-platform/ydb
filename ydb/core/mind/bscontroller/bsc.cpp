@@ -177,18 +177,25 @@ bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGr
         const auto& metrics = pdisk->Metrics;
 
         const ui32 expectedSlotCount = pdisk->GetEffectiveExpectedSlotCount();
+        const ui64 expectedSlotSize = pdisk->GetEffectiveExpectedSlotSize();
 
-        ui64 vdiskSlotSize = 0;
-        const ui32 weight = pdisk->GetOwnerWeight(GroupSizeInUnits);
+        // Fixed quotas are per capacity unit; otherwise use the disk's fair share.
+        ui64 baseSlotSize = 0;
         if (metrics.HasEnforcedDynamicSlotSize()) {
-            vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize() * weight;
+            baseSlotSize = metrics.GetEnforcedDynamicSlotSize();
+        } else if (expectedSlotSize) {
+            baseSlotSize = expectedSlotSize;
         } else if (metrics.GetTotalSize()) {
             const ui32 shareFactor = (useExpectedSlotCount && expectedSlotCount)
                 ? expectedSlotCount
                 : pdisk->NumActiveDynamicSlots + pdisk->StaticSlotUsage;
-            vdiskSlotSize = metrics.GetTotalSize() / shareFactor * weight;
+            baseSlotSize = metrics.GetTotalSize() / shareFactor;
         }
-        if (vdiskSlotSize) {
+
+        const ui64 vdiskSlotSize = TPDiskConfig::GetOwnerQuota(
+            baseSlotSize, GroupSizeInUnits, pdisk->SlotSizeInUnits, expectedSlotSize,
+            metrics.HasUserChunkPoolSize() ? std::make_optional(metrics.GetUserChunkPoolSize()) : std::nullopt);
+        if (vdiskSlotSize || (expectedSlotSize && metrics.HasUserChunkPoolSize())) {
             size = Min(size.value_or(Max<ui64>()), vdiskSlotSize);
         }
 

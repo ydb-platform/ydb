@@ -154,6 +154,7 @@
 /ydb/library/yql/dq/runtime/streaming/ @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver/ @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway/ @ydb-platform/fq
+/ydb/library/yql/providers/common/message_stream/ @ydb-platform/fq
 /ydb/library/yql/providers/common/pushdown/ @ydb-platform/fq
 /ydb/library/yql/providers/common/token_accessor/ @ydb-platform/fq
 /ydb/library/yql/providers/common/ut_helpers/ @ydb-platform/fq

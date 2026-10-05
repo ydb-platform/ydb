@@ -1,4 +1,5 @@
 RECURSE(
+    abstract
     clickhouse
     common
     dq
@@ -10,4 +11,3 @@ RECURSE(
     ydb
     yt
 )
-

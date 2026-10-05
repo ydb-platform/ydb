@@ -255,13 +255,11 @@ struct TSourceRecoveryPartition {
     ui64 StartOffset = 0;
     ui64 EndOffset = 0;
     bool Done = false;
-    std::shared_ptr<IReadSession> Session;
+    std::shared_ptr<NFq::IMessageStreamReadSession> Session;
 };
 
 class TPqSourceRecoveryActor final : public TPqCheckpointActorBase<TPqSourceRecoveryActor> {
     using TBase = TPqCheckpointActorBase<TPqSourceRecoveryActor>;
-    using TEvent = NYdb::NTopic::TReadSessionEvent;
-
     static constexpr ui64 READ_SESSION_MEMORY = 1_MB; // SDK minimum for read sessions.
     static constexpr TDuration PREPARATION_TIMEOUT = TDuration::Seconds(30);
 
@@ -278,31 +276,31 @@ class TPqSourceRecoveryActor final : public TPqCheckpointActorBase<TPqSourceReco
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE));
 
         struct TEvConsumer : TEventLocal<TEvConsumer, EvConsumer> {
-            explicit TEvConsumer(TAsyncDescribeConsumerResult result)
+            explicit TEvConsumer(NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> result)
                 : Result(std::move(result))
             {}
 
-            TAsyncDescribeConsumerResult Result;
+            NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> Result;
         };
 
         struct TEvPartition : TEventLocal<TEvPartition, EvPartition> {
-            TEvPartition(const size_t index, TAsyncDescribePartitionResult result)
+            TEvPartition(const size_t index, NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> result)
                 : Index(index)
                 , Result(std::move(result))
             {}
 
             const size_t Index = 0;
-            TAsyncDescribePartitionResult Result;
+            NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> Result;
         };
 
         struct TEvRewind : TEventLocal<TEvRewind, EvRewind> {
-            TEvRewind(const size_t index, NYdb::TAsyncStatus result)
+            TEvRewind(const size_t index, NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> result)
                 : Index(index)
                 , Result(std::move(result))
             {}
 
             const size_t Index;
-            NYdb::TAsyncStatus Result;
+            NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> Result;
         };
 
         struct TEvReadReady : TEventLocal<TEvReadReady, EvReadReady> {
@@ -317,7 +315,7 @@ class TPqSourceRecoveryActor final : public TPqCheckpointActorBase<TPqSourceReco
     };
 
 public:
-    TPqSourceRecoveryActor(ITopicClient::TPtr client, TString topic, TString consumer, TVector<TSourceRecoveryPartition> partitions, TPromise<TIssues> promise)
+    TPqSourceRecoveryActor(std::shared_ptr<NFq::IMessageStreamClient> client, TString topic, TString consumer, TVector<TSourceRecoveryPartition> partitions, TPromise<TIssues> promise)
         : TBase(std::move(promise))
         , Client(std::move(client))
         , Topic(std::move(topic))
@@ -333,10 +331,10 @@ public:
             Finish({});
         } else if (Consumer.empty()) {
             for (size_t index = 0; index < Partitions.size(); ++index) {
-                Subscribe<TEvPrivate::TEvPartition>(Client->DescribePartition(Topic, Partitions[index].Id, TDescribePartitionSettings().IncludeStats(true)), index);
+                Subscribe<TEvPrivate::TEvPartition>(Client->DescribePartition(NFq::TMessageStreamPartitionId{Partitions[index].Id}), index);
             }
         } else {
-            Subscribe<TEvPrivate::TEvConsumer>(Client->DescribeConsumer(Topic, Consumer, TDescribeConsumerSettings().IncludeStats(true)));
+            Subscribe<TEvPrivate::TEvConsumer>(Client->DescribeConsumer(Consumer, {.IncludeStats = true}));
         }
     }
 
@@ -356,31 +354,33 @@ private:
 
     void Handle(TEvPrivate::TEvConsumer::TPtr& ev) {
         const auto& result = ev->Get()->Result.GetValue();
-        Y_ENSURE(result.IsSuccess(), "Cannot describe consumer: " << result.GetIssues().ToOneLineString());
-        const auto& consumerPartitions = result.GetConsumerDescription().GetPartitions();
+        Y_ENSURE(result.IsSuccess(), "Cannot describe consumer: " << result.Issues.ToOneLineString());
+        const auto& consumerPartitions = result.Value.Partitions;
 
-        THashMap<ui64, const TPartitionInfo*> partitions;
+        THashMap<ui64, const NFq::TMessageStreamConsumerPartition*> partitions;
         partitions.reserve(consumerPartitions.size());
         for (const auto& partition : consumerPartitions) {
-            partitions.emplace(partition.GetPartitionId(), &partition);
+            partitions.emplace(partition.PartitionId.Value, &partition);
         }
 
         for (size_t index = 0; index < Partitions.size(); ++index) {
             const auto it = partitions.find(Partitions[index].Id);
             Y_ENSURE(it != partitions.end(), "Missing topic partition " << Partitions[index].Id);
-            PreparePartition(index, *it->second);
+            Y_ENSURE(it->second->StartOffset && it->second->EndOffset, "Topic partition statistics are unavailable");
+            PreparePartition(index, *it->second->StartOffset, *it->second->EndOffset, it->second->CommittedOffset);
         }
     }
 
     void Handle(TEvPrivate::TEvPartition::TPtr& ev) {
         const auto& result = ev->Get()->Result.GetValue();
-        Y_ENSURE(result.IsSuccess(), "Cannot describe partition: " << result.GetIssues().ToOneLineString());
-        PreparePartition(ev->Get()->Index, result.GetPartitionDescription().GetPartition());
+        Y_ENSURE(result.IsSuccess(), "Cannot describe partition: " << result.Issues.ToOneLineString());
+        Y_ENSURE(result.Value.StartOffset && result.Value.EndOffset, "Topic partition statistics are unavailable");
+        PreparePartition(ev->Get()->Index, *result.Value.StartOffset, *result.Value.EndOffset, std::nullopt);
     }
 
     void Handle(TEvPrivate::TEvRewind::TPtr& ev) {
         const auto& result = ev->Get()->Result.GetValue();
-        Y_ENSURE(result.IsSuccess(), "Cannot rewind consumer: " << result.GetIssues().ToOneLineString());
+        Y_ENSURE(result.IsSuccess(), "Cannot rewind consumer: " << result.Issues.ToOneLineString());
         CheckHistory(ev->Get()->Index, /* rewound */ true);
     }
 
@@ -388,36 +388,40 @@ private:
         const auto index = ev->Get()->Index;
         auto& partition = Partitions[index];
 
-        for (auto& event : partition.Session->GetEvents(false)) {
-            if (auto* const start = std::get_if<TEvent::TStartPartitionSessionEvent>(&event)) {
-                start->Confirm(partition.StartOffset);
-            } else if (auto* data = std::get_if<TEvent::TDataReceivedEvent>(&event)) {
-                if (data->GetMessages().empty()) {
+        for (auto& event : partition.Session->GetEvents({.Block = false})) {
+            if (auto* const start = std::get_if<NFq::TMessageStreamPartitionStartRequestedEvent>(&event)) {
+                start->PartitionControl->ConfirmStart(partition.StartOffset, std::nullopt);
+            } else if (auto* data = std::get_if<NFq::TMessageStreamDataEvent>(&event)) {
+                if (data->Records.empty()) {
                     continue;
                 }
 
-                const auto& first = data->GetMessages().front();
+                const auto& first = data->Records.front();
                 if (partition.Offset) {
-                    Y_ENSURE(first.GetOffset() <= *partition.Offset,
+                    Y_ENSURE(first.Id.Offset <= *partition.Offset,
                         "Required history has expired for partition " << partition.Id
                             << ": requested checkpoint offset " << *partition.Offset
-                            << " precedes first retained message offset " << first.GetOffset());
+                            << " precedes first retained message offset " << first.Id.Offset);
                 } else {
                     const auto timestamp = TInstant::MilliSeconds(partition.TimestampMs);
-                    Y_ENSURE(first.GetWriteTime() <= timestamp,
+                    if (!first.WriteTime) {
+                        ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::Unsupported)
+                            << "Timestamp recovery requires backend message write time";
+                    }
+                    Y_ENSURE(*first.WriteTime <= timestamp,
                         "Required history has expired for partition " << partition.Id
                             << ": requested recovery timestamp " << timestamp
-                            << " precedes first retained message write time " << first.GetWriteTime()
-                            << " (offset " << first.GetOffset() << ")");
+                            << " precedes first retained message write time " << *first.WriteTime
+                            << " (offset " << first.Id.Offset << ")");
                 }
 
                 Complete(index);
                 return;
-            } else if (auto* stop = std::get_if<TEvent::TStopPartitionSessionEvent>(&event)) {
-                stop->Confirm();
-            } else if (auto* closed = std::get_if<TSessionClosedEvent>(&event)) {
-                ythrow yexception() << "Cannot check topic history: " << closed->DebugString();
-            } else if (std::holds_alternative<TEvent::TEndPartitionSessionEvent>(event) || std::holds_alternative<TEvent::TPartitionSessionClosedEvent>(event)) {
+            } else if (auto* stop = std::get_if<NFq::TMessageStreamPartitionStopRequestedEvent>(&event)) {
+                stop->PartitionControl->ConfirmStop();
+            } else if (auto* closed = std::get_if<NFq::TMessageStreamSessionClosedEvent>(&event)) {
+                ythrow yexception() << "Cannot check topic history: " << closed->Issues.ToOneLineString();
+            } else if (std::holds_alternative<NFq::TMessageStreamPartitionExhaustedEvent>(event) || std::holds_alternative<NFq::TMessageStreamPartitionClosedEvent>(event)) {
                 ythrow yexception() << "Partition session ended before the recovery boundary was validated for partition " << partition.Id;
             }
         }
@@ -429,13 +433,10 @@ private:
         Finish({TIssue(TStringBuilder() << "Cannot prepare topic source recovery for " << Topic << ": timed out after " << PREPARATION_TIMEOUT)});
     }
 
-    void PreparePartition(size_t index, const TPartitionInfo& description) {
-        const auto& stats = description.GetPartitionStats();
-        Y_ENSURE(stats, "Topic partition statistics are unavailable");
-
+    void PreparePartition(size_t index, ui64 startOffset, ui64 endOffset, std::optional<ui64> committedOffset) {
         auto& partition = Partitions[index];
-        partition.StartOffset = stats->GetStartOffset();
-        partition.EndOffset = stats->GetEndOffset();
+        partition.StartOffset = startOffset;
+        partition.EndOffset = endOffset;
 
         YDB_LOG_DEBUG("Preparing PQ source partition recovery",
             {"topic", Topic},
@@ -460,10 +461,9 @@ private:
         }
 
         if (!Consumer.empty()) {
-            const auto& consumerStats = description.GetPartitionConsumerStats();
-            Y_ENSURE(consumerStats, "Consumer partition statistics are unavailable");
+            Y_ENSURE(committedOffset, "Consumer partition statistics are unavailable");
 
-            const auto committed = consumerStats->GetCommittedOffset();
+            const auto committed = *committedOffset;
             const bool rewind = partition.Offset ? *partition.Offset < committed : TInstant::MilliSeconds(partition.TimestampMs) < TInstant::Now();
             if (rewind && partition.StartOffset < committed) {
                 YDB_LOG_INFO("Rewinding PQ consumer for source recovery",
@@ -474,7 +474,7 @@ private:
                     {"recoveryOffset", partition.Offset},
                     {"recoveryTimestampMs", partition.TimestampMs},
                     {"startOffset", partition.StartOffset});
-                Subscribe<TEvPrivate::TEvRewind>(Client->CommitOffset(Topic, partition.Id, Consumer, partition.StartOffset), index);
+                Subscribe<TEvPrivate::TEvRewind>(Client->CommitPosition(NFq::TMessageStreamPartitionId{partition.Id}, Consumer, partition.StartOffset), index);
                 return;
             }
         }
@@ -489,12 +489,12 @@ private:
             return;
         }
 
-        TReadSessionSettings settings;
-        settings.MaxMemoryUsageBytes(READ_SESSION_MEMORY).AppendTopics(TTopicReadSettings(Topic).AppendPartitionIds(partition.Id));
-        if (Consumer.empty()) {
-            settings.WithoutConsumer();
-        } else {
-            settings.ConsumerName(Consumer);
+        NFq::TMessageStreamReadSessionSettings settings;
+        settings.PartitionIds = {NFq::TMessageStreamPartitionId{partition.Id}};
+        settings.MaxMemoryUsageBytes = READ_SESSION_MEMORY;
+        settings.RequireWriteTime = !partition.Offset.has_value();
+        if (!Consumer.empty()) {
+            settings.Consumer = Consumer;
         }
 
         partition.Session = Client->CreateReadSession(settings);
@@ -511,7 +511,7 @@ private:
         partition.Done = true;
 
         if (partition.Session) {
-            partition.Session->Close(TDuration::Zero());
+            partition.Session->Close();
             partition.Session.reset();
         }
 
@@ -523,13 +523,13 @@ private:
     void PassAway() override {
         for (auto& partition : Partitions) {
             if (partition.Session) {
-                partition.Session->Close(TDuration::Zero());
+                partition.Session->Close();
             }
         }
         TBase::PassAway();
     }
 
-    const ITopicClient::TPtr Client;
+    const std::shared_ptr<NFq::IMessageStreamClient> Client;
     const TString Topic;
     const TString Consumer;
     TVector<TSourceRecoveryPartition> Partitions;
@@ -803,7 +803,7 @@ private:
                     .DiscoveryEndpoint(cluster.Settings.GetEndpoint())
                     .SslCredentials(NYdb::TSslCredentials(cluster.Settings.GetUseSsl()))
                     .CredentialsProviderFactory(CredentialsFactory->Create(source.Token, cluster.Settings.GetAddBearerToToken()));
-                auto client = PqGateway->GetTopicClient(Driver, settings);
+                auto client = PqGateway->GetTopicClient(cluster.Settings.GetTopicPath(), Driver, settings);
                 Y_ENSURE(client, "Topic client is unavailable for source recovery");
 
                 TVector<TSourceRecoveryPartition> partitions;

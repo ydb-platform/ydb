@@ -1,16 +1,16 @@
 # Vector Indexes
 
-[Vector indexes](../concepts/glossary.md#vector-index) are a specialized type of [secondary index](../concepts/glossary.md#secondary-index) that enable efficient [vector search](../concepts/query_execution/vector_search.md) in multidimensional spaces. While traditional secondary indexes optimize searching by equality or range, vector indexes allow similarity searching based on [similarity or distance functions](../yql/reference/udf/list/knn.md#functions).
+[Vector indexes](../concepts/glossary.md#vector-index) are a specialized type of [secondary index](../concepts/glossary.md#secondary-index) that enable efficient [vector search](../concepts/query_execution/vector_search.md) in multidimensional spaces. Unlike traditional secondary indexes optimized for equality or range search, vector indexes allow approximate search based on [similarity or distance functions](../yql/reference/udf/list/knn.md#functions).
 
-Data in a {{ ydb-short-name }} table is stored and sorted by the primary key, ensuring efficient searching by exact match and range scanning. Vector indexes provide similar efficiency for nearest neighbor searches in vector spaces.
+Data in a {{ ydb-short-name }} table is stored and sorted by the primary key, which ensures efficient exact-match search and range scanning. Vector indexes provide similar efficiency for nearest neighbor search in vector spaces.
 
 ## Types of Vector Indexes {#types}
 
-A vector index can be [global](#global) or [global filtered](#filtered). Indexes of any of these types can also be [covering](#covering) and include a copy of additional column data from the main table.
+A vector index can be [global](#global) or [global with filtering](#filtered). Also, any of these index types can be [covering](#covering) and include a copy of additional column data from the main table.
 
 ### Global Vector Index {#global}
 
-A global vector index on the `embedding` column enables fast approximate nearest neighbor search across the entire table:
+A global vector index on the `embedding` column allows fast approximate nearest neighbor search across the entire table:
 
 ```yql
 ALTER TABLE my_table
@@ -21,7 +21,7 @@ ALTER TABLE my_table
   WITH (distance=cosine, vector_type="float", vector_dimension=512, overlap_clusters=3);
 ```
 
-Example search query using this index:
+Example search query to such an index:
 
 ```yql
 PRAGMA ydb.KMeansTreeSearchTopSize = "10";
@@ -38,19 +38,19 @@ LIMIT 10;
 
 Note that:
 
-- Both the `embedding` column and the `$query_vector` parameter must be of string type and contain an array of numbers in the simple [binary format](../yql/reference/udf/list/knn.md#functions-convert-format).
-- It is more efficient to pass the parameter from the SDK as a string by serializing the numbers on the application side ([examples](../recipes/ydb-sdk/vector-search.md#search-by-vector)). Alternatively, the value can be passed from the SDK as a vector of numbers and converted from a list using `Knn::ToBinaryString*` functions, but this is slower.
-- The `COVER (embedding, data)` clause is optional and is used to create a [covering index](#covering). This helps further speed up the search.
-- Vector index search is always approximate — its results differ from a full-scan search.
-- Increasing the [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize) parameter improves search quality (recall) at the cost of speed. The parameter sets the number of index clusters nearest to the query that are scanned. The default value is 4 with overlapping clusters (`overlap_clusters > 1`) and 10 without overlap.
+- Both the vector column `embedding` and the `$query_vector` parameter must be of string type and contain an array of numbers in the simple [binary format](../yql/reference/udf/list/knn.md#functions-convert-format).
+- It is more efficient to pass the parameter from the SDK as a string, serializing the numbers on the application side ([examples](../recipes/ydb-sdk/vector-search.md#search-by-vector)). Alternatively, the value can be passed from the SDK as a vector of numbers and converted from a list using `Knn::ToBinaryString*` functions, but this is slower.
+- The `COVER (embedding, data)` clause is optional and is intended for creating a [covering index](#covering). This helps further speed up the search.
+- Vector index search is always approximate — its results differ from exhaustive search.
+- Increasing the [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize) parameter improves search quality (recall) but reduces its speed. The parameter sets the number of index clusters nearest to the query that are scanned. The default value is 4 with overlapping clusters (`overlap_clusters > 1`) and 10 without overlap.
 - The `overlap_clusters=3` parameter significantly improves future search quality during indexing by specifying the maximum number of leaf clusters each vector is added to, but increases the index size.
-- The `vector_type` and `vector_dimension` parameters can be omitted if the table is not empty — they will be autodetected from existing rows.
+- The `vector_type` and `vector_dimension` parameters can be omitted if the table is not empty — they will be automatically determined from the row contents.
 
 ### Filtered Vector Index {#filtered}
 
-A filtered vector index enables searching for nearest neighbors within each category defined by unique values of additional columns.
+A filtered vector index allows searching for nearest neighbors within each category defined by a unique value of additional columns.
 
-To create such an index, specify multiple index columns. The last column must be the vector column; the others (category columns) can be of any type:
+To create such an index, specify multiple index columns. The last column must be the vector column, the others (category columns) can be of any type:
 
 ```yql
 ALTER TABLE my_table
@@ -58,10 +58,10 @@ ALTER TABLE my_table
   GLOBAL USING vector_kmeans_tree
   ON (user, embedding)
   COVER (embedding, data)
-  WITH (distance=cosine, vector_type="float", vector_dimension=512);
+  WITH (distance=cosine);
 ```
 
-Search queries using this filtered index can include conditions on the `user` column:
+Search queries to such a filtered index can include conditions on the `user` column:
 
 ```yql
 PRAGMA ydb.KMeansTreeSearchTopSize = "10";
@@ -77,15 +77,15 @@ ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
 LIMIT 10;
 ```
 
-You can search several categories using `IN` or `OR`. With multiple filtering columns, a condition on a leading part of the prefix is also supported. See [filtering with a prefixed vector index](../yql/reference/syntax/select/vector_index.md#filtering).
+Use `IN` or `OR` to search across multiple categories. If there are multiple filtering columns, a condition on the leading part of the prefix is also supported. See [filtering by vector index prefix](../yql/reference/syntax/select/vector_index.md#filtering).
 
-Indexing and search parameters work the same as for a global index. Because different filtering-column values often hold very different numbers of vectors, a filtered index can additionally use [adaptive clusters](vector-indexes-kmeans-tree-type.md#adaptive-clusters) to pick the number of clusters for each value automatically.
+Indexing and search parameters work here similarly to a global index. Since different values of filtering columns often contain very different numbers of vectors, a filtered index can additionally use [adaptive number of clusters](vector-indexes-kmeans-tree-type.md#adaptive-clusters) to select the number of clusters for each value automatically.
 
 ### Covering Vector Index {#covering}
 
-A covering vector index stores a copy of additional column data to avoid reading from the main table and further speed up the search.
+A covering vector index contains a copy of additional column data to avoid reading from the main table and further speed up the search.
 
-Note that by default the index does not contain a copy of the vector column (in the example — `embedding`), so if it is not explicitly added to the list of covered columns, reading from the main table cannot be avoided, since vectors are always used for exact result sorting in the final search step.
+Note that by default the index does not contain a copy of the vector column (in the example — embedding), so if it is not explicitly added to the list of covered columns, reading from the main table cannot be avoided, since vectors are always used for exact sorting of results at the final search stage.
 
 ```yql
 ALTER TABLE my_table
@@ -100,7 +100,7 @@ ALTER TABLE my_table
 
 The following [similarity or distance functions](../yql/reference/udf/list/knn.md#functions-distance) are supported:
 
-* `distance=cosine` or `similarity=cosine` — cosine distance, corresponds to `ORDER BY Knn::CosineDistance(...) ASC` or `ORDER BY Knn::CosineSimilarity(...) DESC`.
+* `distance=cosine` or `similarity=cosine` — cosine distance, corresponds to sorting `ORDER BY Knn::CosineDistance(...) ASC` or `ORDER BY Knn::CosineSimilarity(...) DESC`.
 * `distance=manhattan` — Manhattan distance (L1 metric), corresponds to `ORDER BY Knn::ManhattanDistance(...) ASC`.
 * `distance=euclidean` — Euclidean distance (L2 metric), corresponds to `ORDER BY Knn::EuclideanDistance(...) ASC`.
 * `similarity=inner_product` — inner product, corresponds to `ORDER BY Knn::InnerProductSimilarity(...) DESC`.
@@ -109,41 +109,41 @@ The following [similarity or distance functions](../yql/reference/udf/list/knn.m
 
 Creating a vector index:
 
-* During table creation: [CREATE TABLE](../yql/reference/syntax/create_table/vector_index.md).
+* When creating a table: [CREATE TABLE](../yql/reference/syntax/create_table/vector_index.md).
 * Adding to an existing table: [ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md).
 
-Full syntax for queries using a vector index:
+Full syntax for queries to a vector index:
 
 * [VIEW VECTOR INDEX](../yql/reference/syntax/select/vector_index.md).
 
 ## Search Algorithm
 
-The current implementation offers one type of index: `vector_kmeans_tree`.
+The current implementation offers one index type: `vector_kmeans_tree`.
 
 ### Vector Index Type `vector_kmeans_tree` {#kmeans-tree-type}
 
-The `vector_kmeans_tree` index implements hierarchical data clustering. The structure of the index includes:
+The `vector_kmeans_tree` index implements hierarchical data clustering. The index structure includes:
 
 1. Hierarchical clustering:
 
-    * the index builds multiple levels of k-means clusters;
+    * the index builds several levels of k-means clusters;
     * at each level, vectors are distributed across a predefined number of clusters raised to the power of the level;
     * the first level clusters the entire dataset;
     * subsequent levels recursively cluster the contents of each parent cluster.
 
 2. Search process:
 
-    * search proceeds recursively from the first level to the subsequent ones;
-    * during queries, the index analyzes only the most promising clusters;
-    * such search space pruning avoids complete enumeration of all vectors.
+    * search proceeds recursively from the first level to subsequent ones;
+    * when executing queries, the index analyzes only the most promising clusters;
+    * such pruning of the search space avoids exhaustive enumeration of all vectors.
 
 3. Parameters:
 
-    * `levels`: number of levels in the tree, defining search depth (recommended 1-3);
+    * `levels`: number of levels in the tree, defines search depth (recommended 1-3);
     * `clusters`: number of clusters in k-means, defining search width (recommended 64-512).
-    * `overlap_clusters`: maximum number of leaf-level clusters each vector is added to (recommended 3).
+    * `overlap_clusters`: maximum number of lower-level clusters each vector is added to (recommended 3).
 
-Internally, a vector index consists of index tables named `indexImpl*Table`. In selection queries using the vector index, these tables appear in [query statistics](optimization/plans.md). For more on the structure of the vector index, see the dedicated article [{#T}](vector-indexes-kmeans-tree-type.md).
+Internally, a vector index consists of hidden index tables of the form `indexImpl*Table`. In [selection queries](../yql/reference/syntax/select/vector_index.md) using a vector index, these tables appear in [query statistics](./optimization/plans.md#analyze-cli). For more details on the vector index structure, see the dedicated article [{#T}](vector-indexes-kmeans-tree-type.md).
 
 ### Overlapping Clusters {#overlap-clusters}
 
@@ -157,17 +157,17 @@ ALTER TABLE my_table
   WITH (distance=cosine, overlap_clusters=3);
 ```
 
-In this example, each vector will be added to up to 3 nearest leaf clusters instead of 1.
+In this example, each vector will be added not to 1, but to a maximum of 3 nearest leaf clusters.
 
-The `overlap_clusters` parameter is recommended for nearly all use cases, especially for vector indexes with `levels > 1`, as it significantly improves search recall even with small [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize) values (for example, 3).
+The `overlap_clusters` parameter is recommended for almost all use cases, especially for vector indexes with `levels > 1`, as it significantly improves search recall even with small PRAGMA [KMeansTreeSearchTopSize](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize) values (for example, 3).
 
-This way, you can reduce the PRAGMA value and significantly speed up the search while maintaining the same recall.
+This way, you can reduce the PRAGMA parameter and significantly speed up the search while maintaining the same recall.
 
 ## Partitioning of Index Tables {#partitioning}
 
-The most heavily loaded table in a vector index is `indexImplLevelTable`, the cluster structure table. Every search query reads this table, so load on its partitions may limit query performance.
+The main loaded table of a vector index is `indexImplLevelTable`, the cluster structure table. Any index search query reads this table, so the load on its partitions can limit query performance.
 
-To improve performance, you can enable auto-partitioning by load:
+To improve performance, you can enable auto-partitioning by load for it:
 
 ```yql
 ALTER TABLE `my_table/my_index/indexImplLevelTable`
@@ -181,13 +181,13 @@ ALTER TABLE `my_table/my_index/indexImplLevelTable`
 SET AUTO_PARTITIONING_PARTITION_SIZE_MB 100;
 ```
 
-The same settings can be applied to other index tables (`indexImplPostingTable` and `indexImplPrefixTable`), but the Level table is the most loaded while being small in size, so auto-partitioning settings are most relevant for it.
+Similar settings can be applied to other index tables (`indexImplPostingTable` and `indexImplPrefixTable`), but the Level table is the most loaded while being small in size, so auto-partitioning settings are most relevant for it.
 
-## Using Index Table Replicas {#replicas}
+## Using Replicas of Index Tables {#replicas}
 
 Another way to speed up search is to use table replicas. To do this:
 
-1. Create a [covering index](#covering) so that only index tables are involved in search queries.
+1. Create a [covering index](#covering) so that only index tables are involved in the search query.
 2. Enable replicas on all index tables:
 
    ```yql
@@ -203,89 +203,90 @@ Another way to speed up search is to use table replicas. To do this:
 
 3. Use the [Stale Read-Only](../recipes/ydb-sdk/tx-control.md#stale-read-only) query mode.
 
-## Data requirements and limitations {#limitations}
+## Data Requirements and Limitations {#limitations}
 
-The vector column stores serialized vectors as `String`. Use the [Knn conversion functions](../yql/reference/udf/list/knn.md#functions-convert) to produce this representation. Vectors must match the index type and dimension. During index construction, a nonempty vector with an incompatible dimension causes the build to fail with `Vector dimension mismatch`; `NULL` and empty embeddings are skipped.
+The vector column stores serialized vectors in the `String` type. To obtain this representation, use the [Knn conversion functions](../yql/reference/udf/list/knn.md#functions-convert). The type and dimension of vectors must match the index. If a non-empty vector of incompatible dimension is encountered during construction, the build fails with the error `Vector dimension mismatch`; `NULL` values and empty embeddings are skipped.
 
-Tables with vector indexes currently do not support [TTL](../concepts/ttl.md). Creating an index on a table with TTL enabled, or enabling TTL on a table with a vector index, is rejected.
+Tables with vector indexes currently do not support [TTL](../concepts/ttl.md). Creating an index on a table with TTL enabled, and enabling TTL on a table with a vector index, both fail with an error.
 
-`BulkUpsert` does not support tables with synchronous vector indexes. Load data with `BulkUpsert` before creating the index, or use YQL `INSERT` and `UPSERT` to update an indexed table.
+`BulkUpsert` does not support tables with synchronous vector indexes. Load data via `BulkUpsert` before creating the index, or use YQL `INSERT` and `UPSERT` to update a table with an index.
 
 ## Updating Vector Indexes {#update}
 
-After the index is built, `INSERT`, `UPSERT`, `UPDATE`, and `DELETE` update it synchronously with the main table. A vector search in the same transaction sees earlier writes in that transaction. The following limitations still apply:
+After index construction completes, `INSERT`, `UPSERT`, `UPDATE`, and `DELETE` operations update it synchronously with the main table. Vector search in the same transaction sees writes performed earlier. The following limitations still apply:
 
 ### Clusters are not recalculated during update
 
-When a table with a vector index is updated, its internal structure — a tree of clusters (groups of similar vectors) — is not recalculated. New or modified records are simply assigned to existing clusters.
+When a table with a vector index is updated, its internal structure — a tree of clusters (groups of similar vectors) — is not rebuilt. New or modified records are only distributed across existing clusters.
 
-Over time, this can lead to index degradation, resulting in:
+Over time, this can lead to index degradation, which manifests in two ways:
 
-1. Reduced completeness — the index may return fewer relevant results because clusters no longer reflect the actual data distribution.
-2. Reduced performance — unbalanced clusters (for example, one cluster containing too many records) can slow down search queries and, in the worst case, lead to full table scans.
+* Reduced recall — the index may return fewer relevant results, as clusters no longer reflect the true data structure;
+* Reduced performance — if clusters become unbalanced (for example, one cluster contains too many records), search slows down.
 
-The extent of degradation depends on the nature of the updates:
+The degree of degradation depends on the nature of updates:
 
-* If the index was built on a representative sample (e.g., a random 50% of the data) and the remaining records are added later, the index structure remains mostly relevant, and degradation is minimal.
-* If entire groups of similar vectors were absent from the initial dataset, the clustering may fail to partition the space effectively, leading to a significant drop in result relevance.
+* If the index was built on a representative sample (for example, random 50% of the data), and the remaining records were added later, the structure remains relevant, and degradation is minimal;
+* If entire groups of similar vectors were initially absent, clusters may partition the space incorrectly, and search quality may drop significantly.
 
-A particularly problematic corner case arises when a vector index is created on an empty table. In this scenario, the index consists of a single cluster, and all new records are placed within it. As a result, searches using such an index are equivalent to full table scans.
+An extreme case is an index created on an empty table: in this case, it contains only one cluster, and all new records fall into it. Search using such an index is equivalent to a full table scan.
 
-To prevent degradation:
+To avoid degradation:
 
-* Avoid creating a vector index on an empty table.
-* If a large volume of new data has been added, [rebuild the index](#rebuild) when search quality or performance has degraded.
+* Do not create a vector index on an empty table;
+* If a lot of new data has accumulated in the table, [rebuild the index](#rebuild) when search quality or speed has decreased.
 
-To decide when to rebuild:
+To determine when rebuilding is required:
 
-1. Choose a representative set of query vectors. Measure search recall by comparing indexed results with exact results from a full scan of the same table. The [vector workload command](../reference/ydb-cli/workload-vector.md#run-select) demonstrates this with `--recall`.
-2. Record search latency for the same queries. Repeat the measurements with the same distance function and search settings, including [`KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize).
-3. Rebuild if recall falls or latency rises consistently after the data distribution changes. Row growth alone is a reason to measure, not a fixed rebuild threshold.
+1. Select a representative set of query vectors. Estimate recall by comparing index search results with exact results from a full scan of the same table. An example of such a comparison with the `--recall` parameter is available in the [vector workload command](../reference/ydb-cli/workload-vector.md#run-select).
+2. Measure search time for the same queries. Repeat measurements with the same distance function and search settings, including [`KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize).
+3. Rebuild the index if, after the data distribution changes, recall has consistently decreased or search time has increased. Row growth itself is a reason for measurement, not a fixed rebuild threshold.
 
-### Update inconsistency during index build {#build-consistency}
+### Update inconsistency during build {#build-consistency}
 
-Vector indexes do not support consistent updates during build. That is, a vector index is not updated when data in the main table is modified until the index build is finished.
+Vector indexes do not support consistent updates during build. That is, the vector index is not updated if data in the main table changes before the index build completes.
 
-This means that if you want a vector index to remain 100% consistent, you have to pause table updates while it is being built.
+This means that if you want the vector index to remain 100% consistent, you must pause data updates in the table during its build.
 
-Updates are not blocked automatically because vector index search is approximate by nature, and in many cases temporary inconsistency during the build is acceptable.
+Table updates are not blocked automatically, since vector index search is always approximate and therefore the lack of consistency during build is often not a problem.
 
-This temporary limitation is planned to be removed in a future {{ ydb-short-name }} release.
+This temporary limitation is planned to be removed in one of the upcoming {{ ydb-short-name }} versions.
 
 ## Rebuilding a Vector Index {#rebuild}
 
-Rebuilding creates a new cluster tree and redistributes the table's vectors across it. Use [`ALTER TABLE ... REBUILD INDEX`](../yql/reference/syntax/alter_table/indexes.md#rebuild-index) when changes in the data distribution reduce search recall or performance:
+During rebuild, a new cluster tree is created, over which the table's vectors are redistributed. Use [`ALTER TABLE ... REBUILD INDEX`](../yql/reference/syntax/alter_table/indexes.md#rebuild-index) if changes in the data distribution have led to a decrease in search recall or speed:
 
 ```yql
 ALTER TABLE `my_table` REBUILD INDEX `my_index`;
 ```
 
-The command preserves the index name, indexed and covered columns, and vector index settings. To adjust the tree for a changed dataset size, explicitly set `clusters` and `levels`, which control the number of clusters and tree levels:
+The command preserves the index name, the set of indexed and covered columns, and vector index settings. To adapt the tree to the changed data volume, explicitly set `clusters` and `levels`, which determine the number of clusters and tree levels:
 
 ```yql
 ALTER TABLE `my_table` REBUILD INDEX `my_index`
 WITH (clusters = 128, levels = 2);
 ```
 
-The existing index continues to serve queries and receive table updates during the build. Once the replacement is ready, {{ ydb-short-name }} atomically replaces the old index. Applications continue to use the same index name. The operation temporarily requires storage for both index versions and resources to build the replacement.
+During the build, the existing index continues to serve queries and receive table updates. When the new version is ready, {{ ydb-short-name }} atomically replaces the old index. Applications continue to use the previous index name. During the operation, storage space for both index versions and resources for building the new version are required.
 
-To limit the number of parallel partition handlers during the rebuild, set the [`parallel` parameter](../yql/reference/syntax/alter_table/indexes.md#rebuild-index). For example, to run no more than eight handlers at a time:
+To limit the number of parallel partition handlers during rebuild, set the [`parallel` parameter](../yql/reference/syntax/alter_table/indexes.md#rebuild-index). For example, to run no more than eight handlers simultaneously:
 
 ```yql
 ALTER TABLE `my_table` REBUILD INDEX `my_index`
 WITH (parallel = 8);
 ```
 
-The replacement is built from a snapshot, so the [consistency limitation during index building](#build-consistency) also applies to rebuilding. If you need a fully consistent index:
+The new version is built from a data snapshot, so the [consistency limitation during build](#build-consistency) also applies to rebuilding. If a fully consistent index is needed:
 
-1. Stop all application writers and ingestion jobs for the table, and wait for in-flight writes to finish. {{ ydb-short-name }} does not pause writes automatically.
-2. Start the rebuild. Find its ID with [`ydb operation list buildindex`](../reference/ydb-cli/operation-list.md), then check it with [`ydb operation get`](../reference/ydb-cli/operation-get.md).
-3. Resume writes when the operation reports `ready: true` and `status: SUCCESS`.
+1. Stop all applications and ingestion processes writing data to the table, and wait for in-flight write operations to complete. {{ ydb-short-name }} does not pause writes automatically.
+2. Start the rebuild. Find the operation ID with the [`ydb operation list buildindex`](../reference/ydb-cli/operation-list.md) command and check its status with the [`ydb operation get`](../reference/ydb-cli/operation-get.md) command.
+3. Resume writes when the operation returns `ready: true` and `status: SUCCESS`.
 
-Queries remain available during rebuilding, but may require a [retry](../recipes/ydb-sdk/retry.md) when the index is replaced.
+Queries remain available during the rebuild, but a [retry](../recipes/ydb-sdk/retry.md) may be required at the moment the index is replaced.
 
 ## Recipes for Working with Vector Indexes {#vector-index-recipes}
 
-To get started with vector indexes, you can use the following recipes:
+To get started with a vector index, you can use the following recipes:
 
 * [YDB CLI & YQL](../recipes/vector-search)
+* [YDB SDK: Python, C++](../recipes/ydb-sdk/vector-search.md)

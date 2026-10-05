@@ -1778,6 +1778,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                             .ChunksOwned = usedForOwner[ownerId],
                             .VDiskId = OwnerData[ownerId].VDiskId,
                             .Weight = GetOwnerWeight(OwnerData[ownerId].GroupSizeInUnits),
+                            .GroupSizeInUnits = OwnerData[ownerId].GroupSizeInUnits,
                         };
                     }
                 }

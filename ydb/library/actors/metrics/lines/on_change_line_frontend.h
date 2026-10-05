@@ -99,6 +99,7 @@ namespace NActors {
             static const TLineFrontendOps descriptor{
                 .Name = "on_change",
                 .ReadRange = &TOnChangeLineFrontend<TValue>::ReadRange,
+                .ReadNumericRange = &ReadNumericRange,
             };
             return descriptor;
         }
@@ -108,6 +109,19 @@ namespace NActors {
         }
 
     private:
+        static void ReadNumericRange(const TLineSnapshot& snapshot, TInstant beginTs, TInstant endTs,
+                                     void* opaque, TLineFrontendOps::TInvokeNumericValues invoke) {
+            struct TContext {
+                void* Opaque;
+                TLineFrontendOps::TInvokeNumericValues Invoke;
+            } context{opaque, invoke};
+            ReadRange(snapshot, beginTs, endTs, &context, [](void* opaque, TInstant timestamp, const void* value) {
+                const auto& context = *static_cast<const TContext*>(opaque);
+                const std::array<TLineNumericValue, 1> values = {MakeLineNumericValue(*static_cast<const TValue*>(value))};
+                context.Invoke(context.Opaque, timestamp, values);
+            });
+        }
+
         friend class TLine<TOnChangeLineFrontend<TValue>>;
 
         static bool Append(IMetricLine& line, const TValueType& value) noexcept;

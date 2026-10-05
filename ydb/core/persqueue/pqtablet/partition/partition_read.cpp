@@ -31,10 +31,6 @@
 
 namespace NKikimr::NPQ {
 
-// TDuration::Max() means the caller set no finite lag.
-// Retention tightens it only when limitReadToRetention is set and the topic has no storage limit:
-// min(max(lifetime, availability), request max lag). Important passes availability = Max, so the
-// topic lifetime drops out and only the request lag remains.
 TDuration ReadMaxLag(ui32 requestMaxTimeLagMs, TDuration availabilityPeriod, const NKikimrPQ::TPartitionConfig& partConfig, bool limitReadToRetention) {
     const TDuration userMaxLag = requestMaxTimeLagMs > 0 ? TDuration::MilliSeconds(requestMaxTimeLagMs) : TDuration::Max();
     if (!limitReadToRetention || (partConfig.HasStorageLimitBytes() && partConfig.GetStorageLimitBytes() > 0)) {

@@ -542,6 +542,60 @@ class ShardProgressTest(unittest.TestCase):
         assert parsed is not None
         self.assertEqual(set(parsed["shards"]), {"0", "1"})
 
+    def test_comment_has_the_single_job_count_table(self) -> None:
+        state = shard_progress.apply_shard(
+            _progress_state(2),
+            shard_id=0,
+            result="failure",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:05:00Z",
+            job_url="https://example.test/job/0",
+            log_prefix="shard_0",
+            failed_tests=["ydb/a/Foo"],
+            run_url="https://example.test/run/99",
+            counts={"tests": 10, "passed": 7, "errors": 0, "failed": 2, "skipped": 1, "muted": 0},
+            report_url="https://example.test/shard0/ya-test.html",
+        )
+        state = shard_progress.apply_shard(
+            state,
+            shard_id=1,
+            result="success",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:06:00Z",
+            job_url="https://example.test/job/1",
+            log_prefix="shard_1",
+            failed_tests=[],
+            run_url="https://example.test/run/99",
+            counts={"tests": 5, "passed": 5, "errors": 0, "failed": 0, "skipped": 0, "muted": 0},
+        )
+        state["combined_url"] = "https://example.test/combined/ya-test.html"
+        body = shard_progress.render_comment(state, "2026-10-04T12:06:00Z")
+        self.assertIn("Some tests failed, follow the links below.", body)
+        self.assertIn("| TESTS | PASSED | ERRORS | FAILED | SKIPPED | MUTED |", body)
+        self.assertIn("[15](https://example.test/combined/ya-test.html)", body)
+        self.assertIn("[2](https://example.test/combined/ya-test.html#FAIL)", body)
+        self.assertIn("[12](https://example.test/combined/ya-test.html#PASS)", body)
+
+    def test_combined_html_has_fail_anchor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "combined.html"
+            shard_progress.write_combined_html(
+                str(out),
+                [
+                    {
+                        "results": [
+                            {"path": "ydb/a", "name": "Foo", "status": "FAILED"},
+                            {"path": "ydb/b", "name": "Bar", "status": "PASSED"},
+                        ]
+                    }
+                ],
+                preset="relwithdebinfo",
+            )
+            text = out.read_text(encoding="utf-8")
+            self.assertIn('id="FAIL"', text)
+            self.assertIn("ydb/a/Foo", text)
+            self.assertIn("ydb/b/Bar", text)
+
     def test_comment_update_retries_on_etag_conflict(self) -> None:
         header = shard_progress.marker("99", "relwithdebinfo")
         store = _ConflictStore()

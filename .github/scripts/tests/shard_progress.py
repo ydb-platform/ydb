@@ -96,6 +96,27 @@ def marker(run_id: str, preset: str) -> str:
     return f"<!-- shard-progress run={run_id} preset={preset} -->"
 
 
+COUNT_KEYS = ("tests", "passed", "errors", "failed", "skipped", "muted")
+_STATUS_TO_COUNT = {
+    "PASSED": "passed",
+    "FAILED": "failed",
+    "ERROR": "errors",
+    "SKIPPED": "skipped",
+    "MUTE": "muted",
+}
+_STATUS_TO_ANCHOR = {
+    "PASSED": "PASS",
+    "FAILED": "FAIL",
+    "ERROR": "ERROR",
+    "SKIPPED": "SKIP",
+    "MUTE": "MUTE",
+}
+
+
+def empty_counts() -> dict[str, int]:
+    return {key: 0 for key in COUNT_KEYS}
+
+
 def empty_state(run_id: str, preset: str, target: str, total: int) -> dict[str, Any]:
     return {
         "run_id": str(run_id),
@@ -104,8 +125,87 @@ def empty_state(run_id: str, preset: str, target: str, total: int) -> dict[str, 
         "total": int(total),
         "run_url": "",
         "started_at": "",
+        "combined_url": "",
         "shards": {},
     }
+
+
+def counts_from_report(report: dict[str, Any] | None) -> dict[str, int]:
+    """One row of the TESTS / PASSED / FAILED table from a ya report.json."""
+    found = empty_counts()
+    if not report:
+        return found
+    for result in report.get("results") or []:
+        if not isinstance(result, dict) or not result.get("status"):
+            continue
+        found["tests"] += 1
+        bucket = _STATUS_TO_COUNT.get(str(result.get("status") or ""), "passed")
+        found[bucket] += 1
+    return found
+
+
+def sum_counts(state: dict[str, Any]) -> dict[str, int]:
+    found = empty_counts()
+    for row in (state.get("shards") or {}).values():
+        if not isinstance(row, dict):
+            continue
+        counts = row.get("counts") or {}
+        for key in COUNT_KEYS:
+            found[key] += int(counts.get(key) or 0)
+    return found
+
+
+def report_url_for(state: dict[str, Any]) -> str:
+    combined = str(state.get("combined_url") or "")
+    if combined:
+        return combined
+    for shard_id in sorted(state.get("shards") or {}, key=lambda item: int(item)):
+        url = str((state["shards"][shard_id] or {}).get("report_url") or "")
+        if url:
+            return url
+    return ""
+
+
+def _count_cell(value: int, url: str, anchor: str) -> str:
+    if not value:
+        return "0"
+    if not url:
+        return str(value)
+    suffix = f"#{anchor}" if anchor else ""
+    return f"[{value}]({url}{suffix})"
+
+
+def render_counts_table(state: dict[str, Any]) -> list[str]:
+    counts = sum_counts(state)
+    url = report_url_for(state)
+    return [
+        "| TESTS | PASSED | ERRORS | FAILED | SKIPPED | MUTED |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| "
+        + " | ".join(
+            [
+                _count_cell(counts["tests"], url, ""),
+                _count_cell(counts["passed"], url, "PASS"),
+                _count_cell(counts["errors"], url, "ERROR"),
+                _count_cell(counts["failed"], url, "FAIL"),
+                _count_cell(counts["skipped"], url, "SKIP"),
+                _count_cell(counts["muted"], url, "MUTE"),
+            ]
+        )
+        + " |",
+        "",
+    ]
+
+
+def headline(state: dict[str, Any]) -> str:
+    status = overall_status(state)
+    received = received_count(state)
+    total = int(state.get("total") or 0)
+    if status == "running":
+        return f"Tests still running ({received}/{total} shards)."
+    if status == "failure":
+        return "Some tests failed, follow the links below."
+    return "Tests successful."
 
 
 def _min_time(current: str, candidate: str) -> str:
@@ -130,11 +230,14 @@ def merge_states(states: list[dict[str, Any]]) -> dict[str, Any]:
                 "total": int(state.get("total") or 0),
                 "run_url": str(state.get("run_url") or ""),
                 "started_at": str(state.get("started_at") or ""),
+                "combined_url": str(state.get("combined_url") or ""),
                 "shards": {},
             }
         merged["total"] = max(int(merged["total"]), int(state.get("total") or 0))
         if not merged["run_url"]:
             merged["run_url"] = str(state.get("run_url") or "")
+        if state.get("combined_url"):
+            merged["combined_url"] = str(state.get("combined_url") or "")
         merged["started_at"] = _min_time(str(merged["started_at"]), str(state.get("started_at") or ""))
         for shard_id, row in (state.get("shards") or {}).items():
             key = str(shard_id)
@@ -160,6 +263,9 @@ def apply_shard(
     run_url: str,
     build: str = "",
     tests: str = "",
+    counts: dict[str, int] | None = None,
+    report_url: str = "",
+    report_json_url: str = "",
 ) -> dict[str, Any]:
     updated = merge_states([state])
     if run_url:
@@ -174,6 +280,9 @@ def apply_shard(
         "failed_tests": list(failed_tests),
         "build": build,
         "tests": tests,
+        "counts": dict(counts or empty_counts()),
+        "report_url": report_url,
+        "report_json_url": report_json_url,
     }
     return updated
 
@@ -383,6 +492,9 @@ def render_comment(state: dict[str, Any], now: str) -> str:
     if run_url:
         lines.append(f"**Run:** {run_url}")
     lines.append("")
+    lines.append(headline(state))
+    lines.append("")
+    lines.extend(render_counts_table(state))
 
     failures: list[str] = []
     for shard_id in sorted(state.get("shards") or {}, key=lambda item: int(item)):
@@ -612,19 +724,117 @@ def _delete_extras(store: CommentStore, matches: list[CommentRecord], keep_id: i
                 print(f"warning: {exc}", file=sys.stderr)
 
 
-def _load_failed_tests(path: str) -> list[str]:
+def load_report(path: str) -> dict[str, Any] | None:
     if not path or not os.path.isfile(path):
-        return []
+        return None
     with open(path, encoding="utf-8") as handle:
         report = json.load(handle)
-    if not isinstance(report, dict):
-        return []
-    return failed_test_names(report)
+    return report if isinstance(report, dict) else None
+
+
+def _load_failed_tests(path: str) -> list[str]:
+    report = load_report(path)
+    return failed_test_names(report) if report else []
+
+
+def fetch_report(url: str) -> dict[str, Any] | None:
+    if not url:
+        return None
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            payload = json.load(response)
+    except (OSError, urllib.error.URLError, json.JSONDecodeError, TimeoutError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def collect_reports(
+    state: dict[str, Any],
+    *,
+    local_path: str,
+    local_json_url: str = "",
+) -> list[dict[str, Any]]:
+    """Local report first, then every other shard's public report.json."""
+    found: list[dict[str, Any]] = []
+    local = load_report(local_path)
+    if local:
+        found.append(local)
+    skip = {local_json_url} if local_json_url else set()
+    for row in (state.get("shards") or {}).values():
+        if not isinstance(row, dict):
+            continue
+        url = str(row.get("report_json_url") or "")
+        if not url or url in skip:
+            continue
+        skip.add(url)
+        remote = fetch_report(url)
+        if remote:
+            found.append(remote)
+    return found
+
+
+def _html_escape(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def write_combined_html(path: str, reports: list[dict[str, Any]], *, preset: str) -> None:
+    """One HTML file with the same #FAIL / #PASS anchors as the single-job report."""
+    by_anchor: dict[str, list[str]] = {anchor: [] for anchor in _STATUS_TO_ANCHOR.values()}
+    by_anchor["ALL"] = []
+    for report in reports:
+        for result in report.get("results") or []:
+            if not isinstance(result, dict) or not result.get("status"):
+                continue
+            status = str(result.get("status") or "")
+            anchor = _STATUS_TO_ANCHOR.get(status, "PASS")
+            path_name = str(result.get("path") or "")
+            name = str(result.get("name") or "")
+            sub = str(result.get("subtest_name") or "")
+            if sub:
+                name = f"{name}.{sub}" if name else sub
+            full = f"{path_name}/{name}" if path_name and name else (name or path_name)
+            links = result.get("links") if isinstance(result.get("links"), dict) else {}
+            href = ""
+            for key in ("log", "Log", "stderr"):
+                raw = links.get(key)
+                if isinstance(raw, list) and raw:
+                    href = str(raw[0])
+                    break
+            label = _html_escape(full or "(unnamed)")
+            item = f'<li><a href="{_html_escape(href)}">{label}</a></li>' if href else f"<li>{label}</li>"
+            by_anchor[anchor].append(item)
+            by_anchor["ALL"].append(item)
+    nav = " · ".join(f'<a href="#{name}">{name}</a>' for name in ("ALL", "PASS", "ERROR", "FAIL", "SKIP", "MUTE"))
+    sections = []
+    for name in ("ALL", "PASS", "ERROR", "FAIL", "SKIP", "MUTE"):
+        items = by_anchor.get(name) or []
+        body = f"<ul>{''.join(items)}</ul>" if items else "<p>none</p>"
+        sections.append(f'<section id="{name}"><h2>{name} ({len(items)})</h2>{body}</section>')
+    html = (
+        "<!doctype html><html><head><meta charset=\"utf-8\">"
+        f"<title>Combined tests {_html_escape(preset)}</title>"
+        "<style>body{font-family:sans-serif;margin:1.5rem}section{margin-top:2rem}</style>"
+        "</head><body>"
+        f"<h1>Combined tests `{_html_escape(preset)}`</h1><p>{nav}</p>"
+        + "".join(sections)
+        + "</body></html>\n"
+    )
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(html, encoding="utf-8")
 
 
 def _event_state(args: argparse.Namespace) -> dict[str, Any]:
     base = empty_state(args.run_id, args.preset, args.target, args.shard_count)
     base["run_url"] = args.run_url
+    if getattr(args, "combined_url", ""):
+        base["combined_url"] = args.combined_url
+    report = load_report(args.report)
     return apply_shard(
         base,
         shard_id=args.shard_id,
@@ -633,10 +843,13 @@ def _event_state(args: argparse.Namespace) -> dict[str, Any]:
         finished_at=args.finished_at,
         job_url=args.job_url,
         log_prefix=args.log_prefix or f"shard_{args.shard_id}",
-        failed_tests=_load_failed_tests(args.report),
+        failed_tests=failed_test_names(report) if report else [],
         run_url=args.run_url,
         build=args.build_result,
         tests=args.test_result,
+        counts=counts_from_report(report),
+        report_url=getattr(args, "report_url", "") or "",
+        report_json_url=getattr(args, "report_json_url", "") or "",
     )
 
 
@@ -657,6 +870,27 @@ def _write_state(path: str, state: dict[str, Any]) -> None:
 
 def _cmd_publish(args: argparse.Namespace) -> int:
     state = _event_state(args)
+    if getattr(args, "combined_html", ""):
+        preview = state
+        token = os.environ.get("GITHUB_TOKEN", "")
+        repository = os.environ.get("GITHUB_REPOSITORY", "")
+        if args.pr and token and repository:
+            try:
+                store = GithubCommentStore(token, repository, int(args.pr))
+                matches = store.list_marker(marker(args.run_id, args.preset))
+                existing = [parse_state(item.body) for item in matches]
+                preview = merge_states([item for item in existing if item] + [state])
+            except (OSError, RuntimeError, urllib.error.URLError, json.JSONDecodeError, TimeoutError, ValueError):
+                preview = state
+        reports = collect_reports(
+            preview,
+            local_path=args.report,
+            local_json_url=getattr(args, "report_json_url", "") or "",
+        )
+        if reports:
+            write_combined_html(args.combined_html, reports, preset=args.preset)
+            if getattr(args, "combined_url", ""):
+                state["combined_url"] = args.combined_url
     # Disk copy survives a comment API failure so finalize can still merge it.
     _write_state(args.state_output, state)
     if not args.pr:
@@ -770,6 +1004,10 @@ def main(argv: list[str] | None = None) -> int:
     publish.add_argument("--run-url", default="")
     publish.add_argument("--log-prefix", default="")
     publish.add_argument("--report", default="")
+    publish.add_argument("--report-url", default="")
+    publish.add_argument("--report-json-url", default="")
+    publish.add_argument("--combined-html", default="")
+    publish.add_argument("--combined-url", default="")
     publish.add_argument("--summary-file", default="")
     publish.add_argument("--state-output", default="")
     publish.add_argument("--build-result", default="")

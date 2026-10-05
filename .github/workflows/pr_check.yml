@@ -601,6 +601,28 @@ jobs:
           job_url="$run_url"
         fi
         count=$(python3 -c 'import json; print(json.load(open("test-graph/shard_plan.json"))["shard_count"])')
+        report_url=""
+        report_json_url=""
+        combined_html=""
+        combined_url=""
+        if [ -n "${PUBLIC_DIR:-}" ] && [ -n "${PUBLIC_DIR_URL:-}" ]; then
+          last_try=$(ls -1d "$PUBLIC_DIR"/try_* 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -n "$last_try" ]; then
+            try_name=$(basename "$last_try")
+            if [ -f "$last_try/ya-test.html" ]; then
+              report_url="${PUBLIC_DIR_URL}/${try_name}/ya-test.html"
+            fi
+            if [ -f "$last_try/report.json" ]; then
+              report_json_url="${PUBLIC_DIR_URL}/${try_name}/report.json"
+            fi
+          fi
+          case "$PUBLIC_DIR_URL" in
+            */shard_${SHARD_ID})
+              combined_url="${PUBLIC_DIR_URL%/shard_${SHARD_ID}}/combined/ya-test.html"
+              combined_html="${RUNNER_TEMP:-/tmp}/combined-ya-test-${SHARD_ID}.html"
+              ;;
+          esac
+        fi
         python3 .github/scripts/tests/shard_progress.py publish \
           --pr "$PR_NUMBER" \
           --run-id "$GITHUB_RUN_ID" \
@@ -617,8 +639,20 @@ jobs:
           --run-url "$run_url" \
           --log-prefix "shard_${SHARD_ID}" \
           --report "${LAST_BUILD_RESULTS_REPORT:-}" \
+          --report-url "$report_url" \
+          --report-json-url "$report_json_url" \
+          --combined-html "$combined_html" \
+          --combined-url "$combined_url" \
           --state-output shard_event.json \
           --summary-file "$GITHUB_STEP_SUMMARY"
+        if [ -n "$combined_html" ] && [ -f "$combined_html" ] && [ -n "${S3_BUCKET_PATH:-}" ]; then
+          case "$S3_BUCKET_PATH" in
+            */shard_${SHARD_ID})
+              s3cmd put --acl-public --no-progress --no-mime-magic --guess-mime-type \
+                "$combined_html" "${S3_BUCKET_PATH%/shard_${SHARD_ID}}/combined/ya-test.html" || true
+              ;;
+          esac
+        fi
     - name: Upload shard result
       if: always()
       uses: actions/upload-artifact@v4

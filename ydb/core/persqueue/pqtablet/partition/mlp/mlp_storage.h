@@ -143,8 +143,6 @@ public:
             NextMessageGroupIdOffset_ = offset;
         }
 
-        // STD-only doubly-linked chain accessors. Allow O(1) unlink of an arbitrary node
-        // (out-of-order commits and slow-zone removals). Not used on the FIFO path.
         TMaybe<ui64> PrevMessageGroupIdOffset() const {
             if (!HasMessageGroupId || PrevMessageGroupIdOffset_ == LastMessageGroupIdOffsetSentinel) {
                 return Nothing();
@@ -484,7 +482,7 @@ private:
     public:
         absl::flat_hash_map<ui32, TSingleMessageGroupIdInfo> Groups;
         absl::flat_hash_set<ui32> LockedMessageGroupsId; // without parents
-        absl::flat_hash_set<ui64> UnorderedOffsets; // Groupless. Iteration order is arbitrary.
+        absl::flat_hash_set<ui64> UnorderedOffsets; // Groupless
 
     private:
         absl::flat_hash_set<TOrderedMessageGroupIdHash> UnlockedMessageGroupsId; // without parents

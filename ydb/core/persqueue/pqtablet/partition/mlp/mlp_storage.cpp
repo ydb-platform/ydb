@@ -896,7 +896,7 @@ void TStorage::UpdateMessageGroupOnMessageStatusChange(ui64 offset, const TMessa
         return;
     }
 
-    TSingleMessageGroupIdInfo* group = MapFindPtr(MessageGroups.Groups, ui32(message.MessageGroupIdHash));
+    TSingleMessageGroupIdInfo* group = MapFindPtr(MessageGroups.Groups, message.MessageGroupIdHash);
     AFL_ENSURE(group != nullptr)("offset", offset)("messageGroupIdHash", message.MessageGroupIdHash);
     const bool wasUnprocessed = message.GetStatus() == EMessageStatus::Unprocessed;
     const bool willBeUnprocessed = newStatus == EMessageStatus::Unprocessed;
@@ -920,8 +920,7 @@ void TStorage::UpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& 
             return;
         }
 
-        auto messageGroupIterator = MessageGroups.Groups.find(message.MessageGroupIdHash);
-        TSingleMessageGroupIdInfo* ptr = (messageGroupIterator == MessageGroups.Groups.end()) ? nullptr : &messageGroupIterator->second;
+        TSingleMessageGroupIdInfo* ptr = MapFindPtr(MessageGroups.Groups, message.MessageGroupIdHash);
         AFL_ENSURE(ptr != nullptr)("offset", offset)("messageGroupIdHash", message.MessageGroupIdHash);
 
         if (message.GetStatus() == EMessageStatus::Locked) {
@@ -937,7 +936,7 @@ void TStorage::UpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& 
     }
 
     // STD keeps every status in the chain and may drop a message that is not the head.
-    auto groupIt = MessageGroups.Groups.find(ui32(message.MessageGroupIdHash));
+    auto groupIt = MessageGroups.Groups.find(message.MessageGroupIdHash);
     AFL_ENSURE(groupIt != MessageGroups.Groups.end())("offset", offset)("messageGroupIdHash", message.MessageGroupIdHash);
     TSingleMessageGroupIdInfo& group = groupIt->second;
 
@@ -948,14 +947,14 @@ void TStorage::UpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& 
         AFL_ENSURE(prev != nullptr)("offset", offset)("prev", *prevOffset);
         prev->RelinkNextMessageGroupIdOffset(nextOffset);
     } else {
-        group.FirstOffset = nextOffset.GetOrElse(0);
+        group.FirstOffset = nextOffset.GetOrElse(Max<ui64>());
     }
     if (nextOffset.Defined()) {
         auto [next, _] = GetMessageInt(*nextOffset);
         AFL_ENSURE(next != nullptr)("offset", offset)("next", *nextOffset);
         next->RelinkPrevMessageGroupIdOffset(prevOffset);
     } else {
-        group.LastOffset = prevOffset.GetOrElse(0);
+        group.LastOffset = prevOffset.GetOrElse(Max<ui64>());
     }
 
     if (message.GetStatus() == EMessageStatus::Unprocessed) {
@@ -988,10 +987,9 @@ void TStorage::UpdateMessageGroupForNewMessage(ui64 offset, TMessage& message) {
 
     const ui32 messageGroupIdHash = message.MessageGroupIdHash;
     auto [it, firstMessageInGroup] = MessageGroups.Groups.try_emplace(messageGroupIdHash);
-    TSingleMessageGroupIdInfo& group = it->second;
-    ++group.Size;
-
     bool firstReadableMessageInGroup = false;
+    TSingleMessageGroupIdInfo& group = it->second;
+    group.Size++;
     if (firstMessageInGroup) {
         ++Metrics.InflightMessageGroupCount;
         group.FirstOffset = offset;

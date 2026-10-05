@@ -195,7 +195,9 @@ public:
             Config))
         , ActorSystem(actorSystem)
     {
-        CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);
+        // The outer pipeline needs this annotator before runner preparation.
+        // Build the runner pipeline later, after applying per-query settings.
+        sessionCtx->SetInternalTypeAnnTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), Config));
     }
 
     TIntrusivePtr<TAsyncQueryResult> PrepareDataQuery(const TString& cluster, const TExprNode::TPtr& query,
@@ -335,24 +337,15 @@ private:
 
         TransformCtx->DataQueryBlocks = dataQueryBlocks;
 
-        if (Config->GetEnableNewRBO()) {
-            YQL_CLOG(INFO, CoreDq) << "Taking the new RBO branch";
-            Y_ENSURE(NewRBOTransformer, "NewRBO composite graph transformer was not initialized.");
-            NewRBOTransformer->Rewind();
-            return MakeIntrusive<TPrepareQueryAsyncResult>(query, *NewRBOTransformer, ctx, *TransformCtx);
-        } else {
-            YQL_CLOG(INFO, CoreDq) << "Taking the old RBO branch";
-            return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);
-        }
+        YQL_CLOG(INFO, CoreDq) << "Taking the " << (Config->GetEnableNewRBO() ? "new" : "old") << " RBO branch";
+        return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);
     }
 
-    void CreateGraphTransformer(const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
+    void CreateLegacyGraphTransformer(const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
         const NMiniKQL::IFunctionRegistry& funcRegistry)
     {
         auto preparedExplainTransformer = CreateKqpExplainPreparedTransformer(
             Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
-
-        sessionCtx->SetInternalTypeAnnTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), Config));
 
         auto physicalOptimizePipeline = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
@@ -441,8 +434,13 @@ private:
             },
             false
         );
+    }
 
-        // Create a NewRBO composite transformer only if the special flag is enabled.
+    void CreateGraphTransformer(const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
+        const NMiniKQL::IFunctionRegistry& funcRegistry)
+    {
+        sessionCtx->SetInternalTypeAnnTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), Config));
+
         if (Config->GetEnableNewRBO()) {
             
             auto newRBOPreparedExplainTransformer = CreateKqpRBOExplainPreparedTransformer(
@@ -494,7 +492,7 @@ private:
                 funcRegistry,
                 Config));
 
-            NewRBOTransformer = CreateCompositeGraphTransformer(
+            Transformer = CreateCompositeGraphTransformer(
                 {
                     TTransformStage{newRBOPhysicalOptimizeTransformer, "NewRBOPhysicalOptimize", TIssuesIds::DEFAULT_ERROR},
                     LogStage("NewRBOPhysicalOptimize"),
@@ -510,6 +508,8 @@ private:
                     // if explain-only
                 },
                 false);
+        } else {
+            CreateLegacyGraphTransformer(typesCtx, sessionCtx, funcRegistry);
         }
     }
 
@@ -540,7 +540,6 @@ private:
     TKqpProviderContext Pctx;
 
     TAutoPtr<IGraphTransformer> Transformer;
-    TAutoPtr<IGraphTransformer> NewRBOTransformer;
 
     TActorSystem* ActorSystem;
 };

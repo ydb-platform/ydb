@@ -32,7 +32,8 @@ public:
             if (msg->Status == NKikimrProto::OK
                     || msg->Status == NKikimrProto::RACE
                     || msg->Status == NKikimrProto::BLOCKED
-                    || msg->Status == NKikimrProto::NO_GROUP) {
+                    || msg->Status == NKikimrProto::NO_GROUP
+                    || (msg->Status == NKikimrProto::ALREADY && tablet->IsDeleting())) {
                 if (tablet->IsDeleting()) {
                     if (msg->Status != NKikimrProto::EReplyStatus::OK) {
                         YDB_LOG_WARN("THive::TTxBlockStorageResult::Execute unexpected status for deleting tablet",

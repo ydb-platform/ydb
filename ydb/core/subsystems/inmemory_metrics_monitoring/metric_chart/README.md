@@ -1,6 +1,6 @@
 # Embedding metric charts
 
-Add `ydb/core/mon/metric_chart` to the C++ consumer's `PEERDIR`. During monitoring
+Add `ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart` to the C++ consumer's `PEERDIR`. During monitoring
 setup, call `NKikimr::NMetricChart::RegisterResources(mon)` once. This publishes
 `static/metric-chart/chart.js`, `client.js` and `chart.css` from binary resources.
 ChartKit, its Yagr Canvas renderer, React and styles are bundled into the binary.

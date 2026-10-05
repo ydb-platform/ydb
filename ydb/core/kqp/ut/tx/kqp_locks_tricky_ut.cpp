@@ -644,3 +644,4 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
     }
 }
 }
+// ci: widen increment graph, 2026-10-05

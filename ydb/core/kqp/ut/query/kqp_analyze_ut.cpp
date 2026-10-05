@@ -764,3 +764,4 @@ Y_UNIT_TEST(AnalyzeContinuesOnQueryAbort) {
 
 } // namespace NKqp
 } // namespace NKikimr
+// ci: widen increment graph, 2026-10-05

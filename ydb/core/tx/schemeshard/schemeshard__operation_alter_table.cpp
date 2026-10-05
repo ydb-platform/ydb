@@ -58,15 +58,20 @@ bool CheckDefaultColumnFamilies(const NKikimrSchemeOp::TPartitionConfig& partiti
     return true;
 }
 
-THashSet<TString> GetRequiredNotNullDocumentIdColumns(const TTableIndexInfo& index, const TTableInfo& table) {
-    const auto* fulltext = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
-        &index.SpecializedIndexDescription);
-    // Row-id mode requires NOT NULL even for non-compact indexes.
+// Returns column names whose NOT NULL constraint is required by the index:
+// row-id document identifiers and document identifiers in compact posting lists
+// cannot represent NULL.
+THashSet<TString> GetColumnNamesWithNonDroppableNotNull(const TTableIndexInfo& index, const TTableInfo& table) {
+    const auto* fulltext = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index.SpecializedIndexDescription);
+
     if (fulltext && fulltext->GetUseRowIdAsDocId()) {
         return {NTableIndex::NFulltext::RowIdColumn};
     }
-    // Compact posting lists encode integer document ids, with no NULL representation.
+
     THashSet<TString> columns;
+
+    // Without row-id mode, these indexes require exactly one integer PK column,
+    // as validated when the index is created.
     if (index.Type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
         || index.Type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
         || index.Type == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact)
@@ -76,6 +81,24 @@ THashSet<TString> GetRequiredNotNullDocumentIdColumns(const TTableIndexInfo& ind
         }
     }
     return columns;
+}
+
+bool CheckIndexNotNullConstraints(const NKikimrSchemeOp::TTableDescription& alter,
+        const TPath& indexPath, const TOperationContext& context, TString& errStr)
+{
+    const auto& index = context.SS->Indexes.at(indexPath.Base()->PathId);
+    const auto& baseTable = context.SS->Tables.at(indexPath.Parent().Base()->PathId);
+    const auto requiredColumns = GetColumnNamesWithNonDroppableNotNull(*index, *baseTable);
+    for (const auto& column : alter.GetColumns()) {
+        if (!column.HasType() && column.HasNotNull() && !column.GetNotNull()
+            && requiredColumns.contains(column.GetName()))
+        {
+            errStr = TStringBuilder() << "Cannot drop NOT NULL on column '" << column.GetName()
+                << "': index '" << indexPath.LeafName() << "' requires a non-null document id";
+            return false;
+        }
+    }
+    return true;
 }
 
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
@@ -100,17 +123,9 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
         if (alter.ColumnsSize() != 0 && path.IsInsideTableIndexPath()) {
             // Internal requests may also arrive directly, bypassing base-table decomposition.
-            const TPath indexPath = path.Parent();
-            const auto& index = context.SS->Indexes.at(indexPath.Base()->PathId);
-            const auto& baseTable = context.SS->Tables.at(indexPath.Parent().Base()->PathId);
-            const auto requiredColumns = GetRequiredNotNullDocumentIdColumns(*index, *baseTable);
-            for (const auto& column : alter.GetColumns()) {
-                if (requiredColumns.contains(column.GetName())) {
-                    errStr = TStringBuilder() << "Cannot drop NOT NULL on column '" << column.GetName()
-                        << "': index '" << indexPath.LeafName() << "' requires a non-null document id";
-                    status = NKikimrScheme::StatusPreconditionFailed;
-                    return nullptr;
-                }
+            if (!CheckIndexNotNullConstraints(alter, path.Parent(), context, errStr)) {
+                status = NKikimrScheme::StatusPreconditionFailed;
+                return nullptr;
             }
         }
 
@@ -742,6 +757,21 @@ public:
             return result;
         }
 
+        // Keep validation in Propose; decomposition also checks it because TAlterTable
+        // does not yet support rolling back its proposal when another sub-operation fails.
+        if (alter.ColumnsSize() != 0) {
+            for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
+                const auto& child = context.SS->PathsById.at(childPathId);
+                if (child->Dropped() || !child->IsTableIndex()) {
+                    continue;
+                }
+                if (!CheckIndexNotNullConstraints(alter, TPath::Init(childPathId, context.SS), context, errStr)) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+                    return result;
+                }
+            }
+        }
+
         bool hasLegacyReplicationStream = false;
         bool hasSchemaReplicationStream = false;
         bool hasSchemaCdcStream = false;
@@ -1044,17 +1074,15 @@ static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlt
 
         const TPath indexPath = TPath::Init(childPathId, context.SS);
         const auto& index = context.SS->Indexes.at(childPathId);
-        const auto requiredColumns = GetRequiredNotNullDocumentIdColumns(*index, *table);
+        TString errStr;
+        if (!CheckIndexNotNullConstraints(tx.GetAlterTable(), indexPath, context, errStr)) {
+            return CreateReject(id, NKikimrScheme::StatusPreconditionFailed, errStr);
+        }
         bool affectsIndex = false;
         for (const auto& column : columns) {
             const auto columnId = table->GetColumnIdByNameSlow(column);
             const bool primaryKey = columnId != TTableInfo::InvalidColumnId
                 && table->Columns.at(columnId).KeyOrder != Max<ui32>();
-            if (requiredColumns.contains(column)) {
-                return CreateReject(id, NKikimrScheme::StatusPreconditionFailed,
-                    TStringBuilder() << "Cannot drop NOT NULL on column '" << column
-                        << "': index '" << indexPath.LeafName() << "' requires a non-null document id");
-            }
             affectsIndex |= primaryKey || Find(index->IndexKeys, column) != index->IndexKeys.end()
                 || Find(index->IndexDataColumns, column) != index->IndexDataColumns.end();
         }

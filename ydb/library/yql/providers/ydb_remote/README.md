@@ -28,19 +28,20 @@ CREATE EXTERNAL DATA SOURCE remote_db WITH (
     DATABASE_NAME = '/Remote',
     AUTH_METHOD = 'TOKEN',
     TOKEN_SECRET_PATH = 'remote_token',
-    USE_TLS = 'true',
-    READ_TIMEOUT_MS = '120000'
+    USE_TLS = 'true'
 );
 
 SELECT Key FROM remote_db.`items`;
 ```
 
-`READ_TIMEOUT_MS` is an integer from 1 through 3600000. Its explicit default is
-60000 ms. It bounds the entire source read, including retries and time waiting
-for a slow downstream consumer; it is not an inactivity timeout. Increasing the
-query or script timeout alone does not increase this source timeout. The property
-is accepted by external-source DDL regardless of the routing flag, but only the
-direct path applies it. Metadata loading has a separate finite local budget.
+The experimental direct path has a fixed internal 60-second limit for the entire
+source read, including retries and time waiting for a slow downstream consumer
+(backpressure). This is an experimental limitation, not an inactivity timeout.
+Increasing the query or script timeout does not extend it. There is no external
+data source option to configure this limit; `READ_TIMEOUT_MS` is rejected
+regardless of the routing flag. Propagating the query deadline through the entire
+remote read path is future work. Metadata loading has a separate finite local
+budget.
 
 ## Query and schema support
 
@@ -54,7 +55,8 @@ does not select that column. Unsupported columns are never silently removed.
 Projection is pushed into the remote SELECT. Columns needed by local filters,
 joins or sorting are retained. `COUNT(*)` and constant projections read one
 physical carrier column to preserve the number of rows. Query plans expose the
-physical projection as `ReadColumns` and the source timeout as `ReadTimeoutMs`.
+physical projection as `ReadColumns` and the fixed internal source timeout as
+`ReadTimeoutMs` (60000 ms).
 Filters, limits, aggregation and joins execute locally; they are not pushed into
 the remote query.
 

@@ -90,7 +90,8 @@ public:
         payload.SetTable(path.StartsWith('/') ? path : cluster.Database + "/" + path);
         payload.SetToken(settings.Token().Name().StringValue());
         payload.SetUseTls(cluster.UseTls);
-        payload.SetReadTimeoutMs(cluster.ReadTimeoutMs);
+        // Fixed internal budget for the experimental provider, not an EDS option.
+        payload.SetReadTimeoutMs(TSource::default_instance().GetReadTimeoutMs());
         for (const auto column : settings.Columns()) {
             auto* target = payload.AddColumns();
             target->SetName(column.StringValue());
@@ -131,7 +132,7 @@ public:
         for (const auto column : settings.Columns()) {
             columns.AppendValue(column.StringValue());
         }
-        properties["ReadTimeoutMs"] = State_->Clusters.at(settings.Cluster().StringValue()).ReadTimeoutMs;
+        properties["ReadTimeoutMs"] = TSource::default_instance().GetReadTimeoutMs();
         return true;
     }
 

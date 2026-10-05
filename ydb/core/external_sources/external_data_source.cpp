@@ -73,12 +73,6 @@ struct TExternalDataSource : public IExternalSource {
                 throw TExternalSourceException()
                     << proto.GetSourceType() << " source must provide a non-empty database_name or database_id";
             }
-            if (const auto it = props.find("read_timeout_ms"); it != props.end()) {
-                ui32 timeout = 0;
-                if (!TryFromString(it->second, timeout) || !timeout || timeout > 3600000) {
-                    throw TExternalSourceException() << "Ydb READ_TIMEOUT_MS must be an integer between 1 and 3600000";
-                }
-            }
         }
 
         ValidateHostname(HostnamePatterns, proto.GetLocation());

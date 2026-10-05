@@ -79,13 +79,11 @@ struct TNativeYdbFixture {
         }
     }
 
-    TExecuteQueryResult CreateSource(const TString& endpoint, bool tls, const TString& name = "remote_db",
-                                     const TString& readTimeoutMs = {}) {
+    TExecuteQueryResult CreateSource(const TString& endpoint, bool tls, const TString& name = "remote_db") {
         const TString source = TStringBuilder()
             << "CREATE EXTERNAL DATA SOURCE " << name << " WITH (SOURCE_TYPE='Ydb', LOCATION='"
             << endpoint << "', DATABASE_NAME='/Remote', USE_TLS='" << (tls ? "true" : "false") << "', "
             << "AUTH_METHOD='TOKEN', TOKEN_SECRET_PATH='remote_token'"
-            << (readTimeoutMs.empty() ? TString() : TStringBuilder() << ", READ_TIMEOUT_MS='" << readTimeoutMs << "'")
             << ");";
         return Consumer->GetQueryClient().ExecuteQuery(source, TTxControl::NoTx()).ExtractValueSync();
     }
@@ -273,19 +271,20 @@ Y_UNIT_TEST_SUITE(KqpNativeYdb) {
         UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Total").GetUint64(), 3);
     }
 
-    Y_UNIT_TEST(ExternalSourceReadTimeoutReachesThePhysicalPlan) {
-        TNativeYdbFixture fixture;
-        fixture.Populate();
-        const auto created = fixture.CreateSource(fixture.Remote.GetEndpoint(), false, "remote_slow", "120000");
-        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
-        const auto source = fixture.ExplainSource("SELECT Key FROM remote_slow.`items`;");
-        UNIT_ASSERT_VALUES_EQUAL(source["ReadTimeoutMs"].GetUIntegerSafe(), 120000);
-        const auto result = fixture.Read("SELECT Key FROM remote_slow.`items`;");
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
-        const auto invalid = fixture.CreateSource(fixture.Remote.GetEndpoint(), false, "remote_invalid", "0");
-        UNIT_ASSERT(!invalid.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(invalid.GetIssues().ToString(), "READ_TIMEOUT_MS must be an integer between 1 and 3600000");
+    Y_UNIT_TEST(ExternalSourceReadTimeoutIsRejectedIndependentlyOfRouting) {
+        for (const bool enabled : {false, true}) {
+            // The fixture first creates a source without a timeout option.
+            TNativeYdbFixture fixture(enabled);
+            for (const auto* value : {"60000", "120000", "0", "60s"}) {
+                const TString sql = TStringBuilder()
+                    << "CREATE EXTERNAL DATA SOURCE remote_timeout WITH (SOURCE_TYPE='Ydb', LOCATION='"
+                    << fixture.Remote.GetEndpoint() << "', DATABASE_NAME='/Remote', "
+                    << "AUTH_METHOD='TOKEN', TOKEN_SECRET_PATH='remote_token', READ_TIMEOUT_MS='" << value << "');";
+                const auto rejected = fixture.Consumer->GetQueryClient().ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT(!rejected.IsSuccess());
+                UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "Unknown property: read_timeout_ms");
+            }
+        }
     }
 
     Y_UNIT_TEST(StreamLookupFailsWithControlledQueryIssue) {

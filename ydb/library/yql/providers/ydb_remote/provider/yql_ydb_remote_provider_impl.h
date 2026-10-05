@@ -13,7 +13,6 @@ struct TCluster {
     TString Endpoint;
     TString Database;
     bool UseTls = false;
-    ui64 ReadTimeoutMs = 60000;
 };
 
 struct TTable {

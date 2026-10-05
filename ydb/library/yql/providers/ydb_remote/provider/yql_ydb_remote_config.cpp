@@ -39,12 +39,6 @@ void AddCluster(TState& state, const TString& name, const THashMap<TString, TStr
     }
     cluster.UseTls = tls == "true";
 
-    if (const auto* timeout = properties.FindPtr("read_timeout_ms")) {
-        if (!TryFromString(*timeout, cluster.ReadTimeoutMs) || !cluster.ReadTimeoutMs || cluster.ReadTimeoutMs > 3600000) {
-            throw yexception() << "Native YDB READ_TIMEOUT_MS must be an integer between 1 and 3600000";
-        }
-    }
-
     TString token;
     const auto auth = properties.Value("authMethod", "");
     if (auth == "TOKEN") {

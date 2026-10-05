@@ -9,7 +9,7 @@
 #include <yql/essentials/core/sql_types/block.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/string/cast.h>
+#include <library/cpp/json/json_value.h>
 
 #include <tuple>
 
@@ -437,25 +437,24 @@ Y_UNIT_TEST_SUITE(TYdbRemoteProvider) {
             yexception, "Native YDB streamlookup joins are not supported");
     }
 
-    Y_UNIT_TEST(ReadTimeoutIsConfigurableAndBounded) {
+    Y_UNIT_TEST(InternalReadTimeoutMatchesSourceAndPlan) {
         TFixture f;
-        THashMap<TString, TString> properties{
-            {"location", "localhost:2135"}, {"database_name", "/Remote"}, {"authMethod", "NONE"}};
-        for (const auto* value : {"1", "120000", "3600000"}) {
-            properties["read_timeout_ms"] = value;
-            AddCluster(*f.State, "remote", properties);
-            const auto read = f.MakeRead();
-            const TDqSourceWrap wrap(CreateDqIntegration(f.State)->WrapRead(read.Ptr(), f.Ctx, {}));
-            const auto payload = f.SerializeSource(wrap);
-            UNIT_ASSERT(payload.HasReadTimeoutMs());
-            UNIT_ASSERT_VALUES_EQUAL(ToString(payload.GetReadTimeoutMs()), value);
-        }
-        for (const auto* value : {"", "0", "-1", "3600001", "18446744073709551616", "60s", "1.5"}) {
-            properties["read_timeout_ms"] = value;
-            UNIT_ASSERT_EXCEPTION_CONTAINS(AddCluster(*f.State, "bad", properties), yexception,
-                "READ_TIMEOUT_MS must be an integer between 1 and 3600000");
-            UNIT_ASSERT(!f.State->ValidClusters.contains("bad"));
-        }
+        const TSource defaults;
+        UNIT_ASSERT(!defaults.HasReadTimeoutMs());
+        UNIT_ASSERT_VALUES_EQUAL(defaults.GetReadTimeoutMs(), 60000);
+
+        auto integration = CreateDqIntegration(f.State);
+        const auto read = f.MakeRead();
+        const TDqSourceWrap wrap(integration->WrapRead(read.Ptr(), f.Ctx, {}));
+        const auto payload = f.SerializeSource(wrap);
+        UNIT_ASSERT(payload.HasReadTimeoutMs());
+        UNIT_ASSERT_VALUES_EQUAL(payload.GetReadTimeoutMs(), defaults.GetReadTimeoutMs());
+
+        const auto source = Build<TDqSource>(f.Ctx, read.Pos())
+            .DataSource(wrap.DataSource()).Settings(wrap.Input()).Done();
+        TMap<TString, NJson::TJsonValue> properties;
+        UNIT_ASSERT(integration->FillSourcePlanProperties(source, properties));
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("ReadTimeoutMs").GetUIntegerSafe(), payload.GetReadTimeoutMs());
     }
 
     Y_UNIT_TEST(ClusterErrorsDoNotContainSourcePathsOrCredentials) {
@@ -468,8 +467,7 @@ Y_UNIT_TEST_SUITE(TYdbRemoteProvider) {
             {"location", "grpc://secret@host:2135", "Native YDB requires LOCATION in host:port format"},
             {"use_tls", "private-invalid-value", "Native YDB USE_TLS must be true or false"},
             {"authMethod", "TOKEN", "Native YDB TOKEN credentials are missing"},
-            {"authMethod", "BASIC", "Native YDB currently supports only TOKEN and NONE authentication"},
-            {"read_timeout_ms", "private-invalid-value", "Native YDB READ_TIMEOUT_MS must be an integer between 1 and 3600000"}};
+            {"authMethod", "BASIC", "Native YDB currently supports only TOKEN and NONE authentication"}};
         for (const auto& [property, value, expected] : cases) {
             auto properties = valid;
             properties[property] = value;

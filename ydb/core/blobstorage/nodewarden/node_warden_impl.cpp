@@ -560,6 +560,9 @@ void TNodeWarden::Bootstrap() {
                 icb->RetroTracingControls.EnableStorageGeneration);
         TControlBoard::RegisterSharedControl(EnableStorageRetroTraceCollectionSlowRequests,
                 icb->RetroTracingControls.EnableStorageCollectionSlowRequests);
+
+        TControlBoard::RegisterSharedControl(UseFixedVDiskSlotSize, icb->PDiskControls.UseFixedVDiskSlotSize);
+        UseFixedVDiskSlotSizeCached = UseFixedVDiskSlotSize;
     }
 
     // start replication broker
@@ -1441,6 +1444,11 @@ void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
 }
 
 void TNodeWarden::Handle(TEvPrivate::TEvUpdateStats::TPtr&) {
+    const bool useFixedVDiskSlotSize = UseFixedVDiskSlotSize;
+    if (useFixedVDiskSlotSize != UseFixedVDiskSlotSizeCached) {
+        UseFixedVDiskSlotSizeCached = useFixedVDiskSlotSize;
+        UpdatePDiskSettings();
+    }
     DsProxyPerPoolCounters->UpdateAll();
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateStats());
 }
@@ -1478,6 +1486,35 @@ void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
     if (record.VDisksMetricsSize() || record.PDisksMetricsSize() || record.VDiskStatusSize()) { // anything to report?
         record.SetMetricsSequence(++MetricsSequence);
         SendToController(std::move(ev));
+    }
+}
+
+void TNodeWarden::UpdatePDiskSettings() {
+    for (auto& [key, localPDisk] : LocalPDisks) {
+        TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(
+            localPDisk.Record, &localPDisk.PDiskConfigWarning);
+        ui32 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
+        ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
+        ui64 newExpectedSlotSize = newPDiskConfig->ExpectedSlotSize;
+
+        if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
+                newSlotSizeInUnits != localPDisk.SlotSizeInUnits ||
+                newExpectedSlotSize != localPDisk.ExpectedSlotSize) {
+            YDB_LOG_DEBUG_COMP(BS_NODE, "SendChangeExpectedSlotCount after settings update",
+                {"marker", "NW112"},
+                {"PDiskId", key.PDiskId},
+                {"expectedSlotCount", newExpectedSlotCount},
+                {"slotSizeInUnits", newSlotSizeInUnits},
+                {"expectedSlotSize", newExpectedSlotSize});
+
+            const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
+            Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(
+                newExpectedSlotCount, newSlotSizeInUnits, newExpectedSlotSize));
+
+            localPDisk.ExpectedSlotCount = newExpectedSlotCount;
+            localPDisk.SlotSizeInUnits = newSlotSizeInUnits;
+            localPDisk.ExpectedSlotSize = newExpectedSlotSize;
+        }
     }
 }
 
@@ -1528,36 +1565,11 @@ void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPt
     if (record.HasConfig() && record.GetConfig().HasBlobStorageConfig()) {
         const auto& bsConfig = record.GetConfig().GetBlobStorageConfig();
         VDiskHeapAllocatorNumLeadingDisks = bsConfig.GetVDiskHeapAllocatorNumLeadingDisks();
-        auto inferSettings = bsConfig.GetInferPDiskSlotCountSettings();
+        const auto& inferSettings = bsConfig.GetInferPDiskSlotCountSettings();
         auto equals = ::google::protobuf::util::MessageDifferencer::Equals;
         if (!equals(InferPDiskSlotCountSettings, inferSettings)) {
             InferPDiskSlotCountSettings.CopyFrom(inferSettings);
-            for (auto& [key, localPDisk] : LocalPDisks) {
-                TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(
-                    localPDisk.Record, &localPDisk.PDiskConfigWarning);
-                ui32 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
-                ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
-                ui64 newExpectedSlotSize = newPDiskConfig->ExpectedSlotSize;
-
-                if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
-                        newSlotSizeInUnits != localPDisk.SlotSizeInUnits ||
-                        newExpectedSlotSize != localPDisk.ExpectedSlotSize) {
-                    YDB_LOG_DEBUG_COMP(BS_NODE, "SendChangeExpectedSlotCount from config notification",
-                        {"marker", "NW112"},
-                        {"PDiskId", key.PDiskId},
-                        {"expectedSlotCount", newExpectedSlotCount},
-                        {"slotSizeInUnits", newSlotSizeInUnits},
-                        {"expectedSlotSize", newExpectedSlotSize});
-
-                    const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
-                    Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(
-                        newExpectedSlotCount, newSlotSizeInUnits, newExpectedSlotSize));
-
-                    localPDisk.ExpectedSlotCount = newExpectedSlotCount;
-                    localPDisk.SlotSizeInUnits = newSlotSizeInUnits;
-                    localPDisk.ExpectedSlotSize = newExpectedSlotSize;
-                }
-            }
+            UpdatePDiskSettings();
         }
     }
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);

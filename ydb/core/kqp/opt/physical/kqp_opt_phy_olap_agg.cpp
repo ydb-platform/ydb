@@ -232,7 +232,7 @@ TExprBase KqpPushDownOlapGroupByKeysImpl(TExprBase node, TExprContext& ctx, bool
 
     for (const auto& key : aggCombine.Keys()) {
         bool physical = false;
-        for (const auto& column : maybeRead.Columns()) {
+        for (const auto& column : maybeRead.Cast().Columns()) {
             if (key.Value() == column.Value()) {
                 physical = true;
                 break;

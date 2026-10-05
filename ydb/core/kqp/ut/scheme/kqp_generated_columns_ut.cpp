@@ -3,6 +3,9 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -424,6 +427,20 @@ public:
 
     std::string ShowCreateTable(const std::string& tablePath) {
         return GetShowCreateTable(Session, tablePath);
+    }
+
+    NKikimrSchemeOp::TOlapColumnDescription DescribeColumnTableColumn(
+        const TString& tablePath, const TString& columnName)
+    {
+        const auto describe = Kikimr.GetTestClient().Ls(tablePath);
+        const auto& schema = describe->Record.GetPathDescription().GetColumnTableDescription().GetSchema();
+        for (const auto& column : schema.GetColumns()) {
+            if (column.GetName() == columnName) {
+                return column;
+            }
+        }
+        UNIT_FAIL("Column '" << columnName << "' was not found in " << tablePath);
+        return {};
     }
 
     void SetGeneratedVirtualEnabled(bool enabled) {
@@ -3528,6 +3545,246 @@ Y_UNIT_TEST_SUITE(GeneratedVirtualColumnTable) {
             PRIMARY KEY (k)
         ) WITH (STORE = COLUMN);
     )";
+
+    Y_UNIT_TEST(BulkUpsertRequiresOnlyPhysicalColumns) {
+        auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableColumnShardConfig()->SetBulkUpsertRequireAllColumns(true);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+
+        auto create = queryClient.ExecuteQuery(ColumnTableDdl, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        auto rows = TValueBuilder().BeginList().AddListItem().BeginStruct()
+            .AddMember("k").Int32(1)
+            .AddMember("a").Int32(4)
+            .AddMember("b").Int32(2)
+            .EndStruct().EndList().Build();
+        auto upsert = tableClient.BulkUpsert("/Root/ColumnGenerated", std::move(rows)).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        auto explicitGenerated = TValueBuilder().BeginList().AddListItem().BeginStruct()
+            .AddMember("k").Int32(2)
+            .AddMember("a").Int32(5)
+            .AddMember("b").Int32(3)
+            .AddMember("derived").Int32(53)
+            .EndStruct().EndList().Build();
+        auto rejectedGenerated = tableClient.BulkUpsert("/Root/ColumnGenerated", std::move(explicitGenerated)).GetValueSync();
+        UNIT_ASSERT_C(!rejectedGenerated.IsSuccess(), "Explicit generated values must be rejected");
+        UNIT_ASSERT_STRING_CONTAINS(rejectedGenerated.GetIssues().ToString(), "cannot be set explicitly");
+
+        auto missingPhysical = TValueBuilder().BeginList().AddListItem().BeginStruct()
+            .AddMember("k").Int32(3)
+            .AddMember("a").Int32(6)
+            .EndStruct().EndList().Build();
+        auto rejectedMissing = tableClient.BulkUpsert("/Root/ColumnGenerated", std::move(missingPhysical)).GetValueSync();
+        UNIT_ASSERT_C(!rejectedMissing.IsSuccess(), "Physical columns must still be required");
+        UNIT_ASSERT_STRING_CONTAINS(rejectedMissing.GetIssues().ToString(), "Missing columns: b");
+
+        auto select = queryClient.ExecuteQuery(
+            "SELECT k, derived FROM ColumnGenerated ORDER BY k;", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(select.IsSuccess(), select.GetIssues().ToString());
+        CompareYson("[[1;[42]]]", FormatResultSetYson(select.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(AlterTableRpcRejectsNullableGeneratedDependency) {
+        TKikimrRunner kikimr(TKikimrSettings(GeneratedColumnsAppConfig()).SetWithSampleTables(false));
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        auto create = queryClient.ExecuteQuery(R"(
+            CREATE TABLE ColumnGenerated (
+                k Int32 NOT NULL,
+                a Int32 NOT NULL,
+                b Int32 NOT NULL,
+                g Int32 NOT NULL GENERATED ALWAYS AS (a + 1) VIRTUAL,
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN);
+        )", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        auto dropNotNull = [&](const TString& name) {
+            Ydb::Table::AlterTableRequest request;
+            request.set_session_id(tableSession.GetId());
+            request.set_path("/Root/ColumnGenerated");
+            auto* column = request.add_alter_columns();
+            column->set_name(name);
+            column->set_not_null(false);
+
+            using TAlterTableRpc = NGRpcService::TGrpcRequestOperationCall<
+                Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse>;
+            return NRpcService::DoLocalRpc<TAlterTableRpc>(std::move(request), "/Root", Nothing(),
+                kikimr.GetTestServer().GetRuntime()->GetActorSystem(0)).GetValueSync();
+        };
+
+        auto rejected = dropNotNull("a");
+        UNIT_ASSERT_C(rejected.operation().ready(), rejected.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.operation().status(), Ydb::StatusIds::SCHEME_ERROR, rejected.DebugString());
+        UNIT_ASSERT_C(rejected.operation().issues_size(), rejected.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.operation().issues(0).message(), "used by generated column 'g'");
+
+        auto allowed = dropNotNull("b");
+        UNIT_ASSERT_VALUES_EQUAL_C(allowed.operation().status(), Ydb::StatusIds::SUCCESS, allowed.DebugString());
+
+        auto invalidWrite = queryClient.ExecuteQuery(
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (1, NULL, NULL);", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(!invalidWrite.IsSuccess(), "The generated dependency must remain NOT NULL");
+
+        auto write = queryClient.ExecuteQuery(
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (1, 4, NULL);", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        auto select = queryClient.ExecuteQuery(
+            "SELECT k, g FROM ColumnGenerated;", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(select.IsSuccess(), select.GetIssues().ToString());
+        CompareYson("[[1;5]]", FormatResultSetYson(select.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(AlterDependencyNullabilityRejected) {
+        auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
+        TTestFixture fixture(R"(
+            CREATE TABLE ColumnGenerated (
+                k Int32 NOT NULL,
+                a Int32 NOT NULL,
+                b Int32,
+                unrelated Int32 NOT NULL,
+                derived Int32 NOT NULL GENERATED ALWAYS AS (a + COALESCE(b, 0)) VIRTUAL,
+                PRIMARY KEY (k)
+            ) WITH (STORE = COLUMN);
+        )", "UPSERT INTO ColumnGenerated (k, a, b, unrelated) VALUES (1, 4, NULL, 9);", appConfig);
+
+        fixture.Rejects("ALTER TABLE ColumnGenerated ALTER COLUMN a DROP NOT NULL;",
+            "referenced by a GENERATED column");
+        fixture.Rejects("ALTER TABLE ColumnGenerated ALTER COLUMN b SET NOT NULL;",
+            "referenced by a GENERATED column");
+        fixture.Rejects("ALTER TABLE ColumnGenerated ALTER COLUMN derived DROP NOT NULL;",
+            "it is a GENERATED column");
+        fixture.Rejects("ALTER TABLE ColumnGenerated ALTER COLUMN derived SET NOT NULL;",
+            "it is a GENERATED column");
+
+        UNIT_ASSERT(fixture.DescribeColumnTableColumn("/Root/ColumnGenerated", "a").GetNotNull());
+        UNIT_ASSERT(!fixture.DescribeColumnTableColumn("/Root/ColumnGenerated", "b").GetNotNull());
+        fixture.Exec("ALTER TABLE ColumnGenerated ALTER COLUMN unrelated DROP NOT NULL;");
+        fixture.Exec("UPSERT INTO ColumnGenerated (k, a, b, unrelated) VALUES (2, 7, NULL, NULL);");
+        fixture.Check("SELECT k, derived, unrelated FROM ColumnGenerated ORDER BY k;",
+            "[[1;4;[9]];[2;7;#]]");
+    }
+
+    Y_UNIT_TEST(AlterTableRpcRejectsSetNotNullOnGeneratedDependency) {
+        auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        auto create = queryClient.ExecuteQuery(ColumnTableDdl, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        Ydb::Table::AlterTableRequest request;
+        request.set_session_id(tableSession.GetId());
+        request.set_path("/Root/ColumnGenerated");
+        auto* column = request.add_alter_columns();
+        column->set_name("a");
+        column->set_not_null(true);
+
+        using TAlterTableRpc = NGRpcService::TGrpcRequestOperationCall<
+            Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse>;
+        auto rejected = NRpcService::DoLocalRpc<TAlterTableRpc>(std::move(request), "/Root", Nothing(),
+            kikimr.GetTestServer().GetRuntime()->GetActorSystem(0)).GetValueSync();
+        UNIT_ASSERT_C(rejected.operation().ready(), rejected.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.operation().status(), Ydb::StatusIds::SCHEME_ERROR, rejected.DebugString());
+        UNIT_ASSERT_C(rejected.operation().issues_size(), rejected.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.operation().issues(0).message(), "used by generated column 'derived'");
+
+        auto write = queryClient.ExecuteQuery(
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (1, NULL, 2);", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        auto select = queryClient.ExecuteQuery(
+            "SELECT k, a, derived FROM ColumnGenerated;", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(select.IsSuccess(), select.GetIssues().ToString());
+        CompareYson("[[1;#;[2]]]", FormatResultSetYson(select.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(DropSharedDependencyRequiresDroppingAllVirtualColumns) {
+        for (bool dependencyFirst : {false, true}) {
+            TTestFixture fixture(R"(
+                CREATE TABLE ColumnGenerated (
+                    k Int32 NOT NULL,
+                    source Int32,
+                    unrelated Int32,
+                    first_virtual Int32 GENERATED ALWAYS AS (COALESCE(source, 0) + 1) VIRTUAL,
+                    second_virtual Int32 GENERATED ALWAYS AS (COALESCE(source, 0) * 2) VIRTUAL,
+                    PRIMARY KEY (k)
+                ) WITH (STORE = COLUMN);
+            )", "UPSERT INTO ColumnGenerated (k, source, unrelated) VALUES (1, 4, 9);");
+
+            fixture.Rejects("ALTER TABLE ColumnGenerated DROP COLUMN source;", "missing dependency 'source'");
+            fixture.Rejects(
+                "ALTER TABLE ColumnGenerated DROP COLUMN source, DROP COLUMN first_virtual;",
+                "missing dependency 'source'");
+            fixture.Check("SELECT k, source, first_virtual, second_virtual FROM ColumnGenerated;",
+                "[[1;[4];[5];[8]]]");
+
+            fixture.Exec(dependencyFirst
+                ? "ALTER TABLE ColumnGenerated DROP COLUMN source, DROP COLUMN first_virtual, DROP COLUMN second_virtual;"
+                : "ALTER TABLE ColumnGenerated DROP COLUMN second_virtual, DROP COLUMN first_virtual, DROP COLUMN source;");
+            fixture.Check("SELECT * FROM ColumnGenerated;", "[[1;[9]]]");
+
+            fixture.RestartSchemeShard("/Root/ColumnGenerated");
+            fixture.Exec("ALTER TABLE ColumnGenerated ADD COLUMN source Utf8;");
+            fixture.Exec("UPSERT INTO ColumnGenerated (k, source, unrelated) VALUES (2, 'new', 10);");
+            fixture.Check("SELECT k, source, unrelated FROM ColumnGenerated ORDER BY k;",
+                "[[1;#;[9]];[2;[\"new\"];[10]]]");
+        }
+    }
+
+    Y_UNIT_TEST(DependencyCompressionChangePreservesVirtualValues) {
+        auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableOlapCompression(true);
+        TTestFixture fixture(ColumnTableDdl,
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (1, 4, 2), (2, NULL, 3);", appConfig);
+
+        fixture.Exec("ALTER TABLE ColumnGenerated ALTER COLUMN a SET COMPRESSION(algorithm=zstd, level=3);");
+        const auto source = fixture.DescribeColumnTableColumn("/Root/ColumnGenerated", "a");
+        UNIT_ASSERT_VALUES_EQUAL(source.GetSerializer().GetArrowCompression().GetCodec(), NKikimrSchemeOp::ColumnCodecZSTD);
+        UNIT_ASSERT_VALUES_EQUAL(source.GetSerializer().GetArrowCompression().GetLevel(), 3);
+        fixture.Rejects("ALTER TABLE ColumnGenerated ALTER COLUMN derived SET COMPRESSION(algorithm=zstd);",
+            "VIRTUAL GENERATED column");
+
+        fixture.Exec("UPSERT INTO ColumnGenerated (k, a, b) VALUES (3, 7, 8);");
+        fixture.Check("SELECT k, derived FROM ColumnGenerated ORDER BY k;", "[[1;[42]];[2;[3]];[3;[78]]]");
+        fixture.RestartSchemeShard("/Root/ColumnGenerated");
+        fixture.Check("SELECT k, derived FROM ColumnGenerated ORDER BY k;", "[[1;[42]];[2;[3]];[3;[78]]]");
+    }
+
+    Y_UNIT_TEST(DependencyEncodingChangePreservesVirtualValues) {
+        auto appConfig = GeneratedColumnsAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
+        TTestFixture fixture(ColumnTableDdl,
+            "UPSERT INTO ColumnGenerated (k, a, b) VALUES (1, 4, 2), (2, NULL, 3);", appConfig);
+
+        fixture.Exec("ALTER TABLE ColumnGenerated ALTER COLUMN a SET ENCODING(DICT);");
+        UNIT_ASSERT(fixture.DescribeColumnTableColumn("/Root/ColumnGenerated", "a")
+            .GetDataAccessorConstructor().HasDictionary());
+        fixture.Rejects("ALTER TABLE ColumnGenerated ALTER COLUMN derived SET ENCODING(DICT);",
+            "VIRTUAL GENERATED column");
+        fixture.Exec("UPSERT INTO ColumnGenerated (k, a, b) VALUES (3, 7, 8);");
+        fixture.Check("SELECT k, derived FROM ColumnGenerated ORDER BY k;", "[[1;[42]];[2;[3]];[3;[78]]]");
+
+        fixture.Exec("ALTER TABLE ColumnGenerated ALTER COLUMN a SET ENCODING(OFF);");
+        UNIT_ASSERT(fixture.DescribeColumnTableColumn("/Root/ColumnGenerated", "a")
+            .GetDataAccessorConstructor().HasPlain());
+        fixture.Exec("UPSERT INTO ColumnGenerated (k, a, b) VALUES (4, 9, NULL);");
+        fixture.Check("SELECT k, derived FROM ColumnGenerated ORDER BY k;", "[[1;[42]];[2;[3]];[3;[78]];[4;[90]]]");
+
+        fixture.Exec("ALTER TABLE ColumnGenerated ALTER COLUMN a SET ENCODING();");
+        UNIT_ASSERT(!fixture.DescribeColumnTableColumn("/Root/ColumnGenerated", "a").HasDataAccessorConstructor());
+        fixture.RestartSchemeShard("/Root/ColumnGenerated");
+        fixture.Exec("UPSERT INTO ColumnGenerated (k, a, b) VALUES (5, NULL, NULL);");
+        fixture.Check("SELECT k, derived FROM ColumnGenerated ORDER BY k;",
+            "[[1;[42]];[2;[3]];[3;[78]];[4;[90]];[5;[0]]]");
+    }
 
     Y_UNIT_TEST(ReadWriteRestartAndPhysicalPlan) {
         TTestFixture fixture(ColumnTableDdl);

@@ -56,7 +56,9 @@ struct TValidateSettings {
     // Maximum number of threads for object and data-file checks.
     // 0 means DefaultValidateThreads(), the same rule as `ydb import file csv`.
     ui64 Threads = 0;
-    // auto: full backup if kind is SimpleExportV0 or SchemaMapping is present.
+    // auto: full backup if kind is SimpleExportV0, any file remains under SchemaMapping/
+    // (including checksum sidecars and encrypted payloads), or metadata.json.sha256
+    // remains without metadata.json.
     // full: require a full backup. item: scan schema objects, skip SchemaMapping completeness.
     EValidateFormat Format = EValidateFormat::Auto;
 };
@@ -116,8 +118,9 @@ struct TValidationReport {
 TVector<TString> ParseExpectedObjects(TStringBuf text);
 
 // Checks byte-level integrity and file layout. Success does not mean the backup can be imported.
-// `path` is a full backup (metadata.json kind SimpleExportV0 or SchemaMapping), a directory of
-// exported objects without that metadata (export --item), or one schema object.
+// `path` is a full backup (metadata.json kind SimpleExportV0, any file under SchemaMapping/,
+// or an orphan metadata.json.sha256), a directory of exported objects without those markers
+// (export --item), or one schema object.
 TValidationReport ValidateBackup(const IBackupStorage& storage, const TString& path, const TValidateSettings& settings);
 
 // Lowercase hex SHA-256 of data. Used by tests and checksum sidecars.

@@ -316,17 +316,21 @@ public:
         const bool forceFull = Settings.Format == EValidateFormat::Full;
         const bool forceItem = Settings.Format == EValidateFormat::Item;
         const bool schemaMapping = HasSchemaMapping(root);
+        // Item exports have no backup-level checksum. A leftover sidecar means the
+        // root metadata.json of a full backup was removed.
+        const bool orphanMetadataChecksum = Exists(metadataKey + ".sha256") && !Exists(metadataKey);
+        const bool fullBackupMarker = schemaMapping || orphanMetadataChecksum;
 
         const TReadResult metadata = ReadFile(metadataKey);
         if (metadata.Status == EReadStatus::Missing && Exists(metadataKey + ".enc")) {
             RejectEncrypted(metadataKey + ".enc");
-            if (forceFull || schemaMapping || Stopped()) {
+            if (forceFull || fullBackupMarker || Stopped()) {
                 return Finish();
             }
         }
         if (metadata.Status == EReadStatus::Failed) {
             Error(metadataKey, TStringBuilder() << "failed to read file: " << metadata.Error);
-            if (forceFull || schemaMapping || Stopped()) {
+            if (forceFull || fullBackupMarker || Stopped()) {
                 return Finish();
             }
         }
@@ -337,7 +341,7 @@ public:
         if (metadata.Status == EReadStatus::Ok) {
             if (!NJson::ReadJsonTree(metadata.Content, &json) || !json.IsMap()) {
                 Error(metadataKey, "metadata.json is not a JSON object");
-                if (forceFull || schemaMapping || Stopped()) {
+                if (forceFull || fullBackupMarker || Stopped()) {
                     return Finish();
                 }
             } else {
@@ -354,7 +358,7 @@ public:
             }
         }
 
-        const bool looksFull = isSimpleExport || schemaMapping;
+        const bool looksFull = isSimpleExport || fullBackupMarker;
         const bool validateAsFull = forceFull || (!forceItem && looksFull);
         if (validateAsFull) {
             if (metadata.Status == EReadStatus::Missing) {
@@ -529,9 +533,20 @@ private:
         return Storage.Exists(key);
     }
 
+    // Plaintext mapping.json and metadata.json are the usual markers. A damaged
+    // full backup can lose those files and keep only checksum sidecars, encrypted
+    // payloads, or any other object under SchemaMapping/.
     bool HasSchemaMapping(const TString& root) const {
-        return Exists(JoinKey(root, "SchemaMapping/mapping.json"))
-            || Exists(JoinKey(root, "SchemaMapping/metadata.json"));
+        const TString prefix = JoinKey(root, "SchemaMapping");
+        if (Exists(prefix + "/mapping.json") || Exists(prefix + "/metadata.json")) {
+            return true;
+        }
+        for (const TString& key : Storage.List(prefix)) {
+            if (key == prefix || key.StartsWith(prefix + "/")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     enum class EReadStatus {

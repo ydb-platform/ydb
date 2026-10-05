@@ -287,15 +287,17 @@ void TCommandValidateBase::Config(TConfig& config) {
 
     config.Opts->AddLongOption("format",
             "Expected backup layout. auto (default) treats the path as a full backup when "
-            "metadata.json has kind SimpleExportV0 or SchemaMapping is present, otherwise as an "
-            "item-style export. full requires a full backup with SimpleExportV0 metadata. "
+            "metadata.json has kind SimpleExportV0, when any file remains under SchemaMapping/ "
+            "(including checksum sidecars and encrypted files), or when metadata.json.sha256 "
+            "remains without metadata.json; otherwise as an item-style export. "
+            "full requires a full backup with SimpleExportV0 metadata. "
             "item scans schema objects and does not use SchemaMapping for completeness. "
             "Supported values: auto, full, item.")
         .RequiredArgument("auto|full|item")
         .DefaultValue(Format)
         .StoreResult(&Format)
         .ChoicesWithCompletion({
-            {"auto", "Detect a full backup from SimpleExportV0 metadata or SchemaMapping"},
+            {"auto", "Detect a full backup from SimpleExportV0 metadata, SchemaMapping files, or an orphan metadata.json.sha256"},
             {"full", "Require a full backup with SchemaMapping"},
             {"item", "Treat as an item-style export without SchemaMapping completeness checks"},
         });

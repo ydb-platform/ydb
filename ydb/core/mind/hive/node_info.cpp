@@ -436,7 +436,10 @@ void TNodeInfo::SendReconnect(const TActorId& local) {
     Hive.SendReconnect(local);
 }
 
-void TNodeInfo::SetDown(bool down) {
+void TNodeInfo::SetDown(bool down, const TString& reason, TString extra) {
+    if (Down != down) {
+        Hive.RecordNodeEvent(*this, down ? ENodeEvent::Down : ENodeEvent::Up, reason, std::move(extra));
+    }
     Hive.UpdateCounterNodesDown(static_cast<i64>(down) - static_cast<i64>(Down));
     Down = down;
     if (Down) {
@@ -447,7 +450,11 @@ void TNodeInfo::SetDown(bool down) {
     }
 }
 
-void TNodeInfo::SetFreeze(bool freeze) {
+void TNodeInfo::SetFreeze(bool freeze, const TString& reason, TString extra) {
+    if (Freeze != freeze) {
+        Hive.RecordNodeEvent(*this, freeze ? ENodeEvent::Frozen : ENodeEvent::Unfrozen, reason,
+            TStringBuilder() << extra << (extra.empty() ? "" : " ") << "tablets=" << (freeze ? GetTabletsTotal() : FrozenTablets.size()));
+    }
     Hive.UpdateCounterNodesFrozen(static_cast<i64>(freeze) - static_cast<i64>(Freeze));
     Freeze = freeze;
     if (Freeze) {
@@ -639,6 +646,17 @@ void TNodeInfo::ActualizeNodeStatistics(TInstant now) {
 
 ui64 TNodeInfo::GetRestartsPerPeriod(TInstant barrier) const {
     return Hive.GetRestartsPerPeriod(Statistics.GetRestartTimestamp(), barrier.MilliSeconds());
+}
+
+void TNodeInfo::SetLocation(const TNodeLocation& location, const TString& source) {
+    // Location arrives both from Local (RegisterNode) and from NameService and the two may differ in minor details,
+    // so only a data center change is reported: that is what affects tablet placement
+    if (LocationAcquired && Location.GetDataCenterId() != location.GetDataCenterId()) {
+        Hive.RecordNodeEvent(*this, ENodeEvent::LocationChanged, source,
+            TStringBuilder() << "from=" << GetLocationString(Location) << " to=" << GetLocationString(location));
+    }
+    Location = location;
+    LocationAcquired = true;
 }
 
 TString TNodeInfo::GetLogPrefix() const {

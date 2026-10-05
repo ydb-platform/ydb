@@ -32,6 +32,8 @@ public:
             if (Record.HasStartTime()) {
                 node.StartTime = TInstant::MicroSeconds(Record.GetStartTime());
             }
+            Self->RecordNodeEvent(node, ENodeEvent::Connected, TNodeEventReason::StatusOk,
+                TStringBuilder() << "resourceMaximum={" << Record.GetResourceMaximum().ShortDebugString() << "}");
             if (!node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING].empty()) {
                 Self->WarmUp = false;
             }
@@ -65,7 +67,7 @@ public:
                 {"status", static_cast<int>(status)},
                 {"nodeState", TNodeInfo::EVolatileStateName(node.GetVolatileState())},
                 {"nodeId", node.Id});
-            Self->KillNode(node.Id, Local);
+            Self->KillNode(node.Id, Local, TNodeEventReason::BadStatus, TStringBuilder() << "status=" << static_cast<int>(status));
         }
         return true;
     }

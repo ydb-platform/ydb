@@ -441,7 +441,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             auto& hive = test.Hive;
             auto& node = hive.Node(1);
             auto& tablet = test.CreateStoppedTablet(1);
-            node.SetFreeze(true);
+            node.SetFreeze(true, "test");
             if (state == NKikimrHive::TABLET_VOLATILE_STATE_STARTING) {
                 tablet.BecomeStarting(node.Id);
             } else if (state == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING) {
@@ -455,7 +455,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             UNIT_ASSERT(!node.FrozenTablets.empty());
             tablet.BecomeStopped();
             UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, node.Id);
-            node.SetFreeze(false);
+            node.SetFreeze(false, "test");
             UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, 0);
         }
     }

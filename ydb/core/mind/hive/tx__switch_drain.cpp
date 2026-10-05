@@ -57,7 +57,7 @@ public:
                     if (!node->Down && Settings.DownPolicy == NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART) {
                         node->BecomeUpOnRestart = true;
                     }
-                    node->SetDown(true);
+                    node->SetDown(true, TNodeEventReason::DrainDownPolicy, NKikimrHive::EDrainDownPolicy_Name(Settings.DownPolicy));
                     if (Settings.Persist) {
                         db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::BecomeUpOnRestart>(node->BecomeUpOnRestart);
                         if (Settings.DownPolicy == NKikimrHive::DRAIN_POLICY_KEEP_DOWN) {
@@ -66,6 +66,12 @@ public:
                     }
                 }
                 if (StartingDrain) {
+                    Self->RecordNodeEvent(*node, ENodeEvent::DrainStarted, TNodeEventReason::DrainRequested,
+                        TStringBuilder() << "initiator=" << Initiator
+                            << " persist=" << Settings.Persist
+                            << " downPolicy=" << NKikimrHive::EDrainDownPolicy_Name(Settings.DownPolicy)
+                            << " seqNo=" << SeqNo
+                            << " tabletsRunning=" << node->GetTabletsRunning());
                     Y_DEBUG_ABORT_UNLESS(node->DrainActor == nullptr);
                     node->DrainActor = Self->StartHiveDrain(NodeId, std::move(Settings));
                 }
@@ -129,6 +135,12 @@ public:
 
         if (std::holds_alternative<TNodeId>(Target)) {
             TNodeInfo* node = Self->FindNode(std::get<TNodeId>(Target));
+            if (node != nullptr) {
+                Self->RecordNodeEvent(*node, ENodeEvent::DrainFinished, TNodeEventReason::DrainSwitchedOff,
+                    TStringBuilder() << "status=" << NKikimrProto::EReplyStatus_Name(Status)
+                        << " movements=" << Movements
+                        << " tabletsRunning=" << node->GetTabletsRunning());
+            }
             SwitchDrainOff<Schema::Node>(db, node);
         } else if (std::holds_alternative<TBridgePileId>(Target)) {
             TBridgePileInfo& pile = Self->GetPile(std::get<TBridgePileId>(Target));

@@ -20,7 +20,8 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
         YDB_LOG_DEBUG("THive::TTxDisconnectNode::Execute disconnecting node",
-            {"logPrefix", GetLogPrefix()});
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", Event->NodeId});
         TNodeInfo* node = Self->FindNode(Event->NodeId);
         if (node != nullptr) {
             Self->ScheduleUnlockTabletExecution(*node, NKikimrHive::LOCK_LOST_REASON_NODE_DISCONNECTED);
@@ -29,19 +30,27 @@ public:
                 event->NodeId = node->Id;
                 event->Local = node->Local;
                 event->StartTime = TActivationContext::Now();
+                ui64 maxDisconnectTimeout = 0;
                 for (const auto& t : node->Tablets) {
                     for (TTabletInfo* tablet : t.second) {
                         TLeaderTabletInfo& leader = tablet->GetLeader();
                         TTabletCategoryId tabletCategoryId = leader.Category ? leader.Category->Id : 0;
                         event->Tablets[tabletCategoryId].emplace_back(tablet->GetFullTabletId());
+                        if (leader.Category) {
+                            maxDisconnectTimeout = std::max(maxDisconnectTimeout, leader.Category->MaxDisconnectTimeout);
+                        }
                     }
                 }
+                Self->RecordNodeEvent(*node, ENodeEvent::Disconnecting, TNodeEventReason::InterconnectDisconnected,
+                    TStringBuilder() << "tablets=" << node->GetTabletsTotal()
+                        << " categories=" << event->Tablets.size()
+                        << " maxDisconnectTimeout=" << TDuration::MilliSeconds(maxDisconnectTimeout));
                 Self->ScheduleDisconnectNode(std::move(event));
             } else if (node->IsUnknown()) {
                 YDB_LOG_WARN("THive::TTxDisconnectNode::Execute killing disconnected node",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", node->Id});
-                Self->KillNode(node->Id, node->Local);
+                Self->KillNode(node->Id, node->Local, TNodeEventReason::InterconnectDisconnectedUnknownNode);
             }
         }
         return true;

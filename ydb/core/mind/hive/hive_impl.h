@@ -50,6 +50,7 @@
 #include "follower_tablet_info.h"
 #include "follower_group.h"
 #include "node_info.h"
+#include "event_history.h"
 #include "storage_group_info.h"
 #include "storage_pool_info.h"
 #include "sequencer.h"
@@ -208,6 +209,8 @@ protected:
     friend class TTxMonEvent_ObjectStats;
     friend class TTxMonEvent_StorageRebalance;
     friend class TTxMonEvent_Subactors;
+    friend class TTxMonEvent_NodeEvents;
+    friend class TTxMonEvent_NodeInfo;
     friend class TTxMonEvent_ShrinkPool;
     friend class TTxKillNode;
     friend class TTxLoadEverything;
@@ -290,7 +293,7 @@ protected:
                                            TEvLocal::TEvTabletStatus::EStatus status,
                                            TEvTablet::TEvTabletDead::EReason reason);
     ITransaction* CreateBootTablet(TTabletId tabletId);
-    ITransaction* CreateKillNode(TNodeId nodeId, const TActorId& local);
+    ITransaction* CreateKillNode(TNodeId nodeId, const TActorId& local, const TString& reason, TString reasonExtra);
     ITransaction* CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TGroupMetrics::TGroupParameters> groups = {});
     ITransaction* CreateCheckTablets();
     ITransaction* CreateSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec);
@@ -521,6 +524,10 @@ protected:
     };
 
     TStaticRingBuffer<TTabletMoveInfo, 5> TabletMoveHistory;
+
+    // last events across all nodes, per-node history lives in TNodeInfo::EventHistory
+    static constexpr size_t RECENT_NODE_EVENTS_SIZE = 256;
+    TLazyRingBuffer<TRecentNodeEvent, RECENT_NODE_EVENTS_SIZE> RecentNodeEvents;
     std::vector<TTabletMoveInfo> TabletMoveSamplesForLog; // stores (at most) MOVE_SAMPLES_PER_LOG_ENTRY highest priority moves in a heap
     static constexpr size_t MOVE_SAMPLES_PER_LOG_ENTRY = 10;
     std::unordered_map<TTabletTypes::EType, ui64> TabletMovesByTypeForLog;
@@ -714,7 +721,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void ReportStoppedToWhiteboard(const TLeaderTabletInfo& tablet);
     void ReportDeletedToWhiteboard(const TLeaderTabletInfo& tablet);
     TTabletCategoryInfo& GetTabletCategory(TTabletCategoryId tabletCategoryId);
-    void KillNode(TNodeId nodeId, const TActorId& local);
+    void KillNode(TNodeId nodeId, const TActorId& local, const TString& reason, TString reasonExtra = {});
     void AddToBootQueue(TTabletInfo* tablet, TNodeId node = 0);
     void UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff);
     void UpdateDomainTabletsAlive(const TSubDomainKey& objectDomain, i64 tabletsAliveDiff, const TSubDomainKey& tabletNodeDomain);
@@ -738,6 +745,8 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void OnShrinkMoveDataRetried();
     void OnShrinkMoveDataFinished();
     void RecordTabletMove(const TTabletMoveInfo& info);
+    // reason is one of TNodeEventReason constants (shared, not copied), extra is the variable part of the description
+    void RecordNodeEvent(TNodeInfo& node, ENodeEvent type, const TString& reason, TString extra = {});
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
     void ProcessWaitQueue();

@@ -475,7 +475,7 @@ private:
         const TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder() const;
         TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder();
         // Move groups from the front to the back of the fairness order.
-        void RotateGroupsOrder(TIntrusiveList<TOrderedMessageGroupIdHash>::iterator cutAter);
+        void RotateGroupsOrder(TIntrusiveList<TOrderedMessageGroupIdHash>::iterator cutAfter);
         void Clear();
         ~TMessageGroups();
 

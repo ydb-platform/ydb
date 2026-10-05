@@ -4,8 +4,8 @@ items:
 - { name: Выражения,                    href: expressions.md }
 - name: Ограничения
   items:
-  - { name: Коррелированные подзапросы, EXISTS и NOT EXISTS, href: correlated-subqueries.md }
   - { name: Неподдерживаемые конструкции, href: not_yet_supported.md }
+  - { name: Коррелированные подзапросы, EXISTS и NOT EXISTS, href: correlated-subqueries.md }
 - { name: ACTION,                       href: action.md }
 - { name: ALTER ASYNC REPLICATION,      href: alter-async-replication.md }
 - { name: ALTER DATABASE,                   include: { mode: link, path: alter_database/toc_p.yaml },                                                                                }

@@ -1,6 +1,3 @@
 * @ydb-platform/NbsReleaseApprovers
 /.github @ydb-platform/ci
-/.github/workflows/docs_* @ydb-platform/docs
-/.github/workflows/ydbdoc-* @ydb-platform/docs     
 /CHANGELOG.md @ydb-platform/changelog-reviewers
-/ydb/docs/ @ydb-platform/docs

@@ -17,8 +17,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
-#include <map>
-#include <optional>
 
 namespace NKikimr {
 
@@ -77,25 +75,16 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
     TActorId PersistentBufferServiceId;
     NDDisk::TQueryCredentials Credentials;
     bool Finished = false;
-    // Set once TEvConnect succeeds: a connection slot is held at the service and must be
-    // released (via TEvDisconnect) before this actor dies, even if registration/probing
-    // afterwards fails. Distinct from Connected, which additionally requires a successful
-    // registration probe and gates whether load traffic may be sent.
-    bool ConnectionEstablished = false;
     bool Connected = false;
     bool CleanupEraseSent = false;
     bool DisconnectSent = false;
     bool TestStarted = false;
     bool EnableChecksums = true;
-    // Reason reported to the parent once the deferred disconnect (see FinishAndDie) completes.
-    TString PendingFinishReason = "OK";
 
     std::vector<TWriteInfo> WriteInfos;
     TWeightedIndices WriteInfosByWeight;
 
     std::deque<std::pair<ui64, ui64>> Lsns;
-    // Only expose a completed prefix to cumulative erases, even if writes finish out of order.
-    std::map<ui64, std::optional<ui32>> PendingWrites;
     double FreeSpace = 1;
 
 
@@ -138,7 +127,7 @@ public:
         , Tag(tag)
         , MaxInFlight(4, 0, 65536)
         , EnableChecksums(enableChecksums)
-        , Rng(cmd.HasRandomSeed() ? cmd.GetRandomSeed() : Now().GetValue())
+        , Rng(Now().GetValue())
         , Report(new TEvLoad::TLoadReport())
     {
         VERIFY_PARAM(DurationSeconds);
@@ -224,56 +213,14 @@ public:
             TStringStream str;
             str << "persistent buffer connect failed, Status# " << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus());
             LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
-            // No connection slot was acquired at the service, so there is nothing to disconnect.
             FinishAndDie(ctx, str.Str());
             return;
         }
 
-        // A connection slot is now held at the service; every exit path from here on must
-        // release it via TEvDisconnect before dying (see FailRegistrationAndDisconnect / CheckDie).
-        ConnectionEstablished = true;
+        Connected = true;
         Credentials.DDiskInstanceGuid = msg.GetDDiskInstanceGuid();
         Credentials.ConnectionToken.emplace(msg.GetConnectionToken());
-        ctx.Send(PersistentBufferServiceId, new NDDisk::TEvGetPersistentBufferRegistrationToken(Credentials));
-    }
 
-    // A fatal error anywhere in the registration/probe sequence below must still release the
-    // already-acquired connection slot (ConnectionEstablished == true at this point) instead of
-    // dying immediately, otherwise repeated failed loads accumulate active connections at the
-    // service. Route through CheckDie's disconnect step and report `reason` once it completes.
-    void FailRegistrationAndDisconnect(const TActorContext& ctx, const TString& reason) {
-        PendingFinishReason = reason;
-        MaxInFlight = 0;
-        CheckDie(ctx);
-    }
-
-    void Handle(NDDisk::TEvGetPersistentBufferRegistrationTokenResult::TPtr& ev, const TActorContext& ctx) {
-        const auto& msg = ev->Get()->Record;
-        if (msg.GetStatus() != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-            FailRegistrationAndDisconnect(ctx, TStringBuilder() << "persistent buffer registration token failed: " << msg.GetErrorReason());
-            return;
-        }
-        ctx.Send(PersistentBufferServiceId, new NDDisk::TEvRegisterPersistentBuffer(Credentials, msg.GetToken()));
-    }
-
-    void Handle(NDDisk::TEvRegisterPersistentBufferResult::TPtr& ev, const TActorContext& ctx) {
-        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
-        const auto& msg = ev->Get()->Record;
-        if (msg.GetStatus() != TStatus::OK && msg.GetStatus() != TStatus::INCORRECT_REQUEST) {
-            FailRegistrationAndDisconnect(ctx, TStringBuilder() << "persistent buffer registration failed: " << msg.GetErrorReason());
-            return;
-        }
-        // A repeated load may reuse an existing registration; verify that it is still served.
-        ctx.Send(PersistentBufferServiceId, new NDDisk::TEvListPersistentBuffer(Credentials));
-    }
-
-    void Handle(NDDisk::TEvListPersistentBufferResult::TPtr& ev, const TActorContext& ctx) {
-        const auto& msg = ev->Get()->Record;
-        if (msg.GetStatus() != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-            FailRegistrationAndDisconnect(ctx, TStringBuilder() << "persistent buffer registration probe failed: " << msg.GetErrorReason());
-            return;
-        }
-        Connected = true;
         PrepareDataAndStart(ctx);
     }
 
@@ -314,18 +261,16 @@ public:
         Finished = true;
         switch(MeasureType) {
             case NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad::WRITE:
-                Report->Size /= Max<ui64>(1, Write_RequestsSent);
+                Report->Size /= Write_RequestsSent;
                 break;
             case NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad::READ:
-                Report->Size /= Max<ui64>(1, Read_RequestsSent);
+                Report->Size /= Read_RequestsSent;
                 break;
             case NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad::ERASE:
-                Report->Size /= Max<ui64>(1, Erase_RequestsSent);
+                Report->Size /= Erase_RequestsSent;
                 break;
         }
-        const TString result = status == "OK" && (Write_Error || Read_Error || Erase_Error)
-            ? "persistent buffer load completed with errors" : status;
-        ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, result));
+        ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, status));
         Die(ctx);
     }
 
@@ -333,10 +278,8 @@ public:
         if (MaxInFlight || InFlight) {
             return;
         }
-        if (!ConnectionEstablished) {
-            // TEvConnect itself never succeeded: no connection slot was acquired, so there is
-            // nothing to release via TEvDisconnect.
-            FinishAndDie(ctx, PendingFinishReason);
+        if (!Connected) {
+            FinishAndDie(ctx);
         } else if (!CleanupEraseSent && !Lsns.empty()) {
             CleanupEraseSent = true;
             auto eraseEv = std::make_unique<NDDisk::TEvErasePersistentBuffer>(Credentials, Lsns.back().first);
@@ -350,7 +293,7 @@ public:
     }
 
     void Handle(NDDisk::TEvDisconnectResult::TPtr& /*ev*/, const TActorContext& ctx) {
-        FinishAndDie(ctx, PendingFinishReason);
+        FinishAndDie(ctx);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -432,7 +375,7 @@ public:
                 ErasesCount++;
                 ui64 lsn = Max<ui64>();
                 ui64 eraseSize = 0;
-                for (ui32 _ : xrange(Min<ui32>(Lsns.size(), 100.0 / EraseRatio))) {
+                for (ui32 _ : xrange((ui32)(100.0 / EraseRatio))) {
                     Y_ABORT_UNLESS(!Lsns.empty());
                     lsn = Lsns.front().first;
                     if (MeasureType == NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad::ERASE) {
@@ -459,7 +402,6 @@ public:
                 Report->Size += write.Size;
             }
             const ui64 requestIdx = NewTRequestInfo(write.Size, TRequestInfo::WRITE);
-            PendingWrites.emplace(requestIdx, std::nullopt);
 
             auto ev = std::make_unique<NDDisk::TEvWritePersistentBuffer>(Credentials,
                 NDDisk::TBlockSelector(1, 0, write.Size),
@@ -469,9 +411,6 @@ public:
             } else {
                 ev->AddPayload(TRope(write.Data));
             }
-            ++Report->PBWriteRequestsSent;
-            Report->PBChecksummedWriteRequestsSent += ev->Record.ChecksumsSize() != 0;
-            Report->PBPayloadChecksumsSent += ev->Record.ChecksumsSize();
             SendRequest(ctx, std::move(ev), requestIdx);
             ++Write_RequestsSent;
             ++InFlight;
@@ -565,14 +504,7 @@ public:
             } else {
                 ++Write_Error;
             }
-            PendingWrites.at(requestIdx) = ok ? request.Size : 0;
-            while (!PendingWrites.empty() && PendingWrites.begin()->second.has_value()) {
-                const auto& [lsn, size] = *PendingWrites.begin();
-                if (*size) {
-                    Lsns.emplace_back(lsn, *size);
-                }
-                PendingWrites.erase(PendingWrites.begin());
-            }
+            Lsns.push_back({requestIdx, request.Size});
             if (MeasureType == NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad::WRITE) {
                 *BytesWritten += request.Size;
 
@@ -704,9 +636,6 @@ public:
         CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
         CFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill)
         HFunc(NDDisk::TEvConnectResult, Handle)
-        HFunc(NDDisk::TEvGetPersistentBufferRegistrationTokenResult, Handle)
-        HFunc(NDDisk::TEvRegisterPersistentBufferResult, Handle)
-        HFunc(NDDisk::TEvListPersistentBufferResult, Handle)
         HFunc(NDDisk::TEvDisconnectResult, Handle)
         HFunc(NDDisk::TEvWritePersistentBufferResult, Handle)
         HFunc(NDDisk::TEvErasePersistentBufferResult, Handle)

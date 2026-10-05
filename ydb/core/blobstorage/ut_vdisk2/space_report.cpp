@@ -90,16 +90,38 @@ namespace {
             >= response.GetReport().GetCollectionStartedAtUnixMs());
     }
 
+    ::NMonitoring::TDynamicCounterPtr FindVDiskCounters(TTestEnv& env, const TString& service) {
+        auto vdisk = env.GetCounters()->FindSubgroup("subsystem", "vdisk");
+        if (!vdisk) {
+            return {};
+        }
+        auto counters = vdisk->FindSubgroup("counters", service);
+        if (!counters) {
+            return {};
+        }
+        auto pool = counters->FindSubgroup("storagePool", "static");
+        if (!pool) {
+            return {};
+        }
+        auto group = pool->FindSubgroup("group", "000000000");
+        if (!group) {
+            return {};
+        }
+        auto order = group->FindSubgroup("orderNumber", "00");
+        if (!order) {
+            return {};
+        }
+        auto pdisk = order->FindSubgroup("pdisk", "000000001");
+        if (!pdisk) {
+            return {};
+        }
+        return pdisk->FindSubgroup("media", "ssd");
+    }
+
     ::NMonitoring::TDynamicCounterPtr GetSpaceReportCounters(TTestEnv& env) {
-        return env.GetCounters()
-            ->GetSubgroup("subsystem", "vdisk")
-            ->GetSubgroup("counters", "vdisks")
-            ->GetSubgroup("storagePool", "static")
-            ->GetSubgroup("group", "000000000")
-            ->GetSubgroup("orderNumber", "00")
-            ->GetSubgroup("pdisk", "000000001")
-            ->GetSubgroup("media", "ssd")
-            ->GetSubgroup("subsystem", "vdisk_space_report");
+        auto counters = FindVDiskCounters(env, "vdisk_space_report");
+        UNIT_ASSERT(counters);
+        return counters;
     }
 
     void WaitForSuccessfulRefresh(TTestEnv& env, ui64 previousSuccesses = 0) {
@@ -165,6 +187,7 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
         AssertCompletedReport(response);
         UNIT_ASSERT(response.GetReport().GetLogoBlobs().GetBreakdown().GetUsefulBlobDataBytes() > 0);
         AssertReportCounters(env, response.GetReport());
+        UNIT_ASSERT(!FindVDiskCounters(env, "vdisks")->FindSubgroup("subsystem", "vdisk_space_report"));
 
         const ui64 completedAt = response.GetReport().GetCollectionCompletedAtUnixMs();
         const TActorId cachedEdge = env.GetRuntime()->AllocateEdgeActor(1);
@@ -316,6 +339,23 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
         AssertCompletedReport(cached);
         UNIT_ASSERT_VALUES_EQUAL(
             GetSpaceReportCounters(env)->GetCounter("RefreshSuccesses", true)->Val(), 1);
+    }
+
+    Y_UNIT_TEST(SpaceReportCountersRemovedOnShutdown) {
+        TTestEnv env;
+        UNIT_ASSERT(GetSpaceReportCounters(env));
+
+        const TActorId edge = env.GetRuntime()->AllocateEdgeActor(1);
+        env.GetRuntime()->Send(new IEventHandle(env.GetVDiskServiceId(), edge, new TEvents::TEvPoisonPill()), 1);
+        bool drained = false;
+        env.GetRuntime()->Sim([&] {
+            if (!drained) {
+                drained = true;
+                return true;
+            }
+            return env.GetRuntime()->HasImmediateEvents();
+        });
+        UNIT_ASSERT(!FindVDiskCounters(env, "vdisk_space_report"));
     }
 
     Y_UNIT_TEST(PeriodicRefreshPopulatesCache) {

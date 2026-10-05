@@ -1,7 +1,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
@@ -922,6 +925,123 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_C(refused.load() > 1, "the loop must have retried, not given up at once");
         UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "repartitioning");
+    }
+
+    Y_UNIT_TEST_TWIN(RestartAllShardsDuringCommit, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
+        TKikimrRunner kikimr(settings);
+
+        auto client = GetClient<UseQueryService>(kikimr);
+        auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+        kikimr.RunCall([&] { CreateAndFillSharded(session); });
+        UNIT_ASSERT_VALUES_EQUAL(kikimr.RunCall([&] { return CountRows(session); }), 4u);
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const auto shards = GetTableShards(&kikimr.GetTestServer(), runtime.AllocateEdgeActor(), TablePath);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 4u);
+        const THashSet<ui64> tableShards(shards.begin(), shards.end());
+        const THashSet<ui64> delayedShards{shards[2], shards[3]};
+        TVector<TActorId> shardActors;
+        for (ui64 shard : shards) {
+            shardActors.push_back(ResolveTablet(runtime, shard));
+        }
+
+        ui64 truncateTxId = 0;
+        THashSet<ui64> preparedShards;
+        THashSet<ui64> completedShards;
+        auto observeResults = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>(
+            [&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+                const auto& record = ev->Get()->Record;
+                if (!tableShards.contains(record.GetOrigin())) {
+                    return;
+                }
+                if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
+                    if (!truncateTxId) {
+                        truncateTxId = record.GetTxId();
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetTxId(), truncateTxId);
+                    preparedShards.insert(record.GetOrigin());
+                } else if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED
+                    && record.GetTxId() == truncateTxId)
+                {
+                    completedShards.insert(record.GetOrigin());
+                }
+            });
+
+        // Hold the commit decision at half of the shards. The other half must durably
+        // complete the truncate before any tablet is restarted.
+        THashSet<ui64> blockedShards;
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlans(runtime, [&](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (delayedShards.contains(record.GetTabletID())) {
+                for (const auto& tx : record.GetTransactions()) {
+                    if (truncateTxId && tx.GetTxId() == truncateTxId) {
+                        blockedShards.insert(record.GetTabletID());
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
+
+        auto truncateFuture = kikimr.RunInThreadPool([&] {
+            return ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
+        });
+        runtime.WaitFor("half of the shards committed unsafe truncate", [&] {
+            return completedShards.size() == 2 && blockedShards.size() == 2;
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(preparedShards.size(), shards.size());
+        for (ui64 shard : delayedShards) {
+            UNIT_ASSERT(!completedShards.contains(shard));
+        }
+        UNIT_ASSERT(!truncateFuture.HasValue());
+
+        THashSet<ui64> rebootedShards;
+        auto observeBoots = runtime.AddObserver<TEvTablet::TEvBoot>([&](TEvTablet::TEvBoot::TPtr& ev) {
+            const ui64 shard = ev->Get()->TabletID;
+            if (tableShards.contains(shard)) {
+                rebootedShards.insert(shard);
+            }
+        });
+
+        // Synchronous sends kill every old actor before any shard can resume processing.
+        for (const auto& actor : shardActors) {
+            runtime.Send(new IEventHandle(actor, TActorId(), new TEvents::TEvPoison),
+                actor.NodeId() - runtime.GetFirstNodeId(), /* viaActorSystem */ false);
+        }
+        // Discard events addressed to the old actors. The mediator must redeliver the
+        // plan to the new generations; the test never retries the SQL statement.
+        blockedPlans.Stop().clear();
+
+        runtime.WaitFor("all shards rebooted and the original truncate completed", [&] {
+            return rebootedShards.size() == shards.size() && completedShards.size() == shards.size();
+        }, TDuration::Seconds(30));
+        observeResults.Remove();
+        observeBoots.Remove();
+
+        auto truncateResult = runtime.WaitFuture(truncateFuture, TDuration::Seconds(30));
+        // Losing contact after planning makes the client outcome uncertain even though
+        // the shards recover and finish the already committed transaction.
+        UNIT_ASSERT_VALUES_EQUAL_C(truncateResult.GetStatus(), EStatus::UNDETERMINED,
+            truncateResult.GetIssues().ToString());
+
+        auto observer = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+        UNIT_ASSERT_VALUES_EQUAL_C(kikimr.RunCall([&] { return CountRows(observer); }), 0u,
+            "completed shards must stay empty and prepared shards must finish the original truncate");
+
+        TStringBuilder values;
+        for (size_t i = 0; i < Y_ARRAY_SIZE(ShardKeys); ++i) {
+            values << (i ? ", " : "") << "(" << ShardKeys[i] << "ul, \"after restart\")";
+        }
+        auto refill = kikimr.RunCall([&] {
+            return ExecuteQuery(observer, Sprintf("UPSERT INTO `%s` (Key, Value) VALUES %s;",
+                TablePath, values.c_str()), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(refill.GetStatus(), EStatus::SUCCESS, refill.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(kikimr.RunCall([&] { return CountRows(observer); }), 4u,
+            "all restarted shards must accept new reads and writes");
     }
 
     // Losing the client after the coordinator has planned the transaction is the one case the

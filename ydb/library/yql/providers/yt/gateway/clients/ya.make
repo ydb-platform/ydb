@@ -1,3 +1,3 @@
 RECURSE(
-    message_queue
+    message_stream
 )

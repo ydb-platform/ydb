@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/providers/yt/gateway/clients/message_queue
+    ydb/library/yql/providers/yt/gateway/clients/message_stream
     yt/yt/client/unittests/mock
 )
 

@@ -1,9 +1,9 @@
-#include <ydb/library/yql/providers/yt/gateway/clients/message_queue/yql_qyt_message_stream_client.h>
-#include <ydb/library/yql/providers/yt/gateway/clients/message_queue/yql_yt_client.h>
+#include <ydb/library/yql/providers/yt/gateway/clients/message_stream/yql_qyt_message_stream_client.h>
+#include <ydb/library/yql/providers/yt/gateway/clients/message_stream/yql_yt_client.h>
 
 #include <yt/yt/client/unittests/mock/client.h>
 #include <yt/yt/client/queue_client/consumer_client.h>
-#include <ydb/library/yql/providers/yt/gateway/clients/message_queue/yql_qyt_blocking_queue.h>
+#include <ydb/library/yql/providers/yt/gateway/clients/message_stream/yql_qyt_blocking_queue.h>
 #include <yt/yt/core/yson/string.h>
 #include <yt/yt/client/queue_client/queue_rowset.h>
 #include <yt/yt/client/table_client/unversioned_row.h>

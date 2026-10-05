@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/providers/yt/gateway/clients/message_queue)
+UNITTEST_FOR(ydb/library/yql/providers/yt/gateway/clients/message_stream)
 
 SIZE(MEDIUM)
 
@@ -9,7 +9,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/providers/abstract/message_stream
-    ydb/library/yql/providers/yt/gateway/clients/message_queue
+    ydb/library/yql/providers/yt/gateway/clients/message_stream
     library/cpp/testing/unittest
 )
 

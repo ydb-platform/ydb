@@ -18,4 +18,5 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    ut/hash_combine_perf
 )

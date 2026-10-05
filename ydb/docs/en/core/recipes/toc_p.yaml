@@ -1,4 +1,6 @@
 items:
+- name: System tablet recovery
+  href: backup/system-tablet-backup/recovery.md
 - name: Backup collections recipes
   href: backup-collections/index.md
   include:

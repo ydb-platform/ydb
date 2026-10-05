@@ -3,6 +3,7 @@
 #include "structured_message.h"
 
 #include <ydb/library/actors/core/log_iface.h>
+
 #include <util/datetime/base.h>
 
 #include <memory>
@@ -23,6 +24,7 @@ struct TLogMessage {
 class ILogSink {
 public:
     virtual bool Write(const TLogMessage&) = 0;
+    virtual void Stop() = 0;
     virtual ~ILogSink() = default;
 };
 using ILogSinkSPtr = std::shared_ptr<ILogSink>;

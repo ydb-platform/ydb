@@ -39,6 +39,9 @@ public:
     void ApplyComponentSettings(const TVector<NLog::TComponentSettings> &settings,
                                 const TActorContext &ctx);
 
+    TString GetSinkConfigLabel(const NKikimrConfig::TLogConfig_TSink& sink);
+    void ApplyLogSinkSettings(const NKikimrConfig::TLogConfig &config, const TActorContext &ctx);
+
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
@@ -138,6 +141,8 @@ void TLogSettingsConfigurator::ApplyLogConfig(const NKikimrConfig::TLogConfig &c
 
     // TODO: support update for AllowDrop, Format, ClusterName, UseLocalTimestamps.
     // Options should either become atomic or update should be done via log service.
+
+    ApplyLogSinkSettings(config, ctx);
 }
 
 TVector<NLog::TComponentSettings>
@@ -207,6 +212,53 @@ void TLogSettingsConfigurator::ApplyComponentSettings(const TVector<NLog::TCompo
         }
     }
 }
+
+TString TLogSettingsConfigurator::GetSinkConfigLabel(const NKikimrConfig::TLogConfig_TSink& sink)
+{
+    TStringBuilder result;
+    if (sink.HasSource()) {
+        result << " source=" << sink.GetSource() << Endl;
+    }
+    /* if (sink.has_destination()) {
+        result << " destination=" << sink.destination();
+    }
+    if (sink.has_databasepath()) {
+        result << " database=" << sink.Getdatabasepath();
+    }
+    if (sink.has_storagename()) {
+        result << " storage=" << sink.storagename();
+    }
+    if (sink.has_tablename()) {
+        result << " table=" << sink.tablename();
+    }
+    if (sink.has_maxbatchsize()) {
+        result << " maxBatchSize=" << sink.maxbatchsize();
+    }
+    if (sink.has_flushtimeout()) {
+        result << " flushTimeout=" << sink.flushtimeout();
+    }
+    if (sink.has_storeshardscount()) {
+        result << " storeShardsCount=" << sink.storeshardscount();
+    }
+    if (sink.has_tableshardscount()) {
+        result << " tableshardscount=" << sink.tableshardscount();
+    } */
+
+    return result;
+}
+
+void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogConfig &config, const TActorContext &ctx) {
+
+    auto *logSettings = static_cast<NLog::TSettings*>(ctx.LoggerSettings());
+    Y_UNUSED(logSettings);
+
+    Cerr << "Start dump sinks" << Endl;
+    for(auto& sink: config.GetSink()) { // NKikimrConfig::TLogConfig_TSink
+        Cerr << "   item " <<  GetSinkConfigLabel(sink) << Endl;
+    }
+    Cerr << "Done dump sinks" << Endl;
+}
+
 
 IActor *CreateLogSettingsConfigurator()
 {

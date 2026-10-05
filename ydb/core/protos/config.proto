@@ -487,17 +487,17 @@ message TLogConfig {
     optional bool EnableStructuredLogInJson = 17 [default = false];
 
     message TSink {
-        optional string source = 1;
-        optional string destination = 2;
+        optional string Source = 1;
+        optional string Destination = 2;
 
         // Local database destionation params
-        optional string databasePath = 3;
-        optional string storageName = 4;
-        optional string tableName = 5;
-        optional uint32 maxBatchSize = 6 [default = 1000];
-        optional uint32 flushTimeout = 7 [default = 1000];
-        optional uint32 storeShardsCount = 8 [default = 5];
-        optional uint32 tableShardsCount = 9 [default = 5];
+        optional string DatabasePath = 3;
+        optional string StorageName = 4;
+        optional string TableName = 5;
+        optional uint32 MaxBatchSize = 6 [default = 1000];
+        optional uint32 FlushTimeout = 7 [default = 1000];
+        optional uint32 StoreShardsCount = 8 [default = 5];
+        optional uint32 TableShardsCount = 9 [default = 5];
     }
     repeated TSink Sink = 18;
 }

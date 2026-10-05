@@ -553,7 +553,7 @@ namespace NActors {
 
             // @todo Может ли Settings удалиться в этот момент
             for(auto& sink: Settings->Sinks) {
-                sink->Write(message);
+                sink.second->Write(message);
             }
         }
         return OutputRecord(

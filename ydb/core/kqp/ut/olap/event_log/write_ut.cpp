@@ -165,6 +165,9 @@ public:
         return true;
     }
 
+    void Stop() override {
+    }
+
     TString GetFetchQuery() {
         TStringBuilder selectList;
         TStringBuilder orderBy;
@@ -255,8 +258,15 @@ struct TEnvironment {
     void UpdateSinks() {
         auto* runtime = Kikimr.GetTestServer().GetRuntime();
         for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
-            runtime->GetLogSettings(i)->Sinks = {Writer};
-            std::copy(begin(AddSinks), end(AddSinks), std::back_inserter(runtime->GetLogSettings(i)->Sinks));
+            runtime->GetLogSettings(i)->Sinks.clear();
+            runtime->GetLogSettings(i)->Sinks[""] = Writer;
+
+            ui32 j = 0;
+            for (auto& sink: AddSinks) {
+                TStringBuilder key;
+                key << j++;
+                runtime->GetLogSettings(i)->Sinks[key] = sink;
+            }
         }
         runtime->SetLogPriority(TEnvironment::Component, NActors::NLog::PRI_TRACE);
     }
@@ -300,10 +310,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:293")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:295")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:297")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:298")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:303")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:305")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:307")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:308")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {

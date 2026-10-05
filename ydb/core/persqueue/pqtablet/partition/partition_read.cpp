@@ -31,15 +31,16 @@
 
 namespace NKikimr::NPQ {
 
-TDuration ReadMaxLag(ui32 requestMaxTimeLagMs, TDuration availabilityPeriod, const NKikimrPQ::TPartitionConfig& partConfig, bool limitReadToRetention) {
+static TDuration ReadMaxLag(ui32 requestMaxTimeLagMs, TDuration availabilityPeriod, const NKikimrPQ::TPartitionConfig& partConfig, bool limitReadToRetention) {
     const TDuration userMaxLag = requestMaxTimeLagMs > 0 ? TDuration::MilliSeconds(requestMaxTimeLagMs) : TDuration::Max();
     if (!limitReadToRetention || (partConfig.HasStorageLimitBytes() && partConfig.GetStorageLimitBytes() > 0)) {
         return userMaxLag;
     }
-    return Min(Max(TDuration::Seconds(partConfig.GetLifetimeSeconds()), availabilityPeriod), userMaxLag);
+    const TDuration retentionPeriod = TDuration::Seconds(partConfig.GetLifetimeSeconds());
+    return Min(Max(retentionPeriod, availabilityPeriod), userMaxLag);
 }
 
-TMaybe<TInstant> GetReadFrom(TDuration maxLag, ui64 readTimestampMs, TInstant consumerReadFromTimestamp, const TActorContext& ctx) {
+static TMaybe<TInstant> GetReadFrom(TDuration maxLag, ui64 readTimestampMs, TInstant consumerReadFromTimestamp, const TActorContext& ctx) {
     const TInstant now = ctx.Now();
     const bool hasLag = maxLag < TDuration::Max() && now.MicroSeconds() >= maxLag.MicroSeconds();
     if (!hasLag && readTimestampMs == 0 && consumerReadFromTimestamp <= TInstant::MilliSeconds(1)) {

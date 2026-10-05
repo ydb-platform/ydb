@@ -276,7 +276,7 @@ If you are not a member of the {{ ydb-short-name }} team, build/test checks do n
 
 Checks are restarted every time new changes are pushed; the previous check is interrupted if it has not yet completed. Each iteration of checks creates its own comment on the PR page, so the check history is preserved there.
 
-If you are a member of the {{ ydb-short-name }} team, you can also restart checks on a new merge commit without pushing. To do so, add label `rebase-and-check` to the PR.
+If you are a member of the {{ ydb-short-name }} team, you can rebase the PR branch onto the current base branch without pushing locally. To do so, add label `rebase-and-check` (or the alias `rebase-user-branch`) to the PR. After a successful rebase, checks restart automatically.
 
 ### Test results {#test-results}
 
@@ -306,6 +306,8 @@ If you have conflicts on the Pull Request, you may rebase your changes on top of
 git fetch official main:main
 git rebase main
 ```
+
+Team members can also rebase a PR by adding the `rebase-and-check` or `rebase-user-branch` label.
 
 
 ### Cherry-picking fixes to the stable branch {#cherry_pick_stable}

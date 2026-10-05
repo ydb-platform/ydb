@@ -1,5 +1,6 @@
 #include "test_path_id_translator.h"
 
+#include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/engines/snapshot_holders.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
@@ -37,6 +38,79 @@ Y_UNIT_TEST_SUITE(TSnapshotHoldersTests) {
             registryBuilder->AddSnapshot({ tableId }, snapshot);
         }
         return TTrueAtomicSharedPtr<IImmutableSnapshotRegistry>(std::move(*registryBuilder).Build().release());
+    }
+
+    void CheckInactivePortionSerialization(const bool written) {
+        const auto pathId = NColumnShard::TInternalPathId::FromRawValue(1);
+        auto portion = NTest::MakeTestCompactedPortion(pathId, 1, 0, 9, 10, Step(1), std::nullopt);
+        TFakeGroupSelector groupSelector;
+        const auto indexInfo = NTest::MakePortionTestIndexInfo();
+        const std::vector<TUnifiedBlobId> blobIds = { TUnifiedBlobId(1, TLogoBlobID(1, 1, 1, 1, 100, 0)) };
+        if (written) {
+            TWrittenPortionInfoConstructor constructor(pathId, 2);
+            constructor.SetSchemaVersion(1);
+            UNIT_ASSERT(constructor.MutableMeta().LoadMetadata(
+                portion->GetMeta().SerializeToProto(blobIds, NPortion::EProduced::INSERTED), indexInfo, groupSelector));
+            constructor.SetInsertWriteId(TInsertWriteId(42));
+            constructor.SetCommitSnapshot(Step(1));
+            portion = constructor.Build();
+        }
+        portion->SetRemoveSnapshot(Step(10));
+        UNIT_ASSERT(portion->GetProduced() == NPortion::EProduced::INACTIVE);
+        UNIT_ASSERT(portion->IsVisible(Step(9)));
+        UNIT_ASSERT(!portion->IsVisible(Step(10)));
+        NKikimrColumnShardDataSharingProto::TPortionInfo proto;
+        portion->SerializeToProto(blobIds, proto);
+        NKikimrColumnShardDataSharingProto::TPortionInfo decoded;
+        UNIT_ASSERT(decoded.ParseFromString(proto.SerializeAsString()));
+        UNIT_ASSERT_VALUES_EQUAL(decoded.GetMeta().GetIsInserted(), written);
+        UNIT_ASSERT_VALUES_EQUAL(decoded.GetMeta().GetIsSplitCompacted(), !written);
+        UNIT_ASSERT_VALUES_EQUAL(decoded.GetPathId(), pathId.GetRawValue());
+        UNIT_ASSERT_VALUES_EQUAL(decoded.GetPortionId(), portion->GetPortionId());
+        UNIT_ASSERT_VALUES_EQUAL(decoded.GetSchemaVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(decoded.GetRemoveSnapshot().GetPlanStep(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(decoded.GetRemoveSnapshot().GetTxId(), 1);
+        TPortionMetaConstructor metadata;
+        UNIT_ASSERT(metadata.LoadMetadata(decoded.GetMeta(), indexInfo, groupSelector));
+        UNIT_ASSERT_VALUES_EQUAL(metadata.Build().GetRecordsCount(), portion->GetRecordsCount());
+    }
+
+    Y_UNIT_TEST(InactiveCompactedPortionSerialization) {
+        CheckInactivePortionSerialization(false);
+    }
+
+    Y_UNIT_TEST(InactiveWrittenPortionSerialization) {
+        CheckInactivePortionSerialization(true);
+    }
+
+    Y_UNIT_TEST(EvictedPortionSerialization) {
+        const auto pathId = NColumnShard::TInternalPathId::FromRawValue(1);
+        auto portion = NTest::MakeTestCompactedPortion(pathId, 1, 0, 9, 10, Step(1), std::nullopt);
+        const std::vector<TUnifiedBlobId> blobIds = { TUnifiedBlobId(1, TLogoBlobID(1, 1, 1, 1, 100, 0)) };
+        TFakeGroupSelector groupSelector;
+        const auto indexInfo = NTest::MakePortionTestIndexInfo();
+        TCompactedPortionInfoConstructor constructor(pathId, 1);
+        constructor.SetSchemaVersion(1);
+        constructor.SetAppearanceSnapshot(Step(1));
+        UNIT_ASSERT(constructor.MutableMeta().LoadMetadata(
+            portion->GetMeta().SerializeToProto(blobIds, NPortion::EProduced::SPLIT_COMPACTED), indexInfo, groupSelector));
+        constructor.MutableMeta().SetTierName("external-tier");
+        portion = constructor.Build();
+        UNIT_ASSERT(portion->GetProduced() == NPortion::EProduced::EVICTED);
+        NKikimrColumnShardDataSharingProto::TPortionInfo active;
+        portion->SerializeToProto(blobIds, active);
+        UNIT_ASSERT(active.GetMeta().GetIsEvicted());
+        UNIT_ASSERT(!active.GetMeta().GetIsSplitCompacted());
+        UNIT_ASSERT(!active.HasRemoveSnapshot());
+        UNIT_ASSERT_VALUES_EQUAL(active.GetMeta().GetTierName(), "external-tier");
+
+        portion->SetRemoveSnapshot(Step(10));
+        NKikimrColumnShardDataSharingProto::TPortionInfo inactive;
+        portion->SerializeToProto(blobIds, inactive);
+        UNIT_ASSERT(inactive.GetMeta().GetIsSplitCompacted());
+        UNIT_ASSERT(!inactive.GetMeta().GetIsEvicted());
+        UNIT_ASSERT_VALUES_EQUAL(inactive.GetMeta().GetTierName(), "external-tier");
+        UNIT_ASSERT_VALUES_EQUAL(inactive.GetRemoveSnapshot().GetPlanStep(), 10);
     }
 
     Y_UNIT_TEST(PortionsCouldBeUsedAfterMinReadSnapshot) {

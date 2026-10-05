@@ -1,4 +1,4 @@
-#include "kqp_tasks_graph_rescaling.h"
+#include "physical_graph_rescaling.h"
 
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/fq/libs/state/dq_stage_state_recovery_info.h>
@@ -56,8 +56,18 @@ void PatchQueryPhysicalGraphForRescaling(
             return !settings.GetDeferredPublicationExtIdPrefix().empty();
         };
         const auto hasState = [](const auto& program) {
-            NFq::TStageStateRecoveryContext context;
-            return NFq::TStageStateRecoveryInfo(program.GetRuntimeVersion(), program.GetRaw(), context).HasState;
+            NFq::NProto::TGraphParams graph;
+            auto& task = *graph.AddTasks();
+            task.SetId(1);
+            task.SetStageId(1);
+            task.MutableProgram()->CopyFrom(program);
+            // Keep the synthetic task checkpointable so state discovery does not skip it.
+            task.AddInputs()->AddChannels();
+
+            const NFq::TGraphStateContext context;
+            const NFq::TGraphStateInfo graphInfo(graph, context);
+            YQL_ENSURE(graphInfo.GetStages().size() == 1, "Cannot analyze stage state for rescaling");
+            return NFq::TStageStateRecoveryInfo(graphInfo.GetStages().front()).HasState;
         };
         for (const auto& tx : physQuery.GetTransactions()) {
             for (const auto& stage : tx.GetStages()) {

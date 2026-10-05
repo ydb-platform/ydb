@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     kqp_federated_query_helpers.cpp
-    kqp_tasks_graph_rescaling.cpp
+    physical_graph_rescaling.cpp
 )
 
 PEERDIR(

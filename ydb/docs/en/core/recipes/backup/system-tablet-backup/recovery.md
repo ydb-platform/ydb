@@ -22,7 +22,7 @@ If recovery is performed after a complete loss of the [static group](../../../co
 
 {% endnote %}
 
-1. Determine the ID of the system tablet to be recovered. The tablet ID can be found in the Tablets section of the [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md).
+1. Determine the ID of the system tablet to be recovered. The tablet ID can be found in the Tablets section of the [Embedded UI](../../../reference/embedded-ui/index.md).
 2. Save the current [cluster configuration](../../../devops/configuration-management/index.md) to a file `config.yaml`.
     - When using configuration V1, save the [static configuration](../../../devops/configuration-management/configuration-v1/static-config.md).
     - When using configuration V2, follow the [instructions](../../../devops/configuration-management/configuration-v2/update-config.md).
@@ -152,11 +152,11 @@ If recovery is performed after a complete loss of the [static group](../../../co
 7. Make sure that:
     - There are no issues with the tablet in [HealthCheck](../../../reference/ydb-sdk/health-check-api.md).
     - The tablet is not restarting.
-    - The recovery form is available in the tablet's App in the [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md).
+    - The recovery form is available in the tablet's App in the [Embedded UI](../../../reference/embedded-ui/index.md).
 
 ## Step 2. Find the backup files {#find-backup-files}
 
-1. On each host obtained in step 3, check for the presence of backups. The path to backups is determined by the `path` parameter in the [`system_tablet_backup_config`](../../../reference/configuration/system_tablet_backup_config.md) configuration section.
+1. On each host obtained in step 3, check for the presence of backups. The path to backups is determined by the `path` parameter in the [`system_tablet_backup_config`](../../../reference/configuration/index.md) configuration section.
 
     The name of each backup contains key information: `backup_<timestamp>_g<generation>_s<step>`, where:
 
@@ -180,7 +180,7 @@ If recovery is performed after a complete loss of the [static group](../../../co
 
 ## Step 3. Transfer the backup files {#transfer-backup-files}
 
-1. Determine which host the tablet is running on in Recovery mode. To do this, open the [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md) and find the host where the tablet is running.
+1. Determine which host the tablet is running on in Recovery mode. To do this, open the [Embedded UI](../../../reference/embedded-ui/index.md) and find the host where the tablet is running.
 2. If the backup files are on a different host, copy them to the host with the tablet in Recovery mode using `scp`, `rsync`, or any other available tool:
 
     Copy the backup from the backup directory to your home directory:
@@ -206,7 +206,7 @@ If recovery is performed after a complete loss of the [static group](../../../co
 
 ## Step 4. Perform the recovery {#perform-recovery}
 
-1. Open the App of the tablet being restored in the [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md).
+1. Open the App of the tablet being restored in the [Embedded UI](../../../reference/embedded-ui/index.md).
 
 2. In the recovery form, specify the full path to the directory with the backup files, for example:
 
@@ -281,6 +281,6 @@ After successful recovery:
 3. Make sure that:
     - There are no issues with the tablet in [HealthCheck](../../../reference/ydb-sdk/health-check-api.md).
     - The tablet does not restart.
-    - The recovery form is absent in the tablet's App in [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md).
+    - The recovery form is absent in the tablet's App in [Embedded UI](../../../reference/embedded-ui/index.md).
 
 4. Restart all cluster nodes one by one to synchronize the state of internal in-memory caches with the tablet state. After restarting each node, wait for it to return to a healthy state and make sure there are no issues in [HealthCheck](../../../reference/ydb-sdk/health-check-api.md); only then proceed to the next node.

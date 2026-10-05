@@ -85,8 +85,15 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
-          sparse-checkout: .github/scripts/tests
+          sparse-checkout: .github
           path: _planner
+      - name: Use actions from this workflow
+        run: |
+          # uses: ./.github/actions reads the working tree. The PR checkout is
+          # main, which has no save_test_graph and does not add -A, so the
+          # increment graph is build nodes only and auto stays on one host.
+          rm -rf .github
+          cp -a _planner/.github .github
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
@@ -319,8 +326,12 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
-          sparse-checkout: .github/scripts/tests
+          sparse-checkout: .github
           path: _planner
+      - name: Use actions from this workflow
+        run: |
+          rm -rf .github
+          cp -a _planner/.github .github
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:

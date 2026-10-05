@@ -429,6 +429,7 @@ runs:
         if [ "$INPUT_SAVE_TEST_GRAPH" = "true" ] && [ "$INPUT_RUN_TESTS" != "true" ]; then
           GRAPH_ONLY=true
         fi
+        echo "graph inputs: save_test_graph=$INPUT_SAVE_TEST_GRAPH run_tests=$INPUT_RUN_TESTS increment=$INPUT_INCREMENT skip_graph_compare=$INPUT_SKIP_GRAPH_COMPARE graph_only=$GRAPH_ONLY"
 
         if [ "$INPUT_RUN_TESTS" = "true" ]; then
             params+=(-A)

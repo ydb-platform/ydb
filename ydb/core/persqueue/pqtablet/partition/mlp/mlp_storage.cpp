@@ -256,12 +256,7 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
     if (KeepMessageOrder || policy == EReadSelectionPolicy::ByMessageGroupFairness) {
         TNextMessageResult nextMessage = SearchForEligibleMessage(retentionDeadlineDelta, skipMessageGroups);
         if (nextMessage.Message) {
-            // rotate
-            // move skipped & chosen message groups to the end of queue, so they won't be rechecked on the next iteration
-            auto& unlockedList = MessageGroups.GetUnlockedMessageGroupsIdViewOrder();
-            TIntrusiveList<TOrderedMessageGroupIdHash> cut;
-            unlockedList.Cut(unlockedList.begin(), std::next(nextMessage.OrderIterator), cut.end());
-            unlockedList.Append(std::move(cut));
+            MessageGroups.RotateGroupsOrder(nextMessage.OrderIterator);
             DoLock(nextMessage.Offset, *nextMessage.Message, deadline);
             return ConvertToReadMessage(nextMessage.Offset, *nextMessage.Message);
         }
@@ -2003,6 +1998,13 @@ bool TOrderedMessageGroupIdHash::operator==(const TOrderedMessageGroupIdHash& ot
 
 TOrderedMessageGroupIdHash::operator ui32() const {
     return GroupIdHash;
+}
+
+void TStorage::TMessageGroups::RotateGroupsOrder(TIntrusiveList<TOrderedMessageGroupIdHash>::iterator cutAter) {
+    Y_ASSERT(cutAter != UnlockedMessageGroupsIdViewOrder.end());
+    TIntrusiveList<TOrderedMessageGroupIdHash> cut;
+    UnlockedMessageGroupsIdViewOrder.Cut(UnlockedMessageGroupsIdViewOrder.begin(), std::next(cutAter), cut.end());
+    UnlockedMessageGroupsIdViewOrder.Append(std::move(cut));
 }
 
 bool TStorage::TMessageGroups::UnlockedMessageGroupsIdContains(const ui32 messageGroupIdHash) const {

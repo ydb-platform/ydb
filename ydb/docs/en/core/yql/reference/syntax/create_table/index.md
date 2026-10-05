@@ -28,6 +28,10 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
       [COVER ( <cover_columns> )]
       [WITH ( <parameter_name> = <parameter_value>[, ...])]
     [, ...]
+    STATISTICS <statistics_name>
+      ON ( <column_name> [, ...] )
+      [WITH ( <statistics_type> [, ...] )]
+    [, ...]
   PRIMARY KEY ( <column>[, ...]),
   [FAMILY <column_family> ( family_options[, ...])]
 )
@@ -74,6 +78,10 @@ Index definition on the table. Supported:
 * [Bloom indexes](bloom_skip_index.md),
 * [min-max index](min_max_index.md),
 * [JSON indexes](json_index.md).
+
+### STATISTICS
+
+Declaration of multi-column statistics for [ANALYZE](../analyze.md). See [{#T}](statistics.md).
 
 ### PRIMARY KEY
 
@@ -330,6 +338,7 @@ CREATE TABLE <table_name> (
 
 When creating row tables, you can specify:
 
+* [Statistics](statistics.md).
 * [Secondary index](secondary_index.md).
 * [Vector index](vector_index.md).
 * [Full-text index](fulltext_index.md).
@@ -341,6 +350,7 @@ When creating row tables, you can specify:
 
 When creating column tables, you can specify:
 
+* [Statistics](statistics.md).
 * [Bloom index](bloom_skip_index.md).
 * [Additional parameters](with.md).
 * [Creating and populating a table based on query results](as_select.md).

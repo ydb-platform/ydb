@@ -780,7 +780,7 @@ namespace {
             UNIT_ASSERT(txnActorDiedEvent != nullptr);
         }
 
-        Y_UNIT_TEST(OnEndTxnWithCommitAndAbortFromTxn_shouldReturnCOORDINATOR_NOT_AVAILABLE) {
+        Y_UNIT_TEST(OnEndTxnWithCommitAndAbortFromTxn_shouldReturnPRODUCER_FENCED) {
             ui64 correlationId = 987;
             DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch);
             DummyKqpActor->SetCommitResponse(false);
@@ -788,11 +788,11 @@ namespace {
             auto response = SendEndTxnRequest(true, correlationId);
 
             UNIT_ASSERT(response != nullptr);
-            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
             UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
             const auto& result = static_cast<const NKafka::TEndTxnResponseData&>(*response->Response);
             UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
-            UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+            UNIT_ASSERT_VALUES_EQUAL(result.ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
 
             DummyKqpActor->SetCommitResponse(true);
             auto retry = SendEndTxnRequest(true, correlationId + 1);

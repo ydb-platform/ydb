@@ -31,6 +31,7 @@ enum EErrorReason {
     ERROR_REASON_CHANNELS_CANNOT_SHRINK = 1;
 
     ERROR_REASON_INVALID_ARGUMENTS = 2;
+    ERROR_REASON_CREATE_CONFLICT = 3;
 }
 
 enum ETabletVolatileState {
@@ -121,6 +122,11 @@ message TEvCreateTablet {
     optional EBalancerPolicy BalancerPolicy = 26;
     optional bool IsBackup = 27 [default = false];
 
+    // Batch creation: either OwnerIdx + Count or a non-empty OwnerIdxs list.
+    // TabletID is only supported by the legacy single-tablet request.
+    optional uint32 Count = 28;
+    repeated uint64 OwnerIdxs = 29;
+
     optional uint32 ChannelsProfile = 5 [deprecated = true]; // DEPRECATED
     optional uint32 Flags = 6 [deprecated = true]; // DEPRECATED
     optional uint32 BootTimeoutMilliSeconds = 8 [deprecated = true]; // DEPRECATED
@@ -145,6 +151,20 @@ message TEvCreateTabletReply {
     optional fixed64 Origin = 5;
     optional EErrorReason ErrorReason = 6;
     optional TForwardRequest ForwardRequest = 7;
+
+    message TResult {
+        optional uint64 OwnerIdx = 1;
+        optional NKikimrProto.EReplyStatus Status = 2;
+        // TRYLATER with TabletID requires a legacy single-tablet retry with this
+        // id (Hive migration, or follower settings omitted by an older writer).
+        // TRYLATER without TabletID can be retried as part of another batch.
+        optional fixed64 TabletID = 3;
+        optional EErrorReason ErrorReason = 4;
+        optional TForwardRequest ForwardRequest = 5;
+    }
+    // For a valid batch Status is OK even when individual elements failed.
+    repeated TResult Results = 8;
+    optional bool IsBatch = 9 [default = false];
 }
 
 message TEvTabletCreationResult {

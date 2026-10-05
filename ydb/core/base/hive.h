@@ -6,6 +6,7 @@
 #include "subdomain.h"
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/base/tablet.h>
+#include <util/generic/hash_set.h>
 #include <util/stream/str.h>
 
 namespace NKikimr {
@@ -141,6 +142,53 @@ namespace NKikimr {
         };
 
         struct TEvCreateTablet : public TEventPB<TEvCreateTablet, NKikimrHive::TEvCreateTablet, EvCreateTablet> {
+            static constexpr ui32 MaxBatchSize = 256;
+            // Conservative estimate (request bytes * item count), not a disk I/O limit.
+            static constexpr ui64 MaxBatchMetadataBytes = 4 * 1024 * 1024;
+
+            static bool IsBatch(const NKikimrHive::TEvCreateTablet& record) {
+                return record.HasCount() || record.OwnerIdxsSize() != 0;
+            }
+
+            // Enumerate an already validated batch in request order.
+            static TVector<ui64> GetBatchOwnerIdxs(const NKikimrHive::TEvCreateTablet& record) {
+                if (!record.HasCount()) {
+                    return TVector<ui64>(record.GetOwnerIdxs().begin(), record.GetOwnerIdxs().end());
+                }
+                TVector<ui64> result;
+                result.reserve(record.GetCount());
+                for (ui32 i = 0; i < record.GetCount(); ++i) {
+                    result.push_back(record.GetOwnerIdx() + i);
+                }
+                return result;
+            }
+
+            // Validate the entire envelope before making any changes in Hive.
+            static bool ValidateBatch(const NKikimrHive::TEvCreateTablet& record) {
+                if (!IsBatch(record) || record.HasTabletID()) {
+                    return false;
+                }
+                const ui64 count = record.HasCount() ? record.GetCount() : record.OwnerIdxsSize();
+                if (!count || count > MaxBatchSize || record.ByteSizeLong() > MaxBatchMetadataBytes / count) {
+                    return false;
+                }
+                if (record.HasCount()) {
+                    return record.HasOwnerIdx() && !record.OwnerIdxsSize()
+                        && record.GetOwnerIdx() <= Max<ui64>() - (count - 1);
+                }
+                if (record.HasOwnerIdx()) {
+                    return false;
+                }
+                THashSet<ui64> seenOwnerIdxs;
+                seenOwnerIdxs.reserve(record.OwnerIdxsSize());
+                for (const ui64 ownerIdx : record.GetOwnerIdxs()) {
+                    if (!seenOwnerIdxs.insert(ownerIdx).second) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
             TEvCreateTablet()
             {}
 

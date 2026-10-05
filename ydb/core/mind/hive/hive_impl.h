@@ -279,7 +279,8 @@ protected:
     ITransaction* CreateForceRestartTablet(TFullTabletId tabletId);
     ITransaction* CreateInitScheme();
     ITransaction* CreateAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie);
-    ITransaction* CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie);
+    ITransaction* CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie,
+        ui64 pendingBatchGeneration = 0);
     ITransaction* CreateLoadEverything();
     ITransaction* CreateRegisterNode(const TActorId& local, NKikimrLocal::TEvRegisterNode rec);
     ITransaction* CreateStatus(const TActorId& local, NKikimrLocal::TEvStatus rec);
@@ -468,6 +469,45 @@ protected:
     };
 
     std::unordered_map<std::pair<ui64, ui64>, TPendingCreateTablet> PendingCreateTablets;
+    struct TPendingCreateTabletBatch : TPendingCreateTablet {
+        // Bound stale recipients retained across repeated caller reconnects.
+        static constexpr size_t MaxWaiters = 64;
+        TVector<std::pair<TActorId, ui64>> Waiters;
+        THashSet<ui64> NeededOwnerIdxs;
+        ui64 Generation = 0;
+        bool Scheduled = false;
+        THashSet<ui64> CancelledOwnerIdxs;
+    };
+    using TPendingCreateTabletBatchKey = std::pair<ui64, ui64>;
+    using TPendingCreateTabletBatchKeys = THashSet<TPendingCreateTabletBatchKey>;
+    // Optional, cumulative work counters for deterministic complexity checks in tests.
+    struct TPendingCreateTabletCancellationStats {
+        size_t OwnerLookups = 0;
+        size_t IndexLookups = 0;
+        size_t VisitedBatchEntries = 0;
+    };
+    // One pending batch per (owner, first index). Identical requests share work and
+    // notify every registered (sender, cookie); other requests receive TRYLATER.
+    std::unordered_map<TPendingCreateTabletBatchKey, TPendingCreateTabletBatch> PendingCreateTabletBatches;
+    // Owner -> requested index -> first indices of batches still interested in it.
+    // Includes existing tablets too, not just indices needing a new tablet ID.
+    THashMap<ui64, THashMap<ui64, THashSet<ui64>>> PendingCreateTabletBatchIndex;
+    size_t PendingCreateTabletBatchIds = 0;
+    ui64 PendingCreateTabletBatchGeneration = 0;
+    struct TPendingCreateTabletBatchRetry {
+        TPendingCreateTabletBatchKey Key;
+        ui64 Generation;
+    };
+    // Queue only references, not transactions or copies of their protobuf requests.
+    std::queue<TPendingCreateTabletBatchRetry> PendingCreateTabletBatchRetries;
+    struct TActivePendingCreateTabletBatchRetry {
+        TPendingCreateTabletBatchKey Key;
+        bool Running = false;
+    };
+    // Bound queued events plus unfinished transactions, without serializing log
+    // confirmations or page faults. Each slot is released in Complete.
+    static constexpr size_t MaxPendingCreateTabletBatchRetriesInFlight = 16;
+    THashMap<ui64, TActivePendingCreateTabletBatchRetry> ActivePendingCreateTabletBatchRetries;
     std::deque<THolder<IEventHandle>> PendingOperations;
 
     ui64 UpdateTabletMetricsInProgress = 0;
@@ -608,6 +648,7 @@ protected:
     void Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&);
     void Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr&);
     void Handle(TEvPrivate::TEvProcessPendingOperations::TPtr&);
+    void Handle(TEvPrivate::TEvResumePendingCreateTabletBatch::TPtr&);
     void Handle(TEvPrivate::TEvBalancerOut::TPtr&);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
@@ -1158,9 +1199,20 @@ protected:
             const TTabletInfo* tablet);
     static void DivideMetrics(TMetrics& metrics, ui64 divider);
     TVector<TTabletId> UpdateStoragePools(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TGroupMetrics::TGroupParameters>& groups);
+    // Canonicalize aliases without applying mutable resource defaults.
+    static void NormalizeChannelBind(TChannelBind& bind);
     void InitDefaultChannelBind(TChannelBind& bind);
     void RequestPoolsInformation();
     void RequestFreeSequence();
+    void IndexPendingCreateTabletBatch(const TPendingCreateTabletBatchKey& key, const TPendingCreateTabletBatch& batch);
+    void RemovePendingCreateTabletBatch(const TPendingCreateTabletBatchKey& key);
+    void EnqueuePendingCreateTabletBatch(const TPendingCreateTabletBatchKey& key, TPendingCreateTabletBatch& batch);
+    void ResumePendingCreateTabletBatches();
+    void CompletePendingCreateTabletBatchRetry(ui64 generation);
+    TPendingCreateTabletBatchKeys CancelPendingCreateTabletBatches(ui64 owner, std::optional<ui64> ownerIdx = std::nullopt,
+        TPendingCreateTabletCancellationStats* stats = nullptr);
+    void ProcessPendingCreateTabletBatches(const TPendingCreateTabletBatchKeys& keys);
+    void ProcessPendingCreateTabletBatches();
     void EnqueueIncomingEvent(STATEFN_SIG);
 
     bool SeenDomain(TSubDomainKey domain);

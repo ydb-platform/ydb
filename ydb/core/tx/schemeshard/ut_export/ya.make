@@ -34,6 +34,7 @@ IF (NOT OS_WINDOWS)
         ydb/core/testlib/audit_helpers
     )
     SRCS(
+        ut_bulk_create_export.cpp
         ut_export.cpp
         ut_export_fs.cpp
     )

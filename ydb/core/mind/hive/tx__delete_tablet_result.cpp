@@ -10,6 +10,7 @@ class TTxDeleteTabletResult : public TTransactionBase<THive> {
     TEvTabletBase::TEvDeleteTabletResult::TPtr Result;
     TTabletId TabletId;
     TSideEffects SideEffects;
+    THive::TPendingCreateTabletBatchKeys CancelledCreateBatches;
     bool Success;
 
 public:
@@ -66,6 +67,10 @@ public:
                     SideEffects.Send(unlockedFromActor, new TEvHive::TEvLockTabletExecutionLost(TabletId, NKikimrHive::LOCK_LOST_REASON_TABLET_DELETED));
                 }
                 Self->PendingCreateTablets.erase({tablet->Owner.first, tablet->Owner.second});
+                // A batch may have arrived after this tablet entered Deleting.
+                // Cancel its item before removing the owner mapping, or a retry
+                // after ID replenishment could recreate the deleted tablet.
+                CancelledCreateBatches = Self->CancelPendingCreateTabletBatches(tablet->Owner.first, tablet->Owner.second);
                 Self->DeleteTablet(tablet->Id);
             } else {
                 Success = false;
@@ -99,6 +104,7 @@ public:
             Self->UpdateCounterTabletsDeleting();
         }
         SideEffects.Complete(ctx, Self->Requests);
+        Self->ProcessPendingCreateTabletBatches(CancelledCreateBatches);
     }
 };
 

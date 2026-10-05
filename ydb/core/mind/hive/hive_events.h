@@ -43,6 +43,7 @@ struct TEvPrivate {
         EvReassignInactiveGroupsComplete,
         EvMoveDataComplete,
         EvLogHangingRequests,
+        EvResumePendingCreateTabletBatch,
         EvEnd
     };
 
@@ -102,6 +103,18 @@ struct TEvPrivate {
     };
 
     struct TEvProcessPendingOperations : TEventLocal<TEvProcessPendingOperations, EvProcessPendingOperations> {};
+
+    struct TEvResumePendingCreateTabletBatch : TEventLocal<TEvResumePendingCreateTabletBatch, EvResumePendingCreateTabletBatch> {
+        const ui64 Owner;
+        const ui64 FirstOwnerIdx;
+        const ui64 Generation;
+
+        TEvResumePendingCreateTabletBatch(ui64 owner, ui64 firstOwnerIdx, ui64 generation)
+            : Owner(owner)
+            , FirstOwnerIdx(firstOwnerIdx)
+            , Generation(generation)
+        {}
+    };
 
     struct TEvBalancerOut : TEventLocal<TEvBalancerOut, EvBalancerOut> {};
 

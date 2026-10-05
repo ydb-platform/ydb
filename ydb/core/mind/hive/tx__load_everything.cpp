@@ -493,6 +493,7 @@ public:
                     tablet.Category->Tablets.insert(&tablet);
                 }
                 tablet.BootMode = tabletRowset.GetValue<Schema::Tablet::BootMode>();
+                tablet.BalancerPolicy = tabletRowset.GetValueOrDefault<Schema::Tablet::BalancerPolicy>();
                 tablet.LockedToActor = tabletRowset.GetValueOrDefault<Schema::Tablet::LockedToActor>();
                 tablet.LockedReconnectTimeout = TDuration::MilliSeconds(tabletRowset.GetValueOrDefault<Schema::Tablet::LockedReconnectTimeout>());
                 if (tablet.LockedToActor) {
@@ -575,19 +576,15 @@ public:
                 TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
                 if (tablet) {
                     ui32 channelId = tabletChannelRowset.GetValue<Schema::TabletChannel::Channel>();
-                    TString storagePool = tabletChannelRowset.GetValue<Schema::TabletChannel::StoragePool>();
-                    if (storagePool.empty()) {
-                        storagePool = TLeaderTabletInfo::DEFAULT_STORAGE_POOL_NAME;
-                    }
                     Y_ABORT_UNLESS(tablet->BoundChannels.size() == channelId);
                     tablet->BoundChannels.emplace_back();
                     NKikimrStoragePool::TChannelBind& bind = tablet->BoundChannels.back();
                     if (tabletChannelRowset.HaveValue<Schema::TabletChannel::Binding>()) {
                         bind = tabletChannelRowset.GetValue<Schema::TabletChannel::Binding>();
                     }
-                    bind.SetStoragePoolName(storagePool);
+                    bind.SetStoragePoolName(tabletChannelRowset.GetValue<Schema::TabletChannel::StoragePool>());
                     Self->InitDefaultChannelBind(bind);
-                    tablet->TabletStorageInfo->Channels.emplace_back(channelId, storagePool);
+                    tablet->TabletStorageInfo->Channels.emplace_back(channelId, bind.GetStoragePoolName());
 
                     if (tabletChannelRowset.GetValue<Schema::TabletChannel::NeedNewGroup>()) {
                         tablet->ChannelProfileNewGroup.set(channelId);

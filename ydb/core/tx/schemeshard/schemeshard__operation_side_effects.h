@@ -38,6 +38,7 @@ private:
 
     THashSet<TTxId> ActivationOps;
     THashSet<TOperationId> ActivationParts;
+    TVector<std::pair<TOperationId, TDuration>> DelayedActivationParts;
 
     TDeque<TCoordinatorAck> CoordinatorAcks;
     TDeque<TMediatorAck> MediatorAcks;
@@ -122,6 +123,7 @@ public:
 
     void Dependence(TTxId parent, TTxId child);
     void ActivateTx(TOperationId opId);
+    void ActivateTx(TOperationId opId, TDuration delay);
     void ActivateOperation(TTxId txId);
 
     void WaitShardCreated(TShardIdx idx, TOperationId opId);

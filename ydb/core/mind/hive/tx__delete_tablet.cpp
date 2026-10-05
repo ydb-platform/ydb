@@ -9,6 +9,7 @@ namespace NHive {
 class TTxDeleteBase : public TTransactionBase<THive> {
 protected:
     TSideEffects SideEffects;
+    THive::TPendingCreateTabletBatchKeys CancelledCreateBatches;
 
 public:
     TTxType GetTxType() const override { return NHive::TXTYPE_DELETE_TABLET; }
@@ -144,6 +145,11 @@ public:
             RespondToSender(NKikimrProto::INVALID_OWNER, forwardRequest);
             return true; // abort transaction
         }
+        // Cancel each requested or resolved owner/index once, including TabletID fallback.
+        THashSet<std::pair<ui64, ui64>> ownersToCancel;
+        for (ui64 idx : rec.GetShardLocalIdx()) {
+            ownersToCancel.emplace(owner, idx);
+        }
         // checking for possible migration
         for (TTabletId tabletId : tablets) {
            TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
@@ -155,7 +161,12 @@ public:
                     RespondToSender(NKikimrProto::ERROR);
                     return true; // abort transaction
                 }
+                ownersToCancel.insert(tablet->Owner);
             }
+        }
+        for (const auto& [cancelOwner, idx] : ownersToCancel) {
+            const auto affected = Self->CancelPendingCreateTabletBatches(cancelOwner, idx);
+            CancelledCreateBatches.insert(affected.begin(), affected.end());
         }
         NIceDb::TNiceDb db(txc.DB);
         for (TTabletId tabletId : tablets) {
@@ -170,6 +181,7 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"sideEffects", SideEffects});
         SideEffects.Complete(ctx, Self->Requests);
+        Self->ProcessPendingCreateTabletBatches(CancelledCreateBatches);
     }
 };
 
@@ -230,6 +242,7 @@ public:
         }
         db.Table<Schema::BlockedOwner>().Key(rec.GetOwner()).Update();
         Self->BlockedOwners.emplace(Event->Get()->Record.GetOwner());
+        CancelledCreateBatches = Self->CancelPendingCreateTabletBatches(owner);
         RespondToSender(NKikimrProto::OK);
         return true;
     }
@@ -240,6 +253,7 @@ public:
             {"ownerId", Event->Get()->Record.GetOwner()},
             {"sideEffects", SideEffects});
         SideEffects.Complete(ctx, Self->Requests);
+        Self->ProcessPendingCreateTabletBatches(CancelledCreateBatches);
     }
 };
 

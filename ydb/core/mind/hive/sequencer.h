@@ -102,7 +102,7 @@ public:
     TSequence AllocateSequence(TOwnerType owner, size_t size, std::vector<TOwnerType>& modified); // size = max possible size, but not exact size
     TSequence GetSequence(TOwnerType owner);
     TOwnerType GetOwner(TElementType element); // for unit tests only
-    size_t FreeSize() const; // for unit tests only
+    size_t FreeSize() const; // total available identifiers across all free ranges
     size_t AllocatedSequencesSize() const;
     size_t AllocatedSequencesCount() const;
     size_t NextFreeSequenceIndex() const;

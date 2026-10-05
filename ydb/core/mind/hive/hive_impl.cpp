@@ -33,7 +33,10 @@ namespace NHive {
 
 void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
     NKikimrHive::TEvCreateTablet& rec = ev->Get()->Record;
-    if (rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType() && rec.BindedChannelsSize() != 0) {
+    const bool batch = TEvHive::TEvCreateTablet::IsBatch(rec);
+    const bool validIds = batch ? TEvHive::TEvCreateTablet::ValidateBatch(rec) : rec.HasOwnerIdx();
+    if (rec.HasOwner() && validIds && rec.HasTabletType() && rec.BindedChannelsSize() != 0
+        && (!batch || rec.BindedChannelsSize() <= MAX_TABLET_CHANNELS)) {
         YDB_LOG_DEBUG("Handle TEvHive::TEvCreateTablet:",
             {"logPrefix", GetLogPrefix()},
             {"tabletType", rec.GetTabletType()},
@@ -47,6 +50,10 @@ void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
         THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>();
         reply->Record.SetStatus(NKikimrProto::EReplyStatus::ERROR);
         reply->Record.SetErrorReason(NKikimrHive::EErrorReason::ERROR_REASON_INVALID_ARGUMENTS);
+        reply->Record.SetOrigin(TabletID());
+        if (batch) {
+            reply->Record.SetIsBatch(true);
+        }
         if (rec.HasOwner()) {
             reply->Record.SetOwner(rec.GetOwner());
         }
@@ -3684,7 +3691,14 @@ void THive::Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr&) {
     EventQueue.ProcessIncomingEvent();
 }
 
+void THive::NormalizeChannelBind(TChannelBind& bind) {
+    if (bind.GetStoragePoolName().empty()) {
+        bind.SetStoragePoolName(TLeaderTabletInfo::DEFAULT_STORAGE_POOL_NAME);
+    }
+}
+
 void THive::InitDefaultChannelBind(TChannelBind& bind) {
+    NormalizeChannelBind(bind);
     if (!bind.HasIOPS()) {
         bind.SetIOPS(GetDefaultUnitIOPS());
     }
@@ -3767,6 +3781,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvProcessBootQueue, Handle);
         hFunc(TEvPrivate::TEvPostponeProcessBootQueue, Handle);
         hFunc(TEvPrivate::TEvProcessPendingOperations, Handle);
+        hFunc(TEvPrivate::TEvResumePendingCreateTabletBatch, Handle);
         hFunc(TEvPrivate::TEvProcessDisconnectNode, Handle);
         hFunc(TEvLocal::TEvSyncTablets, Handle);
         hFunc(TEvPrivate::TEvKickTablet, Handle);
@@ -3888,6 +3903,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvProcessBootQueue::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvPostponeProcessBootQueue::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessPendingOperations::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvResumePendingCreateTabletBatch::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessDisconnectNode::EventType, EnqueueIncomingEvent);
         fFunc(TEvLocal::TEvSyncTablets::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvKickTablet::EventType, EnqueueIncomingEvent);
@@ -3988,13 +4004,15 @@ void THive::RequestFreeSequence() {
         size_t sequenceIndex = Sequencer.NextFreeSequenceIndex();
         size_t sequenceSize = GetRequestSequenceSize();
 
-        if (PendingCreateTablets.size() > sequenceSize) {
-            size_t newSequenceSize = ((PendingCreateTablets.size() / sequenceSize) + 1) * sequenceSize;
+        const size_t pendingCreates = PendingCreateTablets.size() + PendingCreateTabletBatchIds;
+        if (pendingCreates > sequenceSize) {
+            size_t newSequenceSize = ((pendingCreates / sequenceSize) + 1) * sequenceSize;
             YDB_LOG_WARN("RequestFreeSequence: increasing sequence size due to pending creates",
                 {"logPrefix", GetLogPrefix()},
                 {"sequenceSize", sequenceSize},
                 {"newSequenceSize", newSequenceSize},
-                {"pendingCreateTabletsCount", PendingCreateTablets.size()});
+                {"pendingCreateTabletsCount", PendingCreateTablets.size()},
+                {"pendingBulkCreateTabletIds", PendingCreateTabletBatchIds});
             sequenceSize = newSequenceSize;
         }
 
@@ -4009,6 +4027,143 @@ void THive::RequestFreeSequence() {
         YDB_LOG_ERROR("RequestFreeSequence: ran out of tablet ids",
             {"logPrefix", GetLogPrefix()});
     }
+}
+
+void THive::IndexPendingCreateTabletBatch(const TPendingCreateTabletBatchKey& key, const TPendingCreateTabletBatch& batch) {
+    for (const ui64 idx : TEvHive::TEvCreateTablet::GetBatchOwnerIdxs(batch.CreateTablet)) {
+        if (!batch.CancelledOwnerIdxs.contains(idx)) {
+            PendingCreateTabletBatchIndex[key.first][idx].insert(key.second);
+        }
+    }
+}
+
+void THive::RemovePendingCreateTabletBatch(const TPendingCreateTabletBatchKey& key) {
+    const auto pending = PendingCreateTabletBatches.find(key);
+    Y_ABORT_UNLESS(pending != PendingCreateTabletBatches.end());
+    auto owner = PendingCreateTabletBatchIndex.find(key.first);
+    if (owner != PendingCreateTabletBatchIndex.end()) {
+        for (const ui64 idx : TEvHive::TEvCreateTablet::GetBatchOwnerIdxs(pending->second.CreateTablet)) {
+            auto entry = owner->second.find(idx);
+            if (entry != owner->second.end()) {
+                entry->second.erase(key.second);
+                if (entry->second.empty()) {
+                    owner->second.erase(entry);
+                }
+            }
+        }
+        if (owner->second.empty()) {
+            PendingCreateTabletBatchIndex.erase(owner);
+        }
+    }
+    PendingCreateTabletBatchIds -= pending->second.NeededOwnerIdxs.size();
+    PendingCreateTabletBatches.erase(pending);
+}
+
+THive::TPendingCreateTabletBatchKeys THive::CancelPendingCreateTabletBatches(ui64 owner, std::optional<ui64> ownerIdx,
+        TPendingCreateTabletCancellationStats* stats) {
+    TPendingCreateTabletBatchKeys affected;
+    if (stats) {
+        ++stats->OwnerLookups;
+    }
+    auto byOwner = PendingCreateTabletBatchIndex.find(owner);
+    if (byOwner == PendingCreateTabletBatchIndex.end()) {
+        return affected;
+    }
+    auto cancelIndex = [&](ui64 idx, const THashSet<ui64>& firstIndices) {
+        for (ui64 firstIdx : firstIndices) {
+            if (stats) {
+                ++stats->VisitedBatchEntries;
+            }
+            const auto key = std::make_pair(owner, firstIdx);
+            auto& batch = PendingCreateTabletBatches.at(key);
+            if (batch.CancelledOwnerIdxs.insert(idx).second) {
+                if (batch.NeededOwnerIdxs.erase(idx)) {
+                    --PendingCreateTabletBatchIds;
+                }
+                affected.insert(key);
+            }
+        }
+    };
+    if (ownerIdx) {
+        if (stats) {
+            ++stats->IndexLookups;
+        }
+        auto entry = byOwner->second.find(*ownerIdx);
+        if (entry != byOwner->second.end()) {
+            cancelIndex(entry->first, entry->second);
+            byOwner->second.erase(entry);
+        }
+        if (byOwner->second.empty()) {
+            PendingCreateTabletBatchIndex.erase(byOwner);
+        }
+    } else {
+        for (const auto& [idx, firstIndices] : byOwner->second) {
+            cancelIndex(idx, firstIndices);
+        }
+        PendingCreateTabletBatchIndex.erase(byOwner);
+    }
+    return affected;
+}
+
+void THive::EnqueuePendingCreateTabletBatch(const TPendingCreateTabletBatchKey& key, TPendingCreateTabletBatch& batch) {
+    if (batch.Scheduled) {
+        return;
+    }
+    batch.Scheduled = true;
+    PendingCreateTabletBatchRetries.push({key, batch.Generation});
+}
+
+void THive::ResumePendingCreateTabletBatches() {
+    while (ActivePendingCreateTabletBatchRetries.size() < MaxPendingCreateTabletBatchRetriesInFlight
+            && !PendingCreateTabletBatchRetries.empty()) {
+        const auto retry = PendingCreateTabletBatchRetries.front();
+        PendingCreateTabletBatchRetries.pop();
+        const bool inserted = ActivePendingCreateTabletBatchRetries.emplace(
+            retry.Generation, TActivePendingCreateTabletBatchRetry{retry.Key}).second;
+        Y_ABORT_UNLESS(inserted);
+        // Go through EventQueue, where viewer/healthcheck requests have higher priority.
+        Send(SelfId(), new TEvPrivate::TEvResumePendingCreateTabletBatch(retry.Key.first, retry.Key.second, retry.Generation));
+    }
+}
+
+void THive::Handle(TEvPrivate::TEvResumePendingCreateTabletBatch::TPtr& ev) {
+    const auto& msg = *ev->Get();
+    const auto key = std::make_pair(msg.Owner, msg.FirstOwnerIdx);
+    const auto active = ActivePendingCreateTabletBatchRetries.find(msg.Generation);
+    if (active == ActivePendingCreateTabletBatchRetries.end() || active->second.Key != key || active->second.Running) {
+        return; // A stale or duplicate event cannot consume another retry's slot.
+    }
+    const auto pending = PendingCreateTabletBatches.find(key);
+    if (pending == PendingCreateTabletBatches.end() || pending->second.Generation != msg.Generation) {
+        CompletePendingCreateTabletBatchRetry(msg.Generation);
+        return;
+    }
+    const auto& batch = pending->second;
+    active->second.Running = true;
+    Execute(CreateCreateTablet(batch.CreateTablet, batch.Sender, batch.Cookie, batch.Generation));
+}
+
+void THive::CompletePendingCreateTabletBatchRetry(ui64 generation) {
+    Y_ABORT_UNLESS(ActivePendingCreateTabletBatchRetries.erase(generation));
+    ResumePendingCreateTabletBatches();
+}
+
+void THive::ProcessPendingCreateTabletBatches(const TPendingCreateTabletBatchKeys& keys) {
+    // Called after the cancelling transaction commits. Unrelated batches need no wakeup.
+    for (const auto& key : keys) {
+        auto pending = PendingCreateTabletBatches.find(key);
+        if (pending != PendingCreateTabletBatches.end()) {
+            EnqueuePendingCreateTabletBatch(key, pending->second);
+        }
+    }
+    ResumePendingCreateTabletBatches();
+}
+
+void THive::ProcessPendingCreateTabletBatches() {
+    for (auto& [key, batch] : PendingCreateTabletBatches) {
+        EnqueuePendingCreateTabletBatch(key, batch);
+    }
+    ResumePendingCreateTabletBatches();
 }
 
 void THive::ProcessPendingOperations() {

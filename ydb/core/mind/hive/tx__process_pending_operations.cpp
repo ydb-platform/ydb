@@ -34,6 +34,7 @@ public:
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("THive::TTxProcessPendingOperations::Complete",
             {"logPrefix", GetLogPrefix()});
+        Self->ProcessPendingCreateTabletBatches();
     }
 };
 

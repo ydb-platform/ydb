@@ -6,6 +6,25 @@ using namespace NKikimr;
 using namespace NHive;
 
 Y_UNIT_TEST_SUITE(Sequencer) {
+    Y_UNIT_TEST(ClearResetsSizesBeforeReload) {
+        TSequenceGenerator sequencer;
+        std::vector<TSequencer::TOwnerType> modified;
+        sequencer.AddFreeSequence({TSequencer::NO_OWNER, 1}, {1000, 1100});
+        sequencer.AllocateSequence({1, 1}, 25, modified);
+        UNIT_ASSERT_VALUES_EQUAL(sequencer.FreeSize(), 75);
+        UNIT_ASSERT_VALUES_EQUAL(sequencer.AllocatedSequencesSize(), 25);
+        sequencer.Clear();
+        UNIT_ASSERT_VALUES_EQUAL(sequencer.FreeSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sequencer.AllocatedSequencesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sequencer.AllocatedSequencesCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sequencer.NextFreeSequenceIndex(), 0);
+        // LoadEverything may retry after a page fault and load the same ranges again.
+        sequencer.AddFreeSequence({TSequencer::NO_OWNER, 1}, {1025, 1100});
+        sequencer.AddAllocatedSequence({1, 1}, {1000, 1025});
+        UNIT_ASSERT_VALUES_EQUAL(sequencer.FreeSize(), 75);
+        UNIT_ASSERT_VALUES_EQUAL(sequencer.AllocatedSequencesSize(), 25);
+    }
+
     Y_UNIT_TEST(Basic1) {
         TSequenceGenerator sequencer;
         std::vector<TSequencer::TOwnerType> modified;

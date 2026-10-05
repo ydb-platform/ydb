@@ -110,6 +110,34 @@ public:
 class TCreateParts: public TSubOperationState {
     const TOperationId OperationId;
 
+    struct TCreateBatch {
+        TTabletId Hive;
+        NKikimrHive::TEvCreateTablet Request;
+        TVector<TShardIdx> Shards;
+        TInstant RetryAt;
+        TDuration RetryDelay = TDuration::Seconds(1);
+    };
+    // Only transport state: shard identities and successful mappings are already durable.
+    THashMap<TShardIdx, TCreateBatch> CreateBatches;
+    bool Started = false;
+
+    using TBatchResults = THashMap<ui64, const NKikimrHive::TEvCreateTabletReply::TResult*>;
+    struct TBatchProgress {
+        TVector<TShardIdx> Retry;
+        bool Done = false;
+        bool MadeProgress = false;
+    };
+
+    void SendBatch(TShardIdx anchor, TCreateBatch& batch, TOperationContext& context);
+    void SendCreateBatches(TCreateBatch& group, TOperationContext& context);
+    bool FallBackToSingles(const NKikimrHive::TEvCreateTabletReply& record, TShardIdx anchor, TOperationContext& context);
+    bool ValidateBatchReply(const NKikimrHive::TEvCreateTabletReply& record, const TCreateBatch& batch, TBatchResults& results) const;
+    TBatchProgress ApplyBatchResults(const NKikimrHive::TEvCreateTabletReply& record, const TCreateBatch& batch,
+        const TBatchResults& results, TOperationContext& context);
+    void ScheduleBatchRetry(TShardIdx anchor, TBatchProgress& progress, TOperationContext& context);
+    bool HandleBatchReply(TEvHive::TEvCreateTabletReply__HandlePtr& ev, TShardIdx anchor, TOperationContext& context);
+    bool HandleCreateReply(const NKikimrHive::TEvCreateTabletReply& record, TOperationContext& context);
+
     virtual const char* Name() const override final { return "TCreateParts"; }
 
     THolder<TEvHive::TEvAdoptTablet> AdoptRequest(TShardIdx shardIdx, TOperationContext& context);

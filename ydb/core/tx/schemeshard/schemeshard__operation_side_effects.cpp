@@ -113,6 +113,10 @@ void TSideEffects::ActivateTx(TOperationId opId) {
     ActivationParts.insert(opId);
 }
 
+void TSideEffects::ActivateTx(TOperationId opId, TDuration delay) {
+    DelayedActivationParts.emplace_back(opId, delay);
+}
+
 void TSideEffects::ActivateOperation(TTxId txId) {
     ActivationOps.insert(txId);
 }
@@ -221,6 +225,9 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
     DoMediatorsAck(ss, ctx);
 
     DoActivateOps(ss, ctx);
+    for (const auto& [opId, delay] : DelayedActivationParts) {
+        ctx.Schedule(delay, new TEvPrivate::TEvProgressOperation(ui64(opId.GetTxId()), opId.GetSubTxId()));
+    }
 
     DoWaitPublication(ss, ctx);
     DoPublishToSchemeBoard(ss, ctx);

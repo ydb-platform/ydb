@@ -2,8 +2,6 @@
 
 #include "common/path_id.h"
 
-#include <ydb/core/protos/tx_columnshard.pb.h>
-
 #include <ydb/library/actors/core/actorid.h>
 
 #include <util/datetime/base.h>
@@ -34,7 +32,6 @@ struct THistoryInterval {
 
 struct TEmptyHistoryIntervalsScan {
     std::map<THistoryIntervalKey, THistoryInterval> Intervals;
-    std::vector<NKikimrTxColumnShard::TCutHistoryRequest> Journaled;
     std::vector<std::pair<TInternalPathId, ui64>> Portions;
     size_t Position = 0;
     size_t Pending = 0;

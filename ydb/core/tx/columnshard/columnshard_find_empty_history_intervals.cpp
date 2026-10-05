@@ -1,6 +1,7 @@
 #include "columnshard_impl.h"
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/sessions.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
@@ -68,7 +69,7 @@ public:
 }   // namespace
 
 class TTxSaveCutHistoryRequests: public TTransactionBase<TColumnShard> {
-    std::vector<NKikimrTxColumnShard::TCutHistoryRequest> ReadyToSendRequests;
+    const std::vector<NKikimrTxColumnShard::TCutHistoryRequest> ReadyToSendRequests;
 
 public:
     TTxSaveCutHistoryRequests(TColumnShard* self, std::vector<NKikimrTxColumnShard::TCutHistoryRequest>&& requests)
@@ -95,8 +96,19 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        Self->EmptyHistoryIntervalsScan->Journaled = std::move(ReadyToSendRequests);
-        Self->TryCutHistory(ctx);
+        // GC cannot invalidate the empty-interval proof; sharing admission can.
+        if (Self->SharingSessionsManager->CanCutHistory() && !Self->GetStoragesManager()->GetDefaultOperator()->GetStopped()) {
+            for (const auto& request : ReadyToSendRequests) {
+                auto event = std::make_unique<TEvTablet::TEvCutTabletHistory>();
+                event->Record.SetTabletID(Self->TabletID());
+                event->Record.SetChannel(request.GetChannel());
+                event->Record.SetFromGeneration(request.GetFromGeneration());
+                event->Record.SetGroupID(request.GetGroupID());
+                Self->Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *Self->EmptyHistoryIntervalsScan->Finished);
+                ctx.Send(Self->LauncherID(), event.release());
+            }
+        }
+        Self->EmptyHistoryIntervalsScan.reset();
     }
 };
 
@@ -302,19 +314,6 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
         return;
     }
     const auto pendingGenerations = storage->GetPendingGCBlobGenerations();
-    for (const auto& request : EmptyHistoryIntervalsScan->Journaled) {
-        if (!CanCutHistoryInterval(*this, { request.GetChannel(), request.GetFromGeneration() },
-                { request.GetToGeneration(), request.GetGroupID() }, pendingGenerations)) {
-            continue;
-        }
-        auto event = std::make_unique<TEvTablet::TEvCutTabletHistory>();
-        event->Record.SetTabletID(TabletID());
-        event->Record.SetChannel(request.GetChannel());
-        event->Record.SetFromGeneration(request.GetFromGeneration());
-        event->Record.SetGroupID(request.GetGroupID());
-        Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *EmptyHistoryIntervalsScan->Finished);
-        ctx.Send(LauncherID(), event.release());
-    }
     std::vector<NKikimrTxColumnShard::TCutHistoryRequest> requests;
     for (const auto& [key, interval] : EmptyHistoryIntervalsScan->Intervals) {
         if (!CanCutHistoryInterval(*this, key, interval, pendingGenerations)) {

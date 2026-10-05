@@ -454,7 +454,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
     }
 
-    Y_UNIT_TEST(JournalCommittedDuringGCResumesAfterGC) {
+    Y_UNIT_TEST(JournalCommitDoesNotWaitForUnrelatedGC) {
         TFixture f;
         const auto cuttable = f.Counters()->GetCounter("Deriviative/CutHistory/CuttableIntervals/Count", true);
         f.Schema();
@@ -493,6 +493,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Runtime.Send(continuation.Release(), 0, true);
         f.Drive();
         UNIT_ASSERT(commit);
+        UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
         f.Controller->EnableBackground(EBackground::GC);
         f.Drive();
         UNIT_ASSERT(f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator()->HasGCInFlight());
@@ -500,7 +501,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Drive();
         UNIT_ASSERT(!gcResults.empty());
         UNIT_ASSERT_STRING_CONTAINS(f.Journal(), "GroupID: " + ToString(OldGroup));
-        UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
+        UNIT_ASSERT(f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator()->HasGCInFlight());
+        UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
         UNIT_ASSERT_VALUES_EQUAL(cuttable->Val(), 1u);
         holdGC = false;
         for (auto& result : gcResults) {

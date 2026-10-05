@@ -154,6 +154,13 @@ TValidationReport Run(const IBackupStorage& storage, const TString& path, bool s
     return ValidateBackup(storage, path, settings);
 }
 
+TValidationReport RunFast(const IBackupStorage& storage, const TString& path, bool schemeOnly = false) {
+    TValidateSettings settings;
+    settings.SchemeOnly = schemeOnly;
+    settings.FailFast = true;
+    return ValidateBackup(storage, path, settings);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(ValidateBackup) {
@@ -473,6 +480,140 @@ Y_UNIT_TEST(UnknownPath) {
     TMemoryStorage storage;
     storage.Put("readme.txt", "hello");
     UNIT_ASSERT(HasIssue(Run(storage, ""), ".", "neither"));
+}
+
+Y_UNIT_TEST(ReportsEveryIndependentError) {
+    TMemoryStorage tables;
+    AddTable(tables, "a", 1, "a\n", true);
+    AddTable(tables, "b", 1, "b\n", true);
+    tables.Files["a/data_00.csv"] = "changed-a\n";
+    tables.Files["b/data_00.csv"] = "changed-b\n";
+    const TValidationReport both = Run(tables, "");
+    UNIT_ASSERT(HasIssue(both, "a/data_00.csv", "checksum mismatch"));
+    UNIT_ASSERT(HasIssue(both, "b/data_00.csv", "checksum mismatch"));
+
+    TMemoryStorage scheme;
+    AddTable(scheme, "t", 1, "row\n", true);
+    scheme.PutChecked("t/scheme.pb", "columns {\n  name: \"id\"\n}\n");
+    const TValidationReport schemeReport = Run(scheme, "t", true);
+    UNIT_ASSERT(HasIssue(schemeReport, "t/scheme.pb", "no type"));
+    UNIT_ASSERT(HasIssue(schemeReport, "t/scheme.pb", "no primary key"));
+
+    TMemoryStorage missing;
+    AddTable(missing, "t", 2, "row\n", true);
+    missing.Files.erase("t/data_00.csv");
+    missing.Files.erase("t/data_00.csv.sha256");
+    missing.Files.erase("t/data_01.csv");
+    missing.Files.erase("t/data_01.csv.sha256");
+    const TValidationReport missingReport = Run(missing, "t");
+    UNIT_ASSERT(HasIssue(missingReport, "t/data_00.csv", "missing data file"));
+    UNIT_ASSERT(HasIssue(missingReport, "t/data_01.csv", "missing data file"));
+    UNIT_ASSERT(HasIssue(missingReport, "t", "checksums are absent"));
+}
+
+Y_UNIT_TEST(FailFastStopsAtFirstError) {
+    class TGuard : public TMemoryStorage {
+    public:
+        bool Armed = false;
+
+        TString Read(const TString& key) const override {
+            if (Armed && key.StartsWith("b/")) {
+                ythrow yexception() << "read past the first error: " << key;
+            }
+            return TMemoryStorage::Read(key);
+        }
+
+        void ReadChunks(const TString& key, const std::function<void(TStringBuf)>& onChunk) const override {
+            if (Armed && key.StartsWith("b/")) {
+                ythrow yexception() << "read past the first error: " << key;
+            }
+            TMemoryStorage::ReadChunks(key, onChunk);
+        }
+    };
+
+    TGuard tables;
+    AddTable(tables, "a", 1, "a\n", true);
+    AddTable(tables, "b", 1, "b\n", true);
+    tables.Files["a/data_00.csv"] = "changed-a\n";
+    tables.Files["b/data_00.csv"] = "changed-b\n";
+    tables.Armed = true;
+    const TValidationReport firstTable = RunFast(tables, "");
+    UNIT_ASSERT_VALUES_EQUAL(firstTable.Issues.size(), 1);
+    UNIT_ASSERT(HasIssue(firstTable, "a/data_00.csv", "checksum mismatch"));
+
+    TMemoryStorage scheme;
+    AddTable(scheme, "t", 1, "row\n", true);
+    scheme.PutChecked("t/scheme.pb", "columns {\n  name: \"id\"\n}\n");
+    const TValidationReport schemeReport = RunFast(scheme, "t", true);
+    UNIT_ASSERT_VALUES_EQUAL(schemeReport.Issues.size(), 1);
+    UNIT_ASSERT(HasIssue(schemeReport, "t/scheme.pb", "no type"));
+
+    TMemoryStorage missing;
+    AddTable(missing, "t", 2, "row\n", true);
+    missing.Files.erase("t/data_00.csv");
+    missing.Files.erase("t/data_00.csv.sha256");
+    missing.Files.erase("t/data_01.csv");
+    missing.Files.erase("t/data_01.csv.sha256");
+    const TValidationReport missingReport = RunFast(missing, "t");
+    UNIT_ASSERT_VALUES_EQUAL(missingReport.Issues.size(), 1);
+    UNIT_ASSERT(HasIssue(missingReport, "t/data_00.csv", "partition 0"));
+}
+
+Y_UNIT_TEST(FailFastSkipsChecksAfterChangefeedError) {
+    class TGuard : public TMemoryStorage {
+    public:
+        TString Read(const TString& key) const override {
+            if (key.Contains("indexImplTable")) {
+                ythrow yexception() << "index must not be read after the first error: " << key;
+            }
+            return TMemoryStorage::Read(key);
+        }
+
+        void ReadChunks(const TString& key, const std::function<void(TStringBuf)>& onChunk) const override {
+            if (key.Contains("indexImplTable")) {
+                ythrow yexception() << "index must not be read after the first error: " << key;
+            }
+            TMemoryStorage::ReadChunks(key, onChunk);
+        }
+    };
+
+    TMemoryStorage storage;
+    AddTable(storage, "t", 1, "row\n", true);
+    storage.PutChecked("t/metadata.json",
+        "{\"version\":1,\"permissions\":0,\"changefeeds\":[{\"prefix\":\"updates\",\"name\":\"updates\"}],"
+        "\"indexes\":[{\"export_prefix\":\"idx/indexImplTable\",\"impl_table_prefix\":\"idx/indexImplTable\"}]}");
+    storage.PutChecked("t/updates/topic_description.pb", "self { name: \"updates\" }\n");
+    AddTable(storage, "t/idx/indexImplTable", 1, "idx\n", true);
+    storage.Files["t/idx/indexImplTable/data_00.csv"] = "changed\n";
+    const TValidationReport all = Run(storage, "t");
+    UNIT_ASSERT(HasIssue(all, "changefeed_description.pb", "missing"));
+    UNIT_ASSERT(HasIssue(all, "t/idx/indexImplTable/data_00.csv", "checksum mismatch"));
+
+    TGuard guarded;
+    for (const auto& [key, data] : storage.Files) {
+        guarded.Put(key, data);
+    }
+    const TValidationReport fast = RunFast(guarded, "t");
+    UNIT_ASSERT_VALUES_EQUAL(fast.Issues.size(), 1);
+    UNIT_ASSERT(HasIssue(fast, "changefeed_description.pb", "missing"));
+}
+
+Y_UNIT_TEST(FailFastKeepsWarningsAndStopsOnFirstMissingObject) {
+    TMemoryStorage storage;
+    AddTable(storage, "dir/t1", 1, "a\n", true);
+    AddTable(storage, "dir/extra", 1, "b\n", true);
+    TValidateSettings settings;
+    settings.ExpectedObjects = TVector<TString>{"t1", "missing-b", "missing-a"};
+    const TValidationReport all = ValidateBackup(storage, "dir", settings);
+    UNIT_ASSERT(HasWarning(all, "extra", "not listed"));
+    UNIT_ASSERT(HasIssue(all, "missing-a", "was not found"));
+    UNIT_ASSERT(HasIssue(all, "missing-b", "was not found"));
+
+    settings.FailFast = true;
+    const TValidationReport fast = ValidateBackup(storage, "dir", settings);
+    UNIT_ASSERT(HasWarning(fast, "extra", "not listed"));
+    UNIT_ASSERT_VALUES_EQUAL(fast.Issues.size(), 1);
+    UNIT_ASSERT(HasIssue(fast, "missing-a", "was not found"));
 }
 
 Y_UNIT_TEST(CompressionFlagMustMatchDataFiles) {

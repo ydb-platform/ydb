@@ -277,11 +277,16 @@ public:
             NJson::TJsonValue json;
             if (!NJson::ReadJsonTree(*metadata, &json) || !json.IsMap()) {
                 Error(metadataKey, "metadata.json is not a JSON object");
+                if (Stopped()) {
+                    return Report;
+                }
             } else if (json["kind"].GetStringRobust() == "SimpleExportV0") {
                 if (Settings.ExpectedObjects.Defined()) {
                     Error(metadataKey, "--expected-objects applies only to backups created without SchemaMapping");
                 }
-                ValidateFullBackup(root, metadataKey, *metadata, json);
+                if (!Stopped()) {
+                    ValidateFullBackup(root, metadataKey, *metadata, json);
+                }
                 return Report;
             }
         }
@@ -289,13 +294,18 @@ public:
         // Exports created with --item have no backup-level metadata.json and no SchemaMapping.
         // The destination prefix is a directory of objects, and index tables may sit under a table
         // even when that table's metadata does not list them.
-        const bool nested = ValidateDiscoveredObjects(root);
+        bool nested = false;
+        if (!Stopped()) {
+            nested = ValidateDiscoveredObjects(root);
+        }
         if (!self && !nested) {
-            Error(root ? root : ".", "path is neither a full backup nor a schema object");
-        } else if (!self) {
+            if (!Stopped()) {
+                Error(root ? root : ".", "path is neither a full backup nor a schema object");
+            }
+        } else if (!self && !Stopped()) {
             Checked(root.empty() ? "backup" : root);
         }
-        if (Settings.ExpectedObjects.Defined()) {
+        if (Settings.ExpectedObjects.Defined() && !Stopped()) {
             CheckExpectedObjects(root);
         }
         return Report;
@@ -314,6 +324,11 @@ private:
 
     void Warning(const TString& path, const TString& message) {
         Report.Warnings.push_back({path, message});
+    }
+
+    // Fail-fast stops on errors only. Warnings are still collected until that point.
+    bool Stopped() const {
+        return Settings.FailFast && !Report.Issues.empty();
     }
 
     void Checked(const TString& path) {
@@ -436,11 +451,16 @@ private:
         const bool checksums = ResolveChecksums(dir, expectChecksums);
         const TString key = JoinKey(dir, fileName);
         auto content = ReadPlainFile(key);
-        if (!content) {
+        if (content) {
+            (this->*check)(dir, *content, checksums);
+            if (!Stopped()) {
+                VerifyChecksum(key, *content, checksums);
+            }
+        }
+        // A missing or unreadable schema file does not make metadata irrelevant.
+        if (Stopped()) {
             return;
         }
-        (this->*check)(dir, *content, checksums);
-        VerifyChecksum(key, *content, checksums);
         ValidateObjectMetadata(dir, checksums, /*table*/ false);
         Checked(dir.empty() ? fileName : dir);
     }
@@ -529,14 +549,29 @@ private:
         if (json.Has("version") && !IsJsonInteger(json["version"])) {
             Error(key, "metadata version must be an integer");
         }
+        if (Stopped()) {
+            return;
+        }
         if (json.Has("permissions") && !IsJsonInteger(json["permissions"])) {
             Error(key, "metadata permissions flag must be an integer");
         }
+        if (Stopped()) {
+            return;
+        }
         VerifyChecksum(key, *content, expectChecksums);
+        if (Stopped()) {
+            return;
+        }
         const TMaybe<bool> permissions = PermissionsFlag(json);
         ValidatePermissions(dir, permissions, expectChecksums);
+        if (Stopped()) {
+            return;
+        }
         if (table) {
             ValidateChangefeeds(dir, json, expectChecksums);
+            if (Stopped()) {
+                return;
+            }
             ValidateIndexes(dir, json, expectChecksums);
         }
     }
@@ -576,6 +611,9 @@ private:
         if (request.actions_size() == 0 && !request.clear_permissions()) {
             Error(key, "permissions.pb has no actions");
         }
+        if (Stopped()) {
+            return;
+        }
         VerifyChecksum(key, *content, expectChecksums);
     }
 
@@ -589,6 +627,9 @@ private:
             return;
         }
         for (const auto& changefeed : changefeeds.GetArray()) {
+            if (Stopped()) {
+                return;
+            }
             if (!changefeed.IsMap() || !changefeed["prefix"].IsString() || !changefeed["name"].IsString()
                 || !changefeed["prefix"].GetString() || !changefeed["name"].GetString())
             {
@@ -607,7 +648,12 @@ private:
                 } else if (proto.name() != name) {
                     Error(descKey, TStringBuilder() << "changefeed name is \"" << proto.name() << "\", metadata says \"" << name << "\"");
                 }
-                VerifyChecksum(descKey, *desc, expectChecksums);
+                if (!Stopped()) {
+                    VerifyChecksum(descKey, *desc, expectChecksums);
+                }
+            }
+            if (Stopped()) {
+                continue;
             }
             const TString topicKey = JoinKey(cfDir, "topic_description.pb");
             auto topic = ReadPlainFile(topicKey);
@@ -616,7 +662,9 @@ private:
                 if (!::NYdb::NBackup::ParseProto(*topic, proto) || proto.ByteSizeLong() == 0) {
                     Error(topicKey, "cannot parse topic_description.pb");
                 }
-                VerifyChecksum(topicKey, *topic, expectChecksums);
+                if (!Stopped()) {
+                    VerifyChecksum(topicKey, *topic, expectChecksums);
+                }
             }
         }
     }
@@ -631,6 +679,9 @@ private:
             return;
         }
         for (const auto& index : indexes.GetArray()) {
+            if (Stopped()) {
+                return;
+            }
             if (!index.IsMap() || !index["export_prefix"].IsString() || !index["impl_table_prefix"].IsString()
                 || !index["export_prefix"].GetString() || !index["impl_table_prefix"].GetString())
             {
@@ -648,6 +699,9 @@ private:
             return;
         }
         AllowedObjectDirs.insert(dir);
+        if (Stopped()) {
+            return;
+        }
         const bool checksums = ResolveChecksums(dir, expectChecksums);
         const TString schemeKey = JoinKey(dir, "scheme.pb");
         auto schemeText = ReadPlainFile(schemeKey);
@@ -658,9 +712,16 @@ private:
                 Error(schemeKey, "cannot parse scheme.pb");
             } else {
                 partitions = ExpectedPartitions(dir, scheme);
-                CheckScheme(schemeKey, scheme);
+                if (!Stopped()) {
+                    CheckScheme(schemeKey, scheme);
+                }
             }
-            VerifyChecksum(schemeKey, *schemeText, checksums);
+            if (!Stopped()) {
+                VerifyChecksum(schemeKey, *schemeText, checksums);
+            }
+        }
+        if (Stopped()) {
+            return;
         }
         if (followIndexes) {
             ValidateObjectMetadata(dir, checksums, true);
@@ -668,15 +729,20 @@ private:
             const TString metadataKey = JoinKey(dir, "metadata.json");
             if (auto metadata = TryRead(metadataKey)) {
                 VerifyChecksum(metadataKey, *metadata, checksums);
-                NJson::TJsonValue json;
-                if (NJson::ReadJsonTree(*metadata, &json) && json.IsMap()) {
-                    ValidatePermissions(dir, PermissionsFlag(json), checksums);
-                } else {
-                    Error(metadataKey, "metadata.json is not a JSON object");
+                if (!Stopped()) {
+                    NJson::TJsonValue json;
+                    if (NJson::ReadJsonTree(*metadata, &json) && json.IsMap()) {
+                        ValidatePermissions(dir, PermissionsFlag(json), checksums);
+                    } else {
+                        Error(metadataKey, "metadata.json is not a JSON object");
+                    }
                 }
             } else if (checksums) {
                 Error(metadataKey, "file is missing");
             }
+        }
+        if (Stopped()) {
+            return;
         }
         if (partitions > 0) {
             CheckDataFiles(dir, partitions, checksums, expectCompressed);
@@ -700,26 +766,41 @@ private:
     }
 
     void CheckScheme(const TString& schemeKey, const Ydb::Table::CreateTableRequest& scheme) {
-        if (scheme.columns_size() == 0) {
+        const bool hasColumns = scheme.columns_size() != 0;
+        if (!hasColumns) {
             Error(schemeKey, "scheme has no columns");
+        }
+        THashSet<TString> columns;
+        if (hasColumns) {
+            for (const auto& column : scheme.columns()) {
+                if (Stopped()) {
+                    return;
+                }
+                if (!column.name()) {
+                    Error(schemeKey, "scheme contains a column without a name");
+                    continue;
+                }
+                if (!column.has_type()) {
+                    Error(schemeKey, TStringBuilder() << "column \"" << column.name() << "\" has no type");
+                }
+                columns.insert(column.name());
+            }
+        }
+        if (Stopped()) {
             return;
         }
         if (scheme.primary_key_size() == 0) {
             Error(schemeKey, "scheme has no primary key");
             return;
         }
-        THashSet<TString> columns;
-        for (const auto& column : scheme.columns()) {
-            if (!column.name()) {
-                Error(schemeKey, "scheme contains a column without a name");
-                continue;
-            }
-            if (!column.has_type()) {
-                Error(schemeKey, TStringBuilder() << "column \"" << column.name() << "\" has no type");
-            }
-            columns.insert(column.name());
+        // Without a column list, every key would also be reported as missing from that list.
+        if (!hasColumns) {
+            return;
         }
         for (const auto& key : scheme.primary_key()) {
+            if (Stopped()) {
+                return;
+            }
             if (!columns.contains(key)) {
                 Error(schemeKey, TStringBuilder() << "primary key column \"" << key << "\" is not in the column list");
             }
@@ -743,6 +824,9 @@ private:
         TMaybe<bool> compressed;
         TString extension;
         for (const auto& part : parts) {
+            if (Stopped()) {
+                return;
+            }
             if (!seen.insert(part.Index).second) {
                 Error(part.Key, TStringBuilder() << "duplicate data file for partition " << part.Index);
             }
@@ -751,6 +835,9 @@ private:
             }
             if (part.Encrypted) {
                 RejectEncrypted(part.Key);
+            }
+            if (Stopped()) {
+                return;
             }
             const TString partExt = part.PlainName.substr(part.PlainName.rfind('.'));
             if (!compressed.Defined()) {
@@ -765,12 +852,18 @@ private:
                 }
             }
         }
+        if (Stopped()) {
+            return;
+        }
         if (expectCompressed.Defined() && compressed.Defined() && *expectCompressed != *compressed) {
             Error(dir, *expectCompressed
                 ? "backup metadata requests compression, but data files are uncompressed"
                 : "backup metadata has no compression, but data files are compressed");
         }
         for (ui64 index = 0; index < partitions; ++index) {
+            if (Stopped()) {
+                return;
+            }
             if (seen.contains(static_cast<ui32>(index))) {
                 continue;
             }
@@ -788,10 +881,16 @@ private:
                 }
             }
         }
+        if (Stopped()) {
+            return;
+        }
         if (!Settings.SchemeOnly && !verifyChecksums) {
             Error(dir, "data file checksums are absent; content integrity cannot be verified");
         }
         for (const auto& part : parts) {
+            if (Stopped()) {
+                return;
+            }
             if (part.Encrypted) {
                 continue;
             }
@@ -842,14 +941,22 @@ private:
         if (json.Has("checksum") && checksumAlgo != "sha256") {
             Error(metadataKey, TStringBuilder() << "unsupported checksum algorithm \"" << checksumAlgo << "\"");
         }
+        if (Stopped()) {
+            return;
+        }
         if (JsonString(json, "encryption")) {
             RejectEncrypted(metadataKey);
         }
         const bool checksums = checksumAlgo == "sha256";
-        VerifyChecksum(metadataKey, metadataText, checksums);
+        if (!Stopped()) {
+            VerifyChecksum(metadataKey, metadataText, checksums);
+        }
         const bool compressed = !JsonString(json, "compression").empty();
         const TMaybe<bool> expectCompressed = compressed;
 
+        if (Stopped()) {
+            return;
+        }
         const TString mappingMetaKey = JoinKey(root, "SchemaMapping/metadata.json");
         auto mappingMeta = ReadPlainFile(mappingMetaKey);
         if (mappingMeta) {
@@ -857,7 +964,12 @@ private:
             if (!NJson::ReadJsonTree(*mappingMeta, &mappingMetaJson) || mappingMetaJson["kind"].GetStringRobust() != "SchemaMappingV0") {
                 Error(mappingMetaKey, "schema mapping metadata kind must be SchemaMappingV0");
             }
-            VerifyChecksum(mappingMetaKey, *mappingMeta, checksums);
+            if (!Stopped()) {
+                VerifyChecksum(mappingMetaKey, *mappingMeta, checksums);
+            }
+        }
+        if (Stopped()) {
+            return;
         }
 
         const TString mappingKey = JoinKey(root, "SchemaMapping/mapping.json");
@@ -874,15 +986,38 @@ private:
         if (mapping["exportedObjects"].GetMap().empty()) {
             Error(mappingKey, "exportedObjects is empty");
         }
+        if (Stopped()) {
+            return;
+        }
+        struct TMappedObject {
+            TString Source;
+            TString Prefix;
+        };
+        TVector<TMappedObject> objects;
         for (const auto& [source, info] : mapping["exportedObjects"].GetMap()) {
             if (!info.IsMap() || !info["exportPrefix"].IsString() || !info["exportPrefix"].GetString()) {
                 Error(mappingKey, TStringBuilder() << "object \"" << source << "\" has no exportPrefix");
+                if (Stopped()) {
+                    return;
+                }
                 continue;
             }
-            const TString objectDir = JoinKey(root, info["exportPrefix"].GetString());
-            if (!ValidateObject(objectDir, checksums, expectCompressed)) {
-                Error(objectDir, TStringBuilder() << "schema object \"" << source << "\" has no recognized schema file");
+            objects.push_back({TString(source), info["exportPrefix"].GetString()});
+        }
+        std::sort(objects.begin(), objects.end(), [](const TMappedObject& a, const TMappedObject& b) {
+            return a.Prefix < b.Prefix;
+        });
+        for (const TMappedObject& object : objects) {
+            if (Stopped()) {
+                return;
             }
+            const TString objectDir = JoinKey(root, object.Prefix);
+            if (!ValidateObject(objectDir, checksums, expectCompressed)) {
+                Error(objectDir, TStringBuilder() << "schema object \"" << object.Source << "\" has no recognized schema file");
+            }
+        }
+        if (Stopped()) {
+            return;
         }
         CheckUnexpectedObjects(root);
         Checked(root.empty() ? "backup" : root);
@@ -918,6 +1053,9 @@ private:
         }
         std::sort(missing.begin(), missing.end());
         for (const TString& name : missing) {
+            if (Stopped()) {
+                return;
+            }
             Error(name, "object listed in --expected-objects was not found in the backup");
         }
     }
@@ -937,6 +1075,9 @@ private:
         dirs.erase(std::unique(dirs.begin(), dirs.end()), dirs.end());
         bool found = false;
         for (const TString& dir : dirs) {
+            if (Stopped()) {
+                break;
+            }
             if (Visited.contains(dir)) {
                 continue;
             }
@@ -948,13 +1089,21 @@ private:
     }
 
     void CheckUnexpectedObjects(const TString& root) {
+        TVector<TString> unexpected;
         for (const auto& key : Storage.List(root)) {
             if (!IsSchemaObjectFileName(FileName(key))) {
                 continue;
             }
             if (!AllowedObjectDirs.contains(ParentKey(key))) {
-                Error(key, "file is not listed in SchemaMapping/mapping.json");
+                unexpected.push_back(key);
             }
+        }
+        std::sort(unexpected.begin(), unexpected.end());
+        for (const TString& key : unexpected) {
+            if (Stopped()) {
+                return;
+            }
+            Error(key, "file is not listed in SchemaMapping/mapping.json");
         }
     }
 };

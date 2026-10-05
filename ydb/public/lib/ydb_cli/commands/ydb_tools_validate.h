@@ -33,6 +33,7 @@ protected:
     TVector<TItem> Items;
     ui32 NumberOfRetries = 10;
     bool SchemeOnly = false;
+    bool FailFast = false;
     TString EncryptionKey;
     TString EncryptionKeyFile;
     TString ExpectedObjectsFile;

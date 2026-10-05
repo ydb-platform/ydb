@@ -165,8 +165,8 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
             auto stats = hub->AddOutput();
             compareResultIU = stats->GetRebindings().At(compareResultIU);
             for (const auto& key : domainJoinKeys.Items()) {
-                statsKeys.Add(stats->GetRebindings().At(key.second));
-                statsJoinKeys.Add(key.first, stats->GetRebindings().At(key.second));
+                statsKeys.Add(stats->GetRebindings().At(key.Second));
+                statsJoinKeys.Add(key.First, stats->GetRebindings().At(key.Second));
             }
             statsSource = stats;
         }

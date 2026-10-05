@@ -320,9 +320,9 @@ void TKqpNewRBOTransformer::CollectJoinKeysColumns(TOpJoin* join, const TColumnL
 
     TVector<const TColumnLineageEntry*> lhsKeys;
     TVector<const TColumnLineageEntry*> rhsKeys;
-    for (const auto& [lhsKey, rhsKey, equalNulls] : join->JoinKeys.Items()) {
-        lhsKeys.push_back(findSource(lhsKey));
-        rhsKeys.push_back(findSource(rhsKey));
+    for (const auto& key : join->JoinKeys.Items()) {
+        lhsKeys.push_back(findSource(key.first));
+        rhsKeys.push_back(findSource(key.second));
         requestHistogram(lhsKeys.back());
         requestHistogram(rhsKeys.back());
     }

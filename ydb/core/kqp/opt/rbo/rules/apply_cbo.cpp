@@ -85,7 +85,9 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     }
 
     TVector<std::shared_ptr<TRelOptimizerNode>> rels;
-    auto joinTree = ConvertJoinTree(cboTree, ctx.TypeCtx, props.ColumnLineage, rels, leaves);
+    // Save all expressions in the join conditions and re-insert them back after CBO
+    THashMap<TInfoUnitId, TExpression> joinExpressions;
+    auto joinTree = ConvertJoinTree(cboTree, ctx.TypeCtx, props.ColumnLineage, rels, leaves, joinExpressions);
 
     bool allRowStorage = std::any_of(
         rels.begin(),
@@ -154,7 +156,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     LogAndTraceJoinTree(ctx, "Optimized join tree", joinTree);
 
-    return ConvertOptimizedTree(joinTree, leaves, cboTree->Pos);
+    return ConvertOptimizedTree(joinTree, leaves, cboTree->Pos, joinExpressions);
 }
 
 } // namespace NKikimr::NKqp

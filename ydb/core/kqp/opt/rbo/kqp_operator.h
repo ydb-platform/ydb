@@ -955,18 +955,44 @@ struct TJoinKey {
     TInfoUnitId first;
     TInfoUnitId second;
     bool EqualNulls = false;
+    std::optional<TExpression> FirstExpression;
+    std::optional<TExpression> SecondExpression;
 
     TJoinKey(TInfoUnitId left, TInfoUnitId right, bool equalNulls = false)
         : first(left), second(right), EqualNulls(equalNulls) {}
+    TJoinKey(TInfoUnitId left, TInfoUnitId right, bool equalNulls, std::optional<TExpression> leftExpr, std::optional<TExpression> rightExpr)
+        : first(left), second(right), EqualNulls(equalNulls), FirstExpression(leftExpr), SecondExpression(rightExpr) {}
     TJoinKey(const std::pair<TInfoUnitId, TInfoUnitId>& pair)
         : TJoinKey(pair.first, pair.second) {}
     auto operator<=>(const TJoinKey&) const = default;
+
+    inline bool ContainsExpressions() const {
+        return FirstExpression.has_value() || SecondExpression.has_value();
+    }
 };
 
 using TJoinIUs = TPairedIUCollection<TJoinKey>;
 
 inline bool HasEqualNullsKey(const TJoinIUs& keys) {
     return std::ranges::any_of(keys.Items(), [](const auto& key) { return key.EqualNulls; });
+}
+
+inline bool HasExpressions(const TJoinIUs& keys) {
+    return std::ranges::any_of(keys.Items(), [](const auto& key) { return key.FirstExpression.has_value() || key.SecondExpression.has_value(); });
+}
+
+inline bool operator == (const TJoinKey& lhs, const TJoinKey& rhs) {
+    if (lhs.first == rhs.first && lhs.second == rhs.second && lhs.EqualNulls == rhs.EqualNulls) {
+        if (!lhs.ContainsExpressions() && !rhs.ContainsExpressions()) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    else {
+        return false;
+    }
 }
 
 class TOpJoin: public IBinaryOperator {

@@ -770,8 +770,8 @@ TString TOpJoin::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) 
     }
     res << " [";
     TStringBuf separator;
-    for (const auto& [left, right, equalNulls] : JoinKeys.Items()) {
-        res << separator << registry.GetDebugName(left) << (equalNulls ? " IS NOT DISTINCT FROM " : "=") << registry.GetDebugName(right);
+    for (const auto& key : JoinKeys.Items()) {
+        res << separator << registry.GetDebugName(key.first) << (key.EqualNulls ? " IS NOT DISTINCT FROM " : "=") << registry.GetDebugName(key.second);
         separator = ", ";
     }
     res << "], Filters: [";
@@ -788,8 +788,8 @@ TString TOpJoin::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) 
 static TString FormatJoinKeys(const TJoinIUs& keys, const TInfoUnitRegistry& registry, bool debug = false) {
     TStringBuilder result;
     TStringBuf separator;
-    for (const auto& [left, right, equalNulls] : keys.Items()) {
-        result << separator << (debug ? registry.GetDebugName(left) : registry.GetDisplayName(left)) << (equalNulls ? " IS NOT DISTINCT FROM " : " = ") << (debug ? registry.GetDebugName(right) : registry.GetDisplayName(right));
+    for (const auto& key : keys.Items()) {
+        result << separator << (debug ? registry.GetDebugName(key.first) : registry.GetDisplayName(key.first)) << (key.EqualNulls ? " IS NOT DISTINCT FROM " : " = ") << (debug ? registry.GetDebugName(key.second) : registry.GetDisplayName(key.second));
         separator = ", ";
     }
     return result;
@@ -1105,8 +1105,8 @@ TString TOpTableLookup::ToString(TExprContext& ctx, const TInfoUnitRegistry& reg
     if (FetchedRowFilter) {
         res << ", filter: " << FetchedRowFilter->ToString();
     }
-    for (const auto& [left, right, equalNulls] : ResidualJoinKeys.Items()) {
-        res << ", residual: " << registry.GetDebugName(left) << (equalNulls ? " IS NOT DISTINCT FROM " : " = ") << registry.GetDebugName(right);
+    for (const auto& key : ResidualJoinKeys.Items()) {
+        res << ", residual: " << registry.GetDebugName(key.first) << (key.EqualNulls ? " IS NOT DISTINCT FROM " : " = ") << registry.GetDebugName(key.second);
     }
     return res;
 }

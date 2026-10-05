@@ -89,7 +89,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
         auto conjuncts = filter->GetFilterExpression().SplitConjunct();
         // If all not equal - we cannot rewrite cross to inner, just adding them as join filters.
         const bool containsEquiJoinCondition = AnyOf(conjuncts, [](const TExpression& conjunct) {
-            return conjunct.MaybeEquiJoinCondition();
+            return conjunct.MaybeExprEquiJoinCondition();
         });
         if (!containsEquiJoinCondition) {
             join->JoinFilters.insert(join->JoinFilters.end(), conjuncts.begin(), conjuncts.end());
@@ -114,16 +114,22 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     bool canPushRight = join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly";
 
     for (const auto& conj : conjuncts) {
-        if (conj.MaybeEquiJoinCondition() && !ReferencesUnresolvedSubplan(conj, props)) {
+        if (conj.MaybeExprEquiJoinCondition() && !ReferencesUnresolvedSubplan(conj, props)) {
             TEquiJoinCondition cond(conj);
 
             // We cannot push filter into join conditions of a LeftOnly join - will break semantics
             if(join->JoinKind != "LeftOnly") {
                 if (leftIUs.Contains(cond.GetLeftIU()) && rightIUs.Contains(cond.GetRightIU())) {
-                    joinConditions.Add(cond.GetLeftIU(), cond.GetRightIU());
+                    TJoinKey key(cond.GetLeftIU(), cond.GetRightIU());
+                    key.FirstExpression = cond.GetLeftExpression();
+                    key.SecondExpression = cond.GetRightExpression();
+                    joinConditions.Add(key);
                     continue;
                 } else if (rightIUs.Contains(cond.GetLeftIU()) && leftIUs.Contains(cond.GetRightIU())) {
-                    joinConditions.Add(cond.GetRightIU(), cond.GetLeftIU());
+                    TJoinKey key(cond.GetRightIU(), cond.GetLeftIU());
+                    key.FirstExpression = cond.GetRightExpression();
+                    key.SecondExpression = cond.GetLeftExpression();
+                    joinConditions.Add(key);
                     continue;
                 }
             }
@@ -165,7 +171,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
             if (expr.MaybeConstantCondition()) {
                 auto iu = *expr.GetInputIUs().begin();
                 if (auto it = std::find_if(join->JoinKeys.Items().begin(), join->JoinKeys.Items().end(), [&iu](const auto& cond)
-                    {return iu == cond.first;}); it != join->JoinKeys.Items().end()) {
+                    {return iu == cond.First && !cond.ContainsExpressions();}); it != join->JoinKeys.Items().end()) {
                     auto rightExpr = expr.ApplyRenames({{iu, it->second}});
                     pushConstantCondsRight.push_back(rightExpr);
                 }
@@ -176,7 +182,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
             if (expr.MaybeConstantCondition()) {
                 auto iu = *expr.GetInputIUs().begin();
                 if (auto it = std::find_if(join->JoinKeys.Items().begin(), join->JoinKeys.Items().end(), [&iu](const auto& cond)
-                    {return iu == cond.second;}); it != join->JoinKeys.Items().end()) {
+                    {return iu == cond.Second && !cond.ContainsExpressions();}); it != join->JoinKeys.Items().end()) {
                     auto leftExpr = expr.ApplyRenames({{iu, it->first}});
                     pushConstantCondsLeft.push_back(leftExpr);
                 }

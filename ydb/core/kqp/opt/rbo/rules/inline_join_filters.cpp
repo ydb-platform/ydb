@@ -97,8 +97,8 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     // Build an inner join
     const auto joinKind = join->JoinKeys.Items().empty() ? "Cross" : "Inner";
     TJoinIUs innerJoinKeys;
-    for (const auto& [leftKey, rightKey, equalNulls] : join->JoinKeys.Items()) {
-        innerJoinKeys.Add({renameMap.At(leftKey), rightKey, equalNulls});
+    for (const auto& key : join->JoinKeys.Items()) {
+        innerJoinKeys.Add({renameMap.At(key.first), key.second, key.EqualNulls, key.FirstExpression, key.SecondExpression});
     }
     auto innerJoin = MakeIntrusive<TOpJoin>(innerLeftInput, join->GetRightInput(), join->Pos, joinKind, innerJoinKeys);
     auto filterExpr = MakeConjunction(join->JoinFilters).ApplyRenames(renameMap);

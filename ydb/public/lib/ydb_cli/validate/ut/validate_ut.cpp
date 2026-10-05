@@ -770,6 +770,72 @@ Y_UNIT_TEST(MissingRootMetadataWithSchemaMappingIsError) {
     UNIT_ASSERT(!report.Ok());
 }
 
+void DropFullBackupPlaintext(TMemoryStorage& storage) {
+    storage.Files.erase("metadata.json");
+    storage.Files.erase("SchemaMapping/mapping.json");
+    storage.Files.erase("SchemaMapping/metadata.json");
+}
+
+Y_UNIT_TEST(SchemaMappingChecksumSidecarsAreNotItemExport) {
+    TMemoryStorage storage;
+    PutFullBackup(storage);
+    DropFullBackupPlaintext(storage);
+    const TValidationReport report = Run(storage, "");
+    UNIT_ASSERT(!report.Ok());
+    UNIT_ASSERT(HasIssue(report, "metadata.json", "SchemaMapping"));
+    UNIT_ASSERT(HasIssue(report, "metadata.json.sha256", "without metadata.json"));
+    UNIT_ASSERT(!HasWarning(report, "", "completeness is not checked"));
+
+    TValidateSettings fullSettings;
+    fullSettings.Format = EValidateFormat::Full;
+    const TValidationReport asFull = ValidateBackup(storage, "", fullSettings);
+    UNIT_ASSERT(!asFull.Ok());
+    UNIT_ASSERT(HasIssue(asFull, "metadata.json", "missing metadata.json"));
+}
+
+Y_UNIT_TEST(SchemaMappingEncryptedRemnantsAreNotItemExport) {
+    TMemoryStorage storage;
+    PutFullBackup(storage);
+    DropFullBackupPlaintext(storage);
+    storage.Files.erase("metadata.json.sha256");
+    storage.Files.erase("SchemaMapping/mapping.json.sha256");
+    storage.Files.erase("SchemaMapping/metadata.json.sha256");
+    storage.Put("SchemaMapping/mapping.json.enc", "cipher");
+    storage.Put("SchemaMapping/metadata.json.enc", "cipher");
+    const TValidationReport report = Run(storage, "");
+    UNIT_ASSERT(!report.Ok());
+    UNIT_ASSERT(HasIssue(report, "metadata.json", "SchemaMapping"));
+    UNIT_ASSERT(!HasWarning(report, "", "completeness is not checked"));
+}
+
+Y_UNIT_TEST(OrphanRootMetadataChecksumIsNotItemExport) {
+    TMemoryStorage storage;
+    PutFullBackup(storage);
+    DropFullBackupPlaintext(storage);
+    storage.Files.erase("SchemaMapping/mapping.json.sha256");
+    storage.Files.erase("SchemaMapping/metadata.json.sha256");
+    const TValidationReport report = Run(storage, "");
+    UNIT_ASSERT(!report.Ok());
+    UNIT_ASSERT(HasIssue(report, "metadata.json", "missing metadata.json"));
+    UNIT_ASSERT(!HasIssue(report, "metadata.json", "SchemaMapping is present"));
+    UNIT_ASSERT(HasIssue(report, "metadata.json.sha256", "without metadata.json"));
+    UNIT_ASSERT(!HasWarning(report, "", "completeness is not checked"));
+}
+
+Y_UNIT_TEST(AnySchemaMappingFileIsFullBackup) {
+    TMemoryStorage storage;
+    PutFullBackup(storage);
+    DropFullBackupPlaintext(storage);
+    storage.Files.erase("metadata.json.sha256");
+    storage.Files.erase("SchemaMapping/mapping.json.sha256");
+    storage.Files.erase("SchemaMapping/metadata.json.sha256");
+    storage.Put("SchemaMapping/leftover.txt", "not a marker");
+    const TValidationReport report = Run(storage, "");
+    UNIT_ASSERT(!report.Ok());
+    UNIT_ASSERT(HasIssue(report, "metadata.json", "SchemaMapping"));
+    UNIT_ASSERT(!HasWarning(report, "", "completeness is not checked"));
+}
+
 Y_UNIT_TEST(UnknownBackupKindIsError) {
     TMemoryStorage storage;
     PutFullBackup(storage);

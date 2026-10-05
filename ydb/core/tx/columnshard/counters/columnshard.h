@@ -103,6 +103,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr IndexationInputBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr CutHistoryRequestsSent;
+    NMonitoring::TDynamicCounters::TCounterPtr CutHistoryCuttableIntervals;
     NMonitoring::TDynamicCounters::TCounterPtr CutHistoryScansAborted;
     NMonitoring::THistogramPtr CutHistoryScanDurationMs;
     NMonitoring::THistogramPtr CutHistoryWaitDurationMs;
@@ -277,6 +278,10 @@ public:
     void OnCutHistoryRequestSent(const TDuration duration) const {
         CutHistoryRequestsSent->Inc();
         CutHistoryWaitDurationMs->Collect(duration.MilliSeconds());
+    }
+
+    void OnCuttableHistoryIntervalsFound(const ui64 count) const {
+        CutHistoryCuttableIntervals->Add(count);
     }
 
     void OnIndexMetadataLimit(const ui64 limit) const {

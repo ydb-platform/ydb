@@ -4,7 +4,7 @@ SRCS(
     background_controller.cpp
     blob.cpp
     blob_cache.cpp
-    columnshard_cut_history.cpp
+    columnshard_find_empty_history_intervals.cpp
     columnshard.cpp
     columnshard__init.cpp
     columnshard__locks.cpp

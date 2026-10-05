@@ -52,7 +52,7 @@ public:
         });
         Runtime.SetScheduledEventFilter(
             [this, previous](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
-                if (event->HasEvent() && dynamic_cast<TEvPrivate::TEvContinueUnusedHistory*>(event->GetBase())) {
+                if (event->HasEvent() && dynamic_cast<TEvPrivate::TEvContinueFindEmptyHistoryIntervals*>(event->GetBase())) {
                     ContinuationDelays.push_back(delay);
                     return false;
                 }
@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             if (!ev->HasEvent()) {
                 return;
             }
-            if (dynamic_cast<TEvPrivate::TEvContinueUnusedHistory*>(ev->GetBase())) {
+            if (dynamic_cast<TEvPrivate::TEvContinueFindEmptyHistoryIntervals*>(ev->GetBase())) {
                 ++batches;
             } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase());
                        cut && cut->Record.GetChannel() == FirstDataChannel) {
@@ -247,6 +247,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("ScanToSend"), 2u);
         UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
         UNIT_ASSERT_VALUES_EQUAL(f.Counters()->GetCounter("Deriviative/CutHistory/RequestsSent/Count", true)->Val(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(f.Counters()->GetCounter("Deriviative/CutHistory/CuttableIntervals/Count", true)->Val(), 2u);
         f.Runtime.SendToPipe(
             TabletId, f.Sender, new NMon::TEvRemoteHttpInfo("/app?TabletID=" + ToString(TabletId)), 0, GetPipeConfigWithRetries());
         const auto mainPage = f.Runtime.GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>(f.Sender);
@@ -339,7 +340,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             if (!ev->HasEvent()) {
                 return;
             }
-            if (holdScan && dynamic_cast<TEvPrivate::TEvContinueUnusedHistory*>(ev->GetBase())) {
+            if (holdScan && dynamic_cast<TEvPrivate::TEvContinueFindEmptyHistoryIntervals*>(ev->GetBase())) {
                 UNIT_ASSERT(!continuation);
                 continuation = ev.Release();
             } else if (dynamic_cast<TEvPrivate::TEvAskTabletDataAccessors*>(ev->GetBase())) {
@@ -455,6 +456,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
 
     Y_UNIT_TEST(JournalCommittedDuringGCResumesAfterGC) {
         TFixture f;
+        const auto cuttable = f.Counters()->GetCounter("Deriviative/CutHistory/CuttableIntervals/Count", true);
         f.Schema();
         f.Restart(NewGroup);
         f.Controller->DisableBackground(EBackground::GC);
@@ -469,7 +471,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             if (!ev->HasEvent()) {
                 return;
             }
-            if (holdScan && dynamic_cast<TEvPrivate::TEvContinueUnusedHistory*>(ev->GetBase())) {
+            if (holdScan && dynamic_cast<TEvPrivate::TEvContinueFindEmptyHistoryIntervals*>(ev->GetBase())) {
                 continuation = ev.Release();
             } else if (const auto* log = dynamic_cast<TEvTabletBase::TEvWriteLogResult*>(ev->GetBase());
                        holdCommit && log && log->EntryId.TabletID() == TabletId && log->EntryId.Cookie() == 0) {
@@ -499,12 +501,14 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT(!gcResults.empty());
         UNIT_ASSERT_STRING_CONTAINS(f.Journal(), "GroupID: " + ToString(OldGroup));
         UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(cuttable->Val(), 1u);
         holdGC = false;
         for (auto& result : gcResults) {
             f.Runtime.Send(result.Release(), 0, true);
         }
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(cuttable->Val(), 1u);
     }
 
     Y_UNIT_TEST(ColdCacheBatchingAndMetadataFailure) {
@@ -596,9 +600,12 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Schema();
         f.Controller->DisableBackground(EBackground::Compaction);
         f.Controller->DisableBackground(EBackground::Cleanup);
+        f.Runtime.GetAppData().ColumnShardConfig.MutableCutHistory()->SetScanBatchSize(1);
         std::vector<ui64> ids;
-        UNIT_ASSERT(WriteData(f.Runtime, f.Sender, TabletId, 1, TableId, MakeTestBlob({ 0, 1000 }, f.Table.Schema), f.Table.Schema, &ids,
-            NEvWrite::EModificationType::Upsert, 42));
+        for (ui64 txId = 1; txId <= 2; ++txId) {
+            UNIT_ASSERT(WriteData(f.Runtime, f.Sender, TabletId, txId, TableId, MakeTestBlob({ (txId - 1) * 1000, txId * 1000 }, f.Table.Schema),
+                f.Table.Schema, &ids, NEvWrite::EModificationType::Upsert, 42));
+        }
         UNIT_ASSERT(!f.LiveOldBlobs().empty());
         std::set<ui32> cutFrom;
         auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
@@ -610,6 +617,11 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         });
         f.Restart(NewGroup);
         f.Drive();
+        f.ContinuationDelays.clear();
+        f.Restart();
+        f.Drive();
+        UNIT_ASSERT_VALUES_EQUAL(f.ContinuationDelays.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
         f.Restart(OldGroup);
         f.Drive();
         const ui32 emptyReusedFrom = f.History.back().first;
@@ -631,7 +643,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             if (!ev->HasEvent()) {
                 return;
             }
-            if (holdContinuation && dynamic_cast<TEvPrivate::TEvContinueUnusedHistory*>(ev->GetBase())) {
+            if (holdContinuation && dynamic_cast<TEvPrivate::TEvContinueFindEmptyHistoryIntervals*>(ev->GetBase())) {
                 continuation = ev.Release();
             } else if (const auto* log = dynamic_cast<TEvTabletBase::TEvWriteLogResult*>(ev->GetBase());
                        holdCommit && log && log->EntryId.TabletID() == TabletId && log->EntryId.Cookie() == 0) {

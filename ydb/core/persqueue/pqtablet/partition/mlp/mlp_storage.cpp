@@ -177,12 +177,11 @@ TStorage::TTryGetMessageResult TStorage::TryGetMessage(ui64 offset, const std::o
     auto isMessageGroupSkipped = [&](const TMessage& message) {
         return message.HasMessageGroupId && skipMessageGroups.contains(message.MessageGroupIdHash);
     };
-    // checks if message is eligible for return: it is not expired or skipped
+    // checks if message is eligible for return: it is not expired & not skipped
     const auto& [message, _] = GetMessageInt(offset);
     AFL_ENSURE(message != nullptr)("offset", offset)("case", caseDescription);
-    // In STD mode the per-group chain holds messages of every status, so the walk must step over
-    // any non-Unprocessed one. In FIFO mode the head is always Unprocessed (invariant).
     if (message->GetStatus() != EMessageStatus::Unprocessed) {
+        // in FIFO mode the first message in the group always Unprocessed
         AFL_ENSURE(!KeepMessageOrder)("status", message->GetStatus())("offset", offset)("case", caseDescription);
         return TTryGetMessageResult{
             .Message = message,

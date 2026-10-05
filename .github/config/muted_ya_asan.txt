@@ -473,6 +473,8 @@ ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.GroupGrants
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.MixedGrantsInBatch
 ydb/services/test_shard/ut unittest.sole chunk
 ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.test_column_tables[rolling_stable-26-3-1_to_prestable-26-4-1]
+ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.test_row_tables[rolling_stable-26-2-1_to_stable-26-3-1]
+ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.test_row_tables[rolling_stable-26-3-1_to_prestable-26-4-1]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-1-lax]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-1-strict]
 ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_current_proxy_returns_overloaded[mixed_current_and_intermediate]

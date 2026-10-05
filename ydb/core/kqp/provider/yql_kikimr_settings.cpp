@@ -76,6 +76,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _DefaultCluster);
     REGISTER_SETTING(*this, _ResultRowsLimit);
     REGISTER_SETTING(*this, EnableSystemColumns);
+    REGISTER_SETTING(*this, EnableUnsafeTruncateTable);
     REGISTER_SETTING(*this, UseLlvm);
     REGISTER_SETTING(*this, EnableLlvm);
     REGISTER_SETTING(*this, HashJoinMode).Parser([](const TString& v) { return FromString<NDq::EHashJoinMode>(v); });

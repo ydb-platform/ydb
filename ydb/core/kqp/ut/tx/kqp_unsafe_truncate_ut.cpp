@@ -27,8 +27,11 @@ TString CountQuery() {
     return Sprintf("SELECT COUNT(*) AS cnt FROM `%s`;", TablePath);
 }
 
-TString UnsafeTruncateQuery() {
-    return Sprintf("TRUNCATE TABLE `%s` WITH (unsafe = true);", TablePath);
+TString UnsafeTruncateQuery(bool enablePragma = true) {
+    return Sprintf(R"(
+        PRAGMA kikimr.EnableUnsafeTruncateTable = "%s";
+        TRUNCATE TABLE `%s` WITH (unsafe = true);
+    )", enablePragma ? "true" : "false", TablePath);
 }
 
 ui64 ReadCount(const TExecuteQueryResult& result) {
@@ -168,7 +171,7 @@ void CreateAndFillSharded(TSession& session) {
 
 Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
-    Y_UNIT_TEST(DisabledByDefault) {
+    Y_UNIT_TEST(FeatureFlagDisabled) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ false);
         auto client = kikimr.GetQueryClient();
         auto session = client.GetSession().GetValueSync().GetSession();
@@ -182,6 +185,33 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
     }
 
+    Y_UNIT_TEST(FeatureFlagAndPragmaDisabled) {
+        auto kikimr = MakeRunner(/* enableUnsafeTruncate */ false);
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        CreateAndFill(session);
+
+        auto result = session.ExecuteQuery(UnsafeTruncateQuery(/* enablePragma */ false),
+            TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "disabled");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
+    }
+
+    Y_UNIT_TEST(PragmaDisabled) {
+        auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        CreateAndFill(session);
+
+        auto result = session.ExecuteQuery(UnsafeTruncateQuery(/* enablePragma */ false),
+            TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+            "requires PRAGMA kikimr.EnableUnsafeTruncateTable");
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
+    }
+
     Y_UNIT_TEST(UnknownSettingRejected) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
         auto client = kikimr.GetQueryClient();
@@ -189,6 +219,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         CreateAndFill(session);
 
         auto result = session.ExecuteQuery(Sprintf(
+            "PRAGMA kikimr.EnableUnsafeTruncateTable = \"true\"; "
             "TRUNCATE TABLE `%s` WITH (nonsense = true);", TablePath), TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown TRUNCATE TABLE setting");
@@ -202,6 +233,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         CreateAndFill(session);
 
         auto result = session.ExecuteQuery(Sprintf(
+            "PRAGMA kikimr.EnableUnsafeTruncateTable = \"true\"; "
             "TRUNCATE TABLE `%s`;", TablePath), TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
@@ -361,6 +393,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             "the index must hold the rows before the truncate, otherwise this proves nothing");
 
         auto result = session.ExecuteQuery(R"(
+            PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             TRUNCATE TABLE `/Root/UnsafeTruncateIndexed` WITH (unsafe = true);
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -390,6 +423,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL_C(fill.GetStatus(), EStatus::SUCCESS, fill.GetIssues().ToString());
 
         auto result = session.ExecuteQuery(R"(
+            PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             TRUNCATE TABLE `/Root/UnsafeTruncateAsync` WITH (unsafe = true);
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
@@ -423,6 +457,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL_C(fill.GetStatus(), EStatus::SUCCESS, fill.GetIssues().ToString());
 
         auto result = session.ExecuteQuery(R"(
+            PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             TRUNCATE TABLE `/Root/UnsafeTruncateCdc` WITH (unsafe = true);
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
@@ -448,7 +483,9 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL_C(GetSchemaVersion(kikimr, TablePath), before,
             "unsafe truncate must not touch the schema version");
 
-        auto plain = session.ExecuteQuery(Sprintf("TRUNCATE TABLE `%s`;", TablePath),
+        auto plain = session.ExecuteQuery(Sprintf(
+            "PRAGMA kikimr.EnableUnsafeTruncateTable = \"true\"; "
+            "TRUNCATE TABLE `%s`;", TablePath),
             TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(plain.GetStatus(), EStatus::SUCCESS, plain.GetIssues().ToString());
 
@@ -565,6 +602,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         CreateAndFill(session);
 
         auto result = session.ExecuteQuery(Sprintf(R"(
+            PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             UPSERT INTO `%s` (Key, Value) VALUES (10u, "before");
             SELECT COUNT(*) AS cnt FROM `%s`;
             TRUNCATE TABLE `%s` WITH (unsafe = true);
@@ -997,6 +1035,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         const TString implPath = "/Root/UnsafeTruncateImpl/idx/indexImplTable";
 
         auto result = session.ExecuteQuery(Sprintf(
+            "PRAGMA kikimr.EnableUnsafeTruncateTable = \"true\"; "
             "TRUNCATE TABLE `%s` WITH (unsafe = true);", implPath.c_str()),
             TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
@@ -1008,6 +1047,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
         // The table itself still truncates, impl table included.
         auto viaTable = session.ExecuteQuery(R"(
+            PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             TRUNCATE TABLE `/Root/UnsafeTruncateImpl` WITH (unsafe = true);
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(viaTable.GetStatus(), EStatus::SUCCESS, viaTable.GetIssues().ToString());
@@ -1058,7 +1098,9 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_UNEQUAL_C(upsert.GetStatus(), EStatus::SUCCESS,
             "a reader may not write, otherwise this test measures nothing");
 
-        auto plain = reader.ExecuteQuery(Sprintf("TRUNCATE TABLE `%s`;", TablePath),
+        auto plain = reader.ExecuteQuery(Sprintf(
+            "PRAGMA kikimr.EnableUnsafeTruncateTable = \"true\"; "
+            "TRUNCATE TABLE `%s`;", TablePath),
             TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(plain.GetStatus(), EStatus::UNAUTHORIZED, plain.GetIssues().ToString());
 
@@ -1079,6 +1121,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         CreateAndFill(session);
 
         auto result = session.ExecuteQuery(Sprintf(R"(
+            PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             UPSERT INTO `%s` (Key, Value) VALUES (10u, "a");
             TRUNCATE TABLE `%s` WITH (unsafe = true);
             UPSERT INTO `%s` (Key, Value) VALUES (20u, "b"), (21u, "b2");
@@ -1117,6 +1160,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
         auto viaPrefix = session.ExecuteQuery(R"(
             PRAGMA TablePathPrefix = "/Root";
+            PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             TRUNCATE TABLE `UnsafeTruncateTable` WITH (unsafe = true);
         )", TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(viaPrefix.GetStatus(), EStatus::SUCCESS, viaPrefix.GetIssues().ToString());
@@ -1128,6 +1172,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL_C(refill.GetStatus(), EStatus::SUCCESS, refill.GetIssues().ToString());
 
         auto bare = session.ExecuteQuery(
+            "PRAGMA kikimr.EnableUnsafeTruncateTable = \"true\"; "
             "TRUNCATE TABLE `UnsafeTruncateTable` WITH (unsafe = true);",
             TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(bare.GetStatus(), EStatus::SUCCESS, bare.GetIssues().ToString());

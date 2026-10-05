@@ -59,6 +59,7 @@ public:
     NCommon::TConfSetting<TString, Static> _DefaultCluster;
     NCommon::TConfSetting<ui32, Static> _ResultRowsLimit;
     NCommon::TConfSetting<bool, Static> EnableSystemColumns;
+    NCommon::TConfSetting<bool, Static> EnableUnsafeTruncateTable;
     NCommon::TConfSetting<bool, Static> UseLlvm;
     NCommon::TConfSetting<bool, Static> EnableLlvm;
     NCommon::TConfSetting<NDq::EHashJoinMode, Static> HashJoinMode;

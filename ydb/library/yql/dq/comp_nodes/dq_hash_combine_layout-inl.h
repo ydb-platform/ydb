@@ -153,7 +153,13 @@ Y_FORCE_INLINE void TDqHashCombineTupleLayout::PackBorrowed(
 Y_FORCE_INLINE void TDqHashCombineTupleLayout::PackWithRefs(
     TArrayRef<const NUdf::TUnboxedValuePod> values, void* storage) const
 {
-    PackBorrowed(values, storage);
+    try {
+        PackBorrowed(values, storage);
+    } catch (...) {
+        // The copied values have not acquired references yet
+        Clear(storage);
+        throw;
+    }
     auto* unboxed = static_cast<NUdf::TUnboxedValuePod*>(storage);
     for (size_t i = 0; i < UnboxedCount; ++i) {
         unboxed[i].Ref();

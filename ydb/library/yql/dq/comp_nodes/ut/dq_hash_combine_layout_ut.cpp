@@ -129,20 +129,64 @@ void TestNativeSlot(typename NUdf::TDataType<T>::TLayout low, typename NUdf::TDa
 Y_UNIT_TEST_SUITE(TDqHashCombineLayoutTest) {
     Y_UNIT_TEST(RequiredNativeRejectsEmptyValue) {
         TLayoutTestEnv env;
+        TUnboxedValue first = TUnboxedValuePod(NUdf::TStringValue("first long borrowed string"));
+        TUnboxedValue second = TUnboxedValuePod(NUdf::TStringValue("second long borrowed string"));
+        const i32 firstRefs = first.RefCount();
+        const i32 secondRefs = second.RefCount();
         for (auto* type : {env.Data<ui16>(), env.Data<ui32>(), env.Data<ui64>()}) {
-            std::vector<TType*> types = {type};
+            std::vector<TType*> types = {
+                env.Data<char*>(), env.Optional(env.Data<ui64>()), type, env.Data<char*>(),
+            };
             TDqHashCombineTupleLayout layout(types);
             TStorage storage(layout.GetSize());
-            const TUnboxedValuePod empty[] = {{}};
-            UNIT_ASSERT_EXCEPTION_CONTAINS(layout.PackBorrowed(empty, storage.Data()), yexception,
-                "Empty value for required native column 0");
-            UNIT_ASSERT_EXCEPTION_CONTAINS(layout.PackMoveFrom(storage.Data(), [](size_t) { return TUnboxedValue{}; }),
-                yexception, "Empty value for required native column 0");
-            UNIT_ASSERT_EXCEPTION_CONTAINS(layout.PackMoveReplacingFrom(storage.Data(), [](size_t) { return TUnboxedValue{}; }),
-                yexception, "Empty value for required native column 0");
+            std::memset(storage.Data(), 0xFF, layout.GetSize());
+            std::vector<TUnboxedValuePod> borrowed = {first, TUnboxedValuePod(ui64{7}), {}, second};
+
+            UNIT_ASSERT_EXCEPTION_CONTAINS(layout.PackWithRefs(borrowed, storage.Data()), yexception,
+                "Empty value for required native column 2");
+            UNIT_ASSERT_VALUES_EQUAL(first.RefCount(), firstRefs);
+            UNIT_ASSERT_VALUES_EQUAL(second.RefCount(), secondRefs);
+            const auto* unboxed = static_cast<const TUnboxedValuePod*>(storage.Data());
+            for (size_t i = 0; i < layout.GetUnboxedCount(); ++i) {
+                UNIT_ASSERT(!unboxed[i]);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<ui32>(
+                static_cast<const char*>(storage.Data()) + layout.GetValidityOffset()), 0);
+            layout.Destroy(storage.Data());
+            UNIT_ASSERT_VALUES_EQUAL(first.RefCount(), firstRefs);
+            UNIT_ASSERT_VALUES_EQUAL(second.RefCount(), secondRefs);
+
+            borrowed[2] = TUnboxedValuePod(ui64{0});
+            layout.PackWithRefs(borrowed, storage.Data());
+            UNIT_ASSERT_VALUES_EQUAL(first.RefCount(), firstRefs + 1);
+            UNIT_ASSERT_VALUES_EQUAL(second.RefCount(), secondRefs + 1);
+            layout.Destroy(storage.Data());
+            UNIT_ASSERT_VALUES_EQUAL(first.RefCount(), firstRefs);
+            UNIT_ASSERT_VALUES_EQUAL(second.RefCount(), secondRefs);
+
+            borrowed[2] = TUnboxedValuePod{};
+            UNIT_ASSERT_EXCEPTION_CONTAINS(layout.PackMoveFrom(storage.Data(), [&](size_t index) {
+                return TUnboxedValue(borrowed[index]);
+            }), yexception, "Empty value for required native column 2");
+            UNIT_ASSERT_VALUES_EQUAL(first.RefCount(), firstRefs + 1);
+            UNIT_ASSERT_VALUES_EQUAL(second.RefCount(), secondRefs);
+            layout.Destroy(storage.Data());
+            UNIT_ASSERT_VALUES_EQUAL(first.RefCount(), firstRefs);
+            UNIT_ASSERT_VALUES_EQUAL(second.RefCount(), secondRefs);
+
+            borrowed[2] = TUnboxedValuePod(ui64{0});
+            layout.PackWithRefs(borrowed, storage.Data());
+            borrowed[2] = TUnboxedValuePod{};
+            UNIT_ASSERT_EXCEPTION_CONTAINS(layout.PackMoveReplacingFrom(storage.Data(), [&](size_t index) {
+                return TUnboxedValue(borrowed[index]);
+            }), yexception, "Empty value for required native column 2");
+            UNIT_ASSERT_VALUES_EQUAL(first.RefCount(), firstRefs + 1);
+            UNIT_ASSERT_VALUES_EQUAL(second.RefCount(), secondRefs + 1);
+            layout.Destroy(storage.Data());
+            UNIT_ASSERT_VALUES_EQUAL(first.RefCount(), firstRefs);
+            UNIT_ASSERT_VALUES_EQUAL(second.RefCount(), secondRefs);
         }
     }
-
 
     Y_UNIT_TEST(SectionOffsetsAndAlignment) {
         TLayoutTestEnv env;

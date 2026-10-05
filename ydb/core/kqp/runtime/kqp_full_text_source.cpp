@@ -2500,6 +2500,7 @@ private:
     TIntrusivePtr<TDocsTableReader> DocsTableReader;
     TIntrusivePtr<TStatsTableReader> StatsTableReader;
     TIntrusivePtr<TUniqueIndexReader> UniqueIndexReader;  // Resolves __ydb_row_id -> PK via unique secondary index
+    TReadLockInfo LockInfo;
 
     // True when the fulltext index uses __ydb_row_id as the synthetic doc_id, and the
     // primary key must be resolved through UniqueIndexReader before main-table reads.
@@ -3002,6 +3003,12 @@ public:
 
         finished = IsFinished();
         return computeBytes;
+    }
+
+    TMaybe<google::protobuf::Any> ExtraData() override {
+        google::protobuf::Any result;
+        result.PackFrom(LockInfo.GetExtraData());
+        return result;
     }
 
     void SaveState(const NDqProto::TCheckpoint&, TSourceState&) override {}
@@ -3531,6 +3538,8 @@ public:
             if (UniqueIndexReader) {
                 ExportTableReaderStats(stats, UniqueIndexReader);
             }
+
+            LockInfo.FillExtraStats(stats);
         }
     }
 
@@ -3647,14 +3656,16 @@ public:
 
         auto& readInfo = *it;
 
+        LockInfo.Add(record);
+
         TStringBuilder txLocks;
         for (const auto& lock : record.GetTxLocks()) {
             txLocks << lock.ShortDebugString();
         }
 
-        TStringBuilder borkenTxlocks;
+        TStringBuilder brokenTxLocks;
         for (const auto& lock : record.GetBrokenTxLocks()) {
-            borkenTxlocks << lock.ShortDebugString();
+            brokenTxLocks << lock.ShortDebugString();
         }
 
         YDB_LOG_DEBUG("Received TEvReadResult from full text source",
@@ -3669,7 +3680,7 @@ public:
             {"rowCount", record.GetRowCount()},
             {"resultFormat", NKikimrDataEvents::EDataFormat_Name(record.GetResultFormat())},
             {"txLocks", txLocks},
-            {"brokenTxLocks", borkenTxlocks});
+            {"brokenTxLocks", brokenTxLocks});
 
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             HandleReadResultError(readId, readInfo, record);

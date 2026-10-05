@@ -4,6 +4,7 @@
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_terminator.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
@@ -15,6 +16,12 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array.h>
 
 #include <util/generic/size_literals.h>
+
+#include <bit>
+#include <cmath>
+#include <limits>
+#include <map>
+#include <optional>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -145,13 +152,6 @@ void ApplyTestPoint(THolder<IComputationGraph>& graph, Func func)
         return std::invoke(func, *testPoints);
     }
     UNIT_FAIL("Couldn't find a DqHashCombine node wrapper in the graph");
-}
-
-void DisableDehydration(THolder<IComputationGraph>& graph)
-{
-    ApplyTestPoint(graph, [](TDqHashCombineTestPoints& tp) {
-        tp.DisableStateDehydration(true);
-    });
 }
 
 void DisableKeyPassthrough(THolder<IComputationGraph>& graph)
@@ -662,6 +662,757 @@ THolder<IComputationGraph> BuildWideGraph(
     return setup.BuildGraph(rootNode, {streamCallable});
 }
 
+using TMixedKey = std::pair<ui32, std::optional<i64>>;
+using TMixedState = std::pair<ui64, std::string>;
+using TMixedReference = std::map<TMixedKey, TMixedState>;
+
+std::shared_ptr<ISpillerFactory> CreateSpillerFactory();
+
+class TMixedWideStream final : public NUdf::TBoxedValue {
+public:
+    TMixedWideStream(size_t rowCount, TMixedReference& reference, std::function<void(size_t)> callback = {})
+        : RowCount(rowCount)
+        , Reference(reference)
+        , Callback(std::move(callback))
+    {
+    }
+
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue&) final {
+        ythrow yexception() << "only WideFetch is supported here";
+    }
+
+    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* result, ui32 width) final {
+        UNIT_ASSERT_VALUES_EQUAL(width, 4);
+        if (Row == RowCount) {
+            return NUdf::EFetchStatus::Finish;
+        }
+
+        if (Callback) {
+            Callback(Row);
+        }
+        const ui32 key32 = Row % 7;
+        const std::optional<i64> key64 = Row % 5 ? std::optional<i64>(Row % 11) : std::nullopt;
+        const ui64 number = Row % 13 + 1;
+        const std::string string = Sprintf("long-state-value-%08zu", Row % 17);
+
+        result[0] = NUdf::TUnboxedValuePod(key32);
+        result[1] = key64 ? NUdf::TUnboxedValuePod(*key64) : NUdf::TUnboxedValuePod{};
+        result[2] = NUdf::TUnboxedValuePod(number);
+        result[3] = NUdf::TUnboxedValuePod(NUdf::TStringValue(string));
+
+        auto [it, inserted] = Reference.emplace(TMixedKey{key32, key64}, TMixedState{number, string});
+        if (!inserted) {
+            it->second.first += number;
+            it->second.second = std::max(it->second.second, string);
+        }
+        ++Row;
+        return NUdf::EFetchStatus::Ok;
+    }
+
+private:
+    const size_t RowCount;
+    TMixedReference& Reference;
+    std::function<void(size_t)> Callback;
+    size_t Row = 0;
+};
+
+template<bool LLVM, bool Spilling = false>
+THolder<IComputationGraph> BuildMixedWideGraph(
+    TDqSetup<LLVM, Spilling>& setup, bool useFlow, bool isAggregator, bool computedKeys)
+{
+    auto& pb = setup.GetDqProgramBuilder();
+    auto key32Type = pb.NewDataType(NUdf::TDataType<ui32>::Id);
+    auto key64Type = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id));
+    auto numberType = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    auto stringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+    const auto streamType = pb.NewStreamType(pb.NewMultiType({key32Type, key64Type, numberType, stringType}));
+    const auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", streamType).Build();
+
+    TRuntimeNode input(streamCallable, false);
+    if (useFlow) {
+        input = pb.ToFlow(input, {});
+    }
+    auto opNode = GetOperatorNode(
+        pb,
+        isAggregator,
+        Spilling,
+        128ull << 20,
+        input,
+        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
+            if (computedKeys) {
+                return {pb.AggrAdd(items[0], pb.template NewDataLiteral<ui32>(0)), items[1]};
+            }
+            return {items[0], items[1]};
+        },
+        [](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList {
+            return {items[2], items[3]};
+        },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+            return {pb.AggrAdd(state[0], items[2]), pb.AggrMax(state[1], items[3])};
+        },
+        [](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+            return {keys[0], keys[1], state[0], state[1]};
+        });
+
+    if (useFlow) {
+        opNode = pb.FromFlow(opNode);
+    }
+    return setup.BuildGraph(opNode, {streamCallable});
+}
+
+template<bool LLVM, bool Spilling = false>
+void RunMixedWideTest(TDqSetup<LLVM, Spilling>& setup, bool useFlow, bool isAggregator, bool computedKeys) {
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    auto graph = BuildMixedWideGraph(setup, useFlow, isAggregator, computedKeys);
+    if constexpr (Spilling) {
+        graph->GetContext().SpillerFactory = CreateSpillerFactory();
+    }
+
+    TMixedReference reference;
+    std::function<void(size_t)> callback;
+    if constexpr (Spilling) {
+        callback = [&setup](size_t row) {
+            if (row == 100) {
+                setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            }
+        };
+    }
+    const size_t rowCount = Spilling ? 1000 : 300;
+    graph->GetEntryPoint(0, true)->SetValue(
+        graph->GetContext(), NUdf::TUnboxedValuePod(new TMixedWideStream(rowCount, reference, callback)));
+
+    auto resultStream = graph->GetValue();
+    std::vector<NUdf::TUnboxedValue> output(4);
+    TMixedReference actual;
+    for (;;) {
+        const auto status = resultStream.WideFetch(output.data(), output.size());
+        if (status == NUdf::EFetchStatus::Finish) {
+            break;
+        }
+        if (status == NUdf::EFetchStatus::Yield) {
+            continue;
+        }
+        std::optional<i64> key64;
+        if (output[1]) {
+            key64 = output[1].Get<i64>();
+        }
+        const TMixedKey key{output[0].Get<ui32>(), key64};
+        const TMixedState state{
+            output[2].Get<ui64>(),
+            std::string(output[3].AsStringRef().Data(), output[3].AsStringRef().Size())
+        };
+        UNIT_ASSERT(actual.emplace(key, state).second);
+    }
+    UNIT_ASSERT(actual == reference);
+}
+
+template<bool LLVM>
+void RunFinalizeSpillingTest(bool useFlow, bool useBlocks, bool expression, bool earlyStop = false) {
+    TDqSetup<LLVM, true> setup(GetHashCombineNodeFactory());
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    auto& pb = setup.GetDqProgramBuilder();
+    const auto key32Type = pb.NewDataType(NUdf::TDataType<ui32>::Id);
+    const auto key64Type = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id));
+    const auto numberType = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto stringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+    const auto streamType = pb.NewStreamType(pb.NewMultiType({key32Type, key64Type, numberType, stringType}));
+    const auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", streamType).Build();
+    const TString keyString = "long-finalize-key-kept-across-spilling-buckets";
+    const bool sparseOutput = useFlow && !LLVM && !useBlocks;
+
+    TRuntimeNode input(streamCallable, false);
+    if (useBlocks) {
+        input = pb.WideToBlocks(input);
+    }
+    if (useFlow) {
+        input = pb.ToFlow(input, {});
+    }
+    auto root = GetOperatorNode(pb, true, true, 128_MB, input,
+        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
+            return {items[0], items[1], pb.template NewDataLiteral<NUdf::EDataSlot::String>(keyString), pb.template NewDataLiteral<NUdf::EDataSlot::String>("unused-long-finalize-key")};
+        },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList {
+            return {items[2], items[3], items[0], items[1],
+                pb.NewTuple({items[0], items[3]}), pb.NewTuple({items[3]})};
+        },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+            return {pb.AggrAdd(state[0], items[2]), pb.AggrMax(state[1], items[3]),
+                pb.AggrMax(state[2], items[0]), pb.AggrMax(state[3], items[1]),
+                pb.NewTuple({items[0], pb.AggrMax(pb.Nth(state[4], 1), items[3])}), pb.NewTuple({items[3]})};
+        },
+        [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+            TRuntimeNode::TList result = {state[1], keys[1],
+                expression ? pb.AggrAdd(state[0], pb.template NewDataLiteral<ui64>(1)) : state[0],
+                keys[0], state[1], state[2], state[3], keys[2], keys[2], state[4], state[4]};
+            if (sparseOutput) {
+                result.insert(result.begin(), state[1]);
+            }
+            return result;
+        });
+    if (useFlow) {
+        root = sparseOutput ? FromWideFlowWithNull(pb, root, 0) : pb.FromFlow(root);
+    }
+    if (useBlocks) {
+        root = pb.WideFromBlocks(root);
+    }
+
+    auto graph = setup.BuildGraph(root, {streamCallable});
+    auto storage = std::make_shared<TPreallocatedSpillerFactory>(32_MB);
+    graph->GetContext().SpillerFactory = std::make_shared<TSlowSpillerFactory>(storage);
+    size_t bucketsRead = 0;
+    SetTestStateCallback(graph, [&](const TDqHashCombineTestState& state) {
+        UNIT_ASSERT_VALUES_EQUAL(state.FastFinalizeEnabled, !expression);
+        bucketsRead = state.SpillingBucketsRead;
+    });
+
+    TMixedReference reference;
+    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(),
+        NUdf::TUnboxedValuePod(new TMixedWideStream(100000, reference, [&](size_t row) {
+            if (row == 50000) {
+                setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            }
+        })));
+
+    auto stream = graph->GetValue();
+    std::vector<NUdf::TUnboxedValue> output(11);
+    std::vector<std::vector<NUdf::TUnboxedValue>> rows;
+    size_t yields = 0;
+    for (;;) {
+        const auto status = stream.WideFetch(output.data(), output.size());
+        if (status == NUdf::EFetchStatus::Finish) {
+            break;
+        }
+        if (status == NUdf::EFetchStatus::Yield) {
+            ++yields;
+            Sleep(TDuration::MilliSeconds(1));
+            continue;
+        }
+        rows.push_back(output);
+        if (earlyStop) {
+            break;
+        }
+    }
+    UNIT_ASSERT(yields > 0);
+    UNIT_ASSERT(bucketsRead > (earlyStop ? 0 : 1));
+    UNIT_ASSERT_VALUES_EQUAL(storage->GetCreatedSpillers().size(), 1);
+    const auto spiller = std::static_pointer_cast<TPreallocatedSpiller>(storage->GetCreatedSpillers().front());
+    UNIT_ASSERT(spiller->GetPutSizes().size() > 1);
+
+    stream = {};
+    graph.Destroy();
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+
+    TMixedReference actual;
+    for (const auto& row : rows) {
+        std::optional<i64> key64;
+        if (row[1]) {
+            key64 = row[1].Get<i64>();
+        }
+        const TMixedKey key{row[3].Get<ui32>(), key64};
+        const auto& expected = reference.at(key);
+        UNIT_ASSERT_VALUES_EQUAL(row[2].Get<ui64>(), expected.first + (expression ? 1 : 0));
+        UNIT_ASSERT_VALUES_EQUAL(std::string(row[0].AsStringRef()), expected.second);
+        UNIT_ASSERT_VALUES_EQUAL(std::string(row[4].AsStringRef()), expected.second);
+        UNIT_ASSERT_VALUES_EQUAL(row[5].Get<ui32>(), key.first);
+        UNIT_ASSERT_VALUES_EQUAL(bool(row[6]), key64.has_value());
+        if (key64) {
+            UNIT_ASSERT_VALUES_EQUAL(row[6].Get<i64>(), *key64);
+        }
+        for (ui32 i : {7, 8}) {
+            UNIT_ASSERT_VALUES_EQUAL(TString(row[i].AsStringRef()), keyString);
+        }
+        for (ui32 i : {9, 10}) {
+            UNIT_ASSERT_VALUES_EQUAL(row[i].GetElement(0).template Get<ui32>(), key.first);
+            const auto string = row[i].GetElement(1);
+            UNIT_ASSERT_VALUES_EQUAL(std::string(string.AsStringRef()), expected.second);
+        }
+        UNIT_ASSERT(actual.emplace(key, expected).second);
+    }
+    if (earlyStop) {
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+    } else {
+        UNIT_ASSERT(actual == reference);
+    }
+}
+
+std::vector<NUdf::TUnboxedValue> TemporalValues(ui32 group) {
+    using NUdf::TUnboxedValuePod;
+    std::vector<NUdf::TUnboxedValue> values = {
+        TUnboxedValuePod(i16(i32(group) - 3)), TUnboxedValuePod(ui16(40000 + group)),
+        TUnboxedValuePod(ui16(30000 + group)), TUnboxedValuePod(ui32(4000000000U + group)),
+        TUnboxedValuePod(ui64(4000000000000000ULL + group)), TUnboxedValuePod(-i64(group)),
+        TUnboxedValuePod(-i32(group)), TUnboxedValuePod(i64(-10000000000LL + group)),
+        TUnboxedValuePod(i64(-10000000000000000LL + group)), TUnboxedValuePod(i64(-100000000000000000LL + group))};
+    const size_t width = values.size();
+    for (size_t i = 0; i < width; ++i) {
+        const auto value = (group + i) % 3 ? values[i] : NUdf::TUnboxedValue{};
+        values.push_back(value);
+    }
+    return values;
+}
+
+std::vector<NUdf::TUnboxedValue> TemporalKey(size_t group, size_t width) {
+    auto values = TemporalValues(0);
+    values.resize(width);
+    if (group) {
+        const size_t column = group - 1;
+        values[column] = column < 10 || !values[column] ? TemporalValues(1)[column] : NUdf::TUnboxedValue{};
+    }
+    return values;
+}
+
+class TGeneratedWideStream final: public NUdf::TBoxedValue {
+public:
+    using TRow = std::vector<NUdf::TUnboxedValue>;
+    TGeneratedWideStream(size_t rowCount, std::function<TRow(size_t)> generate)
+        : RowCount(rowCount)
+        , Generate(std::move(generate))
+    {}
+
+    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) final {
+        if (Row == RowCount) {
+            return NUdf::EFetchStatus::Finish;
+        }
+        auto values = Generate(Row++);
+        UNIT_ASSERT_VALUES_EQUAL(width, values.size());
+        std::move(values.begin(), values.end(), output);
+        return NUdf::EFetchStatus::Ok;
+    }
+
+private:
+    const size_t RowCount;
+    std::function<TRow(size_t)> Generate;
+    size_t Row = 0;
+};
+
+NUdf::TUnboxedValue TemporalAfterUpdates(const NUdf::TUnboxedValue& value, NUdf::EDataSlot slot, size_t updates) {
+    using namespace NUdf;
+    if (!value) {
+        return {};
+    }
+    switch (slot) {
+        case EDataSlot::Int16: return TUnboxedValuePod(i16(value.Get<i16>() + i64(updates)));
+        case EDataSlot::Uint16:
+        case EDataSlot::Date: return TUnboxedValuePod(ui16(value.Get<ui16>() + updates));
+        case EDataSlot::Datetime: return TUnboxedValuePod(ui32(value.Get<ui32>() + updates));
+        case EDataSlot::Timestamp: return TUnboxedValuePod(value.Get<ui64>() + updates);
+        case EDataSlot::Date32: return TUnboxedValuePod(i32(value.Get<i32>() + i64(updates)));
+        default: return TUnboxedValuePod(value.Get<i64>() + i64(updates));
+    }
+}
+
+template<bool LLVM>
+void RunTemporalAggregationTest(bool useFlow, bool useBlocks, bool isAggregator, bool spilling, bool native16Only = false) {
+    using namespace NUdf;
+    TDqSetup<LLVM, true> setup(GetHashCombineNodeFactory());
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    auto& pb = setup.GetDqProgramBuilder();
+    std::vector<TType*> types;
+    std::vector<EDataSlot> slots;
+    for (auto id : {NUdf::TDataType<i16>::Id, NUdf::TDataType<ui16>::Id, NUdf::TDataType<TDate>::Id, NUdf::TDataType<TDatetime>::Id,
+            NUdf::TDataType<TTimestamp>::Id, NUdf::TDataType<TInterval>::Id, NUdf::TDataType<TDate32>::Id,
+            NUdf::TDataType<TDatetime64>::Id, NUdf::TDataType<TTimestamp64>::Id, NUdf::TDataType<TInterval64>::Id})
+    {
+        auto* type = pb.NewDataType(id);
+        slots.push_back(*AS_TYPE(NMiniKQL::TDataType, type)->GetDataSlot());
+        types.push_back(type);
+        if (native16Only && types.size() == 3) {
+            break;
+        }
+    }
+    const size_t width = types.size();
+    if (!native16Only) {
+        for (size_t i = 0; i < width; ++i) {
+            types.push_back(pb.NewOptionalType(types[i]));
+        }
+    }
+    const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", pb.NewStreamType(pb.NewMultiType(types))).Build();
+    TRuntimeNode input(source, false);
+    if (useBlocks) {
+        input = pb.WideToBlocks(input);
+    }
+    if (useFlow) {
+        input = pb.ToFlow(input, {});
+    }
+    auto root = GetOperatorNode(pb, isAggregator, spilling, 128_MB, input,
+        [](TRuntimeNode::TList items) { return items; },
+        [](TRuntimeNode::TList, TRuntimeNode::TList items) { return items; },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) {
+            for (size_t i = 0; i < state.size(); ++i) {
+                const auto slot = slots[i % width];
+                TRuntimeNode increment;
+                if (slot == EDataSlot::Int16) {
+                    increment = pb.template NewDataLiteral<i16>(1);
+                } else if (slot == EDataSlot::Uint16) {
+                    increment = pb.template NewDataLiteral<ui16>(1);
+                } else {
+                    const i64 micros = slot == EDataSlot::Date || slot == EDataSlot::Date32 ? 86400000000LL :
+                        slot == EDataSlot::Datetime || slot == EDataSlot::Datetime64 ? 1000000 : 1;
+                    const TStringRef bytes(reinterpret_cast<const char*>(&micros), sizeof(micros));
+                    const bool extended = slot == EDataSlot::Date32 || slot == EDataSlot::Datetime64 ||
+                        slot == EDataSlot::Timestamp64 || slot == EDataSlot::Interval64;
+                    increment = extended ? pb.template NewDataLiteral<EDataSlot::Interval64>(bytes) :
+                        pb.template NewDataLiteral<EDataSlot::Interval>(bytes);
+                }
+                auto next = pb.Add(state[i], increment);
+                if (!types[i]->IsOptional() && next.GetStaticType()->IsOptional()) {
+                    next = pb.Unwrap(next, pb.template NewDataLiteral<EDataSlot::String>("temporal increment"), __FILE__, __LINE__, 0);
+                }
+                state[i] = next;
+            }
+            return state;
+        },
+        [](TRuntimeNode::TList keys, TRuntimeNode::TList state) {
+            keys.insert(keys.end(), state.begin(), state.end());
+            return keys;
+        });
+    if (useFlow) {
+        root = pb.FromFlow(root);
+    }
+    if (useBlocks) {
+        root = pb.WideFromBlocks(root);
+    }
+    auto graph = setup.BuildGraph(root, {source});
+    if (spilling) {
+        graph->GetContext().SpillerFactory = CreateSpillerFactory();
+    }
+    size_t bucketsRead = 0;
+    SetTestStateCallback(graph, [&](const TDqHashCombineTestState& state) {
+        UNIT_ASSERT(state.FastFinalizeEnabled);
+        bucketsRead = state.SpillingBucketsRead;
+    });
+    const size_t groups = types.size() + 1;
+    const size_t repeats = spilling ? 1001 : 17;
+    const size_t rowCount = groups * repeats;
+    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), TUnboxedValuePod(
+        new TGeneratedWideStream(rowCount, [&](size_t row) {
+            if (spilling && row == rowCount / 2) {
+                setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            }
+            return TemporalKey(row % groups, types.size());
+        })));
+    auto stream = graph->GetValue();
+    std::vector<TUnboxedValue> output(types.size() * 2);
+    std::vector<bool> seen(groups);
+    for (;;) {
+        const auto status = stream.WideFetch(output.data(), output.size());
+        if (status == EFetchStatus::Finish) {
+            break;
+        }
+        if (status == EFetchStatus::Yield) {
+            Sleep(TDuration::MilliSeconds(1));
+            continue;
+        }
+        size_t group = 0;
+        for (; group < groups; ++group) {
+            const auto key = TemporalKey(group, types.size());
+            bool equal = true;
+            for (size_t i = 0; i < key.size(); ++i) {
+                if (bool(output[i]) != bool(key[i]) ||
+                    (key[i] && CompareValues(slots[i % width], output[i], key[i]) != 0))
+                {
+                    equal = false;
+                    break;
+                }
+            }
+            if (equal) {
+                break;
+            }
+        }
+        UNIT_ASSERT(group < groups);
+        UNIT_ASSERT(!seen[group]);
+        seen[group] = true;
+        auto expected = TemporalKey(group, types.size());
+        for (size_t i = 0; i < types.size(); ++i) {
+            expected.push_back(TemporalAfterUpdates(expected[i], slots[i % width], repeats - 1));
+        }
+        for (size_t i = 0; i < output.size(); ++i) {
+            const auto& value = expected[i];
+            UNIT_ASSERT_VALUES_EQUAL(bool(output[i]), bool(value));
+            if (value) {
+                UNIT_ASSERT_VALUES_EQUAL(CompareValues(slots[i % width], output[i], value), 0);
+            }
+        }
+    }
+    UNIT_ASSERT(std::all_of(seen.begin(), seen.end(), [](bool value) { return value; }));
+    UNIT_ASSERT_VALUES_EQUAL(bucketsRead > 0, spilling);
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+}
+
+template<bool LLVM>
+void RunThrowingStateTest(bool useFlow, ui32 bits, size_t mixedWidth, bool failInit, bool spilling = false) {
+    TDqSetup<LLVM, true> setup(GetHashCombineNodeFactory());
+    auto& pb = setup.GetDqProgramBuilder();
+    auto* optionalInput = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id));
+    auto* stringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+    const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
+        pb.NewStreamType(pb.NewMultiType({optionalInput, stringType}))).Build();
+    const auto keySource = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", stringType).Build();
+    const bool mixed = mixedWidth != 0;
+    const size_t width = mixed ? mixedWidth : 5;
+    const size_t prefix = mixed ? 1 : 0;
+    std::vector<TType*> types;
+    for (size_t i = 0; i < width; ++i) {
+        const ui32 itemBits = mixed ? (i % 3 == 0 ? 64 : i % 3 == 1 ? 32 : 16) : bits;
+        types.push_back(pb.NewOptionalType(pb.NewDataType(itemBits == 64 ? NUdf::TDataType<i64>::Id :
+            itemBits == 32 ? NUdf::TDataType<i32>::Id : NUdf::TDataType<i16>::Id)));
+    }
+    auto results = [&](TRuntimeNode::TList items, bool failing) {
+        TRuntimeNode::TList state;
+        if (mixed) {
+            state.push_back(pb.NewTuple({items[1]}));
+        }
+        for (size_t i = 0; i < width; ++i) {
+            if (failing && i == width - 1) {
+                const auto value = pb.Unwrap(items[0],
+                    pb.template NewDataLiteral<NUdf::EDataSlot::String>("aggregation partial state test"), __FILE__, __LINE__, 0);
+                state.push_back(pb.Convert(pb.NewOptional(value), types[i]));
+            } else if ((i % 2 == 0) == failing) {
+                state.push_back(pb.Convert(pb.NewOptional(pb.template NewDataLiteral<i64>((failing ? 200 : 100) + i)), types[i]));
+            } else {
+                state.push_back(pb.NewEmptyOptional(types[i]));
+            }
+        }
+        return state;
+    };
+    TRuntimeNode input(source, false);
+    if (useFlow) {
+        input = pb.ToFlow(input, {});
+    }
+    auto root = GetOperatorNode(pb, true, spilling, 128_MB, input,
+        [&](TRuntimeNode::TList) -> TRuntimeNode::TList { return {TRuntimeNode(keySource, false)}; },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList items) { return results(items, failInit); },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList) { return results(items, true); },
+        [](TRuntimeNode::TList, TRuntimeNode::TList state) { return state; });
+    if (useFlow) {
+        root = pb.FromFlow(root);
+    }
+    NUdf::TUnboxedValue initial = NUdf::TUnboxedValuePod(NUdf::TStringValue("initial heap string for throwing aggregation"));
+    NUdf::TUnboxedValue replacement = NUdf::TUnboxedValuePod(NUdf::TStringValue("replacement heap string for throwing aggregation"));
+    NUdf::TUnboxedValue key = NUdf::TUnboxedValuePod(NUdf::TStringValue("heap string key for throwing aggregation"));
+    std::vector<std::vector<NUdf::TUnboxedValue>> snapshots;
+    auto graph = setup.BuildGraph(root, {source, keySource});
+    ApplyTestPoint(graph, [&](TDqHashCombineTestPoints& points) {
+        points.SetStateSnapshotOnDestroy([&](std::vector<NUdf::TUnboxedValue> values) {
+            snapshots.push_back(std::move(values));
+        });
+    });
+    auto storage = spilling ? std::make_shared<TPreallocatedSpillerFactory>(1_MB) : nullptr;
+    graph->GetContext().SpillerFactory = storage;
+    graph->GetEntryPoint(1, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValue(key));
+    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+        new TGeneratedWideStream(failInit ? 1 : 2, [&](size_t row) {
+            if (spilling && row == 0) {
+                setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            }
+            return std::vector<NUdf::TUnboxedValue>{
+                row == 0 && !failInit ? NUdf::TUnboxedValuePod(i64{1}) : NUdf::TUnboxedValuePod{},
+                row == 0 ? initial : replacement};
+        })));
+    auto stream = graph->GetValue();
+    std::vector<NUdf::TUnboxedValue> output(prefix + width);
+    {
+        TThrowingBindTerminator terminator;
+        auto fetch = [&] {
+            while (stream.WideFetch(output.data(), output.size()) == NUdf::EFetchStatus::Yield) {
+                Sleep(TDuration::MilliSeconds(1));
+            }
+        };
+        UNIT_ASSERT_EXCEPTION_CONTAINS(fetch(), TTerminateException,
+            "aggregation partial state test");
+    }
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    stream = {};
+    graph.Destroy();
+    if (spilling) {
+        UNIT_ASSERT(!storage->GetCreatedSpillers().empty());
+        UNIT_ASSERT(snapshots.empty());
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(snapshots.size(), 1);
+        const auto& state = snapshots.front();
+        if (mixed) {
+            const auto value = state[0].GetElement(0);
+            UNIT_ASSERT_VALUES_EQUAL(TString(value.AsStringRef()), TString((failInit ? initial : replacement).AsStringRef()));
+        }
+        for (size_t i = 0; i < width; ++i) {
+            const auto& value = state[prefix + i];
+            const bool completed = i + 1 < width;
+            const bool present = completed ? i % 2 == 0 : !failInit && i % 2 != 0;
+            UNIT_ASSERT_VALUES_EQUAL(bool(value), present);
+            if (value) {
+                const i64 actual = mixed ? (i % 3 == 0 ? value.Get<i64>() : i % 3 == 1 ? value.Get<i32>() : value.Get<i16>()) :
+                    bits == 64 ? value.Get<i64>() : bits == 32 ? value.Get<i32>() : value.Get<i16>();
+                UNIT_ASSERT_VALUES_EQUAL(actual, (completed ? 200 : 100) + i);
+            }
+        }
+    }
+    snapshots.clear();
+    UNIT_ASSERT_VALUES_EQUAL(key.RefCount(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(initial.RefCount(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(replacement.RefCount(), 1);
+}
+
+template<bool LLVM>
+void RunThrowingKeyTest(bool useFlow, bool failFirst) {
+    TDqSetup<LLVM> setup(GetHashCombineNodeFactory());
+    auto& pb = setup.GetDqProgramBuilder();
+    auto* stringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+    auto* optionalInput = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id));
+    const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
+        pb.NewStreamType(pb.NewMultiType({stringType, optionalInput}))).Build();
+    TRuntimeNode input(source, false);
+    if (useFlow) {
+        input = pb.ToFlow(input, {});
+    }
+    auto root = GetOperatorNode(pb, true, false, 128_MB, input,
+        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
+            return {items[0], pb.Unwrap(items[1],
+                pb.template NewDataLiteral<NUdf::EDataSlot::String>("aggregation partial key test"), __FILE__, __LINE__, 0)};
+        },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode::TList {
+            return {pb.template NewDataLiteral<ui64>(1)};
+        },
+        [](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) { return state; },
+        [](TRuntimeNode::TList keys, TRuntimeNode::TList) { return keys; });
+    if (useFlow) {
+        root = pb.FromFlow(root);
+    }
+    NUdf::TUnboxedValue key = NUdf::TUnboxedValuePod(NUdf::TStringValue("heap string for partial key extraction"));
+    auto graph = setup.BuildGraph(root, {source});
+    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+        new TGeneratedWideStream(failFirst ? 1 : 2, [&](size_t row) {
+            return std::vector<NUdf::TUnboxedValue>{key,
+                row == 0 && !failFirst ? NUdf::TUnboxedValuePod(i64{1}) : NUdf::TUnboxedValuePod{}};
+        })));
+    auto stream = graph->GetValue();
+    NUdf::TUnboxedValue output[2];
+    {
+        TThrowingBindTerminator terminator;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(stream.WideFetch(output, 2), TTerminateException,
+            "aggregation partial key test");
+    }
+    stream = {};
+    graph.Destroy();
+    UNIT_ASSERT_VALUES_EQUAL(key.RefCount(), 1);
+}
+
+std::vector<NUdf::TUnboxedValue> WideNullableKey(size_t group) {
+    std::vector<NUdf::TUnboxedValue> values(65);
+    if (group) {
+        const size_t column = (group - 1) / 2;
+        const ui64 payload = (group - 1) % 2;
+        values[column] = column % 3 == 0 ? NUdf::TUnboxedValuePod(ui16(payload)) :
+            column % 3 == 1 ? NUdf::TUnboxedValuePod(ui32(payload)) : NUdf::TUnboxedValuePod(payload);
+    }
+    values.push_back(NUdf::TUnboxedValuePod(NUdf::TStringValue("constant long key after nullable columns")));
+    return values;
+}
+
+std::vector<NUdf::TUnboxedValue> FloatingKey(size_t row) {
+    const float floats[] = {0.0f, -0.0f, std::bit_cast<float>(ui32{0x7fc00001}), std::bit_cast<float>(ui32{0xffc01234}),
+        1.0f, -1.0f, std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()};
+    const double doubles[] = {0.0, -0.0, std::bit_cast<double>(ui64{0x7ff8000000000001}),
+        std::bit_cast<double>(ui64{0xfff8000000001234}), 1.0, -1.0,
+        std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity()};
+    const size_t f = row % 9;
+    const size_t d = row / 9 % 9;
+    return {f == 8 ? NUdf::TUnboxedValuePod{} : NUdf::TUnboxedValuePod(floats[f]),
+        d == 8 ? NUdf::TUnboxedValuePod{} : NUdf::TUnboxedValuePod(doubles[d])};
+}
+
+template<typename T>
+size_t FloatingKeyClass(const NUdf::TUnboxedValue& value) {
+    if (!value) return 6;
+    const auto number = value.Get<T>();
+    if (number == 0) return 0;
+    if (std::isnan(number)) return 1;
+    if (number == 1) return 2;
+    if (number == -1) return 3;
+    UNIT_ASSERT(std::isinf(number));
+    return number > 0 ? 4 : 5;
+}
+
+template<bool LLVM>
+void RunKeyGroupingTest(bool useFlow, bool blocks, bool floating, bool spilling) {
+    TDqSetup<LLVM, true> setup(GetHashCombineNodeFactory());
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    auto& pb = setup.GetDqProgramBuilder();
+    std::vector<TType*> types;
+    if (floating) {
+        types = {pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<float>::Id)),
+            pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<double>::Id))};
+    } else {
+        for (size_t i = 0; i < 65; ++i) {
+            types.push_back(pb.NewOptionalType(pb.NewDataType(i % 3 == 0 ? NUdf::TDataType<ui16>::Id :
+                i % 3 == 1 ? NUdf::TDataType<ui32>::Id : NUdf::TDataType<ui64>::Id)));
+        }
+        types.push_back(pb.NewDataType(NUdf::TDataType<char*>::Id));
+    }
+    const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", pb.NewStreamType(pb.NewMultiType(types))).Build();
+    TRuntimeNode input(source, false);
+    if (blocks) input = pb.WideToBlocks(input);
+    if (useFlow) input = pb.ToFlow(input, {});
+    auto root = GetOperatorNode(pb, true, spilling, 128_MB, input,
+        [](TRuntimeNode::TList items) { return items; },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode::TList { return {pb.template NewDataLiteral<ui64>(1)}; },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+            return {pb.AggrAdd(state[0], pb.template NewDataLiteral<ui64>(1))};
+        },
+        [](TRuntimeNode::TList keys, TRuntimeNode::TList state) {
+            keys.push_back(state[0]);
+            return keys;
+        });
+    if (useFlow) root = pb.FromFlow(root);
+    if (blocks) root = pb.WideFromBlocks(root);
+    auto graph = setup.BuildGraph(root, {source});
+    if (spilling) graph->GetContext().SpillerFactory = CreateSpillerFactory();
+    size_t bucketsRead = 0;
+    SetTestStateCallback(graph, [&](const TDqHashCombineTestState& state) { bucketsRead = state.SpillingBucketsRead; });
+    const size_t inputGroups = floating ? 81 : 131;
+    const size_t repeats = spilling ? 200 : 3;
+    const size_t rowCount = inputGroups * repeats;
+    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+        new TGeneratedWideStream(rowCount, [&](size_t row) {
+            if (spilling && row == rowCount / 2) setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            return floating ? FloatingKey(row % inputGroups) : WideNullableKey(row % inputGroups);
+        })));
+    auto stream = graph->GetValue();
+    std::vector<NUdf::TUnboxedValue> output(types.size() + 1);
+    std::vector<bool> seen(floating ? 49 : inputGroups);
+    for (;;) {
+        const auto status = stream.WideFetch(output.data(), output.size());
+        if (status == NUdf::EFetchStatus::Finish) break;
+        if (status == NUdf::EFetchStatus::Yield) {
+            Sleep(TDuration::MilliSeconds(1));
+            continue;
+        }
+        size_t group = 0;
+        size_t count = repeats;
+        if (floating) {
+            const auto f = FloatingKeyClass<float>(output[0]);
+            const auto d = FloatingKeyClass<double>(output[1]);
+            group = f + 7 * d;
+            count *= (f < 2 ? 2 : 1) * (d < 2 ? 2 : 1);
+        } else {
+            for (size_t i = 0; i < 65; ++i) {
+                if (output[i]) {
+                    UNIT_ASSERT_VALUES_EQUAL(group, 0);
+                    const ui64 value = i % 3 == 0 ? output[i].Get<ui16>() : i % 3 == 1 ? output[i].Get<ui32>() : output[i].Get<ui64>();
+                    UNIT_ASSERT(value <= 1);
+                    group = 1 + 2 * i + value;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(TString(output[65].AsStringRef()), "constant long key after nullable columns");
+        }
+        UNIT_ASSERT(!seen[group]);
+        seen[group] = true;
+        UNIT_ASSERT_VALUES_EQUAL(output.back().Get<ui64>(), count);
+    }
+    UNIT_ASSERT(std::all_of(seen.begin(), seen.end(), [](bool value) { return value; }));
+    UNIT_ASSERT_VALUES_EQUAL(bucketsRead > 0, spilling);
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+}
+
 template<bool LLVM, bool Spilling = false>
 THolder<IComputationGraph> BuildZeroWidthWideGraph(TDqSetup<LLVM, Spilling>& setup, const bool useFlow, const bool isAggregator, const size_t memLimit, std::vector<TType*>& columnTypes) {
     auto& pb = setup.GetDqProgramBuilder();
@@ -871,7 +1622,7 @@ TOperatorEndState RunDqCombineWideTest(const bool useFlow, StreamCreator streamC
 
 template<bool UseLLVM, bool Spilling, typename StreamCreator, typename StreamChecker>
 void RunDqAggregateEarlyStopTest(TDqSetup<UseLLVM, Spilling>& setup, const bool useFlow,
-    StreamCreator streamCreator, StreamChecker streamChecker, const bool disableDehydration,
+    StreamCreator streamCreator, StreamChecker streamChecker,
     std::shared_ptr<ISpillerFactory> spillerFactory = {})
 {
     const ui32 keyWidth = 2;
@@ -884,10 +1635,6 @@ void RunDqAggregateEarlyStopTest(TDqSetup<UseLLVM, Spilling>& setup, const bool 
 
     if (Spilling) {
         graph->GetContext().SpillerFactory = spillerFactory ? spillerFactory : CreateSpillerFactory();
-    }
-
-    if (disableDehydration) {
-        DisableDehydration(graph);
     }
 
     std::unordered_map<std::string, std::vector<ui64>> refResult;
@@ -941,7 +1688,7 @@ void RunDqAggregateBlockTest(TDqSetup<UseLLVM, Spilling>& setup, const bool useF
 }
 
 template<bool LLVM, bool Spilling, typename StreamCreator>
-void RunDqAggregateWideTest(TDqSetup<LLVM, Spilling>& setup, const bool useFlow, StreamCreator streamCreator, const ui32 keyWidth = 2, const bool disableDehydration = false, const bool disableKeyPassthrough = false)
+void RunDqAggregateWideTest(TDqSetup<LLVM, Spilling>& setup, const bool useFlow, StreamCreator streamCreator, const ui32 keyWidth = 2, const bool disableKeyPassthrough = false)
 {
     setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
 
@@ -955,9 +1702,6 @@ void RunDqAggregateWideTest(TDqSetup<LLVM, Spilling>& setup, const bool useFlow,
         graph->GetContext().SpillerFactory = CreateSpillerFactory();
     }
 
-    if (disableDehydration) {
-        DisableDehydration(graph);
-    }
     if (disableKeyPassthrough) {
         DisableKeyPassthrough(graph);
     }
@@ -1006,6 +1750,457 @@ void RunDqAggregateZeroWidthTest(TDqSetup<UseLLVM, Spilling>& setup, const bool 
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
+
+    Y_UNIT_TEST_QUAD(TestRequiredNativeStateRejectsEmptyValue, UseLLVM, UseFlow) {
+        // These exceptions are only thrown in assertions-enabled builds
+        for (const ui32 bits : {16, 32, 64}) {
+            for (const bool failInit : {false, true}) {
+                for (const bool isAggregator : {false, true}) {
+                    for (const ui32 shape : {0, 1, 2}) {
+                        TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
+                        auto& pb = setup.GetDqProgramBuilder();
+                        auto* type = pb.NewDataType(bits == 16 ? NUdf::TDataType<ui16>::Id :
+                            bits == 32 ? NUdf::TDataType<ui32>::Id : NUdf::TDataType<ui64>::Id);
+                        const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
+                            pb.NewStreamType(pb.NewMultiType({type}))).Build();
+                        auto results = [&](TRuntimeNode::TList items) {
+                            if (shape == 1) {
+                                items.push_back(pb.template NewDataLiteral<NUdf::EDataSlot::String>("inline"));
+                            } else if (shape == 2) {
+                                items.push_back(pb.NewEmptyOptional(pb.NewOptionalType(type)));
+                            }
+                            return items;
+                        };
+                        TRuntimeNode input(source, false);
+                        if (UseFlow) {
+                            input = pb.ToFlow(input, {});
+                        }
+                        auto root = GetOperatorNode(pb, isAggregator, false, 128_MB, input,
+                            [&](TRuntimeNode::TList) -> TRuntimeNode::TList {
+                                return {pb.template NewDataLiteral<ui32>(0)};
+                            },
+                            [&](TRuntimeNode::TList, TRuntimeNode::TList items) { return results(items); },
+                            [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList) { return results(items); },
+                            [](TRuntimeNode::TList, TRuntimeNode::TList state) { return state; });
+                        if (UseFlow) {
+                            root = pb.FromFlow(root);
+                        }
+                        auto graph = setup.BuildGraph(root, {source});
+                        // Deliberately violate the declared input type to exercise required-state validation
+                        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+                            new TGeneratedWideStream(failInit ? 1 : 2, [&](size_t row) {
+                                return std::vector<NUdf::TUnboxedValue>{
+                                    row == 0 && !failInit ? NUdf::TUnboxedValuePod(ui64{0}) : NUdf::TUnboxedValuePod{}};
+                            })));
+                        auto stream = graph->GetValue();
+                        std::vector<NUdf::TUnboxedValue> output(shape ? 2 : 1);
+                        UNIT_ASSERT_EXCEPTION_CONTAINS(stream.WideFetch(output.data(), output.size()), yexception,
+                            "Empty value for required native aggregation state");
+                    }
+                }
+            }
+        }
+    }
+
+
+    Y_UNIT_TEST_QUAD(TestHomogeneousOptionalState, UseLLVM, UseFlow) {
+        for (const ui32 bits : {16, 32, 64}) {
+            for (const size_t width : {1, 5, 32, 33}) {
+                for (const bool isAggregator : {false, true}) {
+                    TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
+                    auto& pb = setup.GetDqProgramBuilder();
+                    const auto optionalType = pb.NewOptionalType(pb.NewDataType(bits == 16 ? NUdf::TDataType<i16>::Id : bits == 32 ?
+                        NUdf::TDataType<i32>::Id : NUdf::TDataType<i64>::Id));
+                    const auto inputType = pb.NewStreamType(pb.NewMultiType({
+                        pb.NewDataType(NUdf::TDataType<ui32>::Id),
+                        pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id)),
+                        pb.NewDataType(NUdf::TDataType<ui64>::Id),
+                        pb.NewDataType(NUdf::TDataType<char*>::Id),
+                    }));
+                    const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", inputType).Build();
+                    TRuntimeNode input(source, false);
+                    if (UseFlow) {
+                        input = pb.ToFlow(input, {});
+                    }
+                    auto root = GetOperatorNode(
+                        pb, isAggregator, false, 128ull << 20, input,
+                        [&](TRuntimeNode::TList) -> TRuntimeNode::TList {
+                            return {pb.template NewDataLiteral<ui32>(0)};
+                        },
+                        [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode::TList {
+                            TRuntimeNode::TList state;
+                            for (size_t i = 0; i < width; ++i) {
+                                state.push_back(i % 2 ? pb.NewEmptyOptional(optionalType) :
+                                    pb.Convert(pb.NewOptional(pb.template NewDataLiteral<i64>(-i64(i) - 1)), optionalType));
+                            }
+                            return state;
+                        },
+                        [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) {
+                            std::rotate(state.begin(), state.begin() + 1, state.end());
+                            state.back() = pb.Convert(items[1], optionalType);
+                            return state;
+                        },
+                        [](TRuntimeNode::TList, TRuntimeNode::TList state) { return state; });
+                    if (UseFlow) {
+                        root = pb.FromFlow(root);
+                    }
+                    auto graph = setup.BuildGraph(root, {source});
+                    TMixedReference reference;
+                    const size_t rowCount = 2 * width + 5;
+                    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(),
+                        NUdf::TUnboxedValuePod(new TMixedWideStream(rowCount, reference)));
+                    auto stream = graph->GetValue();
+                    std::vector<NUdf::TUnboxedValue> output(width);
+                    UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output.data(), output.size()), NUdf::EFetchStatus::Ok);
+                    for (size_t i = 0; i < width; ++i) {
+                        const auto row = rowCount - width + i;
+                        UNIT_ASSERT_VALUES_EQUAL(bool(output[i]), row % 5 != 0);
+                        if (output[i]) {
+                            UNIT_ASSERT_VALUES_EQUAL((bits == 16 ? output[i].Get<i16>() : bits == 32 ? output[i].Get<i32>() : output[i].Get<i64>()), i64(row % 11));
+                        }
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output.data(), output.size()), NUdf::EFetchStatus::Finish);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestMixedWidthState, UseLLVM, UseFlow) {
+        for (const bool required : {false, true}) {
+            for (const size_t width : {2, 32, 33, 65}) {
+                for (const bool isAggregator : {false, true}) {
+                    TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
+                    auto& pb = setup.GetDqProgramBuilder();
+                    const auto int32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
+                    const auto int64Type = pb.NewDataType(NUdf::TDataType<i64>::Id);
+                    const auto optional16 = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i16>::Id));
+                    const auto optional32 = pb.NewOptionalType(int32Type);
+                    const auto optional64 = pb.NewOptionalType(int64Type);
+                    const auto inputType = pb.NewStreamType(pb.NewMultiType({
+                        pb.NewDataType(NUdf::TDataType<ui32>::Id), optional64,
+                        pb.NewDataType(NUdf::TDataType<ui64>::Id),
+                        pb.NewDataType(NUdf::TDataType<char*>::Id),
+                    }));
+                    const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", inputType).Build();
+                    TRuntimeNode input(source, false);
+                    if (UseFlow) {
+                        input = pb.ToFlow(input, {});
+                    }
+                    const size_t prefix = required ? 4 : 0;
+                    auto root = GetOperatorNode(
+                        pb, isAggregator, false, 128ull << 20, input,
+                        [&](TRuntimeNode::TList) -> TRuntimeNode::TList {
+                            return {pb.template NewDataLiteral<ui32>(0)};
+                        },
+                        [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode::TList {
+                            TRuntimeNode::TList state;
+                            if (required) {
+                                state = {pb.template NewDataLiteral<i32>(17),
+                                    pb.NewTuple({pb.template NewDataLiteral<i64>(42)}),
+                                    pb.template NewDataLiteral<i64>(99),
+                                    pb.template NewDataLiteral<NUdf::EDataSlot::String>("initial")};
+                            }
+                            for (size_t i = 0; i < width; ++i) {
+                                auto* type = i % 3 == 0 ? optional16 : i % 3 == 1 ? optional32 : optional64;
+                                state.push_back(i % 3 ? pb.NewEmptyOptional(type) :
+                                    pb.Convert(pb.NewOptional(pb.template NewDataLiteral<i64>(-i64(i) - 1)), type));
+                            }
+                            return state;
+                        },
+                        [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) {
+                            auto result = state;
+                            if (required) {
+                                result[0] = pb.Convert(pb.Nth(state[1], 0), int32Type);
+                                result[1] = pb.NewTuple({state[2]});
+                                result[2] = pb.Convert(state[0], int64Type);
+                                result[3] = pb.ToString(state[0]);
+                            }
+                            for (size_t i = 0; i < width; ++i) {
+                                result[prefix + i] = pb.Convert(i + 1 == width ? items[1] : state[prefix + i + 1],
+                                    i % 3 == 0 ? optional16 : i % 3 == 1 ? optional32 : optional64);
+                            }
+                            return result;
+                        },
+                        [](TRuntimeNode::TList, TRuntimeNode::TList state) { return state; });
+                    if (UseFlow) {
+                        root = pb.FromFlow(root);
+                    }
+                    auto graph = setup.BuildGraph(root, {source});
+                    TMixedReference reference;
+                    const size_t rowCount = 2 * width + 5;
+                    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(),
+                        NUdf::TUnboxedValuePod(new TMixedWideStream(rowCount, reference)));
+                    auto stream = graph->GetValue();
+                    std::vector<NUdf::TUnboxedValue> output(prefix + width);
+                    UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output.data(), output.size()), NUdf::EFetchStatus::Ok);
+                    if (required) {
+                        const i64 initial[] = {17, 42, 99};
+                        UNIT_ASSERT_VALUES_EQUAL(output[0].Get<i32>(), initial[(rowCount - 1) % 3]);
+                        UNIT_ASSERT_VALUES_EQUAL(output[1].GetElement(0).Get<i64>(), initial[rowCount % 3]);
+                        UNIT_ASSERT_VALUES_EQUAL(output[2].Get<i64>(), initial[(rowCount + 1) % 3]);
+                        UNIT_ASSERT_VALUES_EQUAL(std::string(output[3].AsStringRef()), std::to_string(initial[(rowCount - 2) % 3]));
+                    }
+                    for (size_t i = 0; i < width; ++i) {
+                        const auto row = rowCount - width + i;
+                        const auto& value = output[prefix + i];
+                        UNIT_ASSERT_VALUES_EQUAL(bool(value), row % 5 != 0);
+                        if (value) {
+                            UNIT_ASSERT_VALUES_EQUAL((i % 3 == 0 ? value.Get<i16>() : i % 3 == 1 ? value.Get<i32>() : value.Get<i64>()), i64(row % 11));
+                        }
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output.data(), output.size()), NUdf::EFetchStatus::Finish);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestNative32Payloads, UseLLVM, UseFlow) {
+        for (const bool optional : {false, true}) {
+            for (const bool isAggregator : {false, true}) {
+                TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
+                auto& pb = setup.GetDqProgramBuilder();
+                const auto inputType = pb.NewStreamType(pb.NewMultiType({
+                    pb.NewDataType(NUdf::TDataType<ui32>::Id),
+                    pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id)),
+                    pb.NewDataType(NUdf::TDataType<ui64>::Id),
+                    pb.NewDataType(NUdf::TDataType<char*>::Id),
+                }));
+                const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", inputType).Build();
+                TRuntimeNode input(source, false);
+                if (UseFlow) {
+                    input = pb.ToFlow(input, {});
+                }
+                const ui32 nanBits = 0x7fc01234;
+                auto root = GetOperatorNode(
+                    pb, isAggregator, false, 128ull << 20, input,
+                    [&](TRuntimeNode::TList) -> TRuntimeNode::TList {
+                        return {pb.template NewDataLiteral<ui32>(0)};
+                    },
+                    [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode::TList {
+                        TRuntimeNode::TList state = {
+                            pb.template NewDataLiteral<i32>(-7),
+                            pb.template NewDataLiteral<i32>(std::numeric_limits<i32>::min()),
+                            pb.template NewDataLiteral<ui32>(std::numeric_limits<ui32>::max()),
+                            pb.template NewDataLiteral<float>(-0.0f),
+                            pb.template NewDataLiteral<float>(std::bit_cast<float>(nanBits)),
+                        };
+                        if (optional) {
+                            for (auto& value : state) {
+                                value = pb.NewOptional(value);
+                            }
+                        }
+                        return state;
+                    },
+                    [](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                        return {state[1], state[0], state[2], state[4], state[3]};
+                    },
+                    [](TRuntimeNode::TList, TRuntimeNode::TList state) { return state; });
+                if (UseFlow) {
+                    root = pb.FromFlow(root);
+                }
+                auto graph = setup.BuildGraph(root, {source});
+                TMixedReference reference;
+                graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(),
+                    NUdf::TUnboxedValuePod(new TMixedWideStream(6, reference)));
+                auto stream = graph->GetValue();
+                NUdf::TUnboxedValue output[5];
+                UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output, 5), NUdf::EFetchStatus::Ok);
+                UNIT_ASSERT_VALUES_EQUAL(output[0].Get<i32>(), std::numeric_limits<i32>::min());
+                UNIT_ASSERT_VALUES_EQUAL(output[1].Get<i32>(), -7);
+                UNIT_ASSERT_VALUES_EQUAL(output[2].Get<ui32>(), std::numeric_limits<ui32>::max());
+                UNIT_ASSERT_VALUES_EQUAL(std::bit_cast<ui32>(output[3].Get<float>()), nanBits);
+                UNIT_ASSERT_VALUES_EQUAL(std::bit_cast<ui32>(output[4].Get<float>()), ui32{1} << 31);
+                UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output, 5), NUdf::EFetchStatus::Finish);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestCrossDependentUnboxedState, UseLLVM, UseFlow) {
+        for (const bool isAggregator : {false, true}) {
+            TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
+            auto& pb = setup.GetDqProgramBuilder();
+            const auto inputType = pb.NewStreamType(pb.NewMultiType({
+                pb.NewDataType(NUdf::TDataType<ui32>::Id),
+                pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id)),
+                pb.NewDataType(NUdf::TDataType<ui64>::Id),
+                pb.NewDataType(NUdf::TDataType<char*>::Id),
+            }));
+            const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", inputType).Build();
+            TRuntimeNode input(source, false);
+            if (UseFlow) {
+                input = pb.ToFlow(input, {});
+            }
+            auto root = GetOperatorNode(
+                pb, isAggregator, false, 128ull << 20, input,
+                [&](TRuntimeNode::TList) -> TRuntimeNode::TList {
+                    return {pb.template NewDataLiteral<ui32>(0)};
+                },
+                [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList {
+                    auto shortString = pb.template NewDataLiteral<NUdf::EDataSlot::String>("short");
+                    return {items[3], shortString, pb.NewTuple({items[3]}), pb.NewTuple({shortString})};
+                },
+                [](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                    return {state[1], state[0], state[3], state[2]};
+                },
+                [](TRuntimeNode::TList, TRuntimeNode::TList state) { return state; });
+            if (UseFlow) {
+                root = pb.FromFlow(root);
+            }
+            auto graph = setup.BuildGraph(root, {source});
+            TMixedReference reference;
+            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(),
+                NUdf::TUnboxedValuePod(new TMixedWideStream(6, reference)));
+            auto stream = graph->GetValue();
+            std::vector<NUdf::TUnboxedValue> output(4);
+            UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output.data(), output.size()), NUdf::EFetchStatus::Ok);
+            UNIT_ASSERT_VALUES_EQUAL(std::string(output[0].AsStringRef()), "short");
+            UNIT_ASSERT_VALUES_EQUAL(std::string(output[1].AsStringRef()), "long-state-value-00000000");
+            const auto firstElement = output[2].GetElement(0);
+            const auto secondElement = output[3].GetElement(0);
+            UNIT_ASSERT_VALUES_EQUAL(std::string(firstElement.AsStringRef()), "short");
+            UNIT_ASSERT_VALUES_EQUAL(std::string(secondElement.AsStringRef()), "long-state-value-00000000");
+            UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output.data(), output.size()), NUdf::EFetchStatus::Finish);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestCrossDependentMixedState, UseLLVM, UseFlow) {
+        TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
+        auto& pb = setup.GetDqProgramBuilder();
+        const auto inputType = pb.NewStreamType(pb.NewMultiType({
+            pb.NewDataType(NUdf::TDataType<ui32>::Id),
+            pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id)),
+            pb.NewDataType(NUdf::TDataType<ui64>::Id),
+            pb.NewDataType(NUdf::TDataType<char*>::Id),
+        }));
+        const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", inputType).Build();
+        TRuntimeNode input(source, false);
+        if (UseFlow) {
+            input = pb.ToFlow(input, {});
+        }
+        auto root = GetOperatorNode(
+            pb, true, false, 128ull << 20, input,
+            [&](TRuntimeNode::TList) -> TRuntimeNode::TList {
+                return {pb.template NewDataLiteral<ui32>(0)};
+            },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList {
+                return {pb.template NewDataLiteral<ui64>(17), items[3], pb.template NewDataLiteral<ui64>(42), items[1]};
+            },
+            [](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                return {state[2], items[3], state[0], items[1]};
+            },
+            [](TRuntimeNode::TList, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                return state;
+            });
+        if (UseFlow) {
+            root = pb.FromFlow(root);
+        }
+        auto graph = setup.BuildGraph(root, {source});
+        TMixedReference reference;
+        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(),
+            NUdf::TUnboxedValuePod(new TMixedWideStream(6, reference)));
+        auto stream = graph->GetValue();
+        std::vector<NUdf::TUnboxedValue> output(4);
+        UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output.data(), output.size()), NUdf::EFetchStatus::Ok);
+        UNIT_ASSERT_VALUES_EQUAL(output[0].Get<ui64>(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(std::string(output[1].AsStringRef()), "long-state-value-00000005");
+        UNIT_ASSERT_VALUES_EQUAL(output[2].Get<ui64>(), 17);
+        UNIT_ASSERT(!output[3]);
+        UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output.data(), output.size()), NUdf::EFetchStatus::Finish);
+    }
+
+    Y_UNIT_TEST_QUAD(TestMixedNativeAndStringValues, UseLLVM, UseFlow) {
+        {
+            TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
+            RunMixedWideTest(setup, UseFlow, true, false);
+        }
+        {
+            TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
+            RunMixedWideTest(setup, UseFlow, true, true);
+        }
+        {
+            TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
+            RunMixedWideTest(setup, UseFlow, false, true);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestMixedNativeAndStringValuesWithSpilling, UseLLVM, UseFlow) {
+        TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
+        RunMixedWideTest(setup, UseFlow, true, false);
+    }
+
+    Y_UNIT_TEST_QUAD(TestFastFinalizeWithSpilling, UseLLVM, UseFlow) {
+        RunFinalizeSpillingTest<UseLLVM>(UseFlow, false, false);
+    }
+
+    Y_UNIT_TEST_QUAD(TestBlockFastFinalizeWithSpilling, UseLLVM, UseFlow) {
+        RunFinalizeSpillingTest<UseLLVM>(UseFlow, true, false);
+    }
+
+    Y_UNIT_TEST_QUAD(TestFinalizeExpressionWithSpilling, UseLLVM, UseFlow) {
+        RunFinalizeSpillingTest<UseLLVM>(UseFlow, false, true);
+        RunFinalizeSpillingTest<UseLLVM>(UseFlow, true, true);
+    }
+
+    Y_UNIT_TEST_QUAD(TestFastFinalizeEarlyStopAfterSpilling, UseLLVM, UseFlow) {
+        RunFinalizeSpillingTest<UseLLVM>(UseFlow, false, false, true);
+        RunFinalizeSpillingTest<UseLLVM>(UseFlow, true, false, true);
+    }
+
+    Y_UNIT_TEST_QUAD(TestRequiredNative16State, UseLLVM, UseFlow) {
+        for (bool blocks : {false, true}) {
+            RunTemporalAggregationTest<UseLLVM>(UseFlow, blocks, false, false, true);
+            RunTemporalAggregationTest<UseLLVM>(UseFlow, blocks, true, false, true);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestTemporalAggregation, UseLLVM, UseFlow) {
+        RunTemporalAggregationTest<UseLLVM>(UseFlow, false, false, false);
+        RunTemporalAggregationTest<UseLLVM>(UseFlow, false, true, false);
+    }
+
+    Y_UNIT_TEST_QUAD(TestBlockTemporalAggregation, UseLLVM, UseFlow) {
+        RunTemporalAggregationTest<UseLLVM>(UseFlow, true, false, false);
+        RunTemporalAggregationTest<UseLLVM>(UseFlow, true, true, false);
+    }
+
+    Y_UNIT_TEST_QUAD(TestTemporalAggregationWithSpilling, UseLLVM, UseFlow) {
+        RunTemporalAggregationTest<UseLLVM>(UseFlow, false, true, true);
+        RunTemporalAggregationTest<UseLLVM>(UseFlow, true, true, true);
+    }
+
+    Y_UNIT_TEST_QUAD(TestNativeStateExceptions, UseLLVM, UseFlow) {
+        for (const bool init : {false, true}) {
+            for (const ui32 bits : {16, 32, 64}) {
+                RunThrowingStateTest<UseLLVM>(UseFlow, bits, 0, init);
+            }
+            for (const size_t width : {6, 36}) {
+                RunThrowingStateTest<UseLLVM>(UseFlow, 64, width, init);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestStateExceptionDuringSpillReplay, UseLLVM, UseFlow) {
+        RunThrowingStateTest<UseLLVM>(UseFlow, 64, 0, false, true);
+    }
+
+    Y_UNIT_TEST_QUAD(TestPartialKeyException, UseLLVM, UseFlow) {
+        RunThrowingKeyTest<UseLLVM>(UseFlow, true);
+        RunThrowingKeyTest<UseLLVM>(UseFlow, false);
+    }
+
+    Y_UNIT_TEST_QUAD(TestWideNullableKeyGrouping, UseLLVM, UseFlow) {
+        for (const bool blocks : {false, true}) {
+            RunKeyGroupingTest<UseLLVM>(UseFlow, blocks, false, false);
+            RunKeyGroupingTest<UseLLVM>(UseFlow, blocks, false, true);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestFloatingKeyGrouping, UseLLVM, UseFlow) {
+        for (const bool blocks : {false, true}) {
+            RunKeyGroupingTest<UseLLVM>(UseFlow, blocks, true, false);
+            RunKeyGroupingTest<UseLLVM>(UseFlow, blocks, true, true);
+        }
+    }
 
     Y_UNIT_TEST_QUAD(TestWideModeNoInput, UseLLVM, UseFlow) {
         RunDqCombineWideTest<UseLLVM>(UseFlow, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
@@ -1126,17 +2321,6 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
         });
     }
 
-    Y_UNIT_TEST_QUAD(TestWideModeAggregationWithSpillingNonDehydrated, UseLLVM, UseFlow) {
-        TDqSetup<UseLLVM, true> setup(GetHashCombineNodeFactory());
-        RunDqAggregateWideTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
-            return new TWideKVStream(ctx, 100000, 10, columnTypes, keyWidth, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
-                if (rowNum == 100000) {
-                    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
-                }
-            });
-        }, 2, true, false);
-    }
-
     Y_UNIT_TEST_QUAD(TestWideModeAggregationWithSpillingNonPassthrough, UseLLVM, UseFlow) {
         TDqSetup<UseLLVM, true> setup(GetHashCombineNodeFactory());
         RunDqAggregateWideTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
@@ -1145,7 +2329,7 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
                     setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
                 }
             });
-        }, 2, false, true);
+        }, 2, true);
     }
 
     Y_UNIT_TEST_QUAD(TestWideModeAggregationMultiRowNoSpilling, UseLLVM, UseFlow) {
@@ -1201,18 +2385,7 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
             setup,
             UseFlow,
             streamCreator,
-            streamChecker,
-            false
-        );
-
-        lineCount = 0;
-
-        RunDqAggregateEarlyStopTest(
-            setup,
-            UseFlow,
-            streamCreator,
-            streamChecker,
-            true
+            streamChecker
         );
     }
 
@@ -1240,18 +2413,7 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
             setup,
             UseFlow,
             streamCreator,
-            streamChecker,
-            false
-        );
-
-        stopping = false;
-
-        RunDqAggregateEarlyStopTest(
-            setup,
-            UseFlow,
-            streamCreator,
-            streamChecker,
-            true
+            streamChecker
         );
     }
 
@@ -1279,7 +2441,6 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
             UseFlow,
             streamCreator,
             streamChecker,
-            false,
             std::make_shared<TPendingSpillerFactory>()
         );
     }
@@ -1307,18 +2468,7 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
             setup,
             UseFlow,
             streamCreator,
-            streamChecker,
-            false
-        );
-
-        lineCount = 0;
-
-        RunDqAggregateEarlyStopTest(
-            setup,
-            UseFlow,
-            streamCreator,
-            streamChecker,
-            true
+            streamChecker
         );
     }
 } // Y_UNIT_TEST_SUITE

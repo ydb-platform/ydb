@@ -3,6 +3,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
+#include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
@@ -10,6 +11,8 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -18,6 +21,7 @@
 #include <util/generic/hash_multi_map.h>
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
+#include <util/string/join.h>
 
 #include <algorithm>
 #include <limits>
@@ -26,55 +30,26 @@
 namespace NFq {
 
 namespace {
+
 // Pq specific
 // TODO: rewrite this code to not depend on concrete providers (now it is only pq)
 struct TTopic {
     TString DatabaseId;
     TString Database;
     TString TopicPath;
+    TString Endpoint;
+    TString Cluster;
 
     bool operator==(const TTopic& t) const {
-        return DatabaseId == t.DatabaseId && Database == t.Database && TopicPath == t.TopicPath;
+        return DatabaseId == t.DatabaseId && Database == t.Database && TopicPath == t.TopicPath && Endpoint == t.Endpoint && Cluster == t.Cluster;
     }
+
+    struct THash {
+        size_t operator()(const TTopic& t) const {
+            return MultiHash(t.DatabaseId, t.Database, t.TopicPath, t.Endpoint, t.Cluster);
+        }
+    };
 };
-
-struct TTopicHash {
-    size_t operator()(const TTopic& t) const {
-        return MultiHash(t.DatabaseId, t.Database, t.TopicPath);
-    }
-};
-
-struct TTaskSource {
-    ui64 TaskId = 0;
-    ui64 InputIndex = 0;
-
-    bool operator==(const TTaskSource& t) const {
-        return TaskId == t.TaskId && InputIndex == t.InputIndex;
-    }
-};
-
-struct TTaskSourceHash {
-    size_t operator()(const TTaskSource& t) const {
-        return THash<std::tuple<ui64, ui64>>()(std::tie(t.TaskId, t.InputIndex));
-    }
-};
-
-using TPartitionsMapping = THashMultiMap<ui64, TTaskSource>; // Task can have multiple sources for one partition, so multimap.
-
-struct TTopicMappingInfo {
-    TPartitionsMapping PartitionsMapping;
-    bool Used = false;
-};
-
-using TTopicsMapping = THashMap<TTopic, TTopicMappingInfo, TTopicHash>;
-
-// Error in case of normal mode and warning if force one is on.
-#define ISSUE(stream)                                                   \
-    AddForceWarningOrError(TStringBuilder() << stream, issues, force);  \
-    if (!force) {                                                       \
-        result = false;                                                 \
-    }                                                                   \
-    /**/
 
 void AddForceWarningOrError(const TString& message, NYql::TIssues& issues, bool force) {
     NYql::TIssue issue(message);
@@ -98,178 +73,526 @@ bool ParseTopicInput(
     std::vector<NYql::NPq::TTopicPartitionsSet>& partitionsSets,
     NYql::TIssues& issues)
 {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-but-set-variable"
-    bool result = true;
-#pragma clang diagnostic pop
     const char* queryKindStr = isSourceGraph ? "source" : "destination";
     const google::protobuf::Any& settingsAny = taskInput.GetSource().GetSettings();
     if (!settingsAny.Is<NYql::NPq::NProto::TDqPqTopicSource>()) {
-        ISSUE("Can't read " << queryKindStr << " query params: input " << inputIndex << " of task " << task.GetId() << " has incorrect type");
+        AddForceWarningOrError(TStringBuilder() << "Can't read " << queryKindStr << " query params: input " << inputIndex << " of task " << task.GetId() << " has incorrect type", issues, force);
         return false;
     }
+
     if (!settingsAny.UnpackTo(&srcDesc)) {
-        ISSUE("Can't read " << queryKindStr << " query params: failed to unpack input " << inputIndex << " of task " << task.GetId());
+        AddForceWarningOrError(TStringBuilder() << "Can't read " << queryKindStr << " query params: failed to unpack input " << inputIndex << " of task " << task.GetId(), issues, force);
         return false;
     }
 
     partitionsSets = NYql::NPq::GetTopicPartitionsSets(task);
     if (partitionsSets.empty()) {
-        ISSUE("Can't read " << queryKindStr << " query params: failed to load partitions of topic `" << srcDesc.GetTopicPath() << "` from input " << inputIndex << " of task " << task.GetId());
+        AddForceWarningOrError(TStringBuilder() << "Can't read " << queryKindStr << " query params: failed to load partitions of topic `" << srcDesc.GetTopicPath() << "` from input " << inputIndex << " of task " << task.GetId(), issues, force);
         return false;
     }
 
     return true;
 }
 
-void AddToMapping(
-    const NYql::NPq::NProto::TDqPqTopicSource& srcDesc,
-    const std::vector<NYql::NPq::TTopicPartitionsSet>& partitionsSets,
-    ui64 taskId,
-    ui64 inputIndex,
-    TTopicsMapping& mapping)
-{
-    TTopicMappingInfo& info = mapping[TTopic{srcDesc.GetDatabaseId(), srcDesc.GetDatabase(), srcDesc.GetTopicPath()}];
-    for (const auto& partitionsSet : partitionsSets) {
-        ui64 currentPartition = partitionsSet.EachTopicPartitionGroupId;
-        do {
-            info.PartitionsMapping.emplace(currentPartition, TTaskSource{taskId, inputIndex});
-            currentPartition += partitionsSet.DqPartitionsCount;
-        } while (currentPartition < partitionsSet.TopicPartitionsCount);
-    }
-}
-
-void InitForeignPlan(const NYql::NDqProto::TDqTask& task, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan) {
-    taskPlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN);
-    taskPlan.MutableProgram()->SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);
-    for (ui64 inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {
-        const NYql::NDqProto::TTaskInput& taskInput = task.GetInputs(inputIndex);
-        if (taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource) {
-            NYql::NDqProto::NDqStateLoadPlan::TSourcePlan& sourcePlan = *taskPlan.AddSources();
-            sourcePlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);
-            sourcePlan.SetInputIndex(inputIndex);
+template <typename TCallback>
+void ForEachTopicPartition(const NYql::NPq::NProto::TDqPqTopicSource& source, const std::vector<NYql::NPq::TTopicPartitionsSet>& sets, TCallback callback) {
+    const auto add = [&](const TString& cluster, const TString& endpoint, const TString& database, const ui64 partitionsCount) {
+        const TTopic topic{source.GetDatabaseId(), database, source.GetTopicPath(), endpoint, cluster};
+        for (const auto& set : sets) {
+            YQL_ENSURE(set.DqPartitionsCount, "Invalid topic partition mapping");
+            const auto count = partitionsCount ? partitionsCount : set.TopicPartitionsCount;
+            for (ui64 partition = set.EachTopicPartitionGroupId; partition < count; partition += set.DqPartitionsCount) {
+                callback(topic, partition);
+            }
         }
-    }
-    for (ui64 outputIndex = 0; outputIndex < task.OutputsSize(); ++outputIndex) {
-        const NYql::NDqProto::TTaskOutput& taskOutput = task.GetOutputs(outputIndex);
-        if (taskOutput.GetTypeCase() == NYql::NDqProto::TTaskOutput::kSink) {
-            NYql::NDqProto::NDqStateLoadPlan::TSinkPlan& sinkPlan = *taskPlan.AddSinks();
-            sinkPlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);
-            sinkPlan.SetOutputIndex(outputIndex);
+    };
+
+    if (source.GetFederatedClusters().empty()) {
+        add({}, source.GetEndpoint(), source.GetDatabase(), 0);
+    } else {
+        THashSet<TString> clusters;
+        for (const auto& cluster : source.GetFederatedClusters()) {
+            const auto& name = cluster.GetName();
+            YQL_ENSURE(clusters.insert(name).second, "Duplicate federated topic cluster " << name);
+            add(name, name ? cluster.GetEndpoint() : source.GetEndpoint(), name ? cluster.GetDatabase() : source.GetDatabase(), cluster.GetPartitionsCount());
         }
     }
 }
 
-NYql::NDqProto::NDqStateLoadPlan::TSourcePlan& FindSourcePlan(NYql::NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan, ui64 inputIndex) {
-    for (NYql::NDqProto::NDqStateLoadPlan::TSourcePlan& plan : *taskPlan.MutableSources()) {
-        if (plan.GetInputIndex() == inputIndex) {
-            return plan;
+class TContinuationPlanBuilder {
+    // Stateful operators info
+
+    struct THashRouting {
+        TString Settings;
+        TVector<const NKikimr::NMiniKQL::TType*> KeyTypes;
+        bool Block = false;
+
+        bool IsSame(const THashRouting& other) const {
+            if (Settings != other.Settings || Block != other.Block || KeyTypes.size() != other.KeyTypes.size()) {
+                return false;
+            }
+
+            for (size_t i = 0; i < KeyTypes.size(); ++i) {
+                if (!KeyTypes[i]->IsSameType(*other.KeyTypes[i])) {
+                    return false;
+                }
+            }
+
+            return true;
         }
+    };
+
+    struct TAggregation {
+        const TStageStateInfo* Stage = nullptr;
+        const NKikimr::NMiniKQL::TType* KeyType = nullptr;
+        const NKikimr::NMiniKQL::TType* SavedStateType = nullptr;
+    };
+
+    using TOperatorsMap = THashMap<TString, TAggregation>;
+
+    // Topics partitions info
+
+    struct TTaskSource {
+        ui64 TaskId = 0;
+        ui64 InputIndex = 0;
+        TString Consumer;
+
+        bool operator==(const TTaskSource& t) const {
+            return TaskId == t.TaskId && InputIndex == t.InputIndex;
+        }
+
+        struct THash {
+            size_t operator()(const TTaskSource& t) const {
+                return ::THash<std::tuple<ui64, ui64>>()(std::tie(t.TaskId, t.InputIndex));
+            }
+        };
+    };
+
+    using TPartitionsMapping = THashMultiMap<ui64, TTaskSource>; // Task can have multiple sources for one partition, so multimap.
+
+    struct TTopicMappingInfo {
+        TPartitionsMapping PartitionsMapping;
+        bool Used = false;
+    };
+
+    using TTopicsMapping = THashMap<TTopic, TTopicMappingInfo, TTopic::THash>;
+
+public:
+    TContinuationPlanBuilder(const TGraphStateInfo& src, const TGraphStateInfo& dst, const bool force, NYql::TIssues& issues)
+        : Force(force)
+        , Issues(issues)
+    {
+        const auto guard = src.BindAllocator();
+        YQL_ENSURE(src.GetContext() == dst.GetContext(), "Recovery graphs must share a type environment");
+
+        BuildSourcesContinuation(src, dst);
+        BuildStatefulOperatorsContinuation(src, dst);
     }
-    Y_ABORT("Source plan for input index %lu was not found", inputIndex);
-}
 
-} // anonymous namespace
+    bool IsValid() const {
+        return Valid;
+    }
 
-bool MakeContinueFromStreamingOffsetsPlan(
-    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& src,
-    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& dst,
-    const bool force,
-    THashMap<ui64, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan>& plan,
-    NYql::TIssues& issues)
-{
-#define FORCE_MSG(msg) (force ? ". " msg : ". Use force mode to ignore this issue")
+    void ExtractPlan(TStateLoadPlan& plan, TSourceRecoverySet& sourcesToPrepare) {
+        plan = std::move(Plan);
+        sourcesToPrepare = std::move(ChangedConsumers);
+    }
 
-    bool result = true;
-    // Build src mapping
-    TTopicsMapping srcMapping;
-    for (const NYql::NDqProto::TDqTask& task : src) {
-        for (ui64 inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {
-            const NYql::NDqProto::TTaskInput& taskInput = task.GetInputs(inputIndex);
-            if (IsTopicInput(taskInput)) {
-                NYql::NPq::NProto::TDqPqTopicSource srcDesc;
-                std::vector<NYql::NPq::TTopicPartitionsSet> partitionsSets;
-                if (!ParseTopicInput(task, taskInput, inputIndex, force, true, srcDesc, partitionsSets, issues)) {
-                    if (!force) {
-                        result = false;
+private:
+    //// Stateful operators recovery
+
+    static THashRouting GetAggregationRouting(const TGraphStateInfo& graph, const TStageStateInfo& aggregation) {
+        struct TOutputChannel {
+            size_t OutputIndex = 0;
+            size_t Slot = 0;
+        };
+
+        struct TProducer {
+            const NYql::NDqProto::TDqTask* Task = nullptr;
+            const TStageStateInfo* Stage = nullptr;
+            TMaybe<THashMap<ui64, TOutputChannel>> OutputChannels;
+        };
+
+        if (aggregation.Tasks.size() == 1) {
+            return {};
+        }
+
+        THashMap<ui64, TProducer> producers;
+        producers.reserve(std::max(aggregation.Tasks.size(), graph.GetStages().size()));
+        for (const auto& stage : graph.GetStages()) {
+            for (const auto* task : stage.Tasks) {
+                producers.emplace(task->GetId(), TProducer{task, &stage, {}});
+            }
+        }
+
+        TMaybe<THashRouting> result;
+        for (size_t taskIndex = 0; taskIndex < aggregation.Tasks.size(); ++taskIndex) {
+            bool hasShuffle = false;
+
+            const auto& target = *aggregation.Tasks[taskIndex];
+            for (const auto& input : target.GetInputs()) {
+                YQL_ENSURE(!input.HasSource() || !NYql::NDq::IsInfiniteSourceType(input.GetSource().GetType()), "Unsupported aggregation input routing, expected direct hash shuffle");
+                for (const auto& channel : input.GetChannels()) {
+                    if (channel.GetCheckpointingMode() == NYql::NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                        continue;
                     }
-                    continue;
+
+                    auto* const producer = producers.FindPtr(channel.GetSrcTaskId());
+                    YQL_ENSURE(producer, "Missing shuffle producer task " << channel.GetSrcTaskId());
+
+                    if (!producer->OutputChannels) {
+                        auto& outputChannels = producer->OutputChannels.ConstructInPlace();
+                        for (size_t outputIndex = 0; outputIndex < producer->Task->OutputsSize(); ++outputIndex) {
+                            const auto& output = producer->Task->GetOutputs(outputIndex);
+                            for (size_t slot = 0; slot < output.ChannelsSize(); ++slot) {
+                                YQL_ENSURE(outputChannels.emplace(output.GetChannels(slot).GetId(), TOutputChannel{outputIndex, slot}).second, "Unexpected aggregation hash shuffle routing: duplicate output channel");
+                            }
+                        }
+                    }
+
+                    const auto* const sourceChannel = producer->OutputChannels->FindPtr(channel.GetId());
+                    YQL_ENSURE(sourceChannel, "Missing aggregation input channel " << channel.GetId());
+                    const auto& output = producer->Task->GetOutputs(sourceChannel->OutputIndex);
+                    const auto& outgoing = output.GetChannels(sourceChannel->Slot);
+
+                    YQL_ENSURE(output.HasHashPartition() && !output.HasTransform(), "Unsupported aggregation input routing, expected direct hash shuffle without output transforms");
+                    YQL_ENSURE(outgoing.GetDstTaskId() == target.GetId() && sourceChannel->Slot == taskIndex, "Unexpected aggregation hash shuffle routing");
+
+                    auto settings = output.GetHashPartition();
+                    YQL_ENSURE(static_cast<size_t>(output.ChannelsSize()) == aggregation.Tasks.size() && settings.GetPartitionsCount() == output.ChannelsSize() && settings.KeyColumnsSize(), "Invalid aggregation hash shuffle settings");
+                    if (settings.GetHashKindCase() == NYql::NDqProto::TTaskOutputHashPartition::HASHKIND_NOT_SET) {
+                        settings.MutableHashV1(); // Runtime default.
+                    }
+
+                    const auto& types = producer->Stage->OutputTypes;
+                    YQL_ENSURE(sourceChannel->OutputIndex < types.size(), "Missing shuffle output type for aggregation recovery");
+
+                    THashRouting hash;
+                    hash.Settings = settings.SerializeAsString();
+                    hash.Block = true;
+                    hash.KeyTypes.reserve(settings.KeyColumnsSize());
+                    for (const auto& key : settings.GetKeyColumns()) {
+                        const auto column = NYql::NDq::GetColumnInfo(types[sourceChannel->OutputIndex], key);
+                        hash.KeyTypes.emplace_back(column.OriginalType);
+                        hash.Block &= column.IsBlockOrScalar();
+                    }
+
+                    YQL_ENSURE(!result || result->IsSame(hash), "Inconsistent hash shuffle contracts for aggregation recovery");
+                    result = std::move(hash);
+                    hasShuffle = true;
+                }
+            }
+
+            YQL_ENSURE(hasShuffle, "Missing direct hash shuffle for aggregation recovery");
+        }
+
+        YQL_ENSURE(result, "Missing aggregation tasks");
+        return std::move(*result);
+    }
+
+    THashMap<TString, TAggregation> CollectStatefulOperators(const TGraphStateInfo& graph, const bool previous) {
+        THashMap<TString, TAggregation> result;
+        for (const auto& stage : graph.GetStages()) {
+            // Collect supported stateful operators.
+
+            for (const auto* callable : stage.StatefulOperators) {
+                const TStringBuf name = callable->GetType()->GetName();
+                if (name == "KqpStreamingAggregation"sv) {
+                    YQL_ENSURE(callable->GetInputsCount() >= 12, "Invalid streaming aggregation program in stage " << stage.StageId);
+                    if (const auto binding = callable->GetInput(8); binding.IsImmediate() && binding.GetStaticType()->IsTuple()) {
+                        const auto* tuple = AS_VALUE(NKikimr::NMiniKQL::TTupleLiteral, binding);
+                        YQL_ENSURE(tuple->GetValuesCount() == 2, "Invalid streaming aggregation output table binding");
+
+                        const auto path = tuple->GetValue(0);
+                        YQL_ENSURE(path.IsImmediate() && path.GetStaticType()->IsData(), "Invalid streaming aggregation output table path");
+
+                        const TString table(AS_VALUE(NKikimr::NMiniKQL::TDataLiteral, path)->AsValue().AsStringRef());
+                        YQL_ENSURE(!table.empty(), "Empty streaming aggregation output table path");
+                        YQL_ENSURE(result.emplace(table, TAggregation{
+                            .Stage = &stage,
+                            .KeyType = callable->GetInput(3).GetStaticType(),
+                            .SavedStateType = callable->GetInput(9).GetStaticType(),
+                        }).second, "Ambiguous streaming aggregation output table binding: " << table);
+                    } else if (previous) {
+                        StateLossError(TStringBuilder() << "Unsupported checkpointed streaming aggregation setup for offset recovery in stage " << stage.StageId << ", recovery allowed only for streaming aggregation with table binding");
+                    }
+                } else if (previous) {
+                    StateLossError(TStringBuilder() << "Unsupported checkpointed operator for offset recovery: " << name << " in stage " << stage.StageId);
+                }
+            }
+
+            if (!previous) {
+                continue;
+            }
+
+            // Validate that sinks do not hold state.
+
+            THashSet<TString> sinks;
+            for (const auto* task : stage.Tasks) {
+                for (const auto& output : task->GetOutputs()) {
+                    if (!output.HasSink() || output.GetSink().GetType() != "PqSink") {
+                        continue;
+                    }
+
+                    const auto& sink = output.GetSink();
+                    if (!sinks.insert(sink.SerializeAsString()).second) {
+                        continue;
+                    }
+
+                    NYql::NPq::NProto::TDqPqTopicSink settings;
+                    YQL_ENSURE(sink.GetSettings().UnpackTo(&settings), "Invalid PQ sink settings for offset recovery");
+
+                    if (settings.GetEnableDeduplication()) {
+                        StateLossError("Offset recovery does not support PQ sinks with deduplication: producer sequence numbers cannot be transferred");
+                    }
+
+                    if (!settings.GetDeferredPublicationExtIdPrefix().empty()) {
+                        StateLossError("Offset recovery does not support PQ sinks with exactly-once delivery: deferred publications cannot be transferred");
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    void BuildStatefulOperatorsContinuation(const TGraphStateInfo& src, const TGraphStateInfo& dst) {
+        const auto previous = CollectStatefulOperators(src, /* previous */ true);
+        const auto next = CollectStatefulOperators(dst, /* previous */ false);
+
+        for (const auto& [table, old] : previous) {
+            const auto it = next.find(table);
+            if (it == next.end()) {
+                TVector<TString> availableTables;
+                availableTables.reserve(next.size());
+                for (const auto& [name, _] : next) {
+                    availableTables.push_back(name);
                 }
 
-                AddToMapping(srcDesc, partitionsSets, task.GetId(), inputIndex, srcMapping);
+                std::sort(availableTables.begin(), availableTables.end());
+                StateLossError(TStringBuilder() << "Streaming aggregation output table is missing in the new query: " << table
+                    << ", available output tables: " << (availableTables.empty() ? "none" : JoinSeq(", ", availableTables)));
+                continue;
+            }
+
+            const auto& target = it->second;
+            if (!old.KeyType->IsSameType(*target.KeyType)) {
+                StateLossError(TStringBuilder() << "Streaming aggregation key type changed for output table " << table
+                    << ", previous: " << NKikimr::NMiniKQL::PrintNode(old.KeyType, /* singleLine */ true)
+                    << ", new: " << NKikimr::NMiniKQL::PrintNode(target.KeyType, /* singleLine */ true));
+                continue;
+            }
+
+            if (!old.SavedStateType->IsSameType(*target.SavedStateType)) {
+                StateLossError(TStringBuilder() << "Streaming aggregation saved state type changed for output table " << table
+                    << ", previous: " << NKikimr::NMiniKQL::PrintNode(old.SavedStateType, /* singleLine */ true)
+                    << ", new: " << NKikimr::NMiniKQL::PrintNode(target.SavedStateType, /* singleLine */ true));
+                continue;
+            }
+
+            if (old.Stage->Tasks.size() != target.Stage->Tasks.size()) {
+                StateLossError(TStringBuilder() << "Streaming aggregation task count changed for output table " << table << ": " << old.Stage->Tasks.size() << " -> " << target.Stage->Tasks.size() << " on stage " << target.Stage->StageId);
+                continue;
+            }
+
+            try {
+                if (!GetAggregationRouting(src, *old.Stage).IsSame(GetAggregationRouting(dst, *target.Stage))) {
+                    StateLossError(TStringBuilder() << "Streaming aggregation shuffle routing changed for output table " << table);
+                    continue;
+                }
+            } catch (const std::exception& e) {
+                StateLossError(TStringBuilder() << "Cannot validate streaming aggregation shuffle routing for output table " << table << ": " << e.what());
+                continue;
+            }
+
+            if (old.Stage->StatefulOperators.size() != 1 || target.Stage->StatefulOperators.size() != 1) {
+                StateLossError(TStringBuilder() << "Cannot transfer a mixed program checkpoint for output table " << table);
+                continue;
+            }
+
+            for (size_t i = 0; i < target.Stage->Tasks.size(); ++i) {
+                const auto& task = *target.Stage->Tasks[i];
+                auto& taskPlan = Plan[task.GetId()];
+                if (taskPlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
+                    InitForeignPlan(task, taskPlan);
+                }
+
+                auto& program = *taskPlan.MutableProgram();
+                YQL_ENSURE(!program.HasForeignTaskId(), "Ambiguous foreign program checkpoint for task " << task.GetId());
+                program.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN);
+                program.SetForeignTaskId(old.Stage->Tasks[i]->GetId());
             }
         }
     }
 
-    // Watch dst query and build plan
-    for (const NYql::NDqProto::TDqTask& task : dst) {
-        NYql::NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan = plan[task.GetId()];
-        taskPlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY); // default if no topic sources
-        bool foreignStatePlanInited = false;
-        for (ui64 inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {
-            const NYql::NDqProto::TTaskInput& taskInput = task.GetInputs(inputIndex);
-            if (IsTopicInput(taskInput)) {
-                NYql::NPq::NProto::TDqPqTopicSource srcDesc;
-                std::vector<NYql::NPq::TTopicPartitionsSet> partitionsSets;
-                if (!ParseTopicInput(task, taskInput, inputIndex, force, false, srcDesc, partitionsSets, issues)) {
-                    if (!force) {
-                        result = false;
+    //// Sources recovery
+
+    static NYql::NDqProto::NDqStateLoadPlan::TSourcePlan& FindSourcePlan(NYql::NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan, const ui64 inputIndex) {
+        for (auto& plan : *taskPlan.MutableSources()) {
+            if (plan.GetInputIndex() == inputIndex) {
+                return plan;
+            }
+        }
+        Y_ABORT("Source plan for input index %lu was not found", inputIndex);
+    }
+
+    TTopicsMapping BuildScrInputMapping(const TGraphStateInfo& src) {
+        TTopicsMapping srcMapping;
+        for (const auto& task : src.GetGraph()->GetTasks()) {
+            for (size_t inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {
+                const auto& taskInput = task.GetInputs(inputIndex);
+                if (IsTopicInput(taskInput)) {
+                    NYql::NPq::NProto::TDqPqTopicSource srcDesc;
+                    std::vector<NYql::NPq::TTopicPartitionsSet> partitionsSets;
+                    if (!ParseTopicInput(task, taskInput, inputIndex, Force, /* isSourceGraph */ true, srcDesc, partitionsSets, Issues)) {
+                        if (!Force) {
+                            Valid = false;
+                        }
+                        continue;
                     }
-                    continue;
-                }
-                const auto mappingInfoIt = srcMapping.find(TTopic{srcDesc.GetDatabaseId(), srcDesc.GetDatabase(), srcDesc.GetTopicPath()});
-                if (mappingInfoIt == srcMapping.end()) {
-                    ISSUE("Topic `" << srcDesc.GetTopicPath() << "` is not found in previous query" << FORCE_MSG("Query will use fresh offsets for its partitions"));
-                    continue;
-                }
-                TTopicMappingInfo& mappingInfo = mappingInfoIt->second;
-                mappingInfo.Used = true;
 
-                THashSet<TTaskSource, TTaskSourceHash> tasksSet;
+                    const auto& consumer = srcDesc.GetConsumerName();
 
-                // Process all partitions
-                for (const auto& partitionsSet : partitionsSets) {
-                    ui64 currentPartition = partitionsSet.EachTopicPartitionGroupId;
-                    do {
-                        auto [taskBegin, taskEnd] = mappingInfo.PartitionsMapping.equal_range(currentPartition);
+                    ForEachTopicPartition(srcDesc, partitionsSets, [&, taskId = task.GetId()](const TTopic& topic, const ui64 partition) {
+                        auto& topicInfo = srcMapping[topic];
+                        topicInfo.PartitionsMapping.emplace(partition, TTaskSource{taskId, inputIndex, consumer});
+                    });
+                }
+            }
+        }
+
+        return srcMapping;
+    }
+
+    void BuildSourcesContinuation(const TGraphStateInfo& src, const TGraphStateInfo& dst) {
+        auto srcMapping = BuildScrInputMapping(src);
+
+        for (const auto& task : dst.GetGraph()->GetTasks()) {
+            auto& taskPlan = Plan[task.GetId()];
+            taskPlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY); // Default if no topic sources or stateful operators
+
+            bool foreignStatePlanInitted = false;
+            for (size_t inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {
+                if (const auto& taskInput = task.GetInputs(inputIndex); IsTopicInput(taskInput)) {
+                    NYql::NPq::NProto::TDqPqTopicSource srcDesc;
+                    std::vector<NYql::NPq::TTopicPartitionsSet> partitionsSets;
+                    if (!ParseTopicInput(task, taskInput, inputIndex, Force, /* isSourceGraph */ false, srcDesc, partitionsSets, Issues)) {
+                        if (!Force) {
+                            Valid = false;
+                        }
+                        continue;
+                    }
+
+                    const auto& consumer = srcDesc.GetConsumerName();
+
+                    THashSet<TTaskSource, TTaskSource::THash> tasksSet;
+                    ForEachTopicPartition(srcDesc, partitionsSets, [&](const TTopic& topic, ui64 partition) {
+                        const auto mappingInfoIt = srcMapping.find(topic);
+                        if (mappingInfoIt == srcMapping.end()) {
+                            SourceError(TStringBuilder() << "Topic `" << srcDesc.GetTopicPath() << "` is not found in previous query", "Query will use fresh offsets for its partitions");
+                            return;
+                        }
+
+                        auto& mappingInfo = mappingInfoIt->second;
+                        mappingInfo.Used = true;
+
+                        auto [taskBegin, taskEnd] = mappingInfo.PartitionsMapping.equal_range(partition);
                         if (taskBegin == taskEnd) {
-                            ISSUE("Topic `" << srcDesc.GetTopicPath() << "` partition " << currentPartition << " is not found in previous query" << FORCE_MSG("Query will use fresh offsets for it"));
+                            SourceError(TStringBuilder() << "Topic `" << srcDesc.GetTopicPath() << "` partition " << partition << " is not found in previous query", "Query will use fresh offsets for it");
                         } else {
                             if (std::distance(taskBegin, taskEnd) > 1) {
-                                ISSUE("Topic `" << srcDesc.GetTopicPath() << "` partition " << currentPartition << " has ambiguous offsets source in previous query checkpoint" << FORCE_MSG("Query will use minimum offset to avoid skipping data"));
+                                SourceError(TStringBuilder() << "Topic `" << srcDesc.GetTopicPath() << "` partition " << partition << " has ambiguous offsets source in previous query checkpoint", "Query will use minimum offset to avoid skipping data");
                             }
                             for (; taskBegin != taskEnd; ++taskBegin) {
+                                if (consumer != taskBegin->second.Consumer) {
+                                    ChangedConsumers.emplace(task.GetId(), inputIndex);
+                                }
                                 tasksSet.insert(taskBegin->second);
                             }
                         }
-                        currentPartition += partitionsSet.DqPartitionsCount;
-                    } while (currentPartition < partitionsSet.TopicPartitionsCount);
-                }
+                    });
 
-                if (!tasksSet.empty()) {
-                    if (!foreignStatePlanInited) {
-                        foreignStatePlanInited = true;
-                        InitForeignPlan(task, taskPlan);
-                    }
-                    NYql::NDqProto::NDqStateLoadPlan::TSourcePlan& sourcePlan = FindSourcePlan(taskPlan, inputIndex);
-                    sourcePlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN);
-                    for (const TTaskSource& taskSource : tasksSet) {
-                        NYql::NDqProto::NDqStateLoadPlan::TSourcePlan::TForeignTaskSource& taskSourceProto = *sourcePlan.AddForeignTasksSources();
-                        taskSourceProto.SetTaskId(taskSource.TaskId);
-                        taskSourceProto.SetInputIndex(taskSource.InputIndex);
+                    if (!tasksSet.empty()) {
+                        if (!std::exchange(foreignStatePlanInitted, true)) {
+                            InitForeignPlan(task, taskPlan);
+                        }
+
+                        auto& sourcePlan = FindSourcePlan(taskPlan, inputIndex);
+                        sourcePlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN);
+
+                        for (const TTaskSource& taskSource : tasksSet) {
+                            auto& taskSourceProto = *sourcePlan.AddForeignTasksSources();
+                            taskSourceProto.SetTaskId(taskSource.TaskId);
+                            taskSourceProto.SetInputIndex(taskSource.InputIndex);
+                        }
                     }
                 }
             }
         }
-    }
-    for (const auto& [topic, mappingInfo] : srcMapping) {
-        if (!mappingInfo.Used) {
-            ISSUE("Topic `" << topic.TopicPath << "` is read in previous query but is not read in new query" << FORCE_MSG("Reading offsets will be lost in next checkpoint"));
+
+        for (const auto& [topic, mappingInfo] : srcMapping) {
+            if (!mappingInfo.Used) {
+                SourceError(TStringBuilder() << "Topic `" << topic.TopicPath << "` is read in previous query but is not read in new query", "Reading offsets will be lost in next checkpoint");
+            }
         }
     }
-    return result;
 
-#undef FORCE_MSG
+    //// Helpers
+
+    static void InitForeignPlan(const NYql::NDqProto::TDqTask& task, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan) {
+        taskPlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN);
+        taskPlan.MutableProgram()->SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);
+
+        for (size_t inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {
+            if (const auto& taskInput = task.GetInputs(inputIndex); taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource) {
+                auto& sourcePlan = *taskPlan.AddSources();
+                sourcePlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);
+                sourcePlan.SetInputIndex(inputIndex);
+            }
+        }
+
+        for (size_t outputIndex = 0; outputIndex < task.OutputsSize(); ++outputIndex) {
+            if (const auto& taskOutput = task.GetOutputs(outputIndex); taskOutput.GetTypeCase() == NYql::NDqProto::TTaskOutput::kSink) {
+                auto& sinkPlan = *taskPlan.AddSinks();
+                sinkPlan.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY);
+                sinkPlan.SetOutputIndex(outputIndex);
+            }
+        }
+    }
+
+    void StateLossError(const TString& message) {
+        AddForceWarningOrError(message + (Force ? ", FORCE=true discards this state" : ""), Issues, Force);
+        Valid &= Force;
+    }
+
+    void SourceError(const TString& message, const char* forceMessage) {
+        AddForceWarningOrError(Force ? message + ". " + forceMessage : message, Issues, Force);
+        Valid &= Force;
+    }
+
+    const bool Force = false;
+    bool Valid = true;
+    NYql::TIssues& Issues;
+    TStateLoadPlan Plan;
+    TSourceRecoverySet ChangedConsumers;
+};
+
+} // anonymous namespace
+
+bool MakeContinueFromStreamingOffsetsPlan(const TGraphStateInfo& src, const TGraphStateInfo& dst, const bool force, TStateLoadPlan& plan, TSourceRecoverySet& sourcesToPrepare, NYql::TIssues& issues) {
+    plan.clear();
+    sourcesToPrepare.clear();
+
+    try {
+        if (TContinuationPlanBuilder planBuilder(src, dst, force, issues); planBuilder.IsValid()) {
+            planBuilder.ExtractPlan(plan, sourcesToPrepare);
+            return true;
+        }
+        return false;
+    } catch (const std::exception& e) {
+        issues.AddIssue(NYql::TIssue(TStringBuilder() << "Cannot continue from streaming offsets: " << e.what()));
+        return false;
+    }
 }
 
 namespace {
@@ -280,18 +603,16 @@ class TReplayGraph {
 public:
     struct TPartition {
         TTopic Topic;
-        TString Endpoint;
-        TString Cluster;
         ui64 Id = 0;
         std::optional<ui64> Offset = std::nullopt;
 
         bool operator==(const TPartition& other) const {
-            return Topic == other.Topic && Endpoint == other.Endpoint && Cluster == other.Cluster && Id == other.Id;
+            return Topic == other.Topic && Id == other.Id;
         }
 
         struct THash {
             size_t operator()(const TPartition& partition) const {
-                return MultiHash(TTopicHash()(partition.Topic), partition.Endpoint, partition.Cluster, partition.Id);
+                return MultiHash(TTopic::THash()(partition.Topic), partition.Id);
             }
         };
     };
@@ -340,11 +661,16 @@ private:
     };
 
 public:
-    explicit TReplayGraph(const NProto::TGraphParams& graph) {
-        TStageStateRecoveryContext context;
+    explicit TReplayGraph(const TGraphStateInfo& discovered) {
+        const auto& graph = *discovered.GetGraph();
+        const auto guard = discovered.BindAllocator();
 
         THashMap<ui32, TStageStateRecoveryInfo> stages;
-        stages.reserve(graph.GetStageProgram().size());
+        stages.reserve(discovered.GetStages().size());
+        for (const auto& stage : discovered.GetStages()) {
+            stages.emplace(stage.StageId, TStageStateRecoveryInfo(stage));
+        }
+
         Tasks.reserve(graph.GetTasks().size());
         for (const auto& task : graph.GetTasks()) {
             if (NYql::NDq::GetTaskCheckpointingMode(task) == NYql::NDqProto::CHECKPOINTING_MODE_DISABLED) {
@@ -357,13 +683,7 @@ public:
             auto& info = it->second;
             info.Task = &task;
 
-            const auto* program = &task.GetProgram().GetRaw();
-            if (program->empty()) {
-                const auto stage = graph.GetStageProgram().find(task.GetStageId());
-                YQL_ENSURE(stage != graph.GetStageProgram().end(), "Missing program for stage " << task.GetStageId());
-                program = &stage->second;
-            }
-            info.Info = stages.try_emplace(task.GetStageId(), task.GetProgram().GetRuntimeVersion(), *program, context).first->second;
+            info.Info = stages.at(task.GetStageId());
 
             for (ui64 inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {
                 if (const auto& input = task.GetInputs(inputIndex); input.HasSource()) {
@@ -377,22 +697,9 @@ public:
                     NYql::TIssues issues;
                     Y_VALIDATE(ParseTopicInput(task, input, inputIndex, /* force */ false, /* isSourceGraph */ true, source.Description, partitionSets, issues), "Invalid topic input: " << issues.ToOneLineString());
 
-                    if (source.Description.GetFederatedClusters().empty()) {
-                        AddPartitions({}, source.Description.GetEndpoint(), source.Description.GetDatabase(), /* partitionsCount */ 0, partitionSets, source);
-                    } else {
-                        THashSet<TString> clusters;
-                        for (const auto& cluster : source.Description.GetFederatedClusters()) {
-                            Y_VALIDATE(clusters.insert(cluster.GetName()).second, "Duplicate federated topic cluster " << cluster.GetName());
-                            AddPartitions(
-                                cluster.GetName(),
-                                cluster.GetName().empty() ? source.Description.GetEndpoint() : cluster.GetEndpoint(),
-                                cluster.GetName().empty() ? source.Description.GetDatabase() : cluster.GetDatabase(),
-                                cluster.GetPartitionsCount(),
-                                partitionSets,
-                                source
-                            );
-                        }
-                    }
+                    ForEachTopicPartition(source.Description, partitionSets, [&](const TTopic& topic, const ui64 partition) {
+                        source.Partitions.push_back({topic, partition});
+                    });
 
                     info.Sources.push_back(std::move(source));
                 } else {
@@ -459,7 +766,7 @@ public:
                 YQL_ENSURE(StartingMessageTimestampMs, "Missing topic checkpoint data");
 
                 for (const auto& partition : source.Partitions) {
-                    const auto* progress = partitions.FindPtr(std::make_pair(partition.Cluster, partition.Id));
+                    const auto* progress = partitions.FindPtr(std::make_pair(partition.Topic.Cluster, partition.Id));
                     YQL_ENSURE(result.emplace(partition, TPartitionProgress{
                         .StartingMessageTimestampMs = StartingMessageTimestampMs,
                         .Offset = progress ? std::optional(*progress) : std::nullopt,
@@ -582,7 +889,7 @@ public:
                         if (partition.Offset) {
                             auto& saved = *state.AddPartitions();
                             saved.SetPartition(partition.Id);
-                            saved.SetCluster(partition.Cluster);
+                            saved.SetCluster(partition.Topic.Cluster);
                             saved.SetOffset(*partition.Offset);
                         }
                     }
@@ -596,18 +903,6 @@ public:
     }
 
 private:
-    static void AddPartitions(const TString& cluster, const TString& endpoint, const TString& database, const ui64 partitionsCount, const std::vector<NYql::NPq::TTopicPartitionsSet>& partitionSets, TSource& source) {
-        const TTopic topic{source.Description.GetDatabaseId(), database, source.Description.GetTopicPath()};
-        for (const auto& set : partitionSets) {
-            Y_VALIDATE(set.DqPartitionsCount, "Invalid topic partition mapping");
-
-            const auto count = partitionsCount ? partitionsCount : set.TopicPartitionsCount;
-            for (ui64 p = set.EachTopicPartitionGroupId; p < count; p += set.DqPartitionsCount) {
-                source.Partitions.push_back({topic, endpoint, cluster, p});
-            }
-        }
-    };
-
     // Backward propagation of saved boundaries in checkpoint for stateful operators
     void PropagateCheckpointedBounds(const TCheckpointTaskStates& states) {
         for (auto& [taskId, task] : Tasks) {
@@ -735,13 +1030,9 @@ private:
 
 } // anonymous namespace
 
-bool MakeHistoryReplayPlan(
-    const NProto::TGraphParams& src,
-    const NProto::TGraphParams& dst,
-    const TCheckpointTaskStates& states, TStateLoadPlan& plan, NYql::TIssues& issues)
-{
+bool MakeHistoryReplayPlan(const TGraphStateInfo& src, const TGraphStateInfo& dst, const TCheckpointTaskStates& states, TStateLoadPlan& plan, NYql::TIssues& issues) {
     try {
-        YQL_ENSURE(!src.GetTasks().empty() && !dst.GetTasks().empty(), "History replay requires both query graphs");
+        YQL_ENSURE(!src.GetStages().empty() && !dst.GetStages().empty(), "History replay requires both query graphs");
 
         TReplayGraph previous(src);
         TReplayGraph next(dst);
@@ -754,9 +1045,9 @@ bool MakeHistoryReplayPlan(
     }
 }
 
-bool MakeOutputStartTimeReplayPlan(const NProto::TGraphParams& tasks, ui64 outputStartTimeUs, bool useSourceDisposition, TStateLoadPlan& plan, NYql::TIssues& issues) {
+bool MakeOutputStartTimeReplayPlan(const TGraphStateInfo& tasks, ui64 outputStartTimeUs, bool useSourceDisposition, TStateLoadPlan& plan, NYql::TIssues& issues) {
     try {
-        YQL_ENSURE(!tasks.GetTasks().empty(), "Replay from OUTPUT_FROM requires a query graph");
+        YQL_ENSURE(!tasks.GetStages().empty(), "Replay from OUTPUT_FROM requires a query graph");
 
         TReplayGraph graph(tasks);
         graph.PropagateExplicitOutputBound(outputStartTimeUs);

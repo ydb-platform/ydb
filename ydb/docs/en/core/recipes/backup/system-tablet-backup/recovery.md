@@ -156,7 +156,7 @@ If recovery is performed after a complete loss of the [static group](../../../co
 
 ## Step 2. Find the backup files {#find-backup-files}
 
-1. On each host obtained in step 3, check for the presence of backups. The path to backups is determined by the `path` parameter in the [`system_tablet_backup_config`](../../../reference/configuration/system_tablet_backup_config.md) configuration section.
+1. On each host obtained in step 3, check for the presence of backups. The path to backups is determined by the `path` parameter in the [`system_tablet_backup_config`](../../../reference/configuration/index.md) configuration section.
 
     The name of each backup contains key information: `backup_<timestamp>_g<generation>_s<step>`, where:
 

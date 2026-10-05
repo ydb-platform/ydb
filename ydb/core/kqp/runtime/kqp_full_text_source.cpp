@@ -153,7 +153,8 @@ class TTableReader : public TAtomicRefCount<T> {
     TTableId TableId;
     TString TablePath;
     IKqpGateway::TKqpSnapshot Snapshot;
-    TMaybe<ui64> LockTxId;
+    ui64 LockTxId = 0;
+    ui32 LockNodeId = 0;
     TString LogPrefix;
     TString Database;
     TString PoolId;
@@ -220,10 +221,9 @@ public:
         UseArrowFormat = useArrowFormat;
     }
 
-    // Reading under the transaction lock makes uncommitted writes of the same transaction
-    // visible, which is required for read-your-own-write inside an interactive transaction.
-    void SetLockTxId(TMaybe<ui64> lockTxId) {
+    void SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {
         LockTxId = lockTxId;
+        LockNodeId = lockNodeId;
     }
 
     const TConstArrayRef<NScheme::TTypeInfo> GetKeyColumnTypes() const {
@@ -285,7 +285,10 @@ public:
         }
 
         if (LockTxId) {
-            record.SetLockTxId(*LockTxId);
+            record.SetLockTxId(LockTxId);
+        }
+        if (LockNodeId) {
+            record.SetLockNodeId(LockNodeId);
         }
 
         auto defaultSettings = GetDefaultReadSettings()->Record;
@@ -2926,21 +2929,22 @@ public:
         }
 
         if (Settings->HasLockTxId()) {
-            const TMaybe<ui64> lockTxId = Settings->GetLockTxId();
+            const ui64 lockTxId = Settings->GetLockTxId();
+            const ui32 lockNodeId = Settings->GetLockNodeId();
             if (MainTableReader) {
-                MainTableReader->SetLockTxId(lockTxId);
+                MainTableReader->SetLockTxId(lockTxId, lockNodeId);
             }
             if (IndexTableReader) {
-                IndexTableReader->SetLockTxId(lockTxId);
+                IndexTableReader->SetLockTxId(lockTxId, lockNodeId);
             }
             if (DocsTableReader) {
-                DocsTableReader->SetLockTxId(lockTxId);
+                DocsTableReader->SetLockTxId(lockTxId, lockNodeId);
             }
             if (StatsTableReader) {
-                StatsTableReader->SetLockTxId(lockTxId);
+                StatsTableReader->SetLockTxId(lockTxId, lockNodeId);
             }
             if (UniqueIndexReader) {
-                UniqueIndexReader->SetLockTxId(lockTxId);
+                UniqueIndexReader->SetLockTxId(lockTxId, lockNodeId);
             }
         }
     }

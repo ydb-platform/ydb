@@ -1077,6 +1077,7 @@ message TKqpFullTextSourceSettings {
     // Transaction lock id. When set, index/main-table reads are executed in the context
     // of this lock so the read observes uncommitted writes of the same transaction.
     optional uint64 LockTxId = 20;
+    optional uint32 LockNodeId = 21;
 };
 
 message TKqpSysViewSourceSettings {

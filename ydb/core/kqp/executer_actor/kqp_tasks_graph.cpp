@@ -1783,6 +1783,7 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
 void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input, bool serializeAsyncIoSettings, bool& enableMetering) const {
     const auto& snapshot = GetMeta().Snapshot;
     const auto& lockTxId = GetMeta().LockTxId;
+    const auto& lockNodeId = GetMeta().LockNodeId;
 
     switch (input.Type()) {
         case NYql::NDq::TTaskInputType::Source:
@@ -1821,6 +1822,7 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
 
                 if (lockTxId) {
                     input.Meta.FullTextSourceSettings->SetLockTxId(*lockTxId);
+                    input.Meta.FullTextSourceSettings->SetLockNodeId(lockNodeId);
                 }
 
                 inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.FullTextSourceSettings);

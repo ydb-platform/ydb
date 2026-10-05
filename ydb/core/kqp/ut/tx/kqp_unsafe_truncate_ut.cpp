@@ -6,12 +6,14 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
+#include <type_traits>
 
 namespace NKikimr {
 namespace NKqp {
 
 using namespace NYdb;
-using namespace NYdb::NQuery;
 
 namespace {
 
@@ -21,6 +23,53 @@ TKikimrRunner MakeRunner(bool enableUnsafeTruncate) {
     auto settings = TKikimrSettings().SetWithSampleTables(false);
     settings.FeatureFlags.SetEnableUnsafeTruncateTable(enableUnsafeTruncate);
     return TKikimrRunner(settings);
+}
+
+template <bool UseQueryService>
+using TTxControlFor = std::conditional_t<UseQueryService, NYdb::NQuery::TTxControl, NYdb::NTable::TTxControl>;
+
+template <bool UseQueryService>
+using TExecuteQuerySettingsFor = std::conditional_t<UseQueryService,
+    NYdb::NQuery::TExecuteQuerySettings, NYdb::NTable::TExecDataQuerySettings>;
+
+template <bool UseQueryService>
+auto GetClient(TKikimrRunner& kikimr, const TString& authToken = {}) {
+    if constexpr (UseQueryService) {
+        return kikimr.GetQueryClient(NYdb::NQuery::TClientSettings().AuthToken(authToken));
+    } else {
+        return kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken(authToken));
+    }
+}
+
+// Table Service requires an explicit transaction control for data queries.
+template <bool UseQueryService>
+auto AutoCommit() {
+    if constexpr (UseQueryService) {
+        return NYdb::NQuery::TTxControl::NoTx();
+    } else {
+        return NYdb::NTable::TTxControl::BeginTx().CommitTx();
+    }
+}
+
+template <typename TSession>
+auto ExecuteQuery(TSession& session, const TString& sql,
+    const TTxControlFor<std::is_same_v<TSession, NYdb::NQuery::TSession>>& txControl,
+    const TExecuteQuerySettingsFor<std::is_same_v<TSession, NYdb::NQuery::TSession>>& settings = {})
+{
+    if constexpr (std::is_same_v<TSession, NYdb::NQuery::TSession>) {
+        return session.ExecuteQuery(sql, txControl, settings);
+    } else {
+        return session.ExecuteDataQuery(sql, txControl, settings);
+    }
+}
+
+template <typename TSession>
+auto ExecuteSchemeQuery(TSession& session, const TString& sql) {
+    if constexpr (std::is_same_v<TSession, NYdb::NQuery::TSession>) {
+        return session.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx());
+    } else {
+        return session.ExecuteSchemeQuery(sql);
+    }
 }
 
 TString CountQuery() {
@@ -34,36 +83,43 @@ TString UnsafeTruncateQuery(bool enablePragma = true) {
     )", enablePragma ? "true" : "false", TablePath);
 }
 
-ui64 ReadCount(const TExecuteQueryResult& result) {
+template <typename TResult>
+ui64 ReadCount(const TResult& result) {
     auto parser = result.GetResultSetParser(0);
     UNIT_ASSERT(parser.TryNextRow());
     return parser.ColumnParser("cnt").GetUint64();
 }
 
+template <typename TSession>
 void CreateAndFill(TSession& session) {
-    auto create = session.ExecuteQuery(Sprintf(R"(
+    using TTxControl = TTxControlFor<std::is_same_v<TSession, NYdb::NQuery::TSession>>;
+    auto create = ExecuteSchemeQuery(session, Sprintf(R"(
         CREATE TABLE `%s` (
             Key Uint64,
             Value String,
             PRIMARY KEY (Key)
         );
-    )", TablePath), TTxControl::NoTx()).ExtractValueSync();
+    )", TablePath)).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
 
-    auto fill = session.ExecuteQuery(Sprintf(R"(
+    auto fill = ExecuteQuery(session, Sprintf(R"(
         UPSERT INTO `%s` (Key, Value) VALUES (1u, "one"), (2u, "two"), (3u, "three");
     )", TablePath), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(fill.GetStatus(), EStatus::SUCCESS, fill.GetIssues().ToString());
 }
 
+template <typename TSession>
 ui64 CountRows(TSession& session) {
-    auto result = session.ExecuteQuery(CountQuery(), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    using TTxControl = TTxControlFor<std::is_same_v<TSession, NYdb::NQuery::TSession>>;
+    auto result = ExecuteQuery(session, CountQuery(), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     return ReadCount(result);
 }
 
+template <typename TSession>
 ui64 CountOf(TSession& session, const TString& path) {
-    auto result = session.ExecuteQuery(Sprintf("SELECT COUNT(*) AS cnt FROM `%s`;", path.c_str()),
+    using TTxControl = TTxControlFor<std::is_same_v<TSession, NYdb::NQuery::TSession>>;
+    auto result = ExecuteQuery(session, Sprintf("SELECT COUNT(*) AS cnt FROM `%s`;", path.c_str()),
         TTxControl::BeginTx().CommitTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     return ReadCount(result);
@@ -132,8 +188,9 @@ ui64 GetSchemaVersion(TKikimrRunner& kikimr, const TString& path) {
     return describe.GetPathDescription().GetTable().GetTableSchemaVersion();
 }
 
+template <typename TSession>
 void ExecDdl(TSession& session, const TString& sql) {
-    auto result = session.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+    auto result = ExecuteSchemeQuery(session, sql).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
@@ -146,7 +203,9 @@ constexpr ui64 ShardKeys[] = {
     13835058055282163712ull, // 3 * 2^62
 };
 
+template <typename TSession>
 void CreateAndFillSharded(TSession& session) {
+    using TTxControl = TTxControlFor<std::is_same_v<TSession, NYdb::NQuery::TSession>>;
     ExecDdl(session, Sprintf(R"(
         CREATE TABLE `%s` (
             Key Uint64,
@@ -162,7 +221,7 @@ void CreateAndFillSharded(TSession& session) {
         values << (i ? ", " : "") << "(" << ShardKeys[i] << "ul, \"v" << i << "\")";
     }
 
-    auto fill = session.ExecuteQuery(Sprintf("UPSERT INTO `%s` (Key, Value) VALUES %s;",
+    auto fill = ExecuteQuery(session, Sprintf("UPSERT INTO `%s` (Key, Value) VALUES %s;",
         TablePath, values.c_str()), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(fill.GetStatus(), EStatus::SUCCESS, fill.GetIssues().ToString());
 }
@@ -171,13 +230,13 @@ void CreateAndFillSharded(TSession& session) {
 
 Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
-    Y_UNIT_TEST(FeatureFlagDisabled) {
+    Y_UNIT_TEST_TWIN(FeatureFlagDisabled, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ false);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto result = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::NoTx()).ExtractValueSync();
+        auto result = ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
             "unsafe truncate must be rejected while the feature flag is off");
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "disabled");
@@ -185,90 +244,91 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
     }
 
-    Y_UNIT_TEST(FeatureFlagAndPragmaDisabled) {
+    Y_UNIT_TEST_TWIN(FeatureFlagAndPragmaDisabled, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ false);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto result = session.ExecuteQuery(UnsafeTruncateQuery(/* enablePragma */ false),
-            TTxControl::NoTx()).ExtractValueSync();
+        auto result = ExecuteQuery(session, UnsafeTruncateQuery(/* enablePragma */ false),
+            AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "disabled");
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
     }
 
-    Y_UNIT_TEST(PragmaDisabled) {
+    Y_UNIT_TEST_TWIN(PragmaDisabled, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto result = session.ExecuteQuery(UnsafeTruncateQuery(/* enablePragma */ false),
-            TTxControl::NoTx()).ExtractValueSync();
+        auto result = ExecuteQuery(session, UnsafeTruncateQuery(/* enablePragma */ false),
+            AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
             "requires PRAGMA kikimr.EnableUnsafeTruncateTable");
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
     }
 
-    Y_UNIT_TEST(UnknownSettingRejected) {
+    Y_UNIT_TEST_TWIN(UnknownSettingRejected, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto result = session.ExecuteQuery(Sprintf(
+        auto result = ExecuteQuery(session, Sprintf(
             "PRAGMA kikimr.EnableUnsafeTruncateTable = \"true\"; "
-            "TRUNCATE TABLE `%s` WITH (nonsense = true);", TablePath), TTxControl::NoTx()).ExtractValueSync();
+            "TRUNCATE TABLE `%s` WITH (nonsense = true);", TablePath), AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown TRUNCATE TABLE setting");
     }
 
     // The plain statement still goes through SchemeShard exactly as before.
-    Y_UNIT_TEST(PlainTruncateStillWorks) {
+    Y_UNIT_TEST_TWIN(PlainTruncateStillWorks, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto result = session.ExecuteQuery(Sprintf(
+        auto result = ExecuteSchemeQuery(session, Sprintf(
             "PRAGMA kikimr.EnableUnsafeTruncateTable = \"true\"; "
-            "TRUNCATE TABLE `%s`;", TablePath), TTxControl::NoTx()).ExtractValueSync();
+            "TRUNCATE TABLE `%s`;", TablePath)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
     }
 
-    Y_UNIT_TEST(WipesTable) {
+    Y_UNIT_TEST_TWIN(WipesTable, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto result = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::NoTx()).ExtractValueSync();
+        auto result = ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
     }
 
     // The point of the whole feature: the statement runs inside T_user without aborting it.
-    Y_UNIT_TEST(InsideTransaction) {
+    Y_UNIT_TEST_TWIN(InsideTransaction, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto before = session.ExecuteQuery(CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
+        auto before = ExecuteQuery(session, CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(before.GetStatus(), EStatus::SUCCESS, before.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(ReadCount(before), 3u);
 
         auto tx = before.GetTransaction();
         UNIT_ASSERT(tx);
 
-        auto trunc = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        auto trunc = ExecuteQuery(session, UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(trunc.GetStatus(), EStatus::SUCCESS, trunc.GetIssues().ToString());
 
-        auto after = session.ExecuteQuery(CountQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        auto after = ExecuteQuery(session, CountQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(after.GetStatus(), EStatus::SUCCESS, after.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(ReadCount(after), 0u);
 
@@ -279,19 +339,20 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     }
 
     // Anomaly (a): T_trunc is committed on its own, so rolling T_user back does not bring rows back.
-    Y_UNIT_TEST(SurvivesRollback) {
+    Y_UNIT_TEST_TWIN(SurvivesRollback, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto before = session.ExecuteQuery(CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
+        auto before = ExecuteQuery(session, CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(before.GetStatus(), EStatus::SUCCESS, before.GetIssues().ToString());
 
         auto tx = before.GetTransaction();
         UNIT_ASSERT(tx);
 
-        auto trunc = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        auto trunc = ExecuteQuery(session, UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(trunc.GetStatus(), EStatus::SUCCESS, trunc.GetIssues().ToString());
 
         auto rollback = tx->Rollback().ExtractValueSync();
@@ -301,20 +362,21 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     }
 
     // Anomaly (b): the effect is visible outside T_user before T_user commits.
-    Y_UNIT_TEST(VisibleInConcurrentTransaction) {
+    Y_UNIT_TEST_TWIN(VisibleInConcurrentTransaction, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session1 = client.GetSession().GetValueSync().GetSession();
         auto session2 = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session1);
 
-        auto before = session1.ExecuteQuery(CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
+        auto before = ExecuteQuery(session1, CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(before.GetStatus(), EStatus::SUCCESS, before.GetIssues().ToString());
 
         auto tx = before.GetTransaction();
         UNIT_ASSERT(tx);
 
-        auto trunc = session1.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        auto trunc = ExecuteQuery(session1, UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(trunc.GetStatus(), EStatus::SUCCESS, trunc.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL_C(CountRows(session2), 0u,
@@ -326,38 +388,39 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
     // Everything above runs on a single shard, which takes the immediate path. From here on the
     // table has several shards, so the truncate really goes through prepare and the coordinator.
-    Y_UNIT_TEST(MultiShardWipesAllShards) {
+    Y_UNIT_TEST_TWIN(MultiShardWipesAllShards, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFillSharded(session);
 
         UNIT_ASSERT_VALUES_EQUAL_C(CountRows(session), Y_ARRAY_SIZE(ShardKeys),
             "the rows must be spread over the shards, otherwise this proves nothing");
 
-        auto result = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::NoTx()).ExtractValueSync();
+        auto result = ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
     }
 
-    Y_UNIT_TEST(MultiShardInsideTransaction) {
+    Y_UNIT_TEST_TWIN(MultiShardInsideTransaction, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFillSharded(session);
 
-        auto before = session.ExecuteQuery(CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
+        auto before = ExecuteQuery(session, CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(before.GetStatus(), EStatus::SUCCESS, before.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(ReadCount(before), Y_ARRAY_SIZE(ShardKeys));
 
         auto tx = before.GetTransaction();
         UNIT_ASSERT(tx);
 
-        auto trunc = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        auto trunc = ExecuteQuery(session, UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(trunc.GetStatus(), EStatus::SUCCESS, trunc.GetIssues().ToString());
 
-        auto after = session.ExecuteQuery(CountQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        auto after = ExecuteQuery(session, CountQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(after.GetStatus(), EStatus::SUCCESS, after.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(ReadCount(after), 0u);
 
@@ -368,9 +431,10 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     // The index impl table must be wiped in the same transaction, or the table and its index
     // silently disagree. Read the impl table directly: a query through VIEW would join the empty
     // main table and report zero even if the index still held rows.
-    Y_UNIT_TEST(WithIndexWipesImplTable) {
+    Y_UNIT_TEST_TWIN(WithIndexWipesImplTable, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
 
         ExecDdl(session, R"(
@@ -382,7 +446,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             );
         )");
 
-        auto fill = session.ExecuteQuery(R"(
+        auto fill = ExecuteQuery(session, R"(
             UPSERT INTO `/Root/UnsafeTruncateIndexed` (Key, Value)
             VALUES (1u, "a"), (2u, "b"), (3u, "c");
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -392,10 +456,10 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL_C(CountOf(session, "/Root/UnsafeTruncateIndexed/idx/indexImplTable"), 3u,
             "the index must hold the rows before the truncate, otherwise this proves nothing");
 
-        auto result = session.ExecuteQuery(R"(
+        auto result = ExecuteQuery(session, R"(
             PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             TRUNCATE TABLE `/Root/UnsafeTruncateIndexed` WITH (unsafe = true);
-        )", TTxControl::NoTx()).ExtractValueSync();
+        )", AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL(CountOf(session, "/Root/UnsafeTruncateIndexed"), 0u);
@@ -403,9 +467,10 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             "the index impl table must be wiped together with the main table");
     }
 
-    Y_UNIT_TEST(AsyncIndexRejected) {
+    Y_UNIT_TEST_TWIN(AsyncIndexRejected, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
 
         ExecDdl(session, R"(
@@ -417,15 +482,15 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             );
         )");
 
-        auto fill = session.ExecuteQuery(R"(
+        auto fill = ExecuteQuery(session, R"(
             UPSERT INTO `/Root/UnsafeTruncateAsync` (Key, Value) VALUES (1u, "a");
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(fill.GetStatus(), EStatus::SUCCESS, fill.GetIssues().ToString());
 
-        auto result = session.ExecuteQuery(R"(
+        auto result = ExecuteQuery(session, R"(
             PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             TRUNCATE TABLE `/Root/UnsafeTruncateAsync` WITH (unsafe = true);
-        )", TTxControl::NoTx()).ExtractValueSync();
+        )", AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
             "an async index cannot be kept in sync by this operation, so it must be refused");
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "synchronous");
@@ -433,9 +498,10 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL(CountOf(session, "/Root/UnsafeTruncateAsync"), 1u);
     }
 
-    Y_UNIT_TEST(ChangefeedRejected) {
+    Y_UNIT_TEST_TWIN(ChangefeedRejected, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
 
         ExecDdl(session, R"(
@@ -451,15 +517,15 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             );
         )");
 
-        auto fill = session.ExecuteQuery(R"(
+        auto fill = ExecuteQuery(session, R"(
             UPSERT INTO `/Root/UnsafeTruncateCdc` (Key, Value) VALUES (1u, "a");
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(fill.GetStatus(), EStatus::SUCCESS, fill.GetIssues().ToString());
 
-        auto result = session.ExecuteQuery(R"(
+        auto result = ExecuteQuery(session, R"(
             PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             TRUNCATE TABLE `/Root/UnsafeTruncateCdc` WITH (unsafe = true);
-        )", TTxControl::NoTx()).ExtractValueSync();
+        )", AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
             "wiping rows without emitting change records would silently break the feed");
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "changefeed");
@@ -469,24 +535,23 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
     // Anomaly (d): being a data-plane operation, it must not bump the schema version the way the
     // plain statement does. The plain form is measured too, so the check cannot pass vacuously.
-    Y_UNIT_TEST(SchemaVersionUnchanged) {
+    Y_UNIT_TEST_TWIN(SchemaVersionUnchanged, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
         const ui64 before = GetSchemaVersion(kikimr, TablePath);
 
-        auto unsafe = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::NoTx()).ExtractValueSync();
+        auto unsafe = ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(unsafe.GetStatus(), EStatus::SUCCESS, unsafe.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL_C(GetSchemaVersion(kikimr, TablePath), before,
             "unsafe truncate must not touch the schema version");
 
-        auto plain = session.ExecuteQuery(Sprintf(
+        auto plain = ExecuteSchemeQuery(session, Sprintf(
             "PRAGMA kikimr.EnableUnsafeTruncateTable = \"true\"; "
-            "TRUNCATE TABLE `%s`;", TablePath),
-            TTxControl::NoTx()).ExtractValueSync();
+            "TRUNCATE TABLE `%s`;", TablePath)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(plain.GetStatus(), EStatus::SUCCESS, plain.GetIssues().ToString());
 
         UNIT_ASSERT_C(GetSchemaVersion(kikimr, TablePath) > before,
@@ -494,21 +559,22 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     }
 
     // Anomaly (c), the issuing side: T_user keeps its own locks and carries on.
-    Y_UNIT_TEST(LocksOfIssuingTransactionSurvive) {
+    Y_UNIT_TEST_TWIN(LocksOfIssuingTransactionSurvive, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto before = session.ExecuteQuery(CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
+        auto before = ExecuteQuery(session, CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(before.GetStatus(), EStatus::SUCCESS, before.GetIssues().ToString());
         auto tx = before.GetTransaction();
         UNIT_ASSERT(tx);
 
-        auto trunc = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        auto trunc = ExecuteQuery(session, UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(trunc.GetStatus(), EStatus::SUCCESS, trunc.GetIssues().ToString());
 
-        auto write = session.ExecuteQuery(Sprintf(
+        auto write = ExecuteQuery(session, Sprintf(
             "UPSERT INTO `%s` (Key, Value) VALUES (42u, \"after\");", TablePath),
             TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(write.GetStatus(), EStatus::SUCCESS, write.GetIssues().ToString());
@@ -524,13 +590,14 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     // be sitting in the buffer actor. They must be wiped all the same: the statement forces them
     // out to the shards first, otherwise the same SQL would give a different answer depending on
     // whether a flush happened to occur.
-    Y_UNIT_TEST(UncommittedWritesAreWiped) {
+    Y_UNIT_TEST_TWIN(UncommittedWritesAreWiped, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto begin = session.ExecuteQuery(Sprintf(
+        auto begin = ExecuteQuery(session, Sprintf(
             "UPSERT INTO `%s` (Key, Value) VALUES (100u, \"uncommitted\");", TablePath),
             TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(begin.GetStatus(), EStatus::SUCCESS, begin.GetIssues().ToString());
@@ -538,10 +605,10 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         auto tx = begin.GetTransaction();
         UNIT_ASSERT(tx);
 
-        auto trunc = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        auto trunc = ExecuteQuery(session, UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(trunc.GetStatus(), EStatus::SUCCESS, trunc.GetIssues().ToString());
 
-        auto after = session.ExecuteQuery(CountQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        auto after = ExecuteQuery(session, CountQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(after.GetStatus(), EStatus::SUCCESS, after.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL_C(ReadCount(after), 0u,
             "the row written earlier in this very transaction must be gone too");
@@ -554,13 +621,14 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     }
 
     // The whole shape the feature exists for, in one transaction.
-    Y_UNIT_TEST(FullTransactionScenario) {
+    Y_UNIT_TEST_TWIN(FullTransactionScenario, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto begin = session.ExecuteQuery(Sprintf(
+        auto begin = ExecuteQuery(session, Sprintf(
             "UPSERT INTO `%s` (Key, Value) VALUES (10u, \"before\");", TablePath),
             TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(begin.GetStatus(), EStatus::SUCCESS, begin.GetIssues().ToString());
@@ -568,19 +636,19 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         auto tx = begin.GetTransaction();
         UNIT_ASSERT(tx);
 
-        auto beforeCount = session.ExecuteQuery(CountQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        auto beforeCount = ExecuteQuery(session, CountQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(beforeCount.GetStatus(), EStatus::SUCCESS, beforeCount.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL_C(ReadCount(beforeCount), 4u,
             "three seeded rows plus the one just written in this transaction");
 
-        auto trunc = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        auto trunc = ExecuteQuery(session, UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(trunc.GetStatus(), EStatus::SUCCESS, trunc.GetIssues().ToString());
 
-        auto afterCount = session.ExecuteQuery(CountQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        auto afterCount = ExecuteQuery(session, CountQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(afterCount.GetStatus(), EStatus::SUCCESS, afterCount.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(ReadCount(afterCount), 0u);
 
-        auto write = session.ExecuteQuery(Sprintf(
+        auto write = ExecuteQuery(session, Sprintf(
             "UPSERT INTO `%s` (Key, Value) VALUES (20u, \"after\");", TablePath),
             TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(write.GetStatus(), EStatus::SUCCESS, write.GetIssues().ToString());
@@ -595,19 +663,19 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     // The shape the feature exists for: writes, reads and the truncate in one query text, executed
     // in statement order. The truncate is compiled as a transaction of the data query, not through
     // the scheme path, which is what lets it sit between them at all.
-    Y_UNIT_TEST(MixedWithDataInOneQuery) {
+    Y_UNIT_TEST_TWIN(MixedWithDataInOneQuery, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto result = session.ExecuteQuery(Sprintf(R"(
+        auto result = ExecuteQuery(session, Sprintf(R"(
             PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             UPSERT INTO `%s` (Key, Value) VALUES (10u, "before");
             SELECT COUNT(*) AS cnt FROM `%s`;
             TRUNCATE TABLE `%s` WITH (unsafe = true);
             SELECT COUNT(*) AS cnt FROM `%s`;
-        )", TablePath, TablePath, TablePath, TablePath), TTxControl::NoTx()).ExtractValueSync();
+        )", TablePath, TablePath, TablePath, TablePath), AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 2u, "both SELECTs must produce a result");
@@ -629,27 +697,28 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     }
 
     // Anomaly (c), the other side: everyone else's locks are broken.
-    Y_UNIT_TEST(CompetingTransactionAborted) {
+    Y_UNIT_TEST_TWIN(CompetingTransactionAborted, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session1 = client.GetSession().GetValueSync().GetSession();
         auto session2 = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session1);
 
         // The read is what actually takes a lock on the shard: with sinks a lone UPSERT sits in the
         // buffer actor until commit, so there would be nothing for the truncate to break.
-        auto competingRead = session2.ExecuteQuery(CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
+        auto competingRead = ExecuteQuery(session2, CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(competingRead.GetStatus(), EStatus::SUCCESS, competingRead.GetIssues().ToString());
         auto competingTx = competingRead.GetTransaction();
         UNIT_ASSERT(competingTx);
 
         // The write is what makes the commit reach the shard at all, so the broken lock is noticed.
-        auto competingWrite = session2.ExecuteQuery(Sprintf(
+        auto competingWrite = ExecuteQuery(session2, Sprintf(
             "UPSERT INTO `%s` (Key, Value) VALUES (7u, \"competing\");", TablePath),
             TTxControl::Tx(*competingTx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(competingWrite.GetStatus(), EStatus::SUCCESS, competingWrite.GetIssues().ToString());
 
-        auto trunc = session1.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::NoTx()).ExtractValueSync();
+        auto trunc = ExecuteQuery(session1, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(trunc.GetStatus(), EStatus::SUCCESS, trunc.GetIssues().ToString());
 
         auto commit = competingTx->Commit().ExtractValueSync();
@@ -661,18 +730,19 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
     // The truncate opens the transaction, so there is no lock to preserve yet and
     // PreserveLockTxIds goes out empty.
-    Y_UNIT_TEST(TruncateAsFirstStatement) {
+    Y_UNIT_TEST_TWIN(TruncateAsFirstStatement, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto trunc = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::BeginTx()).ExtractValueSync();
+        auto trunc = ExecuteQuery(session, UnsafeTruncateQuery(), TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(trunc.GetStatus(), EStatus::SUCCESS, trunc.GetIssues().ToString());
 
         auto tx = trunc.GetTransaction();
         if (tx) {
-            auto write = session.ExecuteQuery(Sprintf(
+            auto write = ExecuteQuery(session, Sprintf(
                 "UPSERT INTO `%s` (Key, Value) VALUES (1u, \"again\");", TablePath),
                 TTxControl::Tx(*tx)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(write.GetStatus(), EStatus::SUCCESS, write.GetIssues().ToString());
@@ -687,9 +757,9 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
     // A table repartitioned since it was created: the shard set the executer resolves is not the
     // one the table was born with, and every descendant must still be wiped.
-    Y_UNIT_TEST(TruncateAfterSplit) {
+    Y_UNIT_TEST_TWIN(TruncateAfterSplit, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFillSharded(session);
 
@@ -702,7 +772,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         const auto shardsAfter = GetTableShards(&kikimr.GetTestServer(), runtime.AllocateEdgeActor(), TablePath);
         UNIT_ASSERT_VALUES_EQUAL_C(shardsAfter.size(), 5u, "the split must have happened");
 
-        auto result = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::NoTx()).ExtractValueSync();
+        auto result = ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
@@ -710,14 +780,14 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
     // Truncating an already empty table is a no-op, which is what makes a client retry after
     // UNDETERMINED safe.
-    Y_UNIT_TEST(TruncateIsIdempotent) {
+    Y_UNIT_TEST_TWIN(TruncateIsIdempotent, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFillSharded(session);
 
         for (int i = 0; i < 3; ++i) {
-            auto result = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::NoTx()).ExtractValueSync();
+            auto result = ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
         }
@@ -729,33 +799,36 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     // to land inside the resolve->prepare window would be inherently racy, while the code being
     // exercised - RestartOrFail, the new TxId, dropping the results of the abandoned attempt - is
     // the same either way.
-    Y_UNIT_TEST(ReResolvesWhenPrepareIsRefused) {
+    Y_UNIT_TEST_TWIN(ReResolvesWhenPrepareIsRefused, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         // Observers are only honoured while the runtime is single threaded, which in turn means
         // every client call has to go through RunCall so the runtime keeps being pumped.
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
         settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
         TKikimrRunner kikimr(settings);
 
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
 
         auto exec = [&](const TString& sql, bool inTx) {
             return kikimr.RunCall([&] {
-                return session.ExecuteQuery(sql,
-                    inTx ? TTxControl::BeginTx().CommitTx() : TTxControl::NoTx()).ExtractValueSync();
+                return ExecuteQuery(session, sql,
+                    inTx ? TTxControl::BeginTx().CommitTx() : AutoCommit<UseQueryService>()).ExtractValueSync();
             });
         };
 
         {
-            auto create = exec(Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                ) WITH (
-                    UNIFORM_PARTITIONS = 4
-                );
-            )", TablePath), /* inTx */ false);
+            auto create = kikimr.RunCall([&] {
+                return ExecuteSchemeQuery(session, Sprintf(R"(
+                    CREATE TABLE `%s` (
+                        Key Uint64,
+                        Value String,
+                        PRIMARY KEY (Key)
+                    ) WITH (
+                        UNIFORM_PARTITIONS = 4
+                    );
+                )", TablePath)).ExtractValueSync();
+            });
             UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
         }
 
@@ -798,31 +871,34 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
     // A table that keeps repartitioning must eventually give a clear error instead of spinning:
     // every prepare is refused here, so the resolve->prepare loop runs into its attempt cap.
-    Y_UNIT_TEST(GivesUpAfterTooManyRefusals) {
+    Y_UNIT_TEST_TWIN(GivesUpAfterTooManyRefusals, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
         settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
         TKikimrRunner kikimr(settings);
 
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
 
         auto exec = [&](const TString& sql, bool inTx) {
             return kikimr.RunCall([&] {
-                return session.ExecuteQuery(sql,
-                    inTx ? TTxControl::BeginTx().CommitTx() : TTxControl::NoTx()).ExtractValueSync();
+                return ExecuteQuery(session, sql,
+                    inTx ? TTxControl::BeginTx().CommitTx() : AutoCommit<UseQueryService>()).ExtractValueSync();
             });
         };
 
         {
-            auto create = exec(Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                ) WITH (
-                    UNIFORM_PARTITIONS = 4
-                );
-            )", TablePath), /* inTx */ false);
+            auto create = kikimr.RunCall([&] {
+                return ExecuteSchemeQuery(session, Sprintf(R"(
+                    CREATE TABLE `%s` (
+                        Key Uint64,
+                        Value String,
+                        PRIMARY KEY (Key)
+                    ) WITH (
+                        UNIFORM_PARTITIONS = 4
+                    );
+                )", TablePath)).ExtractValueSync();
+            });
             UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
         }
 
@@ -851,31 +927,34 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     // Losing the client after the coordinator has planned the transaction is the one case the
     // client cannot be told anything definite: the shards apply the truncate regardless, so the
     // answer is UNDETERMINED and the rows stay gone.
-    Y_UNIT_TEST(CancelledAfterPlanIsNotRolledBack) {
+    Y_UNIT_TEST_TWIN(CancelledAfterPlanIsNotRolledBack, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
         settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
         TKikimrRunner kikimr(settings);
 
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
 
-        auto exec = [&](const TString& sql, bool inTx, const NYdb::NQuery::TExecuteQuerySettings& s = {}) {
+        auto exec = [&](const TString& sql, bool inTx, const TExecuteQuerySettingsFor<UseQueryService>& s = {}) {
             return kikimr.RunCall([&] {
-                return session.ExecuteQuery(sql,
-                    inTx ? TTxControl::BeginTx().CommitTx() : TTxControl::NoTx(), s).ExtractValueSync();
+                return ExecuteQuery(session, sql,
+                    inTx ? TTxControl::BeginTx().CommitTx() : AutoCommit<UseQueryService>(), s).ExtractValueSync();
             });
         };
 
         {
-            auto create = exec(Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                ) WITH (
-                    UNIFORM_PARTITIONS = 4
-                );
-            )", TablePath), /* inTx */ false);
+            auto create = kikimr.RunCall([&] {
+                return ExecuteSchemeQuery(session, Sprintf(R"(
+                    CREATE TABLE `%s` (
+                        Key Uint64,
+                        Value String,
+                        PRIMARY KEY (Key)
+                    ) WITH (
+                        UNIFORM_PARTITIONS = 4
+                    );
+                )", TablePath)).ExtractValueSync();
+            });
             UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
         }
 
@@ -904,7 +983,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        TExecuteQuerySettingsFor<UseQueryService> querySettings;
         querySettings.ClientTimeout(TDuration::Seconds(5));
 
         auto result = exec(UnsafeTruncateQuery(), /* inTx */ false, querySettings);
@@ -918,16 +997,16 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         // which is also how anybody else would observe it.
         auto observer = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
         auto count = kikimr.RunCall([&] {
-            return observer.ExecuteQuery(CountQuery(), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            return ExecuteQuery(observer, CountQuery(), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         });
         UNIT_ASSERT_VALUES_EQUAL_C(count.GetStatus(), EStatus::SUCCESS, count.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL_C(ReadCount(count), 0u,
             "a planned truncate is not rolled back just because the client gave up on it");
     }
 
-    Y_UNIT_TEST(TruncateAfterMerge) {
+    Y_UNIT_TEST_TWIN(TruncateAfterMerge, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFillSharded(session);
 
@@ -947,7 +1026,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         const auto shardsAfter = GetTableShards(&kikimr.GetTestServer(), runtime.AllocateEdgeActor(), TablePath);
         UNIT_ASSERT_VALUES_EQUAL_C(shardsAfter.size(), 4u, "the merge must have happened");
 
-        auto result = session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::NoTx()).ExtractValueSync();
+        auto result = ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
@@ -955,17 +1034,17 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
     // Losing the client while the truncate is still preparing must produce an error, not an
     // unhandled event: before TEvAbortExecution was handled the executer asserted and died.
-    Y_UNIT_TEST(CancelledWhilePreparing) {
+    Y_UNIT_TEST_TWIN(CancelledWhilePreparing, UseQueryService) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
         settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
         TKikimrRunner kikimr(settings);
 
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
 
         {
             auto create = kikimr.RunCall([&] {
-                return session.ExecuteQuery(Sprintf(R"(
+                return ExecuteSchemeQuery(session, Sprintf(R"(
                     CREATE TABLE `%s` (
                         Key Uint64,
                         Value String,
@@ -973,7 +1052,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
                     ) WITH (
                         UNIFORM_PARTITIONS = 4
                     );
-                )", TablePath), TTxControl::NoTx()).ExtractValueSync();
+                )", TablePath)).ExtractValueSync();
             });
             UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
         }
@@ -995,11 +1074,11 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         });
 
         // Losing the client is what drives the abort down to the executer.
-        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        TExecuteQuerySettingsFor<UseQueryService> querySettings;
         querySettings.ClientTimeout(TDuration::Seconds(5));
 
         auto result = kikimr.RunCall([&] {
-            return session.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::NoTx(), querySettings)
+            return ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>(), querySettings)
                 .ExtractValueSync();
         });
 
@@ -1013,9 +1092,10 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     // Truncating an impl table on its own is the one way this statement could produce the very
     // disagreement it goes out of its way to avoid: an empty index over a full table. The plain
     // TRUNCATE and every write refuse it, so this must too.
-    Y_UNIT_TEST(IndexImplTableRejected) {
+    Y_UNIT_TEST_TWIN(IndexImplTableRejected, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
 
         ExecDdl(session, R"(
@@ -1027,17 +1107,17 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             );
         )");
 
-        auto fill = session.ExecuteQuery(R"(
+        auto fill = ExecuteQuery(session, R"(
             UPSERT INTO `/Root/UnsafeTruncateImpl` (Key, Value) VALUES (1u, "a"), (2u, "b");
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(fill.GetStatus(), EStatus::SUCCESS, fill.GetIssues().ToString());
 
         const TString implPath = "/Root/UnsafeTruncateImpl/idx/indexImplTable";
 
-        auto result = session.ExecuteQuery(Sprintf(
+        auto result = ExecuteQuery(session, Sprintf(
             "PRAGMA kikimr.EnableUnsafeTruncateTable = \"true\"; "
             "TRUNCATE TABLE `%s` WITH (unsafe = true);", implPath.c_str()),
-            TTxControl::NoTx()).ExtractValueSync();
+            AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
             "wiping an index impl table alone would leave the index disagreeing with its table");
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "index implementation table");
@@ -1046,10 +1126,10 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL(CountOf(session, "/Root/UnsafeTruncateImpl"), 2u);
 
         // The table itself still truncates, impl table included.
-        auto viaTable = session.ExecuteQuery(R"(
+        auto viaTable = ExecuteQuery(session, R"(
             PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             TRUNCATE TABLE `/Root/UnsafeTruncateImpl` WITH (unsafe = true);
-        )", TTxControl::NoTx()).ExtractValueSync();
+        )", AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(viaTable.GetStatus(), EStatus::SUCCESS, viaTable.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(CountOf(session, "/Root/UnsafeTruncateImpl"), 0u);
         UNIT_ASSERT_VALUES_EQUAL(CountOf(session, implPath), 0u);
@@ -1059,14 +1139,15 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
     // the same right a DELETE does. The UPSERT and the plain TRUNCATE under the same user are the
     // negative controls: if either of them were allowed, the environment would be enforcing nothing
     // and this test would measure nothing.
-    Y_UNIT_TEST(AclReaderCannotTruncate) {
+    Y_UNIT_TEST_TWIN(AclReaderCannotTruncate, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         const TString user = "user0@builtin";
 
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
         TKikimrRunner kikimr(settings);
 
-        auto admin = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto admin = GetClient<UseQueryService>(kikimr).GetSession().GetValueSync().GetSession();
         CreateAndFill(admin);
 
         auto grant = [&](const TString& path, const std::vector<std::string>& rights) {
@@ -1086,25 +1167,24 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         WaitForProxy(kikimr, user);
         grant(TablePath, {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
 
-        auto userClient = kikimr.GetQueryClient(NYdb::NQuery::TClientSettings().AuthToken(user));
+        auto userClient = GetClient<UseQueryService>(kikimr, user);
         auto reader = userClient.GetSession().GetValueSync().GetSession();
 
-        auto select = reader.ExecuteQuery(CountQuery(), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        auto select = ExecuteQuery(reader, CountQuery(), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(select.GetStatus(), EStatus::SUCCESS, select.GetIssues().ToString());
 
-        auto upsert = reader.ExecuteQuery(Sprintf(
+        auto upsert = ExecuteQuery(reader, Sprintf(
             "UPSERT INTO `%s` (Key, Value) VALUES (9u, \"x\");", TablePath),
             TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL_C(upsert.GetStatus(), EStatus::SUCCESS,
             "a reader may not write, otherwise this test measures nothing");
 
-        auto plain = reader.ExecuteQuery(Sprintf(
+        auto plain = ExecuteSchemeQuery(reader, Sprintf(
             "PRAGMA kikimr.EnableUnsafeTruncateTable = \"true\"; "
-            "TRUNCATE TABLE `%s`;", TablePath),
-            TTxControl::NoTx()).ExtractValueSync();
+            "TRUNCATE TABLE `%s`;", TablePath)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(plain.GetStatus(), EStatus::UNAUTHORIZED, plain.GetIssues().ToString());
 
-        auto unsafe = reader.ExecuteQuery(UnsafeTruncateQuery(), TTxControl::NoTx()).ExtractValueSync();
+        auto unsafe = ExecuteQuery(reader, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_UNEQUAL_C(unsafe.GetStatus(), EStatus::SUCCESS,
             "a user who may not even delete a row must not be able to wipe the table");
         UNIT_ASSERT_STRING_CONTAINS(unsafe.GetIssues().ToString(), "Access denied");
@@ -1114,13 +1194,13 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
     // Several truncates interleaved with writes and reads in one query text. Each truncate gets a
     // query block of its own, so this is what would break if a block ever held anything else.
-    Y_UNIT_TEST(InterleavedTruncatesInOneQuery) {
+    Y_UNIT_TEST_TWIN(InterleavedTruncatesInOneQuery, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto result = session.ExecuteQuery(Sprintf(R"(
+        auto result = ExecuteQuery(session, Sprintf(R"(
             PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             UPSERT INTO `%s` (Key, Value) VALUES (10u, "a");
             TRUNCATE TABLE `%s` WITH (unsafe = true);
@@ -1130,7 +1210,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             UPSERT INTO `%s` (Key, Value) VALUES (30u, "c");
             SELECT COUNT(*) AS cnt FROM `%s`;
         )", TablePath, TablePath, TablePath, TablePath, TablePath, TablePath, TablePath),
-            TTxControl::NoTx()).ExtractValueSync();
+            AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2u);
@@ -1152,29 +1232,30 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
     // The path travels from the parsed statement to the executer as written, so a prefix or a bare
     // relative name has to survive the trip.
-    Y_UNIT_TEST(RelativePathIsResolved) {
+    Y_UNIT_TEST_TWIN(RelativePathIsResolved, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
-        auto client = kikimr.GetQueryClient();
+        auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
         CreateAndFill(session);
 
-        auto viaPrefix = session.ExecuteQuery(R"(
+        auto viaPrefix = ExecuteQuery(session, R"(
             PRAGMA TablePathPrefix = "/Root";
             PRAGMA kikimr.EnableUnsafeTruncateTable = "true";
             TRUNCATE TABLE `UnsafeTruncateTable` WITH (unsafe = true);
-        )", TTxControl::NoTx()).ExtractValueSync();
+        )", AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(viaPrefix.GetStatus(), EStatus::SUCCESS, viaPrefix.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
 
-        auto refill = session.ExecuteQuery(Sprintf(
+        auto refill = ExecuteQuery(session, Sprintf(
             R"(UPSERT INTO `%s` (Key, Value) VALUES (1u, "one"), (2u, "two");)", TablePath),
             TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(refill.GetStatus(), EStatus::SUCCESS, refill.GetIssues().ToString());
 
-        auto bare = session.ExecuteQuery(
+        auto bare = ExecuteQuery(session,
             "PRAGMA kikimr.EnableUnsafeTruncateTable = \"true\"; "
             "TRUNCATE TABLE `UnsafeTruncateTable` WITH (unsafe = true);",
-            TTxControl::NoTx()).ExtractValueSync();
+            AutoCommit<UseQueryService>()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(bare.GetStatus(), EStatus::SUCCESS, bare.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
     }

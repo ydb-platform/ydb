@@ -33,7 +33,7 @@ You can enable and disable Metadata Distribution SelfHeal by changing the config
     ```yaml
     config:
         self_management_config:
-            enabled: true # Indication that V2 configuration is in use
+            enabled: true # Enabling distributed configuration
         cms_config:
             sentinel_config:
                 enable: true # Enabling Sentinel

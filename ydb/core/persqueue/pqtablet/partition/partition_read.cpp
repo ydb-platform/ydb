@@ -1132,9 +1132,9 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     );
 
     THolder<TEvPQ::TEvRead> event = MakeHolder<TEvPQ::TEvRead>(0, userInfo.Offset, 0, 0, 1, "",
-                                                               user, 0, MAX_BLOB_PART_SIZE * 2, false, 0, 0, "",
-                                                               false, TActorId{});
-    event->LimitReadToRetention = !AppData(ctx)->FeatureFlags.GetEnableTopicReadPriorRetention();
+                                                               user, 0, MAX_BLOB_PART_SIZE * 2, false,
+                                                               !AppData(ctx)->FeatureFlags.GetEnableTopicReadPriorRetention(),
+                                                               0, 0, "", false, TActorId{});
 
     ctx.Send(ctx.SelfID, event.Release());
     TabletCounters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_CACHE_MISS].Increment(1);

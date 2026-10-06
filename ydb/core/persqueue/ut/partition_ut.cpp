@@ -3084,6 +3084,7 @@ THolder<TEvPQ::TEvRead> MakeTestRead(
         /*timeout=*/0,
         /*size=*/100,
         /*readToBlobEnd=*/false,
+        /*limitReadToRetention=*/false,
         /*maxTimeLagMs=*/0,
         /*readTimestampMs=*/0,
         /*clientDC=*/"",

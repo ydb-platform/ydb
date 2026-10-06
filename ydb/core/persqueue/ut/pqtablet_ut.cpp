@@ -5435,6 +5435,7 @@ void TPQTabletFixture::SendAcquireReadQuota(ui64 cookie, const TActorId& sender)
         999, // timeout
         99999, // size
         true, // readToBlobEnd
+        false, // limitReadToRetention
         99999, // maxTimeLagMs
         0, // readTimestampMs
         "", // clientDC

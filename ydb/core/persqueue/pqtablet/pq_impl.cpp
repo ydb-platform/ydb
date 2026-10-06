@@ -2074,12 +2074,12 @@ void TPersQueue::HandleReadRequest(
                                        cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0,
                                        bytes,
                                        cmd.GetReadToBlobEnd(),
+                                       !AppData(ctx)->FeatureFlags.GetEnableTopicReadPriorRetention(),
                                        cmd.HasMaxTimeLagMs() ? cmd.GetMaxTimeLagMs() : 0,
                                        cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0,
                                        clientDC,
                                        cmd.GetExternalOperation(),
                                        pipeClient);
-        event->LimitReadToRetention = !AppData(ctx)->FeatureFlags.GetEnableTopicReadPriorRetention();
 
         ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }

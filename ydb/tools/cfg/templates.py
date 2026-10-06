@@ -712,12 +712,14 @@ def kikimr_cfg_for_dynamic_node_new_style(
     cert_params=None,
     use_auth_token_file=False,
     dynamic_node=None,
+    grpcs_port=None,
 ):
     dynamic_node = dynamic_node or {}
     ic_port = dynamic_node.get("ic_port", ic_port)
     grpc_port = dynamic_node.get("grpc_port", grpc_port)
     mon_port = dynamic_node.get("mon_port", mon_port)
-    grpcs_port = dynamic_node.get("grpcs_port")
+    if grpcs_port is None:
+        grpcs_port = dynamic_node.get("grpcs_port")
     return "\n".join(
         [
             local_vars(

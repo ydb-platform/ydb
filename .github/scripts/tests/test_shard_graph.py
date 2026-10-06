@@ -480,13 +480,63 @@ class ShardProgressTest(unittest.TestCase):
             run_url="https://example.test/run/99",
         )
         body = shard_progress.render_comment(state, "2026-10-04T12:05:00Z")
-        self.assertIn("**Progress:** 1/4", body)
+        self.assertIn(":red_circle:", body)
         self.assertIn("**ETA:** 15m", body)
         self.assertIn("Tests still running (1/4 shards).", body)
-        self.assertIn("shard 0 **failure**", body)
-        self.assertIn("`ydb/a/unittest/Foo`", body)
-        self.assertIn("shard_0", body)
-        self.assertIn("https://example.test/job/0", body)
+        self.assertNotIn("Failures", body)
+        self.assertNotIn("| Shard |", body)
+        self.assertNotIn("shard 0 **failure**", body)
+
+    def test_running_stays_yellow_until_a_failure_arrives(self) -> None:
+        ok = shard_progress.apply_shard(
+            _progress_state(),
+            shard_id=0,
+            result="success",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:05:00Z",
+            job_url="https://example.test/job/0",
+            log_prefix="shard_0",
+            failed_tests=[],
+            run_url="https://example.test/run/99",
+            counts={"tests": 10, "passed": 10, "errors": 0, "failed": 0, "skipped": 0, "muted": 0},
+        )
+        body = shard_progress.render_comment(ok, "2026-10-04T12:05:00Z")
+        self.assertIn(":yellow_circle:", body)
+        self.assertNotIn(":red_circle:", body)
+        failed = shard_progress.apply_shard(
+            ok,
+            shard_id=1,
+            result="failure",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:06:00Z",
+            job_url="https://example.test/job/1",
+            log_prefix="shard_1",
+            failed_tests=["ydb/a"],
+            run_url="https://example.test/run/99",
+            counts={"tests": 4, "passed": 3, "errors": 0, "failed": 1, "skipped": 0, "muted": 0},
+        )
+        body = shard_progress.render_comment(failed, "2026-10-04T12:06:00Z")
+        self.assertIn(":red_circle:", body)
+        self.assertIn("Tests still running (2/4 shards).", body)
+        retried = shard_progress.apply_shard(
+            ok,
+            shard_id=1,
+            result="success",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:06:00Z",
+            job_url="https://example.test/job/1",
+            log_prefix="shard_1",
+            failed_tests=[],
+            run_url="https://example.test/run/99",
+            counts={"tests": 4, "passed": 4, "errors": 0, "failed": 0, "skipped": 0, "muted": 0},
+            tries={
+                "1": {"tests": 4, "passed": 3, "errors": 0, "failed": 1, "skipped": 0, "muted": 0},
+                "2": {"tests": 1, "passed": 1, "errors": 0, "failed": 0, "skipped": 0, "muted": 0},
+            },
+        )
+        body = shard_progress.render_comment(retried, "2026-10-04T12:06:00Z")
+        self.assertIn(":yellow_circle:", body)
+        self.assertNotIn(":red_circle:", body)
 
     def test_merge_keeps_every_shard_and_uses_the_earliest_start(self) -> None:
         first = shard_progress.apply_shard(
@@ -515,8 +565,9 @@ class ShardProgressTest(unittest.TestCase):
         self.assertEqual(shard_progress.received_count(merged), 2)
         self.assertEqual(merged["started_at"], "2026-10-04T12:00:00Z")
         body = shard_progress.render_comment(merged, "2026-10-04T12:10:00Z")
-        self.assertIn("**Progress:** 2/4", body)
-        self.assertIn("shard 0 **failure**", body)
+        self.assertIn("Tests still running (2/4 shards).", body)
+        self.assertNotIn("Failures", body)
+        self.assertNotIn("| Shard |", body)
         self.assertNotIn("**Status:** success", body)
 
     def test_full_set_is_the_final_summary(self) -> None:
@@ -534,10 +585,12 @@ class ShardProgressTest(unittest.TestCase):
                 run_url="https://example.test/run/99",
             )
         body = shard_progress.render_comment(state, "2026-10-04T12:04:00Z")
-        self.assertIn("### Run-tests `relwithdebinfo`", body)
+        self.assertIn("Run-tests `relwithdebinfo` has started.", body)
+        self.assertIn(":red_circle:", body)
         self.assertIn("Some tests failed, follow the links below.", body)
         self.assertIn("| TESTS |", body)
-        self.assertIn("Failures:", body)
+        self.assertNotIn("Failures:", body)
+        self.assertNotIn("| Shard |", body)
         self.assertNotIn("**Progress:**", body)
         self.assertNotIn("still running", body)
         parsed = shard_progress.parse_state(body)
@@ -578,6 +631,7 @@ class ShardProgressTest(unittest.TestCase):
         self.assertIn("[15](https://example.test/combined/ya-test.html)", body)
         self.assertIn("[2](https://example.test/combined/ya-test.html#FAIL)", body)
         self.assertIn("[12](https://example.test/combined/ya-test.html#PASS)", body)
+        self.assertIn(":red_circle:", body)
 
     def test_combined_html_has_fail_anchor(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -627,9 +681,12 @@ class ShardProgressTest(unittest.TestCase):
         )
         body = shard_progress.sync_comment(store, header, incoming, "2026-10-04T12:10:00Z")
         self.assertGreaterEqual(store.conflicts, 1)
-        self.assertIn("**Progress:** 2/4", body)
-        self.assertIn("`ydb/late`", body)
-        self.assertIn("shard 0", body)
+        self.assertIn("Tests still running (2/4 shards).", body)
+        self.assertNotIn("Failures", body)
+        parsed = shard_progress.parse_state(body)
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(set(parsed["shards"]), {"0", "1"})
         self.assertEqual(len(store.rows), 1)
 
     def test_merge_uses_the_fresh_comment_not_the_stale_list(self) -> None:
@@ -672,9 +729,12 @@ class ShardProgressTest(unittest.TestCase):
             run_url="https://example.test/run/99",
         )
         body = shard_progress.sync_comment(store, header, incoming, "2026-10-04T12:07:00Z")
-        self.assertIn("shard 2", body)
-        self.assertIn("`ydb/raced`", body)
-        self.assertIn("**Progress:** 3/4", body)
+        self.assertIn("Tests still running (3/4 shards).", body)
+        parsed = shard_progress.parse_state(body)
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(set(parsed["shards"]), {"0", "1", "2"})
+        self.assertEqual(parsed["shards"]["2"]["failed_tests"], ["ydb/raced"])
 
     def test_narrow_retry_keeps_only_the_failed_suite(self) -> None:
         graph = _graph(
@@ -854,18 +914,63 @@ class ShardProgressTest(unittest.TestCase):
         self.assertEqual(shard_progress.href_url(raw), encoded)
         self.assertEqual(shard_progress.href_url(encoded), encoded)
         self.assertEqual(shard_progress.href_url(f"{raw}#FAIL"), f"{encoded}#FAIL")
-        state = _progress_state(1)
-        state["combined_url"] = raw
-        state["shards"] = {
-            "0": {
-                "result": "success",
-                "counts": {"tests": 3, "passed": 2, "errors": 0, "failed": 1, "skipped": 0, "muted": 0},
-            }
-        }
-        table = "\n".join(shard_progress.render_counts_table(state))
+        table = "\n".join(shard_progress.render_try_table(
+            {"tests": 3, "passed": 2, "errors": 0, "failed": 1, "skipped": 0, "muted": 0},
+            raw,
+        ))
         self.assertIn(f"[3]({encoded})", table)
         self.assertIn(f"[1]({encoded}#FAIL)", table)
         self.assertNotIn("](https://storage.example/ydb/Run and debug", table)
+
+    def test_comment_breaks_counts_down_by_try(self) -> None:
+        state = shard_progress.apply_shard(
+            _progress_state(2),
+            shard_id=0,
+            result="failure",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:05:00Z",
+            job_url="https://example.test/job/0",
+            log_prefix="shard_0",
+            failed_tests=["ydb/a/Foo"],
+            run_url="https://example.test/run/99",
+            counts={"tests": 10, "passed": 8, "errors": 0, "failed": 2, "skipped": 0, "muted": 0},
+            tries={
+                "1": {"tests": 10, "passed": 7, "errors": 0, "failed": 3, "skipped": 0, "muted": 0},
+                "2": {"tests": 3, "passed": 1, "errors": 0, "failed": 2, "skipped": 0, "muted": 0},
+            },
+            report_url="https://example.test/shard0/ya-test.html",
+        )
+        state = shard_progress.apply_shard(
+            state,
+            shard_id=1,
+            result="success",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:06:00Z",
+            job_url="https://example.test/job/1",
+            log_prefix="shard_1",
+            failed_tests=[],
+            run_url="https://example.test/run/99",
+            counts={"tests": 5, "passed": 5, "errors": 0, "failed": 0, "skipped": 0, "muted": 0},
+            tries={"1": {"tests": 5, "passed": 5, "errors": 0, "failed": 0, "skipped": 0, "muted": 0}},
+        )
+        state["combined_url"] = "https://example.test/combined"
+        state["try_urls"] = {
+            "1": "https://example.test/combined/try_1/ya-test.html",
+            "2": "https://example.test/combined/try_2/ya-test.html",
+        }
+        body = shard_progress.render_comment(state, "2026-10-04T12:06:00Z")
+        self.assertIn(":white_circle:", body)
+        self.assertIn("2026-10-04 12:00:00 UTC", body)
+        self.assertIn("Going to retry failed tests...", body)
+        self.assertIn("<details>", body)
+        self.assertIn("[15](https://example.test/combined/try_1/ya-test.html)", body)
+        self.assertIn(":red_circle:", body)
+        self.assertIn("only retried tests", body)
+        self.assertIn("[2](https://example.test/combined/try_2/ya-test.html#FAIL)", body)
+        self.assertLess(body.find("</details>"), body.find("only retried tests"))
+        self.assertNotIn("Failures", body)
+        self.assertNotIn("| Shard |", body)
+        self.assertNotIn("| result |", body)
 
 
 class _MemComment:

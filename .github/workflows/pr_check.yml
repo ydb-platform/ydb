@@ -618,8 +618,8 @@ jobs:
           fi
           case "$PUBLIC_DIR_URL" in
             */shard_${SHARD_ID})
-              combined_url="${PUBLIC_DIR_URL%/shard_${SHARD_ID}}/combined/ya-test.html"
-              combined_html="${RUNNER_TEMP:-/tmp}/combined-ya-test-${SHARD_ID}.html"
+              combined_url="${PUBLIC_DIR_URL%/shard_${SHARD_ID}}/combined"
+              combined_html="${RUNNER_TEMP:-/tmp}/combined-ya-test-${SHARD_ID}"
               ;;
           esac
         fi
@@ -646,11 +646,15 @@ jobs:
           --combined-url "$combined_url" \
           --state-output shard_event.json \
           --summary-file "$GITHUB_STEP_SUMMARY"
-        if [ -n "$combined_html" ] && [ -f "$combined_html" ] && [ -n "${S3_BUCKET_PATH:-}" ]; then
+        if [ -n "$combined_html" ] && [ -d "$combined_html" ] && [ -n "${S3_BUCKET_PATH:-}" ]; then
           case "$S3_BUCKET_PATH" in
             */shard_${SHARD_ID})
-              s3cmd put --acl-public --no-progress --no-mime-magic --guess-mime-type \
-                "$combined_html" "${S3_BUCKET_PATH%/shard_${SHARD_ID}}/combined/ya-test.html" || true
+              for html in "$combined_html"/try_*/ya-test.html; do
+                [ -f "$html" ] || continue
+                try=$(basename "$(dirname "$html")")
+                s3cmd put --acl-public --no-progress --no-mime-magic --guess-mime-type \
+                  "$html" "${S3_BUCKET_PATH%/shard_${SHARD_ID}}/combined/${try}/ya-test.html" || true
+              done
               ;;
           esac
         fi

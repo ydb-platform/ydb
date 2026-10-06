@@ -139,6 +139,7 @@ def empty_state(run_id: str, preset: str, target: str, total: int) -> dict[str, 
         "run_url": "",
         "started_at": "",
         "combined_url": "",
+        "try_urls": {},
         "shards": {},
     }
 
@@ -186,18 +187,47 @@ def merge_reports(reports: list[dict[str, Any]]) -> dict[str, Any] | None:
     return merged
 
 
-def load_try_reports(directory: str) -> list[dict[str, Any]]:
+def _try_index(path: Path) -> int:
+    match = re.search(r"try_(\d+)$", path.parent.name)
+    return int(match.group(1)) if match else 0
+
+
+def iter_try_reports(directory: str) -> list[tuple[int, dict[str, Any], Path]]:
     if not directory:
         return []
     root = Path(directory)
     if not root.is_dir():
         return []
-    found: list[dict[str, Any]] = []
-    for path in sorted(root.glob("try_*/report.json"), key=lambda item: item.parent.name):
+    found: list[tuple[int, dict[str, Any], Path]] = []
+    for path in sorted(root.glob("try_*/report.json"), key=lambda item: _try_index(item)):
         report = load_report(str(path))
         if report:
-            found.append(report)
+            found.append((_try_index(path), report, path))
     return found
+
+
+def load_try_reports(directory: str) -> list[dict[str, Any]]:
+    return [report for _index, report, _path in iter_try_reports(directory)]
+
+
+def load_tries(directory: str) -> dict[str, dict[str, Any]]:
+    """Per-try counts plus report mtime, same clock comment-pr uses on main."""
+    found: dict[str, dict[str, Any]] = {}
+    for index, report, path in iter_try_reports(directory):
+        row: dict[str, Any] = counts_from_report(report)
+        try:
+            row["finished_at"] = format_time(datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc))
+        except OSError:
+            pass
+        found[str(index)] = row
+    return found
+
+
+def try_counts_from_dir(directory: str) -> dict[str, dict[str, int]]:
+    return {
+        key: {name: int(row.get(name) or 0) for name in COUNT_KEYS}
+        for key, row in load_tries(directory).items()
+    }
 
 
 def try_report_urls(url: str) -> list[str]:
@@ -252,6 +282,50 @@ def report_url_for(state: dict[str, Any]) -> str:
     return ""
 
 
+def try_url_for(state: dict[str, Any], key: str, *, try_count: int = 1) -> str:
+    urls = state.get("try_urls") or {}
+    if isinstance(urls, dict) and urls.get(str(key)):
+        return str(urls[str(key)])
+    combined = str(state.get("combined_url") or "")
+    if try_count <= 1:
+        return combined or report_url_for(state)
+    if combined.endswith("/ya-test.html"):
+        return combined[: -len("/ya-test.html")] + f"/try_{key}/ya-test.html"
+    if combined:
+        return f"{combined.rstrip('/')}/try_{key}/ya-test.html"
+    return ""
+
+
+def format_comment_time(value: str) -> str:
+    """Same `YYYY-MM-DD HH:MM:SS UTC` clock as comment-pr.py / test_ya."""
+    if not value:
+        return ""
+    return parse_time(value).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def event_line(color: str, when: str, text: str) -> str:
+    stamp = format_comment_time(when)
+    if stamp:
+        return f":{color}_circle: `{stamp}` {text}"
+    return f":{color}_circle: {text}"
+
+
+def try_finished_at(state: dict[str, Any], key: str, fallback: str = "") -> str:
+    latest = ""
+    for row in (state.get("shards") or {}).values():
+        if not isinstance(row, dict):
+            continue
+        tries = shard_tries(row)
+        if key not in tries:
+            continue
+        candidate = str(tries[key].get("finished_at") or row.get("finished_at") or "")
+        if not candidate:
+            continue
+        if not latest or parse_time(candidate) > parse_time(latest):
+            latest = candidate
+    return latest or fallback
+
+
 def _count_cell(value: int, url: str, anchor: str) -> str:
     if not value:
         return "0"
@@ -262,26 +336,61 @@ def _count_cell(value: int, url: str, anchor: str) -> str:
     return f"[{value}]({encoded}{suffix})"
 
 
-def render_counts_table(state: dict[str, Any]) -> list[str]:
-    counts = sum_counts(state)
-    url = report_url_for(state)
+def _counts_cells(counts: dict[str, int], url: str, *, retry: bool = False) -> list[str]:
+    tests = int(counts.get("tests") or 0)
+    tests_cell = _count_cell(tests, url, "")
+    if retry and tests and not url:
+        tests_cell = f"{tests} (only retried tests)"
+    elif retry and tests and url:
+        tests_cell = f"{_count_cell(tests, url, '')} (only retried tests)"
+    return [
+        tests_cell,
+        _count_cell(int(counts.get("passed") or 0), url, "PASS"),
+        _count_cell(int(counts.get("errors") or 0), url, "ERROR"),
+        _count_cell(int(counts.get("failed") or 0), url, "FAIL"),
+        _count_cell(int(counts.get("skipped") or 0), url, "SKIP"),
+        _count_cell(int(counts.get("muted") or 0), url, "MUTE"),
+    ]
+
+
+def shard_tries(row: dict[str, Any]) -> dict[str, dict[str, int]]:
+    tries = row.get("tries") or {}
+    if isinstance(tries, dict) and tries:
+        return {str(key): dict(value) for key, value in tries.items() if isinstance(value, dict)}
+    counts = row.get("counts")
+    if isinstance(counts, dict) and any(int(counts.get(key) or 0) for key in COUNT_KEYS):
+        return {"1": dict(counts)}
+    return {}
+
+
+def sum_try_counts(state: dict[str, Any]) -> dict[str, dict[str, int]]:
+    found: dict[str, dict[str, int]] = {}
+    for row in (state.get("shards") or {}).values():
+        if not isinstance(row, dict):
+            continue
+        for key, counts in shard_tries(row).items():
+            bucket = found.setdefault(key, empty_counts())
+            for name in COUNT_KEYS:
+                bucket[name] += int(counts.get(name) or 0)
+    return found
+
+
+def render_try_table(counts: dict[str, int], url: str, *, retry: bool = False) -> list[str]:
     return [
         "| TESTS | PASSED | ERRORS | FAILED | SKIPPED | MUTED |",
         "| ---: | ---: | ---: | ---: | ---: | ---: |",
-        "| "
-        + " | ".join(
-            [
-                _count_cell(counts["tests"], url, ""),
-                _count_cell(counts["passed"], url, "PASS"),
-                _count_cell(counts["errors"], url, "ERROR"),
-                _count_cell(counts["failed"], url, "FAIL"),
-                _count_cell(counts["skipped"], url, "SKIP"),
-                _count_cell(counts["muted"], url, "MUTE"),
-            ]
-        )
-        + " |",
+        "| " + " | ".join(_counts_cells(counts, url, retry=retry)) + " |",
         "",
     ]
+
+
+def render_counts_table(state: dict[str, Any]) -> list[str]:
+    tries = sum_try_counts(state)
+    keys = sorted(tries, key=lambda item: int(item))
+    if not keys:
+        return render_try_table(sum_counts(state), report_url_for(state))
+    last = keys[-1]
+    return render_try_table(tries[last], try_url_for(state, last, try_count=len(keys)), retry=int(last) > 1)
 
 
 def headline(state: dict[str, Any]) -> str:
@@ -293,6 +402,90 @@ def headline(state: dict[str, Any]) -> str:
     if status == "failure":
         return "Some tests failed, follow the links below."
     return "Tests successful."
+
+
+def last_try_failed(row: dict[str, Any]) -> bool:
+    """True when this shard's latest try still has FAIL/ERROR. Earlier tries do not count."""
+    tries = shard_tries(row)
+    if tries:
+        last = tries[max(tries, key=lambda key: int(key))]
+        return bool(int(last.get("failed") or 0) or int(last.get("errors") or 0))
+    if str(row.get("result") or "") not in ("", "success"):
+        return True
+    counts = row.get("counts") or {}
+    return bool(int(counts.get("failed") or 0) or int(counts.get("errors") or 0))
+
+
+def seen_failures(state: dict[str, Any]) -> bool:
+    """Red as soon as any received shard's last try failed. Do not wait for the rest."""
+    return any(isinstance(row, dict) and last_try_failed(row) for row in (state.get("shards") or {}).values())
+
+
+def running_event(state: dict[str, Any], now: str) -> str:
+    received = received_count(state)
+    total = int(state.get("total") or 0)
+    text = f"Tests still running ({received}/{total} shards)."
+    eta = eta_label(received, total, elapsed_seconds(state, now))
+    if eta not in ("unknown", "done"):
+        text += f" **ETA:** {eta}"
+    color = "red" if seen_failures(state) else "yellow"
+    return event_line(color, now, text)
+
+
+def render_timeline(state: dict[str, Any], now: str) -> list[str]:
+    """Rebuild the test_ya / comment-pr log: circles, UTC stamps, last try open."""
+    lines: list[str] = []
+    preset = _md(str(state.get("preset") or ""))
+    started = str(state.get("started_at") or now)
+    run_url = str(state.get("run_url") or "")
+    start = f"Run-tests `{preset}` has started."
+    if run_url:
+        start += f" [Run]({run_url})"
+    lines.append(event_line("white", started, start))
+    tries = sum_try_counts(state)
+    keys = sorted(tries, key=lambda item: int(item))
+    status = overall_status(state)
+    if not keys:
+        if status == "running":
+            lines.append(running_event(state, now))
+        elif status == "failure":
+            lines.append(event_line("red", now, "Some tests failed, follow the links below."))
+        else:
+            lines.append(event_line("green", now, "Tests successful."))
+        lines.append("")
+        lines.extend(render_try_table(sum_counts(state), report_url_for(state)))
+        return lines
+    last = keys[-1]
+    for key in keys:
+        when = try_finished_at(state, key, now)
+        url = try_url_for(state, key, try_count=len(keys))
+        table = render_try_table(tries[key], url, retry=int(key) > 1)
+        if key != last:
+            lines.append(
+                event_line(
+                    "yellow",
+                    when,
+                    "Some tests failed, follow the links below. Going to retry failed tests...",
+                )
+            )
+            lines.append("")
+            lines.append("<details>")
+            lines.append("")
+            lines.extend(table)
+            lines.append("</details>")
+            lines.append("")
+            continue
+        if status == "running":
+            lines.append(running_event(state, now))
+        elif status == "failure":
+            lines.append(event_line("red", when or now, "Some tests failed, follow the links below."))
+        else:
+            lines.append(event_line("green", when or now, "Tests successful."))
+        lines.append("")
+        lines.extend(table)
+        if status == "success":
+            lines.append(event_line("green", when or now, "Build successful."))
+    return lines
 
 
 def _min_time(current: str, candidate: str) -> str:
@@ -318,6 +511,7 @@ def merge_states(states: list[dict[str, Any]]) -> dict[str, Any]:
                 "run_url": str(state.get("run_url") or ""),
                 "started_at": str(state.get("started_at") or ""),
                 "combined_url": str(state.get("combined_url") or ""),
+                "try_urls": dict(state.get("try_urls") or {}),
                 "shards": {},
             }
         merged["total"] = max(int(merged["total"]), int(state.get("total") or 0))
@@ -325,6 +519,9 @@ def merge_states(states: list[dict[str, Any]]) -> dict[str, Any]:
             merged["run_url"] = str(state.get("run_url") or "")
         if state.get("combined_url"):
             merged["combined_url"] = str(state.get("combined_url") or "")
+        if state.get("try_urls"):
+            merged.setdefault("try_urls", {})
+            merged["try_urls"].update(state["try_urls"])
         merged["started_at"] = _min_time(str(merged["started_at"]), str(state.get("started_at") or ""))
         for shard_id, row in (state.get("shards") or {}).items():
             key = str(shard_id)
@@ -351,6 +548,7 @@ def apply_shard(
     build: str = "",
     tests: str = "",
     counts: dict[str, int] | None = None,
+    tries: dict[str, dict[str, Any]] | None = None,
     report_url: str = "",
     report_json_url: str = "",
 ) -> dict[str, Any]:
@@ -368,6 +566,7 @@ def apply_shard(
         "build": build,
         "tests": tests,
         "counts": dict(counts or empty_counts()),
+        "tries": {str(key): dict(value) for key, value in (tries or {}).items()},
         "report_url": report_url,
         "report_json_url": report_json_url,
     }
@@ -560,60 +759,11 @@ def _md(text: str) -> str:
 
 
 def render_comment(state: dict[str, Any], now: str) -> str:
-    total = int(state.get("total") or 0)
-    received = received_count(state)
-    status = overall_status(state)
     lines = [
         marker(str(state.get("run_id") or ""), str(state.get("preset") or "")),
-        f"### Run-tests `{_md(str(state.get('preset') or ''))}`",
         "",
     ]
-    if status == "running":
-        eta = eta_label(received, total, elapsed_seconds(state, now))
-        lines.append(f"**Progress:** {received}/{total}")
-        lines.append(f"**ETA:** {eta}")
-    run_url = str(state.get("run_url") or "")
-    if run_url:
-        lines.append(f"**Run:** {run_url}")
-    lines.append("")
-    lines.append(headline(state))
-    lines.append("")
-    lines.extend(render_counts_table(state))
-
-    failures: list[str] = []
-    for shard_id in sorted(state.get("shards") or {}, key=lambda item: int(item)):
-        row = state["shards"][shard_id]
-        if str(row.get("result")) == "success":
-            continue
-        tests = [str(name) for name in row.get("failed_tests") or []]
-        shown = ", ".join(f"`{_md(name)}`" for name in tests[:MAX_FAILURE_NAMES]) or "see job log"
-        extra = len(tests) - MAX_FAILURE_NAMES
-        if extra > 0:
-            shown += f" … (+{extra})"
-        link = str(row.get("job_url") or "")
-        prefix = str(row.get("log_prefix") or f"shard_{shard_id}")
-        link_text = f"[shard {shard_id}]({link})" if link else f"shard {shard_id}"
-        failures.append(
-            f"- shard {shard_id} **{row.get('result')}** — {shown} — {link_text} — logs `{_md(prefix)}`"
-        )
-    fail_title = "Failures so far:" if status == "running" else "Failures:"
-    if failures:
-        lines.append(fail_title)
-        lines.extend(failures)
-    elif status == "running":
-        lines.append("Failures so far: none yet")
-    else:
-        lines.append("Failures: none")
-    lines.append("")
-    lines.append("| Shard | Result | Job | Logs |")
-    lines.append("| ---: | --- | --- | --- |")
-    for shard_id in sorted(state.get("shards") or {}, key=lambda item: int(item)):
-        row = state["shards"][shard_id]
-        link = str(row.get("job_url") or "")
-        job = f"[shard {shard_id}]({link})" if link else f"shard {shard_id}"
-        prefix = str(row.get("log_prefix") or f"shard_{shard_id}")
-        lines.append(f"| {shard_id} | {row.get('result')} | {job} | `{_md(prefix)}` |")
-    lines.append("")
+    lines.extend(render_timeline(state, now))
     payload = json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     lines.append(STATE_BEGIN)
     lines.append(payload)
@@ -858,6 +1008,14 @@ def fetch_merged_report(url: str) -> dict[str, Any] | None:
     return merge_reports(reports)
 
 
+def report_json_url_for_try(url: str, try_index: int) -> str:
+    if not url:
+        return ""
+    if re.search(r"/try_\d+/report\.json", url):
+        return re.sub(r"/try_\d+/report\.json", f"/try_{try_index}/report.json", url, count=1)
+    return url if try_index == 1 else ""
+
+
 def collect_reports(
     state: dict[str, Any],
     *,
@@ -885,6 +1043,61 @@ def collect_reports(
         if remote:
             found.append(remote)
     return found
+
+
+def collect_try_reports(
+    state: dict[str, Any],
+    try_index: int,
+    *,
+    local_json_url: str = "",
+    reports_dir: str = "",
+) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
+    if reports_dir:
+        local = load_report(str(Path(reports_dir) / f"try_{try_index}" / "report.json"))
+        if local:
+            found.append(local)
+    skip = {report_json_url_for_try(local_json_url, try_index)} if local_json_url else set()
+    skip.discard("")
+    for row in (state.get("shards") or {}).values():
+        if not isinstance(row, dict):
+            continue
+        url = report_json_url_for_try(str(row.get("report_json_url") or ""), try_index)
+        if not url or url in skip:
+            continue
+        skip.add(url)
+        remote = fetch_report(url)
+        if remote:
+            found.append(remote)
+    return found
+
+
+def write_try_htmls(
+    directory: str,
+    state: dict[str, Any],
+    *,
+    preset: str,
+    local_json_url: str = "",
+    reports_dir: str = "",
+    combined_url: str = "",
+) -> dict[str, str]:
+    urls: dict[str, str] = {}
+    base = combined_url.rstrip("/")
+    if base.endswith("/ya-test.html"):
+        base = base[: -len("/ya-test.html")]
+    for key in sum_try_counts(state):
+        reports = collect_try_reports(
+            state,
+            int(key),
+            local_json_url=local_json_url,
+            reports_dir=reports_dir,
+        )
+        if not reports:
+            continue
+        write_combined_html(str(Path(directory) / f"try_{key}" / "ya-test.html"), reports, preset=preset)
+        if base:
+            urls[str(key)] = f"{base}/try_{key}/ya-test.html"
+    return urls
 
 
 def _html_escape(text: str) -> str:
@@ -948,10 +1161,8 @@ def _event_state(args: argparse.Namespace) -> dict[str, Any]:
     base["run_url"] = args.run_url
     if getattr(args, "combined_url", ""):
         base["combined_url"] = args.combined_url
-    report = resolve_report(
-        reports_dir=getattr(args, "reports_dir", "") or "",
-        report_path=args.report,
-    )
+    reports_dir = getattr(args, "reports_dir", "") or ""
+    report = resolve_report(reports_dir=reports_dir, report_path=args.report)
     return apply_shard(
         base,
         shard_id=args.shard_id,
@@ -965,6 +1176,7 @@ def _event_state(args: argparse.Namespace) -> dict[str, Any]:
         build=args.build_result,
         tests=args.test_result,
         counts=counts_from_report(report),
+        tries=load_tries(reports_dir),
         report_url=getattr(args, "report_url", "") or "",
         report_json_url=getattr(args, "report_json_url", "") or "",
     )
@@ -1024,16 +1236,18 @@ def _cmd_publish(args: argparse.Namespace) -> int:
                 preview = merge_states([item for item in existing if item] + [state])
             except (OSError, RuntimeError, urllib.error.URLError, json.JSONDecodeError, TimeoutError, ValueError):
                 preview = state
-        reports = collect_reports(
+        try_urls = write_try_htmls(
+            args.combined_html,
             preview,
-            local_path=args.report,
+            preset=args.preset,
             local_json_url=getattr(args, "report_json_url", "") or "",
             reports_dir=getattr(args, "reports_dir", "") or "",
+            combined_url=getattr(args, "combined_url", "") or "",
         )
-        if reports:
-            write_combined_html(args.combined_html, reports, preset=args.preset)
-            if getattr(args, "combined_url", ""):
-                state["combined_url"] = args.combined_url
+        if try_urls:
+            state["try_urls"] = try_urls
+        if getattr(args, "combined_url", ""):
+            state["combined_url"] = args.combined_url
     # Disk copy survives a comment API failure so finalize can still merge it.
     _write_state(args.state_output, state)
     _write_summary(args.summary_file, render_shard_job_note(state, args.shard_id))

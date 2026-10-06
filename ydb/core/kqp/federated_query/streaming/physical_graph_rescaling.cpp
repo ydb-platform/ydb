@@ -1,6 +1,5 @@
 #include "physical_graph_rescaling.h"
 
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/fq/libs/state/dq_stage_state_recovery_info.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 
@@ -23,7 +22,8 @@ using namespace NYql::NNodes;
 
 void PatchQueryPhysicalGraphForRescaling(
     NKikimrKqp::TQueryPhysicalGraph& graph,
-    const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot)
+    const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot,
+    ui32 usableThreadsPerNode)
 {
     YDB_LOG_INFO("Starting PQ source rescaling",
         {"resourceCount", resourceSnapshot.size()}, {"taskCount", graph.TasksSize()});
@@ -228,7 +228,7 @@ void PatchQueryPhysicalGraphForRescaling(
 
     // Preserve the saved query and stage limits. As in CountReadTasksFromSource,
     // the thread-based limit is only a fallback when there is no task count hint.
-    const ui64 tasksByThreads = static_cast<ui64>(TStagePredictor::GetUsableThreads()) * resourceSnapshot.size();
+    const ui64 tasksByThreads = static_cast<ui64>(usableThreadsPerNode) * resourceSnapshot.size();
     THashMap<TStageKey, ui32> newTaskCounts;
     for (const auto& sk : pqSourceStages) {
 

@@ -10,6 +10,7 @@ namespace NKikimr::NKqp {
 // Must be called before RestoreTasksGraphInfo().
 void PatchQueryPhysicalGraphForRescaling(
     NKikimrKqp::TQueryPhysicalGraph& graph,
-    const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot);
+    const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot,
+    ui32 usableThreadsPerNode);
 
 } // namespace NKikimr::NKqp

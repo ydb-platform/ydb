@@ -29,6 +29,8 @@ namespace NKqpProto {
 
 namespace NKikimr::NKqp {
 
+    class IKqpStreamingQueryControllerFactory;
+
     NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig);
 
     NYql::IHTTPGateway::TPtr MakeHttpGateway(const NYql::THttpGatewayConfig& httpGatewayConfig, NMonitoring::TDynamicCounterPtr countersRoot);
@@ -72,6 +74,7 @@ namespace NKikimr::NKqp {
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         TScriptExecutionSettings ScriptExecutionSettings = {};
         NFq::TCheckpointProviderIntegrations CheckpointProviderIntegrations = {};
+        std::shared_ptr<IKqpStreamingQueryControllerFactory> StreamingQueryControllerFactory = {};
     };
 
     struct IKqpFederatedQuerySetupFactory {

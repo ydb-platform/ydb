@@ -13,7 +13,6 @@
 #include <ydb/core/kqp/compute_actor/kqp_pure_compute_actor.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/common/control.h>
-#include <ydb/core/fq/libs/checkpointing/events/events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
@@ -144,9 +143,9 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , ArrayBufferMinFillPercentage(args.ArrayBufferMinFillPercentage)
     , BufferPageAllocSize(args.BufferPageAllocSize)
     , Query(args.Query)
-    , CheckpointCoordinatorId(args.CheckpointCoordinator)
+    , EnableCheckpoints(args.EnableCheckpoints)
     , EnableWatermarks(args.EnableWatermarks)
-    , StreamingQueryNodesManagerId(args.StreamingQueryNodesManager)
+    , StreamingQuery(args.StreamingQuery)
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -729,7 +728,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 
 void TKqpPlanner::PrepareCheckpoints() {
     const auto isStreamingQuery = UserRequestContext && UserRequestContext->IsStreamingQuery;
-    const auto enableCheckpoints = isStreamingQuery && static_cast<bool>(CheckpointCoordinatorId);
+    const auto enableCheckpoints = isStreamingQuery && EnableCheckpoints;
     TasksGraph.BuildCheckpointingAndWatermarksMode(enableCheckpoints, EnableWatermarks);
 
     if (!enableCheckpoints) {
@@ -737,7 +736,6 @@ void TKqpPlanner::PrepareCheckpoints() {
     }
 
     bool hasStreamingIngress = false;
-    auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
@@ -755,7 +753,7 @@ void TKqpPlanner::PrepareCheckpoints() {
         {"hasStreamingIngress", hasStreamingIngress});
 
     if (!hasStreamingIngress) {
-        CheckpointCoordinatorId = TActorId{};
+        EnableCheckpoints = false;
         return;
     }
 
@@ -792,7 +790,7 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
             it->second.Set(state->GetStats());
         }
 
-        if (PendingComputeTasks.empty() && (CheckpointCoordinatorId || StreamingQueryNodesManagerId)) {
+        if (PendingComputeTasks.empty() && StreamingQuery) {
             SendReadyState();
         }
         return true;
@@ -1012,7 +1010,7 @@ void TKqpPlanner::SendReadyState() {
         return;
     }
 
-    auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+    TVector<IKqpStreamingQueryController::TTaskInfo> tasks;
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         if (!dqTask.ComputeActorId) {
             YDB_LOG_WARN("Skip sending TEvReadyState: task has no compute actor id (node disconnected or task not started)",
@@ -1024,30 +1022,21 @@ void TKqpPlanner::SendReadyState() {
 
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-        auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
+        tasks.push_back({
             .Id = dqTask.Id,
             .IsCheckpointingEnabled = NDq::GetTaskCheckpointingMode(settings) != NDqProto::CHECKPOINTING_MODE_DISABLED,
             .IsIngress = NDq::IsIngress(settings),
             .IsEgress = NDq::IsEgress(settings),
             .HasState = NDq::HasState(settings),
             .ActorId = dqTask.ComputeActorId,
-        };
-        event->Tasks.emplace_back(std::move(task));
+        });
     }
 
-    YDB_LOG_INFO("Sending TEvReadyState",
+    YDB_LOG_INFO("All compute actors started, notifying streaming query",
         {"txId", TxId},
         {"ctx", *UserRequestContext},
-        {"checkpointCoordinatorId", CheckpointCoordinatorId},
-        {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId});
-    if (StreamingQueryNodesManagerId) {
-        auto managerEvent = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
-        managerEvent->Tasks = event->Tasks;
-        TlsActivationContext->Send(std::make_unique<IEventHandle>(StreamingQueryNodesManagerId, ExecuterId, managerEvent.release()));
-    }
-    if (CheckpointCoordinatorId) {
-        TlsActivationContext->Send(std::make_unique<IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
-    }
+        {"enableCheckpoints", EnableCheckpoints});
+    StreamingQuery->OnComputeActorsStarted(std::move(tasks), EnableCheckpoints);
     ReadyStateSent = true;
 }
 

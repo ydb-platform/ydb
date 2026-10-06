@@ -29,6 +29,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/pq_checkpoint_provider_integration.h>
+#include <ydb/core/kqp/federated_query/streaming/streaming_query_controller.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
@@ -335,6 +336,10 @@ public:
             FederatedQuerySetup->CheckpointProviderIntegrations.try_emplace(
                 TString(NYql::PqProviderName),
                 CreatePqCheckpointProviderIntegration(TActivationContext::ActorSystem(), FederatedQuerySetup->PqGatewayFactory->CreatePqGateway(), *FederatedQuerySetup->Driver, FederatedQuerySetup->CredentialsFactory)
+            );
+            FederatedQuerySetup->StreamingQueryControllerFactory = CreateStreamingQueryControllerFactory(
+                FederatedQuerySetup->PqGatewayFactory,
+                FederatedQuerySetup->CheckpointProviderIntegrations
             );
         }
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);

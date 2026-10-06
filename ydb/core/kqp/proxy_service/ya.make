@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/kqp/compile_service
     ydb/core/kqp/counters
     ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration
+    ydb/core/kqp/federated_query/streaming
     ydb/core/kqp/gateway/behaviour/streaming_query
     ydb/core/kqp/proxy_service/proto
     ydb/core/kqp/proxy_service/script_executions_utils

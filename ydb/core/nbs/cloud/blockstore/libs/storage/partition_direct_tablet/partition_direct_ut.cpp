@@ -4303,6 +4303,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL("test-volume", stat.Volume.GetDiskId());
         UNIT_ASSERT_VALUES_EQUAL(DefaultBlockSize, stat.Volume.GetBlockSize());
         UNIT_ASSERT_VALUES_EQUAL(blockCount, stat.Volume.GetBlocksCount());
+        UNIT_ASSERT_VALUES_EQUAL(1u, stat.Volume.GetPartitionsCount());
         UNIT_ASSERT_VALUES_EQUAL(configVersion, stat.Volume.GetConfigVersion());
         UNIT_ASSERT_VALUES_EQUAL(
             static_cast<ui32>(NNbs1CompatApi::NProto::STORAGE_MEDIA_SSD),

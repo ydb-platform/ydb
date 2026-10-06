@@ -10,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/nbs1_compat/classic_volume.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
@@ -43,33 +44,8 @@ using namespace NActors;
 
 namespace {
 
-using TVolume = NNbs1CompatApi::NBlockStore::NProto::TVolume;
 using TEvStatVolumeResponse =
     NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeResponse;
-
-// Fills TVolume for a StatVolume reply from the stored config. Clients
-// stays empty.
-void FillVolume(const NKikimrBlockStore::TVolumeConfig& config, TVolume* volume)
-{
-    Y_ABORT_UNLESS(config.PartitionsSize() > 0);
-
-    volume->SetDiskId(config.GetDiskId());
-    volume->SetBlockSize(config.GetBlockSize());
-    volume->SetBlocksCount(config.GetPartitions(0).GetBlockCount());
-    volume->SetStorageMediaKind(
-        static_cast<NNbs1CompatApi::NProto::EStorageMediaKind>(
-            config.GetStorageMediaKind()));
-    volume->SetConfigVersion(config.GetVersion());
-    if (config.HasProjectId()) {
-        volume->SetProjectId(config.GetProjectId());
-    }
-    if (config.HasFolderId()) {
-        volume->SetFolderId(config.GetFolderId());
-    }
-    if (config.HasCloudId()) {
-        volume->SetCloudId(config.GetCloudId());
-    }
-}
 
 }   // namespace
 
@@ -909,7 +885,7 @@ void TPartitionActor::HandleStatVolume(
         VolumeConfig.GetDiskId().c_str());
 
     auto response = std::make_unique<TEvStatVolumeResponse>();
-    FillVolume(VolumeConfig, response->Record.MutableVolume());
+    *response->Record.MutableVolume() = MakeClassicVolume(VolumeConfig);
     ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 

@@ -5,6 +5,8 @@ SRCDIR(
 )
 
 SRCS(
+    blobstorage_pdisk_compaction_arbiter.cpp
+    blobstorage_pdisk_compaction_arbiter.h
     blobstorage_pdisk_params.cpp
     blobstorage_pdisk_drivemodel_db.cpp
     drivedata_serializer.cpp

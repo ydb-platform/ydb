@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/library/pdisk_io/request_id.h>
-
 namespace NKikimr::NPDisk {
 
 enum class ERequestType {

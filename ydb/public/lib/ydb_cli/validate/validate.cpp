@@ -528,7 +528,8 @@ public:
             Warning(metadataKey, "path looks like a full backup; --format=item skips SchemaMapping completeness checks");
         }
 
-        Log.Phase("exported schema objects");
+        // Not a full backup. The path may be one schema object, a directory of them, or both.
+        Log.Phase(TStringBuilder() << "find schema objects in " << RootLabel());
         const bool self = ValidateObject(root, /*expectChecksums*/ Nothing(), /*expectCompressed*/ Nothing());
         // Exports created with --item have no backup-level metadata.json and no SchemaMapping.
         // The destination prefix is a directory of objects, and index tables may sit under a table
@@ -838,6 +839,7 @@ private:
             return;
         }
         AllowDir(dir);
+        Log.Phase(TStringBuilder() << "check " << ShownPath(dir));
         Log.Object(TStringBuilder() << ShownPath(dir) << ": checking metadata");
         const bool checksums = ResolveChecksums(dir, expectChecksums);
         const TString key = JoinKey(dir, fileName);
@@ -1103,6 +1105,7 @@ private:
         if (Stopped()) {
             return;
         }
+        Log.Phase(TStringBuilder() << "check " << ShownPath(dir));
         Log.Object(TStringBuilder() << ShownPath(dir) << ": checking metadata");
         const bool checksums = ResolveChecksums(dir, expectChecksums);
         const TString schemeKey = JoinKey(dir, "scheme.pb");
@@ -1468,6 +1471,7 @@ private:
     }
 
     bool ValidateDiscoveredObjects(const TString& root) {
+        Log.Phase(TStringBuilder() << "list schema objects in " << ShownPath(root));
         TVector<TString> dirs;
         for (const auto& key : Storage.List(root)) {
             if (!IsSchemaObjectFileName(FileName(key))) {
@@ -1480,6 +1484,10 @@ private:
         }
         std::sort(dirs.begin(), dirs.end());
         dirs.erase(std::unique(dirs.begin(), dirs.end()), dirs.end());
+        if (!dirs.empty()) {
+            Log.Phase(TStringBuilder() << "check " << dirs.size() << " schema object"
+                << (dirs.size() == 1 ? "" : "s"));
+        }
         std::atomic<bool> found{false};
         ParallelFor(dirs.size(), [&](size_t index) {
             if (WasVisited(dirs[index])) {

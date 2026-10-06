@@ -108,6 +108,36 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
             UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, joinKind);
         }
     }
+
+    Y_UNIT_TEST(FallbackOnNestedOptional) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetQueryClient();
+        CreateSampleTables(client);
+
+        const auto makeQuery = [](bool useScalarHashJoin) {
+            return TStringBuilder() << R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.OptimizerHints='JoinType(L R Broadcast)';
+                PRAGMA ydb.UseScalarHashJoinForMap=")" << (useScalarHashJoin ? "true" : "false") << R"(";
+                $l = SELECT id, k, Just(v) AS jv FROM L;
+                SELECT L.id AS lid, R.id AS rid, L.jv AS jv
+                FROM $l AS L
+                INNER JOIN R ON L.k = R.k
+                ORDER BY lid, rid;
+            )";
+        };
+        const TString scalarQuery = makeQuery(true);
+        const TString mapQuery = makeQuery(false);
+
+        auto explain = client.ExecuteQuery(scalarQuery, TTxControl::NoTx(),
+            TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+        const TString ast(*explain.GetStats()->GetAst());
+        UNIT_ASSERT_C(!ast.Contains("ScalarHashJoin"), ast);
+        UNIT_ASSERT_C(ast.Contains("MapJoinCore"), ast);
+
+        UNIT_ASSERT_VALUES_EQUAL(RunQuery(client, scalarQuery), RunQuery(client, mapQuery));
+    }
 }
 
 } // namespace NKqp

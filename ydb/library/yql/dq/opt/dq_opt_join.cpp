@@ -843,31 +843,57 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
 
 namespace {
 
-bool HasVariantOrResource(const TTypeAnnotationNode* type) {
+const TTypeAnnotationNode* SkipTagged(const TTypeAnnotationNode* type) {
+    while (type->GetKind() == ETypeAnnotationKind::Tagged) {
+        type = type->Cast<TTaggedExprType>()->GetBaseType();
+    }
+    return type;
+}
+
+// Optional<X> where arrow needs an external optional wrapper for X
+bool NeedsExternalOptional(const TTypeAnnotationNode* itemType) {
+    switch (SkipTagged(itemType)->GetKind()) {
+        case ETypeAnnotationKind::Optional:
+        case ETypeAnnotationKind::Pg:
+        case ETypeAnnotationKind::Variant:
+        case ETypeAnnotationKind::Null:
+        case ETypeAnnotationKind::Void:
+        case ETypeAnnotationKind::EmptyList:
+        case ETypeAnnotationKind::EmptyDict:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// The scalar layout converter has no Variant support, keeps Resource as raw pointers
+// that cannot be spilled, and loses the extra null level of external optionals
+bool IsSupportedByScalarConverter(const TTypeAnnotationNode* type) {
+    type = SkipTagged(type);
     switch (type->GetKind()) {
         case ETypeAnnotationKind::Variant:
         case ETypeAnnotationKind::Resource:
-            return true;
-        case ETypeAnnotationKind::Optional:
-            return HasVariantOrResource(type->Cast<TOptionalExprType>()->GetItemType());
-        case ETypeAnnotationKind::Tagged:
-            return HasVariantOrResource(type->Cast<TTaggedExprType>()->GetBaseType());
+            return false;
+        case ETypeAnnotationKind::Optional: {
+            const auto* itemType = type->Cast<TOptionalExprType>()->GetItemType();
+            return !NeedsExternalOptional(itemType) && IsSupportedByScalarConverter(itemType);
+        }
         case ETypeAnnotationKind::Tuple:
             for (const auto* item : type->Cast<TTupleExprType>()->GetItems()) {
-                if (HasVariantOrResource(item)) {
-                    return true;
+                if (!IsSupportedByScalarConverter(item)) {
+                    return false;
                 }
             }
-            return false;
+            return true;
         case ETypeAnnotationKind::Struct:
             for (const auto* item : type->Cast<TStructExprType>()->GetItems()) {
-                if (HasVariantOrResource(item->GetItemType())) {
-                    return true;
+                if (!IsSupportedByScalarConverter(item->GetItemType())) {
+                    return false;
                 }
             }
-            return false;
+            return true;
         default:
-            return false;
+            return true;
     }
 }
 
@@ -893,10 +919,8 @@ bool DqCanUseScalarHashJoinForMap(const TDqJoin& join, TExprContext& ctx, TTypeA
     const auto* leftStructType = leftItemType->Cast<TStructExprType>();
     const auto* rightStructType = rightItemType->Cast<TStructExprType>();
 
-    // The runtime converter only handles arrow compatible types, has no Variant support,
-    // and keeps Resource as raw pointers that cannot be spilled
     const auto supported = [&](const TTypeAnnotationNode* type) {
-        return IsSupportedAsBlockType(join.Pos(), *type, ctx, typeCtx) && !HasVariantOrResource(type);
+        return IsSupportedAsBlockType(join.Pos(), *type, ctx, typeCtx) && IsSupportedByScalarConverter(type);
     };
     for (const auto* item : leftStructType->GetItems()) {
         if (!supported(item->GetItemType())) {

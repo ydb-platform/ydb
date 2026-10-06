@@ -6285,7 +6285,7 @@ Y_UNIT_TEST(CreateIamDelegationSecret) {
     {
         const auto res = SqlToYql(R"sql(
             USE plato;
-            CREATE SECRET `sa-secret` WITH (SOURCE = "IAM_DELEGATION", SERVICE_ACCOUNT_ID = "aje-sa", RESOURCE = "b1g-cloud");
+            CREATE SECRET `sa-secret` WITH (SOURCE = "YC_IAM_DELEGATION", SERVICE_ACCOUNT_ID = "aje-sa", RESOURCE = "b1g-cloud");
         )sql");
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
@@ -6293,7 +6293,7 @@ Y_UNIT_TEST(CreateIamDelegationSecret) {
             if (word == "Write") {
                 UNIT_ASSERT_STRING_CONTAINS(line, "Key '('secret");
                 UNIT_ASSERT_STRING_CONTAINS(line, "'mode 'create");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"('"source" '"IAM_DELEGATION")");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"('"source" '"YC_IAM_DELEGATION")");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"('"service_account_id" '"aje-sa")");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"('"resource" '"b1g-cloud")");
                 UNIT_ASSERT(!line.Contains("value"));
@@ -6307,7 +6307,7 @@ Y_UNIT_TEST(CreateIamDelegationSecret) {
     // RESOURCE is optional, the source is case-insensitive
     UNIT_ASSERT(SqlToYql(R"sql(
         USE plato;
-        CREATE SECRET `sa-secret` WITH (SOURCE = "iam_delegation", SERVICE_ACCOUNT_ID = "aje-sa");
+        CREATE SECRET `sa-secret` WITH (SOURCE = "yc_iam_delegation", SERVICE_ACCOUNT_ID = "aje-sa");
     )sql")
                     .IsOk());
 
@@ -6319,7 +6319,7 @@ Y_UNIT_TEST(CreateIamDelegationSecret) {
                     .IsOk());
     UNIT_ASSERT(SqlToYql(R"sql(
         USE plato;
-        ALTER SECRET `sa-secret` WITH (SOURCE = "IAM_DELEGATION", RESOURCE = "b1g-cloud-2");
+        ALTER SECRET `sa-secret` WITH (SOURCE = "YC_IAM_DELEGATION", RESOURCE = "b1g-cloud-2");
     )sql")
                     .IsOk());
 
@@ -6330,16 +6330,16 @@ Y_UNIT_TEST(CreateIamDelegationSecret) {
     };
     expectError(R"sql(
         USE plato;
-        CREATE SECRET `sa-secret` WITH (SOURCE = "IAM_DELEGATION");
+        CREATE SECRET `sa-secret` WITH (SOURCE = "YC_IAM_DELEGATION");
     )sql", "Parameter SERVICE_ACCOUNT_ID must be set");
     expectError(R"sql(
         USE plato;
-        CREATE SECRET `sa-secret` WITH (SOURCE = "IAM_DELEGATION", SERVICE_ACCOUNT_ID = "aje-sa", VALUE = "v");
+        CREATE SECRET `sa-secret` WITH (SOURCE = "YC_IAM_DELEGATION", SERVICE_ACCOUNT_ID = "aje-sa", VALUE = "v");
     )sql", "Parameter VALUE is not allowed");
     expectError(R"sql(
         USE plato;
         CREATE SECRET `plain` WITH (VALUE = "v", SERVICE_ACCOUNT_ID = "aje-sa");
-    )sql", "allowed only for secrets with SOURCE IAM_DELEGATION");
+    )sql", "allowed only for secrets with SOURCE YC_IAM_DELEGATION");
     expectError(R"sql(
         USE plato;
         CREATE SECRET `sa-secret` WITH (SOURCE = "UNKNOWN", SERVICE_ACCOUNT_ID = "aje-sa");
@@ -6347,16 +6347,40 @@ Y_UNIT_TEST(CreateIamDelegationSecret) {
     expectError(R"sql(
         USE plato;
         DECLARE $sa AS String;
-        CREATE SECRET `sa-secret` WITH (SOURCE = "IAM_DELEGATION", SERVICE_ACCOUNT_ID = $sa);
+        CREATE SECRET `sa-secret` WITH (SOURCE = "YC_IAM_DELEGATION", SERVICE_ACCOUNT_ID = $sa);
     )sql", "String literal was expected");
     expectError(R"sql(
         USE plato;
-        CREATE SECRET `sa-secret` WITH (SOURCE = "IAM_DELEGATION", SERVICE_ACCOUNT_ID = "a", SERVICE_ACCOUNT_ID = "b");
+        CREATE SECRET `sa-secret` WITH (SOURCE = "YC_IAM_DELEGATION", SERVICE_ACCOUNT_ID = "a", SERVICE_ACCOUNT_ID = "b");
     )sql", "Duplicate parameter: SERVICE_ACCOUNT_ID");
     expectError(R"sql(
         USE plato;
-        ALTER SECRET `sa-secret` WITH (SOURCE = "IAM_DELEGATION", VALUE = "v");
+        ALTER SECRET `sa-secret` WITH (SOURCE = "YC_IAM_DELEGATION", VALUE = "v");
     )sql", "Parameter VALUE is not allowed");
+}
+
+Y_UNIT_TEST(YcIamDelegationSecretSourceIsCaseInsensitive) {
+    for (const TString operation : {"CREATE", "ALTER"}) {
+        for (const TString source : {"YC_IAM_DELEGATION", "yc_iam_delegation", "Yc_Iam_Delegation"}) {
+            const TString query = TStringBuilder() << "USE plato; " << operation
+                                                   << " SECRET `sa-secret` WITH (SOURCE = \"" << source << R"(", SERVICE_ACCOUNT_ID = "aje-sa");)";
+            const auto res = SqlToYql(query);
+            UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << query << ": " << Err2Str(res));
+        }
+    }
+}
+
+Y_UNIT_TEST(LegacyIamDelegationSecretSourceRejected) {
+    for (const TString operation : {"CREATE", "ALTER"}) {
+        for (const TString source : {"IAM_DELEGATION", "iam_delegation", "Iam_Delegation"}) {
+            const TString query = TStringBuilder() << "USE plato; " << operation
+                                                   << " SECRET `sa-secret` WITH (SOURCE = \"" << source << R"(", SERVICE_ACCOUNT_ID = "aje-sa");)";
+            const auto res = SqlToYql(query);
+            UNIT_ASSERT_C(!res.IsOk(), query);
+            UNIT_ASSERT_STRING_CONTAINS_C(Err2Str(res),
+                                          "Unknown secret SOURCE: IAM_DELEGATION. Expected YC_IAM_DELEGATION", query);
+        }
+    }
 }
 
 Y_UNIT_TEST(AlterSecretDelegationParamsWithoutSource) {
@@ -6388,29 +6412,29 @@ Y_UNIT_TEST(AlterSecretMixedDelegationAndValueRejected) {
         ALTER SECRET `sa-secret` WITH (VALUE = "v", SERVICE_ACCOUNT_ID = "aje-sa");
     )sql");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Parameters SERVICE_ACCOUNT_ID and RESOURCE are allowed only for secrets with SOURCE IAM_DELEGATION");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Parameters SERVICE_ACCOUNT_ID and RESOURCE are allowed only for secrets with SOURCE YC_IAM_DELEGATION");
 }
 
 Y_UNIT_TEST(AlterDelegationWithoutParamsRejected) {
     const auto res = SqlToYql(R"sql(
         USE plato;
-        ALTER SECRET `sa-secret` WITH (SOURCE = "IAM_DELEGATION");
+        ALTER SECRET `sa-secret` WITH (SOURCE = "YC_IAM_DELEGATION");
     )sql");
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Parameter SERVICE_ACCOUNT_ID or RESOURCE must be set to alter a secret with SOURCE IAM_DELEGATION");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Parameter SERVICE_ACCOUNT_ID or RESOURCE must be set to alter a secret with SOURCE YC_IAM_DELEGATION");
 }
 
 Y_UNIT_TEST(IamDelegationSecretSettingKeysAreCaseInsensitive) {
     // the setting names (RESOURCE is also a type keyword) are accepted in any case
     const auto res = SqlToYql(R"sql(
         USE plato;
-        CREATE SECRET `sa-secret` WITH (source = "IAM_DELEGATION", Service_Account_Id = "aje-sa", resource = "b1g-cloud");
+        CREATE SECRET `sa-secret` WITH (source = "YC_IAM_DELEGATION", Service_Account_Id = "aje-sa", resource = "b1g-cloud");
     )sql");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"('"source" '"IAM_DELEGATION")");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('"source" '"YC_IAM_DELEGATION")");
             UNIT_ASSERT_STRING_CONTAINS(line, R"('"service_account_id" '"aje-sa")");
             UNIT_ASSERT_STRING_CONTAINS(line, R"('"resource" '"b1g-cloud")");
         }
@@ -6425,7 +6449,7 @@ Y_UNIT_TEST(IamDelegationSecretSettingKeysAreCaseInsensitive) {
         CREATE SECRET `sa-secret` WITH (RESOURCE = "b1g-cloud", VALUE = "v");
     )sql");
     UNIT_ASSERT(!bad.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(Err2Str(bad), "allowed only for secrets with SOURCE IAM_DELEGATION");
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(bad), "allowed only for secrets with SOURCE YC_IAM_DELEGATION");
 }
 
 Y_UNIT_TEST(CreateSecretWithoutSourceRequiresValue) {

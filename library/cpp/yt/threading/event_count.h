@@ -1,8 +1,6 @@
 #pragma once
 
-// TODO(babenko): Drop this shim; include library/cpp/yt/system/event_count.h instead.
-
-#include "futex.h"
+// TODO(babenko): Drop once contrib/ydb and contrib/libs/ydb-cpp-sdk include library/cpp/yt/system/event_count.h.
 
 #include <library/cpp/yt/system/event_count.h>
 

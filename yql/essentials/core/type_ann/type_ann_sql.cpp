@@ -494,7 +494,7 @@ bool ScanColumns(
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
         if (node->IsCallable({"PgSubLink", "YqlSubLink"})) {
             return false;
-        } else if (allowProjection && node->IsCallable({"YqlAgg", "PgAgg"})) {
+        } else if (allowProjection && node->IsCallable({"YqlAgg", "PgAgg", "YqlGrouping", "PgGrouping"})) {
             if (!ScanColumns(node, inputs, possibleAliases, hasStar, hasColumnRef, refs, qualifiedRefs,
                 ctx, scanColumnsOnly, hasEmitPgStar, usedInUsing, projectionRefsResolved, /*allowProjection=*/false)) {
                 isError = true;
@@ -1058,29 +1058,33 @@ TMaybe<THashSet<ui32>> ParseProjectionAliases(const TExprNode& aliasIndexes, con
     return aliases;
 }
 
-// A bare column name in GROUP BY that isn't an input column refers to the projection item with this alias.
+// Resolve bare keys, including keys inside grouping sets, without substituting inside expressions.
 bool ReplaceGroupByProjectionAlias(TExprNode::TPtr& lambda, const TInputs& inputs, const THashSet<TString>& possibleAliases,
     const TProjectionOrders& projectionOrders, const TExprNode& aliasIndexes, bool caseSensitive, TExprContext& ctx)
 {
-    const auto& body = lambda->TailPtr();
-    if (!body->IsCallable("YqlColumnRef") || body->ChildrenSize() != 1) {
-        return true;
-    }
-    if (ResolveSqlColumnRef(*body, inputs, possibleAliases, /*scanColumnsOnly=*/false).Status != ESqlColumnRefStatus::Missing) {
-        return true;
-    }
     const auto aliases = ParseProjectionAliases(aliasIndexes, projectionOrders, "group_by_projection_aliases", ctx);
     if (!aliases) {
         return false;
     }
     TVector<ui32> positions;
     const TInputs projectionInputs = {BuildProjectionInput(projectionOrders, *aliases, positions, caseSensitive, ctx)};
-    auto ref = MakeNamedProjectionRef(body, projectionInputs, positions, ctx);
-    if (!ref) {
+    TOptimizeExprSettings settings(nullptr);
+    settings.VisitChecker = [](const TExprNode& node) {
+        return node.IsList() || node.IsCallable({"YqlGroupingSet", "YqlColumnRef"});
+    };
+    auto body = lambda->TailPtr();
+    const auto status = OptimizeExpr(body, body, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
+        if (!node->IsCallable("YqlColumnRef") || node->ChildrenSize() != 1 ||
+            ResolveSqlColumnRef(*node, inputs, possibleAliases, /*scanColumnsOnly=*/false).Status != ESqlColumnRefStatus::Missing) {
+            return node;
+        }
+        return MakeNamedProjectionRef(node, projectionInputs, positions, ctx);
+    }, ctx, settings);
+    if (status == IGraphTransformer::TStatus::Error) {
         return false;
     }
-    if (ref != body) {
-        lambda = ctx.ChangeChild(*lambda, 1, std::move(ref));
+    if (body != lambda->TailPtr()) {
+        lambda = ctx.ChangeChild(*lambda, 1, std::move(body));
     }
     return true;
 }
@@ -1111,7 +1115,7 @@ bool ValidateAggregates(const TExprNode::TPtr& root, bool allowAggregates, TStri
         if (!valid || node->IsCallable({"YqlSubLink", "PgSubLink"})) {
             return false;
         }
-        if (!node->IsCallable({"YqlAgg", "PgAgg"})) {
+        if (!node->IsCallable({"YqlAgg", "PgAgg", "YqlGrouping", "PgGrouping"})) {
             return true;
         }
         if (!allowAggregates) {
@@ -1302,7 +1306,7 @@ TExprNode::TPtr RebuildAggregateColumns(
         if (node->IsCallable({"PgSubLink", "YqlSubLink"})) {
             return false;
         }
-        if (node->IsCallable({"YqlAgg", "PgAgg"})) {
+        if (node->IsCallable({"YqlAgg", "PgAgg", "YqlGrouping", "PgGrouping"})) {
             TExprNode::TPtr rebuilt;
             if (RebuildLambdaColumns(node, argNode, rebuilt, aggregateInputs, /*expandedColumns=*/nullptr, ctx, usedInUsing) == IGraphTransformer::TStatus::Error) {
                 hasError = true;
@@ -2250,10 +2254,14 @@ bool BuildGroupingSets(const TExprNode& data, TExprNode::TPtr& groupSets, TExprN
             const auto& gs = lambda.Tail();
             auto kind = gs.Head().Content();
             if (kind == "cube" || kind == "rollup") {
-                TExprNode::TListType indices;
+                TVector<TExprNode::TListType> indices;
                 for (const auto& expr : gs.Tail().Children()) {
-                    auto index = RegisterGroupExpression(expr, lambda.HeadPtr(), child, hashes, groupExprsItems, ctx);
-                    indices.push_back(ctx.NewAtom(expr->Pos(), ToString(index)));
+                    TExprNode::TListType group;
+                    for (const auto& key : expr->IsList() ? expr->ChildrenList() : TExprNode::TListType{expr}) {
+                        auto index = RegisterGroupExpression(key, lambda.HeadPtr(), child, hashes, groupExprsItems, ctx);
+                        group.push_back(ctx.NewAtom(key->Pos(), ToString(index)));
+                    }
+                    indices.push_back(std::move(group));
                 }
 
                 TExprNode::TListType setsItems;
@@ -2262,20 +2270,20 @@ bool BuildGroupingSets(const TExprNode& data, TExprNode::TPtr& groupSets, TExprN
                     for (ui32 i = 0; i <= indices.size(); ++i) {
                         TExprNode::TListType oneSetItems;
                         for (ui32 j = 0; j < i; ++j) {
-                            oneSetItems.push_back(indices[j]);
+                            oneSetItems.insert(oneSetItems.end(), indices[j].begin(), indices[j].end());
                         }
 
                         setsItems.push_back(ctx.NewList(data.Pos(), std::move(oneSetItems)));
                     }
                 } else {
                     // generate 2**N sets
-                    YQL_ENSURE(indices.size() <= 5, "Too many CUBE components");
+                    YQL_ENSURE(indices.size() < 32, "Too many CUBE components");
                     ui32 count = (1U << indices.size());
                     for (ui32 i = 0; i < count; ++i) {
                         TExprNode::TListType oneSetItems;
                         for (ui32 j = 0; j < indices.size(); ++j) {
                             if ((1U << j) & i) {
-                                oneSetItems.push_back(indices[j]);
+                                oneSetItems.insert(oneSetItems.end(), indices[j].begin(), indices[j].end());
                             }
                         }
 
@@ -2285,9 +2293,15 @@ bool BuildGroupingSets(const TExprNode& data, TExprNode::TPtr& groupSets, TExprN
 
                 sets = ctx.NewList(data.Pos(), std::move(setsItems));
             } else {
-                YQL_ENSURE(kind == "sets");
+                YQL_ENSURE(kind == "sets" || kind == "sets_with_keys");
+                if (kind == "sets_with_keys") {
+                    // Declared keys may be absent from every set (Hive-compatible GROUPING SETS).
+                    for (const auto& expr : gs.Child(1)->Children()) {
+                        RegisterGroupExpression(expr, lambda.HeadPtr(), child, hashes, groupExprsItems, ctx);
+                    }
+                }
                 TExprNode::TListType setsItems;
-                for (ui32 setIndex = 1; setIndex < gs.ChildrenSize(); ++setIndex) {
+                for (ui32 setIndex = kind == "sets_with_keys" ? 2 : 1; setIndex < gs.ChildrenSize(); ++setIndex) {
                     const auto& g = gs.Child(setIndex);
                     TExprNode::TListType oneSetItems;
                     for (const auto& expr : g->Children()) {
@@ -5880,13 +5894,17 @@ IGraphTransformer::TStatus SqlGroupingSetWrapper(const TExprNode::TPtr& input, T
     }
 
     auto kind = input->Child(0)->Content();
-    if (!(kind == "cube" || kind == "rollup" || kind == "sets")) {
+    if (!(kind == "cube" || kind == "rollup" || kind == "sets" ||
+          (input->IsCallable("YqlGroupingSet") && kind == "sets_with_keys"))) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Unexpected grouping set kind: " << kind));
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (kind != "sets") {
+    if (kind == "sets_with_keys" && !EnsureMinArgsCount(*input, 3, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (kind == "cube" || kind == "rollup") {
         if (!EnsureMaxArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -5901,6 +5919,11 @@ IGraphTransformer::TStatus SqlGroupingSetWrapper(const TExprNode::TPtr& input, T
         if (!EnsureTuple(*input->Child(i), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
+    }
+
+    if (kind == "cube" && input->Tail().ChildrenSize() >= 32) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "CUBE must have fewer than 32 components"));
+        return IGraphTransformer::TStatus::Error;
     }
 
     input->SetTypeAnn(ctx.Expr.MakeType<TVoidExprType>());

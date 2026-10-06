@@ -41,7 +41,7 @@
 
 #include <library/cpp/yt/string/stream.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -781,7 +781,7 @@ class TRecordingDnsResolver
     : public NDns::IDnsResolver
 {
 public:
-    NThreading::TAtomicObject<NDns::TDnsResolveOptions> LastOptions;
+    TAtomicObject<NDns::TDnsResolveOptions> LastOptions;
 
     TFuture<TNetworkAddress> Resolve(
         const std::string& /*hostName*/,

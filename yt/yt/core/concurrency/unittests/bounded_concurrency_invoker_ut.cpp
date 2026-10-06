@@ -134,7 +134,7 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
     auto firstFuture = firstPromise.ToFuture();
     auto secondFuture = secondPromise.ToFuture();
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, lock);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, lock);
     int ranCallbacks = 0;
     int finishedCallbacks = 0;
 

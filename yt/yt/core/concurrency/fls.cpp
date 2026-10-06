@@ -2,7 +2,7 @@
 
 #include <yt/yt/core/misc/mpsc_stack.h>
 
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/misc/tls.h>
 
@@ -19,7 +19,7 @@ namespace NDetail {
 constexpr int MaxFlsSize = 256;
 std::atomic<int> FlsSize;
 
-YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, FlsLock);
+YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, FlsLock);
 std::array<TFlsSlotDtor, MaxFlsSize> FlsDtors;
 
 YT_DEFINE_THREAD_LOCAL(TFls*, PerThreadFls);

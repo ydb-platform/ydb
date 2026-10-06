@@ -22,14 +22,13 @@ class XDGMixin(PlatformDirsABC):
     @property
     def _site_data_dirs(self) -> list[str]:
         if xdg_dirs := _xdg_dir_list("XDG_DATA_DIRS"):
-            return [self._append_app_name_and_version(p) for p in xdg_dirs]
+            return [self._join_app_name_and_version(p) for p in xdg_dirs]
         return super()._site_data_dirs
 
     @property
     def site_data_dir(self) -> str:
         """Data directories shared by users, from ``$XDG_DATA_DIRS`` if set, else platform default."""
-        dirs = self._site_data_dirs
-        return os.pathsep.join(dirs) if self.multipath else dirs[0]
+        return self._select_site_dirs(self._site_data_dirs)
 
     @property
     def user_config_dir(self) -> str:
@@ -41,14 +40,13 @@ class XDGMixin(PlatformDirsABC):
     @property
     def _site_config_dirs(self) -> list[str]:
         if xdg_dirs := _xdg_dir_list("XDG_CONFIG_DIRS"):
-            return [self._append_app_name_and_version(p) for p in xdg_dirs]
+            return [self._join_app_name_and_version(p) for p in xdg_dirs]
         return super()._site_config_dirs
 
     @property
     def site_config_dir(self) -> str:
         """Config directories shared by users, from ``$XDG_CONFIG_DIRS`` if set, else platform default."""
-        dirs = self._site_config_dirs
-        return os.pathsep.join(dirs) if self.multipath else dirs[0]
+        return self._select_site_dirs(self._site_config_dirs)
 
     @property
     def user_cache_dir(self) -> str:

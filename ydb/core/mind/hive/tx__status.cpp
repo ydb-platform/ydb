@@ -26,14 +26,18 @@ public:
             {"nodeId", nodeId});
         TEvLocal::TEvStatus::EStatus status = (TEvLocal::TEvStatus::EStatus)Record.GetStatus();
         TNodeInfo& node = Self->GetNode(nodeId);
+        // Local resends StatusOk on resource limit changes, BecomeConnected() returns true for an already connected node too
+        const bool wasConnected = node.GetVolatileState() == TNodeInfo::EVolatileState::Connected;
         if (status == TEvLocal::TEvStatus::StatusOk && node.BecomeConnected()) {
             node.Local = Local;
             node.UpdateResourceMaximum(Record.GetResourceMaximum());
             if (Record.HasStartTime()) {
                 node.StartTime = TInstant::MicroSeconds(Record.GetStartTime());
             }
-            Self->RecordNodeEvent(node, ENodeEvent::Connected, TNodeEventReason::StatusOk,
-                TStringBuilder() << "resourceMaximum={" << Record.GetResourceMaximum().ShortDebugString() << "}");
+            if (!wasConnected) {
+                Self->RecordNodeEvent(node, ENodeEvent::Connected, TNodeEventReason::StatusOk,
+                    TStringBuilder() << "resourceMaximum={" << Record.GetResourceMaximum().ShortDebugString() << "}");
+            }
             if (!node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING].empty()) {
                 Self->WarmUp = false;
             }

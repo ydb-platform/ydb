@@ -3502,6 +3502,69 @@ Y_UNIT_TEST_F(HasDataRejectedByPendingSessionAfterCommitWithoutSession, TPartiti
     WaitProxyResponse({.Cookie=7, .Status=NMsgBusProxy::MSTATUS_OK});
 }
 
+// Active partition, offset < EndOffset, but every stored message is older than the read timestamp.
+// HasData stays pending until its deadline, then answers with lag 0. An immediate lag would wake the read session onto an empty filtered read.
+Y_UNIT_TEST_F(ActiveHasDataWaitsWhenWritesAreOlderThanReadTimestamp, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TInstant endWrite = TInstant::Seconds(10);
+    const TDuration untilDeadline = TDuration::Seconds(30);
+
+    CreatePartition({.Partition=partition, .Begin=0, .End=10, .EndWriteTimestamp=endWrite});
+
+    const auto deadline = Ctx->Runtime->GetCurrentTime() + untilDeadline;
+    bool seenRequest = false;
+    bool gotResponse = false;
+    auto requestObserver = Ctx->Runtime->AddObserver<TEvPersQueue::TEvHasDataInfo>([&](TEvPersQueue::TEvHasDataInfo::TPtr&) {
+        seenRequest = true;
+    });
+    auto responseObserver = Ctx->Runtime->AddObserver<TEvPersQueue::TEvHasDataInfoResponse>([&](TEvPersQueue::TEvHasDataInfoResponse::TPtr&) {
+        gotResponse = true;
+    });
+
+    auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+    event->Record.SetPartition(partition.InternalPartitionId);
+    event->Record.SetOffset(0);
+    event->Record.SetDeadline(deadline.MilliSeconds());
+    event->Record.SetCookie(1);
+    event->Record.SetReadTimestampMs((endWrite + TDuration::Seconds(1)).MilliSeconds());
+    ActorIdToProto(Ctx->Edge, event->Record.MutableSender());
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+
+    // Do not release scheduled wakeups here: collapsed time would jump to the next one and can step over the deadline.
+    auto collapsedTime = Ctx->Runtime->SetScheduledEventsSelectorFunc([](TTestActorRuntimeBase&, TScheduledEventsList&, TEventsList&) {});
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return seenRequest; };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    Ctx->Runtime->SetScheduledEventsSelectorFunc(collapsedTime);
+    requestObserver.Remove();
+    responseObserver.Remove();
+    UNIT_ASSERT(seenRequest);
+    UNIT_ASSERT(!gotResponse);
+
+    Ctx->Runtime->SimulateSleep(untilDeadline + TDuration::Seconds(6));
+    auto expired = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT(expired);
+    UNIT_ASSERT_VALUES_EQUAL(expired->Record.GetCookie(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(expired->Record.GetSizeLag(), 0u);
+    UNIT_ASSERT(!expired->Record.GetReadingFinished());
+    UNIT_ASSERT_VALUES_EQUAL(expired->Record.GetEndOffset(), 10u);
+
+    auto readable = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+    readable->Record.SetPartition(partition.InternalPartitionId);
+    readable->Record.SetOffset(0);
+    readable->Record.SetDeadline((Ctx->Runtime->GetCurrentTime() + TDuration::Hours(1)).MilliSeconds());
+    readable->Record.SetCookie(2);
+    readable->Record.SetReadTimestampMs(endWrite.MilliSeconds());
+    ActorIdToProto(Ctx->Edge, readable->Record.MutableSender());
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, readable.Release()));
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 2u);
+    UNIT_ASSERT(!response->Record.GetReadingFinished());
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetEndOffset(), 10u);
+}
+
 Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
 {
     const TPartitionId partition{3};

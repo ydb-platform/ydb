@@ -542,8 +542,6 @@ public:
             if (!Stopped()) {
                 Error(root ? root : ".", "path is neither a full backup nor a schema object");
             }
-        } else if (!self && !Stopped()) {
-            Checked(root.empty() ? "backup" : root);
         }
         if (Settings.ExpectedObjects.Defined() && !Stopped()) {
             Log.Phase("check expected objects");
@@ -1430,7 +1428,6 @@ private:
         }
         Log.Phase("check unmapped schema files");
         CheckUnexpectedObjects(root);
-        Checked(root.empty() ? "backup" : root);
     }
 
     void CheckExpectedObjects(const TString& root) {

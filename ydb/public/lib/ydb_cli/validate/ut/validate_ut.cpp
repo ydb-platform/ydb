@@ -1179,6 +1179,30 @@ size_t LineIndex(const TVector<TString>& lines, TStringBuf exact) {
     return lines.size();
 }
 
+Y_UNIT_TEST(CheckedCountDoesNotIncludeTheContainingDirectory) {
+    TMemoryStorage one;
+    AddTable(one, "t", 1, "row\n", true);
+    UNIT_ASSERT_VALUES_EQUAL(Run(one, "t").Checked.size(), 1);
+
+    TMemoryStorage item;
+    AddTable(item, "db/customer", 1, "a\n", true);
+    AddTable(item, "db/customer/idx_customer_name/indexImplTable", 1, "b\n", true);
+    const TValidationReport itemReport = Run(item, "db");
+    UNIT_ASSERT_C(itemReport.Ok(), Issues(itemReport));
+    UNIT_ASSERT_VALUES_EQUAL(itemReport.Checked.size(), 2);
+
+    TMemoryStorage full;
+    full.PutChecked("metadata.json", "{\"kind\":\"SimpleExportV0\",\"checksum\":\"sha256\"}");
+    full.PutChecked("SchemaMapping/metadata.json", "{\"kind\":\"SchemaMappingV0\"}");
+    full.PutChecked("SchemaMapping/mapping.json",
+        "{\"exportedObjects\":{\"/t1\":{\"exportPrefix\":\"t1\"},\"/t2\":{\"exportPrefix\":\"t2\"}}}");
+    AddTable(full, "t1", 1, "a\n", true);
+    AddTable(full, "t2", 1, "b\n", true);
+    const TValidationReport fullReport = Run(full, "");
+    UNIT_ASSERT_C(fullReport.Ok(), Issues(fullReport));
+    UNIT_ASSERT_VALUES_EQUAL(fullReport.Checked.size(), 2);
+}
+
 Y_UNIT_TEST(ProgressFollowsVerbosity) {
     TMemoryStorage storage;
     AddTable(storage, "t", 1, "row\n", true);

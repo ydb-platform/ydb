@@ -25,6 +25,8 @@ public:
         ui32 TableShardsCount = 5;
         TDuration FlushTimeout;
         std::optional<ui32> MaxBatchSize;
+        ui8 MaxWriteAttempts = 10;
+        ui8 MaxActiveWrites = 10;
 
         NKikimrSchemeOp::TColumnTableSharding::THashSharding::EHashFunction ShardingMethod =
             NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64;
@@ -32,7 +34,7 @@ public:
 
     TColumnShardLogWriter(
         TDatabaseSettings settings,
-        TVector<std::shared_ptr<TSchematizedLogColumn>> columns);
+        TVector<std::shared_ptr<TEventLogColumn>> columns);
 
     const TDatabaseSettings& GetDatabaseSettings() const {
         return Settings;
@@ -46,9 +48,7 @@ protected:
 
     TString GetStorePath() const;
     TString GetTablePath() const;
-    std::optional<TVector<TString>> GetTableColumnNames() const;
 
-    void CheckStorageExists();
     void CreateSession();
     void ExecuteSchemeQuery(const TString& sessionId, const TString& query, std::function<void()> handle);
     void CreateStorage(const TString& sessionId);
@@ -57,6 +57,14 @@ protected:
     void SetCreateError();
 
     void WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) override;
+
+    // Write batch queue
+    struct TWriteBatch {
+        std::shared_ptr<arrow::RecordBatch> Data;
+        ui8 AttemptNum {0};
+    };
+    std::atomic<unsigned> ActiveWriteCount{0};
+    void ProcessWriteBatch(const TWriteBatch& batch);
 
     const TDatabaseSettings Settings;
 };

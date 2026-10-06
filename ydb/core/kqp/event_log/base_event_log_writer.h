@@ -18,16 +18,20 @@ namespace NKikimr::NKqp::NEventLog {
 class TBaseEventLogWriter : public NActors::NStructuredLog::ILogSink,
     public std::enable_shared_from_this<TBaseEventLogWriter>   {
 public:
-    TBaseEventLogWriter(TVector<std::shared_ptr<TSchematizedLogColumn>> columns,
+    TBaseEventLogWriter(TVector<std::shared_ptr<TEventLogColumn>> columns,
         const TDuration& flushInterval);
 
-    const TVector<std::shared_ptr<TSchematizedLogColumn>>& GetColumns() const {
+    const TVector<std::shared_ptr<TEventLogColumn>>& GetColumns() const {
         return Columns;
     }
 
     virtual bool Filter(const NActors::NStructuredLog::TLogMessage&) = 0;
 
     bool Write(const NActors::NStructuredLog::TLogMessage&) override;
+
+    void Stop() override {
+        State.store(TState(TStateKind::Stop));
+    }
 
     virtual void Flush();
 
@@ -46,7 +50,7 @@ protected:
     std::shared_ptr<arrow::Schema> GetArrowSchema() const;
     std::shared_ptr<arrow::RecordBatch> CreateCurrentBatch();
 
-    const TVector<std::shared_ptr<TSchematizedLogColumn>> Columns;
+    const TVector<std::shared_ptr<TEventLogColumn>> Columns;
     const TDuration FlushInterval;
     std::shared_ptr<TDBLogMessageErrorColumn> ErrorColumn;
     std::optional<std::size_t> ErrorColumnIndex;

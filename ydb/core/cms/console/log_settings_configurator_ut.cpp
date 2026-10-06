@@ -337,4 +337,37 @@ Y_UNIT_TEST_SUITE(TLogSettingsConfiguratorTests)
     }
 }
 
+Y_UNIT_TEST_SUITE(TLogSinkSettings) {
+    Y_UNIT_TEST(AddSink)
+    {
+        NKikimrConfig::TAppConfig ext;
+
+        auto& label = *ext.AddLabels();
+        label.SetName("tenant");
+        label.SetValue(TENANT1_1_NAME);
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), ext);
+        runtime.SimulateSleep(TDuration::MilliSeconds(100)); // settle down
+
+        TConfigUpdatesObserver updates(runtime);
+        auto settings = InitLogSettingsConfigurator(runtime);
+        updates.Wait(); // initial update
+    }
+
+    Y_UNIT_TEST(RemoveSink)
+    {
+
+    }
+
+    Y_UNIT_TEST(ChangeSink)
+    {
+
+    }
+
+	Y_UNIT_TEST(NoSinkChanges)
+    {
+
+    }
+}
+
 } // namespace NKikimr

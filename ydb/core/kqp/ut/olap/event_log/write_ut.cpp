@@ -90,20 +90,16 @@ namespace {
     std::optional<TQueryResult> ExecuteQueryAndFetchData(TKikimrRunner& kikimr, const TString& query) {
         for(unsigned i = 10;i > 0;i--) {
             auto client = kikimr.GetTableClient();
-            Cerr << "DEBUG: Execute" << query << Endl;
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
             if (!it.IsSuccess()) {
-                Cerr << "DEBUG: Execute failed" << Endl;
                 Sleep(TDuration::Seconds(1));
                 continue;
             }
             auto result = FetchStreamData(it, i == 1);
             if (!result.has_value()) {
-                Cerr << "DEBUG: Execute failed" << Endl;
                 Sleep(TDuration::Seconds(1));
                 continue;
             }
-            Cerr << "DEBUG: Execute done count=" << result.value().size() << Endl;
             return result.value();
         }
         return {};
@@ -140,7 +136,7 @@ public:
     NLog::EComponent Component;
     unsigned WrittenCount{0};
 
-    TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TSchematizedLogColumn>> columns,
+    TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TEventLogColumn>> columns,
             std::optional<ui32> maxBatchSize = {})
         : TColumnShardLogWriter(TColumnShardLogWriter::TDatabaseSettings {
             .Path = "/Root",
@@ -246,26 +242,28 @@ struct TEnvironment {
     std::shared_ptr<TBaseTestExampleLogWriter> Writer;
     std::vector<NStructuredLog::ILogSinkSPtr> AddSinks;
 
-    TEnvironment(const TVector<std::shared_ptr<TSchematizedLogColumn>>& columns, std::optional<ui32> maxBatchSize = 0)
+    TEnvironment(const TVector<std::shared_ptr<TEventLogColumn>>& columns, std::optional<ui32> maxBatchSize = 0)
         : Kikimr(TKikimrSettings().SetWithSampleTables(false)) {
         Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, TEnvironment::Component, columns, maxBatchSize);
     }
 
-    void RecreateWriter(const TVector<std::shared_ptr<TSchematizedLogColumn>>& columns, std::optional<ui32> maxBatchSize = 0) {
+    void RecreateWriter(const TVector<std::shared_ptr<TEventLogColumn>>& columns, std::optional<ui32> maxBatchSize = 0) {
         Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, TEnvironment::Component, columns, maxBatchSize);
     }
 
     void UpdateSinks() {
         auto* runtime = Kikimr.GetTestServer().GetRuntime();
         for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
-            runtime->GetLogSettings(i)->Sinks.clear();
-            runtime->GetLogSettings(i)->Sinks[""] = Writer;
+            auto settings = runtime->GetLogSettings(i);
+            settings->DefPriority = NActors::NLog::PRI_TRACE;
+            settings->Sinks.clear();
+            settings->Sinks[""] = Writer;
 
             ui32 j = 0;
             for (auto& sink: AddSinks) {
                 TStringBuilder key;
                 key << j++;
-                runtime->GetLogSettings(i)->Sinks[key] = sink;
+                settings->Sinks[key] = sink;
             }
         }
         runtime->SetLogPriority(TEnvironment::Component, NActors::NLog::PRI_TRACE);
@@ -310,10 +308,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:303")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:305")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:307")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:308")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:301")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:303")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:305")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:306")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -400,7 +398,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         TEnvironment env({
             std::make_shared<TDBLogMessageIdColumn>(1),
-            std::make_shared<TDBLogColumnUint64>("value1", std::vector<TKeyName>{"value1"}, TSchematizedLogColumn::TDatabaseSettings::NotNull()),
+            std::make_shared<TDBLogColumnUint64>("value1", std::vector<TKeyName>{"value1"}, TEventLogColumn::TDatabaseSettings::NotNull()),
             std::make_shared<TDBLogColumnUint64>("value2", std::vector<TKeyName>{"value2"}),
             std::make_shared<TDBLogMessageErrorColumn>()
         });
@@ -621,30 +619,43 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             {"5u", "5u"}});
     } */
 
-    /* Y_UNIT_TEST(KqpRequestLog) {
+    Y_UNIT_TEST(KqpRequestLog) {
         TEnvironment env({
             std::make_shared<TDBLogMessageIdColumn>(1)
         });
 
         TKqpEventLogWriter::TDatabaseSettings settings;
         env.AddSinks.push_back(std::make_shared<TKqpEventLogWriter>(
-            TKqpEventLogWriter::TDatabaseSettings{.Path="/Root"}));
+            TKqpEventLogWriter::TDatabaseSettings{
+                .Path = "/Root",
+                .StoreName = "kqp_requests",
+                .TableName = "kqp_requests",
+                .MaxBatchSize = 0}));
 
-        Cerr << "DEBUG: SELECT 1;" << Endl;
-        env.ExecuteQuery("SELECT 1");
-        env.AddSinks[0]->Flush();
+        // Query with error - must be in log
+        TString query = "SELECT A B C D E";
+        env.ExecuteQuery(query);
 
-        Cerr << "DEBUG: Wait" << Endl;
+        // Wait
         Sleep(TDuration::Seconds(5));
 
-        // Dump
+        // Select from system table
         Cerr << "DEBUG: Dump" << Endl;
-        auto result = ExecuteQueryAndFetchData(env.Kikimr, "SELECT * FROM `/local/testdb/kqp_requests/kqp_requests`");
-        Cerr << " " << Endl;
+        TStringBuilder selectQuery;
+        selectQuery << "SELECT database, request, action, status FROM `/Root/kqp_requests/kqp_requests` WHERE request='" << query << "'";
+
+        auto result = ExecuteQueryAndFetchData(env.Kikimr, selectQuery);
         Cerr << "KQP_RESULT:" << Endl;
         Dump(result.value());
-        Cerr << " " << Endl;
-    } */
+
+        UNIT_ASSERT(result.has_value());
+        UNIT_ASSERT(result.value().size() > 0);
+        UNIT_ASSERT(result.value()[0].size() == 4);
+        UNIT_ASSERT_EQUAL(result.value()[0][0], R"(["/Root"])");
+        UNIT_ASSERT_EQUAL(result.value()[0][1], R"("SELECT A B C D E")");
+        UNIT_ASSERT_EQUAL(result.value()[0][2], R"(["QUERY_ACTION_EXECUTE"])");
+        UNIT_ASSERT_EQUAL(result.value()[0][3], R"(["CANCELLED"])");
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapWriteLogSchema) {

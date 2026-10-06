@@ -22,7 +22,7 @@ namespace NKikimr::NKqp::NEventLog {
 
 using namespace NActors::NStructuredLog;
 
-class TSchematizedLogColumn {
+class TEventLogColumn {
 public:
     struct TDatabaseSettings {
         bool IsPK {false};
@@ -71,14 +71,14 @@ public:
         }
     };
 
-    TSchematizedLogColumn() = default;
-    TSchematizedLogColumn(TString name, TString type)
-        : TSchematizedLogColumn(std::move(name), std::move(type), TDatabaseSettings()) {}
-    TSchematizedLogColumn(TString name, TString type, TDatabaseSettings settings)
+    TEventLogColumn() = default;
+    TEventLogColumn(TString name, TString type)
+        : TEventLogColumn(std::move(name), std::move(type), TDatabaseSettings()) {}
+    TEventLogColumn(TString name, TString type, TDatabaseSettings settings)
         : Name(std::move(name))
         , Type(std::move(type))
         , Settings(std::move(settings)) {}
-    virtual ~TSchematizedLogColumn() = default;
+    virtual ~TEventLogColumn() = default;
 
     const TString Name;
     const TString Type;
@@ -116,7 +116,7 @@ public:
 };
 
 template <typename T>
-class TTypedDBLogColumn : public TSchematizedLogColumn {
+class TTypedDBLogColumn : public TEventLogColumn {
 public:
     using TValueType = T;
     using TArrowBuilderType = TArrowTypeMapper<TValueType>::TArrowBuilderType;
@@ -126,7 +126,7 @@ public:
     std::shared_ptr<TArrowBuilderType> Builder;
 
     TTypedDBLogColumn(TString name, TDatabaseSettings settings)
-        : TSchematizedLogColumn(std::move(name), TypeName, std::move(settings)),
+        : TEventLogColumn(std::move(name), TypeName, std::move(settings)),
         Builder(TArrowTypeMapper<TValueType>::CreateBuilder()) {}
 
     std::shared_ptr<arrow::DataType> GetArrowDataType() const override {
@@ -277,7 +277,7 @@ public:
         if (value.has_value()) {
             return AppendValue(value.value()) ? TWriteResultKind::Success : TWriteResultKind::ArrowError;
         }
-        if (TSchematizedLogColumn::Settings.IsNotNull) {
+        if (TEventLogColumn::Settings.IsNotNull) {
             return AppendValue("") ? TWriteResultKind::DummyValueInsteadOfNull : TWriteResultKind::ArrowError;
         }
         return AppendNull() ? TWriteResultKind::Success : TWriteResultKind::ArrowError;
@@ -310,7 +310,7 @@ public:
                     ? TThisWriteResultKind::Success
                     : TThisWriteResultKind::ArrowError;
             case TExtractor::TResultKind::NoCast:
-                if (TSchematizedLogColumn::Settings.IsNotNull) {
+                if (TEventLogColumn::Settings.IsNotNull) {
                     TStringValueExtractor stringExtractor;
                     auto strValue = stringExtractor.ExtractValue(message.StructuredMessage, KeyName).value_or("");
                     return TBase::AppendValue(T{})
@@ -324,7 +324,7 @@ public:
                         : TThisWriteResult(TThisWriteResultKind::ArrowError);
                 }
             case TExtractor::TResultKind::NoValue:
-                if (TSchematizedLogColumn::Settings.IsNotNull) {
+                if (TEventLogColumn::Settings.IsNotNull) {
                     TStringValueExtractor stringExtractor;
                     auto strValue = stringExtractor.ExtractValue(message.StructuredMessage, KeyName).value_or("");
                     return TBase::AppendValue(T{})  // @todo Generate dummy value

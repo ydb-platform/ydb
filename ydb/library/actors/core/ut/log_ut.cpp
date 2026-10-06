@@ -112,7 +112,7 @@ namespace {
         {
             Runtime.Initialize();
             LogBackend.reset(new TMockBackend{ThrowAlways});
-            settings->Sinks.push_back(sink); //settings->LogSinkProvider = [sink]() { TSettings::TLogSinkVector result; result.push_back(sink); return result; };
+            settings->Sinks[""] = sink; //settings->LogSinkProvider = [sink]() { TSettings::TLogSinkVector result; result.push_back(sink); return result; };
             auto logger = new TLoggerActor{settings, LogBackend, Counters};
             LoggerActor = Runtime.Register(logger);
             Runtime.SetScheduledEventFilter([] (auto&&, auto&&, auto&&, auto) {
@@ -853,6 +853,9 @@ Y_UNIT_TEST_SUITE(TWriteLogSink) {
         bool Write(const TLogMessage& message) override {
             Calls.push_back(message);
             return true;
+        }
+
+        void Stop() override {
         }
     };
 

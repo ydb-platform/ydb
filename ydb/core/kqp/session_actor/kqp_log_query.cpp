@@ -1,6 +1,7 @@
 #include "kqp_log_query.h"
 
 #include <ydb/core/kqp/common/events/query.h>
+#include <ydb/core/kqp/event_log/kqp_event_log_writer.h>
 #include <ydb/core/kqp/session_actor/kqp_query_state.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/library/aclib/aclib.h>
@@ -277,7 +278,7 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
             {"compileTimeUs", fields.CompileTimeUs});
     }
 
-    YDB_LOG((prio), "KQP request processed", message);
+    YDB_LOG((prio), NKikimr::NKqp::NEventLog::TKqpEventLogWriter::GetMessageText(), message);
 }
 
 TString GetRequestId(const TKqpQueryState& state) {

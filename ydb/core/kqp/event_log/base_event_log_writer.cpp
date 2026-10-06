@@ -8,7 +8,7 @@
 namespace NKikimr::NKqp::NEventLog {
 
 TBaseEventLogWriter::TBaseEventLogWriter(
-    TVector<std::shared_ptr<TSchematizedLogColumn>> columns, const TDuration& flushInterval)
+    TVector<std::shared_ptr<TEventLogColumn>> columns, const TDuration& flushInterval)
     : Columns(std::move(columns)),
     FlushInterval(flushInterval)
 {
@@ -22,11 +22,14 @@ TBaseEventLogWriter::TBaseEventLogWriter(
 }
 
 bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
-    if (!Filter(message)) {
+    auto stateKind = State.load().Kind;
+    if (stateKind == TStateKind::StorageCreateError || stateKind == TStateKind::Stop) {
         return false;
     }
 
-    Cerr << "DEBUG: Write " << message.TextMessage << " state = " << static_cast<int>(State.load().Kind) << Endl;
+    if (!Filter(message)) {
+        return false;
+    }
 
     TStringBuilder columnWriteErrors;
     for (std::size_t i = 0; i < Columns.size(); ++i) {
@@ -39,21 +42,21 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
         TStringBuilder errorText;
 
         switch (result.Kind) {
-            case TSchematizedLogColumn::TWriteResultKind::Success:
+            case TEventLogColumn::TWriteResultKind::Success:
                 break;
-            case TSchematizedLogColumn::TWriteResultKind::DummyValueInsteadOfNull:
+            case TEventLogColumn::TWriteResultKind::DummyValueInsteadOfNull:
                 errorText << "Dummy \"" << column->Name << "\" instead of null";
                 break;
-            case TSchematizedLogColumn::TWriteResultKind::DummyValueInsteadOfCastError:
+            case TEventLogColumn::TWriteResultKind::DummyValueInsteadOfCastError:
                 errorText << "Dummy \"" << column->Name << "\" instead of not casted value "
                           << TTextWriter::EscapeFieldValue(result.Value);
                 break;
-            case TSchematizedLogColumn::TWriteResultKind::NullInsteadOfCastError:
+            case TEventLogColumn::TWriteResultKind::NullInsteadOfCastError:
                 errorText << "Null \"" << column->Name << "\" instead of not casted value "
                           << TTextWriter::EscapeFieldValue(result.Value);
                 break;
-            case TSchematizedLogColumn::TWriteResultKind::ArrowError:
-            case TSchematizedLogColumn::TWriteResultKind::UnknownError:
+            case TEventLogColumn::TWriteResultKind::ArrowError:
+            case TEventLogColumn::TWriteResultKind::UnknownError:
                 break;
         }
 
@@ -73,13 +76,17 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
 }
 
 void TBaseEventLogWriter::Flush() {
-    Cerr << "DEBUG: TBaseEventLogWriter::Flush" <<  Endl;
     if (CurrentBatchSize == 0) {
         return;
     }
 
-    // Check need to create storage
+    // Check state
     TState oldState = State.load();
+    if (oldState.Kind == TStateKind::StorageCreateError || oldState.Kind == TStateKind::Stop) {
+        return ;
+    }
+
+    // Check need to create storage
     TState newState = oldState;
     oldState.Kind = TStateKind::Started;
     newState.Kind = TStateKind::StorageCreating;
@@ -94,11 +101,9 @@ void TBaseEventLogWriter::Flush() {
 
     // If storage should be created
     if (State.load().Kind != TStateKind::Working) {
-        Cerr << "DEBUG: TBaseEventLogWriter::Flush delay" <<  Endl;
         return;
     }
 
-    Cerr << "DEBUG: Flush!! " <<  Endl;
     auto batch = CreateCurrentBatch();
     WriteBatch(batch);
     CurrentBatchSize = 0;

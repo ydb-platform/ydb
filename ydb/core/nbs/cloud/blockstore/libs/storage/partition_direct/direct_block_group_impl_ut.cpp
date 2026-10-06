@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                         1,
                         range,
                         MakeSgList(readyWriteBuffer),
-                        /*checksums=*/{},
+                        TBlockChecksums(),
                         CreateTraceId());
                 });
             UNIT_ASSERT_VALUES_EQUAL(
@@ -1038,7 +1038,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange16::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
-                    /*checksums=*/{},
+                    TBlockChecksums(),
                     CreateTraceId(),
                     cb);
                 return future;
@@ -1246,7 +1246,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange16::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
-                    /*checksums=*/{},
+                    TBlockChecksums(),
                     CreateTraceId(),
                     cb);
                 return future;
@@ -1327,7 +1327,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange16::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
-                    /*checksums=*/{},
+                    TBlockChecksums(),
                     CreateTraceId(),
                     cb);
                 return future;
@@ -1464,7 +1464,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,
                     range,
                     MakeSgList(writeBuffer),
-                    /*checksums=*/{},
+                    TBlockChecksums(),
                     CreateTraceId());
             });
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1594,7 +1594,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                         host,
                         range,
                         MakeSgList(writeBuffer),
-                        /*checksums=*/{},
+                        TBlockChecksums(),
                         CreateTraceId());
                 });
             UNIT_ASSERT_VALUES_EQUAL(
@@ -1893,7 +1893,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange16::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
-                    /*checksums=*/{},
+                    TBlockChecksums(),
                     CreateTraceId(),
                     cb);
                 return future;

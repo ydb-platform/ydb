@@ -18,6 +18,7 @@
 #include "query_autocomplete_helper.h"
 #include "viewer_database_stats.h"
 #include "viewer_groups.h"
+#include "viewer_nodelist.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -300,6 +301,100 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(makeRequest(true, true), NWilson::TTraceId::MAX_VERBOSITY);
         UNIT_ASSERT_VALUES_EQUAL(makeRequest(false), static_cast<ui8>(TComponentTracingLevels::DynamicNodesOnly));
         UNIT_ASSERT_VALUES_EQUAL(makeRequest(false, true), static_cast<ui8>(TComponentTracingLevels::DynamicNodesOnly));
+    }
+
+    Y_UNIT_TEST(NodeListLocation) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        NActorsInterconnect::TNodeLocation modernLocation;
+        modernLocation.SetBridgePileName("pile-1");
+        modernLocation.SetDataCenter("sas");
+        modernLocation.SetModule("module-1");
+        modernLocation.SetRack("rack/a=b");
+        modernLocation.SetUnit("42");
+
+        NActorsInterconnect::TNodeLocation legacyLocation;
+        legacyLocation.SetDataCenterNum(49); // legacy encoding of "1"
+        legacyLocation.SetRoomNum(2);
+        legacyLocation.SetRackNum(7);
+        legacyLocation.SetBodyNum(3);
+
+        NActorsInterconnect::TNodeLocation partialLocation;
+        partialLocation.SetRack("rack-only");
+
+        const TVector<TNodeLocation> locations = {
+            TNodeLocation(modernLocation),
+            TNodeLocation(legacyLocation),
+            TNodeLocation(partialLocation),
+            TNodeLocation(),
+        };
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto* event = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+                const auto sample = (*event)->Get()->Nodes.front();
+                for (size_t i = 0; i < locations.size(); ++i) {
+                    auto& node = nodes->emplace_back(sample);
+                    node.NodeId = i + 1;
+                    node.Location = locations[i];
+                }
+                auto response = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+                    new IEventHandle((*event)->Recipient, (*event)->Sender, new TEvInterconnect::TEvNodesInfo(nodes)));
+                event->Swap(response);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodelist", nullptr);
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NMon::TEvHttpInfo(monReq)));
+        TAutoPtr<IEventHandle> handle;
+        auto* response = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        const size_t bodyStart = response->Answer.find("\r\n\r\n");
+        UNIT_ASSERT(bodyStart != TString::npos);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response->Answer.substr(bodyStart + 4), &json, true);
+
+        NJson::TJsonValue expectedLocations;
+        NJson::ReadJsonTree(R"([
+            {"BridgePileName":"pile-1","DataCenter":"sas","Module":"module-1","Rack":"rack/a=b","Unit":"42"},
+            {"DataCenter":"1","Module":"2","Rack":"7","Unit":"3"},
+            {"Rack":"rack-only"}
+        ])", &expectedLocations, true);
+        const auto& nodes = json.GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(nodes.size(), locations.size());
+        for (size_t i = 0; i < expectedLocations.GetArray().size(); ++i) {
+            const auto& fields = nodes[i].GetMap();
+            UNIT_ASSERT_VALUES_EQUAL(fields.at("Id").GetUInteger(), i + 1);
+            UNIT_ASSERT_VALUES_EQUAL(fields.at("Location"), expectedLocations.GetArray()[i]);
+            UNIT_ASSERT(fields.contains("PhysicalLocation"));
+        }
+        const auto& modernPhysicalLocation = nodes[0].GetMap().at("PhysicalLocation").GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(modernPhysicalLocation.at("Location").GetString(),
+            "P=pile-1/DC=sas/M=module-1/R=rack/a=b/U=42/");
+        UNIT_ASSERT_VALUES_EQUAL(modernPhysicalLocation.at("Body").GetUInteger(), 42);
+        const auto& legacyPhysicalLocation = nodes[1].GetMap().at("PhysicalLocation").GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(legacyPhysicalLocation.at("DataCenter").GetUInteger(), 49);
+        UNIT_ASSERT_VALUES_EQUAL(legacyPhysicalLocation.at("Room").GetUInteger(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(legacyPhysicalLocation.at("Rack").GetUInteger(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(legacyPhysicalLocation.at("Body").GetUInteger(), 3);
+        UNIT_ASSERT(!nodes[3].GetMap().contains("Location"));
+        UNIT_ASSERT(!nodes[3].GetMap().contains("PhysicalLocation"));
+
+        const auto schema = TJsonNodeList::GetSwagger()["get"]["responses"]["200"]["content"]["application/json"]["schema"];
+        const auto locationSchema = schema["items"]["properties"]["Location"];
+        UNIT_ASSERT_VALUES_EQUAL(locationSchema["type"].as<std::string>(), "object");
+        UNIT_ASSERT_VALUES_EQUAL(locationSchema["properties"]["Rack"]["type"].as<std::string>(), "string");
     }
 
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {

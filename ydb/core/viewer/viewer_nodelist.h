@@ -1,5 +1,6 @@
 #pragma once
 #include "json_pipe_req.h"
+#include "yaml/yaml.h"
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
@@ -66,6 +67,10 @@ public:
                 jsonNodeInfo["Address"] = nodeInfo.Address;
                 jsonNodeInfo["Port"] = nodeInfo.Port;
                 if (nodeInfo.Location != TNodeLocation()) {
+                    NActorsInterconnect::TNodeLocation location;
+                    nodeInfo.Location.Serialize(&location, false);
+                    Proto2Json(location, jsonNodeInfo["Location"]);
+
                     NJson::TJsonValue& jsonPhysicalLocation = jsonNodeInfo["PhysicalLocation"];
                     const auto& x = nodeInfo.Location.GetLegacyValue();
                     jsonPhysicalLocation["DataCenter"] = x.DataCenter;
@@ -108,6 +113,8 @@ public:
                                             Port:
                                                 type: integer
         )___");
+        node["get"]["responses"]["200"]["content"]["application/json"]["schema"]["items"]["properties"]["Location"] =
+            TProtoToYaml::ProtoToYamlSchema<NActorsInterconnect::TNodeLocation>();
         return node;
     }
 };

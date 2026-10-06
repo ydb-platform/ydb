@@ -52,8 +52,8 @@ Each internal request is classified as HTTP, gRPC, or “either” (a BSC comman
 The utility picks an address in the following order:
 
 1. It takes endpoints of the required type from the `-e` list. If there are several, it picks a random host.
-2. On a connection error, it tries other endpoints of the same type (up to five attempts). A host whose HTTP request fails with a connection error or an HTTP error is skipped during later normal selection for the rest of the run, but the final fallback may still retry it.
-3. If there are no endpoints of the required type, the utility derives an address of the other type. Automatic conversion does not preserve whether TLS is used:
+2. On a connection error, it tries other endpoints of the same type (up to five attempts). An endpoint whose HTTP request fails with a connection error or an HTTP error is skipped during later normal selection for the rest of the run, but the final fallback may still retry it.
+3. If the utility cannot complete the request using endpoints of the required type, it tries endpoints of the other type. Automatic conversion does not preserve whether TLS is used:
    - an HTTP request to a `grpc` or `grpcs` host goes to `http://HOST:<mon-port>` (default `8765`). It becomes `https` only when at least one `-e` value is `https` and none is `http`. A lone `grpcs://HOST:2135` endpoint does not enable HTTPS: the utility warns that no HTTP endpoint is set and sends HTTP requests to `http://HOST:8765` without encryption. On a cluster whose monitoring requires TLS this fails;
    - a request that requires gRPC, sent to an `http` or `https` host, always uses plaintext `grpc` on `--grpc-port`, including when the original endpoint is `https` and `--ca-file` is set. TLS for gRPC is used only for an explicit `grpcs` endpoint. BSC commands are not converted: they use the protocol of the selected endpoint. HTTP already covers the BSC API, so a list of only `http`/`https` endpoints does not switch BSC to gRPC.
 
@@ -122,8 +122,8 @@ A token that ends with `@builtin` (for example `root@builtin`) is sent without a
 | Channel | Where the token goes |
 |---|---|
 | HTTP Viewer | `Authorization: <scheme> <token>` header |
-| gRPC BSC / CMS | `SecurityToken` field (token body only) |
-| gRPC Distributed Storage and Bridge | `x-ydb-auth-ticket` metadata (token body only) |
+| gRPC BSC / [CMS](../../concepts/glossary.md#cms) | `SecurityToken` field (token body only) |
+| gRPC [Distributed Storage](../../concepts/glossary.md#distributed-storage) and [Bridge](../../concepts/glossary.md#bridge) | `x-ydb-auth-ticket` metadata (token body only) |
 
 ### Token sources {#token-sources}
 

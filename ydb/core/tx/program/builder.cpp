@@ -53,6 +53,8 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
             kernelLogic = std::make_shared<TCompareKernel>(false, TIndexCheckOperation::EOperation::Greater);
         } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual) {
             kernelLogic = std::make_shared<TCompareKernel>(false, TIndexCheckOperation::EOperation::GreaterOrEqual);
+        } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce) {
+            kernelLogic = std::make_shared<TCoalesceKernelLogic>();
         }
         auto kernelFunction = KernelsRegistry.GetFunction(func.GetKernelIdx());
         if (!kernelFunction) {

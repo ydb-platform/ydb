@@ -10,6 +10,27 @@
 
 namespace NKikimr::NArrow::NSSA {
 
+TCoalesceKernelLogic::TCoalesceKernelLogic()
+    : TSimpleKernelLogic((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce) {
+}
+
+TConclusion<bool> TCoalesceKernelLogic::DoExecute(
+    const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output, TAccessorsCollection& resources) const {
+    if (input.size() != 2 || output.size() != 1) {
+        return false;
+    }
+    const auto& first = resources.GetAccessorOptional(input.front().GetColumnId());
+    if (!first || first->GetDataType()->id() != arrow::Type::UINT8) {
+        return false;
+    }
+    std::shared_ptr<arrow::Scalar> value;
+    if (first->CheckOneValueAccessor(value) != true || !value || !value->is_valid) {
+        return false;
+    }
+    resources.AddVerified(output.front().GetColumnId(), first, false);
+    return true;
+}
+
 TConclusion<bool> TGetJsonPath::DoExecute(
     const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output, TAccessorsCollection& resources) const {
     auto description = BuildDescription(input, resources);

@@ -338,6 +338,35 @@ Y_UNIT_TEST_SUITE(KernelLogic) {
         AssertNullConstantWithInput(NKikimr::NKernels::EOperation::Or,
             arrow::MakeNullScalar(arrow::uint8()), {std::nullopt, std::nullopt}, true);
     }
+
+    Y_UNIT_TEST(CoalesceReusesValidMonoSparseFirstInput) {
+        auto first = NAccessor::TSparsedArray::BuildFalseArrayUI8(1000);
+        TAccessorsCollection resources(first->GetRecordsCount());
+        resources.AddVerified(1, first, false);
+        resources.AddConstantVerified(2, std::make_shared<arrow::UInt8Scalar>(0));
+
+        auto result = TCoalesceKernelLogic().Execute(TColumnChainInfo::BuildVector({ 1, 2 }),
+            TColumnChainInfo::BuildVector({ 3 }), resources);
+
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT(*result);
+        UNIT_ASSERT_VALUES_EQUAL(resources.GetAccessorVerified(3).get(), first.get());
+        UNIT_ASSERT_VALUES_EQUAL(resources.GetRecordsCountActualVerified(), 1000);
+    }
+
+    Y_UNIT_TEST(CoalesceFallsBackForNullSparseFirstInput) {
+        auto first = std::make_shared<NAccessor::TSparsedArray>(nullptr, arrow::uint8(), 1000);
+        TAccessorsCollection resources(first->GetRecordsCount());
+        resources.AddVerified(1, first, false);
+        resources.AddConstantVerified(2, std::make_shared<arrow::UInt8Scalar>(0));
+
+        auto result = TCoalesceKernelLogic().Execute(TColumnChainInfo::BuildVector({ 1, 2 }),
+            TColumnChainInfo::BuildVector({ 3 }), resources);
+
+        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT(!*result);
+        UNIT_ASSERT(!resources.GetAccessorOptional(3));
+    }
 };
 
 } // namespace NKikimr::NArrow::NSSA

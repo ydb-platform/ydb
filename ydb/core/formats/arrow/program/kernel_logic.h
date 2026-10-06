@@ -103,6 +103,15 @@ public:
     virtual bool IsBoolInResult() const override;
 };
 
+class TCoalesceKernelLogic: public TSimpleKernelLogic {
+private:
+    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
+        TAccessorsCollection& resources) const override;
+
+public:
+    TCoalesceKernelLogic();
+};
+
 class TToStringKernel: public TSimpleKernelLogic {
 private:
     // We are conservative in this field computation for correctness sake and set it only for known good cases.

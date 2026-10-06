@@ -185,37 +185,19 @@ Y_UNIT_TEST_SUITE(QuerySessionStatusInterception) {
         auto session = std::make_shared<TTestKqpSession>("", "");
         std::weak_ptr<TTestKqpSession> weakSession = session;
         auto sourcePromise = NThreading::NewPromise<TStatus>();
-        bool callbackCalled = false;
         auto result = NSessionPool::InjectSessionStatusInterception<TStatus>(
-            session,
-            sourcePromise.GetFuture(),
-            true,
-            TDuration::Seconds(1),
-            [&callbackCalled](const TStatus&, TKqpSessionCommon&) {
-                callbackCalled = true;
-            });
+            session, sourcePromise.GetFuture(), true, TDuration::Seconds(1));
         session.reset();
         UNIT_ASSERT(!weakSession.expired());
 
-        bool completionCalled = false;
-        result.Subscribe([&weakSession, &completionCalled](const NThreading::TFuture<TStatus>& future) {
-            UNIT_ASSERT(future.HasException());
-            UNIT_ASSERT(weakSession.expired());
-            completionCalled = true;
+        bool releasedBeforeCompletion = false;
+        result.Subscribe([&](const NThreading::TFuture<TStatus>&) {
+            releasedBeforeCompletion = weakSession.expired();
         });
+        sourcePromise.SetException(std::make_exception_ptr(std::runtime_error("interception error")));
 
-        auto exception = std::make_exception_ptr(std::runtime_error("interception error"));
-        sourcePromise.SetException(exception);
-
-        UNIT_ASSERT(completionCalled);
-        UNIT_ASSERT(!callbackCalled);
-        std::exception_ptr forwardedException;
-        try {
-            result.TryRethrow();
-        } catch (const std::runtime_error&) {
-            forwardedException = std::current_exception();
-        }
-        UNIT_ASSERT(forwardedException == exception);
+        UNIT_ASSERT(releasedBeforeCompletion);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(result.GetValueSync(), std::runtime_error, "interception error");
     }
 
 } // Y_UNIT_TEST_SUITE(QuerySessionStatusInterception)

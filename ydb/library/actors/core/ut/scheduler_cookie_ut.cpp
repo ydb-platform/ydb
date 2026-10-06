@@ -106,20 +106,23 @@ Y_UNIT_TEST_SUITE(SchedulerCookie) {
         owner.Reset(nullptr);
     }
 
-    Y_UNIT_TEST(DestructorReleasesOwnerBeforeOrAfterScheduler) {
-        for (bool schedulerFirst : {false, true}) {
-            TSchedulerCookieHolder scheduler(ISchedulerCookie::Make2Way());
-            {
-                TSchedulerCookieHolder owner(scheduler.Get());
-                if (schedulerFirst) {
-                    UNIT_ASSERT(scheduler.Detach());
-                    UNIT_ASSERT(!owner.Get()->IsArmed());
-                }
-            }
-            if (!schedulerFirst) {
-                UNIT_ASSERT(!scheduler.Get()->IsArmed());
-                UNIT_ASSERT(!scheduler.Detach());
-            }
+    Y_UNIT_TEST(OwnerDestructorDisarmsCookieBeforeSchedulerRelease) {
+        TSchedulerCookieHolder scheduler(ISchedulerCookie::Make2Way());
+        {
+            TSchedulerCookieHolder owner(scheduler.Get());
+            UNIT_ASSERT(owner.Get()->IsArmed());
+        }
+        UNIT_ASSERT(!scheduler.Get()->IsArmed());
+        UNIT_ASSERT(!scheduler.Detach());
+    }
+
+    Y_UNIT_TEST(OwnerDestructorReleasesLastReferenceAfterSchedulerRelease) {
+        TSchedulerCookieHolder scheduler(ISchedulerCookie::Make2Way());
+        {
+            TSchedulerCookieHolder owner(scheduler.Get());
+            UNIT_ASSERT(scheduler.Detach());
+            UNIT_ASSERT(!owner.Get()->IsArmed());
+            // The owner destructor releases the last reference here.
         }
     }
 

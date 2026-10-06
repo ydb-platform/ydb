@@ -1,4 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+
+#include <util/string/join.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -44,21 +47,39 @@ void CreateSampleTables(TQueryClient& client) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-TString MakeQuery(TStringBuf joinKind, TStringBuf columns, TStringBuf orderBy, bool useScalarHashJoin) {
+// No ORDER BY: a sort right after the join would consume all join outputs
+TString MakeQuery(TStringBuf joinKind, TStringBuf columns, bool useScalarHashJoin, bool useLlvm) {
     return TStringBuilder() << R"(
         PRAGMA TablePathPrefix='/Root';
         PRAGMA ydb.OptimizerHints='JoinType(L R Broadcast)';
         PRAGMA ydb.UseScalarHashJoinForMap=")" << (useScalarHashJoin ? "true" : "false") << R"(";
+        PRAGMA ydb.UseLlvm=")" << (useLlvm ? "true" : "false") << R"(";
         SELECT )" << columns << R"(
         FROM L
-        )" << joinKind << R"( JOIN R ON L.k = R.k
-        ORDER BY )" << orderBy << ";";
+        )" << joinKind << R"( JOIN R ON L.k = R.k;)";
 }
 
 TString RunQuery(TQueryClient& client, const TString& query) {
     auto result = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     return FormatResultSetYson(result.GetResultSet(0));
+}
+
+TString RunQuerySortedRows(TQueryClient& client, const TString& query) {
+    auto result = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    TVector<TString> rows;
+    TResultSetParser parser(result.GetResultSet(0));
+    while (parser.TryNextRow()) {
+        TStringBuilder row;
+        for (size_t i = 0; i < parser.ColumnsCount(); ++i) {
+            row << FormatValueYson(parser.GetValue(i)) << ";";
+        }
+        rows.push_back(row);
+    }
+    Sort(rows);
+    return JoinSeq("\n", rows);
 }
 
 void CheckPlan(TQueryClient& client, const TString& query, bool expectScalarHashJoin) {
@@ -87,57 +108,75 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         struct TCase {
             TStringBuf JoinKind;
             TStringBuf Columns;
-            TStringBuf OrderBy;
         };
         const std::vector<TCase> cases = {
-            {"INNER", "L.id AS lid, R.id AS rid, L.v AS v, R.w AS w", "lid, rid"},
-            {"LEFT", "L.id AS lid, R.id AS rid, L.v AS v, R.w AS w", "lid, rid"},
-            {"LEFT SEMI", "L.id AS lid, L.v AS v", "lid"},
-            {"LEFT ONLY", "L.id AS lid, L.v AS v", "lid"},
+            {"INNER", "L.id AS lid, R.id AS rid, L.v AS v, R.w AS w"},
+            {"LEFT", "L.id AS lid, R.id AS rid, L.v AS v, R.w AS w"},
+            {"LEFT SEMI", "L.id AS lid, L.v AS v"},
+            {"LEFT ONLY", "L.id AS lid, L.v AS v"},
         };
 
-        for (const auto& [joinKind, columns, orderBy] : cases) {
-            const auto scalarQuery = MakeQuery(joinKind, columns, orderBy, true);
-            const auto mapQuery = MakeQuery(joinKind, columns, orderBy, false);
+        // Without LLVM NarrowMap passes null pointers for unused join outputs, e.g. converted keys
+        for (const bool useLlvm : {true, false}) {
+            for (const auto& [joinKind, columns] : cases) {
+                const auto scalarQuery = MakeQuery(joinKind, columns, true, useLlvm);
+                const auto mapQuery = MakeQuery(joinKind, columns, false, useLlvm);
+                const TString caseName = TStringBuilder() << joinKind << (useLlvm ? " llvm" : " no llvm");
 
-            CheckPlan(client, scalarQuery, true);
-            CheckPlan(client, mapQuery, false);
+                CheckPlan(client, scalarQuery, true);
+                CheckPlan(client, mapQuery, false);
 
-            const auto expected = RunQuery(client, mapQuery);
-            const auto actual = RunQuery(client, scalarQuery);
-            UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, joinKind);
+                const auto expected = RunQuerySortedRows(client, mapQuery);
+                const auto actual = RunQuerySortedRows(client, scalarQuery);
+                UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, caseName);
+            }
         }
     }
 
-    Y_UNIT_TEST(FallbackOnNestedOptional) {
+    Y_UNIT_TEST(FallbackOnUnsupportedPayload) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetQueryClient();
         CreateSampleTables(client);
 
-        const auto makeQuery = [](bool useScalarHashJoin) {
-            return TStringBuilder() << R"(
-                PRAGMA TablePathPrefix='/Root';
-                PRAGMA ydb.OptimizerHints='JoinType(L R Broadcast)';
-                PRAGMA ydb.UseScalarHashJoinForMap=")" << (useScalarHashJoin ? "true" : "false") << R"(";
-                -- Aggregate so that Just is not pulled above the join
-                $l = SELECT k, SOME(Just(v)) AS jv FROM L GROUP BY k;
-                SELECT L.k AS lk, R.id AS rid, L.jv AS jv
-                FROM $l AS L
-                INNER JOIN R ON L.k = R.k
-                ORDER BY lk, rid;
-            )";
+        struct TCase {
+            TStringBuf Payload;
+            bool ExpectScalarHashJoin;
         };
-        const TString scalarQuery = makeQuery(true);
-        const TString mapQuery = makeQuery(false);
+        const std::vector<TCase> cases = {
+            {"SOME(v)", true},
+            {"SOME(Just(v))", false},
+            {"SOME(AsTuple(v, id))", false},
+            {"SOME(AddTimezone(CAST(id AS Datetime), 'Europe/Moscow'))", false},
+        };
 
-        auto explain = client.ExecuteQuery(scalarQuery, TTxControl::NoTx(),
-            TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
-        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
-        const TString ast(*explain.GetStats()->GetAst());
-        UNIT_ASSERT_C(!ast.Contains("ScalarHashJoin"), ast);
-        UNIT_ASSERT_C(ast.Contains("MapJoinCore"), ast);
+        for (const auto& [payload, expectScalarHashJoin] : cases) {
+            // Aggregate so that the payload is not pulled above the join
+            const auto makeQuery = [payload](bool useScalarHashJoin) {
+                return TStringBuilder() << R"(
+                    PRAGMA TablePathPrefix='/Root';
+                    PRAGMA ydb.OptimizerHints='JoinType(L R Broadcast)';
+                    PRAGMA ydb.UseScalarHashJoinForMap=")" << (useScalarHashJoin ? "true" : "false") << R"(";
+                    $l = SELECT k, )" << payload << R"( AS p FROM L GROUP BY k;
+                    SELECT L.k AS lk, R.id AS rid, L.p AS p
+                    FROM $l AS L
+                    INNER JOIN R ON L.k = R.k
+                    ORDER BY lk, rid;
+                )";
+            };
+            const TString scalarQuery = makeQuery(true);
+            const TString mapQuery = makeQuery(false);
 
-        UNIT_ASSERT_VALUES_EQUAL(RunQuery(client, scalarQuery), RunQuery(client, mapQuery));
+            auto explain = client.ExecuteQuery(scalarQuery, TTxControl::NoTx(),
+                TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+            const TString ast(*explain.GetStats()->GetAst());
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("ScalarHashJoin"), expectScalarHashJoin, payload << "\n" << ast);
+            if (!expectScalarHashJoin) {
+                UNIT_ASSERT_C(ast.Contains("MapJoinCore"), payload << "\n" << ast);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(RunQuery(client, scalarQuery), RunQuery(client, mapQuery), payload);
+        }
     }
 }
 

@@ -850,56 +850,32 @@ const TTypeAnnotationNode* SkipTagged(const TTypeAnnotationNode* type) {
     return type;
 }
 
-// Optional<X> where arrow needs an external optional wrapper for X
-bool NeedsExternalOptional(const TTypeAnnotationNode* itemType) {
-    switch (SkipTagged(itemType)->GetKind()) {
-        case ETypeAnnotationKind::Optional:
-        case ETypeAnnotationKind::Pg:
-        case ETypeAnnotationKind::Variant:
-        case ETypeAnnotationKind::Null:
-        case ETypeAnnotationKind::Void:
-        case ETypeAnnotationKind::EmptyList:
-        case ETypeAnnotationKind::EmptyDict:
-            return true;
-        default:
-            return false;
-    }
+// Tz types are packed as tuples, but their values are embedded scalars
+bool IsScalarConverterDataType(const TTypeAnnotationNode* type) {
+    return type->GetKind() == ETypeAnnotationKind::Data
+        && !(NUdf::GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()).Features & NUdf::TzDateType);
 }
 
-// The scalar layout converter has no Variant support, keeps Resource as raw pointers
-// that cannot be spilled, and loses the extra null level of external optionals
-bool IsSupportedByScalarConverter(const TTypeAnnotationNode* type) {
+// Only flat columns are safe in the scalar layout converter: it drops the null state
+// of optional tuples, misplaces fields after strings in tuples and loses nested optionals.
+// Pg on the nullable side becomes Optional<Pg>, which is a nested optional too
+bool IsSupportedByScalarConverter(const TTypeAnnotationNode* type, bool nullableSide) {
     type = SkipTagged(type);
     switch (type->GetKind()) {
-        case ETypeAnnotationKind::Variant:
-        case ETypeAnnotationKind::Resource:
-            return false;
-        case ETypeAnnotationKind::Optional: {
-            const auto* itemType = type->Cast<TOptionalExprType>()->GetItemType();
-            return !NeedsExternalOptional(itemType) && IsSupportedByScalarConverter(itemType);
-        }
-        case ETypeAnnotationKind::Tuple:
-            for (const auto* item : type->Cast<TTupleExprType>()->GetItems()) {
-                if (!IsSupportedByScalarConverter(item)) {
-                    return false;
-                }
-            }
-            return true;
-        case ETypeAnnotationKind::Struct:
-            for (const auto* item : type->Cast<TStructExprType>()->GetItems()) {
-                if (!IsSupportedByScalarConverter(item->GetItemType())) {
-                    return false;
-                }
-            }
-            return true;
+        case ETypeAnnotationKind::Data:
+            return IsScalarConverterDataType(type);
+        case ETypeAnnotationKind::Optional:
+            return IsScalarConverterDataType(SkipTagged(type->Cast<TOptionalExprType>()->GetItemType()));
+        case ETypeAnnotationKind::Pg:
+            return !nullableSide;
         default:
-            return true;
+            return false;
     }
 }
 
 } // anonymous namespace
 
-bool DqCanUseScalarHashJoinForMap(const TDqJoin& join, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
+bool DqCanUseScalarHashJoinForMap(const TDqJoin& join, TExprContext& ctx) {
     const auto joinType = join.JoinType().Value();
     if (joinType != "Inner"sv && joinType != "Left"sv && joinType != "LeftSemi"sv && joinType != "LeftOnly"sv) {
         return false;
@@ -919,21 +895,14 @@ bool DqCanUseScalarHashJoinForMap(const TDqJoin& join, TExprContext& ctx, TTypeA
     const auto* leftStructType = leftItemType->Cast<TStructExprType>();
     const auto* rightStructType = rightItemType->Cast<TStructExprType>();
 
-    const auto supported = [&](const TTypeAnnotationNode* type) {
-        return IsSupportedAsBlockType(join.Pos(), *type, ctx, typeCtx) && IsSupportedByScalarConverter(type);
-    };
     for (const auto* item : leftStructType->GetItems()) {
-        if (!supported(item->GetItemType())) {
+        if (!IsSupportedByScalarConverter(item->GetItemType(), false)) {
             return false;
         }
     }
+    const bool rightNullable = joinType == "Left"sv;
     for (const auto* item : rightStructType->GetItems()) {
-        if (!supported(item->GetItemType())) {
-            return false;
-        }
-        // The runtime wraps these into Optional, but the join type keeps them as is
-        const auto kind = item->GetItemType()->GetKind();
-        if (joinType == "Left"sv && kind != ETypeAnnotationKind::Optional && item->GetItemType()->IsOptionalOrNull()) {
+        if (!IsSupportedByScalarConverter(item->GetItemType(), rightNullable)) {
             return false;
         }
     }

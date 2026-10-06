@@ -31,7 +31,7 @@ NNodes::TMaybeNode<NNodes::TExprBase> DqRewriteEquiJoin(const NNodes::TExprBase&
 
 NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage=true, bool useScalarHashJoinForMap = false);
 
-bool DqCanUseScalarHashJoinForMap(const NNodes::TDqJoin& join, TExprContext& ctx, TTypeAnnotationContext& typeCtx);
+bool DqCanUseScalarHashJoinForMap(const NNodes::TDqJoin& join, TExprContext& ctx);
 
 NNodes::TExprBase DqBuildJoin(
     const NNodes::TExprBase& node,

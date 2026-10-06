@@ -3337,7 +3337,7 @@ TExprBase DqBuildJoin(
     // separate stage to receive data from both sides of join.
     // TODO: We can push MapJoin to existing stage for data query, if it doesn't have table reads. This
     //       requires some additional knowledge, probably with use of constraints.
-    useScalarHashJoinForMap = useScalarHashJoinForMap && DqCanUseScalarHashJoinForMap(join, ctx, typeCtx);
+    useScalarHashJoinForMap = useScalarHashJoinForMap && DqCanUseScalarHashJoinForMap(join, ctx);
     return DqBuildPhyJoin(join, pushLeftStage, ctx, optCtx, useGraceCoreForMap, buildCollectStage, useScalarHashJoinForMap);
 }
 

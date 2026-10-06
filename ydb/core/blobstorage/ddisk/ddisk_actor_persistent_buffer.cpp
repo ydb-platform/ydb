@@ -2679,7 +2679,24 @@ namespace NKikimr::NDDisk {
 #undef DDISK_FILL_PB_OP_STATS
 
         if (ev->Get()->DescribeTablets) {
-            for (auto& [k, v] : PersistentBuffers) {
+            if (!ev->Get()->TabletsLimit) {
+                reply->EraseBarriers = PersistentBufferBarriersManager.GetBarriers();
+            }
+            reply->TabletsTotal = PersistentBuffers.size();
+            const ui64 limit = ev->Get()->TabletsLimit;
+            ui64 offset = ev->Get()->TabletsOffset;
+            if (limit && offset >= reply->TabletsTotal) {
+                offset = reply->TabletsTotal ? (reply->TabletsTotal - 1) / limit * limit : 0;
+            }
+            reply->TabletsOffset = offset;
+            auto it = PersistentBuffers.begin();
+            std::advance(it, Min<ui64>(offset, PersistentBuffers.size()));
+            for (; it != PersistentBuffers.end() && (!limit || reply->TabletInfos.size() < limit); ++it) {
+                const auto& [k, v] = *it;
+                if (PersistentBufferBarriersManager.HasBarrier(k.TabletId, k.DirectBlockGroupIndex)) {
+                    reply->EraseBarriers[{k.TabletId, k.DirectBlockGroupIndex}] =
+                        PersistentBufferBarriersManager.GetBarrier(k.TabletId, k.DirectBlockGroupIndex).Lsn;
+                }
                 reply->TabletInfos.emplace_back(k.TabletId, k.Generation,
                     v.Records.begin()->first, v.Records.rbegin()->first,
                     v.Records.begin()->second.Timestamp, v.Records.rbegin()->second.Timestamp,
@@ -2687,7 +2704,6 @@ namespace NKikimr::NDDisk {
                     PersistentBufferBarriersManager.GetErasesCount(k.TabletId, k.DirectBlockGroupIndex),
                     k.DirectBlockGroupIndex);
             }
-            reply->EraseBarriers = PersistentBufferBarriersManager.GetBarriers();
         }
         if (ev->Get()->DescribeFreeSpace) {
             reply->FreeSpace = PersistentBufferSpaceAllocator.DescribeFreeSpace();

@@ -1008,6 +1008,8 @@ struct TPersistentBufferFormat {
         ui32 DiskOperationsInflight;
         ui32 PendingEvents;
         ui64 PerTabletStorageLimit;
+        ui64 TabletsTotal = 0;
+        ui64 TabletsOffset = 0;
         std::vector<TTabletInfo> TabletInfos;
         // Keyed by (TabletId, DirectBlockGroupIndex), matching TPersistentBufferBarriersManager::GetBarriers().
         std::map<std::pair<ui64, ui8>, ui64> EraseBarriers;
@@ -1018,6 +1020,9 @@ struct TPersistentBufferFormat {
     struct TEvGetPersistentBufferInfo : public TEventLocal<TEvGetPersistentBufferInfo, TEv::EvGetPersistentBufferInfo> {
         bool DescribeFreeSpace = false;
         bool DescribeTablets = false;
+        ui64 TabletsOffset = 0;
+        // Zero preserves the unbounded response for existing callers.
+        ui32 TabletsLimit = 0;
         TEvGetPersistentBufferInfo(bool describeFreeSpace = false, bool describeTablets = false)
             : DescribeFreeSpace(describeFreeSpace)
             , DescribeTablets(describeTablets)

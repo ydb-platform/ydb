@@ -5390,6 +5390,24 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
         UNIT_ASSERT(foundDbg0);
         UNIT_ASSERT(foundDbg2);
+
+        // Paginate namespaces independently, in the same stable order as the full response.
+        for (ui64 offset : {0ull, 1ull, 100ull}) {
+            auto request = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>(false, true);
+            request->TabletsOffset = offset;
+            request->TabletsLimit = 1;
+            SendToDDisk(ctx, disk.PBServiceId, request.release());
+            auto page = WaitFromDDisk<NDDisk::TEvPersistentBufferInfo>(ctx);
+            const ui64 expectedOffset = Min<ui64>(offset, 1);
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletsTotal, 2);
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletsOffset, expectedOffset);
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletInfos.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletInfos.front().DirectBlockGroupIndex,
+                info->Get()->TabletInfos[expectedOffset].DirectBlockGroupIndex);
+        }
+        auto stats = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(
+            ctx, disk.PBServiceId, new NDDisk::TEvGetPersistentBufferInfo(false, false));
+        UNIT_ASSERT(stats->Get()->TabletInfos.empty());
     }
 
     Y_UNIT_TEST(PersistentBufferWithoutChecksumsStoresHeaderUniqueIdAndRestoresPayload) {

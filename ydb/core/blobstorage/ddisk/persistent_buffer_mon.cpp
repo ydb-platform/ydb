@@ -34,6 +34,8 @@ namespace NKikimr {
     namespace {
 
         class TPersistentBufferMonActor : public TActorBootstrapped<TPersistentBufferMonActor> {
+            static constexpr ui32 TabletsPageSize = 100;
+
             struct TInflight {
                 TActorId Sender;
                 ui64 Cookie;
@@ -42,6 +44,7 @@ namespace NKikimr {
                 bool ShowTablets;
                 bool AutoRefresh;
                 ui32 RefreshRate;
+                THashMap<TString, ui64> TabletPages;
                 THashSet<TString> SelectedPBs; // empty == show all
                 std::vector<TActorId> AllPBs;
                 // Responses are paired with the *service* id (the well-known PB actor id we
@@ -241,8 +244,12 @@ namespace NKikimr {
                         << "window.__pbMonInstalled = true;"
                         << "var timer = null;"
                         << "var inFlight = false;"
+                        << "var pending = false;"
                         << "function buildUrl(){"
                         << "  var p = new URLSearchParams();"
+                        << "  new URLSearchParams(window.location.search).forEach(function(v,k){"
+                        << "    if (k.indexOf('tabletPage.') === 0) p.set(k,v);"
+                        << "  });"
                         << "  p.set('formPresent','1');"
                         << "  if (document.getElementById('pb-mon-autoRefresh').checked) p.set('autoRefresh','1');"
                         << "  if (document.getElementById('pb-mon-describeFreeSpace').checked) p.set('describeFreeSpace','1');"
@@ -255,18 +262,19 @@ namespace NKikimr {
                         << "  return window.location.pathname + '?' + p.toString();"
                         << "}"
                         << "function refresh(){"
-                        << "  if (inFlight) return;"
+                        << "  if (inFlight) { pending = true; return; }"
                         << "  inFlight = true;"
-                        << "  fetch(window.location.href, {headers:{'Accept':'text/html'}, cache:'no-store'})"
+                        << "  var requestedUrl = window.location.href;"
+                        << "  fetch(requestedUrl, {headers:{'Accept':'text/html'}, cache:'no-store'})"
                         << "    .then(function(r){return r.text();})"
                         << "    .then(function(html){"
                         << "      var doc = new DOMParser().parseFromString(html, 'text/html');"
                         << "      var fresh = doc.getElementById('pb-mon-content');"
                         << "      var cur = document.getElementById('pb-mon-content');"
-                        << "      if (fresh && cur) { cur.innerHTML = fresh.innerHTML; }"
+                        << "      if (fresh && cur && requestedUrl === window.location.href) { cur.innerHTML = fresh.innerHTML; }"
                         << "    })"
                         << "    .catch(function(){})"
-                        << "    .finally(function(){ inFlight = false; });"
+                        << "    .finally(function(){ inFlight = false; if (pending) { pending = false; refresh(); } });"
                         << "}"
                         << "function reschedule(){"
                         << "  if (timer) { clearInterval(timer); timer = null; }"
@@ -296,6 +304,14 @@ namespace NKikimr {
                         << "  e.preventDefault();"
                         << "  document.querySelectorAll('.pb-mon-pb').forEach(function(c){c.checked=false;});"
                         << "  applyNow();"
+                        << "});"
+                        << "document.addEventListener('click', function(e){"
+                        << "  var button = e.target.closest('.pb-mon-tablet-page');"
+                        << "  if (!button || button.disabled) return;"
+                        << "  var url = new URL(window.location.href);"
+                        << "  url.searchParams.set('tabletPage.' + button.dataset.pb, button.dataset.page);"
+                        << "  history.replaceState(null, '', url);"
+                        << "  refresh();"
                         << "});"
                         << "reschedule();"
                         << "})();</script>";
@@ -359,6 +375,17 @@ namespace NKikimr {
                             str << GenerateFreeSpaceSvg(b->FreeSpace, sectorsPerChunk);
                         }
                         if (inflight.ShowTablets) {
+                            const ui64 page = b->TabletsOffset / TabletsPageSize;
+                            const ui64 pages = b->TabletsTotal ? (b->TabletsTotal - 1) / TabletsPageSize + 1 : 1;
+                            str << "<h3>Tablets (" << b->TabletsTotal << ")</h3>";
+                            auto pageButton = [&](const char* label, ui64 targetPage, bool disabled) {
+                                str << "<button type=\"button\" class=\"pb-mon-tablet-page\" data-pb=\""
+                                    << htmlEscape(ToString(serviceId)) << "\" data-page=\"" << targetPage << "\""
+                                    << (disabled ? " disabled" : "") << ">" << label << "</button>";
+                            };
+                            pageButton("Previous", page ? page - 1 : 0, page == 0);
+                            str << " Page " << page + 1 << " of " << pages << " (" << TabletsPageSize << " per page) ";
+                            pageButton("Next", page + 1, page + 1 >= pages);
                             TABLE_CLASS ("table") {
                                 TABLEHEAD() {
                                     TABLER() {
@@ -473,6 +500,10 @@ namespace NKikimr {
                     auto infoReq = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>();
                     infoReq->DescribeFreeSpace = inflight.DescribeFreeSpace;
                     infoReq->DescribeTablets = inflight.ShowTablets;
+                    infoReq->TabletsLimit = TabletsPageSize;
+                    if (auto it = inflight.TabletPages.find(ToString(r.PersistentBufferId)); it != inflight.TabletPages.end()) {
+                        infoReq->TabletsOffset = it->second * TabletsPageSize;
+                    }
                     Send(r.PersistentBufferId, infoReq.release(), 0, reqCookie);
                     YDB_LOG_DEBUG("TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult) Send",
                         {"marker", "BSDD36"},
@@ -549,6 +580,18 @@ namespace NKikimr {
                     }
                 }
 
+                THashMap<TString, ui64> tabletPages;
+                for (const auto& pb : selectedPBs) {
+                    const TString name = "tabletPage." + pb;
+                    if (params.Has(name)) {
+                        ui64 page;
+                        if (!TryFromString(params.Get(name), page) || page > Max<ui64>() / TabletsPageSize) {
+                            return generateError("Failed to parse tablet page -- must be a non-negative integer");
+                        }
+                        tabletPages[pb] = page;
+                    }
+                }
+
                 const ui64 cookie = ++NextCookie;
                 Inflight[cookie] = TInflight{
                     .Sender = ev->Sender,
@@ -558,6 +601,7 @@ namespace NKikimr {
                     .ShowTablets = showTablets,
                     .AutoRefresh = autoRefresh,
                     .RefreshRate = refreshRate,
+                    .TabletPages = std::move(tabletPages),
                     .SelectedPBs = std::move(selectedPBs),
                 };
                 auto nwId = MakeBlobStorageNodeWardenID(SelfId().NodeId());

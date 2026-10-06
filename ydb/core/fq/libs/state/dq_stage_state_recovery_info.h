@@ -84,7 +84,7 @@ struct TStageStateRecoveryInfo {
 
     TStageStateRecoveryInfo() = default;;
 
-    explicit TStageStateRecoveryInfo(const TStageStateInfo& stage, EMode mode = EMode::Analyze);
+    explicit TStageStateRecoveryInfo(const TStageStateInfo& stage, EMode mode = EMode::HistoryReplay);
 
     // Earliest input needed to produce all hop ends at or after outputStartTimeUs.
     ui64 InputStartForOutput(const ui64 outputStartTimeUs) const;

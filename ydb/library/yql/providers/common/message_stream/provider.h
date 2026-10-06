@@ -4,8 +4,8 @@
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 
-namespace NYql::NMessageStream {
-const TStructExprType* MakeRawRowType(TExprContext& ctx);
+namespace NFq::NMessageStream {
+const NYql::TStructExprType* MakeRawRowType(NYql::TExprContext& ctx);
 TString ComposeAuthToken(const THashMap<TString, TString>& properties,
     const TString& fallbackToken = {}, const TString& serviceAccountId = {},
     const TString& serviceAccountSignature = {});

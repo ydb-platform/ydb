@@ -32,10 +32,13 @@
 #define SRC_LOG(prio, s) \
     LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 
-namespace NYql::NDq {
+namespace NFq::NMessageStream {
+
+using namespace NYql;
+using namespace NYql::NDq;
 
 using namespace NActors;
-using namespace NLog;
+using namespace NYql::NLog;
 using namespace NKikimr::NMiniKQL;
 
 namespace {
@@ -1100,7 +1103,7 @@ private:
 private:
     const TMessageStreamReadActorSettings Settings;
     const std::unique_ptr<IMessageStreamReadActorState> State;
-    THashMap<TPartitionKey, NMessageStream::TPartitionProgress>& Partitions;
+    THashMap<TPartitionKey, TPartitionProgress>& Partitions;
     TDqAsyncStats& IngressStats;
     TInstant& StartingMessageTimestamp;
     const ui64 InputIndex;
@@ -1168,4 +1171,4 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateMessageStreamReadA
     auto* actor = new TMessageStreamReadActor(std::move(settings), std::move(state));
     return {actor, actor};
 }
-} // namespace NYql::NDq
+} // namespace NFq::NMessageStream

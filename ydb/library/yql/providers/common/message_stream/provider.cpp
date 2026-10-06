@@ -1,7 +1,8 @@
 #include "provider.h"
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
-namespace NYql::NMessageStream {
+namespace NFq::NMessageStream {
+using namespace NYql;
 const TStructExprType* MakeRawRowType(TExprContext& ctx) {
     return ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
         ctx.MakeType<TItemExprType>("Data", ctx.MakeType<TDataExprType>(NUdf::EDataSlot::String))});

@@ -9,12 +9,12 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <functional>
 
-namespace NYql::NDq {
+namespace NFq::NMessageStream {
 
 struct TMessageStreamReadState {
-    THashMap<TPartitionKey, NMessageStream::TPartitionProgress> Partitions;
+    THashMap<NYql::NDq::TPartitionKey, TPartitionProgress> Partitions;
     TInstant StartingMessageTimestamp;
-    TDqAsyncStats IngressStats;
+    NYql::NDq::TDqAsyncStats IngressStats;
 };
 
 // Source-specific checkpoint encoding and consumer initialization. Neither
@@ -23,8 +23,8 @@ class IMessageStreamReadActorState {
 public:
     virtual ~IMessageStreamReadActorState() = default;
     virtual TMessageStreamReadState& GetReadState() = 0;
-    virtual void SaveState(const NDqProto::TCheckpoint&, TSourceState&) = 0;
-    virtual void LoadState(const TSourceState&) = 0;
+    virtual void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDq::TSourceState&) = 0;
+    virtual void LoadState(const NYql::NDq::TSourceState&) = 0;
     virtual void InitConsumerOffsets(NActors::TActorId, ui32,
         std::shared_ptr<NFq::IMessageStreamClient>, ui32) {}
     virtual bool ConsumerOffsetsInitialized() const { return true; }
@@ -55,7 +55,7 @@ struct TMessageStreamReadCluster {
 struct TMessageStreamReadActorSettings {
     ui64 InputIndex = 0;
     ui64 TaskId = 0;
-    TTxId TxId;
+    NYql::NDq::TTxId TxId;
     NActors::TActorId ComputeActorId;
     TString Stream;
     TString Consumer;
@@ -73,18 +73,18 @@ struct TMessageStreamReadActorSettings {
     TString MetricsSource;
     TVector<std::pair<TString, TString>> SensorLabels;
     bool EnableStreamingQueriesCounters = false;
-    TCollectStatsLevel StatsLevel = TCollectStatsLevel::None;
+    NYql::NDq::TCollectStatsLevel StatsLevel = NYql::NDq::TCollectStatsLevel::None;
     ::NMonitoring::TDynamicCounterPtr Counters;
     const NKikimr::NMiniKQL::THolderFactory* HolderFactory = nullptr;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-    using TMetaExtractor = std::function<std::pair<NUdf::TUnboxedValuePod, i64>(
+    using TMetaExtractor = std::function<std::pair<NYql::NUdf::TUnboxedValuePod, i64>(
         const NFq::TMessageStreamRecord&, const TString&)>;
     std::vector<TMetaExtractor> MetadataFields;
     std::function<void(const NFq::TMessageStreamRecord&)> TraceRecord;
     std::vector<TMessageStreamReadCluster> Clusters;
 };
 
-std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateMessageStreamReadActor(
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateMessageStreamReadActor(
     TMessageStreamReadActorSettings settings, std::unique_ptr<IMessageStreamReadActorState> state);
 
-} // namespace NYql::NDq
+} // namespace NFq::NMessageStream

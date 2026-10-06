@@ -56,7 +56,7 @@ using namespace NKikimr::NMiniKQL;
 namespace {
 LWTRACE_USING(DQ_PQ_PROVIDER);
 
-class TPqReadActorState final : public NInternal::TPqReadState, public IMessageStreamReadActorState {
+class TPqReadActorState final : public NInternal::TPqReadState, public NFq::NMessageStream::IMessageStreamReadActorState {
 public:
     using TClusterInfo = NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo;
     TPqReadActorState(ui64 inputIndex, ui64 taskId, const TTxId& txId,
@@ -64,7 +64,7 @@ public:
         TActorId compute, TActorId controlPlane, std::vector<TClusterInfo> clusters)
         : TPqReadState(inputIndex, taskId, {}, txId, std::move(source), std::move(readParams), compute, controlPlane)
         , Clusters(std::move(clusters)) {}
-    TMessageStreamReadState& GetReadState() override { return *this; }
+    NFq::NMessageStream::TMessageStreamReadState& GetReadState() override { return *this; }
     void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override {
         TPqReadState::SaveState(checkpoint, state);
     }
@@ -144,7 +144,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         ? static_cast<i64>(configuredReadBufferBytes)
         : bufferSize;
 
-    TMessageStreamReadActorSettings common;
+    NFq::NMessageStream::TMessageStreamReadActorSettings common;
     common.InputIndex = inputIndex;
     common.TaskId = taskId;
     common.TxId = txId;
@@ -218,7 +218,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
                 }
             }
         }
-        auto executor = std::make_shared<TTopicEventProcessor<TEvExecuteMessageStreamCallback>>();
+        auto executor = std::make_shared<TTopicEventProcessor<NFq::NMessageStream::TEvExecuteMessageStreamCallback>>();
         cluster.CreateClient = [driver, pqGateway, settings, info = clusters[i], credentials, executor](const TActorContext& ctx) {
             auto options = pqGateway->GetTopicClientSettings();
             if (settings.GetUseActorSystemThreadsInTopicClient()) {
@@ -263,7 +263,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     }
     auto state = std::make_unique<TPqReadActorState>(inputIndex, taskId, txId, std::move(settings),
         std::move(readTaskParamsMsg), computeActorId, controlPlaneActorId, std::move(clusters));
-    return CreateMessageStreamReadActor(std::move(common), std::move(state));
+    return NFq::NMessageStream::CreateMessageStreamReadActor(std::move(common), std::move(state));
 
 }
 

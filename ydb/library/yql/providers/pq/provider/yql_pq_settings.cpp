@@ -89,7 +89,7 @@ void TPqConfiguration::AddCluster(
     const TString authToken = credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
     clusterSettings.AuthToken = authToken;
 
-    const auto structuredTokenJson = NMessageStream::ComposeAuthToken(properties, authToken,
+    const auto structuredTokenJson = NFq::NMessageStream::ComposeAuthToken(properties, authToken,
         cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature());
     Tokens[clusterSettings.ClusterName] = structuredTokenJson;
 

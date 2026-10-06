@@ -3,7 +3,8 @@
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <library/cpp/testing/gtest/gtest.h>
 #include <util/generic/yexception.h>
-namespace NYql::NMessageStream {
+namespace NFq::NMessageStream {
+using namespace NYql;
 TEST(TMessageStreamCommon, SnapshotCompletion) {
     TPartitionProgress progress;
     EXPECT_FALSE(progress.IsFinishedInTableMode());
@@ -58,7 +59,7 @@ TEST(TMessageStreamCommon, AuthMethodsPreserveSecretsAndReferences) {
 }
 }
 
-namespace NYql::NMessageStream {
+namespace NFq::NMessageStream {
 TEST(TMessageStreamCommon, RawSchemaPreservesDataStringContract) {
     TExprContext ctx;
     const auto* row = MakeRawRowType(ctx);

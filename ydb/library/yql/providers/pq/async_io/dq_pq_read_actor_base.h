@@ -11,9 +11,9 @@
 
 namespace NYql::NDq::NInternal {
 
-class TPqReadState : public TMessageStreamReadState {
+class TPqReadState : public NFq::NMessageStream::TMessageStreamReadState {
 protected:
-    using TPartitionInfo = NMessageStream::TPartitionProgress;
+    using TPartitionInfo = NFq::NMessageStream::TPartitionProgress;
 
     const ui64 InputIndex = 0;
     const TTxId TxId;

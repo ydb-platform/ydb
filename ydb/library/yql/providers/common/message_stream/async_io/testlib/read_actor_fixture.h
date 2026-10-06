@@ -3,8 +3,9 @@
 #include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
 #include <util/string/cast.h>
 
-namespace NYql::NDq::NMessageStreamTest {
-using namespace NFq;
+namespace NFq::NMessageStream::NTest {
+using namespace NYql;
+using namespace NYql::NDq;
 
 class TControl final : public IMessageStreamPartitionControl {
 public:
@@ -153,4 +154,4 @@ struct TFixture {
         Setup.Execute([&](TFakeActor& actor) { actor.DqAsyncInput->CommitState(CreateCheckpoint(id)); });
     }
 };
-} // namespace NYql::NDq::NMessageStreamTest
+} // namespace NFq::NMessageStream::NTest

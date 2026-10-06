@@ -1,7 +1,7 @@
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/yql/providers/common/message_stream/async_io/testlib/read_actor_fixture.h>
 
-namespace NYql::NDq::NMessageStreamTest {
+namespace NFq::NMessageStream::NTest {
 Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
     Y_UNIT_TEST(StreamingDoesNotRequireWriteTimeOrEndOffset) {
         TFixture f;

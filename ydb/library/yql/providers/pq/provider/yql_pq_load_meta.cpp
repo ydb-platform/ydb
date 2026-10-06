@@ -95,7 +95,7 @@ public:
                 // Use a completion promise that always resolves with a value (never exceptional),
                 // so WaitAll does not see exceptions and DoApplyAsyncChanges is always invoked.
                 // Per-topic errors are handled in DoApplyAsyncChanges via pending.Future.GetValue().
-                handles.push_back(NMessageStream::CompletionFuture(pending.Future));
+                handles.push_back(NFq::NMessageStream::CompletionFuture(pending.Future));
             }
         };
 
@@ -136,7 +136,7 @@ private:
                     return TStatus::Error;
                 }
             }
-            const TStructExprType* itemType = NMessageStream::MakeRawRowType(ctx);
+            const TStructExprType* itemType = NFq::NMessageStream::MakeRawRowType(ctx);
 
             if (!pending.Meta.RowSpec) {
                 pending.Meta.RowSpec = ExpandType(pending.Meta.Pos, *itemType, ctx);

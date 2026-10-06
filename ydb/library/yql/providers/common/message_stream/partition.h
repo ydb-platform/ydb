@@ -3,7 +3,7 @@
 #include <util/generic/maybe.h>
 #include <optional>
 
-namespace NYql::NMessageStream {
+namespace NFq::NMessageStream {
 struct TPartitionProgress {
     std::optional<ui64> Offset; // Next unread offset.
     std::optional<ui64> EndOffset; // Exclusive snapshot boundary.

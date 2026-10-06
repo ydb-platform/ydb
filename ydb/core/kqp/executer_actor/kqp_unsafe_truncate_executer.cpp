@@ -16,9 +16,7 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-// Bounds the resolve->prepare loop below. A table that keeps splitting must eventually fail with
-// a clear error rather than spin: the scan fetcher has an unbounded re-resolve on schema errors
-// and it burns a core until the query times out.
+// Bounds retries of the resolve->prepare loop when shards remain unavailable.
 constexpr ui32 MaxResolveAttempts = 10;
 
 /*
@@ -84,7 +82,7 @@ private:
         if (ResolveAttempt > MaxResolveAttempts) {
             ReplyError(Ydb::StatusIds::UNAVAILABLE, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                 TStringBuilder() << "Unsafe truncate could not settle on a shard set after "
-                                 << MaxResolveAttempts << " attempts, the table keeps repartitioning");
+                                 << MaxResolveAttempts << " attempts: shards remain unavailable or the table keeps repartitioning");
             return;
         }
 
@@ -314,6 +312,7 @@ private:
                     continue;
                 }
                 ShardTables[partition.ShardId].push_back(table.TableId);
+                TxManager->AddShard(partition.ShardId, /* isOlap */ false, table.Path);
             }
         }
 
@@ -324,7 +323,6 @@ private:
         }
 
         for (const auto& [shardId, tables] : ShardTables) {
-            TxManager->AddShard(shardId, /* isOlap */ false, Tables.front().Path);
             TxManager->AddAction(shardId, IKqpTransactionManager::EAction::WRITE);
         }
 
@@ -388,6 +386,13 @@ private:
                         : TCoordinators(TVector<ui64>(record.GetDomainCoordinators().begin(),
                                                       record.GetDomainCoordinators().end())).Select(*TxId),
                 };
+                if (!result.Coordinator
+                    || (TxManager->GetCoordinator() && TxManager->GetCoordinator() != result.Coordinator))
+                {
+                    ReplyError(Ydb::StatusIds::UNAVAILABLE, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                        "Unable to choose a common coordinator for unsafe truncate");
+                    return;
+                }
                 if (TxManager->ConsumePrepareTransactionResult(std::move(result))) {
                     SendCommitToCoordinator();
                 }
@@ -449,6 +454,12 @@ private:
     }
 
     void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr& ev) {
+        const ui64 resultTxId = ev->Get()->Record.GetTxId();
+        if (Restarting || !TxId || resultTxId != *TxId) {
+            YDB_LOG_INFO("Ignoring a coordinator status of an abandoned unsafe truncate attempt",
+                {"txId", TxId ? *TxId : 0}, {"resultTxId", resultTxId}, {"restarting", Restarting});
+            return;
+        }
         const auto status = ev->Get()->GetStatus();
 
         switch (status) {
@@ -506,6 +517,13 @@ private:
         // A coordinator refusal restarts us from ExecuteState, which does not expect the events of
         // a fresh attempt.
         Become(&TKqpUnsafeTruncateExecuter::PrepareState);
+        // A busy shard may report the same overload as a splitting one. Give it time
+        // to recover instead of exhausting the attempt limit in a tight loop.
+        Schedule(ResolveRetryDelay, new TEvents::TEvWakeup());
+        ResolveRetryDelay = Min(ResolveRetryDelay * 2, TDuration::Seconds(1));
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr&) {
         AllocateTxIdAndResolve();
     }
 
@@ -536,7 +554,6 @@ private:
         Replied = true;
         auto issue = NYql::TIssue(message);
         NYql::SetIssueCode(issueCode, issue);
-        ResponseEv->ResultsSize();
         ResponseEv->BrokenLockShardId = 0;
         ResponseEv->Record.MutableResponse()->SetStatus(status);
         NYql::IssueToMessage(issue, ResponseEv->Record.MutableResponse()->MutableIssues()->Add());
@@ -577,7 +594,9 @@ private:
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
                 hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
+                hFunc(TEvTxProxy::TEvProposeTransactionStatus, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+                hFunc(TEvents::TEvWakeup, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 default:
                     UnexpectedEvent("PrepareState", ev->GetTypeRewrite());
@@ -620,6 +639,7 @@ private:
     IKqpTransactionManagerPtr TxManager;
     std::optional<ui64> TxId;
     ui32 ResolveAttempt = 0;
+    TDuration ResolveRetryDelay = TDuration::MilliSeconds(20);
     bool Planned = false;
     bool Restarting = false;
     bool Replied = false;

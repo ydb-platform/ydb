@@ -237,6 +237,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenReadMetadata, Handle);
         hFunc(TEvNodeWardenWriteMetadata, Handle);
         hFunc(TEvPrivate::TEvDereferencePDisk, Handle);
+        hFunc(TEvPrivate::TEvCleanupTemporaryPDisk, Handle);
+        hFunc(TEvents::TEvPoisonTaken, Handle);
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 

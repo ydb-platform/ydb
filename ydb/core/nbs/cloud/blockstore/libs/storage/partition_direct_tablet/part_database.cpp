@@ -252,9 +252,8 @@ bool TPartitionDatabase::ReadAllDeletedDDisks(
 {
     using TTable = TPartitionSchema::DeletedDDisks;
 
-    auto it = Table<TTable>()
-                  .Range()
-                  .Select<TTable::RecordId, TTable::Record>();
+    auto it =
+        Table<TTable>().Range().Select<TTable::RecordId, TTable::Record>();
 
     if (!it.IsReady()) {
         return false;
@@ -275,8 +274,7 @@ bool TPartitionDatabase::ReadAllDeletedDDisks(
     return true;
 }
 
-void TPartitionDatabase::AddDeletedDDisk(
-    const TDeletedDDiskRecordProto& record)
+void TPartitionDatabase::AddDeletedDDisk(const TDeletedDDiskRecordProto& record)
 {
     WriteDeletedDDisk(record);
 }

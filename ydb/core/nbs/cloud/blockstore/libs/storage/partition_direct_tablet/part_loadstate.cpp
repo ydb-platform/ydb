@@ -266,9 +266,7 @@ void TPartitionActor::CompleteLoadState(
     // initial allocation.
     SignalTabletActive(ctx);
 
-    ExecuteTx(
-        ctx,
-        CreateTx<TCleanupDeletedDDisks>());
+    ExecuteTx(ctx, CreateTx<TCleanupDeletedDDisks>());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

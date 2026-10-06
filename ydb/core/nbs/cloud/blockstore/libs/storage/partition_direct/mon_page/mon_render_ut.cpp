@@ -190,15 +190,15 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
     {
         TMonPageData data = MakeData();
         data.Page = EMonPage::DeletedDDisks;
-        const TVector<NYdb::NBS::PartitionDirect::NProto::
-                          EDeletedDDiskStatus> statuses = {
-            NYdb::NBS::PartitionDirect::NProto::
-                DELETED_DDISK_STATUS_REGISTERED,
-            NYdb::NBS::PartitionDirect::NProto::
-                DELETED_DDISK_STATUS_IN_PROGRESS,
-            NYdb::NBS::PartitionDirect::NProto::
-                DELETED_DDISK_STATUS_EXECUTED,
-        };
+        const TVector<NYdb::NBS::PartitionDirect::NProto::EDeletedDDiskStatus>
+            statuses = {
+                NYdb::NBS::PartitionDirect::NProto::
+                    DELETED_DDISK_STATUS_REGISTERED,
+                NYdb::NBS::PartitionDirect::NProto::
+                    DELETED_DDISK_STATUS_IN_PROGRESS,
+                NYdb::NBS::PartitionDirect::NProto::
+                    DELETED_DDISK_STATUS_EXECUTED,
+            };
 
         for (size_t i = 0; i < statuses.size(); ++i) {
             auto& record = data.DeletedDDiskRecords.emplace_back();

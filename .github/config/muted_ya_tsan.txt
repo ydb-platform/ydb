@@ -140,7 +140,6 @@ ydb/tests/fq/http_api py3test.sole chunk
 ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/backup Backup.CompactSearchIndexesWithSharedRowIdRoundTrip
-ydb/tests/functional/backup unittest.sole chunk
 ydb/tests/functional/backup/s3_path_style S3PathStyleBackup.DisableVirtualAddressing
 ydb/tests/functional/benchmarks_init py3test.[test_generator.py */*] chunk
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1
@@ -613,7 +612,6 @@ ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsv.test
 ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsvArrow.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW10T4SdkCompaction.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
-ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[17]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[18]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[19]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[4]
@@ -800,7 +798,6 @@ ydb/tests/stress/kv_volume_tool/tests py3test.sole chunk
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[1GB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[256MB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[4MB]
-ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[512MB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[64MB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[8MB]
 ydb/tests/stress/log/tests py3test.sole chunk
@@ -829,9 +826,7 @@ ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[light-
 ydb/tests/stress/statistics_workload/tests py3test.sole chunk
 ydb/tests/stress/statistics_workload/tests test_workload.py.TestStatisticsWorkload.test
 ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test
-ydb/tests/stress/system_tablet_backup/tests py3test.sole chunk
 ydb/tests/stress/system_tablet_backup/tests test_workload.py.TestSystemTabletBackup.test_workload
-ydb/tests/stress/system_tablet_backup/tests test_workload.py.TestSystemTabletBackup.test_workload_with_corrupted_backup
 ydb/tests/stress/topic/tests py3test.[*/*] chunk
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_0
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1

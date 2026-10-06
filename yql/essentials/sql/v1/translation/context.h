@@ -395,8 +395,8 @@ public:
     ui32 ResultRowsLimit = 0;
     ui64 ResultSizeLimit = 0;
     TString RuntimeLogLevel;
-    ui32 PragmaGroupByLimit = 1 << 6;
-    ui32 PragmaGroupByCubeLimit = 5;
+    ui32 PragmaGroupByLimit = Settings.GroupByLimit;
+    ui32 PragmaGroupByCubeLimit = Settings.GroupByCubeLimit;
     // if FlexibleTypes=true, emit TypeOrMember callable and resolve Type/Column uncertainty on type annotation stage, otherwise always emit Type
     bool FlexibleTypes = true;
     // see YQL-10265

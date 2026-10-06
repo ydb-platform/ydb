@@ -258,6 +258,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultNotNullColumn_InsertOrReplace+Is
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultNotNullColumn_InsertOrReplace-IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultNullableColumn_InsertOrReplace+IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultNullableColumn_InsertOrReplace-IsInsert
+ydb/core/kqp/ut/scheme KqpConstraints.ShowCreateTableAfterDropDefault
 ydb/core/kqp/ut/scheme KqpConstraints.UpdateDoesNotApplyDefaultWithIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.UpdateDoesNotApplyDefaultWithIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.AlterDatabaseChangeSchemeLimits-EnableAlterDatabase
@@ -405,6 +406,7 @@ ydb/core/tx/datashard/ut_order unittest.[*/*] chunk
 ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk
 ydb/core/tx/datashard/ut_validate_row_condition unittest.sole chunk
 ydb/core/tx/replication/controller/ut_schema_change AttachmentLifecycle.DropCascadeDuringAttachment
+ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropAsyncIndexWithRowConsistency
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithSchemaChangesEnabledAfterCreationReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithoutSchemaChangesReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropSyncIndexWithGlobalConsistency

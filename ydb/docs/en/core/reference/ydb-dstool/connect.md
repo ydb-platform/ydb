@@ -2,7 +2,7 @@
 
 {{ ydb-short-name }} DSTool (`ydb-dstool`) talks to the cluster over two independent channels:
 
-- **[gRPC](https://grpc.io/)** — [BSController](../../concepts/glossary.md#ds-controller) (BSC) and other service APIs: reading configuration, changing [PDisk](../../concepts/glossary.md#pdisk) status, [VDisk](../../concepts/glossary.md#vdisk) and group operations. BSC commands use gRPC when the selected endpoint is `grpc` or `grpcs`, and HTTP when it is `http` or `https`.
+- **[gRPC](https://grpc.io/)** — [BSController](../../concepts/glossary.md#ds-controller) (BSC) and other service APIs: reading configuration, changing [PDisk](../../concepts/glossary.md#pdisk) status, and operations with [VDisk](../../concepts/glossary.md#vdisk) and [storage groups](../../concepts/glossary.md#storage-group). BSC commands use gRPC when the selected endpoint is `grpc` or `grpcs`, and HTTP when it is `http` or `https`.
 - **HTTP** — requests to [{{ ydb-ui-name }}](../ydb-ui/index.md) (Viewer) and node monitoring. For example, some commands must check the current state of nodes and disks through the Viewer JSON API.
 
 The endpoint and authentication method determine which channel can connect and which identity the server uses to authorize the request. This page describes how the utility selects a protocol and host, how [anonymous authentication](../../security/authentication.md#anonymous) works, and how to use [token authentication](#credentials).
@@ -27,10 +27,10 @@ If you omit the protocol, the utility treats the endpoint as an HTTP Viewer addr
 Examples:
 
 ```bash
-# HTTP Viewer only (local cluster without TLS)
+# HTTP Viewer only (local test cluster without TLS)
 ydb-dstool -e http://localhost:8765 cluster list
 
-# gRPC only. cluster list stays on gRPC; commands that need Viewer data also use HTTP
+# gRPC only. cluster list only needs gRPC
 ydb-dstool -e grpc://localhost:2135 cluster list
 
 # Recommended for a cluster with authentication and TLS:
@@ -53,7 +53,7 @@ The utility picks an address in the following order:
 
 1. It takes endpoints of the required type from the `-e` list. If there are several, it picks a random host.
 2. On a connection error, it tries other endpoints of the same type (up to five attempts). A host whose HTTP request fails with a connection error or an HTTP error is skipped during later normal selection for the rest of the run, but the final fallback may still retry it.
-3. If there are no endpoints of the required type, the utility derives an address of the other type. Automatic conversion does not keep TLS:
+3. If there are no endpoints of the required type, the utility derives an address of the other type. Automatic conversion does not preserve whether TLS is used:
    - an HTTP request to a `grpc` or `grpcs` host goes to `http://HOST:<mon-port>` (default `8765`). It becomes `https` only when at least one `-e` value is `https` and none is `http`. A lone `grpcs://HOST:2135` endpoint does not enable HTTPS: the utility warns that no HTTP endpoint is set and sends HTTP requests to `http://HOST:8765` without encryption. On a cluster whose monitoring requires TLS this fails;
    - a request that requires gRPC, sent to an `http` or `https` host, always uses plaintext `grpc` on `--grpc-port`, including when the original endpoint is `https` and `--ca-file` is set. TLS for gRPC is used only for an explicit `grpcs` endpoint. BSC commands are not converted: they use the protocol of the selected endpoint. HTTP already covers the BSC API, so a list of only `http`/`https` endpoints does not switch BSC to gRPC.
 
@@ -94,19 +94,19 @@ To obtain the token, use the regular [authentication](../../security/authenticat
   -e grpcs://static-node-1.example.com:2135 \
   -d /Root \
   --user <user> \
-  auth get-token --force > /tmp/ydb-login.jwt
+  auth get-token --force > ydb-login.jwt
 ```
 
 If you do not pass `--password-file` or `--no-password`, the CLI prompts for the password. For the `root` user with an empty password during initial deployment, add `--no-password`.
 
 ### Token file format {#token-file-format}
 
-`--token-file` reads the **first line** of the file. A single word is treated as an `OAuth` token. Two words separated by a single space are treated as a scheme and a token: the first word is the scheme, the second is the token.
+`--token-file` reads the **first line** of the file. A single word is treated as an `OAuth` token. If there are two words separated by a single space, the first word is the authentication scheme and the second is the token.
 
-For a login token, set the scheme to `Login`. Otherwise HTTP Viewer receives `Authorization: OAuth <token>` and rejects the request (`403 Forbidden`), while gRPC BSC commands with the same file may still succeed: over gRPC the utility sends only the token body, without a scheme.
+For a login token, set the scheme to `Login`; otherwise HTTP Viewer receives `Authorization: OAuth <token>` and rejects the request (`403 Forbidden`), while gRPC BSC commands with the same file may still succeed: over gRPC the utility sends only the token body, without a scheme.
 
 ```bash
-{ printf 'Login '; cat /tmp/ydb-login.jwt; } > /path/to/ydb-token
+{ printf 'Login '; cat ydb-login.jwt; } > /path/to/ydb-token
 ```
 
 Example file contents:
@@ -115,7 +115,7 @@ Example file contents:
 Login eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-A token that ends with `@builtin` (for example `root@builtin`) is sent without a scheme.
+A token that ends with `@builtin` (for example `root@builtin`) is sent without an authentication scheme.
 
 ### How the token is sent {#token-transport}
 
@@ -129,8 +129,8 @@ A token that ends with `@builtin` (for example `root@builtin`) is sent without a
 
 The utility uses the **first** source it finds:
 
-1. `--token-file` — default scheme `OAuth` unless the file specifies one.
-2. `--iam-token-file` — scheme `Bearer`. Mutually exclusive with `--token-file`.
+1. `--token-file` — the default authentication scheme is `OAuth`, unless the file specifies one.
+2. `--iam-token-file` — uses the `Bearer` scheme. Mutually exclusive with `--token-file`.
 3. `YDB_TOKEN` environment variable — scheme `OAuth` unless specified.
 4. `IAM_TOKEN` environment variable — scheme `Bearer`.
 5. `~/.ydb/token` — scheme `OAuth`.
@@ -155,7 +155,7 @@ Anonymous access to a local cluster:
 ydb-dstool -e http://localhost:8765 cluster list
 ```
 
-A TLS cluster with login and password authentication. `pdisk list --check-leaked-slots` only reads data: BSC over the selected channel and, with this flag, Viewer over HTTP.
+A TLS cluster with login and password authentication:
 
 ```bash
 {{ ydb-cli }} --ca-file /path/to/ca.crt \

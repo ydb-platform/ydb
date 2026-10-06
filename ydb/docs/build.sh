@@ -18,6 +18,11 @@ DIR=${1:-"$(python3 -c "import os; print(os.path.realpath('${TMPDIR:-/tmp}'))")d
 
 check_dependency "yfm" "YFM builder" "https://diplodoc.com/docs/en/tools/docs/"
 
+# Generate variables from the same checkout as the documentation.
+# Dependencies: python3 -m pip install -r tools/feature_flags/requirements.txt
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$SCRIPT_DIR/tools/feature_flags/generate.py"
+
 echo "Starting YFM builder"
 echo "Output directory: $DIR"
 

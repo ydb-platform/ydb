@@ -16,7 +16,6 @@
 #include <aws/s3/model/ListObjectsV2Request.h>
 
 #include <cstdint>
-#include <cstdlib>
 #include <exception>
 #include <streambuf>
 
@@ -227,7 +226,7 @@ public:
             std::uint64_t Bytes = 0;
             std::exception_ptr Error;
             bool Failed = false;
-        } state{onChunk};
+        } state{onChunk, 0, nullptr, false};
 
         class TChunkStreamBuf : public std::streambuf {
         public:
@@ -282,14 +281,9 @@ public:
         if (state.Error) {
             std::rethrow_exception(state.Error);
         }
-        const auto& headers = response.GetResult().GetHeaderValueCollection();
-        const Aws::String contentLengthName = "content-length";
-        const auto length = headers.find(contentLengthName);
-        if (length != headers.end()) {
-            const long long expected = std::strtoll(length->second.c_str(), nullptr, 10);
-            if (expected < 0 || static_cast<unsigned long long>(expected) != state.Bytes) {
-                throw TMisuseException() << "GetObject error: incomplete read of " << key;
-            }
+        const long long expected = response.GetResult().GetContentLength();
+        if (expected < 0 || static_cast<unsigned long long>(expected) != state.Bytes) {
+            throw TMisuseException() << "GetObject error: incomplete read of " << key;
         }
     }
 

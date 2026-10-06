@@ -77,7 +77,15 @@ struct TValidateSettings {
     // always: every metadata.json needs a checksum sidecar.
     // auto: follow the backup's checksum declaration. ignore: skip metadata checksums.
     EMetadataChecksumMode MetadataChecksums = EMetadataChecksumMode::Always;
+    // 0: phase changes. 1 (-v): each object's metadata, then its data.
+    // 2 (-vv): reads, listings, and checksum files. 3+ (-vvv): exists probes, sizes, and I/O retries.
+    // Lines are delivered to Progress. An empty Progress prints nothing.
+    ui32 Verbosity = 0;
+    std::function<void(TStringBuf)> Progress;
 };
+
+// Called from RetryValidateIo. No-op unless a validation with Progress is running on this thread.
+void NoteValidateIoRetry(ui32 attempt, const std::exception& ex);
 
 // hardware_concurrency() - 1 when that is positive, otherwise 1.
 ui64 DefaultValidateThreads();
@@ -93,10 +101,11 @@ auto RetryValidateIo(ui32 retries, TFn&& fn, TSleep&& sleep) -> decltype(fn()) {
     for (ui32 attempt = 1;; ++attempt) {
         try {
             return fn();
-        } catch (const std::exception&) {
+        } catch (const std::exception& ex) {
             if (attempt >= attempts) {
                 throw;
             }
+            NoteValidateIoRetry(attempt, ex);
             const TDuration backoff = ValidateRetryBackoff(attempt);
             ui64 jitterMs = 0;
             if (backoff.MilliSeconds() > 0) {

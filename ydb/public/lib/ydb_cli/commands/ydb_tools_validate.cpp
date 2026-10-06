@@ -249,7 +249,8 @@ TValidateSettings MakeSettings(
     const TString& encryptionKey,
     const TMaybe<TVector<TString>>& expectedObjects,
     EValidateFormat format,
-    EMetadataChecksumMode metadataChecksums)
+    EMetadataChecksumMode metadataChecksums,
+    ui32 verbosity)
 {
     TValidateSettings settings;
     settings.SchemeOnly = schemeOnly;
@@ -259,6 +260,10 @@ TValidateSettings MakeSettings(
     settings.ExpectedObjects = expectedObjects;
     settings.Format = format;
     settings.MetadataChecksums = metadataChecksums;
+    settings.Verbosity = verbosity;
+    settings.Progress = [](TStringBuf line) {
+        Cerr << line << Endl;
+    };
     return settings;
 }
 
@@ -267,7 +272,8 @@ TValidateSettings MakeSettings(
 TCommandValidate::TCommandValidate()
     : TClientCommandTree("validate", {},
         "Check byte-level integrity of a full backup or exported schema objects without restoring them. "
-        "A successful result does not prove that the backup can be imported.")
+        "A successful result does not prove that the backup can be imported. "
+        "Progress is written to stderr. -v, -vv, and -vvv add detail.")
 {
     AddCommand(std::make_unique<TCommandValidateFromS3>());
     AddCommand(std::make_unique<TCommandValidateFromNfs>());
@@ -279,7 +285,10 @@ void TCommandValidate::Config(TConfig& config) {
 }
 
 TCommandValidateBase::TCommandValidateBase(const TString& name, const TString& description)
-    : TYdbCommand(name, {}, description)
+    : TYdbCommand(name, {}, TStringBuilder() << description
+        << " Progress is written to stderr: phase changes by default, "
+        "each object's metadata and data checks with -v, "
+        "and per-file traces with -vv and -vvv.")
 {
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Path of a full backup or one exported object", true}},
@@ -464,7 +473,6 @@ void TCommandValidateFromS3::Parse(TConfig& config) {
 }
 
 int TCommandValidateFromS3::Run(TConfig& config) {
-    Y_UNUSED(config);
     if (!DecodeEncryptionKey()) {
         return EXIT_FAILURE;
     }
@@ -491,7 +499,7 @@ int TCommandValidateFromS3::Run(TConfig& config) {
     TS3BackupStorage storage(CreateS3ClientWrapper(settings), NumberOfRetries);
     return PrintReport(storage, paths, MakeSettings(
         SchemeOnly, FailFast, Threads, EncryptionKey, expectedObjects, ParseValidateFormat(Format),
-        ParseMetadataChecksumMode(MetadataChecksums)));
+        ParseMetadataChecksumMode(MetadataChecksums), config.VerbosityLevel));
 }
 
 TCommandValidateFromNfs::TCommandValidateFromNfs()
@@ -519,7 +527,6 @@ void TCommandValidateFromNfs::Config(TConfig& config) {
 }
 
 int TCommandValidateFromNfs::Run(TConfig& config) {
-    Y_UNUSED(config);
     if (!DecodeEncryptionKey()) {
         return EXIT_FAILURE;
     }
@@ -536,7 +543,7 @@ int TCommandValidateFromNfs::Run(TConfig& config) {
     TFsBackupStorage storage(FsPath, NumberOfRetries);
     return PrintReport(storage, paths, MakeSettings(
         SchemeOnly, FailFast, Threads, EncryptionKey, LoadExpectedObjects(ExpectedObjectsFile),
-        ParseValidateFormat(Format), ParseMetadataChecksumMode(MetadataChecksums)));
+        ParseValidateFormat(Format), ParseMetadataChecksumMode(MetadataChecksums), config.VerbosityLevel));
 }
 
 } // namespace NYdb::NConsoleClient

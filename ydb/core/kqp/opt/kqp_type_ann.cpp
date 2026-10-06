@@ -2522,7 +2522,7 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
             TStringBuilder() << "Index does not exist"));
         return TStatus::Error;
     }
-    if (indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+    if (!TIndexDescription::IsVectorIndex(indexDesc->Type)) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_Index)->Pos()),
             TStringBuilder() << "Index is not a vector index"));
         return TStatus::Error;
@@ -2588,6 +2588,18 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
     }
 
     if (node->Child(TKqpCnVectorResolve::idx_WithData)->Content() == "true") {
+        const auto& embeddingColumn = indexDesc->KeyColumns.back();
+        if (!outputColSet.contains(embeddingColumn)) {
+            auto type = tableDesc->GetColumnType(embeddingColumn);
+            YQL_ENSURE(type, "No embedding column: " << embeddingColumn);
+            auto itemType = ctx.MakeType<TItemExprType>(embeddingColumn, type);
+            if (!itemType->Validate(node->Pos(), ctx)) {
+                return TStatus::Error;
+            }
+            rowItems.push_back(itemType);
+            outputColSet.insert(embeddingColumn);
+        }
+
         // Then index data columns which are not also part of the PK
         for (const auto& dataColumn : indexDesc->DataColumns) {
             YQL_ENSURE(inputColSet.contains(dataColumn), "No data column in input: " << dataColumn);

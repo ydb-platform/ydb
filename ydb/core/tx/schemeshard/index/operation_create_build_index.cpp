@@ -70,7 +70,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding a unique index to an existing table is disabled")};
             }
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
@@ -93,8 +94,11 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
-    if (op.GetIsRebuild() && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "REBUILD INDEX is only supported for vector_kmeans_tree indexes")};
+    if (op.GetIsRebuild()
+            && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+            && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed,
+            "REBUILD INDEX is only supported for vector indexes")};
     }
 
     auto counts = GetIndexObjectCounts(indexDesc);
@@ -299,7 +303,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             result.push_back(createImplTable(std::move(implTableDesc)));
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
             const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
             NKikimrSchemeOp::TTableDescription indexLevelTableDesc, indexPostingTableDesc, indexPrefixTableDesc;
             // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
@@ -310,7 +315,13 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                     indexPrefixTableDesc = indexDesc.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition);
                 }
             }
-            const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+            THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+            // Vector search ranks posting rows by the embedding even when the
+            // index is otherwise non-covering. Keep the permanent posting
+            // table schema consistent with the transient build table schema.
+            const auto indexColumns = NTableIndex::ExtractInfo(indexDesc);
+            Y_ENSURE(!indexColumns.KeyColumns.empty());
+            indexDataColumns.insert(indexColumns.KeyColumns.back());
             result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
             result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
             if (prefixVectorIndex) {

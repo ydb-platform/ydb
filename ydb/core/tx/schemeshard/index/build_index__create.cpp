@@ -414,11 +414,19 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
             break;
         }
-        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
+        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
+        case Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex: {
+            const bool isHnsw = index.type_case()
+                == Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex;
+            const auto& requestedSettings = isHnsw
+                ? index.global_hnsw_index().vector_settings()
+                : index.global_vector_kmeans_tree_index().vector_settings();
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+            buildInfo.IndexType = isHnsw
+                ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw
+                : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
 
             if (buildInfo.IsRebuild) {
@@ -429,12 +437,12 @@ private:
                 const auto* existingDesc = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
                     &existingIndex->SpecializedIndexDescription);
                 if (!existingDesc) {
-                    explain = "REBUILD INDEX is only supported for vector_kmeans_tree indexes";
+                    explain = "REBUILD INDEX is only supported for vector indexes";
                     return false;
                 }
                 vectorIndexKmeansTreeDescription = *existingDesc;
                 // Merge user-provided settings over existing ones
-                const auto& userSettings = index.global_vector_kmeans_tree_index().vector_settings();
+                const auto& userSettings = requestedSettings;
                 if (userSettings.has_settings()) {
                     const auto& userVectorSettings = userSettings.settings();
                     const auto& existingVectorSettings = existingDesc->GetSettings().settings();
@@ -453,7 +461,7 @@ private:
                 }
                 vectorIndexKmeansTreeDescription.MutableSettings()->MergeFrom(userSettings);
             } else {
-                *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
+                *vectorIndexKmeansTreeDescription.MutableSettings() = requestedSettings;
             }
 
             if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {

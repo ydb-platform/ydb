@@ -990,6 +990,7 @@ message TReadVectorTopK {
     optional string TargetVector = 3;
     optional uint32 Limit = 4;
     repeated uint32 DistinctColumns = 5;
+    optional uint32 HnswEfSearch = 6 [default = 15];
 }
 
 message TKqpStreamLookupSettings {

@@ -13,6 +13,7 @@ SRCS(
    client_session_ut.cpp
    deferred_session_creation_ut.cpp
    query_stats_ut.cpp
+   transaction_session_ut.cpp
    virtual_timestamp_ut.cpp
 )
 
@@ -24,6 +25,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/impl/session
     ydb/public/sdk/cpp/src/client/query/impl 
     ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/types
 )
 

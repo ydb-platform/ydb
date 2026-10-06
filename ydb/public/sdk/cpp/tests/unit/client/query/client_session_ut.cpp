@@ -9,6 +9,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/cast.h>
 
+#include <exception>
+#include <stdexcept>
+
 using namespace NYdb;
 using namespace NYdb::NQuery;
 
@@ -175,3 +178,44 @@ Y_UNIT_TEST(CloseReasonCommandsAreCompleteAndDeduplicated) {
 }
 
 }
+
+Y_UNIT_TEST_SUITE(QuerySessionStatusInterception) {
+
+    Y_UNIT_TEST(ExceptionForwardedAndSessionReleasedBeforeCompletion) {
+        auto session = std::make_shared<TTestKqpSession>("", "");
+        std::weak_ptr<TTestKqpSession> weakSession = session;
+        auto sourcePromise = NThreading::NewPromise<TStatus>();
+        bool callbackCalled = false;
+        auto result = NSessionPool::InjectSessionStatusInterception<TStatus>(
+            session,
+            sourcePromise.GetFuture(),
+            true,
+            TDuration::Seconds(1),
+            [&callbackCalled](const TStatus&, TKqpSessionCommon&) {
+                callbackCalled = true;
+            });
+        session.reset();
+        UNIT_ASSERT(!weakSession.expired());
+
+        bool completionCalled = false;
+        result.Subscribe([&weakSession, &completionCalled](const NThreading::TFuture<TStatus>& future) {
+            UNIT_ASSERT(future.HasException());
+            UNIT_ASSERT(weakSession.expired());
+            completionCalled = true;
+        });
+
+        auto exception = std::make_exception_ptr(std::runtime_error("interception error"));
+        sourcePromise.SetException(exception);
+
+        UNIT_ASSERT(completionCalled);
+        UNIT_ASSERT(!callbackCalled);
+        std::exception_ptr forwardedException;
+        try {
+            result.TryRethrow();
+        } catch (const std::runtime_error&) {
+            forwardedException = std::current_exception();
+        }
+        UNIT_ASSERT(forwardedException == exception);
+    }
+
+} // Y_UNIT_TEST_SUITE(QuerySessionStatusInterception)

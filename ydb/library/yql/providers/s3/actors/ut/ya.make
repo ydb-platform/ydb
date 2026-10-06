@@ -7,15 +7,12 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/providers/common/ut_helpers
     yql/essentials/minikql
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
 )
 
 IF (CLANG AND NOT WITH_VALGRIND)
-
-    CFLAGS(-DENABLE_S3_READ_ACTOR_TESTS)
 
     SRCS(
         yql_arrow_column_converters_ut.cpp
@@ -24,6 +21,7 @@ IF (CLANG AND NOT WITH_VALGRIND)
 
     PEERDIR(
         ydb/library/yql/providers/common/http_gateway/mock
+        ydb/library/yql/providers/common/ut_helpers
         ydb/library/yql/udfs/common/clickhouse/client
     )
 

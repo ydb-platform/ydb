@@ -227,61 +227,55 @@ void TCommandImportBase::FillItemsFromItemParam(NImport::TImportFromS3Settings& 
 #if defined(_win32_)
     ApplyItems(settings);
 #else
-    InitAwsAPI();
-    try {
-        auto s3Client = CreateS3ClientWrapper(settings);
-        for (auto item : Items) {
-            std::optional<TString> token;
-            if (!item.Source.empty() && item.Source.back() != '/') {
-                item.Source += "/";
-            }
-            if (!item.Destination.empty() && item.Destination.back() == '.') {
-                item.Destination.pop_back();
-            }
-            if (item.Destination.empty() || item.Destination.back() != '/') {
-                item.Destination += "/";
-            }
-
-            TVector<NImport::TImportFromS3Settings::TItem> items;
-            do {
-                auto listResult = s3Client->ListObjectKeys(item.Source, token);
-                token = listResult.NextToken;
-                for (TStringBuf key : listResult.Keys) {
-                    if (IsSupportedObject(key)) {
-                        key.ChopSuffix("/");
-                        TString destination;
-                        if (const auto suffix = key.substr(item.Source.size())) {
-                            destination = item.Destination + suffix;
-                        } else {
-                            destination = NormalizePath(item.Destination);
-                        }
-                        items.push_back({TString(key), std::move(destination)});
-                    }
-                }
-            } while (token);
-
-            Sort(items, [](const auto& a, const auto& b) {
-                return a.Src < b.Src;
-            });
-
-            THashSet<TString> seen;
-            for (auto& item : items) {
-                TStringBuf key = item.Src;
-                // try to skip /<index_name>/<indexImplTable>
-                key.RNextTok('/');
-                key.RNextTok('/');
-                if (seen.contains(key)) {
-                    continue;
-                }
-                seen.insert(TString{item.Src});
-                settings.AppendItem(std::move(item));
-            }
+    TAwsApiGuard awsApi;
+    auto s3Client = CreateS3ClientWrapper(settings);
+    for (auto item : Items) {
+        std::optional<TString> token;
+        if (!item.Source.empty() && item.Source.back() != '/') {
+            item.Source += "/";
         }
-    } catch (...) {
-        ShutdownAwsAPI();
-        throw;
+        if (!item.Destination.empty() && item.Destination.back() == '.') {
+            item.Destination.pop_back();
+        }
+        if (item.Destination.empty() || item.Destination.back() != '/') {
+            item.Destination += "/";
+        }
+
+        TVector<NImport::TImportFromS3Settings::TItem> items;
+        do {
+            auto listResult = s3Client->ListObjectKeys(item.Source, token);
+            token = listResult.NextToken;
+            for (TStringBuf key : listResult.Keys) {
+                if (IsSupportedObject(key)) {
+                    key.ChopSuffix("/");
+                    TString destination;
+                    if (const auto suffix = key.substr(item.Source.size())) {
+                        destination = item.Destination + suffix;
+                    } else {
+                        destination = NormalizePath(item.Destination);
+                    }
+                    items.push_back({TString(key), std::move(destination)});
+                }
+            }
+        } while (token);
+
+        Sort(items, [](const auto& a, const auto& b) {
+            return a.Src < b.Src;
+        });
+
+        THashSet<TString> seen;
+        for (auto& item : items) {
+            TStringBuf key = item.Src;
+            // try to skip /<index_name>/<indexImplTable>
+            key.RNextTok('/');
+            key.RNextTok('/');
+            if (seen.contains(key)) {
+                continue;
+            }
+            seen.insert(TString{item.Src});
+            settings.AppendItem(std::move(item));
+        }
     }
-    ShutdownAwsAPI();
 #endif
 }
 

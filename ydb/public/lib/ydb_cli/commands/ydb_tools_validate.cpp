@@ -487,18 +487,11 @@ int TCommandValidateFromS3::Run(TConfig& config) {
     }
 
     const TMaybe<TVector<TString>> expectedObjects = LoadExpectedObjects(ExpectedObjectsFile);
-    InitAwsAPI();
-    try {
-        TS3BackupStorage storage(CreateS3ClientWrapper(settings), NumberOfRetries);
-        const int code = PrintReport(storage, paths, MakeSettings(
-            SchemeOnly, FailFast, Threads, EncryptionKey, expectedObjects, ParseValidateFormat(Format),
-            ParseMetadataChecksumMode(MetadataChecksums)));
-        ShutdownAwsAPI();
-        return code;
-    } catch (...) {
-        ShutdownAwsAPI();
-        throw;
-    }
+    TAwsApiGuard awsApi;
+    TS3BackupStorage storage(CreateS3ClientWrapper(settings), NumberOfRetries);
+    return PrintReport(storage, paths, MakeSettings(
+        SchemeOnly, FailFast, Threads, EncryptionKey, expectedObjects, ParseValidateFormat(Format),
+        ParseMetadataChecksumMode(MetadataChecksums)));
 }
 
 TCommandValidateFromNfs::TCommandValidateFromNfs()

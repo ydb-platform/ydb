@@ -89,8 +89,8 @@ def manifest_sources(manifest):
             raise SnippetError("{}: include must be a nonempty list".format(sdk))
         for pattern in patterns:
             checked_path(pattern)
-            if not pattern.startswith("ydb_tech/"):
-                raise SnippetError("{}: include paths must stay inside ydb_tech/".format(sdk))
+            if not pattern.startswith(("examples/ydb_tech/", "ydb/examples/ydb_tech/")):
+                raise SnippetError("{}: include paths must stay inside examples/ydb_tech/".format(sdk))
     return sources
 
 

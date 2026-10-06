@@ -31,11 +31,11 @@ class PreparationTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.cache = self.root / "cache"
         self.data = b"// [BEGIN topic_create]\ncreateTopic();\n// [END topic_create]\n"
-        self.path = "ydb_tech/topic/main.ts"
+        self.path = "examples/ydb_tech/topic/main.ts"
         self.source = {
             "repository": "https://github.com/ydb-platform/ydb-js-sdk",
             "ref": {"kind": "branch", "name": "docs/topic-snippets"},
-            "include": ["ydb_tech/topic/*.ts"],
+            "include": ["examples/ydb_tech/topic/*.ts"],
         }
         self.manifest = {"version": 1, "staging-root": cli.STAGING_ROOT, "sources": {"javascript": self.source}}
         self.lock = {"version": 1, "sources": {"javascript": {
@@ -45,7 +45,7 @@ class PreparationTests(unittest.TestCase):
         }}}
         self.page = self.root / "ru" / "topic.md"
         self.page.parent.mkdir()
-        self.page.write_text("{% code \"/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts\" "
+        self.page.write_text("{% code \"/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts\" "
                              "lang=\"typescript\" lines=\"[BEGIN topic_create]-[END topic_create]\" %}\n")
 
     def prepare(self, **kwargs):
@@ -87,13 +87,13 @@ class PreparationTests(unittest.TestCase):
         with self.assertRaisesRegex(cli.SnippetError, "manifest differs"):
             self.prepare(github=FakeGitHub(self.data))
         self.source["ref"]["name"] = "docs/topic-snippets"
-        self.source["include"] = ["ydb_tech/other/*.ts"]
+        self.source["include"] = ["examples/ydb_tech/other/*.ts"]
         with self.assertRaisesRegex(cli.SnippetError, "include differs"):
             self.prepare(github=FakeGitHub(self.data))
 
     def test_lock_rejects_traversal_and_nonallowlisted_paths(self):
         files = self.lock["sources"]["javascript"]["files"]
-        for path in ("../main.ts", "/main.ts", "ydb_tech/../main.ts", "ydb_tech/other/main.ts"):
+        for path in ("../main.ts", "/main.ts", "examples/ydb_tech/../main.ts", "examples/ydb_tech/other/main.ts"):
             with self.subTest(path=path):
                 files.clear()
                 files[path] = file_info(self.data)
@@ -199,8 +199,9 @@ class SourceSelectionTests(unittest.TestCase):
                 self.calls.append(suffix)
                 fixtures = {
                     "git/commits/" + "a" * 40: {"tree": {"sha": "root"}},
-                    "git/trees/root": {"tree": [{"path": "ydb_tech", "type": "tree", "sha": "docs"},
+                    "git/trees/root": {"tree": [{"path": "examples", "type": "tree", "sha": "examples"},
                                                    {"path": "src", "type": "tree", "sha": "sdk-code"}]},
+                    "git/trees/examples": {"tree": [{"path": "ydb_tech", "type": "tree", "sha": "docs"}]},
                     "git/trees/docs": {"tree": [{"path": "topic", "type": "tree", "sha": "topic"}]},
                     "git/trees/topic?recursive=1": {"tree": [
                         {"path": "main.ts", "type": "blob", "mode": "100644", "sha": "b" * 40, "size": 10},
@@ -209,8 +210,8 @@ class SourceSelectionTests(unittest.TestCase):
                 }
                 return fixtures[suffix]
         github = TreeGitHub()
-        source = {"repository": "https://github.com/ydb-platform/ydb-js-sdk", "include": ["ydb_tech/topic/*.ts"]}
-        self.assertEqual(list(github.files(source, "a" * 40)), ["ydb_tech/topic/main.ts"])
+        source = {"repository": "https://github.com/ydb-platform/ydb-js-sdk", "include": ["examples/ydb_tech/topic/*.ts"]}
+        self.assertEqual(list(github.files(source, "a" * 40)), ["examples/ydb_tech/topic/main.ts"])
         self.assertNotIn("git/trees/sdk-code", github.calls)
 
     def test_annotated_tag_is_resolved_to_commit(self):

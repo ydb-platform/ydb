@@ -5,42 +5,42 @@ sources:
     requested-ref:
       kind: branch
       name: docs/topic-snippets
-    resolved-commit: 3c163ca44d9bbda77e89b5d2293bd14c5c761747
+    resolved-commit: bd0d7efa4ce067cae0322a2c2bd03763b01f375a
     include:
-    - ydb_tech/topic/main.go
+    - examples/ydb_tech/topic/main.go
     files:
-      ydb_tech/topic/main.go:
+      examples/ydb_tech/topic/main.go:
         git-blob: 4313ed4e4cb965d19ad8efd0eafb52e8787f72f7
         size: 17516
         sha256: 05e2f0084647f52f3de0ee713632784bd193bafa048316451459faa1e862105f
   java:
-    repository: https://github.com/ydb-platform/ydb-java-sdk
+    repository: https://github.com/ydb-platform/ydb-java-examples
     requested-ref:
       kind: branch
       name: docs/topic-snippets
-    resolved-commit: 342f55195c86ce1139ed3c6de054ad2d197002db
+    resolved-commit: c7e39602fa587ab1c3bbde58c8f018f89d7ae5be
     include:
-    - ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java
+    - examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java
     files:
-      ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java:
-        git-blob: 5c118b887a45b88287a1668e5a40682d129a1dc2
-        size: 26463
-        sha256: 5d8aa2584f2ba43bdfcdecccac24bd580fe763520fe8a3e92e5b1c332aabcb31
+      examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java:
+        git-blob: d333971637bd1071f8b35803993f56ec61cc4fab
+        size: 26766
+        sha256: eec321f3b79e2fcb48438103f2c6f3f21d306df16c064b11efdd910956edab46
   python:
     repository: https://github.com/ydb-platform/ydb-python-sdk
     requested-ref:
       kind: branch
       name: docs/topic-snippets
-    resolved-commit: 697e927341285a499056839ed593c23b8725b572
+    resolved-commit: 3138cc3ccee2bfbd5aef08329f34a3c47add2598
     include:
-    - ydb_tech/topic/sync_example.py
-    - ydb_tech/topic/async_example.py
+    - examples/ydb_tech/topic/sync_example.py
+    - examples/ydb_tech/topic/async_example.py
     files:
-      ydb_tech/topic/async_example.py:
+      examples/ydb_tech/topic/async_example.py:
         git-blob: d0a2c65551289a3bfe73a2fb625b5063aa28e8df
         size: 11674
         sha256: 32d4674a1ad59fd864cc463cdec0b1c1593afb7da31526074dd91c79820a18b5
-      ydb_tech/topic/sync_example.py:
+      examples/ydb_tech/topic/sync_example.py:
         git-blob: 678df727346cc181c4220bccb388068ce9b7011e
         size: 10914
         sha256: cce7780e54e34e830c94528c06a3dbb3293baa26762efe45a3125aad73a976c1
@@ -49,11 +49,11 @@ sources:
     requested-ref:
       kind: branch
       name: docs/topic-snippets
-    resolved-commit: 485b3d7f8ca8c4f727657f6dc5c2e205397d5c37
+    resolved-commit: 02a6ac75dbbf35b2115b54d9c15539ed66037765
     include:
-    - ydb_tech/topic/Program.cs
+    - examples/ydb_tech/topic/Program.cs
     files:
-      ydb_tech/topic/Program.cs:
+      examples/ydb_tech/topic/Program.cs:
         git-blob: 65867d60e48b66e82067ebaa0d1668e7bc25bece
         size: 6089
         sha256: 0d9320221603c8f275c461f3b1a6c36fe8ee203316704fde3c68dece5ad8c4d6
@@ -62,11 +62,11 @@ sources:
     requested-ref:
       kind: branch
       name: docs/topic-snippets
-    resolved-commit: 912c141d51f0e437ff0a41f3e8524880764d2e89
+    resolved-commit: f73cd16b95118882854e259fd4837e01e4a32aed
     include:
-    - ydb_tech/topic/main.ts
+    - examples/ydb_tech/topic/main.ts
     files:
-      ydb_tech/topic/main.ts:
+      examples/ydb_tech/topic/main.ts:
         git-blob: 29f133c669f80e06ff074d9d2e6f3cc3504aad85
         size: 8430
         sha256: 9956de07d6aa1358a74e8d9d6295b20fd8527c7249bfa3ee8fdcde87e140811d
@@ -75,11 +75,11 @@ sources:
     requested-ref:
       kind: branch
       name: docs/topic-snippets
-    resolved-commit: adbd940de26c0ebb19d52dfcb23950ae9a152546
+    resolved-commit: 38adc5f47d91c61cf541fbd2fd0b1a5d65fb4100
     include:
-    - ydb_tech/topic/main.rs
+    - ydb/examples/ydb_tech/topic/main.rs
     files:
-      ydb_tech/topic/main.rs:
+      ydb/examples/ydb_tech/topic/main.rs:
         git-blob: 37c759f7e70c4328899ad3ac7a974540de0fe665
         size: 7414
         sha256: 55d00414f2459b5c98f5e87e3eb9ddc60686f1100aa7e06ef1252cc70d61168f
@@ -88,11 +88,11 @@ sources:
     requested-ref:
       kind: branch
       name: docs/topic-snippets
-    resolved-commit: 274af472c59424734731d525b95eba28fe52a101
+    resolved-commit: 6d43ddc861a04ee01f6711b4ecc54d7a9e981b7a
     include:
-    - ydb_tech/topic/main.cpp
+    - examples/ydb_tech/topic/main.cpp
     files:
-      ydb_tech/topic/main.cpp:
-        git-blob: b75ee5d51a1ebcf42212835d14b88770ddfbcb3f
-        size: 22868
-        sha256: ba804e783b1233934565ff488e61bfd94e7e0ff60fff13d84dec48c42ba190bf
+      examples/ydb_tech/topic/main.cpp:
+        git-blob: cc083047736da4961f5f80548ad4637bb213f0df
+        size: 23821
+        sha256: 18e69eb221fea4127c16c8d74fd20b4c9d2d0fa535c2c9724a3545afdfb6db3b

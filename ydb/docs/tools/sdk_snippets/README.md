@@ -44,14 +44,14 @@ the manifest and lock together. Normal builds never update the lock.
 
 ## Select files and regions
 
-`include` accepts exact paths and glob patterns within `ydb_tech/`. Choose the
+`include` accepts exact paths and glob patterns within `examples/ydb_tech/` (or `ydb/examples/ydb_tech/` for Rust). Choose the
 smallest set required by the documentation. A missing path, empty match, symlink,
 submodule, oversized file or truncated GitHub tree fails the update.
 
 Both documentation languages use the same root-relative path and region:
 
 ```markdown
-{% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_create]-[END topic_create]" %}
+{% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_create]-[END topic_create]" %}
 ```
 
 Regions use Latin letters, digits and underscores. They must be unique within a

@@ -2,7 +2,7 @@
 
 This article provides examples of using the {{ ydb-short-name }} SDK to work with [topics](../../concepts/datamodel/topic.md).
 
-Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [add a reader](../ydb-cli/topic-consumer-add.md).
+The snippets below are parts of the complete executable examples linked in the next section. The applications create uniquely named topics and consumers and remove them after completing the scenarios. Setup and helper functions are included in those applications.
 
 ## Examples of working with topics
 
@@ -10,25 +10,32 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
 
 - C++
 
-  [Reader example on GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_reader)
+  [Executable example on GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/tree/6d43ddc861a04ee01f6711b4ecc54d7a9e981b7a/examples/ydb_tech/topic)
+
 - Go
 
-  [Examples on GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/master/examples/topic)
+  [Executable example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/bd0d7efa4ce067cae0322a2c2bd03763b01f375a/examples/ydb_tech/topic)
+
 - Java
 
-  [Examples on GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/topic)
+  [Executable example on GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/c7e39602fa587ab1c3bbde58c8f018f89d7ae5be/examples/ydb_tech/topic)
+
 - Python
 
-  [Examples on GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
+  [Executable example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/3138cc3ccee2bfbd5aef08329f34a3c47add2598/examples/ydb_tech/topic)
+
 - C#
 
-  [Examples on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
+  [Executable example on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/02a6ac75dbbf35b2115b54d9c15539ed66037765/examples/ydb_tech/topic)
+
 - JavaScript
 
-  [Examples on GitHub](https://github.com/ydb-platform/ydb-js-sdk/tree/main/examples/topic)
+  [Executable example on GitHub](https://github.com/ydb-platform/ydb-js-sdk/tree/f73cd16b95118882854e259fd4837e01e4a32aed/examples/ydb_tech/topic)
+
 - Rust
 
-  [Examples on GitHub](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples) (`topic-writer`, `topic-reader-retry`, `topic-read-in-transaction-example`).
+  [Executable example on GitHub](https://github.com/ydb-platform/ydb-rs-sdk/tree/38adc5f47d91c61cf541fbd2fd0b1a5d65fb4100/ydb/examples/ydb_tech/topic)
+
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -50,22 +57,22 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
   Application code snippet for initializing the {{ ydb-short-name }} driver:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_init]-[END topic_init]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_init]-[END topic_init]" %}
 
 
-  This example uses an authentication token stored in the `YDB_TOKEN` environment variable. For more information, see [connecting to a database](../../concepts/connect.md) and [authentication](../../security/authentication.md).
+  This example connects to a local database with anonymous authentication. For more information, see [connecting to a database](../../concepts/connect.md) and [authentication](../../security/authentication.md).
 
   Application code snippet for creating a client:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_client]-[END topic_client]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_client]-[END topic_client]" %}
 
 - Go
 
   To work with topics, an instance of the {{ ydb-short-name }} driver created using `ydb.Open` is used. The topic client is available via the `db.Topic()` method.
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_init]-[END topic_init]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_init]-[END topic_init]" %}
 
 - Java
 
@@ -76,11 +83,10 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
   Application code snippet for initializing the {{ ydb-short-name }} transport:
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_init]-[END topic_init]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_init]-[END topic_init]" %}
 
 
-  This example uses the helper method `CloudAuthHelper.getAuthProviderFromEnviron()`, which obtains a token from environment variables.
-  For example, `YDB_ACCESS_TOKEN_CREDENTIALS`.
+  This example uses anonymous authentication for a local database.
   For more information, see [connecting to a database](../../concepts/connect.md) and [authentication](../../security/authentication.md).
 
   The topic service client ( [source code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) runs on top of the {{ ydb-short-name }} transport and is responsible for both management operations with topics and creating writers and readers.
@@ -88,11 +94,10 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
   Application code snippet for creating a client:
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_init]-[END topic_init]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_client]-[END topic_client]" %}
 
 
-  Both code examples above use a ( [try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)) block.
-  This allows automatically closing the client and transport when exiting this block, as both are descendants of `AutoCloseable`.
+  The executable example closes the transport and client with [try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html): both implement `AutoCloseable`.
 - C#
 
   To work with topics, simply pass the connection string directly to the constructor of the required client.
@@ -102,7 +107,7 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
   Application code snippet for creating various topic clients:
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_init]-[END topic_init]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_init]-[END topic_init]" %}
 
 - Python
 
@@ -112,11 +117,11 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_init]-[END topic_init]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_init]-[END topic_init]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_init]-[END topic_init]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_init]-[END topic_init]" %}
 
   {% endlist %}
 
@@ -124,12 +129,12 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_init]-[END topic_init]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_init]-[END topic_init]" %}
 
 - Rust
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_init]-[END topic_init]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_init]-[END topic_init]" %}
 
 - PHP
 
@@ -152,7 +157,7 @@ The only required parameter for creating a topic is its path; the other paramete
   Example of creating a topic with three partitions and ZSTD codec support:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_create]-[END topic_create]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_create]-[END topic_create]" %}
 
 - Go
 
@@ -161,7 +166,7 @@ The only required parameter for creating a topic is its path; the other paramete
   Example of creating a topic with a list of supported codecs and a minimum number of partitions
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_create]-[END topic_create]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_create]-[END topic_create]" %}
 
 - Python
 
@@ -171,11 +176,11 @@ The only required parameter for creating a topic is its path; the other paramete
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_create]-[END topic_create]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_create]-[END topic_create]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_create]-[END topic_create]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_create]-[END topic_create]" %}
 
   {% endlist %}
 - Java
@@ -185,24 +190,24 @@ The only required parameter for creating a topic is its path; the other paramete
   Example of creating a topic with a list of supported codecs and a minimum number of partitions
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_create]-[END topic_create]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_create]-[END topic_create]" %}
 
 - C#
 
   Example of creating a topic with a list of supported codecs and a minimum number of partitions:
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_create]-[END topic_create]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_create]-[END topic_create]" %}
 
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_create]-[END topic_create]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_create]-[END topic_create]" %}
 
 - Rust
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_create]-[END topic_create]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_create]-[END topic_create]" %}
 
 - PHP
 
@@ -223,7 +228,7 @@ The only required parameter for creating a topic is its path; the other paramete
   Example of adding an [important reader](../../concepts/datamodel/topic#important-consumer) to a topic and setting the [message retention time](../../concepts/datamodel/topic#retention-time) for the topic to two days:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_alter]-[END topic_alter]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
 - Go
 
@@ -234,7 +239,7 @@ The only required parameter for creating a topic is its path; the other paramete
   Example of adding a reader to a topic
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_alter]-[END topic_alter]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
 - Python
 
@@ -244,11 +249,11 @@ The only required parameter for creating a topic is its path; the other paramete
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_alter]-[END topic_alter]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_alter]-[END topic_alter]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
   {% endlist %}
 - Java
@@ -258,7 +263,7 @@ The only required parameter for creating a topic is its path; the other paramete
   You can see the full list of settings [in the SDK code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/settings/AlterTopicSettings.java#L23).
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_alter]-[END topic_alter]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
 - C#
 
@@ -266,12 +271,12 @@ The only required parameter for creating a topic is its path; the other paramete
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_alter]-[END topic_alter]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
 - Rust
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_alter]-[END topic_alter]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_alter]-[END topic_alter]" %}
 
 - PHP
 
@@ -294,14 +299,14 @@ The only required parameter for creating a topic is its path; the other paramete
   You can access this description as follows:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_describe]-[END topic_describe]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
 
   There is a separate method for getting information about a reader - `DescribeConsumer`.
 - Go
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_describe]-[END topic_describe]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
 - Python
 
@@ -309,11 +314,11 @@ The only required parameter for creating a topic is its path; the other paramete
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_describe]-[END topic_describe]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_describe]-[END topic_describe]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
   {% endlist %}
 - Java
@@ -323,7 +328,7 @@ The only required parameter for creating a topic is its path; the other paramete
   You can see the full list of description fields [in the SDK code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/description/TopicDescription.java#L19).
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_describe]-[END topic_describe]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
 - C#
 
@@ -331,12 +336,12 @@ The only required parameter for creating a topic is its path; the other paramete
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_describe]-[END topic_describe]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
 - Rust
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_describe]-[END topic_describe]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_describe]-[END topic_describe]" %}
 
 - PHP
 
@@ -353,12 +358,12 @@ To delete a topic, just specify its path.
 - C++
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_drop]-[END topic_drop]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
 - Go
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_drop]-[END topic_drop]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
 - Python
 
@@ -366,32 +371,32 @@ To delete a topic, just specify its path.
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_drop]-[END topic_drop]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_drop]-[END topic_drop]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
   {% endlist %}
 - Java
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_drop]-[END topic_drop]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
 - C#
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_drop]-[END topic_drop]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_drop]-[END topic_drop]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
 - Rust
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_drop]-[END topic_drop]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_drop]-[END topic_drop]" %}
 
 - PHP
 
@@ -424,7 +429,7 @@ Currently, only connections with matching [source and message group](../../conce
     See the full list of settings [in the header file](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h#L56).
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
   - ISimpleBlockingWriteSession
 
@@ -433,7 +438,7 @@ Currently, only connections with matching [source and message group](../../conce
     See the full list of settings [in the header file](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h#L56).
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_start_writer_blocking]-[END topic_start_writer_blocking]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_start_writer_blocking]-[END topic_start_writer_blocking]" %}
 
   - IProducer
 
@@ -451,13 +456,13 @@ Currently, only connections with matching [source and message group](../../conce
     See the full list of settings [in the header file](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h#L10).
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_start_producer]-[END topic_start_producer]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_start_producer]-[END topic_start_producer]" %}
 
   {% endlist %}
 - Go
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
 - Python
 
@@ -465,11 +470,11 @@ Currently, only connections with matching [source and message group](../../conce
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
   {% endlist %}
 - Java
@@ -481,47 +486,47 @@ Currently, only connections with matching [source and message group](../../conce
     Initializing writer settings:
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_writer_settings]-[END topic_writer_settings]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_writer_settings]-[END topic_writer_settings]" %}
 
 
     Creating a synchronous writer:
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_writer]-[END topic_sync_writer]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_writer]-[END topic_sync_writer]" %}
 
 
     Call `init()` after creating the writer. It starts initialization in the background. Sending messages and calling `flush()` let you wait for persisted data; `SyncWriter` has no `initAndWait()` method.
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_writer_init]-[END topic_sync_writer_init]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_writer_init]-[END topic_sync_writer_init]" %}
 
   - Asynchronous API
 
     Initializing writer settings:
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_writer_settings]-[END topic_writer_settings]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_writer_settings]-[END topic_writer_settings]" %}
 
 
     Creating and initializing an asynchronous writer:
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_async_writer]-[END topic_async_writer]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_async_writer]-[END topic_async_writer]" %}
 
   {% endlist %}
 - C#
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
 - Rust
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_start_writer]-[END topic_start_writer]" %}
 
 - PHP
 
@@ -549,10 +554,14 @@ Currently, only connections with matching [source and message group](../../conce
 
     By default, `Write` runs asynchronously — data from messages is read and stored in an internal buffer, and sending occurs in the background according to the settings `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. The session automatically reconnects to {{ ydb-short-name }} when connections are broken and retries sending messages as long as possible, according to the setting `RetryPolicy`. Upon receiving an error that makes it impossible to continue, the write session sends `TSessionClosedEvent` with diagnostic information to the user.
 
-    This is how writing multiple messages in an event loop without handlers might look:
+    The `NextToken` helper waits for a readiness event and returns its continuation token. It also checks whether the write session has closed:
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write]-[END topic_write]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_next_token]-[END topic_next_token]" %}
+
+    Pass the returned token to `Write` together with the message:
+
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write]-[END topic_write]" %}
 
   - ISimpleBlockingWriteSession
 
@@ -561,7 +570,7 @@ Currently, only connections with matching [source and message group](../../conce
     Sending to the server, as with `IWriteSession`, is performed in the background. To wait for all writes to complete and close the session, call `Close()`.
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_blocking]-[END topic_write_blocking]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_blocking]-[END topic_write_blocking]" %}
 
   - IProducer
 
@@ -570,7 +579,7 @@ Currently, only connections with matching [source and message group](../../conce
     `Flush` waits for the accumulated data to be delivered to the server; `Close` waits for the remaining messages in the buffer to be sent and terminates the producer.
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_producer]-[END topic_write_producer]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_producer]-[END topic_write_producer]" %}
 
 
     See a detailed example in the [ydb-platform/ydb repository](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_writer/producer/basic_write).
@@ -585,7 +594,7 @@ Currently, only connections with matching [source and message group](../../conce
   By default, Write is performed asynchronously – data from messages is read and saved to the internal buffer, and sending occurs in the background. The Writer itself reconnects to {{ ydb-short-name }} when the connection is broken and retries sending messages as long as possible. When an error is received after which it is impossible to continue, the Writer stops and subsequent Write calls will fail with an error.
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write]-[END topic_write]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write]-[END topic_write]" %}
 
 
   To write by key to multiple partitions, use `WithWriteToManyPartitions(...)` when creating the writer and fill in the `Key` field in `topicwriter.Message`.
@@ -597,7 +606,7 @@ Currently, only connections with matching [source and message group](../../conce
   - `WithWriterPartitionByPartitionID` — write to the partition specified in the `PartitionID` field of the message. Does not combine with key-based routing; when a partition is split, the writer must be recreated manually.
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_multiwriter]-[END topic_multiwriter]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_multiwriter]-[END topic_multiwriter]" %}
 
 
   See a detailed example with key-based routing, alternative strategies (`KafkaHash` and `PartitionID`), and the transactional variant in the [ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicwriter/topicwriter_to_many_partitions.go) repository.
@@ -609,13 +618,13 @@ Currently, only connections with matching [source and message group](../../conce
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write]-[END topic_write]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write]-[END topic_write]" %}
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write_manual]-[END topic_write_manual]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write_manual]-[END topic_write_manual]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_write]-[END topic_write]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_write]-[END topic_write]" %}
 
   {% endlist %}
 - Java
@@ -632,7 +641,7 @@ Currently, only connections with matching [source and message group](../../conce
     If you need confirmation of successful writing for each message, use an asynchronous writer and check the status returned by the `send` method.
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_sync]-[END topic_write_sync]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_sync]-[END topic_write_sync]" %}
 
   - Asynchronous API
 
@@ -644,7 +653,7 @@ Currently, only connections with matching [source and message group](../../conce
     You can also increase the size of the client buffer (`setMaxSendBufferMemorySize`) to handle a larger volume of messages before it fills up.
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_async]-[END topic_write_async]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_async]-[END topic_write_async]" %}
 
   {% endlist %}
 - C#
@@ -652,17 +661,17 @@ Currently, only connections with matching [source and message group](../../conce
   Asynchronous writing of a message to a topic.
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_write]-[END topic_write]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_write]-[END topic_write]" %}
 
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_write]-[END topic_write]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_write]-[END topic_write]" %}
 
 - Rust
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_write]-[END topic_write]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_write]-[END topic_write]" %}
 
 - PHP
 
@@ -685,7 +694,7 @@ Currently, only connections with matching [source and message group](../../conce
     Example of setting up a `TAcksEvent` handler for a write session:
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
 
     In such a write session, `TAcksEvent` events will not be delivered to the user via `GetEvent` / `GetEvents`; instead, when receiving confirmations from the server, the SDK will call the passed handler. Similarly, handlers for other event types can be configured.
@@ -699,7 +708,7 @@ Currently, only connections with matching [source and message group](../../conce
     Confirmations from the server arrive the same way as for `IWriteSession`: via the `AcksHandler` handler in `TProducerSettings::EventHandlers`. To wait for the accumulated buffer to be delivered to the server, call `Flush()`.
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_producer_ack]-[END topic_producer_ack]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_producer_ack]-[END topic_producer_ack]" %}
 
   {% endlist %}
 - Go
@@ -707,7 +716,7 @@ Currently, only connections with matching [source and message group](../../conce
   When connecting, you can specify the synchronous message write option - topicoptions.WithSyncWrite(true). Then Write will return only after receiving confirmation from the server that all messages passed in the call have been saved. At the same time, the SDK will, as usual, reconnect and retry sending messages if necessary. In this mode, the context only controls the timeout for waiting for a response from the SDK, i.e., even after the context is canceled, the SDK will continue trying to send messages.
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
 - Python
 
@@ -720,11 +729,11 @@ Currently, only connections with matching [source and message group](../../conce
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
   {% endlist %}
 - Java
@@ -733,20 +742,20 @@ Currently, only connections with matching [source and message group](../../conce
   The `WriteAck` structure contains information about seqNo, offset, and write status:
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
 - C#
 
   Asynchronous write of a message to a topic. In case of internal buffer overflow, it will wait for the buffer to become free for retransmission.
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
 
   If the server is unavailable, messages may accumulate in a queue waiting to be sent. To control the wait time, you can use a cancellation token (`CancellationToken`). However, with this approach, there is a risk that the user may cancel the sending of an already confirmed message.
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_write_deadline]-[END topic_write_deadline]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_write_deadline]-[END topic_write_deadline]" %}
 
 - JavaScript
 
@@ -756,12 +765,12 @@ Currently, only connections with matching [source and message group](../../conce
   - By the tick of the periodic send interval `flushIntervalMs` (default value = 10ms).
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
 - Rust
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_write_ack]-[END topic_write_ack]" %}
 
 - PHP
 
@@ -785,7 +794,7 @@ Learn more about [data compression in topics](../../concepts/datamodel/topic#mes
     Example of creating a write session without message compression:
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_codec]-[END topic_codec]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_codec]-[END topic_codec]" %}
 
 
     If you need to send a message compressed with a different codec within a write session, you can use the `WriteEncoded` method specifying the codec and the size of the uncompressed message. For a successful write using this method, the codec used must be allowed in the topic settings.
@@ -795,14 +804,14 @@ Learn more about [data compression in topics](../../concepts/datamodel/topic#mes
     The codec is set when [creating a write session](#start-writer) in `TWriteSessionSettings` — the same `Codec` and `CompressionLevel` settings as for `IWriteSession`. The `WriteEncoded` method is not available.
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_codec_blocking]-[END topic_codec_blocking]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_codec_blocking]-[END topic_codec_blocking]" %}
 
   - IProducer
 
     The codec is set in `TProducerSettings` when [creating a producer](#start-writer) — the same `Codec` and `CompressionLevel` settings as for `IWriteSession`.
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_codec_producer]-[END topic_codec_producer]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_codec_producer]-[END topic_codec_producer]" %}
 
   {% endlist %}
 - Go
@@ -812,7 +821,7 @@ Learn more about [data compression in topics](../../concepts/datamodel/topic#mes
   If necessary, you can set a fixed codec in the connection options. Then that codec will be used and no measurements will be performed.
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_codec]-[END topic_codec]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_codec]-[END topic_codec]" %}
 
 - Python
 
@@ -821,12 +830,12 @@ Learn more about [data compression in topics](../../concepts/datamodel/topic#mes
   If necessary, you can set a fixed codec in the connection options. Then that codec will be used and no measurements will be performed.
 
 
-  {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_codec]-[END topic_codec]" %}
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_codec]-[END topic_codec]" %}
 
 - Java
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_codec]-[END topic_codec]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_codec]-[END topic_codec]" %}
 
 - C#
 
@@ -834,7 +843,7 @@ Learn more about [data compression in topics](../../concepts/datamodel/topic#mes
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_codec]-[END topic_codec]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_codec]-[END topic_codec]" %}
 
 - Rust
 
@@ -865,7 +874,7 @@ For more information about writing without deduplication, see the [corresponding
     Example of creating such a write session:
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_no_dedup]-[END topic_no_dedup]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_no_dedup]-[END topic_no_dedup]" %}
 
 
     To enable deduplication, you need to specify the `ProducerId` option in the write session settings or explicitly enable deduplication by calling the `DeduplicationEnabled()` method, for example, as in the ["Connecting to a topic"](#start-writer) section.
@@ -875,7 +884,7 @@ For more information about writing without deduplication, see the [corresponding
     The behavior is the same as for `IWriteSession`: if `ProducerId` is not specified, the session is created without deduplication.
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_no_dedup_blocking]-[END topic_no_dedup_blocking]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_no_dedup_blocking]-[END topic_no_dedup_blocking]" %}
 
   - IProducer
 
@@ -921,21 +930,21 @@ The metadata size limit is no more than 1000 keys.
     Metadata is set in the `TWriteMessage` object and passed to `Write()`:
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
   - ISimpleBlockingWriteSession
 
     The same `TWriteMessage` is used as for `IWriteSession`: metadata is set via `MessageMeta()` and passed to `Write()`:
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_metadata_blocking]-[END topic_write_metadata_blocking]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_metadata_blocking]-[END topic_write_metadata_blocking]" %}
 
   - IProducer
 
     As with write sessions, metadata is set in `TWriteMessage` via `MessageMeta()`. The difference of `IProducer` is that the message also contains a partitioning key, by which the producer selects a partition:
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_metadata_producer]-[END topic_write_metadata_producer]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_metadata_producer]-[END topic_write_metadata_producer]" %}
 
   {% endlist %}
 - Go
@@ -943,13 +952,13 @@ The metadata size limit is no more than 1000 keys.
   Metadata is set in the `Metadata` field of the `topicwriter.Message` structure:
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
 
   When reading, metadata is available in the `Metadata` field of the message:
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_metadata]-[END topic_read_metadata]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_metadata]-[END topic_read_metadata]" %}
 
 - Java
 
@@ -958,19 +967,19 @@ The metadata size limit is no more than 1000 keys.
   You can pass `List` such objects at once:
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
 
   Or add each `MetadataItem` separately:
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_metadata_add]-[END topic_write_metadata_add]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_metadata_add]-[END topic_write_metadata_add]" %}
 
 
   When reading, you can get these message metadata by calling the `getMetadataItems()` method on it:
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_metadata]-[END topic_read_metadata]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_metadata]-[END topic_read_metadata]" %}
 
 - Python
 
@@ -980,28 +989,28 @@ The metadata size limit is no more than 1000 keys.
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
   {% endlist %}
 
   During reading, metadata can be obtained from the `metadata_items` field of the `PublicMessage` object:
 
 
-  {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_metadata]-[END topic_read_metadata]" %}
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_metadata]-[END topic_read_metadata]" %}
 
 - C#
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_write_metadata]-[END topic_write_metadata]" %}
 
 - Rust
 
@@ -1029,7 +1038,7 @@ The metadata size limit is no more than 1000 keys.
     [Example on GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_writer/transaction/main.cpp)
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
 
   - ISimpleBlockingWriteSession
 
@@ -1038,7 +1047,7 @@ The metadata size limit is no more than 1000 keys.
     [Example on GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_writer/transaction/main.cpp)
 
 
-    {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_tx_blocking]-[END topic_write_tx_blocking]" %}
+    {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_write_tx_blocking]-[END topic_write_tx_blocking]" %}
 
   - IProducer
 
@@ -1052,7 +1061,7 @@ The metadata size limit is no more than 1000 keys.
   [Example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicwriter/topic_writer_transaction.go)
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
 
 - Python
 
@@ -1066,14 +1075,14 @@ The metadata size limit is no more than 1000 keys.
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
 
   - Native SDK (Asyncio)
 
     [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
 
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
 
   {% endlist %}
 - Java
@@ -1088,7 +1097,7 @@ The metadata size limit is no more than 1000 keys.
     Then the message will be written together with the commit of that transaction.
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_tx_sync]-[END topic_write_tx_sync]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_tx_sync]-[END topic_write_tx_sync]" %}
 
   - Asynchronous API
 
@@ -1098,7 +1107,7 @@ The metadata size limit is no more than 1000 keys.
     Then the message will be written together with the commit of that transaction.
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_tx_async]-[END topic_write_tx_async]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_write_tx_async]-[END topic_write_tx_async]" %}
 
   {% endlist %}
 
@@ -1140,14 +1149,14 @@ A topic can have multiple Consumers, and the server stores its own read progress
   To create a connection to an existing topic `my-topic` through a previously added reader `my-consumer`, use the following code:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
 - Go
 
   To create a connection to an existing topic `my-topic` through a previously added reader `my-consumer`, use the following code:
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
 - Python
 
@@ -1157,11 +1166,11 @@ A topic can have multiple Consumers, and the server stores its own read progress
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
   {% endlist %}
 - Java
@@ -1173,13 +1182,13 @@ A topic can have multiple Consumers, and the server stores its own read progress
     Initializing reader settings
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_reader_settings]-[END topic_reader_settings]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_reader_settings]-[END topic_reader_settings]" %}
 
 
     Creating a synchronous reader
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_reader]-[END topic_sync_reader]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_reader]-[END topic_sync_reader]" %}
 
 
     After creating a synchronous reader, you need to initialize it. To do this, use one of two methods:
@@ -1187,27 +1196,27 @@ A topic can have multiple Consumers, and the server stores its own read progress
     - `init()`: non-blocking, starts the initialization process in the background and does not wait for it to complete.
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_reader_background]-[END topic_sync_reader_background]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_reader_background]-[END topic_sync_reader_background]" %}
 
 
     - `initAndWait()`: blocking, starts the initialization process and waits for it to complete. If an error occurs during initialization, an exception is thrown.
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_reader_init]-[END topic_sync_reader_init]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_sync_reader_init]-[END topic_sync_reader_init]" %}
 
   - Asynchronous API
 
     Initializing reader settings
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_reader_settings]-[END topic_reader_settings]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_reader_settings]-[END topic_reader_settings]" %}
 
 
     For an asynchronous reader, in addition to the general read settings `ReaderSettings`, you will need the event handler settings `ReadEventHandlersSettings`, in which you must pass an instance of a `ReadEventHandler` subclass.
     It will describe how to handle various events that occur during reading.
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_handler_settings]-[END topic_handler_settings]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_handler_settings]-[END topic_handler_settings]" %}
 
 
     Optionally, in `ReadEventHandlersSettings` you can specify an executor on which message processing will occur; by default, the internal SDK thread is used.
@@ -1216,29 +1225,29 @@ A topic can have multiple Consumers, and the server stores its own read progress
     The `onMessages` method is called each time the SDK receives the next batch of messages from the server. Within a single call, one or more messages arrive, which can be acknowledged (`commit`) either individually or after processing the entire batch. Example implementation:
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
 
     Creating and initializing an asynchronous reader:
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_async_reader]-[END topic_async_reader]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_async_reader]-[END topic_async_reader]" %}
 
   {% endlist %}
 - C#
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
 - Rust
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_start_reader]-[END topic_start_reader]" %}
 
 - PHP
 
@@ -1253,12 +1262,12 @@ You can also use the extended connection creation option to specify multiple top
 - C++
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
 
 - Go
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
 
 
   Also, the example above sets the time from which to start reading messages.
@@ -1268,22 +1277,22 @@ You can also use the extended connection creation option to specify multiple top
 - Java
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
 
 - C#
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
 
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
 
 - Rust
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_reader_selectors]-[END topic_reader_selectors]" %}
 
 - PHP
 
@@ -1330,7 +1339,7 @@ You can use [transactions](#read-tx). In this case, the read position will chang
   Full example of reading a topic in a transaction with writing to a table: [`topic-read-in-transaction-example.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/topic-read-in-transaction-example.rs).
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
 - PHP
 
@@ -1350,7 +1359,7 @@ You can use [transactions](#read-tx). In this case, the read position will chang
 - Go
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
 
 - Python
 
@@ -1358,11 +1367,11 @@ You can use [transactions](#read-tx). In this case, the read position will chang
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
 
   {% endlist %}
 - Java
@@ -1374,7 +1383,7 @@ You can use [transactions](#read-tx). In this case, the read position will chang
     To read messages one by one without processing acknowledgment, use the following code:
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
 
   - Asynchronous API
 
@@ -1384,12 +1393,12 @@ You can use [transactions](#read-tx). In this case, the read position will chang
 - C#
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
 
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_read_one]-[END topic_read_one]" %}
 
 - Rust
 
@@ -1411,14 +1420,14 @@ You can use [transactions](#read-tx). In this case, the read position will chang
   When setting up a read session with the `SimpleDataHandlers` setting, it is enough to pass a handler for data messages. The SDK will call this handler for each batch of messages received from the server. Read acknowledgments will not be sent by default.
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
 
-  In this example, after creating the session, the main thread waits for the session to be closed by the server in the `GetEvent` method; other event types will not arrive.
+  The executable example uses the `process` callback to check received messages and complete a promise. The main thread waits for that promise and then closes the read session.
 - Go
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
 - Python
 
@@ -1426,11 +1435,11 @@ You can use [transactions](#read-tx). In this case, the read position will chang
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
   {% endlist %}
 - Java
@@ -1446,18 +1455,18 @@ You can use [transactions](#read-tx). In this case, the read position will chang
     To read a batch of messages without processing acknowledgment, use the following code:
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
   {% endlist %}
 - C#
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_read_batch]-[END topic_read_batch]" %}
 
 - Rust
 
@@ -1488,7 +1497,7 @@ If an error occurs on message commit, you can log the error and continue working
 - Go
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
 
   By default, `Commit` is a fast call: it saves data in an internal buffer and immediately returns control, while the actual sending happens later. Therefore, to avoid losing the last commits before exiting the program, you need to explicitly close the reader using the `Reader.Close()` call.
@@ -1500,11 +1509,11 @@ If an error occurs on message commit, you can log the error and continue working
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
   {% endlist %}
 - Java
@@ -1517,22 +1526,22 @@ If an error occurs on message commit, you can log the error and continue working
   The reader (not necessarily the same one) will create a new session for this partition, and the message will be read again.
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
 - C#
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
 - Rust
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_read_commit]-[END topic_read_commit]" %}
 
 - PHP
 
@@ -1549,12 +1558,12 @@ If an error occurs on message commit, you can log the error and continue working
   Similarly to [the example above](#no-commit), when setting up a read session with the `SimpleDataHandlers` setting, it is sufficient to pass a handler for data messages. The SDK will call this handler for each message batch received from the server. Passing the `commitDataAfterProcessing = true` parameter means that the SDK will send read acknowledgments for all messages to the server after the handler execution.
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
 - Go
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
 
   By default, `Commit` is a fast call: it saves data to an internal buffer and immediately returns control, while the actual sending happens later. Therefore, to avoid losing the last commits before exiting the program, the reader must be closed explicitly.
@@ -1564,11 +1573,11 @@ If an error occurs on message commit, you can log the error and continue working
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
   {% endlist %}
 
@@ -1586,18 +1595,18 @@ If an error occurs on message commit, you can log the error and continue working
     In the `onMessages` handler, you can commit the entire batch of messages by calling `commit` on the event.
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
   {% endlist %}
 - C#
 
 
-  {% code "/.generated/sdk-snippets/dotnet/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
+  {% code "/.generated/sdk-snippets/dotnet/examples/ydb_tech/topic/Program.cs" lang="csharp" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
 - Rust
 
@@ -1623,10 +1632,10 @@ Instead of committing messages to the server, you can store the read progress yo
   Example of setting up a handler:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
 
 
-  Here, `GetOffsetToReadFrom` is part of the example, not the SDK. Use your own method to determine the required starting read position for a partition with the given partition id.
+  The `offsets` map stores the next reading position for each partition and is updated after processing messages. In the executable example it lives in memory; use persistent storage to recover these positions after a restart.
 
   Also, `TReadSessionSettings` supports the `ReadFromTimestamp` setting for reading events with write timestamps not less than a given value. This setting is intended not for precise start positioning, but for skipping a volume of data over a large time interval. The first few received messages may have write timestamps less than the specified one.
 - Go
@@ -1636,12 +1645,12 @@ Instead of committing messages to the server, you can store the read progress yo
   In the default reader mode, offsets up to the position specified by `res.StartFrom` are committed on the server. After that, re-reading the same messages by moving the position back becomes impossible. To disable automatic acknowledgment, use the no-commit mode when creating the reader.
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
 
   {% endnote %}
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
 
 - Python
 
@@ -1654,14 +1663,14 @@ Instead of committing messages to the server, you can store the read progress yo
   Also, by calling `setCommitOffset`, you can specify the offset that should be considered committed.
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
 
 
   You can also configure the `setReadFrom` reader to read events with write timestamps not less than the given one.
 - JavaScript
 
 
-  {% code "/.generated/sdk-snippets/javascript/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
+  {% code "/.generated/sdk-snippets/javascript/examples/ydb_tech/topic/main.ts" lang="typescript" lines="[BEGIN topic_client_offset]-[END topic_client_offset]" %}
 
 - C#
 
@@ -1688,7 +1697,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
   In `NYdb::NTopic::TReadSessionSettings`, call `WithoutConsumer()`:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_no_consumer]-[END topic_no_consumer]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_no_consumer]-[END topic_no_consumer]" %}
 
 
   On reconnection, the read progress is not saved on the server. To avoid starting from the beginning, pass the offset in `TStartPartitionSessionEvent::Confirm` each time a partition reading session starts — see [storing position on the client](#client-commit).
@@ -1697,20 +1706,20 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
   You need to pass an empty string as the consumer name and the `topicoptions.WithReaderWithoutConsumer(false)` option (**experimental** mode, see [VERSIONING](https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md) in the SDK repository). In the read selector, specify the topic path and the list of partitions. Message commits are not available in this mode (`CommitModeNone`); on reconnections, progress must be restored on the client side — see [storing position on the client](#client-commit).
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_no_consumer]-[END topic_no_consumer]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_no_consumer]-[END topic_no_consumer]" %}
 
 - Java
 
   To read without a consumer, you should explicitly specify this in the reader settings `ReaderSettings` by calling `withoutConsumer()`:
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_no_consumer]-[END topic_no_consumer]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_no_consumer]-[END topic_no_consumer]" %}
 
 
   In this case, note that when the connection is re-established, the progress on the server will be reset. Therefore, to avoid starting reading from the beginning, you should pass the starting read offset in the SDK each time a partition reading session starts:
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_no_consumer_offset]-[END topic_no_consumer_offset]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_no_consumer_offset]-[END topic_no_consumer_offset]" %}
 
 - Python
 
@@ -1723,9 +1732,9 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
   Example:
 
 
-  {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_no_consumer_handler]-[END topic_no_consumer_handler]" %}
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_no_consumer_handler]-[END topic_no_consumer_handler]" %}
 
-  {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_no_consumer]-[END topic_no_consumer]" %}
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_no_consumer]-[END topic_no_consumer]" %}
 
 - C#
 
@@ -1755,7 +1764,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
   [Example on GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_reader/transaction/application.cpp)
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 
 
   {% note warning %}
@@ -1767,7 +1776,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
   Acknowledgment of `TStopPartitionSessionEvent` event processing must be done after calling `Commit`.
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_tx_deferred_stop]-[END topic_read_tx_deferred_stop]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_read_tx_deferred_stop]-[END topic_read_tx_deferred_stop]" %}
 
 - Go
 
@@ -1776,7 +1785,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
   [Example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicreader/topic_reader_transaction.go)
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 
 - Python
 
@@ -1789,14 +1798,14 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
     [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
 
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 
   - Native SDK (Asyncio)
 
     [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
 
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 
   {% endlist %}
 - Java
@@ -1810,7 +1819,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
     In the `ReceiveSettings` settings of the `receive` method, you can specify a transaction:
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_tx_sync]-[END topic_read_tx_sync]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_tx_sync]-[END topic_read_tx_sync]" %}
 
 
     Then the received message will be committed together with the transaction. You do not need to commit it separately.
@@ -1825,7 +1834,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
     This method takes a list of offsets as a parameter. For convenience, `Message` and `DataReceivedEvent` have a method `getPartitionOffsets()` that returns such a list.
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_tx_async]-[END topic_read_tx_async]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_read_tx_async]-[END topic_read_tx_async]" %}
 
   {% endlist %}
 
@@ -1838,7 +1847,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
   Full example of reading a topic in a transaction with writing to a table: [`topic-read-in-transaction-example.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/topic-read-in-transaction-example.rs).
 
 
-  {% code "/.generated/sdk-snippets/rust/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
+  {% code "/.generated/sdk-snippets/rust/ydb/examples/ydb_tech/topic/main.rs" lang="rust" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 
 - PHP
 
@@ -1868,14 +1877,14 @@ In case of a *hard interrupt*, the client receives a notification that it can no
   A fragment of the event loop might look like this:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
 
 - Go
 
   The client code immediately receives all messages available in the buffer (on the SDK side), even if they are not enough to form a packet during batch processing.
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_batch_commit]-[END topic_read_batch_commit]" %}
 
 - Python
 
@@ -1885,11 +1894,11 @@ In case of a *hard interrupt*, the client receives a notification that it can no
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
 
   {% endlist %}
 - Java
@@ -1907,7 +1916,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
     `event.confirm()` must be called, because the server expects this response to continue the shutdown.
 
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_soft_stop]-[END topic_soft_stop]" %}
 
   {% endlist %}
 - C#
@@ -1940,14 +1949,14 @@ In case of a *hard interrupt*, the client receives a notification that it can no
   An event loop fragment may look like this:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
 
 - Go
 
   When reading is interrupted, the context of the message or batch of messages is cancelled.
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
 
 - Python
 
@@ -1957,11 +1966,11 @@ In case of a *hard interrupt*, the client receives a notification that it can no
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
 
   {% endlist %}
 - Java
@@ -1974,7 +1983,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
 
   - Asynchronous API
 
-    {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
+    {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_hard_stop]-[END topic_hard_stop]" %}
 
   {% endlist %}
 - C#
@@ -2018,7 +2027,7 @@ To configure different minimum and maximum limits, also set the strategy to
   The SDK supports two modes for reading topics with auto-scaling enabled: full support mode and compatibility mode. The reading mode is set in the read session creation parameters. By default, compatibility mode is used.
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_autoscale_reader]-[END topic_autoscale_reader]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_autoscale_reader]-[END topic_autoscale_reader]" %}
 
 
   In full support mode, when all messages from a partition have been read, the `TEndPartitionSessionEvent` event arrives. After receiving this event, no new messages will appear in the partition for reading. To continue reading from child partitions, you must call `Confirm()`, thereby confirming that the application is ready to receive messages from child partitions. If messages from all partitions are processed in a single thread, then `Confirm()` can be called immediately after receiving `TEndPartitionSessionEvent`. If messages from different partitions are processed in different threads, you should finish processing the messages, for example, execute the accumulated batch, commit them, or save the read position in your own database, and only then call `Confirm()`.
@@ -2028,7 +2037,7 @@ To configure different minimum and maximum limits, also set the strategy to
   A fragment of the event loop might look like this:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_autoscale_end]-[END topic_autoscale_end]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_autoscale_end]-[END topic_autoscale_end]" %}
 
 
   In compatibility mode, there is no explicit signal that reading from a partition is complete, and the server will try to heuristically determine that the client has processed the partition to the end. This may cause a delay between finishing reading from the original partition and starting reading from its child partitions.
@@ -2041,25 +2050,25 @@ To configure different minimum and maximum limits, also set the strategy to
   Enabling topic autoscaling during its creation is done using the `topicoptions.CreateWithAutoPartitioningSettings` option:
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_create]-[END topic_autoscale_create]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_create]-[END topic_autoscale_create]" %}
 
 
   If necessary, you can also set other parameters in AutoPartitioningSettings:
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_create]-[END topic_autoscale_create]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_create]-[END topic_autoscale_create]" %}
 
 
   Enabling autoscaling for an existing topic is done using the `topicoptions.AlterWithAutoPartitioningStrategy` option of `.Topic().Alter`:
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_alter]-[END topic_autoscale_alter]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_alter]-[END topic_autoscale_alter]" %}
 
 
   The SDK supports two modes for reading topics with autoscaling enabled: full support mode and compatibility mode. The reading mode is set by the `topicoptions.WithReaderSupportSplitMergePartitions` option when creating the reader. By default, full support mode (`true`) is used.
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_reader]-[END topic_autoscale_reader]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_autoscale_reader]-[END topic_autoscale_reader]" %}
 
 - Python
 
@@ -2069,24 +2078,24 @@ To configure different minimum and maximum limits, also set the strategy to
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_autoscale_create]-[END topic_autoscale_create]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_autoscale_create]-[END topic_autoscale_create]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_autoscale_create]-[END topic_autoscale_create]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_autoscale_create]-[END topic_autoscale_create]" %}
 
   {% endlist %}
 
   Modifying an existing topic is done using the `alter_auto_partitioning_settings` argument of `alter_topic`:
 
 
-  {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_autoscale_alter]-[END topic_autoscale_alter]" %}
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_autoscale_alter]-[END topic_autoscale_alter]" %}
 
 
   The SDK supports two modes for reading topics with autoscaling enabled: full support mode and compatibility mode. The reading mode is set by the `auto_partitioning_support` argument when creating the reader. By default, full support mode is used.
 
 
-  {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_autoscale_reader]-[END topic_autoscale_reader]" %}
+  {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_autoscale_reader]-[END topic_autoscale_reader]" %}
 
 
   From a practical point of view, the modes do not differ for the end user. The full support mode differs from the compatibility mode in who guarantees the reading order — the client or the server. The compatibility mode is achieved by server-side processing and is generally slower.
@@ -2121,26 +2130,26 @@ Most often, it is convenient to commit within the reader that receives messages.
   Committing outside the read session is done using the `NYdb::NTopic::TTopicClient::CommitOffset` method:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
 
 
   If there is an active read session at the time of commit (for example, via `CreateReadSession`), it is recommended to pass its ID using the `ReadSessionId` option in `NYdb::NTopic::TCommitOffsetSettings`. This allows the server not to interrupt the current read session:
 
 
-  {% code "/.generated/sdk-snippets/cpp/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_commit_outside_session]-[END topic_commit_outside_session]" %}
+  {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_commit_outside_session]-[END topic_commit_outside_session]" %}
 
 - Go
 
   Acknowledgment of processing outside the reader is performed using the `db.Topic().CommitOffset` method:
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
 
 
   If there is an active read session at the time of commit (via `StartReader` or `StartListener`), it is recommended to pass its ID using the `WithCommitOffsetReadSessionID` option. This allows the server not to interrupt the current read session:
 
 
-  {% code "/.generated/sdk-snippets/go/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_commit_outside_session]-[END topic_commit_outside_session]" %}
+  {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_commit_outside_session]-[END topic_commit_outside_session]" %}
 
 - Python
 
@@ -2150,11 +2159,11 @@ Most often, it is convenient to commit within the reader that receives messages.
 
   - Native SDK
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/sync_example.py" lang="python" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
 
   - Native SDK (Asyncio)
 
-    {% code "/.generated/sdk-snippets/python/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
+    {% code "/.generated/sdk-snippets/python/examples/ydb_tech/topic/async_example.py" lang="python" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
 
   {% endlist %}
 - JavaScript
@@ -2163,7 +2172,7 @@ Most often, it is convenient to commit within the reader that receives messages.
 - Java
 
 
-  {% code "/.generated/sdk-snippets/java/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
+  {% code "/.generated/sdk-snippets/java/examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java" lang="java" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
 
 - C#
 

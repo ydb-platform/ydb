@@ -91,6 +91,8 @@ runs:
     - name: Prepare documentation SDK snippets
       if: hashFiles('ydb/docs/sdk-snippets.lock.yaml') != ''
       uses: ./.github/actions/prepare-sdk-snippets
+      with:
+        isolated-python: 'true'
     - name: comment-build-start
       if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
       shell: bash

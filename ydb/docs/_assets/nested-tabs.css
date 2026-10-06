@@ -1,0 +1,4 @@
+/* Active nested panels must stay hidden while their outer tab is inactive. */
+.yfm-tab-panel:not(.active) .yfm-tabs {
+    display: none;
+}

@@ -3256,14 +3256,13 @@ private:
         return result;
     }
 
-    static NYql::NPq::NProto::StreamingDisposition GetDefaultStreamingDisposition() {
+protected:
+    static TString GetDefaultStreamingDisposition(bool force = true) {
         NYql::NPq::NProto::StreamingDisposition result;
-        result.mutable_from_last_checkpoint()->set_force(true);
-        return result;
+        result.mutable_from_last_checkpoint()->set_force(force);
+        return result.SerializeAsString();
     }
 
-protected:
-    static inline const TString DefaultStreamingDisposition = GetDefaultStreamingDisposition().SerializeAsString();
     NKikimrSchemeOp::TModifyScheme SchemeTx;
 };
 
@@ -3301,11 +3300,18 @@ private:
         using EName = TStreamingQueryConfig::TProperties;
 
         TPropertyValidator validator(*SchemeTx.MutableCreateStreamingQuery()->MutableProperties());
+
+        bool force = false;
+        if (SchemeTx.GetReplaceIfExists()) {
+            CHECK_STATUS_RET(value, validator.ExtractDefault(EName::Force, "false", &TPropertyValidator::ValidateBool));
+            force = value.GetResult() == "true";
+        }
+
         CHECK_STATUS(validator.SaveRequired(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
         CHECK_STATUS(validator.SaveDefault(EName::Run, "true", &TPropertyValidator::ValidateBool));
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, ""));
         CHECK_STATUS(validator.SaveDefault(EName::WatermarkLateEventsPolicy, "drop", &TPropertyValidator::ValidateEnum<NYql::NHoppingWindow::EPolicy>));
-        CHECK_STATUS(validator.SaveDefault(EName::StreamingDisposition, DefaultStreamingDisposition));
+        CHECK_STATUS(validator.SaveDefault(EName::StreamingDisposition, GetDefaultStreamingDisposition(!SchemeInfo || !AppData()->FeatureFlags.GetEnableStreamingQueryStateRecompute() || force)));
         CHECK_STATUS(validator.SaveDefault(EName::CheckpointInterval, "", &TPropertyValidator::ValidateInterval<TPropertyValidator::MAX_PROTOBUF_DURATION_MICROSECONDS>));
         CHECK_STATUS(validator.Save(EName::InflightOperation, TStreamingQueryConfig::TOperations::Create));
         CHECK_STATUS(validator.Save(
@@ -3360,7 +3366,8 @@ private:
         CHECK_STATUS_RET(watermarkLateEventsPolicy, validator.ExtractOptional(EName::WatermarkLateEventsPolicy, &TPropertyValidator::ValidateEnum<NYql::NHoppingWindow::EPolicy>));
 
         const auto queryTextValue = queryText.DetachResult();
-        if (queryTextValue && force.GetResult() != "true") {
+        const bool stateRecomputeEnabled = AppData()->FeatureFlags.GetEnableStreamingQueryStateRecompute();
+        if (queryTextValue && force.GetResult() != "true" && !stateRecomputeEnabled) {
             return TStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED, "Changing the query text will result in the loss of the checkpoint. Please use FORCE=true to change the request text");
         }
 
@@ -3380,7 +3387,7 @@ private:
         CHECK_STATUS(validator.Save(ESqlSettings::QUERY_TEXT_FEATURE, queryTextValue.value_or(previousSettings.QueryText)));
         CHECK_STATUS(validator.Save(EName::QueryTextRevision, ToString(queryTestRevision)));
         CHECK_STATUS(validator.Save(EName::WatermarkLateEventsPolicy, watermarkLateEventsPolicy.GetResult().value_or(previousSettings.WatermarkLateEventsPolicy ? previousSettings.WatermarkLateEventsPolicy : "drop")));
-        CHECK_STATUS(validator.Save(EName::StreamingDisposition, streamingDispositionValue.value_or(DefaultStreamingDisposition)));
+        CHECK_STATUS(validator.Save(EName::StreamingDisposition, streamingDispositionValue.value_or(GetDefaultStreamingDisposition(!queryTextValue || !stateRecomputeEnabled || force.GetResult() == "true"))));
         CHECK_STATUS(validator.Save(EName::InflightOperation, TStreamingQueryConfig::TOperations::Alter));
 
         return validator.Finish();

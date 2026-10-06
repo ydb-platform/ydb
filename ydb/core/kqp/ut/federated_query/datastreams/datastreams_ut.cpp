@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto& status = scriptExecutionOperation.Status();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "External source with type YdbTopics is disabled");
     }
 
     Y_UNIT_TEST_F(ReadTopicEndpointValidationWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto& status = scriptExecutionOperation.Status();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Couldn't determine external YDB entity type");
     }
 
     Y_UNIT_TEST_F(ReadTopicEndpointValidation, TStreamingTestFixture) {
@@ -225,6 +225,31 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto& issues = status.GetIssues().ToString();
         UNIT_ASSERT_STRING_CONTAINS(issues, "Couldn't determine external YDB entity type");
         UNIT_ASSERT_STRING_CONTAINS(issues, "Describe path 'local/topicName' in external YDB database '/local'");
+    }
+
+    Y_UNIT_TEST_F(ReadTableOutsideConnectorDatabaseNames, TStreamingTestFixture) {
+        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        cfg.AddAvailableExternalDataSources("Ydb");
+        cfg.AddAvailableExternalDataSources("YdbTopics");
+        cfg.SetAllExternalDataSourcesAreAvailable(false);
+        auto& connector = *cfg.MutableGeneric()->MutableConnector();
+        connector.AddDatabaseNames("test_db");
+        connector.MutableEndpoint()->set_host("localhost");
+        connector.MutableEndpoint()->set_port(1234);
+
+        ExecExternalQuery(R"(
+            CREATE TABLE regularTable (
+                id String,
+                PRIMARY KEY (id)
+            );
+        )");
+        CreatePqSource("sourceName");
+
+        const auto operation = ExecAndWaitScript("SELECT * FROM `sourceName`.`regularTable`;", EExecStatus::Failed);
+        const auto& status = operation.Status();
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
+            "database is not configured for connector table access");
     }
 
     Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {
@@ -263,6 +288,20 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         }
 
         CheckScriptResult(scriptExecutionOperation, 2, partitionCount, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
+        });
+
+        const auto batchResults = ExecQuery(fmt::format(R"(
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL,
+                    value String NOT NULL
+                )
+            );
+        )", "source"_a = sourceName, "topic"_a = topicName));
+        CheckScriptResult(batchResults[0], 2, partitionCount, [](TResultSetParser& result) {
             UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
             UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
         });

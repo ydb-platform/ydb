@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     args_dechunker.cpp
@@ -23,8 +23,6 @@ PEERDIR(
 )
 
 PROVIDES(YqlUdfSdkArrow)
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

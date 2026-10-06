@@ -24,6 +24,8 @@ public:
         WaitAllGCs,
         WaitTabletGC,
         WaitLogGC,
+        PendingFinalSnapshot,
+        WaitFinalSnapshot,
     };
 
 public:
@@ -40,13 +42,14 @@ public:
     void OnCompleteCompaction(ui32 tableId, const TFinishedCompactionInfo& finishedCompactionInfo);
     bool NeedLogSnaphot();
     void OnMakeLogSnapshot(ui32 generation, ui32 step);
-    void OnSnapshotCommited(ui32 generation, ui32 step);
-    void OnCollectedGarbage(const TActorContext& ctx);
+    void OnSnapshotCommited(ui32 generation, ui32 step, const TActorContext& ctx);
+    void CheckGcProgress();
     void OnGcForStepAckResponse(ui32 generation, ui32 step, const TActorContext& ctx);
-    bool NeedGC();
+    bool NeedGC() const;
 
 private:
     void CompleteVacuum(const TActorContext& ctx);
+    void StartFinalSnapshot();
     void ChangeState(EVacuumState to);
     bool UpdateMaxGeneration(TVacuumTag tag);
 
@@ -71,6 +74,8 @@ private:
     // two subsequent are snapshots required to force GC
     TGCTime FirstLogSnaphotStep;
     TGCTime SecondLogSnaphotStep;
+    // Persists executor GC progress after everything before the second snapshot is collected.
+    TGCTime FinalLogSnaphotStep;
 };
 
 } // NKikimr::NTabletFlatExecutor

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yt_arrow_converter.cpp
@@ -43,8 +43,6 @@ IF (MKQL_DISABLE_CODEGEN)
         -DMKQL_DISABLE_CODEGEN
     )
 ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

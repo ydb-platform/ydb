@@ -54,6 +54,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
         auto* rule = appConfig.MutableResourcePathPrefixMapping()->AddRules();
         rule->SetSrc("/kfront");
         rule->SetDst("/Root");

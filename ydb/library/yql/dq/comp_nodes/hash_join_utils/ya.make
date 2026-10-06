@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
@@ -31,8 +31,6 @@ CFLAGS(
 )
 
 ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

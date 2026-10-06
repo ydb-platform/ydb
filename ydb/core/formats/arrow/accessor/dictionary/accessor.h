@@ -15,6 +15,7 @@ private:
     using TBase = IChunkedArray;
     std::shared_ptr<arrow::Array> ArrayDictionary;
     std::shared_ptr<arrow::Array> ArrayPositions;
+    const bool NeedNullsCountCalculation;
 
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
         visitor(DoGetLocalData(std::nullopt, 0).GetArray());
@@ -41,8 +42,28 @@ protected:
     virtual TMinMax DoGetMinMaxScalars() const override;
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override;
     virtual ui32 DoGetNullsCount() const override {
-        return ArrayPositions->null_count();
+        // For dictionaries created by insertion/Compaction pipeline it is not possible to have a non-null index referencing a null value.
+        // But it may be possible if values we constructed, for example, by a kernel application.
+        // This method is not expected to be called for them (used only for columnar statistics), but that branch is added for correctness sake.
+        if (!NeedNullsCountCalculation || !ArrayDictionary->null_count()) {
+            return ArrayPositions->null_count();
+        }
+        ui32 result = 0;
+        AFL_VERIFY(SwitchType(ArrayPositions->type()->id(), [&](const auto type) {
+            if constexpr (type.IsIndexType()) {
+                const auto* positions = type.CastArray(ArrayPositions.get());
+                for (ui32 index = 0; index < positions->length(); ++index) {
+                    if (positions->IsNull(index) || ArrayDictionary->IsNull(positions->Value(index))) {
+                        ++result;
+                    }
+                }
+                return true;
+            }
+            return false;
+        }));
+        return result;
     }
+
     virtual ui32 DoGetValueRawBytes() const override {
         return NArrow::GetArrayDataSize(ArrayDictionary) + NArrow::GetArrayDataSize(ArrayPositions);
     }
@@ -75,10 +96,13 @@ public:
         return ArrayPositions;
     }
 
-    TDictionaryArray(const std::shared_ptr<arrow::Array>& dictionary, const std::shared_ptr<arrow::Array>& positions)
+    TDictionaryArray(
+        const std::shared_ptr<arrow::Array>& dictionary, const std::shared_ptr<arrow::Array>& positions,
+        const bool needNullsCountCalculation = false)
         : TBase(TValidator::CheckNotNull(positions)->length(), EType::Dictionary, TValidator::CheckNotNull(dictionary)->type())
         , ArrayDictionary(TValidator::CheckNotNull(dictionary))
         , ArrayPositions(TValidator::CheckNotNull(positions))
+        , NeedNullsCountCalculation(needNullsCountCalculation)
     {
     }
 };

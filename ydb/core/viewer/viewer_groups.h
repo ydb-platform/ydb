@@ -1148,6 +1148,9 @@ public:
         }
         // group id pre-filter, affects TotalGroups count
         if (!FilterGroupIds.ToApply.empty()) {
+            if (!FieldsAvailable.test(+EGroupFields::GroupId)) {
+                return;
+            }
             TGroupView groupView;
             for (TGroup* group : GroupView) {
                 if (FilterGroupIds.ToApply.count(group->GroupId)) {

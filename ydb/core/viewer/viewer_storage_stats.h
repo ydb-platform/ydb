@@ -74,6 +74,8 @@ class TJsonStorageStats : public TViewerPipeClient {
     std::vector<TVDiskRequestInfo> VDiskRequests;
     std::unordered_map<TActorId, size_t> VDiskRequestIndex;
     std::unordered_map<TTabletId, TTabletStorageInfo> TabletStorageInfo;
+    // Populated only by SchemeShard, Hive and Whiteboard, never by VDisk responses.
+    std::unordered_set<TTabletId> SelectedTablets;
     std::unordered_map<TString, TPathStorageInfo> PathStorageInfo;
     std::vector<TString> Problems;
 
@@ -433,6 +435,7 @@ public:
                 pathStorageInfo.Tablets.erase(duplicates.begin(), duplicates.end());
             }
         }
+        SelectedTablets.insert(pathStorageInfo.Tablets.begin(), pathStorageInfo.Tablets.end());
     }
 
     void ProcessResponses() {
@@ -482,6 +485,7 @@ public:
     void ProcessHiveInfo(const TEvHive::TEvResponseHiveInfo& hiveInfo) {
         for (const auto& tabletInfo : hiveInfo.Record.GetTablets()) {
             TTabletId tabletId = tabletInfo.GetTabletID();
+            SelectedTablets.insert(tabletId);
             auto& tabletStorageInfo = TabletStorageInfo[tabletId];
             tabletStorageInfo.Type = tabletInfo.GetTabletType();
         }
@@ -491,11 +495,7 @@ public:
         const auto& vDiskInfo(VDiskRequests[requestIndex]);
         for (const auto& record : vDiskInfo.VDiskRequest->Record.stat().tablets()) {
             TTabletId tabletId = record.tablet_id();
-            auto it = TabletStorageInfo.find(tabletId);
-            if (it == TabletStorageInfo.end()) {
-                continue;
-            }
-            auto& tabletStorageInfo = it->second;
+            auto& tabletStorageInfo(TabletStorageInfo[tabletId]);
             for (const auto& channel : record.channels()) {
                 auto& groupStorageInfo(tabletStorageInfo.Groups[vDiskInfo.GroupId]);
                 groupStorageInfo.StorageSize += channel.data_size();
@@ -553,7 +553,12 @@ public:
 
     void Handle(TEvGetLogoBlobIndexStatResponse::TPtr& ev) {
         if (ev->Cookie < VDiskRequests.size()) {
-            if (VDiskRequests[ev->Cookie].VDiskRequest.Set(std::move(ev))) {
+            const size_t requestIndex = ev->Cookie;
+            auto& vdiskRequest = VDiskRequests[requestIndex].VDiskRequest;
+            if (vdiskRequest.Set(std::move(ev))) {
+                if (vdiskRequest.IsOk()) {
+                    ProcessVDiskResponse(requestIndex);
+                }
                 RequestDone();
             }
         } else {
@@ -588,6 +593,7 @@ public:
                         }
                     }
                     TTabletId tabletId = tabletInfo.GetTabletId();
+                    SelectedTablets.insert(tabletId);
                     auto& tabletStorageInfo(TabletStorageInfo[tabletId]);
                     tabletStorageInfo.Type = static_cast<TTabletTypes::EType>(tabletInfo.GetType());
                 }
@@ -671,13 +677,6 @@ public:
     }
 
     void ReplyAndPassAway() override {
-        // Shared storage groups may contain tablets of other databases. Wait for
-        // tablet discovery before joining VDisk stats with the selected tablets.
-        for (size_t requestIndex = 0; requestIndex < VDiskRequests.size(); ++requestIndex) {
-            if (VDiskRequests[requestIndex].VDiskRequest.IsOk()) {
-                ProcessVDiskResponse(requestIndex);
-            }
-        }
         bool returnEverything = FromStringWithDefault<bool>(Params.Get("everything"), false);
         bool returnGroups = FromStringWithDefault<bool>(Params.Get("groups"), returnEverything);
         bool returnTablets = FromStringWithDefault<bool>(Params.Get("tablets"), returnEverything);
@@ -698,7 +697,12 @@ public:
             }
             std::map<TTabletTypes::EType, TTabletStorageInfo> tabletTypeAccumulated;
             std::map<TTabletTypes::EType, std::vector<TTabletId>> tabletIdsByType;
-            for (const auto& [tabletId, tabletStorageInfo] : TabletStorageInfo) {
+            for (const auto& tabletId : SelectedTablets) {
+                auto it = TabletStorageInfo.find(tabletId);
+                if (it == TabletStorageInfo.end()) {
+                    continue;
+                }
+                const auto& tabletStorageInfo = it->second;
                 auto& typeAccumulated = tabletTypeAccumulated[tabletStorageInfo.Type];
                 typeAccumulated.TabletCount += 1;
                 typeAccumulated.DataSize += tabletStorageInfo.DataSize;

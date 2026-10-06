@@ -95,37 +95,27 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
     Y_UNIT_TEST(OmittedMinRowsUsesDocumentedDefault) {
         Ydb::Table::VectorIndexSettings settings;
         UNIT_ASSERT_VALUES_EQUAL(GetHnswMinRows(settings), 10000u);
-        settings.set_min_rows(0);
-        UNIT_ASSERT_VALUES_EQUAL(GetHnswMinRows(settings), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetHnswM(settings), 16u);
     }
 
     Y_UNIT_TEST(OmittedRebuildThresholdUsesDocumentedDefault) {
         Ydb::Table::VectorIndexSettings settings;
         UNIT_ASSERT_VALUES_EQUAL(GetHnswDeltaRows(settings), 10000u);
-        settings.set_delta_rows(5);
-        UNIT_ASSERT_VALUES_EQUAL(GetHnswDeltaRows(settings), 5u);
     }
 
     Y_UNIT_TEST(LegacyPercentageIsNotAnAbsoluteRowCount) {
         Ydb::Table::VectorIndexSettings settings;
         // Former field 8 held 5 percent, not a five-row limit.
         UNIT_ASSERT(settings.ParseFromString(TString("\x40\x05", 2)));
-        UNIT_ASSERT(!settings.has_delta_rows());
         UNIT_ASSERT_VALUES_EQUAL(GetHnswDeltaRows(settings), 10000u);
-        settings.set_delta_rows(0);
-        UNIT_ASSERT_VALUES_EQUAL(GetHnswDeltaRows(settings), 0u);
-        settings.set_delta_rows(1ULL << 40);
-        UNIT_ASSERT_VALUES_EQUAL(GetHnswDeltaRows(settings), 1ULL << 40);
     }
 
-    Y_UNIT_TEST(CacheSettingsIdentityIsNormalizedAndComplete) {
+    Y_UNIT_TEST(CacheSettingsIdentityUsesPublicVectorParameters) {
         auto cached = MakeSettings(
             Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
             Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
             2);
         auto requested = cached;
-        requested.set_m(16);
-        requested.set_ef_construction(200);
         UNIT_ASSERT(AreHnswIndexSettingsCompatible(cached, requested));
 
         requested.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN);
@@ -134,7 +124,7 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         requested.set_vector_dimension(3);
         UNIT_ASSERT(!AreHnswIndexSettingsCompatible(cached, requested));
         requested = cached;
-        requested.set_m(17);
+        requested.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
         UNIT_ASSERT(!AreHnswIndexSettingsCompatible(cached, requested));
     }
 
@@ -268,13 +258,11 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         UNIT_ASSERT(!index->GetVector("missing", stored));
     }
 
-    Y_UNIT_TEST(BuildAndSearchWithCustomParameters) {
+    Y_UNIT_TEST(BuildAndSearchWithDefaultParameters) {
         auto settings = MakeSettings(
             Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
             Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
             2);
-        settings.set_m(24);
-        settings.set_ef_construction(100);
 
         std::vector<std::pair<TString, TString>> data = {
             {"a", SerializeFloatVector({1.0f, 0.0f})},
@@ -350,7 +338,6 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
                 Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT}) {
             auto settings = MakeSettings(metric,
                 Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, dimensions);
-            settings.set_m(4);
             TString error;
             auto index = THnswIndex::Build(settings, data, 0, error);
             UNIT_ASSERT_C(index, error);
@@ -378,7 +365,6 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
                                  Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN,
                                  Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT}) {
             auto settings = MakeSettings(metric, Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 8);
-            settings.set_m(4);
             TString error;
             auto index = THnswIndex::Build(settings, data, 0, error);
             UNIT_ASSERT_C(index, error);
@@ -455,12 +441,12 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
             defaultEstimate + 1234);
     }
 
-    Y_UNIT_TEST(RejectsUnsafeHnswSettingsBeforeNmslibBuild) {
+    Y_UNIT_TEST(RejectsUnsupportedWireSettingsBeforeNmslibBuild) {
         auto settings = MakeSettings(
             Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
             Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
             2);
-        settings.set_m(NKMeans::MaxHnswM + 1);
+        settings.GetReflection()->MutableUnknownFields(&settings)->AddVarint(5, NKMeans::MaxHnswM + 1);
         std::vector<std::pair<TString, TString>> data = {
             {"a", SerializeFloatVector({1.0f, 0.0f})},
         };
@@ -468,7 +454,7 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         TString error;
         auto index = THnswIndex::Build(settings, data, 0, error);
         UNIT_ASSERT(!index);
-        UNIT_ASSERT_STRING_CONTAINS(error, "M");
+        UNIT_ASSERT_STRING_CONTAINS(error, "unsupported parameter");
     }
 
     Y_UNIT_TEST(RejectsEmptyInput) {

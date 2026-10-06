@@ -94,35 +94,24 @@ struct TFloatVectorView {
 
 } // namespace
 
-ui32 GetHnswM(const VectorIndexSettings& settings) {
-    return settings.has_m() ? settings.m() : DefaultHnswM;
+ui32 GetHnswM(const VectorIndexSettings&) {
+    return DefaultHnswM;
 }
 
-ui64 GetHnswMinRows(const VectorIndexSettings& settings) {
-    return settings.has_min_rows() ? settings.min_rows() : DefaultHnswMinRows;
+ui64 GetHnswMinRows(const VectorIndexSettings&) {
+    return DefaultHnswMinRows;
 }
 
-ui64 GetHnswDeltaRows(const VectorIndexSettings& settings) {
-    return settings.has_delta_rows()
-        ? settings.delta_rows() : DefaultHnswDeltaRows;
+ui64 GetHnswDeltaRows(const VectorIndexSettings&) {
+    return DefaultHnswDeltaRows;
 }
 
 bool AreHnswIndexSettingsCompatible(
         const VectorIndexSettings& cached,
         const VectorIndexSettings& requested) {
-    const auto connectivity = [](const auto& settings) {
-        return settings.has_m()
-            ? settings.m() : DefaultHnswM;
-    };
-    const auto constructionCandidates = [](const auto& settings) {
-        return settings.has_ef_construction()
-            ? settings.ef_construction() : DefaultHnswEfConstruction;
-    };
     return cached.metric() == requested.metric()
         && cached.vector_type() == requested.vector_type()
-        && cached.vector_dimension() == requested.vector_dimension()
-        && connectivity(cached) == connectivity(requested)
-        && constructionCandidates(cached) == constructionCandidates(requested);
+        && cached.vector_dimension() == requested.vector_dimension();
 }
 
 void THnswIndexChanges::Set(TString key, TRowVersion version,
@@ -234,12 +223,10 @@ public:
 
         Index = std::make_unique<similarity::Hnsw<float>>(/* PrintProgress */ false, *Space, Objects);
 
-        Connectivity = settings.has_m()
-            ? settings.m() : DefaultHnswM;
+        Connectivity = GetHnswM(settings);
         similarity::AnyParams buildParams(std::vector<std::string>{
             "M=" + std::to_string(Connectivity),
-            "efConstruction=" + std::to_string(settings.has_ef_construction()
-                ? settings.ef_construction() : DefaultHnswEfConstruction),
+            "efConstruction=" + std::to_string(DefaultHnswEfConstruction),
             "indexThreadQty=" + std::to_string(BuildThreadsPerIndex),
         });
         Index->CreateIndex(buildParams);
@@ -470,8 +457,7 @@ std::unique_ptr<THnswIndex> THnswIndex::Build(
     }
 
     if (maxMemoryBytes != 0) {
-        const ui32 connectivity = settings.has_m()
-            ? settings.m() : DefaultHnswM;
+        const ui32 connectivity = GetHnswM(settings);
         size_t keyBytes = 0;
         for (const auto& [key, _] : keysAndVectors) {
             if (key.size() > Max<size_t>() - keyBytes) {

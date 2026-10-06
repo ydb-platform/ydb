@@ -16,15 +16,15 @@
 
 namespace NKikimr::NDataShard {
 
-// Proto3 optional fields have no schema-level defaults. Keep the documented
-// server-side default in one place so omitted SQL settings do not behave as 0.
+// The public vector settings contain metric, type, and dimension only.
+// Keep HNSW construction and rebuild defaults in one place.
 ui32 GetHnswM(const Ydb::Table::VectorIndexSettings& settings);
 ui64 GetHnswMinRows(const Ydb::Table::VectorIndexSettings& settings);
 ui64 GetHnswDeltaRows(const Ydb::Table::VectorIndexSettings& settings);
 
 // Returns whether an index built with `cached` may serve a request with
-// `requested`. This compares normalized values, so an omitted HNSW parameter
-// and the corresponding explicit default are treated identically.
+// `requested`. HNSW construction parameters use fixed server defaults;
+// compare the metric, vector type, and dimension from the public schema.
 bool AreHnswIndexSettingsCompatible(
     const Ydb::Table::VectorIndexSettings& cached,
     const Ydb::Table::VectorIndexSettings& requested);

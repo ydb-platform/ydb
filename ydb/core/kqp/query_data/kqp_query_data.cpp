@@ -97,7 +97,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const NFormats::TF
 
 TTxAllocatorState::TTxAllocatorState(const IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
-    : Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators()))
+    : Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters()))
     , TypeEnv(*Alloc)
     , MemInfo("TQueryData")
     , HolderFactory(Alloc->Ref(), MemInfo, functionRegistry)

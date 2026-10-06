@@ -19,8 +19,8 @@ namespace NKikimr::NKqp {
 //!   Per libraryPath it serializes dlopen / Register so the same .so is not
 //!   opened/registered concurrently; different paths do not block each other.
 //!   Prefer not holding an actor mailbox across that work when possible.
-//! - Clone() copies the current snapshot (including BackTraceCallback /
-//!   SupportsSizedAllocators); module Impl pointers are shared.
+//! - Clone() copies the current snapshot (including BackTraceCallback);
+//!   module Impl pointers are shared.
 //! - Native per-path load mutexes are dropped when the last module for that
 //!   libraryPath is removed.
 class IDynamicFunctionRegistry: public NMiniKQL::IMutableFunctionRegistry {

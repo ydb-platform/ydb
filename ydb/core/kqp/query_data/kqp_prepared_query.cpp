@@ -46,7 +46,7 @@ public:
     NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
 
     TPreparedQueryAllocHolder(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry)
-        : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators())
+        : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters())
         , TypeEnv(Alloc)
     {
         Alloc.Release();

@@ -17,7 +17,7 @@ using namespace NMiniKQL;
 using namespace NYql;
 
 TKqpProtoBuilder::TSelfHosted::TSelfHosted(const IFunctionRegistry& funcRegistry)
-    : Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
+    : Alloc(__LOCATION__, TAlignedPagePoolCounters())
     , TypeEnv(Alloc)
     , MemInfo("KqpProtoBuilder")
     , HolderFactory(Alloc.Ref(), MemInfo)

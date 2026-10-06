@@ -1,5 +1,7 @@
 # Быстрый старт с min_max-индексом
 
+{% include [min_max_index_unavailable_26_2.md](../../yql/reference/syntax/_includes/min_max_index_unavailable_26_2.md) %}
+
 ## Создание таблицы с min_max-индексом
 
 Ниже минимальный пример: колоночная таблица с первичным ключом и локальным индексом типа `min_max` на колонках, которые часто используются в фильтрах.

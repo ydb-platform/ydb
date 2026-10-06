@@ -1,5 +1,7 @@
 # min_max-индекс
 
+{% include [min_max_index_unavailable_26_2.md](../_includes/min_max_index_unavailable_26_2.md) %}
+
 {% if backend_name == 'YDB' %}[min_max-индекс](../../../../dev/min_max-skip-index.md){% else %}min_max-индекс{% endif %} — [локальный индекс](../../../../concepts/glossary.md#local-index), его можно задать только с ключевым словом `LOCAL`. При создании таблицы в секции `INDEX` используется тип `min_max` (по аналогии с [вторичным индексом](secondary_index.md), но с обязательным `LOCAL` и соответствующим `USING`). См. также [локальные индексы](../../../../concepts/query_execution/local_indexes.md).
 
 ```yql

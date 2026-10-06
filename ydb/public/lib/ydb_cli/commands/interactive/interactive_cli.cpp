@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_settings.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 #include <ydb/public/lib/ydb_cli/common/lazy_driver.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
@@ -14,13 +15,17 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_sql.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <library/cpp/resource/resource.h>
 
+#include <util/datetime/base.h>
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/generic/scope.h>
 #include <util/string/strip.h>
+
+#include <chrono>
 
 #if defined(_unix_)
 #include <csignal>
@@ -39,6 +44,46 @@ struct TVersionInfo {
     TString ServerVersion;
     TString ServerAvailableCheckFail;
 };
+
+class TInitialAuthorization : private TInterruptableCommand {
+public:
+    static bool Wait(TClientCommand::TConfig& config);
+};
+
+bool TInitialAuthorization::Wait(TClientCommand::TConfig& config) {
+    if (!config.Oidc.IsDeviceFlow()) {
+        return true;
+    }
+
+    const auto factory = config.GetSingletonCredentialsProviderFactory();
+    if (factory == nullptr) {
+        return true;
+    }
+
+    SetInterruptHandlers();
+    Y_DEFER {
+        ResetInterrupted();
+    };
+
+    // Device authorization needs time for user input, independent of RPC deadlines.
+    // The provider also enforces the device code's expires_in from the IdP.
+    constexpr auto AUTHORIZATION_TIMEOUT = std::chrono::minutes(10);
+    const auto deadline = std::chrono::steady_clock::now() + AUTHORIZATION_TIMEOUT;
+    const auto provider = factory->CreateProvider();
+    auto credentials = provider->GetAuthInfoAsync();
+    while (!credentials.Wait(TDuration::MilliSeconds(50))) {
+        if (IsInterrupted()) {
+            Cerr << "OIDC sign-in interrupted." << Endl;
+            return false;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            Cerr << "Timed out waiting for OIDC sign-in after 10 minutes." << Endl;
+            return false;
+        }
+    }
+    credentials.GetValueSync();
+    return true;
+}
 
 TVersionInfo ResolveVersionInfo(const TDriver& driver) {
     TVersionInfo result;
@@ -133,6 +178,12 @@ TInteractiveCLI::TInteractiveCLI(const TString& profileName)
 {}
 
 int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
+    // Complete the first sign-in before the probe starts its session/RPC timeouts,
+    // and before SIGINT is ignored for the line editor below.
+    if (!TInitialAuthorization::Wait(config)) {
+        return EXIT_FAILURE;
+    }
+
     // Ctrl+C handling stays where it should: inside replxx. While a line is being read the
     // terminal is in raw mode with ISIG disabled, so the tty driver does not turn Ctrl+C
     // into SIGINT — it arrives as a \x03 byte that replxx interprets as a cancel event

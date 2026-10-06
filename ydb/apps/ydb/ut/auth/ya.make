@@ -15,6 +15,7 @@ SRCDIR(ydb/apps/ydb/ut)
 SRCS(
     mock_env.cpp
     oidc.cpp
+    oidc_interactive.cpp
     parse_command_line.cpp
     run_ydb.cpp
 )

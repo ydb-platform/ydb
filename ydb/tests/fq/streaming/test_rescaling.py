@@ -13,7 +13,9 @@ class TestRescaling(StreamingTestBase):
 
     def _reader_count(self, kikimr: Kikimr) -> int:
         return sum(
-            self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR") for node_id in counter_nodes(kikimr.cluster)
+            self.get_actor_count(kikimr, node_id, actor_name)
+            for node_id in counter_nodes(kikimr.cluster)
+            for actor_name in ("DQ_MESSAGE_STREAM_READ_ACTOR", "DQ_PQ_READ_ACTOR")
         )
 
     def _wait_started(self, kikimr: Kikimr, query_name: str):

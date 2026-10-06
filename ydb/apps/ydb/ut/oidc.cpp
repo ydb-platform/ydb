@@ -40,6 +40,60 @@ TString ConfigProfile(const TString& configFile) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(ParseOidcOptionsTest) {
+
+    Y_UNIT_TEST_F(UpdateProfileCanSelectOidcAndRejectsNoAuthConflict, TCliTestFixture) {
+        const auto profile = EnvFile("profiles:\n  test:\n    authentication:\n      method: anonymous-auth\n", "profiles.yaml");
+        const auto token = EnvFile("updated-token", "token");
+        RunCliWithInput({"--profile-file", profile, "config", "profile", "update", "test",
+            "-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-issuer", "https://issuer.example",
+            "--oidc-access-token-file", token}, "");
+        const auto saved = TFileInput(profile).ReadAll();
+        UNIT_ASSERT_STRING_CONTAINS(saved, "method: oidc");
+        UNIT_ASSERT(!saved.Contains("updated-token"));
+        ExpectToken("Bearer updated-token");
+        RunCli({"--profile-file", profile, "--profile", "test", "scheme", "ls"});
+        ExpectFail();
+        RunCliWithInput({"--profile-file", profile, "config", "profile", "update", "test",
+            "--oidc-issuer", "https://issuer.example", "--oidc-access-token-file", token, "--no-auth"}, "");
+        UNIT_ASSERT_VALUES_EQUAL(TFileInput(profile).ReadAll(), saved);
+    }
+
+    Y_UNIT_TEST_F(RejectsMalformedOidcProfileFields, TCliTestFixture) {
+        for (const TString& data : {TString("[]"), TString("{issuer: []}"),
+                TString("{issuer: https://issuer.example, client_id: {nested: value}}")}) {
+            ExpectFail();
+            RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "config", "info"}, {},
+                "profiles:\n  oidc:\n    authentication:\n      method: oidc\n      data: " + data + "\nactive_profile: oidc\n");
+        }
+    }
+
+    Y_UNIT_TEST_F(RejectsEmptyOidcProfileOptions, TCliTestFixture) {
+        for (const TString& option : {TString("--oidc-config"), TString("--oidc-issuer"),
+                TString("--oidc-client-id"), TString("--oidc-scope"), TString("--oidc-access-token-file"),
+                TString("--oidc-client-secret-file"), TString("--oidc-cache-path")}) {
+            const auto profile = EnvFile("", "profiles.yaml");
+            ExpectFail();
+            RunCliWithInput({"--profile-file", profile, "config", "profile", "create", "invalid", option, ""}, "");
+            UNIT_ASSERT(!TFileInput(profile).ReadAll().Contains("invalid"));
+        }
+    }
+
+    Y_UNIT_TEST_F(RejectsEmptyOidcScopeFromStdin, TCliTestFixture) {
+        const auto profile = EnvFile("", "profiles.yaml");
+        ExpectFail();
+        RunCliWithInput({"--profile-file", profile, "config", "profile", "create", "invalid",
+            "--oidc-issuer", "https://issuer.example", "--oidc-client-id", "cli"}, "oidc-scope:   \n");
+        UNIT_ASSERT(!TFileInput(profile).ReadAll().Contains("invalid"));
+    }
+
+    Y_UNIT_TEST_F(RejectsConflictingProfileAuthentication, TCliTestFixture) {
+        const auto profile = EnvFile("", "profiles.yaml");
+        ExpectFail();
+        RunCliWithInput({"--profile-file", profile, "config", "profile", "create", "invalid",
+            "--oidc-issuer", "https://issuer.example", "--oidc-client-id", "cli", "--anonymous-auth"}, "");
+        UNIT_ASSERT(!TFileInput(profile).ReadAll().Contains("invalid"));
+    }
+
     Y_UNIT_TEST_F(StaticOidcConfigFromCommandLine, TCliTestFixture) {
         TTempDir dir;
         TFileOutput((dir.Path() / "token").GetPath()).Write("Bearer config-token\n");

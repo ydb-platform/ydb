@@ -2,6 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/scope.h>
 #include <util/folder/tempdir.h>
 #include <util/stream/file.h>
 #include <util/system/file.h>
@@ -16,6 +17,10 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+#if defined(_unix_)
+#include <unistd.h>
+#endif
 
 using namespace NYdb;
 using namespace NYdb::NOidc;
@@ -50,6 +55,98 @@ TTokenCache MakeCache(std::string access, std::string refresh) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TOidcFileTokenCache) {
+
+    Y_UNIT_TEST(RejectsEmptyCachePathAndIdentity) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateFileTokenCacher("", "identity"), std::invalid_argument, "path");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateFileTokenCacher("tokens.json", ""), std::invalid_argument, "identity");
+    }
+
+    Y_UNIT_TEST(MalformedDocumentsAreSilentCacheMisses) {
+        TTempDir dir;
+        const auto path = dir.Path() / "tokens.json";
+        std::vector<std::string> diagnostics;
+        const auto cacher = CreateFileTokenCacher(path.GetPath(), "identity",
+            [&](const std::string& message) { diagnostics.push_back(message); });
+        for (const std::string& document : {
+                "", "[]", "null", "{}",
+                R"({"version":-1,"identity":"identity","access_token":{"token":"access"}})",
+                R"({"version":"1","identity":"identity","access_token":{"token":"access"}})",
+                R"({"version":1,"access_token":{"token":"access"}})",
+                R"({"version":1,"identity":42,"access_token":{"token":"access"}})",
+                R"({"version":1,"identity":"identity"})",
+                R"({"version":1,"identity":"identity","access_token":null})",
+                R"({"version":1,"identity":"identity","access_token":{}})",
+                R"({"version":1,"identity":"identity","access_token":{"token":1}})",
+                R"({"version":1,"identity":"identity","access_token":{"token":""}})",
+                R"({"version":1,"identity":"identity","access_token":{"token":"access","expires_at":-1}})",
+                R"({"version":1,"identity":"identity","access_token":{"token":"access","expires_at":true}})",
+                R"({"version":1,"identity":"identity","access_token":{"token":"access"},"refresh_token":{}})",
+                R"({"version":1,"identity":"identity","access_token":{"token":"access"},"refresh_token":{"token":"refresh","expires_at":"tomorrow"}})",
+                R"({"nested":[[[[[[[[[[]]]]]]]]]]})"})
+        {
+            WriteFile(path, document);
+            UNIT_ASSERT_C(!cacher->Read().has_value(), document);
+            UNIT_ASSERT(diagnostics.empty());
+        }
+        // A corrupt cache must not prevent storing a fresh token.
+        cacher->Write(MakeCache("fresh-access", "fresh-refresh"));
+        UNIT_ASSERT_VALUES_EQUAL(cacher->Read()->AccessToken.Token, "fresh-access");
+    }
+
+    Y_UNIT_TEST(RoundTripsTokensWithoutExpiry) {
+        TTempDir dir;
+        const auto path = (dir.Path() / "tokens.json").GetPath();
+        const TTokenCache cache{
+            .AccessToken = {.Token = "access"},
+            .RefreshToken = TOAuthToken{.Token = "refresh"},
+        };
+        CreateFileTokenCacher(path, "identity")->Write(cache);
+        const auto restored = CreateFileTokenCacher(path, "identity")->Read();
+        UNIT_ASSERT(restored.has_value());
+        UNIT_ASSERT(!restored->AccessToken.ExpiresAt.has_value());
+        UNIT_ASSERT(restored->RefreshToken.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(restored->RefreshToken->Token, "refresh");
+        UNIT_ASSERT(!restored->RefreshToken->ExpiresAt.has_value());
+    }
+
+    Y_UNIT_TEST(InvalidTokensDoNotReplaceExistingCache) {
+        TTempDir dir;
+        const auto path = dir.Path() / "tokens.json";
+        std::vector<std::string> diagnostics;
+        const auto cacher = CreateFileTokenCacher(path.GetPath(), "identity",
+            [&](const std::string& message) { diagnostics.push_back(message); });
+        cacher->Write(MakeCache("original", "refresh"));
+        const TString original = TFileInput(path).ReadAll();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(cacher->Write(MakeCache("", "secret-refresh")),
+            std::invalid_argument, "access token must not be empty");
+        auto invalid = MakeCache("secret-access", "refresh");
+        invalid.RefreshToken->Token.clear();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(cacher->Write(invalid),
+            std::invalid_argument, "refresh token must not be empty");
+        UNIT_ASSERT_VALUES_EQUAL(TFileInput(path).ReadAll(), original);
+        UNIT_ASSERT_VALUES_EQUAL(diagnostics.size(), 2);
+        for (const auto& message : diagnostics) {
+            UNIT_ASSERT(message.find("secret-") == std::string::npos);
+        }
+    }
+
+    Y_UNIT_TEST(DiagnosticFailurePreservesOriginalError) {
+        TTempDir dir;
+        const auto cacher = CreateFileTokenCacher(dir.Path().GetPath(), "identity",
+            [](const std::string&) { throw std::runtime_error("diagnostic failed"); });
+        UNIT_ASSERT_EXCEPTION_CONTAINS(cacher->Read(), std::runtime_error, "regular file");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(cacher->Write(MakeCache("access", "")), std::runtime_error, "regular file");
+    }
+
+    Y_UNIT_TEST(NonDirectoryParentIsAnIoError) {
+        TTempDir dir;
+        const auto parent = dir.Path() / "file";
+        WriteFile(parent, "unchanged");
+        const auto cacher = CreateFileTokenCacher((parent / "tokens.json").GetPath(), "identity");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(cacher->Read(), std::runtime_error, "failed to open file");
+        UNIT_ASSERT_VALUES_EQUAL(TFileInput(parent).ReadAll(), "unchanged");
+    }
+
     Y_UNIT_TEST(ReusesTokensAfterRestart) {
         TTempDir dir;
         const auto path = (dir.Path() / "tokens.json").GetPath();
@@ -94,6 +191,34 @@ Y_UNIT_TEST_SUITE(TOidcFileTokenCache) {
     }
 
 #if defined(_unix_)
+    // These tests require POSIX permissions and named FIFOs. On Windows,
+    // Chmod only changes the read-only attribute; it cannot deny file reads.
+    Y_UNIT_TEST(PermissionErrorsPreserveCacheAndCleanTemporaryFiles) {
+        // Root bypasses Unix mode bits, so it cannot exercise EACCES this way.
+        if (geteuid() == 0) {
+            return;
+        }
+        TTempDir dir;
+        const auto path = dir.Path() / "tokens.json";
+        const auto cacher = CreateFileTokenCacher(path.GetPath(), "identity");
+        cacher->Write(MakeCache("original", "refresh"));
+        Y_DEFER {
+            Chmod(dir.Name().c_str(), S_IRWXU);
+            Chmod(path.GetPath().c_str(), S_IRUSR | S_IWUSR);
+        };
+        UNIT_ASSERT_VALUES_EQUAL(Chmod(path.GetPath().c_str(), 0), 0);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(cacher->Read(), std::runtime_error, "permission denied");
+        UNIT_ASSERT_VALUES_EQUAL(Chmod(path.GetPath().c_str(), S_IRUSR | S_IWUSR), 0);
+        UNIT_ASSERT_VALUES_EQUAL(Chmod(dir.Name().c_str(), S_IRUSR | S_IXUSR), 0);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(cacher->Write(MakeCache("new", "refresh")),
+            std::runtime_error, "failed to write file");
+        UNIT_ASSERT_VALUES_EQUAL(cacher->Read()->AccessToken.Token, "original");
+        TVector<TString> files;
+        dir.Path().ListNames(files);
+        UNIT_ASSERT_VALUES_EQUAL(files.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(files.front(), "tokens.json");
+    }
+
     Y_UNIT_TEST(RejectsFifoWithoutBlocking) {
         TTempDir dir;
         const auto path = (dir.Path() / "tokens.pipe").GetPath();

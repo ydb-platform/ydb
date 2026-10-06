@@ -4,6 +4,7 @@
 #include "oidc_options.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
+#include <ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers/test_token_exchange_server.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/common/scope.h>
@@ -29,6 +30,72 @@ TOidcCliOptions DeviceOptions() {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
+
+    Y_UNIT_TEST(DefaultCredentialsGetterPrefersOAuthExchangeToOidc) {
+        TTempDir dir;
+        const auto path = (dir.Path() / "oauth.json").GetPath();
+        TFileOutput(path).Write(R"({"subject-credentials":{"type":"fixed","token":"subject-token","token-type":"test-token-type"}})");
+        TTestTokenExchangeServer server;
+        server.Check.ExpectedInputParams = {
+            {"grant_type", "urn:ietf:params:oauth:grant-type:token-exchange"},
+            {"requested_token_type", "urn:ietf:params:oauth:token-type:access_token"},
+            {"subject_token", "subject-token"},
+            {"subject_token_type", "test-token-type"},
+        };
+        server.Check.Response = R"({"access_token":"exchange-token","token_type":"bearer","expires_in":600})";
+        char name[] = "ydb";
+        char* args[] = {name};
+        TClientCommand::TConfig config(1, args);
+        config.UseOauth2TokenExchange = true;
+        config.Oauth2KeyFile = path;
+        config.IamEndpoint = server.GetEndpoint();
+        config.Oidc.Issuer = "invalid-ignored-issuer";
+        const auto factory = config.GetSingletonCredentialsProviderFactory();
+        UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer exchange-token");
+        server.CheckExpectations();
+    }
+
+    Y_UNIT_TEST(DefaultCredentialsGetterAllowsAnonymousWithoutOAuthKey) {
+        char name[] = "ydb";
+        char* args[] = {name};
+        TClientCommand::TConfig config(1, args);
+        config.UseOauth2TokenExchange = true;
+        UNIT_ASSERT(config.GetSingletonCredentialsProviderFactory()->CreateProvider()->GetAuthInfo().empty());
+    }
+
+    Y_UNIT_TEST(EmptyOptionsDoNotPrintOrSelectAuthentication) {
+        TOidcCliOptions options;
+        UNIT_ASSERT(!options.HasOptions());
+        UNIT_ASSERT(!options.IsConfigured());
+        TStringStream output;
+        options.Print(output);
+        UNIT_ASSERT(output.Str().empty());
+        options.Scope = "read";
+        UNIT_ASSERT(options.HasOptions());
+        UNIT_ASSERT(!options.IsConfigured());
+    }
+
+    Y_UNIT_TEST(ConfigFileRejectsEveryDirectOptionBeforeOpeningFile) {
+        for (const auto member : {&TOidcCliOptions::Issuer, &TOidcCliOptions::Flow,
+                &TOidcCliOptions::ClientId, &TOidcCliOptions::ClientSecretFile,
+                &TOidcCliOptions::AccessTokenFile, &TOidcCliOptions::Scope, &TOidcCliOptions::CachePath}) {
+            TOidcCliOptions options;
+            options.ConfigFile = "/nonexistent/oidc.yaml";
+            options.*member = "value";
+            UNIT_ASSERT_EXCEPTION_CONTAINS(options.MakeConfig(), std::invalid_argument, "cannot be combined");
+        }
+    }
+
+    Y_UNIT_TEST(NullCredentialsFactoryIsNotWrapped) {
+        char name[] = "ydb";
+        char* args[] = {name};
+        TClientCommand::TConfig config(1, args);
+        config.CredentialsGetter = [](const TClientCommand::TConfig&) -> TCredentialsProviderFactoryPtr {
+            return nullptr;
+        };
+        UNIT_ASSERT(config.GetSingletonCredentialsProviderFactory() == nullptr);
+    }
+
     Y_UNIT_TEST(DefaultsToDeviceFlow) {
         const auto config = DeviceOptions().MakeConfig();
         UNIT_ASSERT_VALUES_EQUAL(config.Issuer, "https://issuer.example");

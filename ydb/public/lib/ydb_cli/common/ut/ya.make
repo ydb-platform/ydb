@@ -1,5 +1,10 @@
 UNITTEST_FOR(ydb/public/lib/ydb_cli/common)
 
+PEERDIR(
+    contrib/libs/jwt-cpp
+    ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers
+)
+
 SRCS(
     build_info_ut.cpp
     cert_format_converter_ut.cpp

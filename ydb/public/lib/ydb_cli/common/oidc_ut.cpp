@@ -37,6 +37,16 @@ TOidcCliOptions MakeStaticOptions() {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TOidcCliAcceptor) {
+
+    Y_UNIT_TEST(FactoryIdentitySurvivesProviderCreationAndDoesNotExposeTokens) {
+        const auto factory = CreateCliOidcCredentialsProviderFactory(MakeStaticOptions());
+        const auto identity = factory->GetClientIdentity();
+        UNIT_ASSERT(!identity.empty());
+        UNIT_ASSERT(identity.find("session-token") == std::string::npos);
+        UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer session-token");
+        UNIT_ASSERT_VALUES_EQUAL(factory->GetClientIdentity(), identity);
+    }
+
     Y_UNIT_TEST(PrintsVerificationUrlAndCode) {
         TStringStream output;
         const auto acceptor = CreateCliAuthAcceptor(output);

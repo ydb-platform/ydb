@@ -9,6 +9,7 @@
 #include <functional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -38,6 +39,54 @@ std::string ExceptionMessage(const std::function<void()>& action) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TOidcConfigFile) {
+
+    Y_UNIT_TEST(RejectsMalformedMappingsAndRequiredFields) {
+        TTempDir dir;
+        for (const auto& [contents, expected] : std::vector<std::pair<std::string, std::string>>{
+                {"[]", "expected a mapping"},
+                {"? [issuer, other]\n: value\n", "mapping keys must be strings"},
+                {"issuer: https://one.example\nissuer: https://two.example\n", "duplicate field"},
+                {"device_authorization_grant: {client_id: cli}\n", "field is required"},
+                {"issuer: https://issuer.example\ndevice_authorization_grant: []\n", "expected a mapping"},
+                {"issuer: https://issuer.example\ndevice_authorization_grant: {}\n", "field is required"},
+                {"issuer: https://issuer.example\ndevice_authorization_grant: {client_id: cli, scope: ['']}\n", "scope values must not be empty"},
+                {"issuer: https://issuer.example\ndevice_authorization_grant: {client_id: cli, scope: [{}]}\n", "sequence of non-empty strings"}})
+        {
+            const auto path = WriteFile(dir.Path() / "invalid.yaml", contents);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(LoadOidcConfig(path), std::invalid_argument, expected);
+        }
+    }
+
+    Y_UNIT_TEST(InvalidYamlDoesNotExposeSecrets) {
+        TTempDir dir;
+        const auto path = WriteFile(dir.Path() / "invalid.yaml", "issuer: [secret-that-must-not-be-printed\n");
+        const auto message = ExceptionMessage([&] { LoadOidcConfig(path); });
+        UNIT_ASSERT_STRING_CONTAINS(message, "Failed to load OIDC configuration");
+        UNIT_ASSERT(message.find("secret-that-must-not-be-printed") == std::string::npos);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(LoadOidcConfig((dir.Path() / "missing.yaml").GetPath()),
+            std::invalid_argument, "Failed to load OIDC configuration");
+    }
+
+    Y_UNIT_TEST(RejectsInvalidExpiryTypes) {
+        TTempDir dir;
+        WriteFile(dir.Path() / "token", "token");
+        for (const std::string& expiry : {"-1", "true", "tomorrow", "null", "[]", "!!str 100"}) {
+            const auto path = WriteFile(dir.Path() / "invalid.yaml",
+                "issuer: https://issuer.example\nstatic_credentials:\n  access_token_file: token\n  expires_at: " + expiry + "\n");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(LoadOidcConfig(path), std::invalid_argument, "expires_at");
+        }
+    }
+
+    Y_UNIT_TEST(RequiresSecretsWhenEnvironmentIsEmpty) {
+        TTempDir dir;
+        const NTesting::TScopedEnvironment token("YDB_OIDC_ACCESS_TOKEN", "");
+        const NTesting::TScopedEnvironment secret("YDB_OIDC_CLIENT_SECRET", "");
+        for (const std::string& grant : {"static_credentials: {}", "client_credentials_grant: {client_id: cli}"}) {
+            const auto path = WriteFile(dir.Path() / "missing.yaml", "issuer: https://issuer.example\n" + grant + "\n");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(LoadOidcConfig(path), std::invalid_argument, "provide a secret file");
+        }
+    }
+
     Y_UNIT_TEST(LoadsSecretsFromSeparateFiles) {
         TTempDir dir;
         WriteFile(dir.Path() / "token", "Bearer file-token\n");

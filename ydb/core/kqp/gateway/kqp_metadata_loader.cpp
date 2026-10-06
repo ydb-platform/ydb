@@ -1229,7 +1229,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                         }
                                         f(externalDataSourceMetadata);
                                     });
-                            } else if (externalDataSourceMetadata.Metadata->ExternalDataSource().GetType() == ToString(NYql::EDatabaseType::YT) && externalPath) {
+                            } else if (externalDataSourceMetadata.Metadata->ExternalDataSource().GetDatabaseType() == NYql::EDatabaseType::YT && externalPath) {
                                 if (settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::YtProviderName))) {
                                     auto& source = externalDataSourceMetadata.Metadata->ExternalDataSource();
                                     auto locked = ptr.lock();

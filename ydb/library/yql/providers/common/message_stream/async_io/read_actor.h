@@ -1,0 +1,90 @@
+#pragma once
+
+#include <ydb/library/yql/providers/common/message_stream/partition.h>
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/invoke.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <functional>
+
+namespace NYql::NDq {
+
+struct TMessageStreamReadState {
+    THashMap<TPartitionKey, NMessageStream::TPartitionProgress> Partitions;
+    TInstant StartingMessageTimestamp;
+    TDqAsyncStats IngressStats;
+};
+
+// Source-specific checkpoint encoding and consumer initialization. Neither
+// implementation owns the reading loop or buffered/acknowledged records.
+class IMessageStreamReadActorState {
+public:
+    virtual ~IMessageStreamReadActorState() = default;
+    virtual TMessageStreamReadState& GetReadState() = 0;
+    virtual void SaveState(const NDqProto::TCheckpoint&, TSourceState&) = 0;
+    virtual void LoadState(const TSourceState&) = 0;
+    virtual void InitConsumerOffsets(NActors::TActorId, ui32,
+        std::shared_ptr<NFq::IMessageStreamClient>, ui32) {}
+    virtual bool ConsumerOffsetsInitialized() const { return true; }
+    virtual void HandleConsumerOffsets(NActors::TEvents::TEvInvokeResult::TPtr&) {}
+    virtual void StopConsumerOffsetInitialization() {}
+};
+
+struct TEvExecuteMessageStreamCallback : NActors::TEventLocal<TEvExecuteMessageStreamCallback,
+    EventSpaceBegin(NActors::TEvents::ES_PRIVATE) + 20> {
+    explicit TEvExecuteMessageStreamCallback(std::function<void()> function)
+        : Function(std::move(function)) {}
+    void Execute() { Function(); }
+    std::function<void()> Function;
+};
+
+struct TMessageStreamReadCluster {
+    TString Name;
+    ui32 PartitionsCount = 0;
+    std::vector<ui64> Partitions;
+    std::function<std::shared_ptr<NFq::IMessageStreamClient>(const NActors::TActorContext&)> CreateClient;
+    // Factories may complete asynchronously; callbacks never call the actor directly.
+    std::function<NThreading::TFuture<std::shared_ptr<NFq::IMessageStreamReadSession>>(
+        const NActors::TActorContext&, NFq::IMessageStreamClient&,
+        const NFq::TMessageStreamReadSessionSettings&)> CreateSession;
+    std::function<void(ui64, TInstant)> AdvancePartitionTime;
+};
+
+struct TMessageStreamReadActorSettings {
+    ui64 InputIndex = 0;
+    ui64 TaskId = 0;
+    TTxId TxId;
+    NActors::TActorId ComputeActorId;
+    TString Stream;
+    TString Consumer;
+    bool StopAtCurrentEndOffsets = false;
+    bool EnableStreamingAutopartitioning = false;
+    bool RequireWriteTime = false;
+    i64 BufferSize = 16ULL << 20;
+    TDuration ReconnectPeriod;
+    TDuration CheckPartitionCountPeriod;
+    TMaybe<ui64> BeginOffset, EndOffset;
+    TMaybe<TInstant> BeginWriteTime, EndWriteTime;
+    bool WatermarksEnabled = false;
+    bool IdlePartitionsEnabled = false;
+    TDuration WatermarkGranularity, LateArrivalDelay, IdleTimeout;
+    TString MetricsSource;
+    TVector<std::pair<TString, TString>> SensorLabels;
+    bool EnableStreamingQueriesCounters = false;
+    TCollectStatsLevel StatsLevel = TCollectStatsLevel::None;
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    const NKikimr::NMiniKQL::THolderFactory* HolderFactory = nullptr;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    using TMetaExtractor = std::function<std::pair<NUdf::TUnboxedValuePod, i64>(
+        const NFq::TMessageStreamRecord&, const TString&)>;
+    std::vector<TMetaExtractor> MetadataFields;
+    std::function<void(const NFq::TMessageStreamRecord&)> TraceRecord;
+    std::vector<TMessageStreamReadCluster> Clusters;
+};
+
+std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateMessageStreamReadActor(
+    TMessageStreamReadActorSettings settings, std::unique_ptr<IMessageStreamReadActorState> state);
+
+} // namespace NYql::NDq

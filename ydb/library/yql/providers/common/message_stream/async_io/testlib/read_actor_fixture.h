@@ -8,7 +8,9 @@ using namespace NFq;
 
 class TControl final : public IMessageStreamPartitionControl {
 public:
-    TMessageStreamPartitionId GetPartitionId() const override { return {0}; }
+    explicit TControl(ui64 partitionId = 0) : PartitionId{partitionId} {}
+    TMessageStreamPartitionId GetPartitionId() const override { return PartitionId; }
+    const TMessageStreamPartitionId PartitionId;
     void ConfirmStart(std::optional<ui64> offset, std::optional<ui64> bound) override { Start = offset; Bound = bound; }
     void ConfirmStop() override { ++Stopped; }
     void ConfirmExhausted() override { ++Exhausted; }
@@ -39,6 +41,10 @@ public:
     const TString& GetStream() const override { static const TString path = "stream"; return path; }
     std::shared_ptr<IMessageStreamReadSession> CreateReadSession(const TMessageStreamReadSessionSettings& settings) override {
         Settings = settings;
+        settings.Validate();
+        if (!SupportsWriteTime && (settings.RequireWriteTime || settings.ReadFromWriteTime)) {
+            ythrow TMessageStreamException(EMessageStreamStatus::Unsupported) << "Backend has no write time";
+        }
         return Session;
     }
     NThreading::TFuture<TMessageStreamResult<TMessageStreamConsumerPosition>> CommitPosition(TMessageStreamPartitionId, const TString&, ui64) override {
@@ -49,6 +55,7 @@ public:
     NThreading::TFuture<TMessageStreamResult<TMessageStreamPartitionDescription>> DescribePartition(TMessageStreamPartitionId) override { ythrow yexception() << "Unexpected describe"; }
     std::shared_ptr<TSession> Session;
     TMessageStreamReadSessionSettings Settings;
+    bool SupportsWriteTime = true;
 };
 class TState final : public IMessageStreamReadActorState {
 public:
@@ -75,6 +82,11 @@ struct TFixture {
     TMaybe<TInstant> LastWatermark;
     bool EnableStreamingAutopartitioning = false;
     NThreading::TFuture<std::shared_ptr<IMessageStreamReadSession>> PendingSession;
+    std::function<NThreading::TFuture<std::shared_ptr<IMessageStreamReadSession>>()> SessionFactory;
+    std::vector<ui64> PartitionIds = {0};
+    TMaybe<TInstant> BeginWriteTime, EndWriteTime;
+    TDuration ReconnectPeriod;
+    NThreading::TFuture<void> DataReady;
 
     void Init(bool streaming = false, bool requireTime = false,
         std::unique_ptr<IMessageStreamReadActorState> state = std::make_unique<TState>()) {
@@ -86,16 +98,20 @@ struct TFixture {
             settings.Consumer = "consumer";
             settings.StopAtCurrentEndOffsets = !streaming;
             settings.RequireWriteTime = requireTime;
+            settings.BeginWriteTime = BeginWriteTime;
+            settings.EndWriteTime = EndWriteTime;
+            settings.ReconnectPeriod = ReconnectPeriod;
             settings.WatermarksEnabled = WatermarksEnabled;
             settings.WatermarkGranularity = TDuration::Seconds(1);
             settings.EnableStreamingAutopartitioning = EnableStreamingAutopartitioning;
             settings.MetricsSource = "test";
             settings.HolderFactory = &actor.GetHolderFactory();
             TMessageStreamReadCluster cluster;
-            cluster.PartitionsCount = 1;
-            cluster.Partitions = {0};
+            cluster.PartitionsCount = PartitionIds.size();
+            cluster.Partitions = PartitionIds;
             cluster.CreateClient = [client = Client](const auto&) { return client; };
-            cluster.CreateSession = [pending = PendingSession](const auto&, IMessageStreamClient& client, const auto& read) {
+            cluster.CreateSession = [pending = PendingSession, factory = SessionFactory](const auto&, IMessageStreamClient& client, const auto& read) {
+                if (factory) { return factory(); }
                 if (pending.Initialized()) { return pending; }
                 return NThreading::MakeFuture(client.CreateReadSession(read));
             };
@@ -105,15 +121,21 @@ struct TFixture {
         });
     }
     void Start(std::optional<ui64> end, ui64 committed = 0) {
-        Session->Events.emplace_back(TMessageStreamPartitionStartRequestedEvent{Control, committed, end});
+        Start(Control, end, committed);
+    }
+    void Start(const std::shared_ptr<TControl>& control, std::optional<ui64> end, ui64 committed = 0) {
+        Session->Events.emplace_back(TMessageStreamPartitionStartRequestedEvent{control, committed, end});
     }
     void Data(ui64 offset, TString payload = "payload", bool writeTime = false) {
+        Data(Control, offset, std::move(payload), writeTime);
+    }
+    void Data(const std::shared_ptr<TControl>& control, ui64 offset, TString payload = "payload", bool writeTime = false) {
         TMessageStreamRecord record;
-        record.Id.PartitionId = {0};
+        record.Id.PartitionId = control->GetPartitionId();
         record.Id.Offset = offset;
         record.Data = std::move(payload);
         if (writeTime) { record.WriteTime = TInstant::Seconds(1); }
-        Session->Events.emplace_back(TMessageStreamDataEvent{Control, {std::move(record)}});
+        Session->Events.emplace_back(TMessageStreamDataEvent{control, {std::move(record)}});
     }
     TVector<TString> Read(i64 space = 1024) {
         TVector<TString> rows;
@@ -122,6 +144,7 @@ struct TFixture {
             TMaybe<TInstant> watermark;
             actor.DqAsyncInput->GetAsyncInputData(batch, watermark, Finished, space);
             LastWatermark = watermark;
+            DataReady = Setup.AsyncInputPromises->NewAsyncInputDataArrived.GetFuture();
             batch.ForEachRow([&](const NUdf::TUnboxedValue& value) { rows.emplace_back(value.AsStringRef()); });
         });
         return rows;

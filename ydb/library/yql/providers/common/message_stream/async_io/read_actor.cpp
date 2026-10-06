@@ -11,7 +11,8 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 #include <util/random/random.h>
-#include <queue>
+#include <deque>
+#include <set>
 #include <map>
 
 #define SRC_LOG_T(s) \
@@ -222,7 +223,7 @@ public:
         State->SaveState(checkpoint, state);
         state.InputIndex = InputIndex;
         if (!WithoutConsumer) {
-            DeferredCommits.emplace(checkpoint.GetId(), std::move(CurrentDeferredCommit));
+            DeferredCommits.emplace_back(checkpoint.GetId(), std::move(CurrentDeferredCommit));
             CurrentDeferredCommit = {};
         }
     }
@@ -247,7 +248,7 @@ public:
         if (!WithoutConsumer) {
             while (!DeferredCommits.empty() && DeferredCommits.front().first <= checkpoint.GetId()) {
                 DeferredCommits.front().second.Commit();
-                DeferredCommits.pop();
+                DeferredCommits.pop_front();
             }
         }
         ConfirmStoppedPartitions();
@@ -380,13 +381,12 @@ private:
     void Handle(TEvPrivate::TEvReconnectSession::TPtr&) {
         for (auto& clusterState : Clusters) {
             SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index) << ", Reconnect epoch: " << (Metrics.ReconnectRate ? Metrics.ReconnectRate->Val() : 0));
-            if (clusterState.ReadSession) {
-                clusterState.ReadSession->Close();
-                clusterState.ReadSession.reset();
-            }
         }
+        CloseSessions();
         Reconnected = true;
         Metrics.ReconnectRate->Inc();
+        // A pending factory has no WaitEvent subscription to wake the reader.
+        NotifyCA();
 
         Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
     }
@@ -396,14 +396,10 @@ private:
         State->StopConsumerOffsetInitialization();
         ClearMkqlData();
 
+        CloseSessions();
         for (auto& clusterState : Clusters) {
-            if (clusterState.ReadSession) {
-                clusterState.ReadSession->Close();
-                clusterState.ReadSession.reset();
-            }
             clusterState.TopicClient.reset();
         }
-        CloseSessions();
         TActor<TMessageStreamReadActor>::PassAway();
     }
 
@@ -489,7 +485,7 @@ private:
 
         if (Reconnected) {
             Reconnected = false;
-            ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
+            ReadyBuffer = std::deque<TReadyBatch>{}; // clear read buffer
         }
 
         if (freeSpace <= 0) { return 0; }
@@ -596,13 +592,26 @@ private:
         }
     }
 
+    bool HasReadTimeLowerBound() const {
+        // Zero is the legacy checkpoint representation of an absent bound.
+        // An explicit BeginWriteTime also preserves a requested epoch bound.
+        return StartingMessageTimestamp != TInstant::Zero() || BeginWriteTime.Defined();
+    }
+
+    bool RequiresWriteTime() const {
+        return Settings.RequireWriteTime || Settings.WatermarksEnabled
+            || HasReadTimeLowerBound() || EndWriteTime.Defined();
+    }
+
     NFq::TMessageStreamReadSessionSettings GetMessageStreamReadSettings(TClusterState& clusterState) const {
         NFq::TMessageStreamReadSessionSettings settings;
         for (const auto partitionId : GetPartitionsToRead(clusterState)) {
             settings.PartitionIds.push_back(NFq::TMessageStreamPartitionId{partitionId});
         }
-        settings.ReadFromWriteTime = StartingMessageTimestamp;
-        settings.RequireWriteTime = Settings.RequireWriteTime || Settings.WatermarksEnabled;
+        if (HasReadTimeLowerBound()) {
+            settings.ReadFromWriteTime = StartingMessageTimestamp;
+        }
+        settings.RequireWriteTime = RequiresWriteTime();
         settings.MaxMemoryUsageBytes = BufferSize;
         settings.TraceId = LogPrefix;
         settings.AutoPartitioningSupport = !Settings.StopAtCurrentEndOffsets;
@@ -649,13 +658,41 @@ private:
     }
 
     void ConfirmStoppedPartitions() {
-        if (!ReadyBuffer.empty() || !CurrentDeferredCommit.Ranges.empty() || !DeferredCommits.empty()) {
+        if (StoppingPartitions.empty() && ExhaustedPartitions.empty()) {
             return;
         }
-        for (const auto& control : StoppingPartitions) { control->ConfirmStop(); }
-        StoppingPartitions.clear();
-        for (const auto& control : ExhaustedPartitions) { control->ConfirmExhausted(); }
-        ExhaustedPartitions.clear();
+
+        // Track assignments, not partition IDs: an old and a new assignment
+        // of the same partition must not hold up each other's confirmations.
+        using TControl = std::shared_ptr<NFq::IMessageStreamPartitionControl>;
+        std::set<TControl, std::owner_less<TControl>> pending;
+        const auto collect = [&pending](const auto& ranges) {
+            for (const auto& [control, _] : ranges) {
+                pending.insert(control);
+            }
+        };
+        for (const auto& batch : ReadyBuffer) {
+            collect(batch.OffsetRanges);
+        }
+        collect(CurrentDeferredCommit.Ranges);
+        for (const auto& [_, commit] : DeferredCommits) {
+            collect(commit.Ranges);
+        }
+
+        std::erase_if(StoppingPartitions, [&](const auto& control) {
+            if (pending.contains(control)) {
+                return false;
+            }
+            control->ConfirmStop();
+            return true;
+        });
+        std::erase_if(ExhaustedPartitions, [&](const auto& control) {
+            if (pending.contains(control)) {
+                return false;
+            }
+            control->ConfirmExhausted();
+            return true;
+        });
     }
 
     struct TReadyBatch {
@@ -704,7 +741,7 @@ private:
             }
         }
 
-        ReadyBuffer.pop();
+        ReadyBuffer.pop_front();
         ConfirmStoppedPartitions();
 
         if (ReadyBuffer.empty()) {
@@ -726,7 +763,7 @@ private:
         SRC_LOG_D("SessionId: " << GetSessionId() << " New watermark " << watermark << " was generated");
 
         if (Y_UNLIKELY(ReadyBuffer.empty() || ReadyBuffer.back().Watermark.Defined())) {
-            ReadyBuffer.emplace(watermark, 0);
+            ReadyBuffer.emplace_back(watermark, 0);
             return;
         }
 
@@ -735,7 +772,7 @@ private:
 
     // must be called with bound allocator
     void ClearMkqlData() {
-        std::queue<TReadyBatch> empty;
+        std::deque<TReadyBatch> empty;
         ReadyBuffer.swap(empty);
     }
 
@@ -833,7 +870,7 @@ private:
                     needSkip = true;
                 }
 
-                if ((Self.Settings.RequireWriteTime || Self.Settings.WatermarksEnabled) && !record.WriteTime) {
+                if (Self.RequiresWriteTime() && !record.WriteTime) {
                     ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::Unsupported)
                         << "MessageStream reader requires backend message write time";
                 }
@@ -853,7 +890,7 @@ private:
                 }
 
                 if (Self.ReadyBuffer.empty() || Self.ReadyBuffer.back().Watermark.Defined()) {
-                    Self.ReadyBuffer.emplace(Nothing(), BatchCapacity);
+                    Self.ReadyBuffer.emplace_back(Nothing(), BatchCapacity);
                 }
                 TReadyBatch& activeBatch = Self.ReadyBuffer.back();
 
@@ -1104,10 +1141,10 @@ private:
         std::map<TPartitionControl, TDisjointIntervalTree<ui64>, std::owner_less<TPartitionControl>> Ranges;
     };
 
-    std::queue<std::pair<ui64, TStreamDeferredCommit>> DeferredCommits;
+    std::deque<std::pair<ui64, TStreamDeferredCommit>> DeferredCommits;
     TStreamDeferredCommit CurrentDeferredCommit;
     std::vector<TMessageStreamReadActorSettings::TMetaExtractor> MetadataFields;
-    std::queue<TReadyBatch> ReadyBuffer;
+    std::deque<TReadyBatch> ReadyBuffer;
     bool WithoutConsumer = false;
     bool WakeupScheduled = false;
     TInstant LastActiveTime = TInstant::Now();

@@ -456,4 +456,6 @@ message TFeatureFlags {
     optional bool EnableColumnShardSetNotNull = 367 [default = false];
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
+    // Tablets report their memory through Local to the memory controller and get a zone and a share back
+    optional bool EnableTabletMemoryHost = 369 [default = false];
 }

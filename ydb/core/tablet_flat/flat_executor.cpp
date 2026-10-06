@@ -196,6 +196,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
+    TabletMemoryHostEnabled = AppData()->FeatureFlags.GetEnableTabletMemoryHost();
     auto& icb = *AppData()->Icb;
     if (static_cast<size_t>(Owner->TabletType()) < icb.LogFlushDelayOverrideUsec.size()) {
         TControlBoard::RegisterSharedControl(LogFlushDelayOverrideUsec, icb.LogFlushDelayOverrideUsec[static_cast<size_t>(Owner->TabletType())]);
@@ -4166,8 +4167,9 @@ void TExecutor::UpdateUsedTabletMemory() {
     UsedTabletMemory += counters.Parts.OtherBytes;
     UsedTabletMemory += Stats->PacksMetaBytes;
 
-    // Add tablet memory usage:
-    UsedTabletMemory += Owner->GetMemoryUsage();
+    // Add tablet memory usage: the honest report when the tablet memory host is on
+    OwnerMemoryReport = TabletMemoryHostEnabled ? Owner->GetMemoryReport() : NMemory::TConsumerReport{};
+    UsedTabletMemory += TabletMemoryHostEnabled ? OwnerMemoryReport.Used : Owner->GetMemoryUsage();
 }
 
 void TExecutor::UpdateCounters(const TActorContext &ctx) {
@@ -4196,6 +4198,12 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                 Counters->Simple()[TExecutorCounters::DB_OTHER_BYTES].Set(dbCounters.Parts.OtherBytes);
                 Counters->Simple()[TExecutorCounters::DB_BYKEY_BYTES].Set(dbCounters.Parts.ByKeyBytes);
                 Counters->Simple()[TExecutorCounters::USED_TABLET_MEMORY].Set(UsedTabletMemory);
+                const NMemory::TMemoryAdmissionStats admission = Owner->GetMemoryAdmissionStats();
+                Counters->Simple()[TExecutorCounters::TABLET_MEMORY_USED].Set(OwnerMemoryReport.Used);
+                Counters->Simple()[TExecutorCounters::MEMORY_ADMISSION_RUNNING_BYTES].Set(admission.RunningBytes);
+                Counters->Simple()[TExecutorCounters::MEMORY_ADMISSION_POSTPONED_BYTES].Set(admission.PostponedBytes);
+                Counters->Simple()[TExecutorCounters::MEMORY_ADMISSION_POSTPONED_COUNT].Set(admission.PostponedCount);
+                Counters->Simple()[TExecutorCounters::TABLET_MEMORY_SHARE].Set(MemoryShare.value_or(0));
             }
 
             // Runtime stats related to uncommitted changes
@@ -4287,8 +4295,16 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
                 ResourceMetrics->StorageSystem.Set(storageSize);
 
-                auto limit = Memory->Profile->GetStaticTabletTxMemoryLimit();
-                auto memorySize = limit ? (UsedTabletMemory + limit) : (UsedTabletMemory + memory.Static);
+                ui64 memorySize = 0;
+                if (TabletMemoryHostEnabled) {
+                    // The report travels to Local in the metrics it already forwards to Hive
+                    memorySize = UsedTabletMemory;
+                    ResourceMetrics->MemoryDemand.Set(UsedTabletMemory + OwnerMemoryReport.Demand - OwnerMemoryReport.Used);
+                    ResourceMetrics->MemoryReclaimable.Set(Min(OwnerMemoryReport.Reclaimable, UsedTabletMemory));
+                } else {
+                    auto limit = Memory->Profile->GetStaticTabletTxMemoryLimit();
+                    memorySize = limit ? (UsedTabletMemory + limit) : (UsedTabletMemory + memory.Static);
+                }
                 ResourceMetrics->Memory.Set(memorySize);
                 Counters->Simple()[TExecutorCounters::CONSUMED_STORAGE].Set(storageSize);
                 Counters->Simple()[TExecutorCounters::CONSUMED_MEMORY].Set(memorySize);
@@ -4575,6 +4591,25 @@ void TExecutor::Handle(NMemory::TEvMemTableCompact::TPtr &ev) {
     }
 }
 
+// One event means "something changed": the tablet gets the zone and, once it has one, its share
+void TExecutor::Handle(NMemory::TEvMemoryZone::TPtr &ev) {
+    const auto *msg = ev->Get();
+    const bool zoneChanged = MemoryZone != msg->Zone;
+    MemoryZone = msg->Zone;
+    if (msg->Share) {
+        MemoryShare = msg->Share;
+    }
+    if (!Owner) {
+        return;
+    }
+    if (zoneChanged) {
+        Owner->OnMemoryZone(MemoryZone);
+    }
+    if (msg->Share) {
+        Owner->OnMemoryLimit(*msg->Share);
+    }
+}
+
 void TExecutor::AllowBorrowedGarbageCompaction(ui32 tableId) {
     if (CompactionLogic) {
         return CompactionLogic->AllowBorrowedGarbageCompaction(tableId);
@@ -4634,6 +4669,7 @@ STFUNC(TExecutor::StateWork) {
         HFunc(NBlockIO::TEvStat, Handle);
         hFunc(NMemory::TEvMemTableRegistered, Handle);
         hFunc(NMemory::TEvMemTableCompact, Handle);
+        hFunc(NMemory::TEvMemoryZone, Handle);
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
         hFunc(NBackup::TEvSnapshotCompleted, Handle);
         hFunc(NBackup::TEvChangelogFailed, Handle);
@@ -4663,6 +4699,7 @@ STFUNC(TExecutor::StateFollower) {
         HFunc(NOps::TEvScanStat, Handle);
         hFunc(NOps::TEvResult, Handle);
         HFunc(NBlockIO::TEvStat, Handle);
+        hFunc(NMemory::TEvMemoryZone, Handle);
     default:
         break;
     }

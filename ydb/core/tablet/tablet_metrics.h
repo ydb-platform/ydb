@@ -44,6 +44,9 @@ class TResourceMetricsValues {
 public:
     TDecayingAverageValue<ui64, DurationPer15Seconds, DurationPerSecond> CPU;
     TGaugeValue<ui64> Memory;
+    // Set only by a tablet that reports its memory to the node's memory host
+    TGaugeValue<ui64> MemoryDemand;
+    TGaugeValue<ui64> MemoryReclaimable;
     TDecayingAverageValue<ui64, DurationPer15Seconds, DurationPerSecond> Network;
     TGaugeValue<ui64> StorageSystem;
     TGaugeValue<ui64> StorageUser;
@@ -74,6 +77,8 @@ protected:
     const TActorId Launcher;
     std::optional<ui32> LevelCPU;
     std::optional<ui32> LevelMemory;
+    std::optional<ui32> LevelMemoryDemand;
+    std::optional<ui32> LevelMemoryReclaimable;
     std::optional<ui32> LevelNetwork;
     std::optional<ui32> LevelStorage;
     std::optional<ui32> LevelIops;

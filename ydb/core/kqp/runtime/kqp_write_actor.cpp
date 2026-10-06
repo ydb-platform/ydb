@@ -894,7 +894,22 @@ public:
 
             const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
             if (metadata && ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
+<<<<<<< HEAD
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
+=======
+                YDB_LOG_INFO("Waiting for overloaded shard.",
+                    {"logPrefix", this->LogPrefix},
+                    {"tablePath", TablePath},
+                    {"shardID", ev->Get()->Record.GetOrigin()},
+                    {"sink", this->SelfId()});
+                // The shard acknowledged the wait. Don't reset the retry counter here:
+                // the batch is still unacknowledged, and zeroing the accumulated attempts
+                // would re-baseline the exponential backoff and the bounded resend budget
+                // on every subscribed rejection (pacing would collapse to the initial retry
+                // delay under sustained overload). No sends happen while we wait, so the
+                // attempts are merely frozen; OnOverloadReady resets them right before the
+                // resend, once the shard reports it is ready.
+>>>>>>> 130a6938b73 (Fix retries attempts reset for Overloaded (#55218))
             }
 
             return;

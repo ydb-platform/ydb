@@ -307,8 +307,8 @@ static_credentials:
         const auto path = WriteFile(dir.Path() / "oidc.yaml", R"(
 issuer: https://issuer.example
 cache_path: state/tokens.json
-static_credentials:
-  access_token_file: opaque
+device_authorization_grant:
+  client_id: cli
 )");
         (dir.Path() / "state").MkDir();
 
@@ -316,6 +316,22 @@ static_credentials:
         UNIT_ASSERT(config.Cacher_ != nullptr);
         config.Cacher_->Write(TTokenCache{.AccessToken = {.Token = "saved-access"}});
         UNIT_ASSERT((dir.Path() / "state" / "tokens.json").Exists());
+    }
+
+    Y_UNIT_TEST(StaticTokenRotationDoesNotUseFileCache) {
+        TTempDir dir;
+        const auto path = WriteFile(dir.Path() / "static.yaml", R"(
+issuer: https://issuer.example
+cache_path: tokens.json
+static_credentials:
+  access_token_file: token
+)");
+        for (const std::string& token : {"first-token", "rotated-token"}) {
+            WriteFile(dir.Path() / "token", token);
+            UNIT_ASSERT(LoadOidcConfig(path).Cacher_ == nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(CreateOidcFileCredentialsProviderFactory(path, nullptr)->CreateProvider()->GetAuthInfo(), "Bearer " + token);
+            UNIT_ASSERT(!(dir.Path() / "tokens.json").Exists());
+        }
     }
 
     Y_UNIT_TEST(CreatesStaticProviderFromFile) {

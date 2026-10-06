@@ -39,6 +39,7 @@ constexpr TStringBuf ACCESS_TOKEN_ENV = "YDB_OIDC_ACCESS_TOKEN";
 constexpr TStringBuf SCOPE_ENV = "YDB_OIDC_SCOPE";
 constexpr TStringBuf CACHE_PATH_ENV = "YDB_OIDC_CACHE_PATH";
 constexpr TStringBuf ISSUER_KEY = "issuer";
+constexpr TStringBuf FLOW_KEY = "flow";
 constexpr TStringBuf STATIC_FLOW = "static";
 constexpr TStringBuf CLIENT_FLOW = "client";
 constexpr TStringBuf DEVICE_FLOW = "device";
@@ -57,7 +58,7 @@ struct TField {
 
 constexpr TField FIELDS[] = {
     {ISSUER_OPTION.data(), ISSUER_ENV.data(), ISSUER_KEY.data(), "OIDC issuer URL (HTTPS)", &TOidcCliOptions::Issuer},
-    {FLOW_OPTION.data(), FLOW_ENV.data(), "flow", "OIDC flow: static, client or device (default: static with --oidc-access-token-file or YDB_OIDC_ACCESS_TOKEN, otherwise device). Device flow requires browser sign-in, including noninteractive runs; use client or static flow for unattended automation", &TOidcCliOptions::Flow},
+    {FLOW_OPTION.data(), FLOW_ENV.data(), FLOW_KEY.data(), "OIDC flow: static, client or device (default: static with --oidc-access-token-file or YDB_OIDC_ACCESS_TOKEN, otherwise device). Device flow requires browser sign-in, including noninteractive runs; use client or static flow for unattended automation", &TOidcCliOptions::Flow},
     {CLIENT_ID_OPTION.data(), CLIENT_ID_ENV.data(), "client_id", "OIDC client ID for client or device flow", &TOidcCliOptions::ClientId},
     {CLIENT_SECRET_FILE_OPTION.data(), CLIENT_SECRET_ENV.data(), "client_secret_file", "File containing the OIDC client secret for client flow", &TOidcCliOptions::ClientSecretFile},
     {ACCESS_TOKEN_FILE_OPTION.data(), ACCESS_TOKEN_ENV.data(), "access_token_file", "File containing an OIDC access token; Bearer prefix is optional", &TOidcCliOptions::AccessTokenFile},
@@ -216,7 +217,8 @@ NOidc::TOidcConfig TOidcCliOptions::MakeConfig() const {
         };
     }
     const auto factory = NOidc::CreateOidcProviderFactory(config);
-    if (!CachePath.empty()) {
+    // Static tokens are read from their source on every run and need no cache.
+    if (!CachePath.empty() && flow != STATIC_FLOW) {
         config.Cacher(CreateFileTokenCacher(std::string(CachePath), factory->GetClientIdentity()));
     }
     return config;
@@ -230,6 +232,8 @@ YAML::Node TOidcCliOptions::MakeProfileAuth() const {
         return auth;
     }
     auth[PROFILE_METHOD.data()] = std::string(OIDC_METHOD);
+    // Preserve the selected flow even when it was inferred from an environment token.
+    auth[PROFILE_DATA.data()][FLOW_KEY.data()] = std::string(GetFlow(*this));
     for (const auto& field : FIELDS) {
         const auto& value = this->*field.Member;
         if (!value.empty()) {

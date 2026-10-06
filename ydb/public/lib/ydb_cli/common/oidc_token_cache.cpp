@@ -12,10 +12,12 @@
 #include <util/system/fstat.h>
 #include <util/system/platform.h>
 #include <util/system/tempfile.h>
+#include <util/system/sysstat.h>
 
 #include <cerrno>
 #include <filesystem>
 #include <optional>
+#include <memory>
 #include <stdexcept>
 #include <system_error>
 #include <string>
@@ -30,6 +32,7 @@
     #include <windows.h>
 #else
     #include <fcntl.h>
+    #include <unistd.h>
 #endif
 
 namespace NYdb::NConsoleClient {
@@ -56,6 +59,7 @@ void RejectSymlink(const TFsPath& path);
 bool IsNotFoundError(int error);
 TFileHandle OpenCacheHandle(const TFsPath& path);
 void ValidateRegularFile(const TFileStat& stat, const std::string& path);
+void ValidateCachePermissions(const TFile& file, const std::string& path);
 TFile CreateOwnerOnlyFile(const TFsPath& path);
 std::optional<TFile> OpenCacheFile(const TFsPath& path);
 std::optional<std::string> ReadCacheFile(const TFsPath& path);
@@ -92,39 +96,46 @@ void ValidateRegularFile(const TFileStat& stat, const std::string& path) {
     }
 }
 
-// TFile does not expose no-follow/nonblocking open modes or owner-only Windows
-// ACLs. Keep only these operations platform-specific; use util for file ownership,
-// metadata, I/O, temporary-file cleanup and atomic replacement.
+// TFile does not expose no-follow/nonblocking open modes or Windows ACLs.
+// Keep these operations and account lookup platform-specific; use util for
+// handle lifetime, metadata, I/O, temporary-file cleanup and atomic replacement.
 #if defined(_win_)
+std::vector<unsigned char> GetCurrentUser(const std::string& path);
+
 class TOwnerOnlySecurity {
 public:
     explicit TOwnerOnlySecurity(const std::string& path);
     SECURITY_ATTRIBUTES* GetAttributes();
 
 private:
-    TFileHandle ProcessToken_;
     std::vector<unsigned char> TokenInfo_;
     std::unique_ptr<void, decltype(&LocalFree)> Acl_{nullptr, &LocalFree};
     SECURITY_DESCRIPTOR Descriptor_{};
     SECURITY_ATTRIBUTES Attributes_{};
 };
 
-TOwnerOnlySecurity::TOwnerOnlySecurity(const std::string& path) {
+std::vector<unsigned char> GetCurrentUser(const std::string& path) {
     HANDLE processToken = nullptr;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &processToken)) {
         ThrowCacheError(path, "failed to determine file owner");
     }
-    ProcessToken_ = TFileHandle(processToken);
+    const TFileHandle tokenHandle(processToken);
 
     DWORD tokenInfoSize = 0;
     GetTokenInformation(processToken, TokenUser, nullptr, 0, &tokenInfoSize);
-    if (!tokenInfoSize || GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+    if (tokenInfoSize == 0 || GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
         ThrowCacheError(path, "failed to determine file owner");
     }
-    TokenInfo_.resize(tokenInfoSize);
-    if (!GetTokenInformation(processToken, TokenUser, TokenInfo_.data(), tokenInfoSize, &tokenInfoSize)) {
+    std::vector<unsigned char> tokenInfo(tokenInfoSize);
+    if (!GetTokenInformation(processToken, TokenUser, tokenInfo.data(), tokenInfoSize, &tokenInfoSize)) {
         ThrowCacheError(path, "failed to determine file owner");
     }
+    return tokenInfo;
+}
+
+TOwnerOnlySecurity::TOwnerOnlySecurity(const std::string& path)
+    : TokenInfo_(GetCurrentUser(path))
+{
     const auto* tokenUser = reinterpret_cast<const TOKEN_USER*>(TokenInfo_.data());
 
     EXPLICIT_ACCESSA access{};
@@ -142,6 +153,7 @@ TOwnerOnlySecurity::TOwnerOnlySecurity(const std::string& path) {
         ThrowCacheError(path, "failed to create owner-only permissions");
     }
     if (!InitializeSecurityDescriptor(&Descriptor_, SECURITY_DESCRIPTOR_REVISION) ||
+        !SetSecurityDescriptorOwner(&Descriptor_, tokenUser->User.Sid, false) ||
         !SetSecurityDescriptorDacl(&Descriptor_, true, acl, false) ||
         !SetSecurityDescriptorControl(&Descriptor_, SE_DACL_PROTECTED, SE_DACL_PROTECTED))
     {
@@ -154,6 +166,44 @@ TOwnerOnlySecurity::TOwnerOnlySecurity(const std::string& path) {
 
 SECURITY_ATTRIBUTES* TOwnerOnlySecurity::GetAttributes() {
     return &Attributes_;
+}
+
+void ValidateCachePermissions(const TFile& file, const std::string& path) {
+    const auto tokenInfo = GetCurrentUser(path);
+    const auto* tokenUser = reinterpret_cast<const TOKEN_USER*>(tokenInfo.data());
+    PSID owner = nullptr;
+    PACL acl = nullptr;
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    const DWORD error = GetSecurityInfo(file.GetHandle(), SE_FILE_OBJECT,
+        OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+        &owner, nullptr, &acl, nullptr, &descriptor);
+    const std::unique_ptr<void, decltype(&LocalFree)> cleanup(descriptor, &LocalFree);
+    if (error != ERROR_SUCCESS) {
+        ThrowCacheError(path, "failed to inspect file permissions");
+    }
+    if (owner == nullptr || !EqualSid(owner, tokenUser->User.Sid)) {
+        ThrowCacheError(path, "file owner is not the current account");
+    }
+    // A null DACL grants access to everyone. Only owner allow-ACEs are accepted;
+    // deny entries cannot grant access, and inherit-only entries do not apply here.
+    if (acl == nullptr || !IsValidAcl(acl)) {
+        ThrowCacheError(path, "file permissions must allow access only to the owner");
+    }
+    for (DWORD i = 0; i < acl->AceCount; ++i) {
+        void* entry = nullptr;
+        if (!GetAce(acl, i, &entry)) {
+            ThrowCacheError(path, "failed to inspect file permissions");
+        }
+        const auto* header = static_cast<const ACE_HEADER*>(entry);
+        if ((header->AceFlags & INHERIT_ONLY_ACE) != 0 || header->AceType == ACCESS_DENIED_ACE_TYPE) {
+            continue;
+        }
+        if (header->AceType != ACCESS_ALLOWED_ACE_TYPE ||
+            !EqualSid(&static_cast<ACCESS_ALLOWED_ACE*>(entry)->SidStart, tokenUser->User.Sid))
+        {
+            ThrowCacheError(path, "file permissions must allow access only to the owner");
+        }
+    }
 }
 
 bool IsNotFoundError(int error) {
@@ -201,6 +251,19 @@ TFile CreateOwnerOnlyFile(const TFsPath& path) {
     return TFile(handle.Release(), path.GetPath());
 }
 #else
+void ValidateCachePermissions(const TFile& file, const std::string& path) {
+    const TFileStat stat(file);
+    if (stat.IsNull()) {
+        ThrowCacheError(path, "failed to inspect file permissions");
+    }
+    if (stat.Uid != geteuid()) {
+        ThrowCacheError(path, "file owner is not the current account");
+    }
+    if ((stat.Mode & (S_IRWXG | S_IRWXO)) != 0) {
+        ThrowCacheError(path, "file permissions must allow access only to the owner (chmod 600)");
+    }
+}
+
 bool IsNotFoundError(int error) {
     return error == ENOENT;
 }
@@ -236,6 +299,7 @@ std::optional<TFile> OpenCacheFile(const TFsPath& path) {
     }
     TFile file(handle.Release(), path.GetPath());
     ValidateRegularFile(TFileStat(file), path.GetPath());
+    ValidateCachePermissions(file, path.GetPath());
     return file;
 }
 
@@ -425,6 +489,10 @@ void TFileTokenCacher::Write(const NOidc::TTokenCache& cache) {
             RejectSymlink(Path_);
 
             const TFsPath temporary = parent / (".oidc-token-cache-" + CreateGuidAsString());
+            // Cleanup covers successful writes and exception unwinding. SIGKILL or
+            // power loss can leave an owner-only temporary file containing tokens;
+            // such files require manual removal. Do not sweep siblings: another
+            // CLI process may be writing a different cache in this directory.
             TTempFile cleanup(temporary.GetPath());
             try {
                 const auto data = SerializeDocument(Identity_, cache);

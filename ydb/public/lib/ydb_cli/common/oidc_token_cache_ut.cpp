@@ -32,6 +32,9 @@ std::string WriteFile(const TFsPath& path, const std::string& contents);
 TTokenCache MakeCache(std::string access, std::string refresh);
 
 std::string WriteFile(const TFsPath& path, const std::string& contents) {
+    if (!path.Exists()) {
+        CreateFileTokenCacher(path.GetPath(), "fixture")->Write(MakeCache("fixture", ""));
+    }
     TFileOutput(path.GetPath()).Write(contents);
     return path.GetPath();
 }
@@ -335,18 +338,36 @@ Y_UNIT_TEST_SUITE(TOidcFileTokenCache) {
     }
 
 #if defined(_unix_)
-    Y_UNIT_TEST(RestrictsPermissionsWhenReplacingCache) {
+    Y_UNIT_TEST(RejectsCacheAccessibleToOtherAccounts) {
         TTempDir dir;
         const auto path = dir.Path() / "tokens.json";
         auto cacher = CreateFileTokenCacher(path.GetPath(), "identity-a");
         cacher->Write(MakeCache("old-access", {}));
-        UNIT_ASSERT_VALUES_EQUAL(Chmod(path.GetPath().c_str(), S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH), 0);
-
+        const auto original = TFileInput(path).ReadAll();
+        for (const auto extraMode : {S_IRGRP, S_IWGRP, S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH}) {
+            UNIT_ASSERT_VALUES_EQUAL(Chmod(path.GetPath().c_str(), S_IRUSR | S_IWUSR | extraMode), 0);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(cacher->Read(), std::runtime_error, "permissions");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(cacher->Write(MakeCache("new-access", {})), std::runtime_error, "permissions");
+            UNIT_ASSERT_VALUES_EQUAL(TFileInput(path).ReadAll(), original);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(Chmod(path.GetPath().c_str(), S_IRUSR | S_IWUSR), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cacher->Read()->AccessToken.Token, "old-access");
         cacher->Write(MakeCache("new-access", {}));
-
-        const TFileStat stat(path);
-        UNIT_ASSERT_VALUES_EQUAL(stat.Mode & (S_IRWXU | S_IRWXG | S_IRWXO), S_IRUSR | S_IWUSR);
         UNIT_ASSERT_VALUES_EQUAL(cacher->Read()->AccessToken.Token, "new-access");
+    }
+
+    Y_UNIT_TEST(RejectsCacheOwnedByAnotherAccount) {
+        // Only root can create a file owned by a different account.
+        if (geteuid() != 0) {
+            return;
+        }
+        TTempDir dir;
+        const auto path = dir.Path() / "tokens.json";
+        auto cacher = CreateFileTokenCacher(path.GetPath(), "identity-a");
+        cacher->Write(MakeCache("foreign-access", {}));
+        UNIT_ASSERT_VALUES_EQUAL(chown(path.GetPath().c_str(), 1, -1), 0);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(cacher->Read(), std::runtime_error, "owner");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(cacher->Write(MakeCache("new-access", {})), std::runtime_error, "owner");
     }
 
     Y_UNIT_TEST(ConcurrentReplacementNeverFollowsSymlink) {

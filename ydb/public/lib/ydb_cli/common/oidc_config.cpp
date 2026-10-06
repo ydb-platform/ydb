@@ -14,6 +14,7 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <variant>
 
 namespace NYdb::NConsoleClient {
 namespace {
@@ -255,7 +256,8 @@ NOidc::TOidcConfig LoadOidcConfig(const std::string& configFilePath) {
     // Validate through the public SDK API and obtain a persistent identity
     // before adding cacher/acceptor instances to the configuration.
     const auto factory = NOidc::CreateOidcProviderFactory(parsed.Config);
-    if (!parsed.CachePath.empty()) {
+    // A static token is supplied by the caller; caching it only duplicates the secret.
+    if (!parsed.CachePath.empty() && !std::holds_alternative<NOidc::TStaticOidcConfig>(parsed.Config.FlowConfig)) {
         parsed.Config.Cacher(CreateFileTokenCacher(
             parsed.CachePath,
             factory->GetClientIdentity()));

@@ -213,6 +213,36 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
         UNIT_ASSERT(!output.Str().Contains("private-token"));
     }
 
+    Y_UNIT_TEST(PersistsInferredProfileFlowWithoutEnvironmentSecret) {
+        TOidcCliOptions options;
+        options.Issuer = "https://issuer.example";
+        {
+            const NTesting::TScopedEnvironment token("YDB_OIDC_ACCESS_TOKEN", "private-env-token");
+            options.MakeConfig();
+            const auto auth = options.MakeProfileAuth();
+            UNIT_ASSERT_VALUES_EQUAL(auth["data"]["flow"].as<std::string>(), "static");
+            UNIT_ASSERT(!TString(YAML::Dump(auth)).Contains("private-env-token"));
+            options.Flow = auth["data"]["flow"].as<std::string>();
+        }
+        const NTesting::TScopedEnvironment noToken("YDB_OIDC_ACCESS_TOKEN", "");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(options.MakeConfig(), std::invalid_argument, "access_token");
+        UNIT_ASSERT_VALUES_EQUAL(DeviceOptions().MakeProfileAuth()["data"]["flow"].as<std::string>(), "device");
+    }
+
+    Y_UNIT_TEST(StaticTokenRotationDoesNotUseFileCache) {
+        TTempDir dir;
+        TOidcCliOptions options;
+        options.Issuer = "https://issuer.example";
+        options.AccessTokenFile = (dir.Path() / "token").GetPath();
+        options.CachePath = (dir.Path() / "cache.json").GetPath();
+        for (const TString& token : {TString("first-token"), TString("rotated-token")}) {
+            TFileOutput(options.AccessTokenFile).Write(token);
+            UNIT_ASSERT(options.MakeConfig().Cacher_ == nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(CreateCliOidcCredentialsProviderFactory(options)->CreateProvider()->GetAuthInfo(), "Bearer " + token);
+            UNIT_ASSERT(!TFsPath(options.CachePath).Exists());
+        }
+    }
+
     Y_UNIT_TEST(EnvironmentCredentialsAreLiteralValues) {
         TTempDir dir;
         const auto path = (dir.Path() / "secret").GetPath();

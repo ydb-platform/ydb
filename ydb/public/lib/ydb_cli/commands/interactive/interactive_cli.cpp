@@ -25,8 +25,6 @@
 #include <util/generic/scope.h>
 #include <util/string/strip.h>
 
-#include <chrono>
-
 #if defined(_unix_)
 #include <csignal>
 #include <termios.h>
@@ -65,19 +63,11 @@ bool TInitialAuthorization::Wait(TClientCommand::TConfig& config) {
         ResetInterrupted();
     };
 
-    // Device authorization needs time for user input, independent of RPC deadlines.
-    // The provider also enforces the device code's expires_in from the IdP.
-    constexpr auto AUTHORIZATION_TIMEOUT = std::chrono::minutes(10);
-    const auto deadline = std::chrono::steady_clock::now() + AUTHORIZATION_TIMEOUT;
     const auto provider = factory->CreateProvider();
     auto credentials = provider->GetAuthInfoAsync();
     while (!credentials.Wait(TDuration::MilliSeconds(50))) {
         if (IsInterrupted()) {
             Cerr << "OIDC sign-in interrupted." << Endl;
-            return false;
-        }
-        if (std::chrono::steady_clock::now() >= deadline) {
-            Cerr << "Timed out waiting for OIDC sign-in after 10 minutes." << Endl;
             return false;
         }
     }
@@ -338,7 +328,7 @@ int TInteractiveCLI::PrintWelcomeMessage(const TClientCommand::TConfig& config, 
         }
 
         if (activeProfileName) {
-            Cout << "Using model: " << TLogger::EntityName(activeProfileName) << Endl;            
+            Cout << "Using model: " << TLogger::EntityName(activeProfileName) << Endl;
         } else if (!configManager->ActivateAiProfile("", /* printWelcomeMessage */ false)) {
             configManager->SetInteractiveMode(TInteractiveConfigurationManager::EMode::YQL);
             Cout << Endl << "Switching to " << configManager->ModeToString(configManager->GetInteractiveMode()) << " interactive mode, use " << TLogger::EntityNameQuoted("/switch") << " to change mode." << Endl;

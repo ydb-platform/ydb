@@ -244,6 +244,21 @@ Y_UNIT_TEST_SUITE(ParseOidcOptionsTest) {
         UNIT_ASSERT(!output.Contains("private-profile-token"));
     }
 
+    Y_UNIT_TEST_F(ProfileWithEnvironmentTokenPersistsStaticFlow, TCliTestFixture) {
+        const auto profile = EnvFile("", "profiles.yaml");
+        RunCliWithInput({"--profile-file", profile, "config", "profile", "create", "static-env",
+            "-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-issuer", "https://issuer.example"}, "",
+            {{"YDB_OIDC_ACCESS_TOKEN", "private-env-token"}});
+        const auto stored = TFileInput(profile).ReadAll();
+        UNIT_ASSERT_STRING_CONTAINS(stored, "flow: static");
+        UNIT_ASSERT(!stored.Contains("private-env-token"));
+        ExpectToken("Bearer rotated-env-token");
+        RunCli({"--profile-file", profile, "--profile", "static-env", "scheme", "ls"},
+            {{"YDB_OIDC_ACCESS_TOKEN", "rotated-env-token"}});
+        ExpectFail();
+        RunCli({"--profile-file", profile, "--profile", "static-env", "scheme", "ls"});
+    }
+
     Y_UNIT_TEST_F(StaticOidcFlowUsesOidcTokenEnvironment, TCliTestFixture) {
         ExpectToken("Bearer environment-token");
         RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-issuer", "https://issuer.example",

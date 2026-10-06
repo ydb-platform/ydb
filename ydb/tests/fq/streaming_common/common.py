@@ -757,12 +757,15 @@ class StreamingTestBase(TestYdsBase):
         node.start()
 
     def restart_streaming_node(self, kikimr: Kikimr) -> int:
-        """Find and restart the node hosting the streaming query (DQ_PQ_READ_ACTOR).
+        """Find and restart the node hosting the streaming query reader.
         Returns the restarted node ID."""
 
         def _find_node():
             for node_id in kikimr.cluster.slots:
-                if self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR"):
+                if any(
+                    self.get_actor_count(kikimr, node_id, actor_name)
+                    for actor_name in ("DQ_MESSAGE_STREAM_READ_ACTOR", "DQ_PQ_READ_ACTOR")
+                ):
                     return node_id
             return None
 
@@ -772,7 +775,7 @@ class StreamingTestBase(TestYdsBase):
             step_seconds=1,
         )
         restart_node_id = _find_node()
-        assert restart_node_id is not None, "No node found with DQ_PQ_READ_ACTOR"
+        assert restart_node_id is not None, "No node found with a streaming query reader"
         self.restart_node(kikimr, restart_node_id)
         return restart_node_id
 

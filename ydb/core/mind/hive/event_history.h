@@ -13,9 +13,8 @@ namespace NHive {
 //
 // THiveEvent and the two enums below are shared by all kinds of events: node events today,
 // tablet events and Hive settings changes are expected to follow.
-
-// What happened. Node events:
 enum class EHiveEventType : ui8 {
+    // Node events
     Registered,          // Local registered on Hive (first time or after node restart)
     Connected,           // Local reported StatusOk, node can run tablets
     Disconnecting,       // interconnect session lost, waiting for disconnect timeouts

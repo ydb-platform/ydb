@@ -1,7 +1,12 @@
+#include <ydb/core/kqp/common/simple/query_ref.h>
+#include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
+#include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <library/cpp/testing/common/network.h>
 #include <grpc/grpc_security.h>
 #include <grpc/support/string_util.h>
@@ -166,6 +171,50 @@ void CheckTlsCertificateRejected(bool wrongHostname) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpYdbExternal) {
+    Y_UNIT_TEST_TWIN(PrepareWithMinimalFederatedSetup, Script) {
+        TActorSystemStub actorSystem;
+        UNIT_ASSERT(actorSystem.AppData.FeatureFlags.GetEnableExternalDataSources());
+        const NKikimrConfig::TQueryServiceConfig queryServiceConfig;
+        UNIT_ASSERT(queryServiceConfig.GetAllExternalDataSourcesAreAvailable());
+
+        const TString cluster = "local_ut";
+        const TString database = "/Root";
+        const TKqpSettings settings;
+        auto config = MakeIntrusive<NYql::TKikimrConfiguration>();
+        config->Init(settings.DefaultSettings.GetDefaultSettings(), cluster, settings.Settings, true);
+
+        NYql::TExprContext moduleCtx;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleCtx, moduleResolver));
+
+        auto countersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto counters = MakeIntrusive<TKqpRequestCounters>();
+        counters->Counters = new TKqpCounters(countersRoot);
+        counters->TxProxyMon = new NTxProxy::TTxProxyMon(countersRoot);
+        auto gateway = CreateKikimrIcGateway(cluster,
+            Script ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY,
+            database, database, std::make_shared<TKqpTableMetadataLoader>(cluster, actorSystem.System.Get(), config),
+            actorSystem.System.Get(), 0, counters, queryServiceConfig);
+
+        // Query replay supplies only an HTTP gateway and uses the default query service config.
+        // Even queries without external sources initialize all enabled providers.
+        auto host = CreateKqpHost(gateway, cluster, database, config, moduleResolver,
+            TKqpFederatedQuerySetup{.HttpGateway = NYql::IHTTPGateway::Make()},
+            nullptr, std::make_shared<TGUCSettings>(), queryServiceConfig);
+        const TString query = "SELECT 1;";
+        auto preparing = Script
+            ? host->PrepareGenericScript(query, {})
+            : host->PrepareGenericQuery(query, {});
+        while (!preparing->HasResult()) {
+            preparing->Continue().GetValueSync();
+        }
+        const auto result = preparing->GetResult();
+        UNIT_ASSERT_C(result.Success(), result.Issues().ToString());
+        UNIT_ASSERT(result.PreparingQuery);
+        UNIT_ASSERT(result.PreparingQuery->HasPhysicalQuery());
+        UNIT_ASSERT(!result.QueryPlan.empty());
+    }
+
     Y_UNIT_TEST(ReadWithoutConnector) {
         TYdbExternalFixture fixture;
         fixture.Populate();

@@ -77,7 +77,7 @@ namespace NKikimr::NKqp {
         // it outlives all other objects here that might hold
         // gRPC contexts, preventing deadlocks during graceful shutdown.
         std::shared_ptr<NYdb::TDriver> Driver;
-        std::shared_ptr<TYdbExternalResources> YdbExternalResources;
+        std::shared_ptr<TYdbExternalResources> YdbExternalResources = std::make_shared<TYdbExternalResources>();
         NYql::IHTTPGateway::TPtr HttpGateway;
         NYql::NConnector::IClient::TPtr ConnectorClient;
         NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;

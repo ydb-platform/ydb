@@ -668,7 +668,7 @@ public:
         THashMap<ui32, TStageStateRecoveryInfo> stages;
         stages.reserve(discovered.GetStages().size());
         for (const auto& stage : discovered.GetStages()) {
-            stages.emplace(stage.StageId, TStageStateRecoveryInfo(stage));
+            stages.emplace(stage.StageId, TStageStateRecoveryInfo(stage, TStageStateRecoveryInfo::EMode::HistoryReplay));
         }
 
         Tasks.reserve(graph.GetTasks().size());
@@ -682,7 +682,6 @@ public:
 
             auto& info = it->second;
             info.Task = &task;
-
             info.Info = stages.at(task.GetStageId());
 
             for (ui64 inputIndex = 0; inputIndex < task.InputsSize(); ++inputIndex) {

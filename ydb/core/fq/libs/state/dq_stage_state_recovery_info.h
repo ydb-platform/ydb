@@ -68,6 +68,11 @@ public:
 };
 
 struct TStageStateRecoveryInfo {
+    enum class EMode {
+        Analyze,
+        HistoryReplay,
+    };
+
     struct THoppingSettings {
         ui64 HopTimeUs = 0;
         ui64 WindowSizeUs = 0;
@@ -75,10 +80,11 @@ struct TStageStateRecoveryInfo {
 
     TMaybe<THoppingSettings> Hopping;
     bool HasWatermarkGenerator = false;
+    bool HasState = false;
 
     TStageStateRecoveryInfo() = default;;
 
-    explicit TStageStateRecoveryInfo(const TStageStateInfo& stage);
+    explicit TStageStateRecoveryInfo(const TStageStateInfo& stage, EMode mode = EMode::HistoryReplay);
 
     // Earliest input needed to produce all hop ends at or after outputStartTimeUs.
     ui64 InputStartForOutput(const ui64 outputStartTimeUs) const;

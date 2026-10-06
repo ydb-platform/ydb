@@ -904,7 +904,7 @@ public:
     enum class EKind {
         Unknown,
         Table,
-        Topic,
+        MessageStream,
     };
 
 private:
@@ -937,8 +937,7 @@ public:
     void InitObjectKind(EKind kind);
 
     bool IsYdb() const;
-    bool IsYdbTopics() const;
-    bool IsYdbBased() const { return IsYdb() || IsYdbTopics(); }
+    bool IsMessageStream() const;
 
     const std::optional<EDatabaseType>& GetDatabaseType() const { return DatabaseType; }
     const TString& GetLocation() const { return Location; }

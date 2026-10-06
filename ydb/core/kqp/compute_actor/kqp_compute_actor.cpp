@@ -1,3 +1,4 @@
+#include <ydb/library/yql/providers/yt/actors/yql_yt_message_stream_source.h>
 #include "kqp_compute_actor.h"
 #include "kqp_compute_actor_impl.h"
 
@@ -221,6 +222,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
             {},
             enableStreamingQueriesCounters,
             NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueryTopicAutopartitioning());
+        NYql::NDq::RegisterYtMessageStreamReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
         NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters, NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesPqSinkDeduplication());
         NYql::NDq::RegisterDqPqInfoAggregationActorFactory(*factory);
         NYql::NDq::RegisterDqPqControlPlaneActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway);

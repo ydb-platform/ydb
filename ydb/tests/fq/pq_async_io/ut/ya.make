@@ -14,7 +14,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/protobuf/interop
-    ydb/core/testlib/basics/default
+    ydb/core/testlib/basics
     ydb/library/testlib/common
     ydb/library/testlib/pq_helpers
     ydb/library/yql/providers/common/ut_helpers

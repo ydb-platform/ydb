@@ -13,6 +13,7 @@
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_message_stream.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_settings.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
@@ -2054,7 +2055,12 @@ private:
                 .CreateOperationTracker(false)
         );
 
-        TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
+        auto ytSource = CreateYtDataSource(ytState);
+        if (Config->FeatureFlags.GetEnableQYT()) {
+            ytSource = NYql::WrapYtDataSourceWithMessageStreams(std::move(ytSource),
+                NYql::CreateYtMessageStreamIntegration(FederatedQuerySetup->CredentialsFactory));
+        }
+        TypesCtx->AddDataSource(YtProviderName, std::move(ytSource));
         TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
 
         finalizers.emplace_back([ytGateway = FederatedQuerySetup->YtGateway, sessionId]() {

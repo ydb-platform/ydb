@@ -217,9 +217,11 @@ public:
 
     // Every group that holds allocated bytes also waits for another request. A group releases its
     // buffers only after its next request is granted, so nothing will be freed without a grant.
+    // A granted zero-byte allocation holds nothing that could be released, so it is not a holder.
     bool AllHoldersWait() const {
         for (const auto& [_, info] : AllocationInfo) {
-            if (info->GetAllocationStatus() == EAllocationStatus::Allocated && !WaitAllocations.HasWaiting(info->GetAllocationExternalGroupId())) {
+            if (info->GetAllocationStatus() == EAllocationStatus::Allocated && info->GetAllocatedVolume() > 0 &&
+                !WaitAllocations.HasWaiting(info->GetAllocationExternalGroupId())) {
                 return false;
             }
         }

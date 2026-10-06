@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "source_type"_a = "YdbTopics",
             "location"_a = YDB_ENDPOINT,
             "database_name"_a = YDB_DATABASE
-        ), EStatus::SCHEME_ERROR);
+        ), EStatus::BAD_REQUEST);
     }
 
     Y_UNIT_TEST_F(CreateExternalDataSourceBasic, TStreamingTestFixture) {
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             )sql",
             "location"_a = YDB_ENDPOINT,
             "database_name"_a = YDB_DATABASE
-        ), EStatus::SCHEME_ERROR);
+        ), EStatus::BAD_REQUEST);
 
         // 3. E2E smoke test: Full streaming workflow should work
         const auto scriptExecutionOperation = ExecScript(fmt::format(R"(

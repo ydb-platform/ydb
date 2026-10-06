@@ -4,22 +4,12 @@
 #include "page_pool_constants.h"
 
 #include <util/generic/yexception.h>
-#include <util/stream/str.h>
-#include <util/string/cast.h>
 #include <util/system/align.h>
 #include <util/system/compiler.h>
-#include <util/system/error.h>
 #include <util/system/info.h>
 
 #include <yql/essentials/public/udf/sanitizer_utils/sanitizer_utils.h>
 #include <yql/essentials/utils/exception_utils.h>
-
-#if defined(_win_)
-    #define MAP_FAILED reinterpret_cast<void*>(-1)
-#elif defined(_unix_)
-    #include <sys/types.h>
-    #include <sys/mman.h>
-#endif
 
 namespace NKikimr {
 
@@ -301,16 +291,6 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
     if (!res) {
         auto allocSize = size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE;
         void* mem = globalPool.DoMmap(allocSize);
-        if (Y_UNLIKELY(MAP_FAILED == mem)) {
-            TStringStream mmaps;
-            const auto lastError = LastSystemError();
-            if (lastError == ENOMEM) {
-                mmaps << GetMemoryMapsString();
-            }
-
-            ythrow yexception() << "Mmap failed to allocate " << (size + POOL_PAGE_SIZE) << " bytes: "
-                                << LastSystemErrorText(lastError) << mmaps.Str();
-        }
 
         res = AlignUp(mem, POOL_PAGE_SIZE);
         const size_t off = reinterpret_cast<intptr_t>(res) - reinterpret_cast<intptr_t>(mem);
@@ -462,7 +442,7 @@ bool TAlignedPagePoolImpl<T>::IsDefaultArrowAllocatorUsed() {
 }
 
 template class TAlignedPagePoolImpl<>;
-template class TAlignedPagePoolImpl<TFakeMmap>;
+template class TAlignedPagePoolImpl<TTrackedMmap<TFakeMmap>>;
 
 template <typename TMmap>
 void* GetAlignedPage(ui64 size) {
@@ -484,15 +464,6 @@ void* GetAlignedPage(ui64 size) {
 
     auto allocSize = Max<ui64>(MaxMidSize, size);
     void* mem = pool.DoMmap(allocSize);
-    if (Y_UNLIKELY(MAP_FAILED == mem)) {
-        TStringStream mmaps;
-        const auto lastError = LastSystemError();
-        if (lastError == ENOMEM) {
-            mmaps << GetMemoryMapsString();
-        }
-
-        ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: " << LastSystemErrorText(lastError) << mmaps.Str();
-    }
 
     if (size < MaxMidSize) {
         // push extra allocated pages to cache
@@ -520,16 +491,6 @@ void* GetAlignedPage() {
 
     auto allocSize = size * 2;
     void* unalignedPtr = globalPool.DoMmap(allocSize);
-    if (Y_UNLIKELY(MAP_FAILED == unalignedPtr)) {
-        TStringStream mmaps;
-        const auto lastError = LastSystemError();
-        if (lastError == ENOMEM) {
-            mmaps << GetMemoryMapsString();
-        }
-
-        ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: "
-                            << LastSystemErrorText(lastError) << mmaps.Str();
-    }
 
     void* page = AlignUp(unalignedPtr, size);
 
@@ -568,7 +529,7 @@ void ReleaseAlignedPage(void* mem) {
 
 template <typename TMmap>
 i64 GetTotalMmapedBytes() {
-    return TGlobalPools<TMmap, true>::Instance().GetTotalMmappedBytes() + TGlobalPools<TMmap, false>::Instance().GetTotalMmappedBytes();
+    return TMmap::GetInstance().GetTotalCommittedBytes();
 }
 
 template <typename TMmap>
@@ -577,21 +538,21 @@ i64 GetTotalFreeListBytes() {
 }
 
 template i64 GetTotalMmapedBytes<>();
-template i64 GetTotalMmapedBytes<TFakeMmap>();
+template i64 GetTotalMmapedBytes<TTrackedMmap<TFakeMmap>>();
 
 template i64 GetTotalFreeListBytes<>();
-template i64 GetTotalFreeListBytes<TFakeMmap>();
+template i64 GetTotalFreeListBytes<TTrackedMmap<TFakeMmap>>();
 
 template void* GetAlignedPage<>(ui64);
-template void* GetAlignedPage<TFakeMmap>(ui64);
+template void* GetAlignedPage<TTrackedMmap<TFakeMmap>>(ui64);
 
 template void* GetAlignedPage<>();
-template void* GetAlignedPage<TFakeMmap>();
+template void* GetAlignedPage<TTrackedMmap<TFakeMmap>>();
 
 template void ReleaseAlignedPage<>(void*, ui64);
-template void ReleaseAlignedPage<TFakeMmap>(void*, ui64);
+template void ReleaseAlignedPage<TTrackedMmap<TFakeMmap>>(void*, ui64);
 
 template void ReleaseAlignedPage<>(void*);
-template void ReleaseAlignedPage<TFakeMmap>(void*);
+template void ReleaseAlignedPage<TTrackedMmap<TFakeMmap>>(void*);
 
 } // namespace NKikimr

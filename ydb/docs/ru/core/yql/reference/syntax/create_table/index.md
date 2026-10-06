@@ -26,11 +26,11 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
       ON ( <index_columns> )
       [COVER ( <cover_columns> )]
       [WITH ( <parameter_name> = <parameter_value>[, ...])]
-    [, ...]
+    [, ...],
     STATISTICS <statistics_name>
       ON ( <column_name> [, ...] )
       [WITH ( <statistics_type> [, ...] )]
-    [, ...]
+    [, ...],
   PRIMARY KEY ( <column>[, ...]),
   [FAMILY <column_family> ( family_options[, ...])]
 )

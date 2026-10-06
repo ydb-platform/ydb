@@ -1233,7 +1233,7 @@ static inline container_t *container_ior(container_t *c1, uint8_t type1,
         case CONTAINER_PAIR(BITSET, BITSET):
             bitset_container_or(const_CAST_bitset(c1), const_CAST_bitset(c2),
                                 CAST_bitset(c1));
-#ifdef OR_BITSET_CONVERSION_TO_FULL
+#if CROARING_OR_BITSET_CONVERSION_TO_FULL
             if (CAST_bitset(c1)->cardinality == (1 << 16)) {  // we convert
                 result = run_container_create_range(0, (1 << 16));
                 *result_type = RUN_CONTAINER_TYPE;
@@ -1340,7 +1340,7 @@ static inline container_t *container_lazy_ior(container_t *c1, uint8_t type1,
     container_t *result = NULL;
     switch (PAIR_CONTAINER_TYPES(type1, type2)) {
         case CONTAINER_PAIR(BITSET, BITSET):
-#ifdef LAZY_OR_BITSET_CONVERSION_TO_FULL
+#if CROARING_LAZY_OR_BITSET_CONVERSION_TO_FULL
             // if we have two bitsets, we might as well compute the cardinality
             bitset_container_or(const_CAST_bitset(c1), const_CAST_bitset(c2),
                                 CAST_bitset(c1));

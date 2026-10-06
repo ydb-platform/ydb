@@ -2714,8 +2714,6 @@ private:
         const bool rowSpecCompactForm = execCtx->Options_.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
         rowSpec->FillAttrNode(rowSpecNode, rowSpecCompactForm);
 
-        const auto multiSet = execCtx->Options_.Config()->_UseMultisetAttributes.Get().GetOrElse(DEFAULT_USE_MULTISET_ATTRS);
-
         auto commitCheckpoint = [entry, dstPath, mode] (const TFuture<void>& f) {
             f.GetValue();
             if (EYtWriteMode::Flush == mode) {
@@ -2981,42 +2979,20 @@ private:
             res = MakeFuture();
         }
 
-        std::function<void(const TFuture<void>&)> setAttrs = [logCtx = execCtx->LogCtx_, entry, publishTx, dstPath, mode, yqlAttrs, multiSet] (const TFuture<void>& f) {
+        std::function<void(const TFuture<void>&)> setAttrs = [logCtx = execCtx->LogCtx_, entry, publishTx, dstPath, mode, yqlAttrs] (const TFuture<void>& f) {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
             f.GetValue();
             if (yqlAttrs.IsUndefined()) {
                 return;
             }
             YQL_CLOG(INFO, ProviderYt) << "Setting attrs for " << dstPath << ": " << NYT::NodeToYsonString(yqlAttrs);
-            if (multiSet) {
-                try {
-                    publishTx->MultisetAttributes(dstPath + "/@", yqlAttrs.AsMap(), NYT::TMultisetAttributesOptions());
+            try {
+                publishTx->MultisetAttributes(dstPath + "/@", yqlAttrs.AsMap(), NYT::TMultisetAttributesOptions());
+            }
+            catch (const TErrorResponse& e) {
+                if (EYtWriteMode::Append != mode || !e.IsConcurrentTransactionLockConflict()) {
+                    throw;
                 }
-                catch (const TErrorResponse& e) {
-                    if (EYtWriteMode::Append != mode || !e.IsConcurrentTransactionLockConflict()) {
-                        throw;
-                    }
-                }
-            } else {
-                auto batch = publishTx->CreateBatchRequest();
-
-                TVector<TFuture<void>> batchRes;
-
-                for (auto& attr: yqlAttrs.AsMap()) {
-                    batchRes.push_back(batch->Set(TStringBuilder() << dstPath << "/@" << attr.first, attr.second));
-                }
-
-                batch->ExecuteBatch();
-                ForEach(batchRes.begin(), batchRes.end(), [mode] (const TFuture<void>& f) {
-                    try {
-                        f.GetValue();
-                    }
-                    catch (const TErrorResponse& e) {
-                        if (EYtWriteMode::Append != mode || !e.IsConcurrentTransactionLockConflict()) {
-                            throw;
-                        }
-                    }
-                });
             }
         };
         return res.Apply(setAttrs).Apply(commitCheckpoint);
@@ -6275,30 +6251,11 @@ private:
         }
         else {
             // set attributes in transactions
-            const auto multiSet = execCtx->Options_.Config()->_UseMultisetAttributes.Get().GetOrElse(DEFAULT_USE_MULTISET_ATTRS);
-            if (multiSet) {
-                for (auto& out: outTables) {
-                    NYT::TNode attrs = NYT::TNode::CreateMap();
-                    PrepareAttributes(attrs, out, execCtx, cluster, false);
-                    YQL_CLOG(INFO, ProviderYt) << "Update tmp table " << out.Path << ", attrs: " << NYT::NodeToYsonString(attrs);
-                    entry->Tx->MultisetAttributes(out.Path + "/@", attrs.AsMap(), NYT::TMultisetAttributesOptions());
-                }
-            } else {
-                auto batchSet = entry->Tx->CreateBatchRequest();
-                TVector<TFuture<void>> batchSetRes;
-
-                for (auto& out: outTables) {
-                    NYT::TNode attrs = NYT::TNode::CreateMap();
-
-                    PrepareAttributes(attrs, out, execCtx, cluster, false);
-                    YQL_CLOG(INFO, ProviderYt) << "Update tmp table " << out.Path << ", attrs: " << NYT::NodeToYsonString(attrs);
-                    for (auto& attr: attrs.AsMap()) {
-                        batchSetRes.push_back(batchSet->Set(TStringBuilder() << out.Path << "/@" << attr.first, attr.second));
-                    }
-                }
-
-                batchSet->ExecuteBatch();
-                WaitExceptionOrAll(batchSetRes).GetValue();
+            for (auto& out: outTables) {
+                NYT::TNode attrs = NYT::TNode::CreateMap();
+                PrepareAttributes(attrs, out, execCtx, cluster, false);
+                YQL_CLOG(INFO, ProviderYt) << "Update tmp table " << out.Path << ", attrs: " << NYT::NodeToYsonString(attrs);
+                entry->Tx->MultisetAttributes(out.Path + "/@", attrs.AsMap(), NYT::TMultisetAttributesOptions());
             }
         }
 

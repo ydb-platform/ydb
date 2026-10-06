@@ -141,7 +141,8 @@ def test_read_queue_via_federated_sql(yt: YtClient, kikimr: Kikimr, entity_name,
         # Specify CONSUMER so the QYT read session knows which consumer offset to use.
         # No LIMIT: completion must come from MessageStream snapshot bounds.
         if not kikimr.qyt_enabled:
-            with pytest.raises(ydb.issues.GenericError, match="YT message stream reads require EnableQYT"):
+            # With QYT disabled, the native table provider rejects queue-specific settings.
+            with pytest.raises(ydb.issues.GenericError, match=r'Unknown setting.*consumer'):
                 kikimr.ydb_client.query(f"""
                     SELECT * FROM `{eds_name}`.`{queue_path}`
                     WITH (CONSUMER='{consumer_path}', FORMAT='raw')

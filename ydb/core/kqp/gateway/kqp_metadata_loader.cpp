@@ -1230,20 +1230,23 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                         f(externalDataSourceMetadata);
                                     });
                             } else if (externalDataSourceMetadata.Metadata->ExternalDataSource().GetDatabaseType() == NYql::EDatabaseType::YT && externalPath) {
-                                if (settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::YtProviderName))) {
+                                auto locked = ptr.lock();
+                                if (!locked) {
+                                    promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_COMPILE_ERROR, "Table metadata loader destroyed during external source metadata loading")));
+                                    return;
+                                }
+                                const bool enableQyt = locked->Config && locked->Config->FeatureFlags.GetEnableQYT();
+                                if (!enableQyt) {
+                                    loadDynamicMetadata(externalDataSourceMetadata);
+                                } else if (settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::YtProviderName))) {
                                     auto& source = externalDataSourceMetadata.Metadata->ExternalDataSource();
-                                    auto locked = ptr.lock();
-                                    if (!locked) {
-                                        promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_COMPILE_ERROR, "Table metadata loader destroyed during external source metadata loading")));
-                                        return;
-                                    }
                                     GetYtEntityType(
                                         locked->FederatedQuerySetup,
                                         source.GetLocation(),
                                         source.ComposeStructuredTokenJson(),
                                         *externalPath)
                                         .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata, promise,
-                                            enableQyt = locked->Config && locked->Config->FeatureFlags.GetEnableQYT()] (const NThreading::TFuture<TYtEntityTypeResult>& result) mutable {
+                                            enableQyt] (const NThreading::TFuture<TYtEntityTypeResult>& result) mutable {
                                             TYtEntityTypeResult value = result.GetValue();
                                             if (!value.Issues.Empty()) {
                                                 NYql::TIssue rootIssue("Could not determine YT object type");

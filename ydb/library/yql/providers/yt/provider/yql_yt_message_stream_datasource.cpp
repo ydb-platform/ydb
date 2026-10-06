@@ -10,6 +10,39 @@ namespace NYql {
 namespace {
 using namespace NNodes;
 
+// Provider phases may run again after KQP resolves an external data source,
+// without rewinding the enclosing compilation pipeline.
+class TYtMessageStreamPipeline final : public TGraphTransformerBase {
+public:
+    explicit TYtMessageStreamPipeline(TAutoPtr<IGraphTransformer> pipeline)
+        : Pipeline_(std::move(pipeline))
+    {}
+
+private:
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        if (Finished_) {
+            Rewind();
+        }
+        const auto status = Pipeline_->Transform(input, output, ctx);
+        Finished_ = status.Level == TStatus::Ok;
+        return status;
+    }
+    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) override {
+        return Pipeline_->GetAsyncFuture(input);
+    }
+    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        const auto status = Pipeline_->ApplyAsyncChanges(input, output, ctx);
+        Finished_ = status.Level == TStatus::Ok;
+        return status;
+    }
+    void Rewind() override {
+        Pipeline_->Rewind();
+        Finished_ = false;
+    }
+    TAutoPtr<IGraphTransformer> Pipeline_;
+    bool Finished_ = false;
+};
+
 class TYtMessageStreamTransformer final : public TGraphTransformerBase {
 public:
     TYtMessageStreamTransformer(std::shared_ptr<IYtMessageStreamIntegration> streams, TTransformStage stream, TTransformStage table)
@@ -80,7 +113,9 @@ public:
         return tableSize ? TMaybe<ui64>(*tableSize + *streamSize) : Nothing();
     }
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
-        Tables_.RegisterMkqlCompiler(compiler);
+        // Native YT table callables are registered by the YT sink integration.
+        // This wrapper has a distinct IDqIntegration pointer, so registering
+        // Tables_ here would add the same callables twice when QYT is enabled.
         Streams_->GetDqIntegration().RegisterMkqlCompiler(compiler);
     }
     void FillSourceSettings(const TExprNode& node, google::protobuf::Any& settings, TString& sourceType,
@@ -227,10 +262,10 @@ public:
                     return node;
                 }, ctx, TOptimizeExprSettings(nullptr));
             });
-            Discovery_ = CreateCompositeGraphTransformer({
+            Discovery_ = new TYtMessageStreamPipeline(CreateCompositeGraphTransformer({
                 {std::move(lower), "YtMessageStreamDiscovery", TIssuesIds::DEFAULT_ERROR},
                 {Tables_->GetIODiscoveryTransformer(), "YtTableDiscovery", TIssuesIds::DEFAULT_ERROR},
-            }, false);
+            }, false));
         }
         return *Discovery_;
     }
@@ -252,10 +287,10 @@ public:
     }
     IGraphTransformer& GetLoadTableMetadataTransformer() override {
         if (!Metadata_) {
-            Metadata_ = CreateCompositeGraphTransformer({
+            Metadata_ = new TYtMessageStreamPipeline(CreateCompositeGraphTransformer({
                 {Tables_->GetLoadTableMetadataTransformer(), "YtTableMetadata", TIssuesIds::DEFAULT_ERROR},
                 {Streams_->GetLoadTableMetadataTransformer(), "YtMessageStreamMetadata", TIssuesIds::DEFAULT_ERROR},
-            }, false);
+            }, false));
         }
         return *Metadata_;
     }
@@ -285,6 +320,9 @@ public:
     }
 
     TMaybe<TString> ResolveClusterToken(const TString& cluster) override {
+        if (const auto* token = Streams_->GetClusterTokens().FindPtr(cluster)) {
+            return *token;
+        }
         return Tables_->ResolveClusterToken(cluster);
     }
 
@@ -297,7 +335,17 @@ public:
     }
 
     IGraphTransformer& GetIntentDeterminationTransformer() override {
-        return Tables_->GetIntentDeterminationTransformer();
+        if (!Intent_) {
+            // Queue reads do not acquire native YT table intents. Their metadata
+            // is loaded by the MessageStream integration after IO discovery.
+            Intent_ = new TYtMessageStreamTransformer(Streams_,
+                {CreateFunctorTransformer([](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) {
+                    output = input;
+                    return IGraphTransformer::TStatus::Ok;
+                }), "YtMessageStreamIntent", TIssuesIds::DEFAULT_ERROR},
+                {Tables_->GetIntentDeterminationTransformer(), "YtTableIntent", TIssuesIds::DEFAULT_ERROR});
+        }
+        return *Intent_;
     }
 
     void FillModifyCallables(THashSet<TStringBuf>& callables) override {
@@ -494,6 +542,7 @@ private:
     TIntrusivePtr<IDataProvider> Tables_;
     std::shared_ptr<IYtMessageStreamIntegration> Streams_;
     TYtMessageStreamDqIntegrationWrapper Dq_;
+    TAutoPtr<IGraphTransformer> Intent_;
     TAutoPtr<IGraphTransformer> Discovery_;
     TAutoPtr<IGraphTransformer> Annotation_;
     TAutoPtr<IGraphTransformer> Constraints_;

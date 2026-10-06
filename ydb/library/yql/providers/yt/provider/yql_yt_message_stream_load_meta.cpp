@@ -26,13 +26,17 @@ private:
         bool failed = false;
         TVector<NThreading::TFuture<void>> completed;
         VisitExpr(input, [&](const TExprNode::TPtr& node) {
-            if (!NNodes::TYtMessageStreamReadTable::Match(node.Get())) {
+            const bool rawRead = node->IsCallable("Read!") && node->ChildrenSize() > 1
+                && NNodes::TYtMessageStreamDataSource::Match(node->Child(1));
+            if (!rawRead && !NNodes::TYtMessageStreamReadTable::Match(node.Get())) {
                 return true;
             }
             try {
-                const NNodes::TYtMessageStreamReadTable stream(node);
-                const auto path = stream.Table().StringValue();
-                const auto cluster = stream.DataSource().Cluster().StringValue();
+                // KQP can resolve an EDS after IO discovery. Load metadata for
+                // the generic Read! too, before RewriteIO lowers that read.
+                const auto path = rawRead ? ParseYtMessageStreamReadSettings(*node).Path
+                    : NNodes::TYtMessageStreamReadTable(node).Table().StringValue();
+                const auto cluster = NNodes::TYtMessageStreamDataSource(node->Child(1)).Cluster().StringValue();
                 const TKey key{cluster, path};
                 if (State_->Partitions.contains(key) || Pending_.contains(key)) {
                     return true;

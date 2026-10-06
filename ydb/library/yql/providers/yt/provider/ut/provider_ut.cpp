@@ -211,3 +211,100 @@ TEST(TYtMessageStreamIntegration, RejectsInvalidStreamBeforeTableDiscovery) {
     EXPECT_EQ(tables->DiscoveryCalls, 0u);
 }
 }
+
+namespace NYql {
+TEST(TYtMessageStreamIntegration, RoutesIntentsForStreamsAndTables) {
+    auto types = MakeIntrusive<TTypeAnnotationContext>();
+    auto state = std::make_shared<TYtState>(types.Get());
+    state->DqIntegration_ = MakeHolder<TDqIntegrationBase>();
+    auto provider = WrapYtDataSourceWithMessageStreams(CreateYtDataSource(state),
+        CreateYtMessageStreamIntegration(CreateStructuredTokenCredentialsFactory()));
+    auto& intent = provider->GetIntentDeterminationTransformer();
+    for (size_t attempt = 0; attempt < 2; ++attempt) {
+        TExprContext ctx;
+        auto stream = Read(ctx, "raw", true);
+        TExprNode::TPtr output;
+        EXPECT_EQ(intent.Transform(stream, output, ctx).Level, IGraphTransformer::TStatus::Ok);
+        EXPECT_EQ(output, stream);
+
+        const auto pos = TPositionHandle();
+        auto table = ctx.ChangeChild(*stream, 1, ctx.NewCallable(pos, "DataSource", {
+            ctx.NewAtom(pos, "yt"), ctx.NewAtom(pos, "cluster")}));
+        table = ctx.ChangeChild(*table, 2, ctx.NewList(pos, {}));
+        EXPECT_EQ(intent.Transform(table, output, ctx).Level, IGraphTransformer::TStatus::Ok);
+
+        auto invalidTable = ctx.NewCallable(pos, "Read!", {table->ChildPtr(0), table->ChildPtr(1)});
+        EXPECT_EQ(intent.Transform(invalidTable, output, ctx).Level, IGraphTransformer::TStatus::Error);
+        intent.Rewind();
+    }
+}
+}
+
+namespace NYql {
+TEST(TYtMessageStreamIntegration, ValidatesRawReadsBeforeMetadataLoading) {
+    auto streams = CreateYtMessageStreamIntegration(CreateStructuredTokenCredentialsFactory());
+    TExprContext ctx;
+    auto input = ctx.NewCallable(TPositionHandle(), "Right!", {Read(ctx, "raw", false)});
+    TExprNode::TPtr output;
+    EXPECT_EQ(streams->GetLoadTableMetadataTransformer().Transform(input, output, ctx).Level,
+        IGraphTransformer::TStatus::Error);
+    EXPECT_FALSE(ctx.IssueManager.GetIssues().Empty());
+}
+}
+
+namespace NYql {
+namespace {
+IGraphTransformer::TStatus RunProviderPhase(IGraphTransformer& phase, TExprNode::TPtr& input, TExprContext& ctx) {
+    auto status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat);
+    for (size_t step = 0; step < 20 && status.Level == IGraphTransformer::TStatus::Repeat; ++step) {
+        TExprNode::TPtr output;
+        status = phase.Transform(input, output, ctx);
+        if (output) {
+            input = output;
+        }
+    }
+    return status;
+}
+}
+
+TEST(TYtMessageStreamIntegration, RediscoversStreamAfterInitialPassWithoutRewind) {
+    auto tables = MakeIntrusive<TTableSourceForDiscovery>();
+    auto provider = WrapYtDataSourceWithMessageStreams(tables,
+        CreateYtMessageStreamIntegration(CreateStructuredTokenCredentialsFactory()));
+    auto& discovery = provider->GetIODiscoveryTransformer();
+    TExprContext ctx;
+    auto input = ctx.NewWorld(TPositionHandle());
+    ASSERT_EQ(RunProviderPhase(discovery, input, ctx).Level, IGraphTransformer::TStatus::Ok);
+    input = ctx.NewCallable(TPositionHandle(), "Right!", {Read(ctx, "raw", true)});
+    ASSERT_EQ(RunProviderPhase(discovery, input, ctx).Level, IGraphTransformer::TStatus::Ok);
+    EXPECT_TRUE(NNodes::TYtMessageStreamReadTable::Match(input->Child(0)));
+    EXPECT_EQ(tables->StreamReads, 1u);
+}
+
+TEST(TYtMessageStreamIntegration, ReloadsStreamMetadataAfterInitialPassWithoutRewind) {
+    auto provider = WrapYtDataSourceWithMessageStreams(MakeIntrusive<TTableSourceForDiscovery>(),
+        CreateYtMessageStreamIntegration(CreateStructuredTokenCredentialsFactory()));
+    auto& metadata = provider->GetLoadTableMetadataTransformer();
+    TExprContext ctx;
+    auto input = ctx.NewWorld(TPositionHandle());
+    ASSERT_EQ(RunProviderPhase(metadata, input, ctx).Level, IGraphTransformer::TStatus::Ok);
+    input = ctx.NewCallable(TPositionHandle(), "Right!", {Read(ctx, "raw", false)});
+    EXPECT_EQ(RunProviderPhase(metadata, input, ctx).Level, IGraphTransformer::TStatus::Error);
+    EXPECT_FALSE(ctx.IssueManager.GetIssues().Empty());
+}
+}
+
+namespace NYql {
+TEST(TYtMessageStreamIntegration, ResolvesNoAuthMessageStreamSecureParameter) {
+    auto credentials = CreateStructuredTokenCredentialsFactory();
+    auto streams = CreateYtMessageStreamIntegration(credentials);
+    streams->AddCluster("/Root/eds", {{"source_type", "YT"}, {"location", "host:9013"}, {"authMethod", "NONE"}});
+    auto provider = WrapYtDataSourceWithMessageStreams(MakeIntrusive<TTableSourceForDiscovery>(), streams);
+    const auto token = provider->ResolveClusterToken("/Root/eds");
+    ASSERT_TRUE(token.Defined());
+    EXPECT_FALSE(token->empty());
+    EXPECT_EQ(*token, streams->GetClusterTokens().at("/Root/eds"));
+    EXPECT_TRUE(credentials->Create(*token)->CreateProvider()->GetAuthInfo().empty());
+    EXPECT_FALSE(provider->ResolveClusterToken("/Root/missing").Defined());
+}
+}

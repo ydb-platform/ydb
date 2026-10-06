@@ -10,7 +10,7 @@
 
 - C++
 
-  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/tree/7b6e0f79b138d8f24f396a4e7f049d57f6ada3f8/examples/ydb_tech/topic)
+  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/tree/130cf2f695d083d0131434e674d7b1419fc15c22/examples/ydb_tech/topic)
 
 - Go
 

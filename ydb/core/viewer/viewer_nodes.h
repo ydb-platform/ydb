@@ -2306,6 +2306,7 @@ public:
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kVDiskRawUsageFieldNumber);
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kCapacityAlertFieldNumber);
             request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kGroupSizeInUnitsFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kDetailedReplicationStatusFieldNumber);
         }
     }
 
@@ -3424,11 +3425,28 @@ public:
                     }
                 }
                 if (FieldsAvailable.test(+ENodeFields::PDisks) && FieldsRequested.test(+ENodeFields::PDisks)) {
+                    std::unordered_map<ui32, const NKikimrSysView::TPDiskInfo*> sysViewPDisks;
+                    for (const auto& entry : node->SysViewPDisks) {
+                        sysViewPDisks.emplace(entry.GetKey().GetPDiskId(), &entry.GetInfo());
+                    }
                     std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
                         return a.path() < b.path();
                     });
                     for (NKikimrWhiteboard::TPDiskStateInfo& pDisk : node->PDisks) {
-                        (*jsonNode.AddPDisks()) = std::move(pDisk);
+                        auto& jsonPDisk = *jsonNode.AddPDisks();
+                        jsonPDisk = std::move(pDisk);
+                        if (auto it = sysViewPDisks.find(jsonPDisk.GetPDiskId()); it != sysViewPDisks.end()) {
+                            const auto& info = *it->second;
+                            if (info.HasStatusV2()) {
+                                jsonPDisk.SetStatus(info.GetStatusV2());
+                            }
+                            if (info.HasDecommitStatus()) {
+                                jsonPDisk.SetDecommitStatus(info.GetDecommitStatus());
+                            }
+                            if (info.HasMaintenanceStatus()) {
+                                jsonPDisk.SetMaintenanceStatus(info.GetMaintenanceStatus());
+                            }
+                        }
                     }
                 }
                 if (FieldsAvailable.test(+ENodeFields::VDisks) && FieldsRequested.test(+ENodeFields::VDisks)) {

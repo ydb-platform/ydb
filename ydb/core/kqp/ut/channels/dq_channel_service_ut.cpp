@@ -1343,6 +1343,37 @@ struct TStaleBounceTest : public TSessionTest {
     bool Genuine = false;
 };
 
+// A freed node session unsubscribes from the interconnect session (#54894). In simulated time, where an observer
+// sees the TEvUnsubscribe of the dying session actor
+struct TUnsubscribeTest : public TLoadTest {
+
+    void Prepare() override {
+        TLoadTest::Prepare();
+        settings.SetUseRealThreads(false).SetWithSampleTables(false);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto peerNodeId = Runtime->GetNodeId(NodeIndex1);
+        auto session = Service0->CreateDebugNodeState(peerNodeId);
+        session->StartSession();
+        Runtime->SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(session->Subscribed.load(), "the discovery did not subscribe");
+
+        auto sessionActorId = session->NodeActorId;
+        bool unsubscribed = false;
+        auto observer = Runtime->AddObserver<NActors::TEvents::TEvUnsubscribe>([&](NActors::TEvents::TEvUnsubscribe::TPtr& ev) {
+            unsubscribed |= ev->Sender == sessionActorId;
+        });
+        session->Terminating.store(true);
+        Service0->FreeNodeSession(peerNodeId, sessionActorId);
+        Runtime->SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(unsubscribed, "the freed node session did not unsubscribe");
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20) {
 
     void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& = TFailureSettings{}) {
@@ -1498,6 +1529,14 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
         test.Local = false;
         test.Genuine = true;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(FreedSessionUnsubscribes2n) {
+        TUnsubscribeTest test;
+
+        test.Local = false;
 
         test.Run();
     }

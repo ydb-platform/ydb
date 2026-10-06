@@ -1,39 +1,17 @@
 #pragma once
 
+// TODO(babenko): Drop this shim; include library/cpp/yt/system/fork_aware_spin_lock.h instead.
+
 #include "public.h"
 #include "spin_lock.h"
 
-#include <util/system/src_location.h>
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 
 namespace NYT::NThreading {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Wraps TSpinLock and additionally acquires a global fork lock (in read mode)
-//! preventing concurrent forks from happening.
-class TForkAwareSpinLock
-{
-public:
-    static constexpr bool Traced = true;
-
-    TForkAwareSpinLock(const TForkAwareSpinLock&) = delete;
-    TForkAwareSpinLock& operator =(const TForkAwareSpinLock&) = delete;
-
-    constexpr TForkAwareSpinLock() = default;
-
-    explicit constexpr TForkAwareSpinLock(const ::TSourceLocation& location)
-        : SpinLock_(location)
-    { }
-
-    void Acquire() noexcept;
-    bool TryAcquire() noexcept;
-    void Release() noexcept;
-
-    bool IsLocked() const noexcept;
-
-private:
-    ::NYT::NThreading::TSpinLock SpinLock_;
-};
+using ::NYT::TForkAwareSpinLock;
 
 ////////////////////////////////////////////////////////////////////////////////
 

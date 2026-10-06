@@ -606,6 +606,10 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
 
 void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     const bool pruneKeyColumns = KqpCtx.Config->GetEnablePruneKeyColumns();
+    // Match the compiler's AllowWithSpilling setting: shared stage outputs need
+    // channel spilling, otherwise every consumer needs its own producer.
+    const bool allowChannelSpilling = KqpCtx.Config->GetEnableQueryServiceSpilling()
+        && (KqpCtx.IsGenericQuery() || KqpCtx.IsScanQuery()) && KqpCtx.Config->SpillingEnabled();
 
     // Prune unused outputs before any rules that require type information.
     RBO.AddStage(std::make_unique<TGlobalPruningStage>("Early pruning"));
@@ -614,6 +618,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     TVector<std::unique_ptr<IRule>> expandAggregationRules;
     expandAggregationRules.emplace_back(std::make_unique<TExpandGroupingSetsRule>());
     expandAggregationRules.emplace_back(std::make_unique<TExpandDistinctAggregationRule>());
+    expandAggregationRules.emplace_back(std::make_unique<TExpandWholePartitionWindowRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand aggregation", std::move(expandAggregationRules)));
 
     // Rewrite all right joins into left joins
@@ -689,6 +694,15 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites II", std::move(logicalStage_II_Rules)));
 
     RBO.AddStage(std::make_unique<TGlobalPruningStage>("Pruning I", pruneKeyColumns));
+
+    // Duplicate only after logical rewrites have removed unused work, while
+    // reads and joins still have a logical representation supported by Copy().
+    if (!allowChannelSpilling) {
+        TVector<std::unique_ptr<IRule>> expandReplicateRules;
+        expandReplicateRules.emplace_back(std::make_unique<TExpandReplicateRule>());
+        RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand shared subtrees", std::move(expandReplicateRules)));
+        RBO.AddStage(std::make_unique<TGlobalInliningStage>("Inline duplicated definitions"));
+    }
 
     // Physical stage.
     TVector<std::unique_ptr<IRule>> physicalStageRules;

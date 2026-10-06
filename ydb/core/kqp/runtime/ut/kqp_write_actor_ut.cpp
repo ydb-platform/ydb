@@ -267,8 +267,6 @@ public:
         Execute();
     }
 
-<<<<<<< HEAD
-=======
     void SendWriteError(const TWrite& write, const NKikimrDataEvents::TEvWriteResult::EStatus& status) {
         Runtime.Send(new IEventHandle(write->Sender, PipeCache,
             NEvents::TDataEvents::TEvWriteResult::BuildError(
@@ -315,7 +313,6 @@ public:
         Execute();
     }
 
->>>>>>> 130a6938b73 (Fix retries attempts reset for Overloaded (#55218))
     void Retry(const TWrite& write, TPartitions partitions = {}) {
         if (!partitions.empty()) {
             UNIT_ASSERT(Kind == ETableKind::Row);
@@ -577,8 +574,6 @@ Y_UNIT_TEST_SUITE(KqpDirectWriteActor) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, TVector<ui64>{1});
     }
 
-<<<<<<< HEAD
-=======
     const NKikimrDataEvents::TEvWriteResult::EStatus OverloadStatuses[] = {
         NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED,
         NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE,
@@ -650,7 +645,6 @@ Y_UNIT_TEST_SUITE(KqpDirectWriteActor) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, TVector<ui64>{1});
     }
 
->>>>>>> 130a6938b73 (Fix retries attempts reset for Overloaded (#55218))
 }
 
 } // namespace NKikimr::NKqp

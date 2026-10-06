@@ -166,8 +166,12 @@ struct TPartition::THasDataReq {
     TString ClientId;
     TMaybe<TInstant> ReadTimestamp;
 
+    auto OrderBy() const {
+        return std::tuple(Offset, ReadTimestamp.GetOrElse(TInstant::Zero()), Num);
+    }
+
     bool operator < (const THasDataReq& req) const {
-        return std::tuple(Offset, Num) < std::tuple(req.Offset, req.Num);
+        return OrderBy() < req.OrderBy();
     }
 };
 

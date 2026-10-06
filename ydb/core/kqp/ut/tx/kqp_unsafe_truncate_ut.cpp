@@ -470,6 +470,72 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             "the index impl table must be wiped together with the main table");
     }
 
+    Y_UNIT_TEST_TWIN(WithUniqueIndexInsideTransaction, UseQueryService) {
+        using TTxControl = TTxControlFor<UseQueryService>;
+        auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
+        auto client = GetClient<UseQueryService>(kikimr);
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        ExecDdl(session, R"(
+            CREATE TABLE `/Root/UnsafeTruncateTable` (
+                Key Uint64,
+                Value Uint64,
+                PRIMARY KEY (Key),
+                INDEX idx GLOBAL UNIQUE ON (Value)
+            ) WITH (UNIFORM_PARTITIONS = 4);
+        )");
+        TStringBuilder values;
+        for (size_t i = 0; i < Y_ARRAY_SIZE(ShardKeys); ++i) {
+            values << (i ? ", " : "") << "(" << ShardKeys[i] << "ul, " << i + 1 << "ul)";
+        }
+        auto fill = ExecuteQuery(session, Sprintf("UPSERT INTO `%s` (Key, Value) VALUES %s;",
+            TablePath, values.c_str()), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(fill.GetStatus(), EStatus::SUCCESS, fill.GetIssues().ToString());
+        const TString implPath = TString(TablePath) + "/idx/indexImplTable";
+        UNIT_ASSERT_VALUES_EQUAL(CountOf(session, implPath), 4u);
+
+        auto before = ExecuteQuery(session, CountQuery(), TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(before.GetStatus(), EStatus::SUCCESS, before.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(ReadCount(before), 4u);
+        auto tx = before.GetTransaction();
+        UNIT_ASSERT(tx);
+
+        auto truncate = ExecuteQuery(session, UnsafeTruncateQuery(), TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(truncate.GetStatus(), EStatus::SUCCESS, truncate.GetIssues().ToString());
+        for (const TString& path : {TString(TablePath), implPath}) {
+            auto count = ExecuteQuery(session, Sprintf("SELECT COUNT(*) AS cnt FROM `%s`;", path.c_str()),
+                TTxControl::Tx(*tx)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(count.GetStatus(), EStatus::SUCCESS, count.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(ReadCount(count), 0u);
+        }
+        auto commit = tx->Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
+
+        // A value removed by truncate can be reused, but uniqueness must still be enforced.
+        auto reuse = ExecuteQuery(session, R"(
+            UPSERT INTO `/Root/UnsafeTruncateTable` (Key, Value) VALUES (7u, 1u);
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(reuse.GetStatus(), EStatus::SUCCESS, reuse.GetIssues().ToString());
+        auto duplicate = ExecuteQuery(session, R"(
+            UPSERT INTO `/Root/UnsafeTruncateTable` (Key, Value) VALUES (8u, 1u);
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(duplicate.GetStatus(), EStatus::PRECONDITION_FAILED,
+            duplicate.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(CountOf(session, implPath), 1u);
+    }
+
+    Y_UNIT_TEST(SchemeQueryRejectsUnsafeTruncate) {
+        auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
+        auto client = kikimr.GetTableClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        CreateAndFill(session);
+        auto result = session.ExecuteSchemeQuery(UnsafeTruncateQuery()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+            result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
+    }
+
     Y_UNIT_TEST_TWIN(AsyncIndexRejected, UseQueryService) {
         using TTxControl = TTxControlFor<UseQueryService>;
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
@@ -872,6 +938,89 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL(ReadCount(count), 0u);
     }
 
+    Y_UNIT_TEST_TWIN(InvalidPrepareCoordinatorRejected, UseQueryService) {
+        for (bool mismatch : {false, true}) {
+            auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+            settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
+            TKikimrRunner kikimr(settings);
+            auto client = GetClient<UseQueryService>(kikimr);
+            auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            kikimr.RunCall([&] { CreateAndFillSharded(session); });
+
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            ui64 firstCoordinator = 0;
+            bool injected = false;
+            auto observer = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>(
+                [&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+                    auto& record = ev->Get()->Record;
+                    if (injected || record.GetStatus() != NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
+                        return;
+                    }
+                    if (mismatch && !firstCoordinator) {
+                        UNIT_ASSERT_VALUES_EQUAL(record.DomainCoordinatorsSize(), 1);
+                        firstCoordinator = record.GetDomainCoordinators(0);
+                        return;
+                    }
+                    record.ClearDomainCoordinators();
+                    if (mismatch) {
+                        record.AddDomainCoordinators(firstCoordinator + 1);
+                    }
+                    injected = true;
+                });
+            auto result = kikimr.RunCall([&] {
+                return ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
+            });
+            observer.Remove();
+            UNIT_ASSERT(injected);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unable to choose a common coordinator");
+            UNIT_ASSERT_VALUES_EQUAL(kikimr.RunCall([&] { return CountRows(session); }), 4u);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(IgnoresStaleCoordinatorStatuses, UseQueryService) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
+        TKikimrRunner kikimr(settings);
+        auto client = GetClient<UseQueryService>(kikimr);
+        auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+        kikimr.RunCall([&] { CreateAndFillSharded(session); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        ui64 abandonedTxId = 0;
+        size_t proposals = 0;
+        auto observer = runtime.AddObserver<TEvTxProxy::TEvProposeTransaction>(
+            [&](TEvTxProxy::TEvProposeTransaction::TPtr& ev) {
+                using TStatus = TEvTxProxy::TEvProposeTransactionStatus;
+                const ui64 txId = ev->Get()->Record.GetTransaction().GetTxId();
+                ++proposals;
+                if (!abandonedTxId) {
+                    abandonedTxId = txId;
+                    // Refuse the first attempt without letting the coordinator plan it.
+                    // The duplicate arrives after the executer returns to PrepareState.
+                    for (size_t i = 0; i < 2; ++i) {
+                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                            new TStatus(TStatus::EStatus::StatusDeclined, txId, 0)), 0, true);
+                    }
+                    ev.Reset();
+                } else {
+                    UNIT_ASSERT_VALUES_UNEQUAL(txId, abandonedTxId);
+                    // This time the new attempt is in ExecuteState. An old refusal must
+                    // not restart it after its request has already reached the coordinator.
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                        new TStatus(TStatus::EStatus::StatusDeclined, abandonedTxId, 0)), 0, true);
+                }
+            });
+
+        auto result = kikimr.RunCall([&] {
+            return ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>()).ExtractValueSync();
+        });
+        observer.Remove();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(proposals, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(kikimr.RunCall([&] { return CountRows(session); }), 0u);
+    }
+
     // A table that keeps repartitioning must eventually give a clear error instead of spinning:
     // every prepare is refused here, so the resolve->prepare loop runs into its attempt cap.
     Y_UNIT_TEST_TWIN(GivesUpAfterTooManyRefusals, UseQueryService) {
@@ -907,12 +1056,17 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         std::atomic<int> refused{0};
+        THashSet<ui64> attemptedTxIds;
+        TVector<TInstant> attemptTimes;
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWriteResult::EventType) {
                 auto* msg = ev->Get<NKikimr::NEvents::TDataEvents::TEvWriteResult>();
                 if (msg && msg->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
                     refused.fetch_add(1);
+                    if (attemptedTxIds.insert(msg->Record.GetTxId()).second) {
+                        attemptTimes.push_back(runtime.GetCurrentTime());
+                    }
                     msg->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
                 }
             }
@@ -923,6 +1077,9 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 
         UNIT_ASSERT_C(refused.load() > 1, "the loop must have retried, not given up at once");
+        UNIT_ASSERT_VALUES_EQUAL(attemptTimes.size(), 10u);
+        UNIT_ASSERT_C(attemptTimes.back() - attemptTimes.front() >= TDuration::Seconds(1),
+            "persistent overload must back off instead of exhausting every attempt immediately");
         UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "repartitioning");
     }

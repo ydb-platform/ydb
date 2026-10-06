@@ -2062,7 +2062,7 @@ Y_UNIT_TEST(TestPartitionTotalQuota) {
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetMaxParallelConsumersPerPartition(1); //total partition quota is equal to quota per consumer. Very low.
 
-        PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds(), .partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
         TVector<std::pair<ui64, TString>> data;
         TString s{2_MB, 'c'};
         data.push_back({1, s});
@@ -2107,7 +2107,7 @@ Y_UNIT_TEST(TestAccountReadQuota) {
     tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
     tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableReadQuoting(true);
 
-    PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
+    PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds(), .partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
     TVector<std::pair<ui64, TString>> data;
     TString s{100_KB, 'c'};
     data.push_back({1, s});
@@ -2145,7 +2145,7 @@ Y_UNIT_TEST(TestPartitionPerConsumerQuota) {
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetMaxParallelConsumersPerPartition(1000); //total partition quota is 1 consumer quota * 1000. Very high.
 
 
-        PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds(), .partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
         TVector<std::pair<ui64, TString>> data;
         TString s{2_MB, 'c'};
         data.push_back({1, s});
@@ -2795,7 +2795,7 @@ Y_UNIT_TEST(TestAlreadyWrittenWithoutDeduplication) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare({}, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds()}, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
         TVector<std::pair<ui64, TString>> data;
         activeZone = true;
 
@@ -2879,7 +2879,7 @@ Y_UNIT_TEST(TestWritePQBigMessage) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare({.lowWatermark=(8_MB - 512_KB)}, {{"user1", true}}, tc); //nothing dropped
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds(), .lowWatermark=(8_MB - 512_KB)}, {{"user1", true}}, tc); //nothing dropped
                 //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
         TVector<std::pair<ui64, TString>> data;
@@ -3370,7 +3370,7 @@ Y_UNIT_TEST(TestPQPartialRead) {
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds()}, {{"aaa", true}}, tc); //important client - never delete
 
         activeZone = false;
         TVector<std::pair<ui64, TString>> data;
@@ -3404,7 +3404,7 @@ Y_UNIT_TEST(TestPQRead) {
         tc.Runtime->SetScheduledLimit(200);
         tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
-        PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds()}, {{"aaa", true}}, tc); //important client - never delete
 
         activeZone = false;
         TVector<std::pair<ui64, TString>> data;
@@ -3457,7 +3457,7 @@ Y_UNIT_TEST(TestPQReadWithoutReadToBlobEnd) {
         tc.Runtime->SetScheduledLimit(200);
         tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
-        PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds()}, {{"aaa", true}}, tc); //important client - never delete
 
         activeZone = false;
         TVector<std::pair<ui64, TString>> data;
@@ -3509,7 +3509,7 @@ Y_UNIT_TEST(TestPQSmallRead) {
 
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds()}, {{"aaa", true}}, tc); //important client - never delete
 
         activeZone = false;
         TVector<std::pair<ui64, TString>> data;
@@ -3552,7 +3552,7 @@ Y_UNIT_TEST(TestPQReadAhead) {
         tc.Runtime->SetScheduledLimit(200);
         tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
-        PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds()}, {{"aaa", true}}, tc); //important client - never delete
 
         TVector<std::pair<ui64, TString>> data;
 
@@ -3698,7 +3698,7 @@ Y_UNIT_TEST(TestGetTimestamps) {
         tc.Runtime->UpdateCurrentTime(TInstant::Zero() + TDuration::Days(2));
         activeZone = false;
 
-        PQTabletPrepare({.maxCountInPartition=10}, {{"user1", false}}, tc);
+        PQTabletPrepare({.maxCountInPartition=10, .deleteTime = TDuration::Days(2).Seconds()}, {{"user1", false}}, tc);
 
         TVector<std::pair<ui64, TString>> data;
         data.push_back({1, TString(1_KB, 'a')});
@@ -3887,7 +3887,7 @@ Y_UNIT_TEST(TestPQCacheSizeManagement) {
         tc.Runtime->SetScheduledLimit(200);
 
         activeZone = false;
-        PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds()}, {{"aaa", true}}, tc); //important client - never delete
 
         TVector<std::pair<ui64, TString>> data;
 
@@ -3946,7 +3946,7 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
         tc.Runtime->SetScheduledLimit(200);
         tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
-        PQTabletPrepare({}, {{"aaa", true}}, tc);
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds()}, {{"aaa", true}}, tc);
         activeZone = false;
 
 
@@ -3964,7 +3964,7 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
         CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {0});
         CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {21}, TDuration::Minutes(3).MilliSeconds());
         CmdRead(0, 22, 1, Max<i32>(), 1, false, tc, {22}, TDuration::Minutes(3).MilliSeconds());
-        CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {34}, 1000);
+        CmdRead(0, 4, 1, Max<i32>(), 0, true, tc, {}, 1000);
 
         CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {21}, 0,
                 (ts - TDuration::Minutes(3)).MilliSeconds());
@@ -3975,7 +3975,7 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
 
         PQTabletPrepare({.readFromTimestampsMs=(ts - TDuration::Seconds(1)).MilliSeconds()},
                         {{"aaa", true}}, tc);
-        CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {34});
+        CmdRead(0, 0, 1, Max<i32>(), 0, true, tc, {});
 
     });
 }
@@ -4640,7 +4640,7 @@ Y_UNIT_TEST(IncompleteProxyResponse) {
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(1000);
 
-    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+    PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds(), .partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
     TVector<std::pair<ui64, TString>> data;
     TString s{2_MB, 'c'};
     for (auto i = 0u; i < 5; ++i) {
@@ -4789,6 +4789,7 @@ Y_UNIT_TEST(Large_Message_On_The_Border_Of_The_Zones) {
         PQGetPartInfo(3, 6, tc);
 
         // проверяем, что может прочитать сообщение, которое лежит между зонами
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds(), .partitions = 1, .writeSpeed = 50_MB}, {}, tc);
         CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {4});
         CmdRead(0, 3, 2, Max<i32>(), 2, false, tc, {3, 4});
     });
@@ -4851,6 +4852,7 @@ Y_UNIT_TEST(Large_Message_On_The_Border_Of_The_Zones_2) {
         PQGetPartInfo(3, 5, tc);
 
         // проверяем, что может прочитать сообщение, которое лежит между зонами
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds(), .partitions = 1, .writeSpeed = 50_MB}, {}, tc);
         CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {4});
         CmdRead(0, 3, 2, Max<i32>(), 2, false, tc, {3, 4});
     });
@@ -4939,7 +4941,7 @@ Y_UNIT_TEST(TestSizeLag) {
             CmdRunCompaction(0, tc);
         };
 
-        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds(), .partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
 
         // CompactZone.Body
         cmdWrite(27, 300_KB);
@@ -5160,7 +5162,7 @@ Y_UNIT_TEST(TestRetentionDropsBodyBeforeYoungerHeadKeys) {
     }
     PQGetPartInfo(200, 202, tc);
 
-    CmdRead(0, 200, 2, Max<i32>(), 2, false, tc, {200, 201});
+    CmdRead(0, 200, 2, Max<i32>(), 1, false, tc, {201});
 }
 
 Y_UNIT_TEST(TestPartitionMetaOffsetsSurviveRestartWithoutRetentionFlag) {

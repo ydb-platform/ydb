@@ -2064,10 +2064,9 @@ void TPersQueue::HandleReadRequest(
             }
         }
 
-        const ui16 partNo = cmd.HasPartNo() ? cmd.GetPartNo() : 0;
         THolder<TEvPQ::TEvRead> event =
             MakeHolder<TEvPQ::TEvRead>(responseCookie, cmd.GetOffset(), cmd.GetLastOffset(),
-                                       partNo,
+                                       cmd.HasPartNo() ? cmd.GetPartNo() : 0,
                                        count,
                                        cmd.HasSessionId() ? cmd.GetSessionId() : "",
                                        cmd.GetClientId(),

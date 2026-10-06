@@ -981,7 +981,6 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     ui64 readTimestampMs = read->ReadTimestampMs;
     const TDuration maxLag = ReadMaxLag(read->MaxTimeLagMs, GetAvailabilityPeriod(*userInfo), Config.GetPartitionConfig(), read->LimitReadToRetention);
     auto readTimestamp = GetReadFrom(maxLag, read->ReadTimestampMs, userInfo->ReadFromTimestamp, ctx);
-    // Publish the bound into the result so readproxy drops messages written before it.
     if (read->LimitReadToRetention && readTimestamp) {
         readTimestampMs = readTimestamp->MilliSeconds();
     }

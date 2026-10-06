@@ -1825,6 +1825,16 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                     input.Meta.FullTextSourceSettings->SetLockNodeId(lockNodeId);
                 }
 
+                if (GetMeta().LockMode) {
+                    input.Meta.FullTextSourceSettings->SetLockMode(*GetMeta().LockMode);
+                }
+
+                const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
+                    GetMeta().QuerySpanId, input.Meta.FullTextSourceSettings->GetTable().GetPath());
+                if (effectiveSpanId) {
+                    input.Meta.FullTextSourceSettings->SetQuerySpanId(effectiveSpanId);
+                }
+
                 inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.FullTextSourceSettings);
             } else if (input.Meta.SysViewSourceSettings) {
                 inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SysViewSourceSettings);

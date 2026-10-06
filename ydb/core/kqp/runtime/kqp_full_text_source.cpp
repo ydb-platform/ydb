@@ -155,6 +155,8 @@ class TTableReader : public TAtomicRefCount<T> {
     IKqpGateway::TKqpSnapshot Snapshot;
     ui64 LockTxId = 0;
     ui32 LockNodeId = 0;
+    NKikimrDataEvents::ELockMode LockMode = NKikimrDataEvents::ELockMode::OPTIMISTIC;
+    ui64 QuerySpanId = 0;
     TString LogPrefix;
     TString Database;
     TString PoolId;
@@ -221,9 +223,14 @@ public:
         UseArrowFormat = useArrowFormat;
     }
 
-    void SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {
+    void SetLockTxId(ui64 lockTxId, ui32 lockNodeId, NKikimrDataEvents::ELockMode lockMode) {
         LockTxId = lockTxId;
         LockNodeId = lockNodeId;
+        LockMode = lockMode;
+    }
+
+    void SetQuerySpanId(ui64 spanId) {
+        QuerySpanId = spanId;
     }
 
     const TConstArrayRef<NScheme::TTypeInfo> GetKeyColumnTypes() const {
@@ -289,6 +296,12 @@ public:
         }
         if (LockNodeId) {
             record.SetLockNodeId(LockNodeId);
+        }
+        if (LockMode) {
+            record.SetLockMode(LockMode);
+        }
+        if (QuerySpanId) {
+            record.SetQuerySpanId(QuerySpanId);
         }
 
         auto defaultSettings = GetDefaultReadSettings()->Record;
@@ -2932,20 +2945,40 @@ public:
         if (Settings->HasLockTxId()) {
             const ui64 lockTxId = Settings->GetLockTxId();
             const ui32 lockNodeId = Settings->GetLockNodeId();
+            const auto lockMode = Settings->GetLockMode();
             if (MainTableReader) {
-                MainTableReader->SetLockTxId(lockTxId, lockNodeId);
+                MainTableReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
             }
             if (IndexTableReader) {
-                IndexTableReader->SetLockTxId(lockTxId, lockNodeId);
+                IndexTableReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
             }
             if (DocsTableReader) {
-                DocsTableReader->SetLockTxId(lockTxId, lockNodeId);
+                DocsTableReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
             }
             if (StatsTableReader) {
-                StatsTableReader->SetLockTxId(lockTxId, lockNodeId);
+                StatsTableReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
             }
             if (UniqueIndexReader) {
-                UniqueIndexReader->SetLockTxId(lockTxId, lockNodeId);
+                UniqueIndexReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
+            }
+        }
+
+        if (Settings->GetQuerySpanId()) {
+            const ui64 spanId = Settings->GetQuerySpanId();
+            if (MainTableReader) {
+                MainTableReader->SetQuerySpanId(spanId);
+            }
+            if (IndexTableReader) {
+                IndexTableReader->SetQuerySpanId(spanId);
+            }
+            if (DocsTableReader) {
+                DocsTableReader->SetQuerySpanId(spanId);
+            }
+            if (StatsTableReader) {
+                StatsTableReader->SetQuerySpanId(spanId);
+            }
+            if (UniqueIndexReader) {
+                UniqueIndexReader->SetQuerySpanId(spanId);
             }
         }
     }

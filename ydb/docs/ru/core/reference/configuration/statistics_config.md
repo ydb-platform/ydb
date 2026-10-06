@@ -11,8 +11,8 @@
 | `enable_background_column_stats_collection` | bool | `false` | Собирать статистику столбцов в фоне |
 | `background_analyze_change_ratio_threshold_percent` | uint32 | `20` | Доля строк, обновлённых или удалённых с последнего полного `ANALYZE`, после которой статистика столбцов считается устаревшей |
 | `analyze_collect_primary_key_histogram` | bool | `false` | Строить гистограмму равной высоты по первичному ключу при полном `ANALYZE` |
-| `analyze_column_table_whole_table_scan_max_bytes` | uint64 | `10737418240` (10 ГиБ) | Максимальный размер колоночной таблицы, которую `ANALYZE` читает одним запросом |
-| `analyze_row_table_whole_table_scan_max_bytes` | uint64 | `10737418240` (10 ГиБ) | Максимальный размер строковой таблицы, которую `ANALYZE` читает одним запросом |
+| `analyze_column_table_whole_table_scan_max_bytes` | uint64 | `10737418240` (10 GiB) | Максимальный размер колоночной таблицы, которую `ANALYZE` читает одним запросом |
+| `analyze_row_table_whole_table_scan_max_bytes` | uint64 | `10737418240` (10 GiB) | Максимальный размер строковой таблицы, которую `ANALYZE` читает одним запросом |
 
 ### enable_background_column_stats_collection {#enable-background-column-stats-collection}
 

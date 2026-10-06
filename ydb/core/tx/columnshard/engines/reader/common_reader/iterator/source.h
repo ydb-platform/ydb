@@ -153,8 +153,6 @@ private:
     virtual TConclusion<TExecutionResult> DoStartFetch(const NArrow::NSSA::TProcessorContext& context,
         const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
 
-    virtual TConclusionStatus DoApplyPendingFetcher(const NArrow::NSSA::TProcessorContext& context, const ui32 entityId) override;
-
     virtual TExecutionResult DoStartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
@@ -163,6 +161,8 @@ private:
     std::shared_ptr<TPortionDataAccessor> Accessor;
 
 protected:
+    virtual TConclusionStatus DoApplyPendingFetcher(const NArrow::NSSA::TProcessorContext& context, const ui32 entityId) override;
+
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
     NLWTrace::TOrbit DataSourceOrbit;
     TMonotonic LastProbeTimestamp;
@@ -452,8 +452,7 @@ private:
 
 public:
     explicit TDataSourceLease(std::shared_ptr<IDataSource>&& source)
-        : Source(std::move(source))
-    {
+        : Source(std::move(source)) {
         AFL_VERIFY(Source);
     }
 

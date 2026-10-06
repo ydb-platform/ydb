@@ -44,8 +44,7 @@ class TChunkDetailsFetchLogic: public NCommon::IKernelFetchLogic {
 
 public:
     TChunkDetailsFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(entityId, storagesManager)
-    {
+        : TBase(entityId, storagesManager) {
     }
 
     void Add(std::shared_ptr<NCommon::IKernelFetchLogic> fetcher) {
@@ -396,6 +395,23 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
         }
     }
     return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
+}
+
+TConclusionStatus TSourceData::DoApplyPendingFetcher(const NArrow::NSSA::TProcessorContext& context, const ui32 entityId) {
+    if (entityId != NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
+        return TBase::DoApplyPendingFetcher(context, entityId);
+    }
+    if (!HasStageData()) {
+        return TConclusionStatus::Success();
+    }
+    auto fetcher = MutableStageData().ExtractFetcherOptional(entityId);
+    if (!fetcher) {
+        return TConclusionStatus::Success();
+    }
+    AFL_VERIFY(OriginalData);
+    auto& source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+    NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
+    return fetcher->OnDataCollected(fetchContext);
 }
 
 TConclusionStatus TSourceData::DoAssembleAccessor(

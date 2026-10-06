@@ -89,6 +89,9 @@ private:
     virtual TConclusionStatus DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
 
+    // ChunkDetails fetchers are collected into OriginalData, not the scan output collection.
+    virtual TConclusionStatus DoApplyPendingFetcher(const NArrow::NSSA::TProcessorContext& context, const ui32 entityId) override;
+
     virtual TConclusion<NReader::NCommon::TExecutionResult> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) override;
 
@@ -102,8 +105,7 @@ public:
         : TBase(sourceIdx, pathId, tabletId, std::move(start), std::move(finish), std::nullopt, portion->RecordSnapshotMin(),
               portion->RecordSnapshotMin(), context)
         , Portion(std::move(portion))
-        , PortionSchema(std::move(schema))
-    {
+        , PortionSchema(std::move(schema)) {
     }
 };
 

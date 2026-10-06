@@ -2583,7 +2583,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         // Create resource manager
         auto rm = NKqp::CreateKqpResourceManagerActor(Config.GetTableServiceConfig().GetResourceManager(), nullptr,
-            {}, kqpProxySharedResources, NodeId, warmupDeadline);
+            kqpProxySharedResources, NodeId, warmupDeadline);
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpRmServiceID(NodeId),
             TActorSetupCmd(rm, TMailboxType::HTSwap, appData->UserPoolId)));

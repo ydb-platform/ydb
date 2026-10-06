@@ -523,12 +523,14 @@ Y_UNIT_TEST(ResourceBroker) {
 
     InitRoot(server, sender);
 
+    // The queue of the queries is now only for the services other than the queries (see TKqpResourceManager), its
+    // limit is still the one of the query execution; the query execution is taken out of the activities limit
     runtime.SimulateSleep(TDuration::Seconds(2));
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue)));
     auto config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 150_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 150_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 300_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 300_MB - 150_MB);
 
     runtime.SimulateSleep(TDuration::Seconds(2));
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), senderSubscriber, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue, /*subscribe=*/ true)));
@@ -541,7 +543,7 @@ Y_UNIT_TEST(ResourceBroker) {
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 75_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 75_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 150_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 150_MB - 75_MB);
 
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(senderSubscriber);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 75_MB);
@@ -581,11 +583,13 @@ Y_UNIT_TEST(ResourceBroker_ConfigLimit) {
 
     InitRoot(server, sender);
 
+    // The explicit limit of the queue of the queries is kept for the services other than the queries, but it doesn't
+    // override the limit of the query execution anymore
     runtime.SimulateSleep(TDuration::Seconds(2));
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue)));
     auto config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 999_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 999_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 75_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 1000_MB);
 
     server->ProcessMemoryInfo->CGroupLimit = 200_MB;
@@ -593,7 +597,7 @@ Y_UNIT_TEST(ResourceBroker_ConfigLimit) {
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue)));
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 999_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 999_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 30_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 1000_MB);
 
     // ensure that other settings are not affected:
@@ -961,6 +965,39 @@ Y_UNIT_TEST(ConsumerUnregisterDropsAccounting) {
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 0);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 0);
+}
+
+Y_UNIT_TEST(QueryExecutionConsumer) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    config.SetSharedCacheMinBytes(20_MB);
+    config.SetSharedCacheMaxBytes(60_MB);
+    config.SetMemTableMinBytes(10_MB);
+    config.SetMemTableMaxBytes(10_MB);
+    config.SetQueryExecutionLimitBytes(50_MB);
+    TControllerFixture fixture(config);
+
+    // The allocated memory includes 30 MB of the shared cache and 20 MB of the queries
+    auto sharedCacheConsumer = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+    sharedCacheConsumer->SetConsumption(30_MB);
+    fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 90_MB;
+    fixture.Tick();
+    const auto sharedCacheLimit = fixture.Counter("Consumer/SharedCache/Limit");
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 30_MB);
+
+    const TActorId queries = fixture.Runtime.AllocateEdgeActor();
+    auto queriesConsumer = fixture.Register(queries, EMemoryConsumerKind::QueryExecution);
+    queriesConsumer->SetConsumption(20_MB);
+    fixture.Tick();
+
+    // The reported memory moves from the other consumption to the consumers, so the elastic limits don't change
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 50_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), sharedCacheLimit);
+
+    // The reported consumption replaces the global page pool estimation, the limit stays fixed
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/QueryExecution/Consumption"), 20_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/QueryExecution/Limit"), 50_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(queries)->Get()->LimitBytes, 50_MB);
 }
 }
 

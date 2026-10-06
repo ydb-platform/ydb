@@ -31,6 +31,8 @@ message TTableServiceConfig {
         reserved 3;
         optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 1048576];    // 1 MiB
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280, (InvalidateCompileCache) = true];   // 30 MB
+        // The initial memory limit of all the queries on the node - until the memory controller gives the one of the
+        // query execution (see TMemoryControllerConfig::QueryExecutionLimitPercent).
         optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
         optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];
         reserved 8;  // optional bool EnableInstantMkqlMemoryAlloc = 8 [default = true];
@@ -49,7 +51,7 @@ message TTableServiceConfig {
         optional TInfoExchangerSettings InfoExchangerSettings = 19;
         optional uint64 KqpPatternCachePatternAccessTimesBeforeTryToCompile = 20 [default = 5];
         optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
-        // Percent of the query memory limit (node total and resource pool) past which the tasks see memory
+        // Percent of the query memory limit (node total and resource pool fair-share) past which the tasks see memory
         // pressure: spilling, optional memory requests refused, channel back pressure. Above 100 behaves as 100.
         optional double SpillingPercent = 22 [default = 80];
 
@@ -73,23 +75,10 @@ message TTableServiceConfig {
         // bound quota (the operator side of the RFC); until then the flag only binds the quota.
         optional bool EnableOperatorMemoryQuota = 34 [default = false];
 
-        // Precise memory tracking (issue #53093): a resource broker task backs the ExternalMemory requests and the
-        // memory of the execution units in use. Off: the demand is only counted, the node total is not charged.
-        // As with every field of this section, a dynamic config item that carries the section without the field
-        // resets it to the default.
-        optional bool EnableMemoryArena = 35 [default = true];
-        // Bytes charged to the arena per execution unit in use: the compute actor footprint outside the MKQL quota,
-        // which is prepaid as ExternalMemory. A task the node service starts charges MkqlLightProgramMemoryLimit
-        // twice, for its program and its channels, plus this: 3 MiB with the defaults. The kqp queue limit
-        // (QueryExecutionLimitPercent of the hard limit) should hold the expected concurrency times that, plus
-        // MemoryArenaMaxFreeSize and the Memory the tasks acquire as they grow. Past it the demand is a charged
-        // deficit: extra Memory requests are refused and the spilling cookies report the pressure, RM/ArenaDeficit.
+        reserved 35; // optional bool EnableMemoryArena = 35 [default = true];
         optional uint64 ExecutionUnitMemory = 36 [default = 1048576];       // 1 MiB
-        // Once a second the arena is resized to Used + (Min + Max) / 2 whenever its free part leaves the band; a max
-        // below the min is raised to it. A usage that overruns the arena by more than the max grows it right away,
-        // RM/ArenaBurstGrows. The free part counts against the kqp queue limit like the usage.
-        optional uint64 MemoryArenaMinFreeSize = 37 [default = 33554432];   // 32 MiB
-        optional uint64 MemoryArenaMaxFreeSize = 38 [default = 134217728];  // 128 MiB
+        reserved 37; // optional uint64 MemoryArenaMinFreeSize = 37 [default = 33554432];   // 32 MiB
+        reserved 38; // optional uint64 MemoryArenaMaxFreeSize = 38 [default = 134217728];  // 128 MiB
     }
 
     message TSpillingServiceConfig {

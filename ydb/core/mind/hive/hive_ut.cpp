@@ -10754,9 +10754,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 break;
             }
         }
-        TBlockEvents<TEvBlobStorage::TEvControllerSelectGroupsResult> block(runtime);
         {
             // test concurrently creating tablet
+            TBlockEvents<TEvBlobStorage::TEvControllerSelectGroupsResult> block(runtime);
             activeZone = false;
             THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100501, TTabletTypes::Dummy, {3, GetChannelBind("def1")}));
             SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
@@ -10907,7 +10907,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestShrinkStoragePoolWithReboots) {
         const ui64 hiveTablet = MakeDefaultHiveID();
 
-        TListEventFilter filter = {NHive::TEvPrivate::EvProcessIncomingEvent};
+        TListEventFilter filter = {NHive::TEvPrivate::EvProcessIncomingEvent, TEvTabletPipe::EvServerConnected};
         //THiveEveryEventFilter filter;
 
         RunTestWithReboots({hiveTablet}, [&]() {

@@ -485,6 +485,7 @@ public:
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
+                .ColumnShardMaxOperationBytes = MessageSettings.ColumnShardMaxOperationBytes,
                 .Inconsistent = InconsistentTx,
             },
             Alloc);
@@ -1960,6 +1961,12 @@ public:
 
     std::vector<std::pair<TPathId, TString>> SendGenSequenceRequests() {
         std::vector<std::pair<TPathId, TString>> res;
+        // Compact fulltext generations are consumed only once a task participates in a write flush.
+        // Do not reserve them while the task is still buffering/looking up rows: an UPDATE/DELETE that
+        // matches nothing may otherwise finish before its asynchronous sequence response arrives.
+        if (State != EState::WRITING) {
+            return res;
+        }
         for (auto& [pathId, info] : PathWriteInfo) {
             if (!info.GenSequencePath.empty()) {
                 size_t n = (!info.DeleteKeysIndexes.empty() ? 2 : 1);
@@ -3419,6 +3426,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, HandleRollback);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleRollback);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleRollback);
 
@@ -4224,6 +4232,15 @@ public:
         }
         auto [taskCookie, pathId] = it->second;
         SeqCookies.erase(it);
+        auto taskIt = WriteTasks.find(taskCookie);
+        // A task may be cancelled by an error/rollback after its asynchronous request was sent. Sequence
+        // values may have gaps, so any late response has no state left to update and is safe to discard.
+        if (taskIt == WriteTasks.end()) {
+            YDB_LOG_DEBUG("Ignoring generation sequence result for a finished write task",
+                {"taskCookie", taskCookie},
+                {"pathId", pathId});
+            return;
+        }
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
@@ -4232,8 +4249,6 @@ public:
                 ev->Get()->Issues);
             return;
         }
-        auto taskIt = WriteTasks.find(taskCookie);
-        YQL_ENSURE(taskIt != WriteTasks.end());
         taskIt->second.OnGenSequenceAllocated(pathId, ev->Get()->Value);
         Process();
     }
@@ -4433,6 +4448,9 @@ public:
         });
 
         if (!TxManager->NeedCommit()) {
+            ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
+                AFL_ENSURE(actor->IsEmpty());
+            });
             Rollback(std::move(traceId), /* waitForResult */ true);
         } else if (TxManager->BrokenLocks()) {
             NYql::TIssues issues;
@@ -5242,6 +5260,11 @@ public:
     void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
         Rollback(std::move(ev->TraceId), /* waitForResult */ true);
+    }
+
+    void HandleRollback(TEvKqpBuffer::TEvRollback::TPtr& ev) {
+        // A timeout can replace the executer while rollback is in progress.
+        ExecuterActorId = ev->Get()->ExecuterActorId;
     }
 
     void OnAllTasksFinised() {

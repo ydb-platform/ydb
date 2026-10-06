@@ -2,9 +2,9 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
-#include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/gtest.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -49,7 +49,7 @@ public:
     void InitRdSource(
         NYql::NPq::NProto::TDqPqTopicSource settings,
         i64 freeSpace = 1_MB,
-        ui64 partitionCount = 1
+        ui64 partitionCount = PartitionId1 + 1
     ) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             NPq::NProto::TDqReadTaskParams params;
@@ -83,9 +83,10 @@ public:
         });
     }
 
-    void ExpectCoordinatorChangesSubscribe() const {
+    auto ExpectCoordinatorChangesSubscribe() const {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe>(LocalRowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_UNEQUAL(nullptr, eventHolder.Get());
+        return eventHolder;
     }
 
     auto ExpectCoordinatorRequest(NActors::TActorId coordinatorId) const {
@@ -118,20 +119,21 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(expectedGeneration, eventHolder->Cookie);
     }
 
-    void ExpectGetNextBatch(NActors::TActorId rowDispatcherId, ui64 partitionId) const {
+    auto ExpectGetNextBatch(NActors::TActorId rowDispatcherId, ui64 partitionId) const {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_UNEQUAL(nullptr, eventHolder.Get());
         UNIT_ASSERT_VALUES_EQUAL(partitionId, eventHolder->Get()->Record.GetPartitionId());
+        return eventHolder;
     }
 
-    void MockCoordinatorChanged(NActors::TActorId coordinatorId) const {
+    void MockCoordinatorChanged(NActors::TActorId coordinatorId, NActors::TActorId readActorId = {}) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvCoordinatorChanged(coordinatorId, 0);
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, LocalRowDispatcherId, event));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(readActorId ? readActorId : *actor.DqAsyncInputActorId, LocalRowDispatcherId, event));
         });
     }
 
-    void MockCoordinatorResult(NActors::TActorId coordinatorId, const TMap<NActors::TActorId, ui64>& result, ui64 cookie = 0) const {
+    void MockCoordinatorResult(NActors::TActorId coordinatorId, const TMap<NActors::TActorId, ui64>& result, ui64 cookie = 0, NActors::TActorId readActorId = {}) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvCoordinatorResult();
 
@@ -140,16 +142,17 @@ public:
                 partitions->AddPartitionIds(partitionId);
                 ActorIdToProto(rowDispatcherId, partitions->MutableActorId());
             }
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, coordinatorId, event, 0, cookie));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(readActorId ? readActorId : *actor.DqAsyncInputActorId, coordinatorId, event, 0, cookie));
         });
     }
 
-    void MockAck(NActors::TActorId rowDispatcherId, ui64 generation, ui64 partitionId) const {
+    void MockAck(NActors::TActorId rowDispatcherId, ui64 generation, ui64 partitionId, NActors::TActorId readActorId = {}, ui64 seqNo = 0) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             NFq::NRowDispatcherProto::TEvStartSession proto;
             proto.AddPartitionIds(partitionId);
             auto event = new NFq::TEvRowDispatcher::TEvStartSessionAck(proto);
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
+            event->Record.MutableTransportMeta()->SetSeqNo(seqNo);
+            CaSetup->Runtime->Send(new NActors::IEventHandle(readActorId ? readActorId : *actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }
 
@@ -160,9 +163,10 @@ public:
         });
     }
 
-    void MockNewDataArrived(NActors::TActorId rowDispatcherId, ui64 generation, ui64 partitionId) const {
+    void MockNewDataArrived(NActors::TActorId rowDispatcherId, ui64 generation, ui64 partitionId, ui64 seqNo = 0) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvNewDataArrived();
+            event->Record.MutableTransportMeta()->SetSeqNo(seqNo);
             event->Record.SetPartitionId(partitionId);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
@@ -194,10 +198,12 @@ public:
         const std::vector<TMessage>& messages,
         NActors::TActorId rowDispatcherId,
         ui64 generation,
-        ui64 partitionId
+        ui64 partitionId,
+        ui64 seqNo = 0
     ) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvMessageBatch();
+            event->Record.MutableTransportMeta()->SetSeqNo(seqNo);
             for (const auto& item : messages) {
                 NFq::NRowDispatcherProto::TEvMessage message;
                 message.SetPayloadId(event->AddPayload(SerializeItem(actor.ProgramBuilder, item)));
@@ -215,7 +221,8 @@ public:
         const std::vector<std::pair<TMaybe<TMessage>, TMaybe<TInstant>>>& messages,
         NActors::TActorId rowDispatcherId,
         ui64 generation,
-        ui64 partitionId
+        ui64 partitionId,
+        NActors::TActorId readActorId = {}
     ) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvMessageBatch();
@@ -232,7 +239,7 @@ public:
             }
             event->Record.SetPartitionId(partitionId);
             event->Record.SetNextMessageOffset(offset);
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(readActorId ? readActorId : *actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }
 
@@ -245,9 +252,10 @@ public:
         });
     }
 
-    void MockStatistics(NActors::TActorId rowDispatcherId, ui64 nextOffset, ui64 generation, ui64 partitionId) const {
+    void MockStatistics(NActors::TActorId rowDispatcherId, ui64 nextOffset, ui64 generation, ui64 partitionId, ui64 seqNo = 0) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvStatistics();
+            event->Record.MutableTransportMeta()->SetSeqNo(seqNo);
             auto* partitionsProto = event->Record.AddPartition();
             partitionsProto->SetPartitionId(partitionId);
             partitionsProto->SetNextMessageOffset(nextOffset);
@@ -307,7 +315,7 @@ public:
     void StartSession(
         const NYql::NPq::NProto::TDqPqTopicSource& settings,
         i64 freeSpace = 1_MB,
-        ui64 partitionCount = 1
+        ui64 partitionCount = PartitionId1 + 1
     ) const {
         InitRdSource(settings, freeSpace, partitionCount);
         SourceRead<TMessage>(UVPairParser);
@@ -394,6 +402,74 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
             TWatermarkOr<TMessage>{Message2},
         };
         ReadMessages(expected);
+    }
+
+    Y_UNIT_TEST_F(FederatedPartitionsUseClusterCounts, TFixture) {
+        for (ui32 i = 0; i < 3; ++i) {
+            auto* cluster = Settings.AddFederatedClusters();
+            cluster->SetName(TStringBuilder() << "cluster" << i);
+            cluster->SetEndpoint(TStringBuilder() << "endpoint" << i);
+            cluster->SetDatabase("database");
+            cluster->SetPartitionsCount(PartitionId1 + i);
+        }
+        InitRdSource(Settings, 1_MB, PartitionId2 + 1);
+        SourceRead<TMessage>(UVPairParser);
+        TSet<NActors::TActorId> children;
+        while (children.size() < 3) {
+            children.insert(ExpectCoordinatorChangesSubscribe()->Sender);
+        }
+        for (const auto& child : children) {
+            MockCoordinatorChanged(CoordinatorId1, child);
+            const auto request = ExpectCoordinatorRequest(CoordinatorId1);
+            const auto& record = request->Get()->Record;
+            TSet<ui32> actual(record.GetPartitionIds().begin(), record.GetPartitionIds().end());
+            const auto& endpoint = record.GetSource().GetEndpoint();
+            const TSet<ui32> expected = endpoint == "endpoint0" ? TSet<ui32>{}
+                : endpoint == "endpoint1" ? TSet<ui32>{PartitionId1} : TSet<ui32>{PartitionId1, PartitionId2};
+            UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN_F(FederatedWatermarkWaitsForEveryCluster, DelayedCoordinator, TFixture) {
+        for (ui32 i = 0; i < 2; ++i) {
+            auto* cluster = Settings.AddFederatedClusters();
+            cluster->SetName(TStringBuilder() << "cluster" << i);
+            cluster->SetEndpoint(TStringBuilder() << "endpoint" << i);
+            cluster->SetDatabase("database");
+            cluster->SetPartitionsCount(PartitionId1 + 1);
+        }
+        InitRdSource(Settings, 1_MB, PartitionId1 + 1);
+        SourceRead<TMessage>(UVPairParser);
+        TSet<NActors::TActorId> children;
+        while (children.size() < 2) {
+            children.insert(ExpectCoordinatorChangesSubscribe()->Sender);
+        }
+        const auto first = *children.begin();
+        const auto second = *children.rbegin();
+        const auto start = [&](const auto& child) {
+            MockCoordinatorChanged(CoordinatorId1, child);
+            const auto request = ExpectCoordinatorRequest(CoordinatorId1);
+            MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId1, PartitionId1}}, request->Cookie, child);
+            ExpectStartSession({}, RowDispatcherId1, 1);
+            MockAck(RowDispatcherId1, 1, PartitionId1, child);
+        };
+        start(first);
+        if (!DelayedCoordinator) {
+            start(second);
+        }
+        const std::vector<std::pair<TMaybe<TMessage>, TMaybe<TInstant>>> firstBatch = {
+            {Message1, TInstant::MicroSeconds(400)},
+        };
+        MockMessageBatch(0, firstBatch, RowDispatcherId1, 1, PartitionId1, first);
+        AssertDataWithWatermarks({Message1}, SourceRead<TMessage>(UVPairParser));
+        if (DelayedCoordinator) {
+            start(second);
+        }
+        const std::vector<std::pair<TMaybe<TMessage>, TMaybe<TInstant>>> secondBatch = {
+            {Message2, TInstant::MicroSeconds(200)},
+        };
+        MockMessageBatch(0, secondBatch, RowDispatcherId1, 1, PartitionId1, second);
+        ReadMessages({Message2, TInstant::MicroSeconds(200)});
     }
 
     Y_UNIT_TEST_F(IgnoreUndeliveredWithWrongGeneration, TFixture) {

@@ -9,6 +9,8 @@
 namespace NYdb::inline Dev::NTopic {
 
 class TReadSession : public IReadSession {
+    friend class NTests::TReaderMetricsTestPeer;
+
 public:
     TReadSession(const TReadSessionSettings& settings,
                  std::shared_ptr<TTopicClient::TImpl> client,
@@ -62,6 +64,9 @@ private:
     void AbortImpl(EStatus statusCode, NYdb::NIssue::TIssues&& issues, TDeferredActions<false>& deferred);
     void AbortImpl(EStatus statusCode, const std::string& message, TDeferredActions<false>& deferred);
 
+    void RecordDelivered(const TReadSessionEvent::TEvent& event) const noexcept;
+    void RecordDelivered(const std::vector<TReadSessionEvent::TEvent>& events) const noexcept;
+
 private:
 
     TReadSessionSettings Settings;
@@ -71,6 +76,7 @@ private:
     std::shared_ptr<TTopicClient::TImpl> Client;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     TDbDriverStatePtr DbDriverState;
+    std::shared_ptr<TReaderMetrics> ReaderMetrics;
     TAdaptiveLock Lock;
     std::shared_ptr<TReadSessionEventsQueue<false>> EventsQueue;
 

@@ -11,6 +11,7 @@
 #include "direct_reader.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metrics.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/read_session.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
@@ -27,11 +28,14 @@
 #include <util/digest/numeric.h>
 
 #include <atomic>
+#include <cstdint>
+#include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
 #include <vector>
-
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -115,6 +119,61 @@ template <bool UseMigrationProtocol>
 class TReadSessionEventsQueue;
 
 class TReadSession;
+namespace NTests {
+    class TReaderMetricsTestPeer;
+} // namespace NTests
+
+// One private facade per Topic read session. Instruments are registered once
+// before reader locks are acquired; external counter updates run outside locks.
+class TReaderMetrics final {
+public:
+    struct TTopicMetrics {
+        std::shared_ptr<NMetrics::ICounter> DeliveredMessages;
+        std::shared_ptr<NMetrics::ICounter> ReceivedMessages;
+        std::shared_ptr<NMetrics::ICounter> CommitQueued;
+        std::shared_ptr<NMetrics::ICounter> CommitAcknowledged;
+    };
+    using TTopicMetricsPtr = std::shared_ptr<TTopicMetrics>;
+
+    struct TReceivedSnapshot {
+        std::shared_ptr<TReaderMetrics> Metrics;
+        TTopicMetricsPtr Topic;
+        std::uint64_t LogicalMessageCount = 0;
+    };
+
+    static std::shared_ptr<TReaderMetrics> Create(
+        std::shared_ptr<NMetrics::IMetricRegistry> registry,
+        std::string endpoint,
+        std::string database,
+        const TReadSessionSettings& settings) noexcept;
+
+    void RecordDelivered(const TReadSessionEvent::TDataReceivedEvent& event) noexcept;
+    void RecordReceived(const TReceivedSnapshot& snapshot) noexcept;
+    void RecordCommitQueued(const TTopicMetricsPtr& topic, std::uint64_t count) noexcept;
+    void RecordCommitQueued(const std::vector<TTopicOffsets>& topics) noexcept;
+    void RecordCommitAcknowledged(const TTopicMetricsPtr& topic, std::uint64_t count) noexcept;
+    TTopicMetricsPtr ResolveTopic(std::string_view topic) noexcept;
+    bool IsUpdatingOnThisThread() const noexcept;
+
+private:
+    TReaderMetrics(
+        std::shared_ptr<NMetrics::IMetricRegistry> registry,
+        std::string endpoint,
+        std::string database,
+        const TReadSessionSettings& settings);
+    static std::string NormalizeTopicPath(std::string_view path);
+    static void AddSaturated(std::uint64_t& total, std::uint64_t value) noexcept;
+    std::string GetTopicKey(std::string_view topic) const;
+    TTopicMetricsPtr ResolveTopicImpl(std::string_view topic);
+    TTopicMetricsPtr MakeTopicMetrics(std::string_view topic) noexcept;
+    void AddCounter(const std::shared_ptr<NMetrics::ICounter>& counter, std::uint64_t count) noexcept;
+
+    std::shared_ptr<NMetrics::IMetricRegistry> Registry;
+    NMetrics::TLabels BaseLabels;
+    std::string DatabasePath;
+    std::unordered_map<std::string, TTopicMetricsPtr> Topics;
+    bool HasCommitQueued_ = false;
+};
 
 enum class EDecompressionTaskState : ui8 {
     InProcess,
@@ -131,7 +190,6 @@ using TDataDecompressionInfoPtr = typename TDataDecompressionInfo<UseMigrationPr
 
 template <bool UseMigrationProtocol>
 using TCallbackContextPtr = std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>>;
-
 
 template <bool UseMigrationProtocol>
 class TUserRetrievedEventsInfoAccumulator {
@@ -174,9 +232,16 @@ public:
     void DeferSignalWaiter(TWaiter&& waiter);
     void DeferOnUserRetrievedEvent(TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& accumulator);
     void DeferDestroyDecompressionInfos(std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>>&& infos);
+    void DeferReceivedSnapshot(TReaderMetrics::TReceivedSnapshot&& snapshot) noexcept;
+    void DeferCommitAcknowledged(
+        std::shared_ptr<TReaderMetrics> metrics,
+        TReaderMetrics::TTopicMetricsPtr topic,
+        std::uint64_t count) noexcept;
 
 private:
     void DoActions();
+    void RecordReceivedSnapshots();
+    void RecordCommitAcknowledgedSnapshots();
 
     void Read();
     void DirectRead();
@@ -191,6 +256,14 @@ private:
     void DestroyDecompressionInfos();
 
 private:
+    struct TCommitAcknowledgedSnapshot {
+        std::shared_ptr<TReaderMetrics> Metrics;
+        TReaderMetrics::TTopicMetricsPtr Topic;
+        std::uint64_t Count = 0;
+    };
+    std::vector<TCommitAcknowledgedSnapshot> CommitAcknowledgedSnapshots;
+    std::vector<TReaderMetrics::TReceivedSnapshot> ReceivedSnapshots;
+
     // Read.
     typename IProcessor<UseMigrationProtocol>::TPtr Processor;
     TServerMessage<UseMigrationProtocol>* ReadDst = nullptr;
@@ -267,6 +340,7 @@ public:
         ui64 committedOffset = 0
     );
     ~TDataDecompressionInfo();
+    std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> GetSessionOwner() const noexcept;
 
     void Cleanup();
 
@@ -284,6 +358,7 @@ public:
     }
 
     bool AllDecompressionTasksStarted() const {
+        std::lock_guard guard(TasksLock);
         return Tasks.empty();
     }
 
@@ -308,6 +383,7 @@ public:
     }
 
     size_t GetNotStartedTasksCunt() const {
+        std::lock_guard guard(TasksLock);
         return Tasks.size();
     }
 
@@ -434,6 +510,9 @@ private:
     std::atomic<i64> CompressedDataSize = 0;
     std::atomic<i64> DecompressedDataSize = 0;
 
+    // Deferred cleanup can outlive callback cancellation. This mutex protects
+    // only pending-task ownership; release it before accounting or callbacks.
+    mutable std::mutex TasksLock;
     std::deque<TDecompressionTask> Tasks;
 };
 
@@ -835,7 +914,6 @@ public:
                                   TReadSessionEventsQueue<UseMigrationProtocol>* queue,
                                   TDeferredActions<UseMigrationProtocol>& deferred);
 
-
     ui64 GetMaxReadOffset() const {
         return MaxReadOffset;
     }
@@ -855,6 +933,52 @@ public:
             ClientCommits.EraseInterval(MaxCommittedOffset, offset);
             MaxCommittedOffset = offset;
         }
+    }
+
+    void TrackUserCommitForAcknowledgement(ui64 startOffset, ui64 endOffset) noexcept {
+        if (!CommitAcknowledgementTrackingAvailable_) {
+            return;
+        }
+        try {
+            UserCommitAcknowledgementRanges_.InsertInterval(startOffset, endOffset);
+        } catch (...) {
+            // An allocation failure makes coverage incomplete. Disable tracking
+            // for this partition incarnation rather than publish partial ACKs.
+            UserCommitAcknowledgementRanges_.Clear();
+            CommitAcknowledgementTrackingAvailable_ = false;
+        }
+    }
+
+    ui64 ConsumeUserCommitAcknowledgementRanges(ui64 committedOffset) noexcept {
+        if (!CommitAcknowledgementTrackingAvailable_ || committedOffset == 0) {
+            return 0;
+        }
+        try {
+            ui64 acknowledged = 0;
+            for (const auto& range : UserCommitAcknowledgementRanges_) {
+                if (range.first >= committedOffset) {
+                    break;
+                }
+                const ui64 acknowledgedEnd = Min(range.second, committedOffset);
+                acknowledged += acknowledgedEnd - range.first;
+            }
+            // Consume before export and never replay: a backend may mutate its
+            // counter and then throw, so retrying could count these offsets twice.
+            UserCommitAcknowledgementRanges_.EraseInterval(0, committedOffset);
+            return acknowledged;
+        } catch (...) {
+            UserCommitAcknowledgementRanges_.Clear();
+            CommitAcknowledgementTrackingAvailable_ = false;
+            return 0;
+        }
+    }
+
+    void SetPartitionSessionMetricsTopic(TReaderMetrics::TTopicMetricsPtr topic) {
+        PartitionSessionMetricsTopic = std::move(topic);
+    }
+
+    const TReaderMetrics::TTopicMetricsPtr& GetPartitionSessionMetricsTopic() const {
+        return PartitionSessionMetricsTopic;
     }
 
     bool HasCommitsInflight() const {
@@ -946,10 +1070,12 @@ private:
 
     TDisjointIntervalTree<ui64> Commits;
     TDisjointIntervalTree<ui64> ClientCommits;
+    TDisjointIntervalTree<ui64> UserCommitAcknowledgementRanges_;
+    bool CommitAcknowledgementTrackingAvailable_ = true;
+    TReaderMetrics::TTopicMetricsPtr PartitionSessionMetricsTopic;
 
     std::mutex Lock;
 };
-
 
 template <bool UseMigrationProtocol>
 class TReadSessionEventsQueue: public TBaseSessionEventsQueue<TAReadSessionSettings<UseMigrationProtocol>,
@@ -964,7 +1090,8 @@ class TReadSessionEventsQueue: public TBaseSessionEventsQueue<TAReadSessionSetti
                                             TReadSessionEventInfo<UseMigrationProtocol>>;
 
 public:
-    TReadSessionEventsQueue(const TAReadSessionSettings<UseMigrationProtocol>& settings);
+    TReadSessionEventsQueue(const TAReadSessionSettings<UseMigrationProtocol>& settings,
+                            std::shared_ptr<TReaderMetrics> readerMetrics = {});
 
     // Assumes we are under lock.
     std::optional<TReadSessionEventInfo<UseMigrationProtocol>>
@@ -1219,8 +1346,15 @@ private:
     }
 
 private:
+    TReadSessionEventsQueue(
+        std::unique_ptr<const TAReadSessionSettings<UseMigrationProtocol>> settings,
+        std::shared_ptr<TReaderMetrics> readerMetrics);
+
+    // Keep TParent::Settings alive after the public reader is destroyed.
+    std::unique_ptr<const TAReadSessionSettings<UseMigrationProtocol>> SettingsOwner;
     bool HasEventCallbacks;
     TCallbackContextPtr<UseMigrationProtocol> CbContext;
+    std::shared_ptr<TReaderMetrics> ReaderMetrics;
 };
 
 } // namespace NYdb::NTopic
@@ -1265,6 +1399,7 @@ public:
 
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
     friend class TDirectReadSessionControlCallbacks;
+    friend class NTests::TReaderMetricsTestPeer;
     friend class TDataDecompressionInfo<UseMigrationProtocol>;
 
     TSingleClusterReadSessionImpl(
@@ -1279,8 +1414,8 @@ public:
         ui64 partitionStreamIdStart,
         ui64 partitionStreamIdStep,
         TScheduleCallbackFunc scheduleCallbackFunc = {},
-        IDirectReadProcessorFactoryPtr directReadProcessorFactory = {}
-    )
+        IDirectReadProcessorFactoryPtr directReadProcessorFactory = {},
+        std::shared_ptr<TReaderMetrics> readerMetrics = {})
         : Settings(settings)
         , Database(database)
         , SessionId(sessionId)
@@ -1296,6 +1431,7 @@ public:
         , ReadSizeServerDelta(0)
         , ScheduleCallbackFunc(scheduleCallbackFunc)
         , DirectReadProcessorFactory(std::move(directReadProcessorFactory))
+        , ReaderMetrics(std::move(readerMetrics))
     {
     }
 
@@ -1410,14 +1546,17 @@ private:
     // Read/Write.
     void ReadFromProcessorImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.
     void WriteToProcessorImpl(TClientMessage<UseMigrationProtocol>&& req); // Assumes that we're under lock.
-    void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
+    void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration,
+                    TDeferredActions<UseMigrationProtocol>& deferred);
 
     // Direct Read
     bool IsDirectRead();
 
     // TODO(qyryq) Is it possible to revert back to the approach without TLockFreeQueue?
     // void OnDirectReadDone(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&&, TDeferredActions<false>&);
-    void OnDirectReadDone(std::shared_ptr<TLockFreeQueue<Ydb::Topic::StreamDirectReadMessage::DirectReadResponse>>); //, TDeferredActions<false>&);
+    void OnDirectReadDone(
+        std::shared_ptr<TLockFreeQueue<Ydb::Topic::StreamDirectReadMessage::DirectReadResponse>>,
+        TDeferredActions<false>& deferred);
 
     void StopPartitionSession(TPartitionSessionId);
     void StopPartitionSessionImpl(TIntrusivePtr<TPartitionStreamImpl<false>>, bool graceful, TDeferredActions<false>&);
@@ -1614,6 +1753,7 @@ private:
     // to retry sending StartDirectReadPartitionSession requests after temporary errors.
     TScheduleCallbackFunc ScheduleCallbackFunc;
     IDirectReadProcessorFactoryPtr DirectReadProcessorFactory;
+    std::shared_ptr<TReaderMetrics> ReaderMetrics;
 
     TTransactionMap Txs;
 };

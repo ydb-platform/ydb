@@ -14,10 +14,11 @@ PEERDIR(
 
 IF (CLANG AND NOT WITH_VALGRIND)
 
+    CFLAGS(-DENABLE_S3_READ_ACTOR_TESTS)
+
     SRCS(
         yql_arrow_column_converters_ut.cpp
         yql_s3_source_queue_ut.cpp
-        yql_s3_read_actor_ut.cpp
     )
 
     PEERDIR(

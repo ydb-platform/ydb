@@ -80,10 +80,10 @@ struct TJsonParserBuffer : public TNonCopyable {
         Offsets.reserve(numberValues);
     }
 
-    void AddMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+    void AddRecord(const TMessageStreamRecord& record) {
         Y_ENSURE(!Finished, "Cannot add messages into finished buffer");
 
-        const auto offset = message.GetOffset();
+        const auto offset = record.Id.Offset;
         if (Y_UNLIKELY(Offsets && Offsets.back() > offset)) {
             YDB_LOG_WARN("Got message with offset which is less than previous offset",
                 {"logPrefix", LogPrefix},
@@ -91,7 +91,11 @@ struct TJsonParserBuffer : public TNonCopyable {
                 {"offsetsBack", Offsets.back()});
         }
 
-        const auto& data = message.GetData();
+        if (!record.Data) {
+            ythrow TMessageStreamException(EMessageStreamStatus::Unsupported)
+                << "PQ parser does not support null message payloads";
+        }
+        const auto& data = *record.Data;
         try {
             MessageOffsets.emplace_back(Values.size());
             Offsets.emplace_back(offset);
@@ -927,17 +931,17 @@ public:
     }
 
 public:
-    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseRecords(const std::vector<TMessageStreamRecord>& records) override {
         YDB_LOG_TRACE("Add messages to parse",
             {"logPrefix", LogPrefix},
-            {"messages", messages.size()});
+            {"messages", records.size()});
 
         Y_ENSURE(!Buffer.Finished, "Cannot parse messages with finished buffer");
-        for (auto message = messages.begin(); message != messages.end();) {
+        for (auto record = records.begin(); record != records.end();) {
             with_lock(Alloc) {
                 do {
-                    Buffer.AddMessage(*message++);
-                } while (message != messages.end() && Buffer.NumberValues < MaxNumberRows && Buffer.GetSize() < Config.BatchSize);
+                    Buffer.AddRecord(*record++);
+                } while (record != records.end() && Buffer.NumberValues < MaxNumberRows && Buffer.GetSize() < Config.BatchSize);
             }
             if (Buffer.IsReady() && (Buffer.NumberValues >= MaxNumberRows || Buffer.GetSize() >= Config.BatchSize)) {
                 ParseBuffer();

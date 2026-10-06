@@ -828,15 +828,16 @@ struct Schema : NIceDb::Schema {
     };
 
     struct ResourcePools : Table<22> {
-        struct Name                           : Column<1, NScheme::NTypeIds::Utf8> {};
-        struct ConcurrentQueryLimit           : Column<2, NScheme::NTypeIds::Int32> {};
-        struct QueueSize                      : Column<3, NScheme::NTypeIds::Int32> {};
-        struct DatabaseLoadCpuThreshold       : Column<4, NScheme::NTypeIds::Double> {};
-        struct ResourceWeight                 : Column<5, NScheme::NTypeIds::Double> {};
-        struct TotalCpuLimitPercentPerNode    : Column<6, NScheme::NTypeIds::Double> {};
-        struct QueryCpuLimitPercentPerNode    : Column<7, NScheme::NTypeIds::Double> {};
-        struct QueryMemoryLimitPercentPerNode : Column<8, NScheme::NTypeIds::Double> {};
-        struct TotalMemoryLimitPercentPerNode : Column<9, NScheme::NTypeIds::Double> {};
+        struct Name                            : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct ConcurrentQueryLimit            : Column<2, NScheme::NTypeIds::Int32> {};
+        struct QueueSize                       : Column<3, NScheme::NTypeIds::Int32> {};
+        struct DatabaseLoadCpuThreshold        : Column<4, NScheme::NTypeIds::Double> {};
+        struct ResourceWeight                  : Column<5, NScheme::NTypeIds::Double> {};
+        struct TotalCpuLimitPercentPerNode     : Column<6, NScheme::NTypeIds::Double> {};
+        struct QueryCpuLimitPercentPerNode     : Column<7, NScheme::NTypeIds::Double> {};
+        struct QueryMemoryLimitPercentPerNode  : Column<8, NScheme::NTypeIds::Double> {};
+        struct TotalMemoryLimitPercentPerNode  : Column<9, NScheme::NTypeIds::Double> {};
+        struct TotalCpuGuaranteePercentPerNode : Column<10, NScheme::NTypeIds::Double> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
@@ -848,7 +849,8 @@ struct Schema : NIceDb::Schema {
             TotalCpuLimitPercentPerNode,
             QueryCpuLimitPercentPerNode,
             QueryMemoryLimitPercentPerNode,
-            TotalMemoryLimitPercentPerNode>;
+            TotalMemoryLimitPercentPerNode,
+            TotalCpuGuaranteePercentPerNode>;
     };
 
     struct TopPartitionsTli : Table<23> {
@@ -945,6 +947,15 @@ struct Schema : NIceDb::Schema {
         struct SuspendedUntil       : Column<11, NScheme::NTypeIds::Timestamp> {};
         struct LastExecutionId      : Column<12, NScheme::NTypeIds::Utf8> {};
         struct PreviousExecutionIds : Column<13, NScheme::NTypeIds::Utf8> {};
+        struct CreatedBy            : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct ModifiedBy           : Column<15, NScheme::NTypeIds::Utf8> {};
+        struct StartedBy            : Column<16, NScheme::NTypeIds::Utf8> {};
+        struct StoppedBy            : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct CreatedAt            : Column<18, NScheme::NTypeIds::Timestamp> {};
+        struct ModifiedAt           : Column<19, NScheme::NTypeIds::Timestamp> {};
+        struct SubmittedAt          : Column<20, NScheme::NTypeIds::Timestamp> {};
+        struct StartedAt            : Column<21, NScheme::NTypeIds::Timestamp> {};
+        struct FinishedAt           : Column<22, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<Path>;
         using TColumns = TableColumns<
@@ -960,7 +971,16 @@ struct Schema : NIceDb::Schema {
             LastFailAt,
             SuspendedUntil,
             LastExecutionId,
-            PreviousExecutionIds>;
+            PreviousExecutionIds,
+            CreatedBy,
+            ModifiedBy,
+            StartedBy,
+            StoppedBy,
+            CreatedAt,
+            ModifiedAt,
+            SubmittedAt,
+            StartedAt,
+            FinishedAt>;
     };
 
     struct UdfModules : Table<27> {

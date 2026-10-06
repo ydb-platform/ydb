@@ -27,6 +27,8 @@ bool CanPushMapThroughInput(const IOperator& op) {
         case EOperator::Sort:
         case EOperator::Join:
             return true;
+        case EOperator::Map:
+            return CastOperator<TOpMap>(op).NeedToPush == false;
         default:
             return false;
     }
@@ -98,7 +100,7 @@ TIntrusivePtr<IOperator> TPushMapElementsIntoMapRule::SimpleMatchAndApply(const 
 }
 
 bool TPushMapElementsThroughInputRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::Map && CanPushMapThroughInput(*input->GetChild(0));
+    return input->Kind == EOperator::Map && CastOperator<TOpMap>(input)->NeedToPush && CanPushMapThroughInput(*input->GetChild(0));
 }
 
 TIntrusivePtr<IOperator> TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
@@ -109,6 +111,10 @@ TIntrusivePtr<IOperator> TPushMapElementsThroughInputRule::SimpleMatchAndApply(c
     }
 
     auto& map = CastOperator<TOpMap>(*input);
+    if (!map.NeedToPush) {
+        return input;
+    }
+
     auto& op = *map.GetInput();
     TVector<TMapIUs> pushed(op.GetChildCount());
     TMapIUs kept;
@@ -133,7 +139,7 @@ TIntrusivePtr<IOperator> TPushMapElementsThroughInputRule::SimpleMatchAndApply(c
 
     for (ui32 childIdx = 0; childIdx < pushed.size(); ++childIdx) {
         if (!pushed[childIdx].Keys().Empty()) {
-            op.SetChild(childIdx, MakeIntrusive<TOpMap>(op.GetChild(childIdx), map.Pos, std::move(pushed[childIdx])));
+            op.SetChild(childIdx, MakeIntrusive<TOpMap>(op.GetChild(childIdx), map.Pos, std::move(pushed[childIdx]), true));
         }
     }
     op.Props.OutputIUs.reset();

@@ -14,6 +14,7 @@ using namespace fmt::literals;
 using namespace NFederatedQueryTest;
 using namespace NTestUtils;
 using namespace NYdb;
+using namespace NYdb::NFederatedTopic;
 using namespace NYdb::NTopic;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
@@ -53,19 +54,26 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         }
 
         TTopicClientSettings settings;
+        TFederatedTopicClientSettings federatedSettings;
         settings.Database(TEST_DATABASE);
+        federatedSettings.Database(TEST_DATABASE);
         if constexpr (LocalTopics) {
-            settings.CredentialsProviderFactory(NYql::CreateStructuredTokenCredentialsFactory()->Create(
+            const auto credentials = NYql::CreateStructuredTokenCredentialsFactory()->Create(
                 NYql::ComposeStructuredTokenJsonForTransientTokenAuth(NACLib::TUserToken(testUser, {}).SerializeAsString())
-            ));
+            );
+            settings.CredentialsProviderFactory(credentials);
+            federatedSettings.CredentialsProviderFactory(credentials);
         } else {
             settings.Database(YDB_DATABASE);
             settings.DiscoveryEndpoint(YDB_ENDPOINT);
             settings.AuthToken(testUser);
+            federatedSettings.Database(YDB_DATABASE);
+            federatedSettings.DiscoveryEndpoint(YDB_ENDPOINT);
+            federatedSettings.AuthToken(testUser);
         }
 
         const TIntrusivePtr<NYql::IPqGateway> pqGateway = SetupRealPqGateway();
-        const NYql::ITopicClient::TPtr topicClient = pqGateway->GetTopicClient(*PqGatewayDriver, settings);
+        const auto federatedClient = pqGateway->GetFederatedTopicClient(*PqGatewayDriver, federatedSettings);
         const NYql::IDeferredPublishClient::TPtr publishClient = pqGateway->GetDeferredPublishClient(*PqGatewayDriver, settings);
 
         {
@@ -117,9 +125,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             UNIT_ASSERT_VALUES_EQUAL(info.Destinations.size(), 0);
         }
 
-        const auto writeSession = topicClient->CreateWriteSession(TWriteSessionSettings()
+        const auto writeSession = federatedClient->CreateWriteSession(TFederatedWriteSessionSettings(TWriteSessionSettings()
             .Codec(ECodec::RAW)
-            .Path(outputTopicName));
+            .Path(outputTopicName)));
         const auto disposition = TInstant::Now();
 
         bool dataWritten = false;
@@ -748,7 +756,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             }));
         }
 
-        constexpr TDuration CHECKPOINT_INTERVAL = TDuration::Seconds(10);
+        // Keep checkpoint timing independent of query setup and message delivery.
+        const auto unblockCheckpoints = BlockCheckpointCreation();
+        constexpr TDuration CHECKPOINT_INTERVAL = TDuration::Seconds(1);
         const auto queryName = TStringBuilder() << Name_ << "StreamingQuery";
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` WITH (
@@ -802,6 +812,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto disposition = TInstant::Now();
         const auto& checkpointId = GetStreamingQueryCheckpointId(queryName);
+        const auto seqNo = GetLastCheckpointSeqNo(checkpointId);
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})", /* partition */ 0, LocalTopics);
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})", /* partition */ 1, LocalTopics);
         ReadTopicMessages(secondOutputTopicName, {"A-2025-08-24T00:00:00.000000Z-1", "A-2025-08-25T00:00:00.000000Z-1"}, disposition, /* sort */ true, LocalTopics);
@@ -826,11 +837,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         // [source stage, finished] -> [limit stage, finished] -> [group by stage + 2x PQ sinks, waiting sink{1}] -> [table sink stage, finished]
         // Checkpoint will be injected into source stage and must pass all stages
 
-        CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 2);
+        UNIT_ASSERT_VALUES_EQUAL(CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 2), seqNo);
         ValidatePublicationsCount(/* count */ 1, queryName, *sdkClient);
         EnsureTopicEndOffset(firstOutputTopicName, /* endOffset */ 0, LocalTopics);
 
-        WaitCheckpointUpdate(checkpointId);
+        unblockCheckpoints();
+        WaitCheckpointUpdate(checkpointId, std::pair(1, seqNo));
         ValidatePublicationsCount(/* count */ 0, queryName, *sdkClient);
         ReadTopicMessages(firstOutputTopicName, {"A-2025-08-24T00:00:00.000000Z-1", "A-2025-08-25T00:00:00.000000Z-1"}, disposition, /* sort */ true, LocalTopics);
 

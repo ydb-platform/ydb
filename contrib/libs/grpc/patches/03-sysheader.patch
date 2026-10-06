@@ -2,14 +2,13 @@ diff --git a/include/grpcpp/grpcpp.h b/include/grpcpp/grpcpp.h
 index aa8a242..39b7296 100644
 --- a/include/grpcpp/grpcpp.h
 +++ b/include/grpcpp/grpcpp.h
-@ -19,6 +19,11 @@
+@ -19,6 +19,10 @@
  #ifndef GRPCPP_SERVER_H
  #define GRPCPP_SERVER_H
 
 +#if defined(__GNUC__)
 +#pragma GCC system_header
 +#endif
-+
 +
  #include <list>
  #include <memory>
@@ -179,3 +178,16 @@ index b004687..d30d830 100644
      printer->Print(vars, "#include \"$filename_base$$message_header_ext$\"\n");
      printer->Print(vars, file->additional_headers().c_str());
      printer->Print(vars, "\n");
+--- a/src/core/lib/promise/status_flag.h	(bbfbdd8da52bae49ffed23bf7ec1f9307ab88110)
++++ b/src/core/lib/promise/status_flag.h	(index)
+@@ -15,6 +15,10 @@
+ #ifndef GRPC_SRC_CORE_LIB_PROMISE_STATUS_FLAG_H
+ #define GRPC_SRC_CORE_LIB_PROMISE_STATUS_FLAG_H
+ 
++#if defined(__GNUC__)
++#pragma GCC system_header
++#endif
++
+ #include <grpc/support/port_platform.h>
+ 
+ #include "y_absl/status/status.h"

@@ -627,12 +627,26 @@ public:
             return Metrics.HasExpectedSlotSize() ? Metrics.GetExpectedSlotSize() : ExpectedSlotSize;
         }
 
+        ui32 GetEffectiveSlotSizeInUnits() const {
+            // Preserve config-based slot accounting when ExpectedSlotSize is zero.
+            ui32 slotSizeInUnits = SlotSizeInUnits;
+            // When ExpectedSlotSize is nonzero, prefer SlotSizeInUnits reported by PDisk.
+            if (GetEffectiveExpectedSlotSize() != 0 && Metrics.HasSlotSizeInUnits()) {
+                slotSizeInUnits = Metrics.GetSlotSizeInUnits();
+            }
+            return Max(1u, slotSizeInUnits);
+        }
+
         ui32 GetOwnerWeight(ui32 groupSizeInUnits) const {
-            // NOTE: uses the config-side SlotSizeInUnits, not the effective (metrics-preferred)
-            // one: for unit-size-inferred disks this over-counts occupancy of multi-unit groups
-            // (conservative). Switching to the effective value would change legacy accounting
-            // and requires extending the NumActiveDynamicSlots recompute triggers to units changes
-            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, GetEffectiveExpectedSlotSize());
+            // NOTE: when ExpectedSlotSize is zero, uses the config-side
+            // SlotSizeInUnits, not the effective (metrics-preferred)
+            // one: for unit-size-inferred disks this over-counts
+            // occupancy of multi-unit groups (conservative). Switching
+            // to the effective value would change accounting when
+            // ExpectedSlotSize is zero. When ExpectedSlotSize is
+            // nonzero, use the effective value; NumActiveDynamicSlots
+            // is recomputed on units changes.
+            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, GetEffectiveSlotSizeInUnits());
         }
 
         // sum of owner weights over the live vslots with the current weight inputs; must be
@@ -1274,6 +1288,7 @@ public:
         Table::DefaultGroupSizeInUnits::Type DefaultGroupSizeInUnits;
         Table::BridgeMode::Type BridgeMode = false;
         Table::DDisk::Type DDisk = false;
+        TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
@@ -1379,6 +1394,7 @@ public:
                     Table::DefaultGroupSizeInUnits,
                     Table::BridgeMode,
                     Table::DDisk,
+                    Table::VDiskHeapAllocatorNumLeadingDisks,
                     TInlineTable<TUserIds, Schema::BoxStoragePoolUser>,
                     TInlineTable<TPDiskFilters, Schema::BoxStoragePoolPDiskFilter>
                 > adapter(
@@ -1408,6 +1424,7 @@ public:
                     &TStoragePoolInfo::DefaultGroupSizeInUnits,
                     &TStoragePoolInfo::BridgeMode,
                     &TStoragePoolInfo::DDisk,
+                    &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::UserIds,
                     &TStoragePoolInfo::PDiskFilters
                 );
@@ -1811,7 +1828,6 @@ private:
 
     //TGroupStatusTracker GroupStatusTracker;
     TDeque<TAutoPtr<IEventHandle>> InitQueue;
-    THashMap<Schema::Group::Owner::Type, Schema::Group::ID::Type> OwnerIdIdxToGroup;
 
     void ReadGroups(TSet<TGroupId>& groupIDsToRead, bool discard, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result,
             TNodeId nodeId);
@@ -2733,6 +2749,7 @@ public:
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
     static void Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool);
+    static void Serialize(NKikimrBlobStorage::TStoragePoolSettings *pb, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk);
     static void Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id);

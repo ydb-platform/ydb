@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     library/cpp/charset/lite
@@ -31,6 +31,7 @@ SRCS(
     ddl_resource_pool.cpp
     ddl_session.cpp
     ddl_symlink.cpp
+    ddl_topic.cpp
     join.cpp
     insert.cpp
     list_builtin.cpp
@@ -51,6 +52,7 @@ SRCS(
     sql_ddl_resource_pool.cpp
     sql_ddl_session.cpp
     sql_ddl_symlink.cpp
+    sql_ddl_topic.cpp
     sql_expression.cpp
     sql_group_by.cpp
     sql_match_recognize.cpp
@@ -64,8 +66,6 @@ SRCS(
     query.cpp
     object_processing.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(match_recognize.h)
 

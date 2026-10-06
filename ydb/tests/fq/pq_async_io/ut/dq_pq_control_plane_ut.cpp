@@ -5,6 +5,7 @@
 #include <ydb/library/testlib/common/test_with_actor_system.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_control_plane_actor.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
 #include <ydb/library/yql/providers/pq/common/events.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
@@ -48,7 +49,7 @@ void CheckUnavailableResponse(TTestActorRuntime& runtime, TActorId reader, ui64 
     UNIT_ASSERT_VALUES_EQUAL(record.PartitionsSize(), 0);
 }
 
-class TTopicClient final : public ITopicClient {
+class TTopicClient final {
 public:
     NThreading::TPromise<TDescribeConsumerResult> Description = NThreading::NewPromise<TDescribeConsumerResult>();
     THashMap<TString, TAsyncDescribeConsumerResult> DescriptionResults;
@@ -58,49 +59,91 @@ public:
     bool ThrowOnCommit = false;
     TActorId Observer;
 
-    TAsyncDescribeConsumerResult DescribeConsumer(const TString& path, const TString&, const TDescribeConsumerSettings& settings) override {
-        UNIT_ASSERT(settings.IncludeStats_);
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamDescription>> DescribeStream(const TString&) {
+        Y_ABORT("Unexpected DescribeStream");
+    }
+
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> DescribeConsumer(
+        const TString& path, const TString&, const NFq::TMessageStreamDescribeConsumerSettings& settings)
+    {
+        UNIT_ASSERT(settings.IncludeStats);
         ++Calls;
         TActivationContext::ActorSystem()->Send(Observer, new TEvDescribeCalled());
         if (ThrowOnDescribe) {
             throw std::runtime_error("describe exception");
         }
-        return DescriptionResults.Value(path, Description.GetFuture());
+        return DescriptionResults.Value(path, Description.GetFuture()).Apply([](const TAsyncDescribeConsumerResult& future) {
+            return ToMessageStream(future.GetValue());
+        });
     }
 
-    TAsyncDescribeTopicResult DescribeTopic(const TString&, const TDescribeTopicSettings&) override {
-        Y_ABORT("Unexpected DescribeTopic");
-    }
-    TAsyncDescribePartitionResult DescribePartition(const TString&, i64, const TDescribePartitionSettings&) override {
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(const TString&, NFq::TMessageStreamPartitionId) {
         Y_ABORT("Unexpected DescribePartition");
     }
-    std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings&) override {
+
+    std::shared_ptr<NFq::IMessageStreamReadSession> CreateReadSession(const TString&, const NFq::TMessageStreamReadSessionSettings&) {
         Y_ABORT("Unexpected CreateReadSession");
     }
-    std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TWriteSessionSettings&) override {
-        Y_ABORT("Unexpected CreateSimpleBlockingWriteSession");
-    }
-    std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings&) override {
-        Y_ABORT("Unexpected CreateWriteSession");
-    }
-    NYdb::TAsyncStatus CommitOffset(const TString&, ui64, const TString&, ui64, const TCommitOffsetSettings&) override {
+
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> CommitPosition(
+        const TString&, NFq::TMessageStreamPartitionId partitionId, const TString&, ui64 offset)
+    {
         UNIT_ASSERT_C(CommitResult, "Unexpected CommitOffset");
         TActivationContext::ActorSystem()->Send(Observer, new TEvCommitCalled());
         if (ThrowOnCommit) {
             throw std::runtime_error("rewind exception");
         }
-        return *CommitResult;
+        return CommitResult->Apply([partitionId, offset](const NYdb::TAsyncStatus& future) {
+            return ToMessageStreamConsumerPosition(future.GetValue(), partitionId, offset);
+        });
     }
+};
+
+// Each facade is bound to one stream; test counters/promises can be shared.
+class TBoundTopicClient final : public NFq::IMessageStreamClient {
+public:
+    TBoundTopicClient(TString stream, std::shared_ptr<TTopicClient> state)
+        : Stream(std::move(stream))
+        , State(std::move(state))
+    {}
+
+    const TString& GetStream() const override {
+        return Stream;
+    }
+
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamDescription>> DescribeStream() override {
+        return State->DescribeStream(Stream);
+    }
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> DescribeConsumer(
+        const TString& consumer, const NFq::TMessageStreamDescribeConsumerSettings& settings) override
+    {
+        return State->DescribeConsumer(Stream, consumer, settings);
+    }
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(NFq::TMessageStreamPartitionId id) override {
+        return State->DescribePartition(Stream, id);
+    }
+    std::shared_ptr<NFq::IMessageStreamReadSession> CreateReadSession(const NFq::TMessageStreamReadSessionSettings& settings) override {
+        return State->CreateReadSession(Stream, settings);
+    }
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> CommitPosition(
+        NFq::TMessageStreamPartitionId id, const TString& consumer, ui64 offset) override
+    {
+        return State->CommitPosition(Stream, id, consumer, offset);
+    }
+
+private:
+    const TString Stream;
+    const std::shared_ptr<TTopicClient> State;
 };
 
 class TGateway final : public IPqStaticGateway {
 public:
-    explicit TGateway(ITopicClient::TPtr client)
+    explicit TGateway(std::shared_ptr<TTopicClient> client)
         : Client(std::move(client))
     {}
 
-    ITopicClient::TPtr GetTopicClient(const NYdb::TDriver&, const TTopicClientSettings&) override {
-        return Client;
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const TString& stream, const NYdb::TDriver&, const TTopicClientSettings&) override {
+        return std::make_shared<TBoundTopicClient>(stream, Client);
     }
     TTopicClientSettings GetTopicClientSettings() const override {
         return {};
@@ -116,7 +159,7 @@ public:
     }
 
 private:
-    const ITopicClient::TPtr Client;
+    const std::shared_ptr<TTopicClient> Client;
 };
 
 class TCredentialsFactory final : public IStructuredTokenCredentialsFactory {
@@ -206,7 +249,7 @@ protected:
     }
 
     const NYdb::TDriver Driver{NYdb::TDriverConfig()};
-    const TIntrusivePtr<TTopicClient> Client = MakeIntrusive<TTopicClient>();
+    const std::shared_ptr<TTopicClient> Client = std::make_shared<TTopicClient>();
     const std::shared_ptr<TCredentialsFactory> CredentialsFactory = std::make_shared<TCredentialsFactory>();
     TActorId ControlPlaneId;
 };
@@ -214,9 +257,9 @@ protected:
 // Exercises the shared startup implementation without a data-plane session.
 class TReader final : public TActorBootstrapped<TReader>, public NInternal::TDqPqReadActorBase {
 public:
-    TReader(TActorId compute, TActorId controlPlane, ITopicClient::TPtr topicClient)
+    TReader(TActorId compute, TActorId controlPlane, std::shared_ptr<TTopicClient> topicClient)
         : TDqPqReadActorBase(0, 0, {}, "test", Source(), ReadTaskParams(), compute, controlPlane)
-        , TopicClient(std::move(topicClient))
+        , TopicClient(std::make_shared<TBoundTopicClient>("topic", std::move(topicClient)))
     {}
 
     void Bootstrap() {
@@ -268,7 +311,7 @@ private:
         TActorBootstrapped<TReader>::PassAway();
     }
 
-    const ITopicClient::TPtr TopicClient;
+    const std::shared_ptr<NFq::IMessageStreamClient> TopicClient;
 };
 
 } // namespace
@@ -504,7 +547,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         TTestActorRuntime runtime;
         InitializeRuntime(runtime);
         const NYdb::TDriver driver{NYdb::TDriverConfig()};
-        const auto client = MakeIntrusive<TTopicClient>();
+        const auto client = std::make_shared<TTopicClient>();
         client->Observer = runtime.AllocateEdgeActor();
         client->ThrowOnDescribe = true;
         const auto controlPlane = runtime.Register(CreateDqPqControlPlaneActor(
@@ -568,7 +611,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         TTestActorRuntime runtime(2, true);
         InitializeRuntime(runtime);
         const NYdb::TDriver driver{NYdb::TDriverConfig()};
-        const auto client = MakeIntrusive<TTopicClient>();
+        const auto client = std::make_shared<TTopicClient>();
         client->Observer = runtime.AllocateEdgeActor();
         client->DescriptionResults.emplace("ready-topic", NThreading::MakeFuture(TDescribeConsumerResult(
             NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), Ydb::Topic::DescribeConsumerResult{})));
@@ -621,7 +664,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         InitializeRuntime(runtime);
         const auto compute = runtime.AllocateEdgeActor();
         const TActorId missing(runtime.GetNodeId(0), "missing-cp");
-        runtime.Register(new TReader(compute, missing, MakeIntrusive<TTopicClient>()));
+        runtime.Register(new TReader(compute, missing, std::make_shared<TTopicClient>()));
         const auto error = runtime.GrabEdgeEvent<IDqComputeActorAsyncInput::TEvAsyncInputError>(compute);
         UNIT_ASSERT(error);
         UNIT_ASSERT_STRING_CONTAINS(error->Get()->Issues.ToString(), "Failed to deliver consumer description request");
@@ -632,7 +675,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         InitializeRuntime(runtime);
         const auto compute = runtime.AllocateEdgeActor();
         const auto controlPlane = runtime.AllocateEdgeActor();
-        const auto client = MakeIntrusive<TTopicClient>();
+        const auto client = std::make_shared<TTopicClient>();
         client->Observer = runtime.AllocateEdgeActor();
         auto commit = NThreading::NewPromise<NYdb::TStatus>();
         client->CommitResult = commit.GetFuture();
@@ -665,7 +708,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         TTestActorRuntime runtime(2, true);
         InitializeRuntime(runtime);
         const NYdb::TDriver driver{NYdb::TDriverConfig()};
-        const auto client = MakeIntrusive<TTopicClient>();
+        const auto client = std::make_shared<TTopicClient>();
         client->Observer = runtime.AllocateEdgeActor(1);
         Ydb::Topic::DescribeConsumerResult description;
         auto* partition = description.add_partitions();
@@ -689,7 +732,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         InitializeRuntime(runtime);
         const auto compute = runtime.AllocateEdgeActor();
         const auto controlPlane = runtime.AllocateEdgeActor(1);
-        const auto reader = runtime.Register(new TReader(compute, controlPlane, MakeIntrusive<TTopicClient>()));
+        const auto reader = runtime.Register(new TReader(compute, controlPlane, std::make_shared<TTopicClient>()));
         const auto request = runtime.GrabEdgeEvent<TPqControlPlaneEvents::TEvDescribeConsumer>(controlPlane);
         UNIT_ASSERT(request);
         UNIT_ASSERT(request->InterconnectSession);

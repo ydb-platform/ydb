@@ -8,6 +8,12 @@ using namespace NSQLTranslationV1;
 
 Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
+Y_UNIT_TEST(DottedCallWithoutExpression) {
+    auto result = SqlToYql("SELECT COLUMN. JSON_EXISTS()");
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "Unknown builtin:");
+}
+
 Y_UNIT_TEST(UnknownBuiltinSuggestsSparkAlias) {
     const TString query = "SELECT md5('a');";
     const TString sparkSuggestion = "consider using Spark::md5 or Pg::md5 instead.";
@@ -40,6 +46,30 @@ Y_UNIT_TEST(SparkFunctionArity) {
     result = SqlToYqlWithSettings("SELECT Spark::lpad('a', 1, 'x', 'y');", settings);
     UNIT_ASSERT(!result.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "lpad expected from 2 to 3 arguments, but got: 4");
+}
+
+Y_UNIT_TEST(SparkAggregatesRequireYqlSelect) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::SparkTranslator.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Disable;
+    for (const TString& name : {"count", "min", "max", "avg", "sum"}) {
+        auto result = SqlToYqlWithSettings("SELECT Spark::" + name + "(1);", settings);
+        UNIT_ASSERT(!result.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "Spark aggregate functions require YqlSelect mode");
+    }
+}
+
+Y_UNIT_TEST(SparkAggregateModes) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::SparkTranslator.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+    auto result = SqlToYqlWithSettings("SELECT Spark::abs(DISTINCT 1);", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "DISTINCT can only be used in aggregation functions");
+
+    result = SqlToYqlWithSettings("SELECT Spark::sum(1) OVER ();", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "Spark aggregate functions do not support OVER");
 }
 
 Y_UNIT_TEST(UdfSyntaxSugarMissingCall) {
@@ -1327,52 +1357,48 @@ Y_UNIT_TEST(YsonFuncWithoutArgs) {
 }
 
 Y_UNIT_TEST(CanNotUseOrderByInNonLastSelectInUnionAllChain) {
-    auto req = "pragma AnsiOrderByLimitInUnionAll;\n"
-               "use plato;\n"
+    auto req = "use plato;\n"
                "\n"
                "select * from Input order by key\n"
                "union all\n"
                "select * from Input order by key limit 1;";
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:21: Error: ORDER BY within UNION ALL is only allowed after last subquery\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:21: Error: ORDER BY within UNION ALL is only allowed after last subquery\n");
 }
 
 Y_UNIT_TEST(CanNotUseLimitInNonLastSelectInUnionAllChain) {
-    auto req = "pragma AnsiOrderByLimitInUnionAll;\n"
-               "use plato;\n"
+    auto req = "use plato;\n"
                "\n"
                "select * from Input limit 1\n"
                "union all\n"
                "select * from Input order by key limit 1;";
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:21: Error: LIMIT within UNION ALL is only allowed after last subquery\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:21: Error: LIMIT within UNION ALL is only allowed after last subquery\n");
 }
 
 Y_UNIT_TEST(CanNotUseDiscardInNonFirstSelectInUnionAllChain) {
-    auto req = "pragma AnsiOrderByLimitInUnionAll;\n"
-               "use plato;\n"
+    auto req = "use plato;\n"
                "\n"
                "select * from Input\n"
                "union all\n"
                "discard select * from Input;";
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:1: Error: DISCARD within UNION ALL is only allowed before first subquery\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:1: Error: DISCARD within UNION ALL is only allowed before first subquery\n");
 }
 
 Y_UNIT_TEST(CanNotUseIntoResultInNonLastSelectInUnionAllChain) {
     auto req = "use plato;\n"
-               "pragma AnsiOrderByLimitInUnionAll;\n"
                "\n"
-               "select * from Input\n"
+               "select * from Input into result aaa\n"
                "union all\n"
-               "discard select * from Input;";
+               "select * from Input;";
 
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:1: Error: DISCARD within UNION ALL is only allowed before first subquery\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:21: Error: INTO RESULT within UNION ALL is only allowed after last subquery\n");
 }
 
 Y_UNIT_TEST(YsonStrictInvalidPragma) {

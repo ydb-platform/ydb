@@ -90,7 +90,7 @@ RECURSE_FOR_TESTS(
     ut_view
 )
 
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     defs.h
@@ -419,8 +419,6 @@ PEERDIR(
     ydb/core/tx/columnshard/bg_tasks/manager
     ydb/core/tx/tiering/tier
 )
-
-YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     SRCS(

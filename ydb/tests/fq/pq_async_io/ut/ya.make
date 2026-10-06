@@ -18,6 +18,7 @@ PEERDIR(
     ydb/library/testlib/common
     ydb/library/testlib/pq_helpers
     ydb/library/yql/providers/common/ut_helpers
+    ydb/library/yql/providers/pq/gateway/clients/message_stream
     ydb/library/yql/providers/pq/gateway/native
     ydb/public/sdk/cpp/src/client/datastreams
     ydb/public/sdk/cpp/src/client/persqueue_public

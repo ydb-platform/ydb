@@ -570,15 +570,29 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             const auto* settingsList = node.Child(TKqpStreamingAggregation::idx_Settings);
 
             TString stateTablePath;
+            TRuntimeNode outputStateTable;
             for (const auto& setting : settingsList->Children()) {
                 if (setting->ChildrenSize() >= 1 && setting->Child(0)->IsAtom() && setting->Child(0)->Content() == "state_table_path") {
                     if (setting->ChildrenSize() >= 2 && setting->Child(1)->IsAtom()) {
                         stateTablePath = TString(setting->Child(1)->Content());
                     }
-                    break;
+                } else if (setting->Head().Content() == "output_state_table") {
+                    const auto& binding = setting->Tail();
+                    TVector<std::pair<std::string_view, TRuntimeNode>> columns;
+                    for (const auto& pair : binding.Tail().Children()) {
+                        columns.emplace_back(pair->Head().Content(), ctx.PgmBuilder().NewDataLiteral<NUdf::EDataSlot::String>(pair->Tail().Content()));
+                    }
+                    outputStateTable = ctx.PgmBuilder().NewTuple({
+                        ctx.PgmBuilder().NewDataLiteral<NUdf::EDataSlot::String>(binding.Head().Content()),
+                        ctx.PgmBuilder().NewStruct(columns)
+                    });
                 }
             }
-            auto stateTablePathArg = ctx.PgmBuilder().NewDataLiteral<NUdf::EDataSlot::String>(stateTablePath);
+
+            YQL_ENSURE(stateTablePath.empty() || !outputStateTable.GetNode(), "Explicit and output state tables cannot be used together");
+            const auto stateTablePathArg = outputStateTable.GetNode()
+                ? outputStateTable
+                : ctx.PgmBuilder().NewDataLiteral<NUdf::EDataSlot::String>(stateTablePath);
 
             const auto stateName = [](const TExprNode& handler) {
                 const auto& names = handler.Head();
@@ -722,8 +736,25 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 };
             };
 
+            TProgramBuilder::TBinaryLambda mergeLambda;
+            if (outputStateTable.GetNode()) {
+                mergeLambda = [&](TRuntimeNode state, TRuntimeNode other) {
+                    TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                    members.reserve(handlersList->ChildrenSize());
+                    for (const auto& handler : handlersList->Children()) {
+                        const auto name = stateName(*handler);
+                        const auto& trait = *handler->Child(TCoAggregateTuple::idx_Trait);
+                        members.emplace_back(name, MkqlBuildLambda(*trait.Child(TCoAggregationTraits::idx_MergeHandler), buildCtx, {
+                            ctx.PgmBuilder().Member(state, name),
+                            ctx.PgmBuilder().Member(other, name),
+                        }));
+                    }
+                    return ctx.PgmBuilder().NewStruct(members);
+                };
+            }
+
             return ctx.PgmBuilder().KqpStreamingAggregation(inputFlow, keyExtractor, initLambda, updateLambda, finishLambda,
-                stateTablePathArg, stateLambda(TCoAggregationTraits::idx_SaveHandler), stateLambda(TCoAggregationTraits::idx_LoadHandler));
+                stateTablePathArg, stateLambda(TCoAggregationTraits::idx_SaveHandler), stateLambda(TCoAggregationTraits::idx_LoadHandler), mergeLambda);
         });
 
     return compiler;

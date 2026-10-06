@@ -30,6 +30,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     datashard_ut_read_iterator.cpp
     datashard_ut_read_iterator_ext_blobs.cpp
+    datashard_ut_read_iterator_sampling.cpp
     datashard_ut_read_iterator_scheduler.cpp
 )
 

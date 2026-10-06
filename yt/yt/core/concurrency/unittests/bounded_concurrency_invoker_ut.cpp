@@ -135,7 +135,7 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
     auto secondFuture = secondPromise.ToFuture();
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, lock);
-    int runnedCallbacks = 0;
+    int ranCallbacks = 0;
     int finishedCallbacks = 0;
 
     std::vector<std::vector<TFuture<void>>> callbacks;
@@ -154,11 +154,14 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
 
                 {
                     auto guard = Guard(lock);
-                    runnedCallbacks += 1;
+                    ranCallbacks += 1;
+                    if (finishedCallbacks <= callbackIndex - maxConcurrentInvocations) {
+                        THROW_ERROR_EXCEPTION("%v-th callback was executed before %v callbacks finished",
+                            callbackIndex + 1,
+                            callbackIndex + 1 - maxConcurrentInvocations);
+                    }
                 }
 
-                // Later callbacks wait for the first future to set to check that
-                // they are not scheduled before first MaxConcurrentInvocations callbacks.
                 WaitFor((callbackIndex > maxConcurrentInvocations)
                     ? firstFuture
                     : secondFuture)
@@ -166,14 +169,10 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
 
                 auto guard = Guard(lock);
 
-                auto concurrentInvocations = runnedCallbacks - finishedCallbacks;
+                auto concurrentInvocations = ranCallbacks - finishedCallbacks;
                 THROW_ERROR_EXCEPTION_UNLESS(concurrentInvocations <= maxConcurrentInvocations, "Number of concurrent invocations %v exceeds maximum %v",
                     concurrentInvocations,
                     maxConcurrentInvocations);
-                if (callbackIndex > maxConcurrentInvocations) {
-                    THROW_ERROR_EXCEPTION_UNLESS(finishedCallbacks > maxConcurrentInvocations, "%v-th callback was executed before first %v",
-                        callbackIndex + 1, maxConcurrentInvocations);
-                }
 
                 finishedCallbacks += 1;
             }).AsyncVia(invoker).Run());
@@ -187,7 +186,7 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
         firstFuture = firstPromise.ToFuture();
         secondFuture = secondPromise.ToFuture();
 
-        runnedCallbacks = 0;
+        ranCallbacks = 0;
         finishedCallbacks = 0;
     };
 
@@ -229,7 +228,7 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
 
     WaitFor(AllSucceeded(callbacks[0]))
         .ThrowOnError();
-    EXPECT_EQ(runnedCallbacks, 10);
+    EXPECT_EQ(ranCallbacks, 10);
     EXPECT_EQ(finishedCallbacks, 10);
 
     resetState();
@@ -258,7 +257,7 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
 
     WaitFor(AllSucceeded(callbacks[1]))
         .ThrowOnError();
-    EXPECT_EQ(runnedCallbacks, 10);
+    EXPECT_EQ(ranCallbacks, 10);
     EXPECT_EQ(finishedCallbacks, 10);
 }
 

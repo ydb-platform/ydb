@@ -22,6 +22,7 @@ SRCS(
     persistent_buffer_barriers_manager_ut.cpp
     persistent_buffer_space_allocator_ut.cpp
     segment_manager_ut.cpp
+    tablet_stats_ut.cpp
 )
 
 END()

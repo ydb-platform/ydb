@@ -181,7 +181,8 @@ private:
         const NKikimr::TEvTabletPipe::TEvServerDestroyed::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    void ReportTabletState(const NActors::TActorContext& ctx);
+    // Publish volume identity without changing the tablet health state.
+    void ReportDiskId(const NActors::TActorContext& ctx);
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 

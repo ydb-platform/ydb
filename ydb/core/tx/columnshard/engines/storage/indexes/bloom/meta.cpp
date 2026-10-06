@@ -98,7 +98,7 @@ bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std
     return true;
 }
 
-std::optional<ui64> TBloomIndexMeta::DoCalcCategory(const TString& subColumnName) const {
+std::optional<ui64> TBloomIndexMeta::DoCalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const {
     ui64 result;
     const NRequest::TOriginalDataAddress addr(GetColumnId(), subColumnName);
     AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, &result));

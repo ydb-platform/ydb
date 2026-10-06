@@ -4515,6 +4515,76 @@ Y_UNIT_TEST_F(Kafka_StreamsEos_EndTxnWhileNextProduceQueued_ShouldNotLoseRecords
     UNIT_ASSERT_VALUES_EQUAL(messages[1], batch2);
 }
 
+// KQP can abort the transaction which contains KafkaApiOperations after PQ has
+// already prepared the transaction. A Kafka client retries EndTxn, which creates
+// a new internal PQ TxId but keeps the same producerId+epoch WriteId. The abort
+// must not discard the staged payload before that retry commits it.
+Y_UNIT_TEST_F(Kafka_StreamsEos_RetryEndTxnAfterKqpAbort_ShouldKeepStagedPayload, TPQTabletFixture) {
+    const NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 abortedTxId = 67890;
+    const ui64 retryTxId = 67900;
+    const ui64 mockTabletId = 22222;
+    const TString payload = "kafka-payload";
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie, 0, 0, payload);
+    WaitForExactTxWritesCount(1);
+
+    // Model KQP rollback after AddKafkaOperations has prepared the PQ participant.
+    SendProposeTransactionRequest({
+        .TxId=abortedTxId,
+        .Senders={mockTabletId},
+        .Receivers={mockTabletId},
+        .TxOps={{.Partition=0, .Path="/topic", .KafkaTransaction=true}},
+        .WriteId=TWriteId(producerInstanceId),
+    });
+    WaitProposeTransactionResponse({
+        .TxId=abortedTxId,
+        .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED,
+    });
+
+    SendPlanStep({.Step=100, .TxIds={abortedTxId}});
+    WaitReadSet(*tablet, {
+        .Step=100,
+        .TxId=abortedTxId,
+        .Source=Ctx->TabletId,
+        .Target=mockTabletId,
+        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .Producer=Ctx->TabletId,
+    });
+    tablet->SendReadSet(*Ctx->Runtime, {
+        .Step=100,
+        .TxId=abortedTxId,
+        .Target=Ctx->TabletId,
+        .Decision=NKikimrTx::TReadSetData::DECISION_ABORT,
+    });
+    WaitProposeTransactionResponse({
+        .TxId=abortedTxId,
+        .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+    });
+    tablet->SendReadSetAck(*Ctx->Runtime, {
+        .Step=100,
+        .TxId=abortedTxId,
+        .Source=Ctx->TabletId,
+    });
+    WaitForTheTransactionToBeDeleted(abortedTxId);
+    WaitPlanStepAck({.Step=100, .TxIds={abortedTxId}});
+    WaitPlanStepAccepted({.Step=100});
+
+    // Kafka retries EndTxn with a new KQP/PQ transaction but the original WriteId.
+    CommitKafkaTransaction(producerInstanceId, retryTxId, {0}, /*planStep=*/200);
+
+    const auto messages = ReadMainPartitionMessages();
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        messages.size(),
+        0u,
+        "KQP abort discarded the staged Kafka payload before EndTxn retry");
+}
+
 // Unknown WriteId with nothing in KafkaNextTransactionRequests is a true empty
 // Kafka 3.4 commit (Streams restore), not the EOS undercount hole.
 Y_UNIT_TEST_F(Kafka_StreamsEos_EmptyEndTxnAfterPreviousTxnFullyDeleted_ShouldSucceed, TPQTabletFixture) {
@@ -5611,7 +5681,7 @@ Y_UNIT_TEST_F(Multiple_Transactions_Different_Ranges, TFixture)
     AddReadRange();
     AddPairFromPQ(101, {1});
     AddPairFromPartition(101, 1);
-    
+
     AddReadRange();
     AddPairFromPQ(102, {1, 2});
     AddPairFromPartition(102, 1);
@@ -5626,7 +5696,7 @@ Y_UNIT_TEST_F(Transaction_Adjacent_ReadRanges, TFixture)
 {
     AddReadRange();
     AddPairFromPQ(101, {1, 2});
-    
+
     AddReadRange();
     AddPairFromPartition(101, 1);
     AddPairFromPartition(101, 2);
@@ -5640,10 +5710,10 @@ Y_UNIT_TEST_F(Transaction_Multiple_ReadRanges, TFixture)
 {
     AddReadRange();
     AddPairFromPQ(101, {1, 2, 3});
-    
+
     AddReadRange();
     AddPairFromPartition(101, 1);
-    
+
     AddReadRange();
     AddPairFromPartition(101, 2);
     AddPairFromPartition(101, 3);
@@ -5656,7 +5726,7 @@ Y_UNIT_TEST_F(Transaction_Multiple_ReadRanges, TFixture)
 Y_UNIT_TEST_F(Empty_ReadRange_In_Vector, TFixture)
 {
     AddReadRange();
-    
+
     AddReadRange();
     AddPairFromPQ(101, {1});
 
@@ -5669,29 +5739,29 @@ Y_UNIT_TEST_F(Comprehensive_Test_Set_For_Complete_CollectTransactions_Testing, T
 {
     // Пустой readRange (краевой случай)
     AddReadRange();
-    
+
     // Транзакция без субтранзакций
     AddReadRange();
     AddPairFromPQ(101, {1});             // tx 101: 1 партиция, не записала -> PREPARED
-    
+
     // Транзакция tx 102 полная в одном readRange
     AddReadRange();
     AddPairFromPQ(102, {1, 2, 3});       // tx 102: 3 партиции
     AddPairFromPartition(102, 1);        // tx 102: партиция 1 записала
     AddPairFromPartition(102, 2);        // tx 102: партиция 2 записала
     AddPairFromPartition(102, 3);        // tx 102: партиция 3 записала -> все 3/3 -> EXECUTED
-    
+
     // Основная транзакция tx 103
     AddReadRange();
     AddPairFromPQ(103, {1, 2});          // tx 103: 2 партиции в другом readRange
-    
+
     // Субтранзакции tx 103 + транзакция tx 104 (частичная)
     AddReadRange();
     AddPairFromPartition(103, 1);        // tx 103: партиция 1 записала -> 1/2 -> PLANNED
     AddPairFromPQ(104, {1, 2, 3, 4, 5}); // tx 104: много партиций
     AddPairFromPartition(104, 1);        // tx 104: партиция 1 записала
     AddPairFromPartition(104, 5);        // tx 104: партиция 5 записала (крайняя)
-    
+
     // Транзакции tx 105 (полная) и tx 106 (частичная)
     AddReadRange();
     AddPairFromPQ(105, {1, 2});          // tx 105: 2 партиции

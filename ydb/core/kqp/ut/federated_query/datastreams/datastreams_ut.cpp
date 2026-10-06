@@ -41,18 +41,17 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             settings.AuthToken(BUILTIN_ACL_ROOT);
         }
         const auto gateway = SetupRealPqGateway();
-        const auto client = gateway->GetTopicClient(*PqGatewayDriver, settings);
+        const auto client = gateway->GetTopicClient(topicName, *PqGatewayDriver, settings);
         const auto describeConsumer = [&]() {
-            return client->DescribeConsumer(topicName, consumer, NYdb::NTopic::TDescribeConsumerSettings()
-                .IncludeStats(true).IncludeLocation(true)).GetValue(TEST_OPERATION_TIMEOUT);
+            return client->DescribeConsumer(consumer, {.IncludeStats = true, .IncludeGeneration = true}).GetValue(TEST_OPERATION_TIMEOUT);
         };
 
         const auto initial = describeConsumer();
-        UNIT_ASSERT_C(initial.IsSuccess(), initial.GetIssues().ToString());
-        const auto& initialPartitions = initial.GetConsumerDescription().GetPartitions();
+        UNIT_ASSERT_C(initial.IsSuccess(), initial.Issues.ToOneLineString());
+        const auto& initialPartitions = initial.Value.Partitions;
         UNIT_ASSERT_VALUES_EQUAL(initialPartitions.size(), 1);
-        UNIT_ASSERT(initialPartitions[0].GetPartitionStats());
-        const auto writeTimestamp = initialPartitions[0].GetPartitionStats()->GetLastWriteTime();
+        UNIT_ASSERT(initialPartitions[0].LastWriteTime);
+        const auto writeTimestamp = *initialPartitions[0].LastWriteTime;
         UNIT_ASSERT_GT(writeTimestamp, TInstant::Zero());
 
         const auto checkStatistics = [&](ui64 committedOffset, i64 previousGeneration = 0) {
@@ -60,26 +59,27 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             WaitFor(TDuration::Seconds(30), "Wait for consumer statistics after partition restart", [&](TString& error) {
                 const auto result = describeConsumer();
                 if (!result.IsSuccess()) {
-                    error = result.GetIssues().ToString();
+                    error = result.Issues.ToOneLineString();
                     return false;
                 }
-                const auto& partitions = result.GetConsumerDescription().GetPartitions();
+                const auto& partitions = result.Value.Partitions;
                 UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
                 const auto& partition = partitions[0];
-                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
-                UNIT_ASSERT(partition.GetPartitionLocation());
-                generation = partition.GetPartitionLocation()->GetGeneration();
+                UNIT_ASSERT_VALUES_EQUAL(partition.PartitionId.Value, 0);
+                UNIT_ASSERT(partition.Generation);
+                generation = *partition.Generation;
                 if (generation <= previousGeneration) {
                     error = TStringBuilder() << "Partition generation: " << generation << ", previous: " << previousGeneration;
                     return false;
                 }
-                UNIT_ASSERT(partition.GetPartitionStats());
-                UNIT_ASSERT(partition.GetPartitionConsumerStats());
-                const auto& stats = *partition.GetPartitionStats();
-                UNIT_ASSERT_VALUES_EQUAL(stats.GetStartOffset(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(stats.GetEndOffset(), 3);
-                UNIT_ASSERT_VALUES_EQUAL(stats.GetLastWriteTime(), writeTimestamp);
-                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionConsumerStats()->GetCommittedOffset(), committedOffset);
+                UNIT_ASSERT(partition.StartOffset);
+                UNIT_ASSERT(partition.EndOffset);
+                UNIT_ASSERT(partition.LastWriteTime);
+                UNIT_ASSERT(partition.CommittedOffset);
+                UNIT_ASSERT_VALUES_EQUAL(*partition.StartOffset, 0);
+                UNIT_ASSERT_VALUES_EQUAL(*partition.EndOffset, 3);
+                UNIT_ASSERT_VALUES_EQUAL(*partition.LastWriteTime, writeTimestamp);
+                UNIT_ASSERT_VALUES_EQUAL(*partition.CommittedOffset, committedOffset);
                 return true;
             });
             return generation;
@@ -87,8 +87,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         for (const ui64 committedOffset : {3, 1}) {
             // The initial commit and subsequent out-of-session rewind must both persist.
-            const auto committed = client->CommitOffset(topicName, 0, consumer, committedOffset).GetValue(TEST_OPERATION_TIMEOUT);
-            UNIT_ASSERT_C(committed.IsSuccess(), committed.GetIssues().ToString());
+            const auto committed = client->CommitPosition(NFq::TMessageStreamPartitionId{0}, consumer, committedOffset).GetValue(TEST_OPERATION_TIMEOUT);
+            UNIT_ASSERT_C(committed.IsSuccess(), committed.Issues.ToOneLineString());
             const auto generation = checkStatistics(committedOffset);
             tabletClient->KillTablet(GetKikimrRunner()->GetTestServer(), tabletId);
             // No writes or reads may repopulate the statistics after either restart.
@@ -113,7 +113,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "database_name"_a = YDB_DATABASE
         ), EStatus::SCHEME_ERROR);
 
-        // YdbTopics is not allowed.
+        // "YdbTopics" is NOT a valid EDS source type for user creation.
+        // It was an internal type that is now removed. Users should use "Ydb" instead.
         ExecSchemeQuery(fmt::format(
             R"sql(
                 CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
@@ -123,7 +124,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     AUTH_METHOD="NONE"
                 );
             )sql",
-            "source_type"_a = ToString(NYql::EDatabaseType::YdbTopics),
+            "source_type"_a = "YdbTopics",
             "location"_a = YDB_ENDPOINT,
             "database_name"_a = YDB_DATABASE
         ), EStatus::SCHEME_ERROR);
@@ -150,26 +151,48 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ), EStatus::SCHEME_ERROR);
     }
 
-    Y_UNIT_TEST_F(CheckAvailableExternalDataSourcesYdb, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(LegacyYdbTopicsInAvailableExternalDataSources, TStreamingTestFixture) {
+        // Test backward compatibility: "YdbTopics" in available_external_data_sources config
+        // should enable "Ydb" type (legacy config alias, not for EDS creation)
         auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
-        cfg.AddAvailableExternalDataSources("Ydb");
-        cfg.SetAllExternalDataSourcesAreAvailable(false);
-
-        CreatePqSource("sourceName");
-    }
-
-    Y_UNIT_TEST_F(ReadTopicFailedWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
-        cfg.AddAvailableExternalDataSources("Ydb");
+        cfg.AddAvailableExternalDataSources("YdbTopics");  // Legacy config value (ONLY YdbTopics, no "Ydb")
         cfg.SetAllExternalDataSourcesAreAvailable(false);
 
         const std::string sourceName = "sourceName";
-        CreatePqSource(sourceName);
-
         const std::string topicName = "topicName";
         CreateScopedTopic(topicName);
 
-        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
+        // 1. Schema validation: Should succeed - "YdbTopics" in config enables "Ydb" type
+        ExecSchemeQuery(fmt::format(
+            R"sql(
+                CREATE EXTERNAL DATA SOURCE `{source}` WITH (
+                    SOURCE_TYPE="Ydb",
+                    LOCATION="{location}",
+                    DATABASE_NAME="{database_name}",
+                    AUTH_METHOD="NONE"
+                );
+            )sql",
+            "source"_a = sourceName,
+            "location"_a = YDB_ENDPOINT,
+            "database_name"_a = YDB_DATABASE
+        ), EStatus::SUCCESS);
+
+        // 2. Schema validation: Users CANNOT create EDS with SOURCE_TYPE="YdbTopics"
+        ExecSchemeQuery(fmt::format(
+            R"sql(
+                CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
+                    SOURCE_TYPE="YdbTopics",
+                    LOCATION="{location}",
+                    DATABASE_NAME="{database_name}",
+                    AUTH_METHOD="NONE"
+                );
+            )sql",
+            "location"_a = YDB_ENDPOINT,
+            "database_name"_a = YDB_DATABASE
+        ), EStatus::SCHEME_ERROR);
+
+        // 3. E2E smoke test: Full streaming workflow should work
+        const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
             SELECT * FROM `{source}`.`{topic}` WITH (
                 STREAMING = "TRUE",
                 FORMAT = "json_each_row",
@@ -178,35 +201,28 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     value String NOT NULL
                 )
             )
-            LIMIT 1;
+            LIMIT 2;
             )",
             "source"_a=sourceName,
             "topic"_a=topicName
-        ), EExecStatus::Failed);
+        ));
 
-        const auto& status = scriptExecutionOperation.Status();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+        WriteTopicMessages(topicName, {
+            R"({"key": "key1", "value": "value1"})",
+            R"({"key": "key1", "value": "value1"})",
+        });
+        CheckScriptResult(scriptExecutionOperation, 2, 2, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
+        });
     }
 
-    Y_UNIT_TEST_F(ReadTopicEndpointValidationWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(CheckAvailableExternalDataSourcesYdb, TStreamingTestFixture) {
         auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
         cfg.AddAvailableExternalDataSources("Ydb");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
 
-        constexpr char sourceName[] = "sourceName";
-        CreatePqSource(sourceName);
-
-        // Execute script without existing topic
-        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
-            SELECT * FROM `{source}`.`topicName` WITH (STREAMING = "TRUE")
-            )",
-            "source"_a=sourceName
-        ), EExecStatus::Failed);
-
-        const auto& status = scriptExecutionOperation.Status();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+        CreatePqSource("sourceName");
     }
 
     Y_UNIT_TEST_F(ReadTopicEndpointValidation, TStreamingTestFixture) {
@@ -227,10 +243,37 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_STRING_CONTAINS(issues, "Describe path 'local/topicName' in external YDB database '/local'");
     }
 
-    Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(ReadTableOutsideConnectorDatabaseNames, TStreamingTestFixture) {
         auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
         cfg.AddAvailableExternalDataSources("Ydb");
         cfg.AddAvailableExternalDataSources("YdbTopics");
+        cfg.SetAllExternalDataSourcesAreAvailable(false);
+        auto& connector = *cfg.MutableGeneric()->MutableConnector();
+        connector.AddDatabaseNames("test_db");
+        connector.MutableEndpoint()->set_host("localhost");
+        connector.MutableEndpoint()->set_port(1234);
+
+        ExecExternalQuery(R"(
+            CREATE TABLE regularTable (
+                id String,
+                PRIMARY KEY (id)
+            );
+        )");
+        Y_DEFER {
+            ExecExternalQuery(R"(DROP TABLE regularTable;)");
+        };
+        CreatePqSource("sourceName");
+
+        const auto operation = ExecAndWaitScript("SELECT * FROM `sourceName`.`regularTable`;", EExecStatus::Failed);
+        const auto& status = operation.Status();
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
+            "database is not configured for connector table access");
+    }
+
+    Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {
+        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        cfg.AddAvailableExternalDataSources("Ydb");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
 
         const std::string sourceName = "sourceName";
@@ -266,6 +309,40 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
             UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
         });
+
+        // Test batch query (table mode) for topics
+        const auto batchResults = ExecQuery(fmt::format(R"(
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL,
+                    value String NOT NULL
+                )
+            );
+        )", "source"_a = sourceName, "topic"_a = topicName));
+        CheckScriptResult(batchResults[0], 2, partitionCount, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
+        });
+    }
+
+    Y_UNIT_TEST_F(CreateYdbExternalDataSourceFailedWithoutYdbInConfig, TStreamingTestFixture) {
+        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        cfg.AddAvailableExternalDataSources("ObjectStorage");
+        cfg.SetAllExternalDataSourcesAreAvailable(false);
+
+        ExecSchemeQuery(fmt::format(
+            R"sql(
+                CREATE EXTERNAL DATA SOURCE `sourceName` WITH (
+                    SOURCE_TYPE="Ydb",
+                    LOCATION="{location}",
+                    DATABASE_NAME="{database_name}",
+                    AUTH_METHOD="NONE"
+                );
+            )sql",
+            "location"_a = YDB_ENDPOINT,
+            "database_name"_a = YDB_DATABASE
+        ), EStatus::SCHEME_ERROR);
     }
 
     Y_UNIT_TEST_F(ReadTopicBasicNewSecrets, TStreamingWithSchemaSecretsTestFixture) {
@@ -1898,14 +1975,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             Sleep(TDuration::Seconds(1));
         }
 
-        // a) Attempt to use existing EDS fails
+        // a) A new query must fail during scheme entry lookup when IAM credentials are disabled.
         ExecQuery(fmt::format(R"(
                 INSERT INTO `{pq_source}`.`{topic_name}` (Data) VALUES ("foobar");
                 )",
                 "pq_source"_a = sourceName,
                 "topic_name"_a = topicName
             ),
-            EStatus::INTERNAL_ERROR, "AUTH_METHOD=IAM is disabled");
+            EStatus::GENERIC_ERROR, "Failed to get scheme entry type: AUTH_METHOD=IAM is disabled");
 
         // b) Attempt to create new EDS fails
         ExecQuery(fmt::format(
@@ -1984,7 +2061,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 SELECT Data, COUNT(*) FROM `{source}`.`{i}` WITH (STREAMING = "TRUE") GROUP BY Data;
             )sql", "source"_a = source, "i"_a = input1),
             EStatus::GENERIC_ERROR,
-            "Aggregation of streaming input without windows is not supported"
+            "Streaming aggregation output must be written to a table"
         );
 
         // Distinct agg
@@ -1992,7 +2069,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 SELECT DISTINCT Data FROM `{source}`.`{i}` WITH (STREAMING = "TRUE");
             )sql", "source"_a = source, "i"_a = input1),
             EStatus::GENERIC_ERROR,
-            "Aggregation of streaming input without windows is not supported"
+            "Streaming aggregation output must be written to a table"
         );
 
         // Agg by sessions
@@ -2001,7 +2078,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 GROUP BY Data, SessionWindow(CAST(Data AS Timestamp), Interval("PT1S"));
             )sql", "source"_a = source, "i"_a = input1),
             EStatus::GENERIC_ERROR,
-            "Aggregation of streaming input without windows is not supported"
+            "Session windows are not supported for streaming aggregation"
         );
 
         //// Window functions ////

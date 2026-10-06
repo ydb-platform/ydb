@@ -814,21 +814,250 @@ Y_UNIT_TEST_SUITE(Viewer) {
         StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 10, 100, true, "Red");
     }
 
+    void CheckStorageLimitWithGroupSizeInUnits(bool enforcedSlotSize, bool cluster = false,
+            std::optional<ui64> userChunkPoolSize = {}, bool overflowingQuota = false)
+    {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        struct TGroup {
+            ui32 PDiskId;
+            ui32 PoolId;
+            ui32 SizeInUnits;
+        };
+        // Nominal sizes below apply when EnforcedDynamicSlotSize is absent.
+        const std::array<TGroup, 5> groups = {{
+            {1, 1, 5}, // ceil(5 / 3) slots = 200 bytes
+            {1, 1, 1}, // same PDisk, one slot = 100 bytes
+            {2, 2, overflowingQuota ? ui32{1} << 24 : 9}, // fixed capacity unit = 150 bytes, group quota = 1350 bytes
+            {3, 2, 4}, // default slot count (16), weight 2 = 200 bytes
+            {4, 2, 0}, // unspecified units default to 1 = 100 bytes
+        }};
+        const std::array<TString, 2> poolKinds = {"ssd", "hdd"};
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvSchemeShard::EvDescribeSchemeResult: {
+                    auto* response = ev->Get<TEvSchemeShard::TEvDescribeSchemeResult>();
+                    auto* domain = response->MutableRecord()->MutablePathDescription()->MutableDomainDescription();
+                    domain->ClearStoragePools();
+                    for (const auto& kind : poolKinds) {
+                        auto* pool = domain->AddStoragePools();
+                        pool->SetName(kind);
+                        pool->SetKind(kind);
+                    }
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
+                    record.ClearEntries();
+                    for (ui32 i = 0; i < poolKinds.size(); ++i) {
+                        auto* pool = record.AddEntries();
+                        pool->MutableKey()->SetStoragePoolId(i + 1);
+                        pool->MutableInfo()->SetName(poolKinds[i]);
+                        pool->MutableInfo()->SetKind(poolKinds[i]);
+                    }
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStorageStatsResponse: {
+                    auto& record = ev->Get<NSysView::TEvSysView::TEvGetStorageStatsResponse>()->Record;
+                    record.ClearEntries();
+                    for (const auto& kind : poolKinds) {
+                        auto* stats = record.AddEntries();
+                        stats->SetPDiskFilter("Type:" + to_upper(kind));
+                        stats->SetErasureSpecies("mirror-3-dc");
+                    }
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto& record = ev->Get<NSysView::TEvSysView::TEvGetPDisksResponse>()->Record;
+                    record.ClearEntries();
+                    for (ui32 id = 1; id <= 4; ++id) {
+                        auto* pdisk = record.AddEntries();
+                        pdisk->MutableKey()->SetNodeId(runtime.GetNodeId(0));
+                        pdisk->MutableKey()->SetPDiskId(id);
+                        auto* info = pdisk->MutableInfo();
+                        info->SetType(id == 1 ? "SSD" : "HDD");
+                        info->SetTotalSize(1600);
+                        info->SetExpectedSlotCount(id == 3 ? 0 : 16);
+                        info->SetSlotSizeInUnits(id == 1 ? 3 : id == 4 ? 0 : 2);
+                        if (enforcedSlotSize && id != 4) {
+                            info->SetEnforcedDynamicSlotSize(80);
+                        }
+                        if (id == 2) {
+                            info->SetExpectedSlotSize(150);
+                            if (overflowingQuota) {
+                                info->SetExpectedSlotSize(ui64{1} << 40);
+                                if (enforcedSlotSize) {
+                                    info->SetEnforcedDynamicSlotSize(ui64{1} << 40);
+                                }
+                            }
+                            if (userChunkPoolSize) {
+                                info->SetUserChunkPoolSize(*userChunkPoolSize);
+                            }
+                        }
+                    }
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto& record = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
+                    record.ClearEntries();
+                    for (ui32 i = 0; i < groups.size(); ++i) {
+                        auto* group = record.AddEntries();
+                        group->MutableKey()->SetGroupId(i + 1);
+                        group->MutableInfo()->SetStoragePoolId(groups[i].PoolId);
+                        group->MutableInfo()->SetGroupSizeInUnits(groups[i].SizeInUnits);
+                        group->MutableInfo()->SetErasureSpeciesV2("mirror-3-dc");
+                    }
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto& record = ev->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
+                    record.ClearEntries();
+                    for (ui32 i = 0; i < groups.size(); ++i) {
+                        auto* vslot = record.AddEntries();
+                        vslot->MutableKey()->SetNodeId(runtime.GetNodeId(0));
+                        vslot->MutableKey()->SetPDiskId(groups[i].PDiskId);
+                        vslot->MutableKey()->SetVSlotId(i + 1);
+                        vslot->MutableInfo()->SetGroupId(i + 1);
+                        vslot->MutableInfo()->SetAllocatedSize(10);
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        const TString path = cluster
+            ? "/viewer/cluster?use_cache=false&use_health_check=false&offload_merge=false"
+            : "/viewer/tenantinfo?storage=true&use_cache=false";
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET " << path << " HTTP/1.1\r\n\r\n", endpoint, {});
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Response->Status, "200", result->Response->Body);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const ui64 fixedQuota = overflowingQuota ? userChunkPoolSize.value_or(Max<ui64>())
+            : Min<ui64>((enforcedSlotSize ? 80 : 150) * 9, userChunkPoolSize.value_or(Max<ui64>()));
+        const bool saturatedQuota = overflowingQuota && !userChunkPoolSize;
+        if (cluster) {
+            const auto& stats = json["StorageStats"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(stats.size(), 2);
+            for (const auto& entry : stats) {
+                const auto& type = entry["PDiskFilter"].GetString();
+                UNIT_ASSERT(type == "Type:SSD" || type == "Type:HDD");
+                UNIT_ASSERT_VALUES_EQUAL(entry["CurrentAllocatedSize"].GetString(), type == "Type:SSD" ? "20" : "30");
+                const TString expectedAvailable = type == "Type:SSD"
+                    ? (enforcedSlotSize ? "220" : "280")
+                    : ToString(saturatedQuota ? Max<ui64>()
+                        : (fixedQuota > 10 ? fixedQuota - 10 : 0) + (enforcedSlotSize ? 240 : 280));
+                UNIT_ASSERT_VALUES_EQUAL(entry["CurrentAvailableSize"].GetString(), expectedAvailable);
+            }
+            return;
+        }
+        const auto& tenants = json["TenantInfo"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
+        const auto& tenant = tenants[0];
+        UNIT_ASSERT_VALUES_EQUAL(tenant["StorageAllocatedLimit"].GetString(),
+            ToString(saturatedQuota ? Max<ui64>() : fixedQuota + (enforcedSlotSize ? 500 : 600)));
+        UNIT_ASSERT_VALUES_EQUAL(tenant["StorageAllocatedSize"].GetString(), "50");
+        const auto& storage = tenant["DatabaseStorage"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(storage.size(), 2);
+        for (const auto& usage : storage) {
+            const auto& type = usage["Type"].GetString();
+            UNIT_ASSERT(type == "SSD" || type == "HDD");
+            const TString expectedLimit = type == "SSD"
+                ? (enforcedSlotSize ? "240" : "300")
+                : ToString(saturatedQuota ? Max<ui64>() : fixedQuota + (enforcedSlotSize ? 260 : 300));
+            UNIT_ASSERT_VALUES_EQUAL(usage["Limit"].GetString(), expectedLimit);
+            UNIT_ASSERT_VALUES_EQUAL(usage["Size"].GetString(), type == "SSD" ? "20" : "30");
+        }
+    }
+
+    Y_UNIT_TEST(TenantInfoStorageLimitWithGroupSizeInUnits)
+    {
+        CheckStorageLimitWithGroupSizeInUnits(false);
+    }
+
+    Y_UNIT_TEST(TenantInfoStorageLimitWithGroupSizeInUnitsAndEnforcedSlotSize)
+    {
+        CheckStorageLimitWithGroupSizeInUnits(true);
+    }
+
+    Y_UNIT_TEST(ClusterStorageLimitWithGroupSizeInUnits)
+    {
+        CheckStorageLimitWithGroupSizeInUnits(false, true);
+    }
+
+    Y_UNIT_TEST(ClusterStorageLimitWithGroupSizeInUnitsAndEnforcedSlotSize)
+    {
+        CheckStorageLimitWithGroupSizeInUnits(true, true);
+    }
+
+    Y_UNIT_TEST(StorageLimitsCappedByUserChunkPool) {
+        for (bool cluster : {false, true}) {
+            for (ui64 poolSize : {0, 600}) {
+                CheckStorageLimitWithGroupSizeInUnits(true, cluster, poolSize);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StorageLimitsWithOverflowingQuota) {
+        for (bool cluster : {false, true}) {
+            for (bool enforced : {false, true}) {
+                CheckStorageLimitWithGroupSizeInUnits(enforced, cluster, {}, true);
+                CheckStorageLimitWithGroupSizeInUnits(enforced, cluster, 600, true);
+            }
+        }
+    }
+
     Y_UNIT_TEST(DatabaseStatsStorageLimitWithExpectedSlotSize)
     {
         TDatabaseStorageStats stats;
         NKikimrWhiteboard::TVDiskStateInfo vdisk;
         NKikimrWhiteboard::TPDiskStateInfo pdisk;
         pdisk.SetExpectedSlotSize(100);
-        pdisk.SetEnforcedDynamicSlotSize(1000);
+        pdisk.SetEnforcedDynamicSlotSize(96);
         pdisk.SetExpectedSlotCount(10);
         pdisk.SetTotalSize(10000);
-        pdisk.SetSlotSizeInUnits(1);
+        pdisk.SetSlotSizeInUnits(2);
 
         stats.AddVDisk(vdisk, pdisk, 4);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.Total, 100);
+        UNIT_ASSERT_VALUES_EQUAL(stats.Total, 384);
         UNIT_ASSERT(!stats.UnknownSlotSize);
+
+        auto check = [&](ui64 expectedTotal, ui32 groupSizeInUnits = 4) {
+            TDatabaseStorageStats result;
+            result.AddVDisk(vdisk, pdisk, groupSizeInUnits);
+            UNIT_ASSERT_VALUES_EQUAL(result.Total, expectedTotal);
+            UNIT_ASSERT(!result.UnknownSlotSize);
+        };
+        pdisk.ClearEnforcedDynamicSlotSize();
+        check(400);
+        pdisk.SetEnforcedDynamicSlotSize(100);
+        check(400);
+        pdisk.SetTotalSize(350);
+        check(400);
+        pdisk.SetUserChunkPoolSize(300);
+        check(300);
+        pdisk.SetEnforcedDynamicSlotSize(ui64{1} << 40);
+        check(300, ui32{1} << 24);
+        pdisk.ClearUserChunkPoolSize();
+        check(Max<ui64>(), Max<ui32>());
+        pdisk.SetUserChunkPoolSize(0);
+        check(0);
     }
 
     Y_UNIT_TEST(DatabaseStatsStorageLimitWithDynamicSlotSize)
@@ -929,15 +1158,46 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         TStorageGroups::TPDisk pdisk;
         pdisk.ExpectedSlotSize = 100;
-        pdisk.EnforcedDynamicSlotSize = 1000;
-        pdisk.SlotSizeInUnits = 1;
+        pdisk.EnforcedDynamicSlotSize = 96;
+        pdisk.SlotSizeInUnits = 2;
         pdisk.TotalSize = 10000;
         pdisk.AvailableSize = 9000;
         pdisk.SlotCount = 10;
 
         group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
-        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 100);
-        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 25.0, 1e-6);
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 192);
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 167);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 100.0 * 25 / 192, 1e-6);
+
+        pdisk.EnforcedDynamicSlotSize = 0;
+        vdisk.AvailableSize = 900;
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 200);
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 175);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 12.5, 1e-6);
+
+        pdisk.TotalSize = 180;
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 200);
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 175);
+        pdisk.UserChunkPoolSize = 150;
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 150);
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 125);
+        group.GroupSizeInUnits = ui32{1} << 24;
+        pdisk.EnforcedDynamicSlotSize = ui64{1} << 40;
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 150);
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 125);
+        pdisk.UserChunkPoolSize.reset();
+        vdisk.AvailableSize = 900;
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, Max<ui64>());
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 900);
+        pdisk.UserChunkPoolSize = 0;
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 0);
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 0);
     }
 
     Y_UNIT_TEST(StorageGroupUsageWithoutDynamicSlotSize)
@@ -1245,7 +1505,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto sender = runtime.AllocateEdgeActor();
         bool withSample = true;
         bool includeDDisks = false;
+        ui32 storagePoolRequests = 0;
+        ui32 groupRequests = 0;
+        std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> cachedPools;
+        std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse> cachedGroups;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsRequest) {
+                ++storagePoolRequests;
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsRequest) {
+                ++groupRequests;
+            }
             if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse) {
                 auto& record = ev->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
                 record.ClearEntries();
@@ -1262,6 +1531,24 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 ordinary->MutableKey()->SetPDiskId(1);
                 ordinary->MutableKey()->SetVSlotId(1001);
                 ordinary->MutableInfo()->SetGroupId(43);
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
+                record.ClearEntries();
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetBoxId(1);
+                entry->MutableKey()->SetStoragePoolId(7);
+                entry->MutableInfo()->SetName("ddisk-pool");
+                cachedPools = std::make_shared<NSysView::TEvSysView::TEvGetStoragePoolsResponse>();
+                cachedPools->Record.CopyFrom(record);
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
+                record.ClearEntries();
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetGroupId(42);
+                entry->MutableInfo()->SetBoxId(1);
+                entry->MutableInfo()->SetStoragePoolId(7);
+                cachedGroups = std::make_shared<NSysView::TEvSysView::TEvGetGroupsResponse>();
+                cachedGroups->Record.CopyFrom(record);
             } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvPDiskStateRequest) {
                 UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvWhiteboard::TEvPDiskStateRequest>()->Record.GetIncludeDDiskState(), includeDDisks);
             } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvPDiskStateResponse) {
@@ -1350,19 +1637,57 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
                 checkDisks(json["Whiteboard"], sample, true);
                 for (bool offload : {false, true}) {
-                    NHttp::THttpIncomingRequestPtr nodesRequest = new NHttp::THttpIncomingRequest(
-                        TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId,VDisks"
+                    storagePoolRequests = 0;
+                    groupRequests = 0;
+                    NHttp::THttpIncomingRequestPtr minimalRequest = new NHttp::THttpIncomingRequest(
+                        TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId"
                             << extraParams << "&offload_merge=" << (offload ? "true" : "false") << " HTTP/1.1\r\n\r\n", endpoint, {});
                     runtime.Send(new IEventHandle(MakeViewerID(0), sender,
-                        new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(nodesRequest)));
-                    TAutoPtr<IEventHandle> nodesHandle;
-                    auto* nodesResult = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(nodesHandle);
-                    NJson::TJsonValue nodesJson;
-                    NJson::ReadJsonTree(nodesResult->Response->Body, &nodesJson, true);
-                    const auto& nodes = nodesJson["Nodes"].GetArray();
-                    UNIT_ASSERT_VALUES_EQUAL(nodes.size(), 1);
-                    // A successful empty whiteboard response does not trigger the nodes VDisk fallback.
-                    checkDisks(nodes[0], sample, false);
+                        new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(minimalRequest)));
+                    TAutoPtr<IEventHandle> minimalHandle;
+                    auto* minimalResult = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(minimalHandle);
+                    NJson::TJsonValue minimalJson;
+                    NJson::ReadJsonTree(minimalResult->Response->Body, &minimalJson, true);
+                    UNIT_ASSERT_VALUES_EQUAL(minimalJson["Nodes"].GetArray().size(), 1);
+                    UNIT_ASSERT(!minimalJson["Nodes"][0].Has("DDisks"));
+                    UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 0);
+                    UNIT_ASSERT_VALUES_EQUAL(groupRequests, 0);
+                    for (bool useCache : {false, true}) {
+                        if (useCache && includeDDisks) {
+                            // Refresh the cache on the local viewer service before the request.
+                            UNIT_ASSERT(cachedPools && cachedGroups);
+                            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                                new TEvViewer::TEvUpdateSharedCacheTabletResponse(cachedPools)));
+                            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                                new TEvViewer::TEvUpdateSharedCacheTabletResponse(cachedGroups)));
+                        }
+                        storagePoolRequests = 0;
+                        groupRequests = 0;
+                        NHttp::THttpIncomingRequestPtr nodesRequest = new NHttp::THttpIncomingRequest(
+                            TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId,VDisks"
+                                << extraParams << "&offload_merge=" << (offload ? "true" : "false")
+                                << "&use_cache=" << (useCache ? "true" : "false") << " HTTP/1.1\r\n\r\n", endpoint, {});
+                        runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(nodesRequest)));
+                        TAutoPtr<IEventHandle> nodesHandle;
+                        auto* nodesResult = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(nodesHandle);
+                        NJson::TJsonValue nodesJson;
+                        NJson::ReadJsonTree(nodesResult->Response->Body, &nodesJson, true);
+                        const auto& nodes = nodesJson["Nodes"].GetArray();
+                        UNIT_ASSERT_VALUES_EQUAL(nodes.size(), 1);
+                        // A successful empty whiteboard response does not trigger the nodes VDisk fallback.
+                        checkDisks(nodes[0], sample, false);
+                        if (includeDDisks) {
+                            for (ui32 i = 0; i < 3; ++i) {
+                                UNIT_ASSERT_VALUES_EQUAL(nodes[0]["DDisks"][i]["StoragePoolName"].GetString(), "ddisk-pool");
+                            }
+                        }
+                        if (useCache && includeDDisks) {
+                            // Completed cached responses must provide metadata without controller requests.
+                            UNIT_ASSERT_VALUES_EQUAL(storagePoolRequests, 0);
+                            UNIT_ASSERT_VALUES_EQUAL(groupRequests, 0);
+                        }
+                    }
                 }
             }
         }

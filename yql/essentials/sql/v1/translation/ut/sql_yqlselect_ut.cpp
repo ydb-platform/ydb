@@ -2404,6 +2404,21 @@ Y_UNIT_TEST(AnsiCurrentRow) {
     check("", /*      */ "rows", "up", "uf", {"AnsiCurrentRow"});
 }
 
+Y_UNIT_TEST(AggregationFactoryIsCallable) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    const auto res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        $factory = AGGREGATION_FACTORY("sum");
+        SELECT ListAggregate([1, 2], $factory);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    TWordCountHive stat = {"YqlAgg", "YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+}
+
 Y_UNIT_TEST(PragmaSupported) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;

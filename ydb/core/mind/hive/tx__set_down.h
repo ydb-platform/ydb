@@ -11,8 +11,8 @@ public:
     const TActorId Source;
     const ui64 Cookie;
     // go to the node event log, derived classes may override them
-    TString Reason = TNodeEventReason::SetDownRequest;
-    TString ReasonExtra;
+    ENodeEventReason Reason = ENodeEventReason::SetDownRequest;
+    TString ReasonDetails;
     TTxSetDown(TNodeId nodeId, bool down, TSelf* hive, TActorId source, ui64 cookie = 0, bool forward = false);
     TTxType GetTxType() const override;
     bool SetDown(NIceDb::TNiceDb& db);

@@ -436,9 +436,9 @@ void TNodeInfo::SendReconnect(const TActorId& local) {
     Hive.SendReconnect(local);
 }
 
-void TNodeInfo::SetDown(bool down, const TString& reason, TString extra) {
+void TNodeInfo::SetDown(bool down, ENodeEventReason reason, TString details) {
     if (Down != down) {
-        Hive.RecordNodeEvent(*this, down ? ENodeEvent::Down : ENodeEvent::Up, reason, std::move(extra));
+        Hive.RecordNodeEvent(*this, down ? ENodeEvent::Down : ENodeEvent::Up, reason, std::move(details));
     }
     Hive.UpdateCounterNodesDown(static_cast<i64>(down) - static_cast<i64>(Down));
     Down = down;
@@ -450,10 +450,10 @@ void TNodeInfo::SetDown(bool down, const TString& reason, TString extra) {
     }
 }
 
-void TNodeInfo::SetFreeze(bool freeze, const TString& reason, TString extra) {
+void TNodeInfo::SetFreeze(bool freeze, ENodeEventReason reason, TString details) {
     if (Freeze != freeze) {
         Hive.RecordNodeEvent(*this, freeze ? ENodeEvent::Frozen : ENodeEvent::Unfrozen, reason,
-            TStringBuilder() << extra << (extra.empty() ? "" : " ") << "tablets=" << (freeze ? GetTabletsTotal() : FrozenTablets.size()));
+            TStringBuilder() << details << (details.empty() ? "" : " ") << "tablets=" << (freeze ? GetTabletsTotal() : FrozenTablets.size()));
     }
     Hive.UpdateCounterNodesFrozen(static_cast<i64>(freeze) - static_cast<i64>(Freeze));
     Freeze = freeze;
@@ -648,11 +648,11 @@ ui64 TNodeInfo::GetRestartsPerPeriod(TInstant barrier) const {
     return Hive.GetRestartsPerPeriod(Statistics.GetRestartTimestamp(), barrier.MilliSeconds());
 }
 
-void TNodeInfo::SetLocation(const TNodeLocation& location, const TString& source) {
+void TNodeInfo::SetLocation(const TNodeLocation& location, ENodeEventReason reason) {
     // Location arrives both from Local (RegisterNode) and from NameService and the two may differ in minor details,
     // so only a data center change is reported: that is what affects tablet placement
     if (LocationAcquired && Location.GetDataCenterId() != location.GetDataCenterId()) {
-        Hive.RecordNodeEvent(*this, ENodeEvent::LocationChanged, source,
+        Hive.RecordNodeEvent(*this, ENodeEvent::LocationChanged, reason,
             TStringBuilder() << "from=" << GetLocationString(Location) << " to=" << GetLocationString(location));
     }
     Location = location;

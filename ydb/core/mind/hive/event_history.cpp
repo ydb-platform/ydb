@@ -7,27 +7,32 @@
 namespace NKikimr {
 namespace NHive {
 
-const TString TNodeEventReason::NewLocalActor = "new Local actor";
-const TString TNodeEventReason::SameLocalActor = "same Local actor";
-const TString TNodeEventReason::ServicedDomainsChanged = "serviced domains changed on registration";
-const TString TNodeEventReason::TenantChanged = "tenant changed";
-const TString TNodeEventReason::BecomeUpOnRestart = "node restarted with BecomeUpOnRestart";
-const TString TNodeEventReason::RegisterNode = "RegisterNode";
-const TString TNodeEventReason::NameService = "NameService";
-const TString TNodeEventReason::StatusOk = "status OK";
-const TString TNodeEventReason::BadStatus = "bad status";
-const TString TNodeEventReason::InterconnectDisconnected = "interconnect disconnected";
-const TString TNodeEventReason::InterconnectDisconnectedUnknownNode = "interconnect disconnected while node state is Unknown";
-const TString TNodeEventReason::PingUndelivered = "ping undelivered";
-const TString TNodeEventReason::NodeExpired = "not alive, no tablets, delete period expired";
-const TString TNodeEventReason::DrainDownPolicy = "drain down policy";
-const TString TNodeEventReason::DrainRequested = "drain requested";
-const TString TNodeEventReason::DrainSwitchedOff = "drain switched off";
-const TString TNodeEventReason::DrainStarted = "drain started";
-const TString TNodeEventReason::DrainFinished = "drain finished";
-const TString TNodeEventReason::SetDownRequest = "TEvSetDown";
-const TString TNodeEventReason::MonitoringRequest = "monitoring request";
-const TString TNodeEventReason::LoadedFromDatabase = "loaded from database";
+TStringBuf ENodeEventReasonName(ENodeEventReason value) {
+    switch (value) {
+    case ENodeEventReason::NewLocalActor: return "new Local actor";
+    case ENodeEventReason::SameLocalActor: return "same Local actor";
+    case ENodeEventReason::ServicedDomainsChanged: return "serviced domains changed on registration";
+    case ENodeEventReason::TenantChanged: return "tenant changed";
+    case ENodeEventReason::BecomeUpOnRestart: return "node restarted with BecomeUpOnRestart";
+    case ENodeEventReason::RegisterNode: return "RegisterNode";
+    case ENodeEventReason::NameService: return "NameService";
+    case ENodeEventReason::StatusOk: return "status OK";
+    case ENodeEventReason::BadStatus: return "bad status";
+    case ENodeEventReason::InterconnectDisconnected: return "interconnect disconnected";
+    case ENodeEventReason::InterconnectDisconnectedUnknownNode: return "interconnect disconnected while node state is Unknown";
+    case ENodeEventReason::PingUndelivered: return "ping undelivered";
+    case ENodeEventReason::NodeExpired: return "not alive, no tablets, delete period expired";
+    case ENodeEventReason::DrainDownPolicy: return "drain down policy";
+    case ENodeEventReason::DrainRequested: return "drain requested";
+    case ENodeEventReason::DrainSwitchedOff: return "drain switched off";
+    case ENodeEventReason::DrainStarted: return "drain started";
+    case ENodeEventReason::DrainFinished: return "drain finished";
+    case ENodeEventReason::SetDownRequest: return "TEvSetDown";
+    case ENodeEventReason::MonitoringRequest: return "monitoring request";
+    case ENodeEventReason::LoadedFromDatabase: return "loaded from database";
+    }
+    return "Unknown";
+}
 
 TStringBuf ENodeEventName(ENodeEvent value) {
     switch (value) {
@@ -49,12 +54,12 @@ TStringBuf ENodeEventName(ENodeEvent value) {
     return "Unknown";
 }
 
-void THive::RecordNodeEvent(TNodeInfo& node, ENodeEvent type, const TString& reason, TString extra) {
-    TNodeEvent event(TActivationContext::Now(), type, reason, std::move(extra));
+void THive::RecordNodeEvent(TNodeInfo& node, ENodeEvent type, ENodeEventReason reason, TString details) {
+    TNodeEvent event(TActivationContext::Now(), type, reason, std::move(details));
     // State restored from the database on Hive start is not a transition: it is kept in the histories
     // (so the node page shows the node was already down/frozen before this Hive generation) but not logged,
     // TTxLoadEverything already reports the loaded nodes
-    const auto priority = (reason == TNodeEventReason::LoadedFromDatabase) ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_INFO;
+    const auto priority = (reason == ENodeEventReason::LoadedFromDatabase) ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_INFO;
     YDB_LOG(priority, "Node event",
         {"logPrefix", GetLogPrefix()},
         {"event", ENodeEventName(type)},
@@ -73,8 +78,8 @@ void THive::RecordNodeEvent(TNodeInfo& node, ENodeEvent type, const TString& rea
         {"tabletsLocked", node.LockedTablets.size()},
         {"startTime", node.StartTime},
         {"restarts", node.GetRestartsPerPeriod()},
-        {"reason", event.Reason},
-        {"extra", event.Extra});
+        {"reason", ENodeEventReasonName(reason)},
+        {"details", event.Details});
     RecentNodeEvents.Push(TRecentNodeEvent{.NodeId = node.Id, .Event = event});
     node.EventHistory.Push(std::move(event));
 }

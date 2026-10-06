@@ -270,10 +270,10 @@ public:
     void DeregisterInDomains();
     void Ping();
     void SendReconnect(const TActorId& local);
-    // reason (one of TNodeEventReason) and extra describe who/what initiated the change, see THive::RecordNodeEvent
-    void SetDown(bool down, const TString& reason, TString extra = {});
-    void SetFreeze(bool freeze, const TString& reason, TString extra = {});
-    void SetLocation(const TNodeLocation& location, const TString& source);
+    // reason and details describe who/what initiated the change, see THive::RecordNodeEvent
+    void SetDown(bool down, ENodeEventReason reason, TString details = {});
+    void SetFreeze(bool freeze, ENodeEventReason reason, TString details = {});
+    void SetLocation(const TNodeLocation& location, ENodeEventReason reason);
     void UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics);
 
     TResourceRawValues GetResourceCurrentValues() const;

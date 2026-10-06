@@ -1565,7 +1565,7 @@ public:
             Self->ObjectDistributions.AddNode(*Node);
             Self->ProcessWaitQueue();
             WriteOperation(db, jsonOperation);
-            Self->RecordNodeEvent(*Node, ENodeEvent::AvailabilityChanged, TNodeEventReason::MonitoringRequest, eventDetails << "user=" << GetUserForLog());
+            Self->RecordNodeEvent(*Node, ENodeEvent::AvailabilityChanged, ENodeEventReason::MonitoringRequest, eventDetails << "user=" << GetUserForLog());
         }
         return true;
     }
@@ -3004,8 +3004,8 @@ public:
         , TLoggedMonTransaction(ev, hive)
         , Event(ev->Release())
     {
-        Reason = TNodeEventReason::MonitoringRequest;
-        ReasonExtra = TStringBuilder() << "user=" << GetUserForLog();
+        Reason = ENodeEventReason::MonitoringRequest;
+        ReasonDetails = TStringBuilder() << "user=" << GetUserForLog();
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOWN; }
@@ -3069,7 +3069,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
-            node->SetFreeze(Freeze, TNodeEventReason::MonitoringRequest, TStringBuilder() << "user=" << GetUserForLog());
+            node->SetFreeze(Freeze, ENodeEventReason::MonitoringRequest, TStringBuilder() << "user=" << GetUserForLog());
             db.Table<Schema::Node>().Key(NodeId).Update(NIceDb::TUpdate<Schema::Node::Freeze>(Freeze));
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
@@ -5342,18 +5342,18 @@ static TString GetNodeInfoLink(ui64 hiveId, TNodeId nodeId) {
 }
 
 static void RenderNodeEventRow(IOutputStream& out, const TNodeEvent& event) {
-    out << "<td>" << event.Timestamp.ToStringLocalUpToSeconds() << "</td>"
-        << "<td>" << ENodeEventName(event.Type) << "</td>"
-        << "<td>" << EncodeHtmlPcdata(event.Reason) << "</td>"
-        << "<td>" << EncodeHtmlPcdata(event.Extra) << "</td>";
+    out << "<td>" << event.GetTimestamp().ToStringLocalUpToSeconds() << "</td>"
+        << "<td>" << ENodeEventName(event.GetType()) << "</td>"
+        << "<td>" << EncodeHtmlPcdata(ENodeEventReasonName(event.GetReason())) << "</td>"
+        << "<td>" << EncodeHtmlPcdata(event.Details) << "</td>";
 }
 
 static NJson::TJsonValue NodeEventToJson(const TNodeEvent& event) {
     NJson::TJsonValue json;
-    json["Timestamp"] = event.Timestamp.MilliSeconds();
-    json["Event"] = TString(ENodeEventName(event.Type));
-    json["Reason"] = event.Reason;
-    json["Extra"] = event.Extra;
+    json["Timestamp"] = event.GetTimestamp().MilliSeconds();
+    json["Event"] = TString(ENodeEventName(event.GetType()));
+    json["Reason"] = TString(ENodeEventReasonName(event.GetReason()));
+    json["Details"] = event.Details;
     return json;
 }
 

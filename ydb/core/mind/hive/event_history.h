@@ -32,52 +32,70 @@ enum class ENodeEvent : ui8 {
 
 TStringBuf ENodeEventName(ENodeEvent value);
 
-// Constant reasons for node events. TString is a refcounted pointer, so passing one of these shared
-// instances stores a reference in the event instead of allocating a new string per event.
-struct TNodeEventReason {
-    static const TString NewLocalActor;
-    static const TString SameLocalActor;
-    static const TString ServicedDomainsChanged;
-    static const TString TenantChanged;
-    static const TString BecomeUpOnRestart;
-    static const TString RegisterNode;
-    static const TString NameService;
-    static const TString StatusOk;
-    static const TString BadStatus;
-    static const TString InterconnectDisconnected;
-    static const TString InterconnectDisconnectedUnknownNode;
-    static const TString PingUndelivered;
-    static const TString NodeExpired;
-    static const TString DrainDownPolicy;
-    static const TString DrainRequested;
-    static const TString DrainSwitchedOff;
-    static const TString DrainStarted;
-    static const TString DrainFinished;
-    static const TString SetDownRequest;
-    static const TString MonitoringRequest;
-    static const TString LoadedFromDatabase;
+// Constant reasons for node events, rendered as text only when logged or shown in the UI
+enum class ENodeEventReason : ui8 {
+    NewLocalActor,
+    SameLocalActor,
+    ServicedDomainsChanged,
+    TenantChanged,
+    BecomeUpOnRestart,
+    RegisterNode,
+    NameService,
+    StatusOk,
+    BadStatus,
+    InterconnectDisconnected,
+    InterconnectDisconnectedUnknownNode,
+    PingUndelivered,
+    NodeExpired,
+    DrainDownPolicy,
+    DrainRequested,
+    DrainSwitchedOff,
+    DrainStarted,
+    DrainFinished,
+    SetDownRequest,
+    MonitoringRequest,
+    LoadedFromDatabase,
 };
+
+TStringBuf ENodeEventReasonName(ENodeEventReason value);
 
 // Kept small on purpose: a cluster may have thousands of nodes with a full history each.
-// TString is a refcounted pointer (8 bytes, no allocation when empty), so the reason shares the buffer
-// of the TNodeEventReason constant and copies of an event in the global and per-node histories share
-// one Extra buffer.
+// One word holds the millisecond timestamp (48 bits), the type and the reason (a byte each);
+// Details is a refcounted pointer (8 bytes, no allocation when empty) shared by the copies
+// in the global and per-node histories.
 struct TNodeEvent {
-    TInstant Timestamp;
-    TString Reason; // constant part of the description, one of TNodeEventReason
-    TString Extra;  // variable part of the description
-    ENodeEvent Type = ENodeEvent::Registered;
+    ui64 Packed = 0;
+    TString Details; // variable part of the description
+
+    static constexpr ui64 TYPE_SHIFT = 0;
+    static constexpr ui64 TYPE_MASK = 0xFF;
+    static constexpr ui64 REASON_SHIFT = 8;
+    static constexpr ui64 REASON_MASK = 0xFF;
+    static constexpr ui64 TIMESTAMP_SHIFT = 16;
+    static constexpr ui64 TIMESTAMP_MASK = (1ull << 48) - 1; // milliseconds, enough for ~8900 years
 
     TNodeEvent() = default;
-    TNodeEvent(TInstant timestamp, ENodeEvent type, const TString& reason, TString extra)
-        : Timestamp(timestamp)
-        , Reason(reason)
-        , Extra(std::move(extra))
-        , Type(type)
+    TNodeEvent(TInstant timestamp, ENodeEvent type, ENodeEventReason reason, TString details)
+        : Packed(((static_cast<ui64>(type) & TYPE_MASK) << TYPE_SHIFT)
+            | ((static_cast<ui64>(reason) & REASON_MASK) << REASON_SHIFT)
+            | ((timestamp.MilliSeconds() & TIMESTAMP_MASK) << TIMESTAMP_SHIFT))
+        , Details(std::move(details))
     {}
+
+    ENodeEvent GetType() const {
+        return static_cast<ENodeEvent>((Packed >> TYPE_SHIFT) & TYPE_MASK);
+    }
+
+    ENodeEventReason GetReason() const {
+        return static_cast<ENodeEventReason>((Packed >> REASON_SHIFT) & REASON_MASK);
+    }
+
+    TInstant GetTimestamp() const {
+        return TInstant::MilliSeconds((Packed >> TIMESTAMP_SHIFT) & TIMESTAMP_MASK);
+    }
 };
 
-static_assert(sizeof(TNodeEvent) <= 32, "TNodeEvent is expected to stay compact");
+static_assert(sizeof(TNodeEvent) <= 16, "TNodeEvent is expected to stay compact");
 
 // Ring buffer with a fixed capacity that allocates lazily: an idle node costs nothing.
 template <typename T, size_t Capacity>

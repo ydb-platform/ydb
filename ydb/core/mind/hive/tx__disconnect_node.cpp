@@ -41,7 +41,7 @@ public:
                         }
                     }
                 }
-                Self->RecordNodeEvent(*node, ENodeEvent::Disconnecting, TNodeEventReason::InterconnectDisconnected,
+                Self->RecordNodeEvent(*node, ENodeEvent::Disconnecting, ENodeEventReason::InterconnectDisconnected,
                     TStringBuilder() << "tablets=" << node->GetTabletsTotal()
                         << " categories=" << event->Tablets.size()
                         << " maxDisconnectTimeout=" << TDuration::MilliSeconds(maxDisconnectTimeout));
@@ -50,7 +50,7 @@ public:
                 YDB_LOG_WARN("THive::TTxDisconnectNode::Execute killing disconnected node",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", node->Id});
-                Self->KillNode(node->Id, node->Local, TNodeEventReason::InterconnectDisconnectedUnknownNode);
+                Self->KillNode(node->Id, node->Local, ENodeEventReason::InterconnectDisconnectedUnknownNode);
             }
         }
         return true;

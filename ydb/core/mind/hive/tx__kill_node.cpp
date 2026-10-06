@@ -10,16 +10,16 @@ class TTxKillNode : public TTransactionBase<THive> {
 protected:
     TNodeId NodeId;
     TActorId Local;
-    TString Reason;
-    TString ReasonExtra;
+    ENodeEventReason Reason;
+    TString ReasonDetails;
     TSideEffects SideEffects;
 public:
-    TTxKillNode(TNodeId nodeId, const TActorId& local, const TString& reason, TString reasonExtra, THive *hive)
+    TTxKillNode(TNodeId nodeId, const TActorId& local, ENodeEventReason reason, TString reasonDetails, THive *hive)
         : TBase(hive)
         , NodeId(nodeId)
         , Local(local)
         , Reason(reason)
-        , ReasonExtra(std::move(reasonExtra))
+        , ReasonDetails(std::move(reasonDetails))
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_KILL_NODE; }
@@ -28,8 +28,8 @@ public:
         YDB_LOG_DEBUG("THive::TTxKillNode::Execute killing node",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", NodeId},
-            {"reason", Reason},
-            {"reasonExtra", ReasonExtra});
+            {"reason", ENodeEventReasonName(Reason)},
+            {"reasonDetails", ReasonDetails});
         SideEffects.Reset(Self->SelfId());
         TInstant now = TActivationContext::Now();
         TNodeInfo* node = Self->FindNode(NodeId);
@@ -53,12 +53,12 @@ public:
                 db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Statistics>(node->Statistics);
             }
             if (!node->IsDisconnected()) {
-                TStringBuilder extra;
-                extra << ReasonExtra << (ReasonExtra.empty() ? "" : " ") << "tablets=" << node->GetTabletsTotal();
+                TStringBuilder details;
+                details << ReasonDetails << (ReasonDetails.empty() ? "" : " ") << "tablets=" << node->GetTabletsTotal();
                 if (node->IsAlive() && node->StartTime) {
-                    extra << " uptime=" << (now - node->StartTime);
+                    details << " uptime=" << (now - node->StartTime);
                 }
-                Self->RecordNodeEvent(*node, ENodeEvent::Killed, Reason, extra);
+                Self->RecordNodeEvent(*node, ENodeEvent::Killed, Reason, details);
             }
             node->BecomeDisconnected();
             if (node->LocationAcquired) {
@@ -99,8 +99,8 @@ public:
     }
 };
 
-ITransaction* THive::CreateKillNode(TNodeId nodeId, const TActorId& local, const TString& reason, TString reasonExtra) {
-    return new TTxKillNode(nodeId, local, reason, std::move(reasonExtra), this);
+ITransaction* THive::CreateKillNode(TNodeId nodeId, const TActorId& local, ENodeEventReason reason, TString reasonDetails) {
+    return new TTxKillNode(nodeId, local, reason, std::move(reasonDetails), this);
 }
 
 } // NHive

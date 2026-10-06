@@ -366,8 +366,8 @@ public:
                 TNodeId nodeId = nodeRowset.GetValue<Schema::Node::ID>();
                 TNodeInfo& node = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first->second;
                 node.Local = nodeRowset.GetValue<Schema::Node::Local>();
-                node.SetDown(nodeRowset.GetValue<Schema::Node::Down>(), TNodeEventReason::LoadedFromDatabase);
-                node.SetFreeze(nodeRowset.GetValue<Schema::Node::Freeze>(), TNodeEventReason::LoadedFromDatabase);
+                node.SetDown(nodeRowset.GetValue<Schema::Node::Down>(), ENodeEventReason::LoadedFromDatabase);
+                node.SetFreeze(nodeRowset.GetValue<Schema::Node::Freeze>(), ENodeEventReason::LoadedFromDatabase);
                 node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
                 node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
                 node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
@@ -377,7 +377,7 @@ public:
                 if (node.BecomeUpOnRestart) {
                     // If a node must become up on restart, it must have been down
                     // That was not persisted to avoid issues with downgrades
-                    node.SetDown(true, TNodeEventReason::LoadedFromDatabase);
+                    node.SetDown(true, ENodeEventReason::LoadedFromDatabase);
                 }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();

@@ -471,6 +471,7 @@ private:
         YDB_LOG_WARN_CTX(ctx, "ReadColumns got system view scan warning",
             {"actorId", SelfId()},
             {"issues", ev->Get()->Issues.ToOneLineString()});
+        Request->RaiseIssues(ev->Get()->Issues);
     }
 
     STFUNC(StateSysViewScan) {

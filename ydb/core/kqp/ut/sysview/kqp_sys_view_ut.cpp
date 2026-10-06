@@ -12,6 +12,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/library/query_actor/query_actor.h>
@@ -1542,6 +1543,22 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                         TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie));
                 ev.Reset();
             });
+        ui32 deliveredWarnings = 0;
+        const auto warningObserver = runtime.AddObserver<TEvKqpCompute::TEvScanWarning>(
+            [&](TEvKqpCompute::TEvScanWarning::TPtr& ev) {
+                // Check delivery to the consumer, including forwarding through the ranges reader.
+                if (runtime.FindActorName(ev->GetRecipientRewrite()) != "KQP_COMPUTE_ACTOR") {
+                    return;
+                }
+                const auto& issues = ev->Get()->Issues;
+                UNIT_ASSERT(!issues.Empty());
+                for (const auto& issue : issues) {
+                    UNIT_ASSERT_C(issue.GetSeverity() == NYql::TSeverityIds::S_WARNING, issues.ToString());
+                }
+                UNIT_ASSERT_STRING_CONTAINS(issues.ToString(),
+                    TStringBuilder() << "node_id=" << deadNodeId);
+                ++deliveredWarnings;
+            });
         const TVector<TString> nodePredicates = {
             TStringBuilder() << "NodeId IN (" << liveNodeId << ", " << deadNodeId << ")",
             TStringBuilder() << "(NodeId BETWEEN " << liveNodeId << " AND " << deadNodeId
@@ -1550,21 +1567,26 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         for (const auto& nodePredicate : nodePredicates) {
             for (bool empty : {true, false}) {
                 const auto requestsBefore = failedRequests;
+                const auto warningsBefore = deliveredWarnings;
                 const auto result = RunCompileCacheWarmupAggregate(runtime,
                     TStringBuilder() << nodePredicate << " AND Query = '"
                         << (empty ? TString("__missing_compile_cache_aggregate_probe__") : probe) << "'");
                 UNIT_ASSERT_C(failedRequests > requestsBefore, "One of the selected peers must fail after discovery");
                 AssertCompileCacheAggregate(result, empty ? std::nullopt : std::optional<i64>(0));
+                UNIT_ASSERT_C(deliveredWarnings > warningsBefore,
+                    "The compute actor must receive a partial scan warning");
             }
         }
 
         // A real scan failure must still fail the query.
         const auto requestsBefore = failedRequests;
+        const auto warningsBefore = deliveredWarnings;
         const auto result = RunCompileCacheWarmupAggregate(runtime,
             TStringBuilder() << "NodeId IN (" << deadNodeId << ")");
         UNIT_ASSERT_C(failedRequests > requestsBefore, "The selected peer must fail after discovery");
         UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::UNAVAILABLE, result.Issues.ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), "Failed to read compile cache from all nodes");
+        UNIT_ASSERT_VALUES_EQUAL(deliveredWarnings, warningsBefore);
     }
 
     Y_UNIT_TEST_TWIN(CompileCacheBasic, EnableCompileCacheView) {

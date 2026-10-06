@@ -11,7 +11,6 @@
 #include <util/system/byteorder.h>
 #include <util/system/unaligned_mem.h>
 
-#ifdef ENABLE_S3_READ_ACTOR_TESTS
 #include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
@@ -21,7 +20,6 @@
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/writer.h>
 
 #include <util/generic/algorithm.h>
-#endif
 
 namespace NYql::NPathGenerator {
 
@@ -513,10 +511,8 @@ TString MakeParquet(bool nullLastGroup) {
 void CheckRead(ui64 parallelReaders, bool reorder, bool withPredicate, bool nullLastGroup = false) {
     const auto data = MakeParquet(nullLastGroup);
     TFakeCASetup setup;
-    std::unique_ptr<THolderFactory> holder;
     auto error = setup.AsyncInputPromises->FatalError.GetFuture();
     setup.Execute([&](TFakeActor& actor) {
-        holder = std::make_unique<THolderFactory>(actor.Alloc.Ref(), actor.MemoryInfo, actor.FunctionRegistry.Get());
         NS3::TSource source;
         source.SetUrl("http://unit-test/");
         source.SetFormat("parquet");
@@ -544,7 +540,7 @@ void CheckRead(ui64 parallelReaders, bool reorder, bool withPredicate, bool null
         path->SetRead(true);
         TStringStream rangeData;
         range.Save(&rangeData);
-        const auto [input, reader] = CreateS3ReadActor(actor.TypeEnv, *holder, nullptr,
+        const auto [input, reader] = CreateS3ReadActor(actor.TypeEnv, actor.GetHolderFactory(), nullptr,
             std::make_shared<TRangeGateway>(data), std::move(source), 0, TCollectStatsLevel::None,
             "test", {}, {}, {rangeData.Str()}, actor.SelfId(),
             CreateStructuredTokenCredentialsFactory(), IHTTPGateway::TRetryPolicy::GetNoRetryPolicy(),
@@ -575,7 +571,6 @@ void CheckRead(ui64 parallelReaders, bool reorder, bool withPredicate, bool null
         }
     }
     setup.Terminate();
-    setup.Execute([&](TFakeActor&) { holder.reset(); });
     UNIT_ASSERT_C(!error.HasValue(), error.HasValue() ? error.GetValue().ToString() : "");
     UNIT_ASSERT_C(finished, "S3 reader did not finish after skipping a Parquet row group");
     Sort(rows);

@@ -42,12 +42,11 @@ static TDuration ReadMaxLag(ui32 requestMaxTimeLagMs, TDuration availabilityPeri
 
 static TMaybe<TInstant> GetReadFrom(TDuration maxLag, ui64 readTimestampMs, TInstant consumerReadFromTimestamp, const TActorContext& ctx) {
     const TInstant now = ctx.Now();
-    const bool hasLag = maxLag < TDuration::Max() && now.MicroSeconds() >= maxLag.MicroSeconds();
-    if (!hasLag && readTimestampMs == 0 && consumerReadFromTimestamp <= TInstant::MilliSeconds(1)) {
+    const bool hasMaxLagLimit = maxLag < TDuration::Max() && now.MicroSeconds() >= maxLag.MicroSeconds();
+    if (!hasMaxLagLimit && readTimestampMs == 0 && consumerReadFromTimestamp <= TInstant::MilliSeconds(1)) {
         return {};
     }
-
-    TInstant timestamp = hasLag ? now - maxLag : TInstant::Zero();
+    TInstant timestamp = now - maxLag;
     timestamp = Max(timestamp, TInstant::MilliSeconds(readTimestampMs));
     timestamp = Max(timestamp, consumerReadFromTimestamp);
     return timestamp;
@@ -261,10 +260,10 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     const TUserInfo* reader = InitDone
         ? UsersInfoStorage->GetIfExists(clientId.empty() ? CLIENTID_WITHOUT_CONSUMER : clientId)
         : nullptr;
-    const TDuration availability = reader ? GetAvailabilityPeriod(*reader) : TDuration::Zero();
+    const TDuration availabilityPeriod = reader ? GetAvailabilityPeriod(*reader) : TDuration::Zero();
     const TInstant consumerReadFrom = reader ? reader->ReadFromTimestamp : TInstant::Zero();
     const bool limitReadToRetention = !AppData(ctx)->FeatureFlags.GetEnableTopicReadPriorRetention();
-    const TDuration maxLag = ReadMaxLag(record.GetMaxTimeLagMs(), availability, Config.GetPartitionConfig(), limitReadToRetention);
+    const TDuration maxLag = ReadMaxLag(record.GetMaxTimeLagMs(), availabilityPeriod, Config.GetPartitionConfig(), limitReadToRetention);
     auto readTimestamp = GetReadFrom(maxLag, record.GetReadTimestampMs(), consumerReadFrom, ctx);
     TActorId sender = ActorIdFromProto(record.GetSender());
 

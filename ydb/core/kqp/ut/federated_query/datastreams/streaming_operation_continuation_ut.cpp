@@ -69,6 +69,7 @@ struct TContinuationTest {
     static std::shared_ptr<TKikimrRunner> CreateRunner(const TIntrusivePtr<NTestUtils::IMockPqGateway>& gateway, ui32 nodeCount) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
+        config.MutableFeatureFlags()->SetEnableStreamingQuerySchemeOperations(true);
         config.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         return NFederatedQueryTest::MakeKikimrRunner(false, nullptr, nullptr, config, NYql::NDq::CreateS3ActorsFactory(), {
             .NodeCount = nodeCount,
@@ -96,6 +97,7 @@ struct TContinuationTest {
         });
         for (ui32 node = 0; node < nodeCount; ++node) {
             Runtime.GetAppData(node).FeatureFlags.SetEnableStreamingQueries(true);
+            Runtime.GetAppData(node).FeatureFlags.SetEnableStreamingQuerySchemeOperations(true);
             Runtime.EnableScheduleForActor(Runtime.GetActorSystem(node)->LookupLocalService(
                 NMetadata::NProvider::MakeServiceId(Runtime.GetNodeId(node))));
         }

@@ -815,6 +815,39 @@ class ShardProgressTest(unittest.TestCase):
             0,
         )
 
+    def test_merge_reports_keeps_first_try_and_overlays_retries(self) -> None:
+        first = {
+            "results": [
+                {"uid": "suite", "path": "ydb/a", "name": "ok", "status": "PASSED"},
+                {"uid": "suite", "path": "ydb/a", "name": "flaky", "status": "FAILED"},
+                {"uid": "suite", "path": "ydb/a", "name": "skip", "status": "SKIPPED"},
+            ]
+        }
+        retry = {
+            "results": [
+                {"uid": "suite", "path": "ydb/a", "name": "flaky", "status": "PASSED"},
+            ]
+        }
+        merged = shard_progress.merge_reports([first, retry])
+        self.assertEqual(
+            shard_progress.counts_from_report(merged),
+            {"tests": 3, "passed": 2, "errors": 0, "failed": 0, "skipped": 1, "muted": 0},
+        )
+        self.assertEqual(
+            shard_progress.try_report_urls(
+                "https://s3.example/shard_1/try_3/report.json"
+            ),
+            [
+                "https://s3.example/shard_1/try_1/report.json",
+                "https://s3.example/shard_1/try_2/report.json",
+                "https://s3.example/shard_1/try_3/report.json",
+            ],
+        )
+        self.assertEqual(
+            shard_progress.try_report_urls("https://s3.example/merged_report.json"),
+            ["https://s3.example/merged_report.json"],
+        )
+
     def test_count_links_encode_spaces_in_the_workflow_name(self) -> None:
         raw = "https://storage.example/ydb/Run and debug tests/1/ya-test.html"
         encoded = "https://storage.example/ydb/Run%20and%20debug%20tests/1/ya-test.html"

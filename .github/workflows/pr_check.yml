@@ -608,15 +608,13 @@ jobs:
         combined_html=""
         combined_url=""
         if [ -n "${PUBLIC_DIR:-}" ] && [ -n "${PUBLIC_DIR_URL:-}" ]; then
+          first_try=$(ls -1d "$PUBLIC_DIR"/try_* 2>/dev/null | sort -V | head -n 1 || true)
           last_try=$(ls -1d "$PUBLIC_DIR"/try_* 2>/dev/null | sort -V | tail -n 1 || true)
-          if [ -n "$last_try" ]; then
-            try_name=$(basename "$last_try")
-            if [ -f "$last_try/ya-test.html" ]; then
-              report_url="${PUBLIC_DIR_URL}/${try_name}/ya-test.html"
-            fi
-            if [ -f "$last_try/report.json" ]; then
-              report_json_url="${PUBLIC_DIR_URL}/${try_name}/report.json"
-            fi
+          if [ -n "$first_try" ] && [ -f "$first_try/ya-test.html" ]; then
+            report_url="${PUBLIC_DIR_URL}/$(basename "$first_try")/ya-test.html"
+          fi
+          if [ -n "$last_try" ] && [ -f "$last_try/report.json" ]; then
+            report_json_url="${PUBLIC_DIR_URL}/$(basename "$last_try")/report.json"
           fi
           case "$PUBLIC_DIR_URL" in
             */shard_${SHARD_ID})
@@ -641,6 +639,7 @@ jobs:
           --run-url "$run_url" \
           --log-prefix "shard_${SHARD_ID}" \
           --report "${LAST_BUILD_RESULTS_REPORT:-}" \
+          --reports-dir "${PUBLIC_DIR:-}" \
           --report-url "$report_url" \
           --report-json-url "$report_json_url" \
           --combined-html "$combined_html" \

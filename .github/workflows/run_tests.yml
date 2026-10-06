@@ -813,6 +813,7 @@ jobs:
             --run-url "$run_url" \
             --log-prefix "shard_${SHARD_ID}" \
             --report "$report" \
+            --reports-dir "${PUBLIC_DIR:-}" \
             --state-output shard_event.json \
             --summary-file "$GITHUB_STEP_SUMMARY"
       - name: Upload shard result

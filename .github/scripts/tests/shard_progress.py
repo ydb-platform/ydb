@@ -157,6 +157,67 @@ def counts_from_report(report: dict[str, Any] | None) -> dict[str, int]:
     return found
 
 
+def result_key(result: dict[str, Any]) -> tuple[str, ...]:
+    # uid is the suite/node id and repeats across tests in one report.
+    return (
+        str(result.get("path") or ""),
+        str(result.get("name") or ""),
+        str(result.get("subtest_name") or ""),
+    )
+
+
+def merge_reports(reports: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Later tries overlay earlier ones. try_1 is the full set; retries are a subset."""
+    if not reports:
+        return None
+    by_key: dict[tuple[str, ...], dict[str, Any]] = {}
+    merged: dict[str, Any] = {}
+    for report in reports:
+        if not report:
+            continue
+        merged = dict(report)
+        for result in report.get("results") or []:
+            if not isinstance(result, dict) or not result.get("status"):
+                continue
+            by_key[result_key(result)] = result
+    if not by_key:
+        return merged or None
+    merged["results"] = list(by_key.values())
+    return merged
+
+
+def load_try_reports(directory: str) -> list[dict[str, Any]]:
+    if not directory:
+        return []
+    root = Path(directory)
+    if not root.is_dir():
+        return []
+    found: list[dict[str, Any]] = []
+    for path in sorted(root.glob("try_*/report.json"), key=lambda item: item.parent.name):
+        report = load_report(str(path))
+        if report:
+            found.append(report)
+    return found
+
+
+def try_report_urls(url: str) -> list[str]:
+    """Expand .../try_3/report.json to try_1..try_3 so retries are not the only source."""
+    if not url:
+        return []
+    match = re.search(r"/try_(\d+)/report\.json(?:\?.*)?$", url)
+    if not match:
+        return [url]
+    last = int(match.group(1))
+    return [re.sub(r"/try_\d+/report\.json", f"/try_{index}/report.json", url, count=1) for index in range(1, last + 1)]
+
+
+def resolve_report(*, reports_dir: str = "", report_path: str = "") -> dict[str, Any] | None:
+    reports = load_try_reports(reports_dir)
+    if reports:
+        return merge_reports(reports)
+    return load_report(report_path)
+
+
 def sum_counts(state: dict[str, Any]) -> dict[str, int]:
     found = empty_counts()
     for row in (state.get("shards") or {}).values():
@@ -792,26 +853,35 @@ def fetch_report(url: str) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def fetch_merged_report(url: str) -> dict[str, Any] | None:
+    reports = [item for item in (fetch_report(item) for item in try_report_urls(url)) if item]
+    return merge_reports(reports)
+
+
 def collect_reports(
     state: dict[str, Any],
     *,
     local_path: str,
     local_json_url: str = "",
+    reports_dir: str = "",
 ) -> list[dict[str, Any]]:
-    """Local report first, then every other shard's public report.json."""
+    """Local merged tries first, then every other shard's public reports."""
     found: list[dict[str, Any]] = []
-    local = load_report(local_path)
+    local = resolve_report(reports_dir=reports_dir, report_path=local_path)
     if local:
         found.append(local)
-    skip = {local_json_url} if local_json_url else set()
+    skip = set(try_report_urls(local_json_url)) if local_json_url else set()
+    if local_json_url:
+        skip.add(local_json_url)
     for row in (state.get("shards") or {}).values():
         if not isinstance(row, dict):
             continue
         url = str(row.get("report_json_url") or "")
         if not url or url in skip:
             continue
+        skip.update(try_report_urls(url))
         skip.add(url)
-        remote = fetch_report(url)
+        remote = fetch_merged_report(url)
         if remote:
             found.append(remote)
     return found
@@ -878,7 +948,10 @@ def _event_state(args: argparse.Namespace) -> dict[str, Any]:
     base["run_url"] = args.run_url
     if getattr(args, "combined_url", ""):
         base["combined_url"] = args.combined_url
-    report = load_report(args.report)
+    report = resolve_report(
+        reports_dir=getattr(args, "reports_dir", "") or "",
+        report_path=args.report,
+    )
     return apply_shard(
         base,
         shard_id=args.shard_id,
@@ -955,6 +1028,7 @@ def _cmd_publish(args: argparse.Namespace) -> int:
             preview,
             local_path=args.report,
             local_json_url=getattr(args, "report_json_url", "") or "",
+            reports_dir=getattr(args, "reports_dir", "") or "",
         )
         if reports:
             write_combined_html(args.combined_html, reports, preset=args.preset)
@@ -1076,6 +1150,7 @@ def main(argv: list[str] | None = None) -> int:
     publish.add_argument("--run-url", default="")
     publish.add_argument("--log-prefix", default="")
     publish.add_argument("--report", default="")
+    publish.add_argument("--reports-dir", default="")
     publish.add_argument("--report-url", default="")
     publish.add_argument("--report-json-url", default="")
     publish.add_argument("--combined-html", default="")

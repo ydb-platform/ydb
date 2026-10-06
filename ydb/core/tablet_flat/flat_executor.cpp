@@ -4169,6 +4169,9 @@ void TExecutor::UpdateUsedTabletMemory() {
 
     // Add tablet memory usage: the honest report when the tablet memory host is on
     OwnerMemoryReport = TabletMemoryHostEnabled ? Owner->GetMemoryReport() : NMemory::TConsumerReport{};
+    // Clamp at the source, so no reader of the report has to guard against a wrap
+    OwnerMemoryReport.Demand = Max(OwnerMemoryReport.Demand, OwnerMemoryReport.Used);
+    OwnerMemoryReport.Reclaimable = Min(OwnerMemoryReport.Reclaimable, OwnerMemoryReport.Used);
     UsedTabletMemory += TabletMemoryHostEnabled ? OwnerMemoryReport.Used : Owner->GetMemoryUsage();
 }
 
@@ -4300,7 +4303,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                     // The report travels to Local in the metrics it already forwards to Hive
                     memorySize = UsedTabletMemory;
                     ResourceMetrics->MemoryDemand.Set(UsedTabletMemory + OwnerMemoryReport.Demand - OwnerMemoryReport.Used);
-                    ResourceMetrics->MemoryReclaimable.Set(Min(OwnerMemoryReport.Reclaimable, UsedTabletMemory));
+                    ResourceMetrics->MemoryReclaimable.Set(OwnerMemoryReport.Reclaimable);
                 } else {
                     auto limit = Memory->Profile->GetStaticTabletTxMemoryLimit();
                     memorySize = limit ? (UsedTabletMemory + limit) : (UsedTabletMemory + memory.Static);

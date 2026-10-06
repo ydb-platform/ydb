@@ -27,6 +27,8 @@ namespace NKikimr::NKqp::NScheduler {
         struct TStaticAttributes;
 
         namespace NDynamic {
+            struct TTreeElement;
+
             class TQuery;
             class TPool;
             class TDatabase;

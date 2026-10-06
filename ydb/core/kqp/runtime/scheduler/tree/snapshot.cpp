@@ -28,8 +28,8 @@ void TTreeElement::AccountSnapshotDuration(TDuration period) {
     });
 }
 
-void TTreeElement::UpdateBottomUp(ui64 totalLimit, TDuration period) {
-    CpuLimit = Min<ui64>(GetCpuLimit(), totalLimit);
+void TTreeElement::UpdateBottomUp(ui64 totalCpuLimit, TDuration period) {
+    CpuLimit = Min<ui64>(GetCpuLimit(), totalCpuLimit);
 
     if (IsPool()) {
         CpuMaxDemand = 0;
@@ -38,7 +38,7 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit, TDuration period) {
         CpuBurstThrottle = 0;
         MemoryDemand = 0;
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
-            child->UpdateBottomUp(totalLimit, period);
+            child->UpdateBottomUp(totalCpuLimit, period);
             CpuMaxDemand += child->CpuMaxDemand;
             PreciseCpuActualDemand += child->PreciseCpuActualDemand;
             CpuBurstUsage += child->CpuBurstUsage;
@@ -189,9 +189,14 @@ void TTreeElement::UpdateTopDown() {
 }
 
 void TTreeElement::UpdateMemoryTopDown() {
-    // TODO: replace with the actual fair-share distribution - for now it's just the limit inherited from the parent.
+    // TODO: replace with the actual fair-share distribution - for now it's just the limit inherited from the parent,
+    //       like the pools of the resource manager had: the sum of the fair-shares may exceed the one of the parent,
+    //       then the memory is taken on the first-come basis until the total limit of the root.
     ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
-        child->MemoryFairShare = Min<ui64>(child->GetMemoryLimit(), MemoryFairShare);
+        // The default pool has no fair-share
+        child->MemoryFairShare = dynamic_cast<TDefaultPool*>(child)
+            ? Infinity()
+            : Min<ui64>(child->GetMemoryLimit(), MemoryFairShare);
         child->UpdateMemoryTopDown();
     });
 }
@@ -238,7 +243,7 @@ TQuery::TQuery(const TQueryId& id, const NDynamic::TQueryPtr& query)
 {
 }
 
-void TQuery::UpdateBottomUp(ui64 totalLimit, TDuration period) {
+void TQuery::UpdateBottomUp(ui64 totalCpuLimit, TDuration period) {
     RawCpuActualDemand = CalculateRawCpuActualDemand(period);
 
     // The actual demand grows immediately, but falls only when it stays low for two snapshots in a row: otherwise
@@ -249,7 +254,7 @@ void TQuery::UpdateBottomUp(ui64 totalLimit, TDuration period) {
     // Every task is able to use at most one CPU - and the departed tasks don't want anything anymore.
     PreciseCpuActualDemand = Min<ui64>(PreciseCpuActualDemand, CpuMaxDemand * MicroCoresPerCore);
 
-    TTreeElement::UpdateBottomUp(totalLimit, period);
+    TTreeElement::UpdateBottomUp(totalCpuLimit, period);
 }
 
 ui64 TQuery::CalculateRawCpuActualDemand(TDuration period) const {
@@ -302,6 +307,16 @@ void TPool::AccountSnapshotDuration(TDuration period) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// TDefaultPool
+///////////////////////////////////////////////////////////////////////////////
+
+TDefaultPool::TDefaultPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const TStaticAttributes& attrs)
+    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id, attrs)
+    , TPool(id, counters, attrs)
+{
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // TDatabase
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -336,10 +351,22 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
 void TRoot::Update(const TRootPtr& previous) {
     const auto period = previous && Timestamp > previous->Timestamp ? Timestamp - previous->Timestamp : TDuration::Zero();
 
-    UpdateBottomUp(TotalLimit, period);
+    UpdateBottomUp(TotalCpuLimit, period);
 
     CpuFairShare = CpuMaxDemand;
-    MemoryFairShare = Min<ui64>(GetMemoryLimit(), MemoryTotalLimit);
+
+    // Reduce the root's fair-share by default pools' usage
+    ui64 defaultPoolsUsage = 0;
+    ForEachChild<TDatabase>([&](TDatabase* database, size_t) {
+        database->ForEachChild<TPool>([&](TPool* pool, size_t) {
+            if (dynamic_cast<TDefaultPool*>(pool)) {
+                defaultPoolsUsage += pool->MemoryUsage;
+            }
+        });
+    });
+
+    const ui64 memoryLimit = Min<ui64>(GetMemoryLimit(), TotalMemoryLimit);
+    MemoryFairShare = memoryLimit > defaultPoolsUsage ? memoryLimit - defaultPoolsUsage : 0;
     UpdateTopDown();
 
     if (period) {

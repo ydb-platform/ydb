@@ -201,10 +201,6 @@ public:
         return Counters_;
     }
 
-    NRm::TMemoryResourceCookies GetMemoryResourceCookies(const TString&, const TString&, double) override {
-        return {};
-    }
-
     NRm::TKqpRMAllocateResult AllocateResources(NRm::TTxState&, ui64, const NRm::TKqpResourcesRequest&) override {
         Y_ABORT("TStubResourceManager::AllocateResources is not used in tests");
     }

@@ -17,6 +17,9 @@ using namespace NYdb::NTable;
 
 using namespace NResourceBroker;
 
+// The memory of the queries is limited by the compute scheduler, the limit comes from the memory controller
+constexpr ui64 KqpQueryExecutionTestLimit = 33554453;
+
 NKikimrResourceBroker::TResourceBrokerConfig MakeResourceBrokerTestConfig(ui32 multiplier = 1) {
     NKikimrResourceBroker::TResourceBrokerConfig config;
 
@@ -291,7 +294,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST(ComputeActorMemoryAllocationFailure) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
-        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(KqpQueryExecutionTestLimit);
+        settings.AppConfig.MutableMemoryControllerConfig()->SetQueryExecutionLimitBytes(KqpQueryExecutionTestLimit);
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheMaxSizeBytes(1000);
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheIncreaseBatchSizeBytes(1000);
         auto cfg = MakeResourceBrokerTestConfig();
@@ -318,7 +322,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST(ComputeActorMemoryAllocationFailureQueryService) {
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(KqpQueryExecutionTestLimit);
+        app.MutableMemoryControllerConfig()->SetQueryExecutionLimitBytes(KqpQueryExecutionTestLimit);
         app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
         app.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10000);
         app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms(true);

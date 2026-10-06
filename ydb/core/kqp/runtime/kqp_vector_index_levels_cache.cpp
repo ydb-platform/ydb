@@ -42,7 +42,7 @@ public:
         const NKikimrConfig::TTableServiceConfig::TResourceManager& initialConfig)
         : Cache_(std::move(cache))
         , ResourceManager(rm)
-        , Tx(MakeIntrusive<NRm::TTxState>(ResourceManager, LevelCacheTxId, TInstant::Now(), NKikimr::NResourcePool::DEFAULT_POOL_ID, 100.0, AppData()->TenantName, false))
+        , Tx(MakeIntrusive<NRm::TTxState>(ResourceManager, LevelCacheTxId, TInstant::Now(), NKikimr::NResourcePool::DEFAULT_POOL_ID, AppData()->TenantName, false))
         , RmConfig(initialConfig)
     {}
 

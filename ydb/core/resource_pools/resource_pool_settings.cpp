@@ -75,9 +75,6 @@ std::optional<TString> TPoolSettings::Validate() const {
     if (QueryMemoryLimitPercentPerNode != -1) {
         return "Invalid resource pool configuration, query_memory_limit_percent_per_node is not supported";
     }
-    if (TotalMemoryLimitPercentPerNode != -1) {
-        return "Invalid resource pool configuration, total_memory_limit_percent_per_node is not supported";
-    }
     if (QueryCpuLimitPercentPerNode != -1) {
         return "Invalid resource pool configuration, query_cpu_limit_percent_per_node is not supported";
     }

@@ -9,7 +9,7 @@ class TMemoryQuotaManager final : public NYql::NDq::IMemoryQuotaManager {
 public:
     explicit TMemoryQuotaManager(std::shared_ptr<IKqpResourceManager> resourceManager)
         : ResourceManager(std::move(resourceManager))
-        , State(MakeIntrusive<TTxState>(ResourceManager, /* txId */ static_cast<ui64>(0), TInstant::Now(), /* poolId */ "", /* memoryPoolPercent */ 100.0, /* database */ "", /* collectBacktrace */ false))
+        , State(MakeIntrusive<TTxState>(ResourceManager, /* txId */ static_cast<ui64>(0), TInstant::Now(), /* poolId */ "", /* database */ "", /* collectBacktrace */ false))
     {}
 
     bool AllocateQuota(ui64 size, bool isOptional) final {

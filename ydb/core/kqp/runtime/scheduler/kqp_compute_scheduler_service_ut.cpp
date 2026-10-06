@@ -1,3 +1,6 @@
+#include "kqp_compute_scheduler_service.h"
+#include "kqp_schedulable_memory.h"
+
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
@@ -5,7 +8,14 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
+#include <ydb/core/base/memory_controller_iface.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/library/testlib/helpers.h>
+
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NKqp {
 
@@ -184,6 +194,145 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         auto result = request.GetResult();
         UNIT_ASSERT_EQUAL(result.Response.GetResponse().GetEffectivePoolId(), NResourcePool::DEFAULT_POOL_ID);
         TSampleQueries::TSelect42::CheckResult(result);
+    }
+
+    /* Scenario:
+        - The service registers the query execution consumer in the memory controller on start.
+        - The memory of the tracked queries is reported as the consumption on every fair-share update.
+     */
+    Y_UNIT_TEST(ReportMemoryToMemoryController) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
+            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            NScheduler::TOptions{
+                .DelayParams = NScheduler::TDelayParams{
+                    .MaxDelay = TDuration::MicroSeconds(3'000'000),
+                    .MinDelay = TDuration::MicroSeconds(10),
+                    .AttemptBonus = TDuration::MicroSeconds(5),
+                    .MaxRandomDelay = TDuration::MicroSeconds(100),
+                },
+            });
+        runtime.GetAppData().KqpComputeScheduler = scheduler;
+
+        const TActorId memoryController = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NMemory::MakeMemoryControllerId(), memoryController);
+
+        const TActorId service = runtime.Register(CreateKqpComputeSchedulerService(TDuration::MilliSeconds(100)));
+        runtime.EnableScheduleForActor(service);
+
+        auto registerEvent = runtime.GrabEdgeEvent<NMemory::TEvConsumerRegister>(memoryController);
+        UNIT_ASSERT_EQUAL(registerEvent->Get()->Kind, NMemory::EMemoryConsumerKind::QueryExecution);
+
+        struct TRecorder : public NMemory::IMemoryConsumer {
+            void SetReport(NMemory::TConsumerReport report) override {
+                Used = report.Used;
+                Demand = report.Demand;
+            }
+
+            std::atomic<ui64> Used = 0;
+            std::atomic<ui64> Demand = 0;
+        };
+
+        auto recorder = MakeIntrusive<TRecorder>();
+        runtime.Send(new IEventHandle(service, memoryController, new NMemory::TEvConsumerRegistered(recorder)));
+
+        NScheduler::TSchedulableMemory memory(scheduler->GetOrCreateMemoryPool("db", "pool"));
+
+        memory.IncreaseUsage(10_MB);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(recorder->Used.load(), 10_MB);
+        UNIT_ASSERT_VALUES_EQUAL(recorder->Demand.load(), 10_MB);
+
+        memory.DecreaseUsage(10_MB);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(recorder->Used.load(), 0);
+    }
+
+    /* Scenario:
+        - The limit of the memory consumer is the total memory limit of the scheduler.
+        - The memory limits of the pools are the shares of it, and follow it.
+     */
+    Y_UNIT_TEST(ConsumerLimitIsTotalMemoryLimit) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
+            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            NScheduler::TOptions{
+                .DelayParams = NScheduler::TDelayParams{
+                    .MaxDelay = TDuration::MicroSeconds(3'000'000),
+                    .MinDelay = TDuration::MicroSeconds(10),
+                    .AttemptBonus = TDuration::MicroSeconds(5),
+                    .MaxRandomDelay = TDuration::MicroSeconds(100),
+                },
+            });
+        scheduler->SetTotalMemoryLimit(1000_MB);
+        runtime.GetAppData().KqpComputeScheduler = scheduler;
+
+        const TActorId memoryController = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NMemory::MakeMemoryControllerId(), memoryController);
+
+        const TActorId service = runtime.Register(CreateKqpComputeSchedulerService(TDuration::MilliSeconds(100)));
+        runtime.GrabEdgeEvent<NMemory::TEvConsumerRegister>(memoryController);
+
+        NResourcePool::TPoolSettings poolSettings;
+        poolSettings.TotalMemoryLimitPercentPerNode = 30;
+        const TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(service, sender, new NScheduler::TEvAddPool("db", "pool", poolSettings)));
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+
+        auto pool = scheduler->GetOrCreateMemoryPool("db", "pool");
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetMemoryLimit(), 300_MB);
+
+        runtime.Send(new IEventHandle(service, memoryController, new NMemory::TEvConsumerLimit(500_MB)));
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryLimit(), 500_MB);
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetMemoryLimit(), 150_MB);
+    }
+
+    /* Scenario:
+        - The service pushes the limit and the usage of the query memory to the resource manager, which publishes
+          the free memory to the other nodes.
+        - It's pushed on the fair-share update once they change.
+     */
+    Y_UNIT_TEST(PublishQueryMemoryStateToResourceManager) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
+            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            NScheduler::TOptions{
+                .DelayParams = NScheduler::TDelayParams{
+                    .MaxDelay = TDuration::MicroSeconds(3'000'000),
+                    .MinDelay = TDuration::MicroSeconds(10),
+                    .AttemptBonus = TDuration::MicroSeconds(5),
+                    .MaxRandomDelay = TDuration::MicroSeconds(100),
+                },
+            });
+        scheduler->SetTotalMemoryLimit(1000_MB);
+        runtime.GetAppData().KqpComputeScheduler = scheduler;
+
+        const TActorId resourceManager = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeKqpRmServiceID(runtime.GetNodeId()), resourceManager);
+
+        const TActorId service = runtime.Register(CreateKqpComputeSchedulerService(TDuration::MilliSeconds(100)));
+        runtime.EnableScheduleForActor(service);
+
+        auto state = runtime.GrabEdgeEvent<NRm::TEvQueryMemoryState>(resourceManager);
+        UNIT_ASSERT_VALUES_EQUAL(state->Get()->Limit, 1000_MB);
+        UNIT_ASSERT_VALUES_EQUAL(state->Get()->Usage, 0);
+
+        NScheduler::TSchedulableMemory memory(scheduler->GetOrCreateMemoryPool("db", "pool"));
+        memory.IncreaseUsage(10_MB);
+
+        state = runtime.GrabEdgeEvent<NRm::TEvQueryMemoryState>(resourceManager);
+        UNIT_ASSERT_VALUES_EQUAL(state->Get()->Limit, 1000_MB);
+        UNIT_ASSERT_VALUES_EQUAL(state->Get()->Usage, 10_MB);
+
+        memory.DecreaseUsage(10_MB);
     }
 
 }

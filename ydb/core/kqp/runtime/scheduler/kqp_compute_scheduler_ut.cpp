@@ -10,6 +10,7 @@
 #include <ydb/library/testlib/helpers.h>
 
 #include <limits>
+#include <thread>
 #include <utility>
 
 namespace NKikimr::NKqp::NScheduler {
@@ -1807,17 +1808,17 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         auto tasks = CreateDemandTasks(query1, 4);
 
         scheduler.UpdateFairShare();
-        UNIT_ASSERT_VALUES_EQUAL(query1->GetSnapshot()->FairShare, 4);
+        UNIT_ASSERT_VALUES_EQUAL(query1->GetSnapshot()->CpuFairShare, 4);
 
         auto query2 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 2, {});
         auto query2Snapshot = query2->GetSnapshot();
         UNIT_ASSERT(query2Snapshot);
-        UNIT_ASSERT_VALUES_EQUAL(query2Snapshot->FairShare, 4);
+        UNIT_ASSERT_VALUES_EQUAL(query2Snapshot->CpuFairShare, 4);
         UNIT_ASSERT(!query2Snapshot->GetParent());
 
         auto query3 = scheduler.AddOrUpdateQuery(databaseId, "pool2", 3, {});
         UNIT_ASSERT(query3->GetSnapshot());
-        UNIT_ASSERT_VALUES_EQUAL(query3->GetSnapshot()->FairShare, 1);
+        UNIT_ASSERT_VALUES_EQUAL(query3->GetSnapshot()->CpuFairShare, 1);
 
         scheduler.AddOrUpdatePool(databaseId, "pool3", {});
         auto query4 = scheduler.AddOrUpdateQuery(databaseId, "pool3", 4, {});
@@ -1946,10 +1947,10 @@ namespace {
     //       └── poolB: query3
     //
     struct THierarchy {
-        explicit THierarchy(ui64 totalLimit, const NHdrf::TStaticAttributes& poolAttrs = {})
+        explicit THierarchy(ui64 totalCpuLimit, const NHdrf::TStaticAttributes& poolAttrs = {})
             : Root(std::make_shared<NHdrf::NDynamic::TRoot>(MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>())))
         {
-            Root->TotalLimit = totalLimit;
+            Root->TotalCpuLimit = totalCpuLimit;
 
             auto database = std::make_shared<NHdrf::NDynamic::TDatabase>("db");
             Root->AddDatabase(database);
@@ -2209,7 +2210,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
         /*
             Scenario:
             - 1 database with 1 pool with memory limit and 2 queries
-            - Before the first snapshot the usage isn't limited
+            - Before the first snapshot the usage is limited only by the total limit
             - After the snapshot the summary usage of queries is limited by the pool's fair-share
             - Unconditional increase may exceed the fair-share, then the availability becomes negative
             - Fair-share update doesn't reset the usage
@@ -2236,7 +2237,8 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
         TSchedulableMemory memory2(scheduler.AddOrUpdateQuery(databaseId, poolId, 2, {}));
 
         UNIT_ASSERT(memory1.TryIncreaseUsage(kMemoryLimit));
-        UNIT_ASSERT_VALUES_EQUAL(memory1.GetAvailability(), std::numeric_limits<i64>::max());
+        UNIT_ASSERT(!memory2.TryIncreaseUsage(1));
+        UNIT_ASSERT_VALUES_EQUAL(memory1.GetAvailability(), 0);
         memory1.DecreaseUsage(kMemoryLimit);
 
         scheduler.UpdateFairShare();
@@ -2247,13 +2249,12 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
         UNIT_ASSERT_VALUES_EQUAL(memory1.GetAvailability(), 0);
         UNIT_ASSERT_VALUES_EQUAL(memory2.GetAvailability(), 0);
 
-        auto* pool = memory1.Query->GetParent();
+        auto pool = scheduler.GetOrCreateMemoryPool(databaseId, poolId);
         auto* database = pool->GetParent();
-        UNIT_ASSERT_VALUES_EQUAL(memory1.Query->MemoryUsage.load(), 200);
-        UNIT_ASSERT_VALUES_EQUAL(memory2.Query->MemoryUsage.load(), 100);
         UNIT_ASSERT_VALUES_EQUAL(pool->MemoryUsage.load(), kPoolLimit);
         UNIT_ASSERT_VALUES_EQUAL(database->MemoryUsage.load(), kPoolLimit);
         UNIT_ASSERT_VALUES_EQUAL(database->GetParent()->MemoryUsage.load(), kPoolLimit);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler.GetTotalMemoryUsage(), kPoolLimit);
 
         memory2.IncreaseUsage(50);
         UNIT_ASSERT_VALUES_EQUAL(memory1.GetAvailability(), -50);
@@ -2267,7 +2268,267 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerHierarchy) {
         memory1.DecreaseUsage(200);
         memory2.DecreaseUsage(150);
         UNIT_ASSERT_VALUES_EQUAL(pool->MemoryUsage.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler.GetTotalMemoryUsage(), 0);
         UNIT_ASSERT_VALUES_EQUAL(memory1.GetAvailability(), static_cast<i64>(kPoolLimit));
+    }
+
+}
+
+Y_UNIT_TEST_SUITE(KqpComputeSchedulerMemory) {
+
+    TComputeSchedulerPtr MakeScheduler(ui64 totalMemoryLimit) {
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        auto scheduler = std::make_shared<TComputeScheduler>(counters, TOptions{.DelayParams = kDefaultDelayParams});
+        scheduler->SetTotalCpuLimit(12);
+        scheduler->SetTotalMemoryLimit(totalMemoryLimit);
+        return scheduler;
+    }
+
+    Y_UNIT_TEST(UsageNeverExceedsTotalMemoryLimit) {
+        /*
+            Scenario:
+            - 2 databases with pools without limits - the sum of their fair-shares exceeds the total limit
+            - The memory is taken on the first-come basis, but never past the total limit
+            - A refusal by the total limit doesn't leave anything accounted for the pool
+        */
+        auto scheduler = MakeScheduler(1'000);
+
+        TSchedulableMemory memory1(scheduler->GetOrCreateMemoryPool("db1", "pool1"));
+        TSchedulableMemory memory2(scheduler->GetOrCreateMemoryPool("db2", "pool2"));
+
+        scheduler->UpdateFairShare();
+
+        UNIT_ASSERT(memory1.TryIncreaseUsage(700));
+        UNIT_ASSERT(!memory2.TryIncreaseUsage(400));
+        UNIT_ASSERT(memory2.TryIncreaseUsage(300));
+        UNIT_ASSERT(!memory1.TryIncreaseUsage(1));
+        UNIT_ASSERT(!memory2.TryIncreaseUsage(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryUsage(), 1'000);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetOrCreateMemoryPool("db1", "pool1")->MemoryUsage.load(), 700);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetOrCreateMemoryPool("db2", "pool2")->MemoryUsage.load(), 300);
+        UNIT_ASSERT_VALUES_EQUAL(memory1.GetAvailability(), 0);
+
+        memory1.DecreaseUsage(700);
+        memory2.DecreaseUsage(300);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryUsage(), 0);
+    }
+
+    Y_UNIT_TEST(ConcurrentUsageNeverExceedsTotalMemoryLimit) {
+        constexpr ui64 kTotalMemoryLimit = 10'000;
+        auto scheduler = MakeScheduler(kTotalMemoryLimit);
+        scheduler->UpdateFairShare();
+
+        std::vector<std::shared_ptr<TSchedulableMemory>> memories;
+        for (const auto& [databaseId, poolId] : {std::pair{"db1", "pool1"}, {"db1", "pool2"}, {"db2", ""}, {"", ""}}) {
+            memories.push_back(std::make_shared<TSchedulableMemory>(scheduler->GetOrCreateMemoryPool(databaseId, poolId)));
+        }
+
+        std::atomic<bool> exceeded = false;
+        std::vector<std::thread> threads;
+        for (ui32 i = 0; i < 8; ++i) {
+            threads.emplace_back([&, i] {
+                auto& memory = *memories.at(i % memories.size());
+                for (ui32 j = 0; j < 10'000; ++j) {
+                    const ui64 bytes = 1 + (i * 31 + j) % 1'000;
+                    if (memory.TryIncreaseUsage(bytes, j % 2)) {
+                        if (scheduler->GetTotalMemoryUsage() > kTotalMemoryLimit) {
+                            exceeded = true;
+                        }
+                        memory.DecreaseUsage(bytes);
+                    }
+                }
+            });
+        }
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        UNIT_ASSERT(!exceeded);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryUsage(), 0);
+    }
+
+    Y_UNIT_TEST(DefaultPoolIsLimitedOnlyByTotalMemoryLimit) {
+        /*
+            Scenario:
+            - The default pool (an empty pool id) has a limit, but it's never applied
+            - The usage of the default pool is subtracted from the fair-share of the other pools on the next snapshot
+        */
+        auto scheduler = MakeScheduler(1'000);
+
+        auto defaultPool = scheduler->GetOrCreateMemoryPool("db1", "");
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NHdrf::TPoolId>(defaultPool->GetId()), NResourcePool::DEFAULT_POOL_ID);
+        UNIT_ASSERT(std::dynamic_pointer_cast<NHdrf::NDynamic::TDefaultPool>(defaultPool));
+        UNIT_ASSERT_EQUAL(defaultPool, scheduler->GetOrCreateMemoryPool("db1", NResourcePool::DEFAULT_POOL_ID));
+
+        scheduler->AddOrUpdatePool("db1", NResourcePool::DEFAULT_POOL_ID, {.MemoryLimit = 100});
+        scheduler->AddOrUpdatePool("db1", "pool1", {});
+
+        auto query = scheduler->AddOrUpdateQuery("db1", "pool1", 1, {});
+
+        TSchedulableMemory defaultMemory(defaultPool);
+        TSchedulableMemory poolMemory(query);
+
+        scheduler->UpdateFairShare();
+
+        UNIT_ASSERT(defaultMemory.TryIncreaseUsage(400));
+        UNIT_ASSERT_VALUES_EQUAL(defaultMemory.GetAvailability(), 600);
+
+        // The fair-share of the pool is not updated yet - only the total limit is left
+        UNIT_ASSERT_VALUES_EQUAL(query->GetSnapshot()->MemoryFairShare, 1'000);
+        UNIT_ASSERT_VALUES_EQUAL(poolMemory.GetAvailability(), 600);
+
+        scheduler->UpdateFairShare();
+        UNIT_ASSERT_VALUES_EQUAL(query->GetSnapshot()->MemoryFairShare, 600);
+
+        UNIT_ASSERT(poolMemory.TryIncreaseUsage(500));
+        UNIT_ASSERT(!defaultMemory.TryIncreaseUsage(200));
+        UNIT_ASSERT(defaultMemory.TryIncreaseUsage(100));
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryUsage(), 1'000);
+
+        poolMemory.DecreaseUsage(500);
+        defaultMemory.DecreaseUsage(500);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryUsage(), 0);
+    }
+
+    Y_UNIT_TEST(OptionalMemoryStopsAtElasticPart) {
+        /*
+            Scenario:
+            - The elastic part is 80% of the pool fair-share and of the total limit
+            - The optional memory is refused past it, the mandatory one is not
+            - The availability is the rest of the nearest elastic part, negative past it
+        */
+        auto scheduler = MakeScheduler(1'000);
+        scheduler->AddOrUpdatePool("db1", "pool1", {.MemoryLimit = 500});
+        auto query = scheduler->AddOrUpdateQuery("db1", "pool1", 1, {});
+        scheduler->UpdateFairShare();
+
+        TSchedulableMemory poolMemory(query, /* elasticMemoryPercent */ 80);
+        TSchedulableMemory defaultMemory(scheduler->GetOrCreateMemoryPool("db1", ""), /* elasticMemoryPercent */ 80);
+
+        UNIT_ASSERT_VALUES_EQUAL(query->GetSnapshot()->MemoryFairShare, 500);
+
+        UNIT_ASSERT_VALUES_EQUAL(poolMemory.GetAvailability(), 400);
+        UNIT_ASSERT(poolMemory.TryIncreaseUsage(300, true));
+        UNIT_ASSERT(!poolMemory.TryIncreaseUsage(200, true));
+        UNIT_ASSERT(poolMemory.TryIncreaseUsage(200, false));
+        UNIT_ASSERT_VALUES_EQUAL(poolMemory.GetAvailability(), -100);
+
+        // The default pool has no threshold of its own - only the one of the total limit
+        UNIT_ASSERT_VALUES_EQUAL(defaultMemory.GetAvailability(), 300);
+        UNIT_ASSERT(!defaultMemory.TryIncreaseUsage(400, true));
+        UNIT_ASSERT(defaultMemory.TryIncreaseUsage(300, true));
+        UNIT_ASSERT(!defaultMemory.TryIncreaseUsage(1, true));
+        UNIT_ASSERT(defaultMemory.TryIncreaseUsage(200, false));
+        UNIT_ASSERT_VALUES_EQUAL(defaultMemory.GetAvailability(), -200);
+        UNIT_ASSERT(!defaultMemory.TryIncreaseUsage(1, false));
+
+        poolMemory.DecreaseUsage(500);
+        defaultMemory.DecreaseUsage(500);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryUsage(), 0);
+    }
+
+    Y_UNIT_TEST(TotalMemoryLimitChange) {
+        /*
+            Scenario:
+            - The total limit is lowered under the live usage: nothing more is given, the availability is negative
+            - The fair-shares follow the total limit on the next snapshot
+        */
+        auto scheduler = MakeScheduler(1'000);
+        scheduler->GetOrCreateMemoryPool("db1", "pool1");
+        auto query = scheduler->AddOrUpdateQuery("db1", "pool1", 1, {});
+        scheduler->UpdateFairShare();
+
+        TSchedulableMemory memory(query);
+        UNIT_ASSERT(memory.TryIncreaseUsage(600));
+
+        scheduler->SetTotalMemoryLimit(500);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryLimit(), 500);
+        UNIT_ASSERT(!memory.TryIncreaseUsage(1));
+        UNIT_ASSERT_VALUES_EQUAL(memory.GetAvailability(), -100);
+
+        scheduler->UpdateFairShare();
+        UNIT_ASSERT_VALUES_EQUAL(query->GetSnapshot()->MemoryFairShare, 500);
+
+        memory.DecreaseUsage(200);
+        UNIT_ASSERT(memory.TryIncreaseUsage(100));
+        UNIT_ASSERT(!memory.TryIncreaseUsage(1));
+
+        memory.DecreaseUsage(500);
+    }
+
+    Y_UNIT_TEST(NewQueryGetsMemoryFairShareOfItsPool) {
+        /*
+            Scenario:
+            - A new query gets the memory fair-share of its pool from the latest snapshot - before its own one
+            - So its memory is limited by the pool right away
+        */
+        auto scheduler = MakeScheduler(1'000);
+        scheduler->AddOrUpdatePool("db1", "pool1", {.MemoryLimit = 300});
+        auto query1 = scheduler->AddOrUpdateQuery("db1", "pool1", 1, {});
+        scheduler->UpdateFairShare();
+
+        auto query2 = scheduler->AddOrUpdateQuery("db1", "pool1", 2, {});
+        UNIT_ASSERT(query2->GetSnapshot());
+        UNIT_ASSERT_VALUES_EQUAL(query2->GetSnapshot()->MemoryFairShare, 300);
+
+        TSchedulableMemory memory(query2);
+        UNIT_ASSERT(!memory.TryIncreaseUsage(301));
+        UNIT_ASSERT(memory.TryIncreaseUsage(300));
+        UNIT_ASSERT_VALUES_EQUAL(memory.GetAvailability(), 0);
+
+        memory.DecreaseUsage(300);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryUsage(), 0);
+    }
+
+    Y_UNIT_TEST(MemoryDemandIsSummedUp) {
+        /*
+            Scenario:
+            - The demand of the queries is summed up by the snapshot for the pools and the databases
+            - The root has the live total of the demand, also of the pools without the query nodes
+        */
+        auto scheduler = MakeScheduler(1'000);
+        scheduler->AddOrUpdatePool("db1", "pool1", {});
+        auto query1 = scheduler->AddOrUpdateQuery("db1", "pool1", 1, {});
+        auto query2 = scheduler->AddOrUpdateQuery("db1", "pool1", 2, {});
+
+        TSchedulableMemory memory1(query1);
+        TSchedulableMemory memory2(query2);
+        TSchedulableMemory defaultMemory(scheduler->GetOrCreateMemoryPool("db1", ""));
+
+        memory1.IncreaseDemand(100);
+        memory2.IncreaseDemand(200);
+        defaultMemory.IncreaseDemand(50);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryDemand(), 350);
+
+        scheduler->UpdateFairShare();
+        UNIT_ASSERT_VALUES_EQUAL(query1->GetSnapshot()->MemoryDemand, 100);
+        auto* poolSnapshot = query1->GetSnapshot()->GetParent();
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->MemoryDemand, 300);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->GetParent()->MemoryDemand, 300);
+
+        memory1.DecreaseDemand(100);
+        memory2.DecreaseDemand(200);
+        defaultMemory.DecreaseDemand(50);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryDemand(), 0);
+    }
+
+    Y_UNIT_TEST(MemoryPoolGetsReadQueryWithConfig) {
+        /*
+            Scenario:
+            - The pool created for the memory accounting has no read query - the reads aren't scheduled
+            - Once the pool is configured, it gets the read query
+        */
+        auto scheduler = MakeScheduler(1'000);
+
+        auto pool = scheduler->GetOrCreateMemoryPool("db1", "pool1");
+        UNIT_ASSERT(!scheduler->GetReadQuery("db1", "pool1"));
+        UNIT_ASSERT_VALUES_EQUAL(pool->ChildrenSize(), 0);
+
+        scheduler->AddOrUpdatePool("db1", "pool1", {.MemoryLimit = 100});
+        UNIT_ASSERT(scheduler->GetReadQuery("db1", "pool1"));
+        UNIT_ASSERT_EQUAL(pool, scheduler->GetOrCreateMemoryPool("db1", "pool1"));
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetMemoryLimit(), 100);
     }
 
 }

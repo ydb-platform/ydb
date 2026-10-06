@@ -96,6 +96,18 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
                 Counters->Delay->Collect(microseconds);
             }
         }
+
+    protected:
+        virtual NSnapshot::TPool* CreateSnapshot() const;
+    };
+
+    // The memory of the default pool is accounted, but not limited by the pool itself
+    class TDefaultPool : public TPool {
+    public:
+        TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs = {});
+
+    protected:
+        NSnapshot::TPool* CreateSnapshot() const override;
     };
 
     class TDatabase : public TPool {
@@ -116,13 +128,13 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         NSnapshot::TRoot* TakeSnapshot() override;
 
     public:
-        std::atomic<ui64> TotalLimit = Infinity();
-        ui64 MemoryTotalLimit = Infinity();
+        std::atomic<ui64> TotalCpuLimit = Infinity();
+        std::atomic<ui64> TotalMemoryLimit = Infinity();
 
     private:
         struct {
-            NMonitoring::TDynamicCounters::TCounterPtr TotalLimit;
-            NMonitoring::TDynamicCounters::TCounterPtr MemoryTotalLimit;
+            NMonitoring::TDynamicCounters::TCounterPtr TotalCpuLimit;
+            NMonitoring::TDynamicCounters::TCounterPtr TotalMemoryLimit;
         } Counters;
     };
 

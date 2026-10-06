@@ -2,7 +2,7 @@
 
 {{ ydb-short-name }} DSTool (`ydb-dstool`) talks to the cluster over two independent channels:
 
-- **gRPC** — Blob Storage Controller (BSC) and other service APIs: reading configuration, changing PDisk status, VDisk and group operations. This is the primary interface for data retrieval and management.
+- **[gRPC](https://grpc.io/)** — [BSController](../../concepts/glossary.md#ds-controller) (BSC) and other service APIs: reading configuration, changing [PDisk](../../concepts/glossary.md#pdisk) status, [VDisk](../../concepts/glossary.md#vdisk) and group operations. BSC commands use gRPC when the selected endpoint is `grpc` or `grpcs`, and HTTP when it is `http` or `https`.
 - **HTTP** — requests to [{{ ydb-ui-name }}](../ydb-ui/index.md) (Viewer) and node monitoring. For example, some commands must check the current state of nodes and disks through the Viewer JSON API.
 
 The endpoint and authentication method determine which channel can connect and which identity the server uses to authorize the request. This page describes how the utility selects a protocol and host, how [anonymous authentication](../../security/authentication.md#anonymous) works, and how to use [token authentication](#credentials).
@@ -30,7 +30,7 @@ Examples:
 # HTTP Viewer only (local cluster without TLS)
 ydb-dstool -e http://localhost:8765 cluster list
 
-# gRPC only. Required HTTP requests are sent to http://<host>:8765
+# gRPC only. cluster list stays on gRPC; commands that need Viewer data also use HTTP
 ydb-dstool -e grpc://localhost:2135 cluster list
 
 # Recommended for a cluster with authentication and TLS:
@@ -43,7 +43,7 @@ ydb-dstool \
   cluster list
 ```
 
-For `grpcs` and `https`, pass the cluster root certificate in `--ca-file`. The `--insecure` flag disables certificate and hostname verification for HTTPS only; it does not affect gRPC.
+For `grpcs` and `https`, pass a trusted root certificate in `--ca-file` when you need one. The option is optional when the server certificate is verified with the default trusted certificates. The `--insecure` flag disables certificate and hostname verification for HTTPS only; it does not affect gRPC.
 
 ## Protocol and host selection {#host-selection}
 
@@ -52,17 +52,12 @@ Each internal request is classified as HTTP, gRPC, or “either” (a BSC comman
 The utility picks an address in the following order:
 
 1. It takes endpoints of the required type from the `-e` list. If there are several, it picks a random host.
-2. On a connection error it retries other endpoints of the same type (up to five attempts). A host that returns an HTTP error is marked bad for the rest of the run.
-3. If there are no endpoints of the required type, the utility converts the specified addresses to endpoints of the other type:
-   - an HTTP request from `grpc`/`grpcs://HOST:PORT` becomes `{http|https}://HOST:<mon-port>`;
-   - a gRPC request from `http`/`https://HOST:PORT` becomes `{grpc|grpcs}://HOST:<grpc-port>`.
-4. The conversion protocol is:
-   - `https` if at least one `-e` value is `https` and none is `http`; otherwise `http`;
-   - `grpcs` if at least one `-e` value is `grpcs` and none is `grpc`; otherwise `grpc`.
+2. On a connection error, it tries other endpoints of the same type (up to five attempts). A host whose HTTP request fails with a connection error or an HTTP error is skipped during later normal selection for the rest of the run, but the final fallback may still retry it.
+3. If there are no endpoints of the required type, the utility derives an address of the other type. Automatic conversion does not keep TLS:
+   - an HTTP request to a `grpc` or `grpcs` host goes to `http://HOST:<mon-port>` (default `8765`). It becomes `https` only when at least one `-e` value is `https` and none is `http`. A lone `grpcs://HOST:2135` endpoint does not enable HTTPS: the utility warns that no HTTP endpoint is set and sends HTTP requests to `http://HOST:8765` without encryption. On a cluster whose monitoring requires TLS this fails;
+   - a request that requires gRPC, sent to an `http` or `https` host, always uses plaintext `grpc` on `--grpc-port`, including when the original endpoint is `https` and `--ca-file` is set. TLS for gRPC is used only for an explicit `grpcs` endpoint. BSC commands are not converted: they use the protocol of the selected endpoint. HTTP already covers the BSC API, so a list of only `http`/`https` endpoints does not switch BSC to gRPC.
 
-If you pass only `grpcs://...:2135`, the utility warns that no HTTP endpoint is set and sends HTTP requests to `http://<host>:8765`. On a cluster whose monitoring requires TLS this fails. Specify both endpoints to avoid conversion.
-
-`--use-ip` resolves the hostname to an IP address before an HTTP request.
+To use TLS on both channels, specify `grpcs://` and `https://` explicitly.
 
 {% note warning %}
 
@@ -106,7 +101,7 @@ If you do not pass `--password-file` or `--no-password`, the CLI prompts for the
 
 ### Token file format {#token-file-format}
 
-`--token-file` reads the **first line** of the file. A single word is treated as an `OAuth` token. Two words are treated as a scheme and a token.
+`--token-file` reads the **first line** of the file. A single word is treated as an `OAuth` token. Two words separated by a single space are treated as a scheme and a token: the first word is the scheme, the second is the token.
 
 For a login token, set the scheme to `Login`. Otherwise HTTP Viewer receives `Authorization: OAuth <token>` and rejects the request (`403 Forbidden`), while gRPC BSC commands with the same file may still succeed: over gRPC the utility sends only the token body, without a scheme.
 
@@ -160,7 +155,7 @@ Anonymous access to a local cluster:
 ydb-dstool -e http://localhost:8765 cluster list
 ```
 
-A TLS cluster with login and password authentication:
+A TLS cluster with login and password authentication. `pdisk list --check-leaked-slots` only reads data: BSC over the selected channel and, with this flag, Viewer over HTTP.
 
 ```bash
 {{ ydb-cli }} --ca-file /path/to/ca.crt \
@@ -175,5 +170,5 @@ ydb-dstool \
   -e https://static-node-1.example.com:8765 \
   --ca-file /path/to/ca.crt \
   --token-file ~/ydb-token \
-  pdisk set --status BROKEN --pdisk-ids '[9:1008]'
+  pdisk list --check-leaked-slots
 ```

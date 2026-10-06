@@ -7,6 +7,10 @@
 #include <functional>
 #include <vector>
 
+namespace NKikimrConfig {
+class TActorSystemConfig;
+}
+
 namespace NKikimr::NActorSystemMonitoring {
 
 struct TPoolConfig {
@@ -30,6 +34,9 @@ struct TConfig {
 };
 
 class TActorSystemMonitoring : public NActors::ISubSystem {};
+
+TConfig MakeConfig(const NKikimrConfig::TActorSystemConfig& systemConfig,
+    ui32 executorPool, bool autoConfigured);
 
 std::unique_ptr<TActorSystemMonitoring> MakeActorSystemMonitoring(TConfig config);
 

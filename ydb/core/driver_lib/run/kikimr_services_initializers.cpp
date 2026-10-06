@@ -641,35 +641,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     }));
 
     if (auto* mon = appData->Mon) {
-        NActorSystemMonitoring::TConfig monitoring;
-        monitoring.ExecutorPool = appData->BatchPoolId;
-        monitoring.AutoConfigured = useAutoConfig;
-        auto systemParameters = systemConfig;
-        systemParameters.ClearExecutor();
-        monitoring.SystemParameters = systemParameters.DebugString();
-        for (const auto& executor : systemConfig.GetExecutor()) {
-            auto& pool = monitoring.Pools.emplace_back();
-            pool.Name = executor.GetName();
-            pool.IsIo = executor.GetType() == NKikimrConfig::TActorSystemConfig::TExecutor::IO;
-            if (executor.HasThreads()) {
-                pool.Threads = ToString(executor.GetThreads());
-            }
-            if (executor.HasMinThreads()) {
-                pool.MinThreads = ToString(executor.GetMinThreads());
-            }
-            if (executor.HasMaxThreads()) {
-                pool.MaxThreads = ToString(executor.GetMaxThreads());
-            }
-            if (executor.HasPriority()) {
-                pool.Priority = ToString(executor.GetPriority());
-            }
-            if (executor.GetAllThreadsAreShared()) {
-                pool.SharedThreads = "All";
-            } else if (executor.HasHasSharedThread()) {
-                pool.SharedThreads = executor.GetHasSharedThread() ? "One" : "None";
-            }
-            pool.Parameters = executor.DebugString();
-        }
+        auto monitoring = NActorSystemMonitoring::MakeConfig(
+            systemConfig, appData->BatchPoolId, useAutoConfig);
         monitoring.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
             auto* actors = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actors, "system", "Actor system", false, &system, actor, /*useAuth=*/true);

@@ -63,8 +63,8 @@ message TTableServiceConfig {
 
         optional bool VerboseMemoryLimitException = 29 [default = false];
 
-        optional uint64 KqpLevelCacheMaxSizeBytes = 32 [default = 0];
-        optional uint64 KqpLevelCacheIncreaseBatchSizeBytes = 33 [default = 33554432];
+        optional uint64 KqpLevelCacheMaxSizeBytes = 32 [default = 104857600];
+        optional uint64 KqpLevelCacheIncreaseBatchSizeBytes = 33 [default = 10485760];
 
         // Bind the compute actor memory quota to the memory hungry operators (RFC dq_memory_quota_20), so that
         // DqHashCombine / DqHashAggregate / DqBlockHashJoin can request memory before growing, read a numeric

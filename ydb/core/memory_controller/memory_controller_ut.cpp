@@ -868,6 +868,28 @@ Y_UNIT_TEST(SetConsumptionForwardsDegradedReport) {
     UNIT_ASSERT_VALUES_EQUAL(recorder->Last.Reclaimable, 0);
 }
 
+Y_UNIT_TEST(HnswConsumerDoesNotSharePageCacheGrant) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(1_GB);
+    config.SetSharedCacheMinBytes(60_MB);
+    config.SetSharedCacheMaxBytes(60_MB);
+    config.SetHnswIndexCacheMinBytes(20_MB);
+    config.SetHnswIndexCacheMaxBytes(20_MB);
+    TControllerFixture fixture(config);
+    const auto pages = fixture.Runtime.AllocateEdgeActor();
+    const auto first = fixture.Runtime.AllocateEdgeActor();
+    const auto second = fixture.Runtime.AllocateEdgeActor();
+    auto pageConsumer = fixture.Register(pages, EMemoryConsumerKind::SharedCache);
+    auto firstConsumer = fixture.Register(first, EMemoryConsumerKind::HnswIndexCache);
+    auto secondConsumer = fixture.Register(second, EMemoryConsumerKind::HnswIndexCache);
+    firstConsumer->SetConsumption(1_MB);
+    secondConsumer->SetConsumption(1_MB);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(pages)->Get()->LimitBytes, 60_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/HnswIndexCache/Consumption"), 2_MB);
+}
+
 Y_UNIT_TEST(ConsumerKindSumsRegistrants) {
     NKikimrConfig::TMemoryControllerConfig config;
     config.SetHardLimitBytes(200_MB);

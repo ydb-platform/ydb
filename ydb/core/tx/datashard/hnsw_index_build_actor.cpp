@@ -109,6 +109,13 @@ void TDataShard::Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TAc
         }
         return;
     }
+    if (result->BelowMinRows) {
+        // A write does not cancel this cooldown. Growing partitions may retry
+        // later, while small hot partitions avoid scanning on every read.
+        DeferHnswIndexBuild(result->LocalTid, TDuration::Minutes(1));
+        HnswCacheMemoryTracker->ResetDemand();
+        return;
+    }
     if (result->Index) {
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
             TabletID() << " HNSW: lazy build completed for localTid=" << result->LocalTid

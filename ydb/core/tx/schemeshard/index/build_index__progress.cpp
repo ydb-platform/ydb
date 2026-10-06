@@ -33,6 +33,22 @@ namespace NSchemeShard {
 
 ui64 gVectorIndexSeed = 0;
 
+template <typename TRecord>
+void FillVectorBuildDataColumns(TRecord& record, const TIndexBuildInfo& buildInfo, const TTableInfo& table) {
+    *record.MutableDataColumns() = {buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()};
+    const auto& embedding = buildInfo.IndexColumns.back();
+    if (buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw || Count(buildInfo.DataColumns, embedding)) {
+        return;
+    }
+    for (ui32 tag : table.KeyColumnIds) {
+        if (table.Columns.at(tag).Name == embedding) {
+            return;
+        }
+    }
+    record.AddDataColumns(embedding);
+}
+
+
 // return count, parts, step
 static std::tuple<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId>
     ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo, ui64 maxShardsInPath) {
@@ -481,7 +497,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
     THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
     const auto indexColumns = NTableIndex::ExtractInfo(indexDesc);
     Y_ENSURE(!indexColumns.KeyColumns.empty());
-    indexDataColumns.insert(indexColumns.KeyColumns.back());
+    if (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+        indexDataColumns.insert(indexColumns.KeyColumns.back());
+    }
 
     auto addCreateTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
         InheritDetailedMetricsSettings(tableInfo, implTableDesc);
@@ -1304,9 +1322,7 @@ private:
         ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        *ev->Record.MutableDataColumns() = {
-            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
-        };
+        FillVectorBuildDataColumns(ev->Record, buildInfo, *Self->Tables.at(buildInfo.TablePathId));
 
         ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
         ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
@@ -1408,9 +1424,7 @@ private:
         ev->Record.SetLevelName(path.PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        *ev->Record.MutableDataColumns() = {
-            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
-        };
+        FillVectorBuildDataColumns(ev->Record, buildInfo, *Self->Tables.at(buildInfo.TablePathId));
 
         ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
         ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
@@ -1484,9 +1498,7 @@ private:
 
         ev->Record.SetPrefixColumns(buildInfo.IndexColumns.size() - 1);
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        *ev->Record.MutableDataColumns() = {
-            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
-        };
+        FillVectorBuildDataColumns(ev->Record, buildInfo, *Self->Tables.at(buildInfo.TablePathId));
         const auto& tableInfo = *Self->Tables.at(buildInfo.TablePathId);
         for (ui32 keyPos: tableInfo.KeyColumnIds) {
             ev->Record.AddSourcePrimaryKeyColumns(tableInfo.Columns.at(keyPos).Name);

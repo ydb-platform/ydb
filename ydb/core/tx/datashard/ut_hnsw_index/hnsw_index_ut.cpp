@@ -743,6 +743,23 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         UNIT_ASSERT(!index->NeedsRebuild(1ULL << 40));
     }
 
+    Y_UNIT_TEST(LargeJournalUsesScanFallback) {
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        TString error;
+        const auto vector = SerializeFloatVector({0, 0});
+        auto index = THnswIndex::Build(settings, {{"base", vector}}, 0, error);
+        UNIT_ASSERT_C(index, error);
+        index->SetSnapshot({100, 0}, std::make_shared<THnswIndexChanges>());
+        for (ui32 i = 0; i < 1023; ++i) {
+            index->Upsert(KeyFor(i), vector, {120, 0});
+        }
+        UNIT_ASSERT(index->Search(vector, 1, {120, 0}).Covered);
+        index->Upsert("last", vector, {120, 0});
+        UNIT_ASSERT(!index->Search(vector, 1, {120, 0}).Covered);
+        UNIT_ASSERT(!index->Search(vector, 1025, {120, 0}).Covered);
+    }
+
     Y_UNIT_TEST(MvccPruneReleasesVersionReservations) {
         THnswIndexChanges changes;
         auto reservation = std::make_shared<int>(0);

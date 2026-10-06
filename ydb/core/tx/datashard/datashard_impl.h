@@ -440,6 +440,7 @@ class TDataShard
             std::shared_ptr<void> MemoryReservation;
             std::shared_ptr<NDataShard::THnswIndex> Index;
             TString Error;
+            bool BelowMinRows = false;
         };
 
         struct TEvBuildTableStatsError : public TEventLocal<TEvBuildTableStatsError, EvTableStatsError> {
@@ -1934,7 +1935,7 @@ public:
         if (!HnswCacheMemoryTracker) {
             HnswCacheMemoryTracker = std::make_shared<THnswCacheMemoryTracker>();
             Send(NMemory::MakeMemoryControllerId(),
-                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache),
+                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::HnswIndexCache),
                 NActors::IEventHandle::FlagTrackDelivery);
         }
         return HnswCacheMemoryTracker->GetLimit();

@@ -298,6 +298,17 @@ constexpr TConsumerTraits ConsumerTraits[] = {
         .StatsSummed = true,
         .StatsWithLimit = false,
     },
+    {
+        .Kind = EMemoryConsumerKind::HnswIndexCache,
+        .ElasticLimit = true,
+        .CanZeroLimit = true,
+        .GetMinBytes = &GetHnswIndexCacheMinBytes,
+        .GetMaxBytes = &GetHnswIndexCacheMaxBytes,
+        .LimitDelivery = ELimitDelivery::LimitShares,
+        .WriteStats = [](NKikimrMemory::TMemoryStats&, const TConsumerState&, bool, bool, ui64) {},
+        .StatsSummed = false,
+        .StatsWithLimit = true,
+    },
 };
 
 constexpr bool ConsumerTraitsFollowEnumOrder() {

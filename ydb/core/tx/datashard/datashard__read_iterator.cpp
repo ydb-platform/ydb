@@ -35,18 +35,14 @@ using namespace NTabletFlatExecutor;
 namespace {
 
 bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state) {
-    if (!AppData()->FeatureFlags.GetEnableHNSWIndex()) {
+    if (!AppData()->FeatureFlags.GetEnableHNSWIndex() || shard.IsFollower()) {
         return false;
     }
     // ANN candidate reads cannot observe conflicts on rows they did not visit.
     if (!shard.IsUserTable(state.PathId) || state.LockId || shard.GetVolatileTxManager().GetTxInFlight()) {
         return false;
     }
-    if (!shard.IsFollower()) {
-        return !state.ReadVersion.IsMax();
-    }
-    const auto [edge, repeatable] = shard.GetSnapshotManager().GetFollowerReadEdge();
-    return repeatable && state.ReadVersion <= edge;
+    return !state.ReadVersion.IsMax();
 }
 
 } // namespace
@@ -367,112 +363,6 @@ struct TShortTableInfo {
 
 std::vector<TRawTypeValue> ToRawTypeValue(
     TArrayRef<const TCell> keyCells, const TShortTableInfo& tableInfo, bool addNulls);
-
-// Scans the full local table partition for (primary key, vector column) pairs.
-// Keep reservation and page-fault handling in sync with
-// ScanPostingTableVectors() in hnsw_index_build_unit.cpp.
-// Returns an empty vector (and sets hasPageFault) if the scan needs to
-// page-fault and retry; the caller then leaves the current transaction without
-// marking the build as done.
-std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
-    TTransactionContext& txc,
-    const TShortTableInfo& tableInfo,
-    ui32 vectorColumn,
-    const Ydb::Table::VectorIndexSettings& settings,
-    TDataShard& dataShard,
-    std::shared_ptr<void>& memoryReservation,
-    ui64& reservedBytes,
-    bool& hasPageFault,
-    const TRowVersion& readVersion)
-{
-    hasPageFault = false;
-    reservedBytes = 0;
-    std::vector<NTable::TTag> columns{vectorColumn};
-    for (ui32 keyColumn : tableInfo.KeyColumnIds) {
-        if (keyColumn != vectorColumn) {
-            columns.push_back(keyColumn);
-        }
-    }
-
-    // Split destinations may borrow whole parts from the source tablet.
-    // Only index keys belonging to this shard, even before borrowed compaction.
-    std::vector<TRawTypeValue> minKey;
-    std::vector<TRawTypeValue> maxKey;
-    NTable::TKeyRange range;
-    if (tableInfo.ShardRange) {
-        const auto bounds = tableInfo.ShardRange->ToTableRange();
-        if (bounds.From) {
-            minKey = ToRawTypeValue(bounds.From, tableInfo, bounds.InclusiveFrom);
-        }
-        if (bounds.To) {
-            maxKey = ToRawTypeValue(bounds.To, tableInfo, !bounds.InclusiveTo);
-        }
-        range.MinKey = minKey;
-        range.MaxKey = maxKey;
-        range.MinInclusive = bounds.InclusiveFrom;
-        range.MaxInclusive = bounds.InclusiveTo;
-    }
-    auto precharge = txc.DB.Precharge(tableInfo.LocalTid, minKey, maxKey, columns, 0, 0, 0,
-        NTable::EDirection::Forward, readVersion);
-    if (!precharge.Ready) {
-        hasPageFault = true;
-        return {};
-    }
-
-    const ui64 estimatedBytes = THnswIndex::EstimateMemoryBytes(
-        precharge.ItemsPrecharged, settings.vector_dimension(),
-        settings.has_m() ? settings.m() : 16);
-    memoryReservation = dataShard.TryReserveHnswCacheMemory(estimatedBytes);
-    if (!memoryReservation) {
-        return {};
-    }
-    reservedBytes = estimatedBytes;
-
-    std::vector<std::pair<TString, TString>> result;
-    result.reserve(precharge.ItemsPrecharged);
-    auto iter = txc.DB.IterateRange(tableInfo.LocalTid, range, columns, readVersion, nullptr, nullptr);
-    while (true) {
-        const auto ready = iter->Next(NTable::ENext::All);
-        if (ready == NTable::EReady::Page) {
-            hasPageFault = true;
-            return {};
-        }
-        if (ready == NTable::EReady::Gone) {
-            break;
-        }
-        const auto key = iter->GetKey();
-        const auto values = iter->GetValues();
-        if (!key.Cells().empty() && !values.Cells().empty() && !values.Cells()[0].IsNull()) {
-            result.emplace_back(TSerializedCellVec::Serialize(key.Cells()), TString(values.Cells()[0].AsBuf()));
-        }
-    }
-
-    size_t keyBytes = 0;
-    for (const auto& [key, _] : result) {
-        keyBytes += key.size();
-    }
-    // Precharge does not count rows held in memtables. Include the actual
-    // scanned rows as well as their keys before handing the build its budget.
-    const ui64 requiredBytes = THnswIndex::EstimateMemoryBytes(
-        result.size(), settings.vector_dimension(),
-        settings.has_m() ? settings.m() : 16, keyBytes);
-    if (requiredBytes > reservedBytes) {
-        auto additionalReservation = dataShard.TryReserveHnswCacheMemory(requiredBytes - reservedBytes);
-        if (!additionalReservation) {
-            result.clear();
-            memoryReservation.reset();
-            return {};
-        }
-        struct TCombinedReservation {
-            std::shared_ptr<void> Initial;
-            std::shared_ptr<void> Additional;
-        };
-        memoryReservation = std::make_shared<TCombinedReservation>(
-            TCombinedReservation{std::move(memoryReservation), std::move(additionalReservation)});
-        reservedBytes = requiredBytes;
-    }
-    return result;
-}
 
 std::unique_ptr<IBlockBuilder> CreateBlockBuilder(
     const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
@@ -1493,99 +1383,88 @@ private:
     // to Limit sequential restart round-trips.
     // HNSW indexes posting-table rows, while overlap queries need unique base
     // table keys. Those keys are part of the posting-table primary key, so we
-    // can deduplicate candidates before touching the table and progressively
-    // over-fetch until Limit unique neighbors have been found.
+    // can deduplicate one bounded candidate set before touching the table.
     THnswSearchResult SearchHnswDistinct(const TTableRange& range) const {
         const auto& topK = *State.VectorTopK;
         // Search resolves vector versions and tombstones before selecting K.
         // Range filtering and posting-key deduplication may need more candidates.
-        const size_t availableCandidates = topK.HnswIndex->Size() + topK.HnswIndex->ChangeCount();
-        // Cluster prefixes can use the shared graph by progressively asking
-        // for more neighbors. Bound work for selective or empty ranges and
-        // retain the table-scan fallback when the graph cannot fill top-K.
+        const size_t changes = topK.HnswIndex->ChangeCount();
+        const size_t availableCandidates = topK.HnswIndex->Size() + changes;
+        // Filter and deduplicate one bounded candidate set. Use the yielding
+        // table scan when it cannot fill top-K, without repeating delta merges.
         constexpr size_t MaxFilteredHnswCandidates = 1024;
-        const size_t maxCandidates = TableInfo.CoversFullShard(range)
-            ? availableCandidates
-            : Min(availableCandidates, Max<size_t>(topK.Limit, MaxFilteredHnswCandidates));
-        size_t requested = Min(maxCandidates, static_cast<size_t>(topK.Limit));
-        if (!topK.DistinctColumns.empty()) {
-            requested = Min(maxCandidates, Max<size_t>(requested * 2, 32));
+        const size_t maxCandidates = Min(availableCandidates,
+            MaxFilteredHnswCandidates - Min(changes, MaxFilteredHnswCandidates));
+        const size_t requested = !topK.DistinctColumns.empty() || !TableInfo.CoversFullShard(range)
+            ? maxCandidates : Min(maxCandidates, static_cast<size_t>(topK.Limit));
+
+        auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion, topK.HnswEfSearch);
+        if (!candidates.Covered) {
+            return candidates;
         }
 
-        while (true) {
-            auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion, topK.HnswEfSearch);
-            if (!candidates.Covered) {
-                return candidates;
+        THnswSearchResult inRange;
+        for (auto& candidate : candidates.Results) {
+            TSerializedCellVec key(candidate.first);
+            // ReadRange uses legacy borders: a shortened key ends in
+            // +infinity, including an exclusive lower cluster prefix.
+            // ComparePointAndRange treats the missing lower suffix as
+            // NULL and would admit rows from the preceding cluster.
+            const bool afterFrom = range.From.empty()
+                || CompareBorders<false, false>(key.GetCells(), range.From,
+                    true, range.InclusiveFrom, TableInfo.KeyColumnTypes) >= 0;
+            const bool beforeTo = range.To.empty()
+                || CompareBorders<true, true>(key.GetCells(), range.To,
+                    true, range.InclusiveTo, TableInfo.KeyColumnTypes) <= 0;
+            if (afterFrom && beforeTo) {
+                inRange.Results.push_back(std::move(candidate));
             }
-
-            THnswSearchResult inRange;
-            for (auto& candidate : candidates.Results) {
-                TSerializedCellVec key(candidate.first);
-                // ReadRange uses legacy borders: a shortened key ends in
-                // +infinity, including an exclusive lower cluster prefix.
-                // ComparePointAndRange treats the missing lower suffix as
-                // NULL and would admit rows from the preceding cluster.
-                const bool afterFrom = range.From.empty()
-                    || CompareBorders<false, false>(key.GetCells(), range.From,
-                        true, range.InclusiveFrom, TableInfo.KeyColumnTypes) >= 0;
-                const bool beforeTo = range.To.empty()
-                    || CompareBorders<true, true>(key.GetCells(), range.To,
-                        true, range.InclusiveTo, TableInfo.KeyColumnTypes) <= 0;
-                if (afterFrom && beforeTo) {
-                    inRange.Results.push_back(std::move(candidate));
-                }
-            }
-
-            if (topK.DistinctColumns.empty()) {
-                if (inRange.Results.size() >= topK.Limit) {
-                    inRange.Results.resize(topK.Limit);
-                    return inRange;
-                }
-                if (requested == maxCandidates) {
-                    return inRange;
-                }
-                requested = Min(maxCandidates, requested * 2);
-                continue;
-            }
-
-            TVector<size_t> distinctKeyPositions;
-            bool keysOnly = true;
-            for (ui32 columnIndex : topK.DistinctColumns) {
-                const auto tag = State.Columns[columnIndex];
-                auto it = Find(TableInfo.KeyColumnIds.begin(), TableInfo.KeyColumnIds.end(), tag);
-                if (it == TableInfo.KeyColumnIds.end()) {
-                    keysOnly = false;
-                    break;
-                }
-                distinctKeyPositions.push_back(it - TableInfo.KeyColumnIds.begin());
-            }
-            if (!keysOnly) {
-                // Non-key DISTINCT values are unavailable in the graph. Keep
-                // the exact table path; returning unfiltered graph rows here
-                // would also violate the bounds of a restricted range.
-                return THnswSearchResult{.Covered = false};
-            }
-
-            THnswSearchResult unique;
-            THashSet<TString> seen;
-            for (auto& candidate : inRange.Results) {
-                TSerializedCellVec key(candidate.first);
-                TVector<TCell> cells;
-                for (size_t position : distinctKeyPositions) {
-                    cells.push_back(key.GetCells().at(position));
-                }
-                if (seen.insert(TSerializedCellVec::Serialize(cells)).second) {
-                    unique.Results.push_back(std::move(candidate));
-                    if (unique.Results.size() == topK.Limit) {
-                        return unique;
-                    }
-                }
-            }
-            if (requested == maxCandidates) {
-                return unique;
-            }
-            requested = Min(maxCandidates, requested * 2);
         }
+
+        if (topK.DistinctColumns.empty()) {
+            if (inRange.Results.size() >= topK.Limit) {
+                inRange.Results.resize(topK.Limit);
+                return inRange;
+            }
+            inRange.Covered = requested == availableCandidates;
+            return inRange;
+        }
+
+        TVector<size_t> distinctKeyPositions;
+        bool keysOnly = true;
+        for (ui32 columnIndex : topK.DistinctColumns) {
+            const auto tag = State.Columns[columnIndex];
+            auto it = Find(TableInfo.KeyColumnIds.begin(), TableInfo.KeyColumnIds.end(), tag);
+            if (it == TableInfo.KeyColumnIds.end()) {
+                keysOnly = false;
+                break;
+            }
+            distinctKeyPositions.push_back(it - TableInfo.KeyColumnIds.begin());
+        }
+        if (!keysOnly) {
+            // Non-key DISTINCT values are unavailable in the graph. Keep
+            // the exact table path; returning unfiltered graph rows here
+            // would also violate the bounds of a restricted range.
+            return THnswSearchResult{.Covered = false};
+        }
+
+        THnswSearchResult unique;
+        THashSet<TString> seen;
+        for (auto& candidate : inRange.Results) {
+            TSerializedCellVec key(candidate.first);
+            TVector<TCell> cells;
+            for (size_t position : distinctKeyPositions) {
+                cells.push_back(key.GetCells().at(position));
+            }
+            if (seen.insert(TSerializedCellVec::Serialize(cells)).second) {
+                unique.Results.push_back(std::move(candidate));
+                if (unique.Results.size() == topK.Limit) {
+                    return unique;
+                }
+            }
+        }
+        unique.Covered = requested == availableCandidates;
+        return unique;
     }
 
     bool TryReadHnswCoveredRange(const TTableRange& range, TTransactionContext& txc) {
@@ -3142,7 +3021,13 @@ public:
                     && TableInfo.HnswSettings->vector_dimension() == hnswSettings.vector_dimension()) {
                 hnswSettings = *TableInfo.HnswSettings;
             }
-            const bool canUseHnsw = CanUseHnsw(*Self, state);
+            const bool canUseHnsw = CanUseHnsw(*Self, state)
+                && TableInfo.HnswSettings
+                && TableInfo.HnswVectorColumnTag == vectorColumnTag
+                && AreHnswIndexSettingsCompatible(*TableInfo.HnswSettings, hnswSettings);
+            if (canUseHnsw) {
+                hnswSettings = *TableInfo.HnswSettings;
+            }
             if (!canUseHnsw && AppData()->FeatureFlags.GetEnableHNSWIndex()) {
                 Self->RegisterHnswFallback(localTid, TDataShard::EHnswFallback::UnsupportedRead);
             }
@@ -3177,38 +3062,7 @@ public:
                     && Self->TryStartHnswIndexBuild(localTid, vectorColumnTag,
                         hnswSettings, buildVersion)) {
                 Self->TrackHnswOpenTransactions(localTid, txc.DB);
-                if (!Self->IsFollower()) {
-                    Self->StartHnswSnapshotScan(localTid, Self->GetUserTables().at(state.PathId.LocalPathId), buildVersion, txc);
-                } else {
-                    // Followers reconstruct directly at their repeatable read version.
-                    bool pageFault = false;
-                    ui64 reservedBytes = 0;
-                    std::shared_ptr<void> memoryReservation;
-                    auto vectors = ScanVectorColumnForHnsw(
-                        txc, TableInfo, vectorColumnTag, hnswSettings,
-                        *Self, memoryReservation, reservedBytes, pageFault,
-                        buildVersion);
-                    if (pageFault) {
-                        Self->DeferHnswIndexBuild(localTid, TDuration::MilliSeconds(500));
-                    } else if (!memoryReservation) {
-                        // Splits and replica builds can temporarily retain other
-                        // graphs. Retry after their reservations are released.
-                        Self->DeferHnswIndexBuild(localTid, TDuration::Seconds(5));
-                    } else if (vectors.empty()
-                            || vectors.size() < GetHnswMinRows(hnswSettings)) {
-                        Self->DisableHnswIndexBuild(localTid);
-                    } else {
-                        const ui64 rowCount = vectors.size();
-                        auto* actor = CreateHnswIndexBuildActor(ctx.SelfID, localTid,
-                            vectorColumnTag, rowCount,
-                            hnswSettings, std::move(vectors),
-                            std::move(memoryReservation), reservedBytes, buildVersion,
-                            Self->GetHnswBuildToken(localTid));
-                        const TActorId actorId = ctx.Register(
-                            actor, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
-                        Self->Actors.insert(actorId);
-                    }
-                }
+                Self->StartHnswSnapshotScan(localTid, Self->GetUserTables().at(state.PathId.LocalPathId), buildVersion, txc);
             }
             state.VectorTopK = std::move(topState);
         }

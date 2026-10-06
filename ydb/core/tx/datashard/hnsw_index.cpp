@@ -94,6 +94,10 @@ struct TFloatVectorView {
 
 } // namespace
 
+ui32 GetHnswM(const VectorIndexSettings& settings) {
+    return settings.has_m() ? settings.m() : DefaultHnswM;
+}
+
 ui64 GetHnswMinRows(const VectorIndexSettings& settings) {
     return settings.has_min_rows() ? settings.min_rows() : DefaultHnswMinRows;
 }
@@ -255,6 +259,14 @@ public:
             return result;
         }
         if (k == 0) {
+            return result;
+        }
+
+        // Large journals are cheaper and fairer to read through the yielding
+        // table iterator than to merge synchronously in the tablet transaction.
+        constexpr size_t MaxSearchWork = 1024;
+        if (k > MaxSearchWork || Changes->Rows.size() > MaxSearchWork - k) {
+            result.Covered = false;
             return result;
         }
 

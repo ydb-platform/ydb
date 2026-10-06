@@ -747,6 +747,12 @@ namespace {
             return false;
         }
 
+        if ((settings.has_min_rows() && settings.min_rows() == 0)
+                || (settings.has_delta_rows() && settings.delta_rows() == 0)) {
+            error = "min_rows and delta_rows must be positive";
+            return false;
+        }
+
         if (settings.has_m()
             && !ValidateSettingInRange("M", settings.m(), 1, MaxHnswM, error)) {
             return false;
@@ -1171,7 +1177,7 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
         settings.set_adaptive_clusters(ParseBool(nameLower, value, error));
     } else if (nameLower == "min_rows") {
         settings.mutable_settings()->set_min_rows(
-            ParseUInt64(nameLower, value, 0, Max<ui64>(), error));
+            ParseUInt64(nameLower, value, 1, Max<ui64>(), error));
     } else if (nameLower == "m") {
         settings.mutable_settings()->set_m(
             ParseUInt32(nameLower, value, 1, MaxHnswM, error));
@@ -1180,7 +1186,7 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
             ParseUInt32(nameLower, value, 1, MaxHnswEfConstruction, error));
     } else if (nameLower == "delta_rows") {
         settings.mutable_settings()->set_delta_rows(
-            ParseUInt64(nameLower, value, 0, Max<ui64>(), error));
+            ParseUInt64(nameLower, value, 1, Max<ui64>(), error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;

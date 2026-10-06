@@ -419,6 +419,30 @@ struct TTestHelper {
         table1.Columns = columns;
     }
 
+    void ConfigureHnswTable(const TString& name,
+            Ydb::Table::VectorIndexSettings::Metric metric = Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+            ui64 deltaRows = 10000, ui64 minRows = 1) {
+        auto& runtime = *Server->GetRuntime();
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(ResolveTablet(runtime, Tables.at(name).TabletId)));
+        UNIT_ASSERT(shard);
+        const auto& table = shard->GetUserTables().at(Tables.at(name).TableId.PathId.LocalPathId);
+        NKikimrSchemeOp::TTableDescription schema;
+        table->GetSchema(schema);
+        schema.SetVectorIndexHnsw(true);
+        for (const auto& [tag, column] : table->Columns) {
+            if (column.Name == "emb") {
+                schema.SetVectorIndexEmbeddingColumnId(tag);
+            }
+        }
+        auto* settings = schema.MutableVectorIndexKmeansTreeDescription()->MutableSettings()->mutable_settings();
+        settings->set_metric(metric);
+        settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings->set_vector_dimension(2);
+        settings->set_min_rows(minRows);
+        settings->set_delta_rows(deltaRows);
+        shard->SetUserTable(Tables.at(name).TableId.PathId, new TUserTable(*table, schema));
+    }
+
     void UpsertMany(ui32 startRow, ui32 rowCount) {
         auto &runtime = *Server->GetRuntime();
         const auto& table = Tables["table-1-many"];
@@ -6209,17 +6233,76 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
 Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
 
 
+    Y_UNIT_TEST_TWIN(HnswLazyBuildRequiresPostingTableAndKeepsCooldown, PostingTable) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetEnableHNSWIndex(true).SetUseRealThreads(false).SetNeedStatsCollectors(true);
+        settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
+        TTestHelper helper(settings);
+        helper.CreateCustomTable("small", {{"key", "Uint32", true, false}, {"emb", "String", false, false}});
+        if (PostingTable) {
+            helper.ConfigureHnswTable("small", Ydb::Table::VectorIndexSettings::DISTANCE_COSINE, 10000, 10000);
+        }
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/small` (key, emb) VALUES
+                (1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
+                (2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
+        )");
+        auto& runtime = *helper.Server->GetRuntime();
+        ui32 scans = 0;
+        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            scans += ev->GetTypeRewrite() == buildResult;
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        ui64 readId = 0;
+        auto read = [&] {
+            auto request = helper.GetBaseReadRequest("small", ++readId);
+            AddRangeQuery<ui32>(*request, {}, true, {}, true);
+            auto* top = request->Record.MutableVectorTopK();
+            top->SetColumn(1);
+            top->SetLimit(1);
+            top->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            auto* vector = top->MutableSettings();
+            vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            vector->set_vector_dimension(2);
+            vector->set_min_rows(1); // The request cannot override the table threshold.
+            const auto result = helper.SendRead("small", request.release());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2);
+        };
+        for (ui32 i = 0; i < 10; ++i) {
+            read();
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(scans, PostingTable ? 1 : 0);
+        for (ui32 i = 0; i < 10; ++i) {
+            ExecSQL(helper.Server, helper.Sender, R"(
+                UPSERT INTO `/Root/small` (key, emb) VALUES
+                    (1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+            )");
+            read();
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(scans, PostingTable ? 1 : 0);
+    }
+
     Y_UNIT_TEST_QUAD(HnswFeatureFlagCache, Followers, DisableDuringBuild) {
         TPortManager pm;
         TServerSettings settings(pm.GetPort(2134));
         settings.SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
         settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TTestHelper helper(settings, 1, Followers);
         helper.CreateCustomTable("hnsw-flag", {
             {"parent", "Uint32", true, false}, {"key", "Uint32", true, false},
             {"emb", "String", false, false}});
+        helper.ConfigureHnswTable("hnsw-flag");
         ExecSQL(helper.Server, helper.Sender, R"(
             UPSERT INTO `/Root/hnsw-flag` (parent, key, emb) VALUES
                 (1, 1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
@@ -6257,6 +6340,14 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         for (ui32 i = 0; i < 3; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(read(), 2u);
             runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        if (Followers) {
+            setEnabled(true);
+            for (ui32 i = 0; i < 3; ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(read(), 2u);
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            return;
         }
         if (DisableDuringBuild) {
             TVector<TAutoPtr<IEventHandle>> pending;
@@ -6300,13 +6391,13 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(HnswFollowerBuildSurvivesReadEdgeAdvance, ChangeVectors) {
+    Y_UNIT_TEST_TWIN(HnswFollowerFallsBackAcrossReadEdgeAdvance, ChangeVectors) {
         TPortManager pm;
         TServerSettings settings(pm.GetPort(2134));
         settings.SetEnableHNSWIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
         settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TTestHelper helper(settings, 1, true);
         helper.CreateCustomTable("hnsw-follower-edge", {
             {"parent", "Uint32", true, false}, {"key", "Uint32", true, false},
@@ -6338,26 +6429,14 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             }
             return helper.SendRead("hnsw-follower-edge", request.release());
         };
-        TVector<TAutoPtr<IEventHandle>> pending;
-        TDataShard* follower = nullptr;
+        ui32 builds = 0;
         constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == buildResult) {
-                follower = dynamic_cast<TDataShard*>(runtime.FindActor(ev->Recipient));
-                pending.push_back(ev.Release());
-                return TTestActorRuntime::EEventAction::DROP;
-            }
+            builds += ev->GetTypeRewrite() == buildResult;
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         Y_DEFER { runtime.SetObserverFunc(observer); };
-        for (ui32 attempt = 0; attempt < 20 && pending.empty(); ++attempt) {
-            read(false);
-            runtime.SimulateSleep(TDuration::MilliSeconds(200));
-        }
-        UNIT_ASSERT(!pending.empty());
-        UNIT_ASSERT(follower && follower->IsFollower());
-        const auto tid = follower->GetUserTables().begin()->second->LocalTid;
-        const auto oldEdge = follower->GetSnapshotManager().GetFollowerReadEdge().first;
+        read(false);
         if (ChangeVectors) {
             ExecSQL(helper.Server, helper.Sender, R"(
                 UPSERT INTO `/Root/hnsw-follower-edge` (parent, key, emb) VALUES
@@ -6366,27 +6445,12 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             )");
         }
         read(true);
-        const auto newEdge = follower->GetSnapshotManager().GetFollowerReadEdge().first;
-        UNIT_ASSERT_GT(newEdge, oldEdge);
-        UNIT_ASSERT_VALUES_EQUAL_C(follower->IsHnswIndexBuildObsolete(tid), ChangeVectors,
-            "In-flight graph invalidation must depend on data changes, not read-edge advancement");
-        runtime.SetObserverFunc(observer);
-        for (auto& ev : pending) {
-            runtime.Send(ev.Release());
-        }
-        runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        runtime.SimulateSleep(TDuration::Seconds(2));
         auto result = read(false);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].template AsValue<ui32>(), ChangeVectors ? 2 : 1);
-        if (ChangeVectors) {
-            for (ui32 attempt = 0; attempt < 20 && result->Record.GetStats().GetRows() != 1; ++attempt) {
-                runtime.SimulateSleep(TDuration::MilliSeconds(200));
-                result = read(false);
-                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-                UNIT_ASSERT_VALUES_EQUAL(result->GetCells(0)[1].template AsValue<ui32>(), 2);
-            }
-        }
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(builds, 0);
     }
 
     Y_UNIT_TEST_QUAD(HnswPrefixRangeUsesLegacyBorders, Followers, Distinct) {
@@ -6394,13 +6458,14 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetEnableHNSWIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
         serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TTestHelper helper(serverSettings, 1, Followers);
         helper.CreateCustomTable("table-vector-prefix", {
             {"parent", "Uint64", true, false},
             {"key", "Uint64", true, false},
             {"emb", "String", false, false}});
+        helper.ConfigureHnswTable("table-vector-prefix", Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
         ExecSQL(helper.Server, helper.Sender, R"(
             UPSERT INTO `/Root/table-vector-prefix` (parent, key, emb) VALUES
                 (9223372036854775809ul, 1ul, "\x00\x00\xC8\x42\x00\x00\x00\x00\x01"),
@@ -6444,8 +6509,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(cold->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(cold->GetRowsCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(cold->GetCells(0)[0].template AsValue<ui64>(), selected);
-        bool accelerated = false;
-        for (ui32 attempt = 0; attempt < 20; ++attempt) {
+        bool accelerated = Followers;
+        for (ui32 attempt = 0; attempt < 20 && !Followers; ++attempt) {
             auto result = read(false);
             UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             if (result->Record.GetStats().GetRows() == 1) {
@@ -6466,21 +6531,22 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             NScheme::TTypeInfo(NScheme::NTypeIds::Uint64),
             NScheme::TTypeInfo(NScheme::NTypeIds::String)
         });
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), Followers ? 2 : 1);
     }
 
-    Y_UNIT_TEST(HnswSharesPageCacheBudgetAndEvictsOnLimit) {
+    Y_UNIT_TEST(HnswUsesSeparateBudgetAndEvictsOnLimit) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetEnableHNSWIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
         serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TTestHelper helper(serverSettings);
         helper.CreateCustomTable("table-vector-memory", {
             {"parent", "Uint32", true, false},
             {"key", "Uint32", true, false},
             {"emb", "String", false, false}});
+        helper.ConfigureHnswTable("table-vector-memory", Ydb::Table::VectorIndexSettings::DISTANCE_COSINE, Max<ui64>());
         ExecSQL(helper.Server, helper.Sender, R"(
             UPSERT INTO `/Root/table-vector-memory` (parent, key, emb) VALUES
                 (1, 1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
@@ -6496,7 +6562,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         std::optional<ui64> limitOverride;
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegister::EventType && ev->Sender == shardActor) {
-                UNIT_ASSERT(ev->Get<NMemory::TEvConsumerRegister>()->Kind == NMemory::EMemoryConsumerKind::SharedCache);
+                UNIT_ASSERT(ev->Get<NMemory::TEvConsumerRegister>()->Kind == NMemory::EMemoryConsumerKind::HnswIndexCache);
                 ++registrations;
             } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegistered::EventType && ev->Recipient == shardActor) {
                 consumer = dynamic_cast<NMemory::TRegistrantConsumer*>(ev->Get<NMemory::TEvConsumerRegistered>()->Consumer.Get());
@@ -6540,7 +6606,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT(consumer);
         UNIT_ASSERT_GT(consumer->GetReport().Used, 0);
         UNIT_ASSERT_GT(shard->GetHnswCacheMemoryLimit(), 0);
-        UNIT_ASSERT_LT(shard->GetHnswCacheMemoryLimit(), 64_MB);
+        UNIT_ASSERT_LE(shard->GetHnswCacheMemoryLimit(), 64_MB);
         UNIT_ASSERT_VALUES_EQUAL(read()->Record.GetStats().GetRows(), 1);
 
         // Simulate an active reader pinning a graph and its write deltas.
@@ -6570,8 +6636,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         serverSettings.SetEnableHNSWIndex(true).SetDomainName("Root").SetUseRealThreads(false);
         serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
         serverSettings.SetNeedStatsCollectors(true);
-        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TTestHelper helper(serverSettings);
 
         TVector<TShardedTableOptions::TColumn> columns = {
@@ -6579,6 +6645,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             {"key", "Uint32", true, false},
             {"emb", "String", false, false}};
         helper.CreateCustomTable("table-vector-race", columns);
+        helper.ConfigureHnswTable("table-vector-race");
         ExecSQL(helper.Server, helper.Sender, R"(
             UPSERT INTO `/Root/table-vector-race` (parent, key, emb) VALUES
                 (1, 1, "\x66\x66\x66\x3F\xCD\xCC\xCC\x3D\x01"),
@@ -6663,14 +6730,15 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         TServerSettings settings(pm.GetPort(2134));
         settings.SetEnableHNSWIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
         settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         settings.AppConfig->MutableDataShardConfig()->SetKeepSnapshotTimeout(1000);
         settings.AppConfig->MutableDataShardConfig()->SetCleanupSnapshotPeriod(100);
         TTestHelper helper(settings);
         helper.CreateCustomTable("hnsw-mvcc", {
             {"parent", "Uint32", true, false}, {"key", "Uint32", true, false},
             {"emb", "String", false, false}});
+        helper.ConfigureHnswTable("hnsw-mvcc", Ydb::Table::VectorIndexSettings::DISTANCE_COSINE, Rebuild ? 1 : 1000);
         ExecSQL(helper.Server, helper.Sender, R"(
             UPSERT INTO `/Root/hnsw-mvcc` (parent, key, emb) VALUES
                 (1, 1, "\x66\x66\x66\x3F\xCD\xCC\xCC\x3D\x01"),
@@ -6797,11 +6865,12 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         TServerSettings settings(pm.GetPort(2134));
         settings.SetEnableHNSWIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
         settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TTestHelper helper(settings);
         helper.CreateCustomTable("hnsw-cold", {
             {"key", "Uint32", true, false}, {"emb", "String", false, false}});
+        helper.ConfigureHnswTable("hnsw-cold");
         ExecSQL(helper.Server, helper.Sender, R"(
             UPSERT INTO `/Root/hnsw-cold` (key, emb) VALUES
                 (1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),

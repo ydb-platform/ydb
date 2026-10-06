@@ -167,9 +167,10 @@ public:
         for (auto & col: request.GetSourcePrimaryKeyColumns()) {
             data.push_back(col);
         }
-        ScanTags = MakeScanTags(table, embedding, {data.begin(), data.end()}, EmbeddingPos, DataPos);
+        ScanTags = MakeScanTags(table, embedding, {data.begin(), data.end()},
+            UploadState == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD || UploadState == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD, EmbeddingPos, DataPos);
         // tags: __ydb_foreign [embedding] data... sourcePK...
-        // DataPos always includes the embedding column
+        // Build output and explicitly covering posting output include the embedding.
         DataColumnCount = ScanTags.size() - request.GetSourcePrimaryKeyColumns().size() - DataPos;
         Lead.To(ScanTags, {}, NTable::ESeek::Lower);
         if (request.HasKeyRange()) {

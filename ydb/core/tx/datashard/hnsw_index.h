@@ -18,6 +18,7 @@ namespace NKikimr::NDataShard {
 
 // Proto3 optional fields have no schema-level defaults. Keep the documented
 // server-side default in one place so omitted SQL settings do not behave as 0.
+ui32 GetHnswM(const Ydb::Table::VectorIndexSettings& settings);
 ui64 GetHnswMinRows(const Ydb::Table::VectorIndexSettings& settings);
 ui64 GetHnswDeltaRows(const Ydb::Table::VectorIndexSettings& settings);
 

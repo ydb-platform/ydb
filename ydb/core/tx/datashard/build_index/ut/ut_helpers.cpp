@@ -8,15 +8,14 @@ using namespace NTableIndex::NKMeans;
 
 void AssertPostingTableEqual(TString actual, const TString& expected) {
     if (!expected.Contains("embedding = ")) {
-        constexpr TStringBuf embeddingPrefix = "embedding = ";
-        constexpr TStringBuf dataPrefix = ", data = ";
+        // Some scan fixtures retain the legacy nullable column. An omitted
+        // posting embedding must remain NULL; never hide a stored vector.
+        constexpr TStringBuf nullEmbedding = "embedding = (empty maybe), ";
         size_t pos = 0;
-        while ((pos = actual.find(embeddingPrefix, pos)) != TString::npos) {
-            const size_t dataPos = actual.find(dataPrefix, pos + embeddingPrefix.size());
-            UNIT_ASSERT_C(dataPos != TString::npos, "Malformed posting row: " << actual);
-            UNIT_ASSERT_C(dataPos > pos + embeddingPrefix.size(), "Empty embedding in posting row: " << actual);
-            actual.erase(pos, dataPos + 2 - pos);
+        while ((pos = actual.find(nullEmbedding, pos)) != TString::npos) {
+            actual.erase(pos, nullEmbedding.size());
         }
+        UNIT_ASSERT_C(!actual.Contains("embedding = "), "Unexpected embedding in non-covering posting rows");
     }
     UNIT_ASSERT_VALUES_EQUAL(actual, expected);
 }

@@ -316,12 +316,12 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 }
             }
             THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-            // Vector search ranks posting rows by the embedding even when the
-            // index is otherwise non-covering. Keep the permanent posting
-            // table schema consistent with the transient build table schema.
+            // Only HNSW needs embeddings in a non-covering posting table.
             const auto indexColumns = NTableIndex::ExtractInfo(indexDesc);
             Y_ENSURE(!indexColumns.KeyColumns.empty());
-            indexDataColumns.insert(indexColumns.KeyColumns.back());
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                indexDataColumns.insert(indexColumns.KeyColumns.back());
+            }
             result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
             result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
             if (prefixVectorIndex) {

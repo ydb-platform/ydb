@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -611,8 +612,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             return;
         }
 
-        // Selecting only key columns is covered by every vector index because posting tables
-        // store the embedding used for ranking.
+        // A non-covering KMeans index still fetches the embedding from the
+        // main table when only primary keys are selected.
         const TString keyOnlyQuery(Q1_(R"(
             $target = "\x67\x71\x02";
             SELECT pk FROM `/Root/TestTable` VIEW index1
@@ -628,7 +629,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT(ValidatePlanNodeIds(keyOnlyPlan));
 
         const auto keyOnlyMainTableAccess = CountPlanNodesByKv(keyOnlyPlan, "Table", "TestTable");
-        UNIT_ASSERT_VALUES_EQUAL_C(keyOnlyMainTableAccess, 0, keyOnlyResult.GetPlan());
+        UNIT_ASSERT_VALUES_EQUAL_C(keyOnlyMainTableAccess, (flags & F_COVERING) ? 0 : 1, keyOnlyResult.GetPlan());
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexPlanShape, EnableVectorSearchActor) {
@@ -1613,14 +1614,45 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         CheckTableReads(session, mainTableName, true, false);
     }
 
-    Y_UNIT_TEST(FollowerHnswCacheInvalidatedOnRedo) {
+    Y_UNIT_TEST_TWIN(KMeansPostingDoesNotCopyEmbedding, HnswEnabled) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHNSWIndex(HnswEnabled)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto scheme = [&](const TString& query) {
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme("CREATE TABLE `/Root/KMeansPosting` (pk Int64 NOT NULL, emb String, PRIMARY KEY (pk));");
+        const auto write = ExecuteDataQuery(session, Q_(R"(
+            UPSERT INTO `/Root/KMeansPosting` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector"));
+        )"));
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/KMeansPosting` ADD INDEX idx GLOBAL USING vector_kmeans_tree
+            ON (emb) WITH (distance=cosine, vector_type="float", vector_dimension=2, levels=1, clusters=2);
+        )"));
+        const auto posting = session.DescribeTable("/Root/KMeansPosting/idx/indexImplPostingTable").ExtractValueSync();
+        UNIT_ASSERT_C(posting.IsSuccess(), posting.GetIssues().ToString());
+        for (const auto& column : posting.GetTableDescription().GetColumns()) {
+            UNIT_ASSERT_C(column.Name != "emb", "Non-covering KMeans posting tables must not contain embeddings");
+        }
+        const auto result = session.ExecuteDataQuery(Q_(R"(
+            $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+            SELECT pk FROM `/Root/KMeansPosting` VIEW idx ORDER BY Knn::CosineDistance(emb, $target) LIMIT 1;
+        )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1]]");
+    }
+
+    Y_UNIT_TEST(FollowerHnswScanObservesRedo) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableHNSWIndex(true);
         featureFlags.SetEnableAccessToIndexImplTables(true);
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         auto serverSettings = TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true)
             .SetFeatureFlags(featureFlags)
             .SetEnableForceFollowers(true);
@@ -1681,8 +1713,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             LIMIT 1;
         )"));
 
-        // The first read starts the follower's lazy HNSW build. Give the build
-        // actor time to install it, then exercise the cached path once.
+        // Followers use the yielding table scan and observe replayed writes.
         execute(search, TTxSettings::StaleRO());
         Sleep(TDuration::Seconds(1));
         execute(search, TTxSettings::StaleRO());
@@ -1713,8 +1744,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(HnswBuildAfterAlterWithColdPages) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         appConfig.MutableSharedCacheConfig()->SetMemoryLimit(0);
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true).SetUseRealThreads(false));
         auto* runtime = kikimr.GetTestServer().GetRuntime();
@@ -1803,10 +1834,67 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         AssertTableReads(firstRead, "/Root/HnswColdPages", 1);
     }
 
+    Y_UNIT_TEST(HnswEagerInstallRetriesAreBounded) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true)
+            .SetNeedsStatsCollectors(true).SetUseRealThreads(false)};
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto scheme = [&](const TString& query) {
+            const auto result = kikimr.RunCall([&] {
+                return session.ExecuteSchemeQuery(query,
+                    TExecSchemeQuerySettings().OperationTimeout(TDuration::Seconds(90))).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme("CREATE TABLE `/Root/HnswRejected` (pk Int64 NOT NULL, emb String, PRIMARY KEY (pk));");
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, Q_(R"(
+            UPSERT INTO `/Root/HnswRejected` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector"));
+        )")); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        ui32 completedBuilds = 0;
+        auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvAsyncJobComplete::EventType) {
+                if (auto* shard = dynamic_cast<NDataShard::TDataShard*>(runtime->FindActor(ev->Recipient))) {
+                    ++completedBuilds;
+                    // Make successful reservations/builds obsolete before installation.
+                    // Stop injecting after 40 attempts so the old unbounded path
+                    // also terminates and fails the assertion below.
+                    if (completedBuilds <= 40) {
+                        for (const auto& [_, table] : shard->GetUserTables()) {
+                            shard->InvalidateHnswIndex(table->LocalTid);
+                        }
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(observer); };
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswRejected` ADD INDEX idx GLOBAL USING hnsw ON (emb)
+            WITH (distance=cosine, vector_type="float", vector_dimension=2, levels=1, clusters=2, min_rows=1);
+        )"));
+        UNIT_ASSERT_GT(completedBuilds, 1);
+        UNIT_ASSERT_LE(completedBuilds, 32);
+        const auto result = kikimr.RunCall([&] {
+            return session.ExecuteDataQuery(Q_(R"(
+                $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+                SELECT pk FROM `/Root/HnswRejected` VIEW idx ORDER BY Knn::CosineDistance(emb, $target) LIMIT 1;
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1]]");
+    }
+
     Y_UNIT_TEST_TWIN(HnswBuildCompletesWithWarmCache, ConstrainedGrant) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true).SetUseRealThreads(false)};
         auto* runtime = kikimr.GetTestServer().GetRuntime();
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
@@ -1918,8 +2006,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(HnswCacheLabeledCountersContainIndexPaths) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         auto serverSettings = TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true).SetUseRealThreads(false);
 
         TKikimrRunner kikimr(serverSettings);
@@ -2061,8 +2149,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_TWIN(HnswFullRangeUsesCachedSettings, Parameterized) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true)};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2155,8 +2243,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(HnswIndexViewRebuildUsesStoredSettings, Followers, Split) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true).SetEnableForceFollowers(Followers).SetUseRealThreads(false)};
         auto* runtime = kikimr.GetTestServer().GetRuntime();
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
@@ -2256,7 +2344,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             }
             runtime->SimulateSleep(TDuration::MilliSeconds(100));
         }
-        UNIT_ASSERT_C(accelerated, "HNSW cache was not reconstructed with persisted min_rows=1");
+        UNIT_ASSERT_VALUES_EQUAL_C(accelerated, !Followers, "Only leaders construct HNSW graphs");
 
         if (Followers) {
             WaitForCompaction(&kikimr.GetTestServer(), posting);
@@ -2265,7 +2353,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx(),
                 values, settings).ExtractValueSync(); });
             UNIT_ASSERT_C(compacted.IsSuccess(), compacted.GetIssues().ToString());
-            AssertTableReads(compacted, posting, shards.size());
+            AssertTableReads(compacted, posting, 3);
         }
 
         const auto update = kikimr.RunCall([&] { return ExecuteDataQuery(session, Q_(R"(
@@ -2291,8 +2379,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     Y_UNIT_TEST_QUAD(HnswIndexViewSkipsClusterTraversal, Followers, EnableVectorSearchActor) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true)
             .SetEnableForceFollowers(Followers).SetUseRealThreads(false)};
         auto* runtime = kikimr.GetTestServer().GetRuntime();
@@ -2328,10 +2416,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         const auto& index = indexes.front();
         UNIT_ASSERT_VALUES_EQUAL(index.GetIndexType(), EIndexType::GlobalHnsw);
         const auto& vectorSettings = std::get<TKMeansTreeSettings>(index.GetIndexSettings()).Settings;
-        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.MinRows, 1u);
-        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.M, 24u);
-        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.EfConstruction, 100u);
-        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.DeltaRows, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.MinRows.value(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.M.value(), 24u);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.EfConstruction.value(), 100u);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.DeltaRows.value(), 5u);
         const auto show = kikimr.RunCall([&] {
             return kikimr.GetQueryClient().ExecuteQuery("SHOW CREATE TABLE `/Root/HnswView`;",
                 NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2404,7 +2492,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 }
                 runtime->SimulateSleep(TDuration::Seconds(1));
             }
-            UNIT_ASSERT_C(accelerated, "VIEW vidx did not use its partition-local HNSW graph");
+            UNIT_ASSERT_VALUES_EQUAL_C(accelerated, !Followers, "Only leaders construct HNSW graphs");
             UNIT_ASSERT_GT(vectorReads, readsBefore);
         }
         expectedEfSearch = 75;
@@ -2477,10 +2565,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(HnswFullRangeAcrossPartitions) {
+    Y_UNIT_TEST(HnswFlagDoesNotBuildMainTableGraphsAcrossPartitions) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true)};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2492,7 +2580,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             ) WITH (PARTITION_AT_KEYS = (10001));
         )")).ExtractValueSync();
         UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
-        // Each partition exceeds the default threshold for lazy construction.
+        // The flag alone must not accelerate main tables, even above the default threshold.
         const auto write = ExecuteDataQuery(session, Q_(R"(
             $rows = ListMap(ListFromRange(0ul, 20002ul), ($key) -> {
                 RETURN AsStruct($key AS pk,
@@ -2516,27 +2604,14 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             return result;
         };
 
-        const auto deadline = TInstant::Now() + TDuration::Seconds(60);
-        ui64 rowsRead = 0;
-        do {
+        for (ui32 attempt = 0; attempt < 3; ++attempt) {
             const auto result = read("");
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[20001u]]");
-            rowsRead = 0;
-            const auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            for (const auto& phase : stats.query_phases()) {
-                for (const auto& access : phase.table_access()) {
-                    rowsRead += access.reads().rows();
-                }
-            }
-            if (rowsRead == 2) {
-                break;
-            }
+            AssertTableReads(result, "/Root/HnswPartitions", 20002);
             Sleep(TDuration::MilliSeconds(100));
-        } while (TInstant::Now() < deadline);
-        UNIT_ASSERT_VALUES_EQUAL_C(rowsRead, 2, "full scan did not use both partition graphs");
+        }
 
-        // A genuinely restricted range must not lose the best in-range row
-        // merely because the graph's global top candidate lies outside it.
+        // Restricted scans must still return the best row within the range.
         const auto filtered = read("WHERE pk < 5");
         UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(filtered.GetResultSet(0)), "[[4u]]");
         AssertTableReads(filtered, "/Root/HnswPartitions", 5);
@@ -2544,8 +2619,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(HnswCacheTracksLeaderWrites) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true)};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2628,8 +2703,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_TWIN(HnswMvccPendingCommitAndRollback, Commit) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true)};
         auto db = kikimr.GetTableClient();
         auto reader = db.CreateSession().GetValueSync().GetSession();
@@ -2691,8 +2766,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(HnswSnapshotReadsUseCacheByDefault) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true)};
         auto db = kikimr.GetTableClient();
         auto reader = db.CreateSession().GetValueSync().GetSession();
@@ -2751,8 +2826,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(HnswSnapshotConsistencyAcrossWrites) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true)};
         auto db = kikimr.GetTableClient();
         auto snapshotSession = db.CreateSession().GetValueSync().GetSession();
@@ -2826,8 +2901,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         // graphs exceed this budget. Keep page-cache retention at zero so
         // graphs compete for the budget.
         appConfig.MutableSharedCacheConfig()->SetMemoryLimit(0);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(1536);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(1536);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(1536);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(1536);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true)};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2885,8 +2960,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     void TestHnswFallback(ui64 cacheBytes, ui64 minRows) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(cacheBytes);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(cacheBytes);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(cacheBytes);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(cacheBytes);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true)};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -3070,10 +3145,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         return std::move(ev->Get()->Followers);
     }
 
-    Y_UNIT_TEST(HnswFollowerCoveredRowsDoNotFetchDataPages) {
+    Y_UNIT_TEST(HnswFollowerCoveredRowsUseScan) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         appConfig.MutableSharedCacheConfig()->SetMemoryLimit(0);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true).SetEnableForceFollowers(true).SetUseRealThreads(false)};
         auto* runtime = kikimr.GetTestServer().GetRuntime();
@@ -3108,23 +3183,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             return result;
         };
-        bool cacheReady = false;
-        for (ui32 i = 0; i < 100; ++i) {
-            const auto result = read(false);
-            ui64 rowsRead = 0;
-            for (const auto& phase : NYdb::TProtoAccessor::GetProto(*result.GetStats()).query_phases()) {
-                for (const auto& access : phase.table_access()) {
-                    rowsRead += access.reads().rows();
-                }
-            }
-            if (rowsRead == 1) {
-                cacheReady = true;
-                break;
-            }
-            Sleep(TDuration::MilliSeconds(100));
-            runtime->SimulateSleep(TDuration::MilliSeconds(100));
-        }
-        UNIT_ASSERT_C(cacheReady, "follower graph did not become ready");
+        read(false);
         runtime->SimulateSleep(TDuration::Seconds(2));
         const auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(), posting);
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
@@ -3138,8 +3197,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         });
         Y_DEFER { runtime->SetObserverFunc(observer); };
         auto covered = read(false);
-        AssertTableReads(covered, posting, 1);
-        UNIT_ASSERT_VALUES_EQUAL_C(pageRequests, 0, "covered HNSW result fetched database pages");
+        AssertTableReads(covered, posting, 2);
+        UNIT_ASSERT_GT(pageRequests, 0);
         TResultSetParser parser(covered.GetResultSet(0));
         UNIT_ASSERT(parser.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("pk").GetInt64(), 1);
@@ -3160,8 +3219,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(HnswSearchUsesMultipleReadReplicas) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
-        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetHnswIndexCacheMaxBytes(64_MB);
         TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHNSWIndex(true).SetNeedsStatsCollectors(true).SetEnableForceFollowers(true).SetUseRealThreads(false)};
         auto* runtime = kikimr.GetTestServer().GetRuntime();
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });

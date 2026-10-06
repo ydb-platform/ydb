@@ -150,7 +150,8 @@ public:
 
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
-        ScanTags = MakeScanTags(table, embedding, data, EmbeddingPos, DataPos, InForeign ? &IsForeignPos : nullptr);
+        ScanTags = MakeScanTags(table, embedding, data,
+            UploadState == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD || UploadState == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD, EmbeddingPos, DataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
         OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data, {}, OutForeign));
 

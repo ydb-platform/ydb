@@ -80,6 +80,9 @@ GET_LIMIT(ActivitiesLimit)
 GET_MIN_LIMIT(MemTable)
 GET_MAX_LIMIT(MemTable)
 
+GET_MIN_LIMIT(HnswIndexCache)
+GET_MAX_LIMIT(HnswIndexCache)
+
 GET_MIN_LIMIT(SharedCache)
 GET_MAX_LIMIT(SharedCache)
 

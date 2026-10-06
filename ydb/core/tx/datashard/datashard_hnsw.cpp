@@ -15,7 +15,7 @@ constexpr ui64 ScanMetadataBytes = 256;
 class THnswSnapshotScan : public NTable::IScan {
 public:
     using TFinish = std::function<void(std::vector<std::pair<TString, TString>>,
-        std::shared_ptr<void>, ui64, bool)>;
+        std::shared_ptr<void>, ui64, bool, bool)>;
 
     THnswSnapshotScan(const TUserTable& table, ui32 vectorTag,
             Ydb::Table::VectorIndexSettings settings,
@@ -60,7 +60,7 @@ public:
         KeyBytes += serialized.size();
         // Account for both graph storage and the scan/build input buffer.
         const auto required = THnswIndex::EstimateMemoryBytes(Rows.size() + 1,
-            Settings.vector_dimension(), Settings.has_m() ? Settings.m() : 16,
+            Settings.vector_dimension(), GetHnswM(Settings),
             2 * KeyBytes) + (Rows.size() + 1) * cells[0].Size();
         if (required > Reservation->Bytes) {
             const ui64 additional = required - Reservation->Bytes;
@@ -77,12 +77,13 @@ public:
     EScan Exhausted() override { return EScan::Final; }
 
     TAutoPtr<IDestructable> Finish(EStatus status) override {
-        const bool success = !Failed && status == EStatus::Done
-            && (Rebuilding || Rows.size() >= GetHnswMinRows(Settings));
+        const bool belowMinRows = !Failed && status == EStatus::Done
+            && !Rebuilding && Rows.size() < GetHnswMinRows(Settings);
+        const bool success = !Failed && status == EStatus::Done && !belowMinRows;
         if (!success) {
             Rows.clear();
         }
-        OnFinish(std::move(Rows), Reservation, Reservation->Bytes, success && Rebuilding);
+        OnFinish(std::move(Rows), Reservation, Reservation->Bytes, success && Rebuilding, belowMinRows);
         return this; // The executor owns and destroys the scan product.
     }
 
@@ -148,7 +149,15 @@ void TDataShard::StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table,
         auto* scan = new THnswSnapshotScan(*table, entry.VectorColumnTag, entry.Settings,
             HnswCacheMemoryTracker, bool(entry.Index),
             [replyTo = SelfId(), localTid, tag = entry.VectorColumnTag, settings = entry.Settings,
-                    base, token](auto rows, auto reservation, ui64 bytes, bool allowEmpty) mutable {
+                    base, token](auto rows, auto reservation, ui64 bytes, bool allowEmpty, bool belowMinRows) mutable {
+                if (belowMinRows) {
+                    auto result = MakeHolder<TEvPrivate::TEvHnswIndexBuildResult>();
+                    result->LocalTid = localTid;
+                    result->BuildToken = token;
+                    result->BelowMinRows = true;
+                    TActivationContext::Send(new IEventHandle(replyTo, TActorId(), result.Release()));
+                    return;
+                }
                 const auto count = rows.size();
                 auto* actor = CreateHnswIndexBuildActor(replyTo, localTid, tag, count, settings,
                     std::move(rows), std::move(reservation), bytes, base, token, allowEmpty);
@@ -449,7 +458,6 @@ void TDataShard::ApplyHnswIndexChange(ui32 localTid, TString key, THnswIndexChan
     }
     entry.Changes->Set(std::move(key), change.Version, std::move(change.Vector),
         std::move(change.MemoryReservation));
-    entry.NextScanAttemptAt = TInstant::Zero();
     ScheduleHnswRebuild(localTid);
 }
 

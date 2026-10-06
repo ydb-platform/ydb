@@ -14,8 +14,6 @@ using namespace NActors;
 namespace {
 
 // Collects (serialized key, embedding) pairs for every row of the posting table.
-// Keep reservation and page-fault handling in sync with
-// ScanVectorColumnForHnsw() in datashard__read_iterator.cpp.
 // Runs inside the finalize scheme transaction, where a page fault is an ordinary
 // transaction restart rather than a dropped attempt.
 bool ScanPostingTableVectors(
@@ -39,7 +37,25 @@ bool ScanPostingTableVectors(
         }
     }
 
-    auto precharge = txc.DB.Precharge(table.LocalTid, {}, {}, columns, 0, 0, 0,
+    const auto bounds = table.Range.ToTableRange();
+    const auto rawKey = [&](TConstArrayRef<TCell> cells, bool addNulls) {
+        std::vector<TRawTypeValue> result;
+        for (size_t i = 0; i < cells.size(); ++i) {
+            result.emplace_back(cells[i].AsRef(), table.KeyColumnTypes[i].GetTypeId());
+        }
+        if (addNulls && !cells.empty()) {
+            result.resize(table.KeyColumnTypes.size());
+        }
+        return result;
+    };
+    const auto minKey = rawKey(bounds.From, bounds.InclusiveFrom);
+    const auto maxKey = rawKey(bounds.To, !bounds.InclusiveTo);
+    NTable::TKeyRange range;
+    range.MinKey = minKey;
+    range.MaxKey = maxKey;
+    range.MinInclusive = bounds.InclusiveFrom;
+    range.MaxInclusive = bounds.InclusiveTo;
+    auto precharge = txc.DB.Precharge(table.LocalTid, minKey, maxKey, columns, 0, 0, 0,
         NTable::EDirection::Forward, baseVersion);
     if (!precharge.Ready) {
         return false;
@@ -47,7 +63,7 @@ bool ScanPostingTableVectors(
 
     const ui64 estimatedBytes = THnswIndex::EstimateMemoryBytes(
         precharge.ItemsPrecharged, settings.vector_dimension(),
-        settings.has_m() ? settings.m() : 16);
+        GetHnswM(settings));
     memoryReservation = dataShard.TryReserveHnswCacheMemory(estimatedBytes);
     if (!memoryReservation) {
         return true;
@@ -57,7 +73,7 @@ bool ScanPostingTableVectors(
     keysAndVectors.clear();
     keysAndVectors.reserve(precharge.ItemsPrecharged);
 
-    auto iter = txc.DB.IterateRange(table.LocalTid, {}, columns, baseVersion, nullptr, nullptr);
+    auto iter = txc.DB.IterateRange(table.LocalTid, range, columns, baseVersion, nullptr, nullptr);
     while (true) {
         auto ready = iter->Next(NTable::ENext::All);
         if (ready == NTable::EReady::Page) {
@@ -88,7 +104,7 @@ bool ScanPostingTableVectors(
     // scanned rows as well as their keys before handing the build its budget.
     const ui64 requiredBytes = THnswIndex::EstimateMemoryBytes(
         keysAndVectors.size(), settings.vector_dimension(),
-        settings.has_m() ? settings.m() : 16, keyBytes);
+        GetHnswM(settings), keyBytes);
     if (requiredBytes > reservedBytes) {
         auto additionalReservation = dataShard.TryReserveHnswCacheMemory(requiredBytes - reservedBytes);
         if (!additionalReservation) {
@@ -171,6 +187,15 @@ protected:
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         PageFault = false;
         RetryScheduled = false;
+        const bool started = RunImpl(op, txc, ctx);
+        if (!started && !PageFault && !RetryScheduled) {
+            Builds.erase(op->GetTxId());
+        }
+        return started;
+    }
+
+    bool RunImpl(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
+        auto& build = Builds[op->GetTxId()];
         if (!AppData()->FeatureFlags.GetEnableHNSWIndex()) {
             return false;
         }
@@ -220,8 +245,8 @@ protected:
             return false;
         }
 
-        BaseVersion = TRowVersion(op->GetStep(), op->GetTxId());
-        if (!DataShard.TryStartHnswIndexBuild(table.LocalTid, vectorColumnTag, settings, BaseVersion)) {
+        build.BaseVersion = TRowVersion(op->GetStep(), op->GetTxId());
+        if (!DataShard.TryStartHnswIndexBuild(table.LocalTid, vectorColumnTag, settings, build.BaseVersion)) {
             const auto token = DataShard.GetHnswBuildToken(table.LocalTid);
             if (!DataShard.IsHnswBuildCurrent(table.LocalTid, token)
                     && !DataShard.IsHnswIndexBuildObsolete(table.LocalTid)) {
@@ -231,13 +256,13 @@ protected:
             }
             return ScheduleRetry(op, ctx);
         }
-        BuildToken = DataShard.GetHnswBuildToken(table.LocalTid);
+        build.BuildToken = DataShard.GetHnswBuildToken(table.LocalTid);
         DataShard.TrackHnswOpenTransactions(table.LocalTid, txc.DB);
         std::vector<std::pair<TString, TString>> keysAndVectors;
         ui64 reservedBytes = 0;
         std::shared_ptr<void> memoryReservation;
         if (!ScanPostingTableVectors(txc, table, vectorColumnTag, settings, DataShard,
-                memoryReservation, reservedBytes, keysAndVectors, BaseVersion)) {
+                memoryReservation, reservedBytes, keysAndVectors, build.BaseVersion)) {
             DataShard.DeferHnswIndexBuild(table.LocalTid, TDuration::Zero());
             // Page fault: this unit is re-executed after the pages are fetched.
             PageFault = true;
@@ -253,14 +278,13 @@ protected:
             // the configured budget cannot accommodate the optional graph.
             return ScheduleMemoryRetry(op, ctx);
         }
-        MemoryRetryCount = 0;
 
         if (keysAndVectors.empty()) {
-            DataShard.SetHnswIndexBuilding(table.LocalTid, false);
+            DataShard.DeferHnswIndexBuild(table.LocalTid, TDuration::Minutes(1));
             return false;
         }
         if (keysAndVectors.size() < GetHnswMinRows(settings)) {
-            DataShard.SetHnswIndexBuilding(table.LocalTid, false);
+            DataShard.DeferHnswIndexBuild(table.LocalTid, TDuration::Minutes(1));
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
                 << " HNSW: partition is below min_rows for localTid=" << table.LocalTid
                 << " rows=" << keysAndVectors.size()
@@ -272,10 +296,10 @@ protected:
             << " HNSW: starting eager build for localTid=" << table.LocalTid
             << " rows=" << keysAndVectors.size());
 
-        LocalTid = table.LocalTid;
-        VectorColumnTag = vectorColumnTag;
-        Settings = settings;
-        RowCountAtBuild = keysAndVectors.size();
+        build.LocalTid = table.LocalTid;
+        build.VectorColumnTag = vectorColumnTag;
+        build.Settings = settings;
+        build.RowCountAtBuild = keysAndVectors.size();
         tx->SetAsyncJobActor(ctx.Register(
             CreateHnswIndexBuildJob(DataShard.SelfId(), op->GetTxId(), settings,
                 std::move(keysAndVectors), std::move(memoryReservation), reservedBytes),
@@ -290,53 +314,66 @@ protected:
     }
 
     bool ProcessResult(TOperation::TPtr op, const TActorContext& ctx) override {
+        auto& build = Builds.at(op->GetTxId());
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (!AppData()->FeatureFlags.GetEnableHNSWIndex()) {
-            DataShard.InvalidateHnswIndex(LocalTid);
-            DataShard.SetHnswIndexBuilding(LocalTid, false);
+            DataShard.InvalidateHnswIndex(build.LocalTid);
+            DataShard.SetHnswIndexBuilding(build.LocalTid, false);
             op->SetAsyncJobResult(nullptr);
             tx->SetAsyncJobActor(TActorId());
+            Builds.erase(op->GetTxId());
             return true;
         }
         auto* result = CheckedCast<THnswIndexBuildProduct*>(op->AsyncJobResult().Get());
         bool retry = false;
         if (result->Index) {
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
-                << " HNSW: eager build completed for localTid=" << LocalTid
+                << " HNSW: eager build completed for localTid=" << build.LocalTid
                 << " size=" << result->Index->Size());
-            DataShard.SetHnswIndex(LocalTid, std::move(result->Index),
-                std::move(result->MemoryReservation), RowCountAtBuild,
-                VectorColumnTag, Settings, BaseVersion, BuildToken);
-            // A limit change can reject installation after construction. Such
-            // a successful build must not publish completion with no cache.
-            retry = !DataShard.GetHnswIndex(LocalTid, VectorColumnTag,
-                Settings, false, BaseVersion);
+            DataShard.SetHnswIndex(build.LocalTid, std::move(result->Index),
+                std::move(result->MemoryReservation), build.RowCountAtBuild,
+                build.VectorColumnTag, build.Settings, build.BaseVersion, build.BuildToken);
+            // A limit change or obsolete token can reject installation.
+            // Retry within this operation's budget; the graph is optional.
+            retry = !DataShard.GetHnswIndex(build.LocalTid, build.VectorColumnTag,
+                build.Settings, false, build.BaseVersion);
         } else {
-            DataShard.SetHnswIndexBuilding(LocalTid, false);
+            DataShard.SetHnswIndexBuilding(build.LocalTid, false);
             // A failed build only costs acceleration, not correctness: reads
             // fall back to brute force.
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
-                << " HNSW: eager build failed for localTid=" << LocalTid
+                << " HNSW: eager build failed for localTid=" << build.LocalTid
                 << ": " << result->Error);
         }
 
-        if (DataShard.IsHnswIndexBuildObsolete(LocalTid)
-                && DataShard.GetHnswBuildToken(LocalTid) == BuildToken) {
-            DataShard.DeferHnswIndexBuild(LocalTid, TDuration::Zero());
+        if (DataShard.IsHnswIndexBuildObsolete(build.LocalTid)
+                && DataShard.GetHnswBuildToken(build.LocalTid) == build.BuildToken) {
+            DataShard.DeferHnswIndexBuild(build.LocalTid, TDuration::Zero());
         }
         op->SetAsyncJobResult(nullptr);
         tx->SetAsyncJobActor(TActorId());
 
-        return !retry;
+        if (retry && build.RetryCount++ < MaxBuildRetries) {
+            return false;
+        }
+        Builds.erase(op->GetTxId());
+        return true;
     }
 
     void Cancel(TActiveTransaction* tx, const TActorContext& ctx) override {
-        if (DataShard.IsHnswBuildCurrent(LocalTid, BuildToken)) {
-            DataShard.DeferHnswIndexBuild(LocalTid, TDuration::Zero());
+        auto it = Builds.find(tx->GetTxId());
+        if (it == Builds.end()) {
+            tx->KillAsyncJobActor(ctx);
+            return;
+        }
+        const auto& build = it->second;
+        if (DataShard.IsHnswBuildCurrent(build.LocalTid, build.BuildToken)) {
+            DataShard.DeferHnswIndexBuild(build.LocalTid, TDuration::Zero());
         }
         tx->KillAsyncJobActor(ctx);
+        Builds.erase(it);
     }
 
 public:
@@ -348,38 +385,34 @@ public:
     }
 
 private:
+    static constexpr ui32 MaxBuildRetries = 30;
+
     bool ScheduleMemoryRetry(TOperation::TPtr op, const TActorContext& ctx) {
-        if (MemoryWaitTxId != op->GetTxId()) {
-            MemoryWaitTxId = op->GetTxId();
-            MemoryRetryCount = 0;
-        }
-        // Controller limits are refreshed once a second. Admission must not
-        // hold a scheme operation forever when its graph cannot fit.
-        constexpr ui32 MaxMemoryRetries = 30;
-        if (MemoryRetryCount++ >= MaxMemoryRetries) {
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
-                << " HNSW: cache memory admission did not succeed after "
-                << MaxMemoryRetries << " retries, completing without eager cache");
-            return false;
-        }
         return ScheduleRetry(op, ctx);
     }
 
     bool ScheduleRetry(TOperation::TPtr op, const TActorContext& ctx) {
+        if (Builds.at(op->GetTxId()).RetryCount++ >= MaxBuildRetries) {
+            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
+                << " HNSW: eager admission exhausted, completing without cache");
+            return false;
+        }
         RetryScheduled = true;
         ScheduleRestart(op, ctx);
         return false;
     }
 
-    ui64 MemoryWaitTxId = 0;
-    ui32 MemoryRetryCount = 0;
+    struct TBuildState {
+        ui32 RetryCount = 0;
+        ui32 LocalTid = 0;
+        ui32 VectorColumnTag = 0;
+        Ydb::Table::VectorIndexSettings Settings;
+        ui64 RowCountAtBuild = 0;
+        TRowVersion BaseVersion = TRowVersion::Min();
+        ui64 BuildToken = 0;
+    };
+    THashMap<ui64, TBuildState> Builds;
     bool RetryScheduled = false;
-    ui32 LocalTid = 0;
-    ui32 VectorColumnTag = 0;
-    Ydb::Table::VectorIndexSettings Settings;
-    ui64 RowCountAtBuild = 0;
-    TRowVersion BaseVersion = TRowVersion::Min();
-    ui64 BuildToken = 0;
     mutable bool PageFault = false;
 };
 

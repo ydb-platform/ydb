@@ -847,8 +847,8 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT_VALUES_EQUAL(settings.settings().m(), 24);
         UNIT_ASSERT_VALUES_EQUAL(settings.settings().ef_construction(), 200);
         UNIT_ASSERT_VALUES_EQUAL(settings.settings().delta_rows(), 5);
-        UNIT_ASSERT(FillSetting(settings, "delta_rows", "0", error));
-        UNIT_ASSERT_VALUES_EQUAL(settings.settings().delta_rows(), 0);
+        UNIT_ASSERT(!FillSetting(settings, "delta_rows", "0", error));
+        UNIT_ASSERT(!FillSetting(settings, "min_rows", "0", error));
         UNIT_ASSERT(FillSetting(settings, "delta_rows", "4294967296", error));
         UNIT_ASSERT_VALUES_EQUAL(settings.settings().delta_rows(), 4294967296ULL);
         UNIT_ASSERT(FillSetting(settings, "delta_rows", "18446744073709551615", error));
@@ -892,6 +892,13 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT_STRING_CONTAINS(error, "ef_construction");
 
         settings.set_ef_construction(MaxHnswEfConstruction);
+        UNIT_ASSERT(ValidateSettings(settings, error));
+        settings.set_min_rows(0);
+        UNIT_ASSERT(!ValidateSettings(settings, error));
+        settings.set_min_rows(1);
+        settings.set_delta_rows(0);
+        UNIT_ASSERT(!ValidateSettings(settings, error));
+        settings.set_delta_rows(1);
         UNIT_ASSERT(ValidateSettings(settings, error));
     }
 }

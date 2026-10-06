@@ -40,6 +40,7 @@ SRCS(
     metric_system_ut.cpp
     log_ut.cpp
     mon_ut.cpp
+    node_location_ut.cpp
     scheduler_actor_ut.cpp
     scheduler_cookie_ut.cpp
     subsystem_ut.cpp

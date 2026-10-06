@@ -20,6 +20,7 @@
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_scalar_hash_join.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_control_plane_actor.h>
@@ -76,6 +77,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
 
             if (name == "DqBlockHashJoin"sv) {
                 return WrapDqBlockHashJoin(callable, ctx);
+            }
+
+            if (name == "DqScalarHashJoin"sv) {
+                return WrapDqScalarHashJoin(callable, ctx);
             }
 
             if (name == "DqHashCombine"sv) {

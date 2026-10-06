@@ -16,6 +16,8 @@ using NUdf::EDataSlot;
 using NUdf::TUnboxedValue;
 using NUdf::TUnboxedValuePod;
 
+constexpr size_t StringHeaderSize = sizeof(*TUnboxedValuePod{}.AsRawStringValue());
+
 TDqHashCombineTupleLayout::EStorage GetStorage(EDataSlot slot) {
     switch (slot) {
         case EDataSlot::Uint64:
@@ -72,7 +74,7 @@ std::optional<size_t> GetStaticUvSizeBound(TType* type) {
         }
         switch (*slot) {
             case EDataSlot::Uuid:
-                return sizeof(TUnboxedValuePod) + NUdf::UUID_SIZE;
+                return sizeof(TUnboxedValuePod) + StringHeaderSize + NUdf::UUID_SIZE;
             case EDataSlot::DyNumber:
             case EDataSlot::Json:
             case EDataSlot::JsonDocument:
@@ -94,7 +96,7 @@ std::optional<size_t> TDqHashCombineTupleLayout::EstimateValueMemorySize(const T
         return sizeof(TUnboxedValuePod);
     }
     if (value.IsString()) {
-        return sizeof(TUnboxedValuePod) + value.AsStringRef().Size();
+        return sizeof(TUnboxedValuePod) + StringHeaderSize + value.AsStringRef().Size();
     }
     if (!value.IsBoxed()) {
         return {};

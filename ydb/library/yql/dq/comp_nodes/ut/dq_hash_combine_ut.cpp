@@ -1791,7 +1791,8 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
                 UNIT_ASSERT_VALUES_EQUAL(inputRows, 2 * sampleGroups - 1);
             }
             const size_t recordBytes = 40;
-            const size_t externalBytes = sizeof(TDirectArrayHolderInplace) + 2 * sizeof(NUdf::TUnboxedValuePod) + text.size() + 1;
+            const size_t externalBytes = sizeof(TDirectArrayHolderInplace) + 2 * sizeof(NUdf::TUnboxedValuePod) +
+                sizeof(*string.AsRawStringValue()) + text.size() + 1;
             using TMap = TDqRobinHoodHashSet<char*, TDqHashCombinePackedEqual, std::allocator<char>>;
             const size_t nextGroups = 1_MB / (recordBytes + externalBytes + 2 * TMap::GetCellSize());
             UNIT_ASSERT(nextGroups > 1024 && nextGroups < sampleGroups);

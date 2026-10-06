@@ -343,6 +343,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
         zeroNamedLocation.SetRack("0");
         zeroNamedLocation.SetUnit("1");
 
+        auto legacyZeroLocation = legacyLocation;
+        legacyZeroLocation.SetRoomNum(0);
+        legacyZeroLocation.SetRackNum(0);
+        legacyZeroLocation.SetBodyNum(0);
+
         const TVector<TNodeLocation> locations = {
             TNodeLocation(modernLocation),
             TNodeLocation(legacyLocation),
@@ -350,24 +355,26 @@ Y_UNIT_TEST_SUITE(Viewer) {
             TNodeLocation(unsetLocation),
             TNodeLocation(zeroUnitLocation),
             TNodeLocation(zeroNamedLocation),
+            TNodeLocation(legacyZeroLocation),
             TNodeLocation(),
         };
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
-                auto* event = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
-                UNIT_ASSERT(!(*event)->Get()->Nodes.empty());
-                const auto sample = (*event)->Get()->Nodes.front();
-                for (size_t i = 0; i < locations.size(); ++i) {
-                    auto& node = nodes->emplace_back(sample);
-                    node.NodeId = i + 1;
-                    node.Location = locations[i];
-                }
-                auto response = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
-                    new IEventHandle((*event)->Recipient, (*event)->Sender, new TEvInterconnect::TEvNodesInfo(nodes)));
-                event->Swap(response);
+        auto observer = runtime.AddObserver<TEvInterconnect::TEvNodesInfo>([&](TEvInterconnect::TEvNodesInfo::TPtr& event) {
+            if (!dynamic_cast<TJsonNodeList*>(runtime.FindActor(event->GetRecipientRewrite()))) {
+                return;
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
+            auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+            UNIT_ASSERT(!event->Get()->Nodes.empty());
+            const auto sample = event->Get()->Nodes.front();
+            for (size_t i = 0; i < locations.size(); ++i) {
+                auto& node = nodes->emplace_back(sample);
+                node.NodeId = i + 1;
+                node.Location = locations[i];
+            }
+            auto response = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+                new IEventHandle(event->Recipient, event->Sender,
+                    new TEvInterconnect::TEvNodesInfo(nodes, std::move(event->Get()->PileMap)),
+                    event->Flags, event->Cookie, nullptr, std::move(event->TraceId)));
+            event.Swap(response);
         });
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -377,6 +384,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NMon::TEvHttpInfo(monReq)));
         TAutoPtr<IEventHandle> handle;
         auto* response = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        observer.Remove();
         const size_t bodyStart = response->Answer.find("\r\n\r\n");
         UNIT_ASSERT(bodyStart != TString::npos);
         NJson::TJsonValue json;
@@ -389,7 +397,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
             {"Rack":"rack-only"},
             {},
             {"BridgePileName":"pile-1","DataCenter":"sas","Module":"module-1","Rack":"rack/a=b"},
-            {"DataCenter":"0","Rack":"0","Unit":"1"}
+            {"DataCenter":"0","Rack":"0","Unit":"1"},
+            {"DataCenter":"1","Module":"0","Rack":"0"}
         ])", &expectedLocations, true);
         const auto& nodes = json.GetArray();
         UNIT_ASSERT_VALUES_EQUAL(nodes.size(), locations.size());
@@ -411,6 +420,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& unsetPhysicalLocation = nodes[3].GetMap().at("PhysicalLocation").GetMap();
         UNIT_ASSERT_VALUES_EQUAL(unsetPhysicalLocation.at("Location").GetString(), "DC=/R=/U=0/");
         UNIT_ASSERT_VALUES_EQUAL(unsetPhysicalLocation.at("Body").GetUInteger(), 0);
+        const auto& legacyZeroPhysicalLocation = nodes[6].GetMap().at("PhysicalLocation").GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(legacyZeroPhysicalLocation.at("Location").GetString(), "DC=1/M=0/R=0/U=0/");
         UNIT_ASSERT(!nodes.back().GetMap().contains("Location"));
         UNIT_ASSERT(!nodes.back().GetMap().contains("PhysicalLocation"));
 

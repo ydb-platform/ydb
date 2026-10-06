@@ -127,8 +127,10 @@ public:
             locationSchema["properties"].remove(field);
         }
         locationSchema["description"] =
-            "Node location from nameservice. Omitted if no location is supplied. "
-            "Empty DataCenter and Rack, and empty or \"0\" Unit, are omitted. "
+            "Node location from nameservice. Only fields known to this Viewer version are included. "
+            "Unknown protobuf fields are not exposed. Omitted if no location is supplied. "
+            "Normalization follows /viewer/nodes: empty DataCenter and Rack, and empty or \"0\" Unit, are omitted. "
+            "Module \"0\" is preserved, including values converted from legacy RoomNum. "
             "The object can be empty after normalization.";
         node["get"]["responses"]["200"]["content"]["application/json"]["schema"]["items"]["properties"]["Location"] =
             locationSchema;

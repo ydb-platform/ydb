@@ -70,7 +70,9 @@ private:
     TExprNode::TPtr BuildSumCastTarget(TInfoUnitId column) const;
     TExprNode::TPtr BuildAvgAccumulatorDataType(TInfoUnitId column) const;
     TExprNode::TPtr BuildAvgAccumulatorType(TInfoUnitId column) const;
-    TExprNode::TPtr BuildResultFromAccumulator(const TOpWindowFunc& func, TExprNode::TPtr accumulator) const;
+    bool IsNonOptionalAggregate(TInfoUnitId column) const;
+    TExprNode::TPtr BuildResultFromAccumulator(TInfoUnitId column, TExprNode::TPtr accumulator) const;
+    TExprNode::TPtr BuildAverage(const TOpWindowFunc& func, TExprNode::TPtr accumulator) const;
     TExprNode::TPtr MakeOptional(TExprNode::TPtr value, bool alreadyOptional) const;
     TExprNode::TPtr BuildUint64(ui64 value) const;
 

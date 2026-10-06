@@ -923,7 +923,25 @@ struct TOpWindowFrame {
         return (Type == EWindowFrameType::Rows || Type == EWindowFrameType::Range) &&
                BeginKind == EWindowFrameBound::UnboundedPreceding && EndKind == EWindowFrameBound::UnboundedFollowing;
     }
+
+    // The frame always holds the current row, so an aggregate over it is NULL only for a NULL input.
+    bool IsNeverEmpty() const {
+        const bool beginsAfter = BeginKind == EWindowFrameBound::UnboundedFollowing || (BeginKind == EWindowFrameBound::Following && BeginValue > 0);
+        const bool endsBefore = EndKind == EWindowFrameBound::UnboundedPreceding || (EndKind == EWindowFrameBound::Preceding && EndValue > 0);
+        return !beginsAfter && !endsBefore;
+    }
 };
+
+template <typename TFrameNode>
+TOpWindowFrame WindowFrameFromNode(const TFrameNode& node) {
+    TOpWindowFrame frame;
+    frame.Type = WindowFrameTypeFromString(TString(node.FrameType()));
+    frame.BeginKind = WindowFrameBoundFromString(TString(node.BeginKind()));
+    frame.BeginValue = FromString<ui64>(TString(node.BeginValue()));
+    frame.EndKind = WindowFrameBoundFromString(TString(node.EndKind()));
+    frame.EndValue = FromString<ui64>(TString(node.EndValue()));
+    return frame;
+}
 
 // Represents a window function.
 class TOpWindow: public IUnaryOperator {

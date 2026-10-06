@@ -6914,22 +6914,68 @@ FROM (
                 WINDOW w AS (PARTITION BY b)
                 ORDER BY a;
             )"},
-            // TODO: fix and enable. The New RBO types every window aggregate as optional, while YQL keeps
-            // sum/min/max/avg over a NOT NULL column non-optional when the frame always holds the current row,
-            // so the rewritten plan fails CheckExpectedTypeAndColumnOrder ("Rewrite error").
-            // {"whole partition aggregates over a not null measure", R"(
-            //     PRAGMA YqlSelect = "force";
-            //
-            //     SELECT a, b,
-            //         Sum(a) OVER w AS total,
-            //         Min(a) OVER w AS min_a,
-            //         Max(a) OVER w AS max_a,
-            //         Avg(a) OVER w AS avg_a,
-            //         Count(a) OVER w AS cnt
-            //     FROM `/Root/t1`
-            //     WINDOW w AS (PARTITION BY b)
-            //     ORDER BY a;
-            // )"},
+            {"whole partition aggregates over a not null measure", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b,
+                    Sum(a) OVER w AS total,
+                    Min(a) OVER w AS min_a,
+                    Max(a) OVER w AS max_a,
+                    Avg(a) OVER w AS avg_a,
+                    Count(a) OVER w AS cnt
+                FROM `/Root/t1`
+                WINDOW w AS (PARTITION BY b)
+                ORDER BY a;
+            )"},
+            {"whole partition aggregates over a not null measure without a partition", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a,
+                    Sum(a) OVER () AS total,
+                    Max(a) OVER () AS max_a,
+                    Avg(a) OVER () AS avg_a
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"interval sum without a partition", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a,
+                    Sum(Interval("PT1S")) OVER () AS total
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"running aggregates over a not null measure", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b,
+                    Sum(a) OVER w AS total,
+                    Min(a) OVER w AS min_a,
+                    Avg(a) OVER w AS avg_a
+                FROM `/Root/t1`
+                WINDOW w AS (PARTITION BY b ORDER BY a ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                ORDER BY a;
+            )"},
+            {"range running aggregates over a not null measure", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c,
+                    Sum(a) OVER w AS total,
+                    Max(a) OVER w AS max_a
+                FROM `/Root/t1`
+                WINDOW w AS (PARTITION BY b ORDER BY c)
+                ORDER BY a;
+            )"},
+            {"sliding frame over a not null measure", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b,
+                    Sum(a) OVER w AS total,
+                    Max(a) OVER w AS max_a
+                FROM `/Root/t1`
+                WINDOW w AS (PARTITION BY b ORDER BY a ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+                ORDER BY a;
+            )"},
             {"whole partition aggregates without a partition", R"(
                 PRAGMA YqlSelect = "force";
 
@@ -7121,7 +7167,10 @@ FROM (
             PRAGMA YqlSelect = "force";
             PRAGMA ydb.WindowFunctionsV2 = ")" << (WindowFunctionsV2 ? "true" : "false") << R"(";
 
-            SELECT a, Sum(c) OVER (PARTITION BY b) AS s, Count(a) OVER (PARTITION BY b) AS cnt
+            SELECT a,
+                Sum(c) OVER (PARTITION BY b) AS s,
+                Count(a) OVER (PARTITION BY b) AS cnt,
+                Max(a) OVER (PARTITION BY b) AS max_a
             FROM `/Root/t1`
             ORDER BY a;
         )";
@@ -7143,11 +7192,11 @@ FROM (
         auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([
-            [1;[30];2u];
-            [2;[30];2u];
-            [3;[5];1u];
-            [4;[7];2u];
-            [5;[7];2u]
+            [1;[30];2u;2];
+            [2;[30];2u;2];
+            [3;[5];1u;3];
+            [4;[7];2u;5];
+            [5;[7];2u;5]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 

@@ -17,6 +17,9 @@ public:
             config.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMinSize(0);
             config.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMethod("zstd_6");
         }
+        if (enabled) {
+            config.MutableFeatureFlags()->SetEnableHoppingWindowStartCheck(true);
+        }
         config.MutableFeatureFlags()->SetEnableStreamingQueryStateRecompute(enabled);
         config.MutableFeatureFlags()->SetEnableStreamingQueriesPqSinkDeduplication(true);
         config.MutableFeatureFlags()->SetEnableSharedReadingInStreamingQueries(sharedReading);

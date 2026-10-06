@@ -25,6 +25,7 @@ class TJsonQuery : public TViewerPipeClient {
     TString Syntax;
     TString QueryId;
     TString ResourcePool;
+    bool IncludeWmInfo = false;
     bool WmQueueReported = false;
     bool WmExecutionReported = false;
     TString TransactionMode;
@@ -358,6 +359,7 @@ public:
         if (params.Has("limit_rows")) {
             LimitRows = std::clamp<int>(FromStringWithDefault<int>(params.Get("limit_rows"), 10000), 1, Streaming != EStreamingType::None ? std::numeric_limits<int>::max() : 100000);
         }
+        IncludeWmInfo = FromStringWithDefault<bool>(params.Get("include_wm_info"), IncludeWmInfo);
         if (params.Has("resource_pool")) {
             ResourcePool = params.Get("resource_pool");
         }
@@ -1004,7 +1006,7 @@ private:
             QueryResponse.Set(std::move(ev));
             MakeOkReply(jsonResponse, QueryResponse->Record);
             AddWmInfo(jsonResponse, QueryResponse->Record.GetResponse());
-            if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
+            if (Schema == ESchemaType::Classic && Stats.empty() && !IncludeWmInfo && (Action.empty() || Action == "execute")) {
                 jsonResponse = std::move(jsonResponse["result"]);
             }
         } else {
@@ -1594,6 +1596,16 @@ public:
                       * `ydb2`
                 type: string
                 enum: [classic, modern, ydb, multi]
+                required: false
+              - name: include_wm_info
+                in: query
+                description: >
+                    Preserve the response envelope with result, wm_state,
+                    wm_classified_by and resource_pool for classic execute responses.
+                    Without this flag, classic execute without stats keeps its legacy array format.
+                    Supported since /viewer/query capability version 13.
+                type: boolean
+                default: false
                 required: false
               - name: stats
                 in: query

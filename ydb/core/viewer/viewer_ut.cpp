@@ -1,7 +1,9 @@
 #include "ut/ut_utils.h"
 #include <ydb/core/mon/ut_utils/ut_utils.h>
-#include <thread>
 #include <future>
+#include <util/generic/scope.h>
+#include <ydb/services/workload_manager/events.h>
+#include <ydb/services/workload_manager/service/service.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -663,13 +665,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TString Schema;
         TString Base64;
         TString ResourcePool;
+        TString Stats = "none";
+        bool IncludeWmInfo = false;
+        TDuration Timeout = TDuration::Seconds(600);
     };
 
     NJson::TJsonValue PostQuery(TKeepAliveHttpClient& httpClient, TPostQueryArguments args) {
         NJson::TJsonValue jsonRequest;
         jsonRequest["database"] = "/Root";
         jsonRequest["syntax"] = "yql_v1";
-        jsonRequest["stats"] = "none";
+        if (args.Stats) {
+            jsonRequest["stats"] = args.Stats;
+        }
+        jsonRequest["include_wm_info"] = args.IncludeWmInfo;
         if (args.Query) {
             jsonRequest["query"] = args.Query;
         }
@@ -692,30 +700,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
         headers["Authorization"] = VALID_TOKEN;
-        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost(TStringBuilder() << "/viewer/query?timeout=" << args.Timeout.MilliSeconds(), NJson::WriteJson(jsonRequest, false), &responseStream, headers);
         UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
         return NJson::ReadJsonTree(&responseStream, /* throwOnError = */ true);
-    }
-
-    TString PostStreamingQuery(TKeepAliveHttpClient& httpClient, const TString& query, const TString& resourcePool = {}) {
-        NJson::TJsonValue request;
-        request["database"] = "/Root";
-        request["query"] = query;
-        request["action"] = "execute-query";
-        request["schema"] = "multipart";
-        if (resourcePool) {
-            request["resource_pool"] = resourcePool;
-        }
-
-        TStringStream responseStream;
-        TKeepAliveHttpClient::THeaders headers;
-        headers["Content-Type"] = "application/json";
-        headers["Accept"] = "multipart/form-data";
-        headers["Authorization"] = VALID_TOKEN;
-        const auto statusCode = httpClient.DoPost("/viewer/query?timeout=30000&schema=multipart",
-            NJson::WriteJson(request, false), &responseStream, headers);
-        UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
-        return responseStream.Str();
     }
 
     TVector<NJson::TJsonValue> ParseStreamingChunks(const TString& response) {
@@ -732,6 +719,130 @@ Y_UNIT_TEST_SUITE(Viewer) {
             position = end;
         }
         return chunks;
+    }
+
+    NJson::TJsonValue PostWmQuery(TKeepAliveHttpClient& httpClient, TPostQueryArguments args) {
+        args.Timeout = TDuration::Seconds(30);
+        return PostQuery(httpClient, std::move(args));
+    }
+
+    class TStreamingResponseCollector : public IOutputStream {
+    public:
+        explicit TStreamingResponseCollector(std::promise<NJson::TJsonValue>* queued)
+            : Queued(queued)
+        {}
+
+        TString Body;
+
+    private:
+        void DoWrite(const void* data, size_t size) override {
+            Body.append(static_cast<const char*>(data), size);
+            if (!Queued) {
+                return;
+            }
+            for (const auto& chunk : ParseStreamingChunks(Body)) {
+                if (chunk.Has("meta") && chunk["meta"]["event"].GetString() == "QueryStarted" &&
+                    chunk["wm_state"].GetString() == "QUEUED") {
+                    Queued->set_value(chunk);
+                    Queued = nullptr;
+                    break;
+                }
+            }
+        }
+
+        std::promise<NJson::TJsonValue>* Queued;
+    };
+
+    TString PostStreamingQuery(TKeepAliveHttpClient& httpClient, const TString& query,
+                               const TString& resourcePool = {},
+                               std::promise<NJson::TJsonValue>* queued = nullptr) {
+        NJson::TJsonValue request;
+        request["database"] = "/Root";
+        request["query"] = query;
+        request["action"] = "execute-query";
+        request["schema"] = "multipart";
+        if (resourcePool) {
+            request["resource_pool"] = resourcePool;
+        }
+        TStreamingResponseCollector response(queued);
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Accept"] = "multipart/form-data";
+        headers["Authorization"] = VALID_TOKEN;
+        const auto statusCode = httpClient.DoPost("/viewer/query?timeout=10000&schema=multipart&keep_alive=1000",
+            NJson::WriteJson(request, false), &response, headers);
+        UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
+        return std::move(response.Body);
+    }
+
+    // Hold only the first query's successful admission reply. The real FIFO
+    // pool has already occupied its execution slot, so subsequent queries must
+    // queue or be rejected until the test releases this reply.
+    class TWmAdmissionGate : public TActorBootstrapped<TWmAdmissionGate> {
+    public:
+        TWmAdmissionGate(TActorId service, std::shared_ptr<std::promise<Ydb::StatusIds::StatusCode>> admitted)
+            : Service(service)
+            , Admitted(std::move(admitted))
+        {}
+
+        void Bootstrap() {
+            Become(&TWmAdmissionGate::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(NWorkloadManager::TEvPlaceRequestIntoPool, HandlePlace);
+                hFunc(NWorkloadManager::TEvContinueRequest, HandleContinue);
+                cFunc(TEvents::TEvWakeup::EventType, Release);
+                case NWorkloadManager::TEvCleanupResponse::EventType:
+                case NKqp::TEvKqp::TEvCancelQueryRequest::EventType:
+                    Send(ev->Forward(Worker));
+                    break;
+                default:
+                    Send(ev->Forward(Service));
+            }
+        }
+
+        void HandlePlace(NWorkloadManager::TEvPlaceRequestIntoPool::TPtr& ev) {
+            if (ev->Get()->RequestText != "SELECT 111;") {
+                Send(ev->Forward(Service));
+                return;
+            }
+            Worker = ev->Sender;
+            Send(new IEventHandle(Service, SelfId(), ev->Release().Release(), 0, ev->Cookie));
+        }
+
+        void HandleContinue(NWorkloadManager::TEvContinueRequest::TPtr& ev) {
+            Admitted->set_value(ev->Get()->Status);
+            if (Released) {
+                Send(ev->Forward(Worker));
+            } else {
+                Held.Reset(ev.Release());
+            }
+        }
+
+        void Release() {
+            Released = true;
+            if (Held) {
+                Send(Held->Forward(Worker));
+                Held.Reset();
+            }
+        }
+
+    private:
+        const TActorId Service;
+        const std::shared_ptr<std::promise<Ydb::StatusIds::StatusCode>> Admitted;
+        TActorId Worker;
+        TAutoPtr<IEventHandle> Held;
+        bool Released = false;
+    };
+
+    TActorId InstallWmAdmissionGate(TTestActorRuntime& runtime,
+                                  std::shared_ptr<std::promise<Ydb::StatusIds::StatusCode>> admitted) {
+        const auto service = NWorkloadManager::MakeServiceId(runtime.GetNodeId());
+        const auto gate = runtime.Register(new TWmAdmissionGate(runtime.GetLocalServiceId(service), std::move(admitted)));
+        runtime.RegisterService(service, gate);
+        return gate;
     }
 
     void CreateUser(TClient& client) {
@@ -4546,9 +4657,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
 
-        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TKeepAliveHttpClient httpClient("localhost", monPort, TDuration::Seconds(10), TDuration::Seconds(5));
         WaitForHttpReady(httpClient);
-        auto poolDdl = PostQuery(httpClient, {
+        auto poolDdl = PostWmQuery(httpClient, {
             .Query = "CREATE RESOURCE POOL explicit_pool WITH (concurrent_query_limit = 10);",
             .Action = "execute-query"
         });
@@ -4560,7 +4671,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NJson::TJsonValue json;
         const auto deadline = TInstant::Now() + TDuration::Seconds(30);
         while (TInstant::Now() < deadline) {
-            json = PostQuery(httpClient, {
+            json = PostWmQuery(httpClient, {
                 .Query = "SELECT 1;",
                 .Action = "execute",
                 .Schema = "modern",
@@ -4576,6 +4687,64 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(json.Has("wm_classified_by"), "wm_classified_by is missing in response: " << NJson::WriteJson(json, false));
         UNIT_ASSERT_VALUES_EQUAL_C(json["wm_classified_by"].GetString(), "USER", "response: " << NJson::WriteJson(json, false));
         UNIT_ASSERT_VALUES_EQUAL_C(json["resource_pool"].GetString(), "explicit_pool", "response: " << NJson::WriteJson(json, false));
+    }
+
+    Y_UNIT_TEST(WmInfoClassicResponseCompatibility) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetEnableResourcePools(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort, TDuration::Seconds(10), TDuration::Seconds(5));
+        WaitForHttpReady(httpClient);
+        auto poolDdl = PostWmQuery(httpClient, {
+            .Query = "CREATE RESOURCE POOL explicit_pool WITH (concurrent_query_limit = 10);",
+            .Action = "execute-query"
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(poolDdl["status"].GetString(), "SUCCESS", "Pool DDL failed: " << NJson::WriteJson(poolDdl, false));
+
+        for (const auto& action : {TString(), TString("execute")}) {
+            auto legacy = PostWmQuery(httpClient, {
+                .Query = "SELECT 42 AS value;",
+                .Action = action,
+                .Schema = "classic",
+                .ResourcePool = "explicit_pool",
+                .Stats = {}
+            });
+            UNIT_ASSERT_C(legacy.IsArray(), NJson::WriteJson(legacy, false));
+            UNIT_ASSERT_VALUES_EQUAL(legacy.GetArray().size(), 1);
+            auto withWm = PostWmQuery(httpClient, {
+                .Query = "SELECT 42 AS value;",
+                .Action = action,
+                .Schema = "classic",
+                .ResourcePool = "explicit_pool",
+                .Stats = {},
+                .IncludeWmInfo = true
+            });
+            UNIT_ASSERT_VALUES_EQUAL(withWm["version"].GetUInteger(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(withWm["status"].GetString(), "SUCCESS");
+            UNIT_ASSERT_VALUES_EQUAL(NJson::WriteJson(withWm["result"], false), NJson::WriteJson(legacy, false));
+            UNIT_ASSERT_VALUES_EQUAL(withWm["wm_state"].GetString(), "EXECUTING");
+            UNIT_ASSERT_VALUES_EQUAL(withWm["wm_classified_by"].GetString(), "USER");
+            UNIT_ASSERT_VALUES_EQUAL(withWm["resource_pool"].GetString(), "explicit_pool");
+        }
     }
 
     Y_UNIT_TEST(WmStateIsNotFabricatedForInvalidQuery) {
@@ -4601,7 +4770,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
 
-        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TKeepAliveHttpClient httpClient("localhost", monPort, TDuration::Seconds(10), TDuration::Seconds(5));
         WaitForHttpReady(httpClient);
         const auto response = PostStreamingQuery(httpClient, "SELECT FROM;");
         UNIT_ASSERT_C(response.find("\"status\":\"GENERIC_ERROR\"") != TString::npos, response);
@@ -4631,9 +4800,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
 
-        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TKeepAliveHttpClient httpClient("localhost", monPort, TDuration::Seconds(10), TDuration::Seconds(5));
         WaitForHttpReady(httpClient);
-        const auto response = PostQuery(httpClient, {
+        const auto response = PostWmQuery(httpClient, {
             .Query = "SELECT FROM;",
             .Action = "execute-query",
             .Schema = "modern",
@@ -4667,15 +4836,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
         GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
 
-        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TKeepAliveHttpClient httpClient("localhost", monPort, TDuration::Seconds(10), TDuration::Seconds(5));
         WaitForHttpReady(httpClient);
-        auto poolDdl = PostQuery(httpClient, {
+        auto poolDdl = PostWmQuery(httpClient, {
             .Query = "CREATE RESOURCE POOL classified_pool WITH (concurrent_query_limit = 10);",
             .Action = "execute-query"
         });
         UNIT_ASSERT_VALUES_EQUAL_C(poolDdl["status"].GetString(), "SUCCESS", "Pool DDL failed: " << NJson::WriteJson(poolDdl, false));
         // A classifier without any match predicates routes all requests to the pool.
-        auto classifierDdl = PostQuery(httpClient, {
+        auto classifierDdl = PostWmQuery(httpClient, {
             .Query = "CREATE RESOURCE POOL CLASSIFIER catch_all_classifier WITH (resource_pool = 'classified_pool', rank = 20);",
             .Action = "execute-query"
         });
@@ -4687,7 +4856,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NJson::TJsonValue json;
         const auto deadline = TInstant::Now() + TDuration::Seconds(30);
         while (TInstant::Now() < deadline) {
-            json = PostQuery(httpClient, {
+            json = PostWmQuery(httpClient, {
                 .Query = "SELECT 1;",
                 .Action = "execute",
                 .Schema = "modern"
@@ -4727,84 +4896,64 @@ Y_UNIT_TEST_SUITE(Viewer) {
         GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
 
-        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TKeepAliveHttpClient httpClient("localhost", monPort, TDuration::Seconds(10), TDuration::Seconds(5));
         WaitForHttpReady(httpClient);
 
         // Create a pool with concurrent_query_limit = 1 so that a second
         // concurrent query will be queued.
-        auto poolDdl = PostQuery(httpClient, {
+        auto poolDdl = PostWmQuery(httpClient, {
             .Query = "CREATE RESOURCE POOL limited_pool WITH (concurrent_query_limit = 1, queue_size = 10);",
             .Action = "execute-query"
         });
         UNIT_ASSERT_VALUES_EQUAL_C(poolDdl["status"].GetString(), "SUCCESS", "Pool DDL failed: " << NJson::WriteJson(poolDdl, false));
 
-        // Wait until the pool is picked up by the workload manager.
-        NJson::TJsonValue json;
-        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
-        while (TInstant::Now() < deadline) {
-            json = PostQuery(httpClient, {
-                .Query = "SELECT 1;",
-                .Action = "execute",
-                .Schema = "modern",
-                .ResourcePool = "limited_pool"
-            });
-            if (json.Has("wm_state") && json.Has("wm_classified_by")) {
-                break;
+        auto admitted = std::make_shared<std::promise<Ydb::StatusIds::StatusCode>>();
+        auto admittedFuture = admitted->get_future();
+        auto& runtime = *server.GetRuntime();
+        const auto gate = InstallWmAdmissionGate(runtime, admitted);
+        std::promise<NJson::TJsonValue> queued;
+        auto queuedFuture = queued.get_future();
+        auto first = std::async(std::launch::async, [monPort] {
+            TKeepAliveHttpClient queryClient("localhost", monPort, TDuration::Seconds(10), TDuration::Seconds(5));
+            return PostStreamingQuery(queryClient, "SELECT 111;", "limited_pool");
+        });
+        std::future<TString> second;
+        Y_DEFER { runtime.Send(new IEventHandle(gate, {}, new TEvents::TEvWakeup())); };
+        UNIT_ASSERT(admittedFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+        UNIT_ASSERT_VALUES_EQUAL(admittedFuture.get(), Ydb::StatusIds::SUCCESS);
+        second = std::async(std::launch::async, [monPort, &queued] {
+            TKeepAliveHttpClient queryClient("localhost", monPort, TDuration::Seconds(10), TDuration::Seconds(5));
+            return PostStreamingQuery(queryClient, "SELECT 222;", "limited_pool", &queued);
+        });
+
+        // Observe the actual HTTP stream while the first request still owns the
+        // only pool slot. A completed response cannot satisfy this assertion.
+        UNIT_ASSERT(queuedFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+        const auto queuedChunk = queuedFuture.get();
+        UNIT_ASSERT_VALUES_EQUAL(queuedChunk["resource_pool"].GetString(), "limited_pool");
+        UNIT_ASSERT_VALUES_EQUAL(queuedChunk["wm_classified_by"].GetString(), "USER");
+        UNIT_ASSERT(first.wait_for(std::chrono::seconds(0)) == std::future_status::timeout);
+        UNIT_ASSERT(second.wait_for(std::chrono::seconds(0)) == std::future_status::timeout);
+        runtime.Send(new IEventHandle(gate, {}, new TEvents::TEvWakeup()));
+
+        UNIT_ASSERT(first.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+        UNIT_ASSERT(second.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+        UNIT_ASSERT_STRING_CONTAINS(first.get(), "\"status\":\"SUCCESS\"");
+        const auto body = second.get();
+        TVector<TString> states;
+        bool success = false;
+        for (const auto& chunk : ParseStreamingChunks(body)) {
+            if (chunk["meta"]["event"].GetString() == "QueryStarted" && chunk.Has("wm_state")) {
+                states.push_back(chunk["wm_state"].GetString());
             }
-            Sleep(TDuration::MilliSeconds(500));
-        }
-        UNIT_ASSERT_C(json.Has("wm_state"), "wm_state is missing in response: " << NJson::WriteJson(json, false));
-        UNIT_ASSERT_VALUES_EQUAL_C(json["wm_state"].GetString(), "EXECUTING", "response: " << NJson::WriteJson(json, false));
-
-        // Keep the only execution slot busy while other queries enter the queue.
-        // Each request uses its own HTTP client because the client is not shared across threads.
-        const TString heavyQuery = "SELECT ListSum(ListMap(ListFromRange(1u, 30000000u), ($x) -> { RETURN $x * $x; }));";
-        std::future<TString> responses[3];
-        for (auto& response : responses) {
-            response = std::async(std::launch::async, [monPort, heavyQuery] {
-                TKeepAliveHttpClient queryClient("localhost", monPort);
-                return PostStreamingQuery(queryClient, heavyQuery, "limited_pool");
-            });
-        }
-
-        bool sawQueuedSession = false;
-        const auto queueDeadline = TInstant::Now() + TDuration::Seconds(20);
-        while (TInstant::Now() < queueDeadline) {
-            const auto sessions = PostQuery(httpClient, {
-                .Query = "SELECT State FROM `.sys/query_sessions` WHERE WmPoolId = \"limited_pool\";",
-                .Action = "execute",
-                .Schema = "modern",
-                .ResourcePool = "default"
-            });
-            UNIT_ASSERT_VALUES_EQUAL_C(sessions["status"].GetString(), "SUCCESS", NJson::WriteJson(sessions, false));
-            if (NJson::WriteJson(sessions, false).find("\"QUEUED\"") != TString::npos) {
-                sawQueuedSession = true;
-                break;
-            }
-            Sleep(TDuration::MilliSeconds(100));
-        }
-
-        bool sawQueuedChunk = false;
-        bool sawQueueExit = false;
-        for (auto& response : responses) {
-            const auto body = response.get();
-            UNIT_ASSERT_C(body.find("\"status\":\"SUCCESS\"") != TString::npos, body);
-            bool queued = false;
-            for (const auto& chunk : ParseStreamingChunks(body)) {
-                if (!chunk.Has("meta") || chunk["meta"]["event"].GetString() != "QueryStarted") {
-                    continue;
-                }
-                if (chunk["wm_state"].GetString() == "QUEUED") {
-                    queued = true;
-                    sawQueuedChunk = true;
-                } else if (queued && chunk["wm_state"].GetString() == "EXECUTING") {
-                    sawQueueExit = true;
-                }
+            if (chunk["meta"]["event"].GetString() == "QueryResponse") {
+                success = chunk["status"].GetString() == "SUCCESS";
             }
         }
-        UNIT_ASSERT_C(sawQueuedSession, "No limited_pool session entered QUEUED state");
-        UNIT_ASSERT_C(sawQueuedChunk, "WM queued a query but viewer did not stream the QUEUED state");
-        UNIT_ASSERT_C(sawQueueExit, "Viewer did not report EXECUTING after a queued query left the WM queue");
+        UNIT_ASSERT_C(success, body);
+        UNIT_ASSERT_VALUES_EQUAL(states.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(states[0], "QUEUED");
+        UNIT_ASSERT_VALUES_EQUAL(states[1], "EXECUTING");
     }
 
     Y_UNIT_TEST(WmRejectedQueryIsNotExecuting) {
@@ -4829,53 +4978,38 @@ Y_UNIT_TEST_SUITE(Viewer) {
         GrantRead(client);
         client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
 
-        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TKeepAliveHttpClient httpClient("localhost", monPort, TDuration::Seconds(10), TDuration::Seconds(5));
         WaitForHttpReady(httpClient);
-        const auto poolDdl = PostQuery(httpClient, {
+        const auto poolDdl = PostWmQuery(httpClient, {
             .Query = "CREATE RESOURCE POOL reject_pool WITH (concurrent_query_limit = 1, queue_size = 0);",
             .Action = "execute-query"
         });
         UNIT_ASSERT_VALUES_EQUAL_C(poolDdl["status"].GetString(), "SUCCESS", NJson::WriteJson(poolDdl, false));
 
-        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
-        NJson::TJsonValue ready;
-        while (TInstant::Now() < deadline) {
-            ready = PostQuery(httpClient, {
-                .Query = "SELECT 1;",
-                .Action = "execute",
-                .Schema = "modern",
-                .ResourcePool = "reject_pool"
-            });
-            if (ready.Has("wm_state")) {
-                break;
-            }
-            Sleep(TDuration::MilliSeconds(500));
-        }
-        UNIT_ASSERT_VALUES_EQUAL_C(ready["wm_state"].GetString(), "EXECUTING", NJson::WriteJson(ready, false));
-
-        const TString heavyQuery = "SELECT ListSum(ListMap(ListFromRange(1u, 30000000u), ($x) -> { RETURN $x * $x; }));";
-        std::future<TString> responses[4];
-        for (auto& response : responses) {
-            response = std::async(std::launch::async, [monPort, heavyQuery] {
-                TKeepAliveHttpClient queryClient("localhost", monPort);
-                return PostStreamingQuery(queryClient, heavyQuery, "reject_pool");
-            });
-        }
-
-        bool sawRejection = false;
-        for (auto& response : responses) {
-            const auto body = response.get();
-            for (const auto& chunk : ParseStreamingChunks(body)) {
-                if (!chunk.Has("meta") || chunk["meta"]["event"].GetString() != "QueryResponse" ||
-                    chunk["status"].GetString() != "OVERLOADED") {
-                    continue;
-                }
-                sawRejection = true;
-                UNIT_ASSERT_C(!chunk.Has("wm_state") || chunk["wm_state"].GetString() != "EXECUTING",
-                    "Rejected query was reported as executing: " << body);
+        auto admitted = std::make_shared<std::promise<Ydb::StatusIds::StatusCode>>();
+        auto admittedFuture = admitted->get_future();
+        auto& runtime = *server.GetRuntime();
+        const auto gate = InstallWmAdmissionGate(runtime, admitted);
+        auto first = std::async(std::launch::async, [monPort] {
+            TKeepAliveHttpClient queryClient("localhost", monPort, TDuration::Seconds(10), TDuration::Seconds(5));
+            return PostStreamingQuery(queryClient, "SELECT 111;", "reject_pool");
+        });
+        Y_DEFER { runtime.Send(new IEventHandle(gate, {}, new TEvents::TEvWakeup())); };
+        UNIT_ASSERT(admittedFuture.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+        UNIT_ASSERT_VALUES_EQUAL(admittedFuture.get(), Ydb::StatusIds::SUCCESS);
+        const auto body = PostStreamingQuery(httpClient, "SELECT 222;", "reject_pool");
+        bool rejected = false;
+        for (const auto& chunk : ParseStreamingChunks(body)) {
+            UNIT_ASSERT_C(!chunk.Has("wm_state") || chunk["wm_state"].GetString() != "EXECUTING", body);
+            if (chunk["meta"]["event"].GetString() == "QueryResponse") {
+                UNIT_ASSERT_VALUES_EQUAL_C(chunk["status"].GetString(), "OVERLOADED", body);
+                rejected = true;
             }
         }
-        UNIT_ASSERT_C(sawRejection, "No request was rejected by reject_pool");
+        UNIT_ASSERT_C(rejected, body);
+        runtime.Send(new IEventHandle(gate, {}, new TEvents::TEvWakeup()));
+        UNIT_ASSERT(first.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+        UNIT_ASSERT_STRING_CONTAINS(first.get(), "\"status\":\"SUCCESS\"");
     }
 
 }

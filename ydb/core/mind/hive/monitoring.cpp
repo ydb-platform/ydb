@@ -5352,17 +5352,17 @@ public:
 };
 
 static void RenderNodeEventRow(IOutputStream& out, const THiveEvent& event) {
-    out << "<td>" << event.GetTimestamp().ToStringLocalUpToSeconds() << "</td>"
-        << "<td>" << EHiveEventTypeName(event.GetType()) << "</td>"
-        << "<td>" << EncodeHtmlPcdata(EHiveEventReasonName(event.GetReason())) << "</td>"
+    out << "<td>" << event.GetTimestamp().ToString() << "</td>"
+        << "<td>" << EHiveEventTypeName(event.Type) << "</td>"
+        << "<td>" << EncodeHtmlPcdata(EHiveEventReasonName(event.Reason)) << "</td>"
         << "<td>" << EncodeHtmlPcdata(event.Details) << "</td>";
 }
 
 static NJson::TJsonValue NodeEventToJson(const THiveEvent& event) {
     NJson::TJsonValue json;
-    json["Timestamp"] = event.GetTimestamp().MilliSeconds();
-    json["Event"] = TString(EHiveEventTypeName(event.GetType()));
-    json["Reason"] = TString(EHiveEventReasonName(event.GetReason()));
+    json["Timestamp"] = event.TimestampMs;
+    json["Event"] = TString(EHiveEventTypeName(event.Type));
+    json["Reason"] = TString(EHiveEventReasonName(event.Reason));
     json["Details"] = event.Details;
     return json;
 }

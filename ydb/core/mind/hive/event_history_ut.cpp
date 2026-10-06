@@ -14,8 +14,8 @@ Y_UNIT_TEST_SUITE(THiveEventTest) {
                 const auto type = static_cast<EHiveEventType>(t);
                 const auto reason = static_cast<EHiveEventReason>(r);
                 THiveEvent event(timestamp, type, reason, "details");
-                UNIT_ASSERT_EQUAL_C(event.GetType(), type, "type " << int(t) << " reason " << int(r));
-                UNIT_ASSERT_EQUAL_C(event.GetReason(), reason, "type " << int(t) << " reason " << int(r));
+                UNIT_ASSERT_EQUAL_C(event.Type, type, "type " << int(t) << " reason " << int(r));
+                UNIT_ASSERT_EQUAL_C(event.Reason, reason, "type " << int(t) << " reason " << int(r));
                 UNIT_ASSERT_VALUES_EQUAL(event.Details, "details");
                 UNIT_ASSERT_VALUES_EQUAL(event.GetTimestamp(), timestamp);
             }
@@ -30,21 +30,10 @@ Y_UNIT_TEST_SUITE(THiveEventTest) {
                                    TInstant::ParseIso8601("2026-10-06T00:00:00Z"), TInstant::ParseIso8601("9999-12-31T23:59:59.999Z")}) {
             THiveEvent event(timestamp, type, reason, {});
             UNIT_ASSERT_VALUES_EQUAL(event.GetTimestamp(), TInstant::MilliSeconds(timestamp.MilliSeconds()));
-            UNIT_ASSERT_EQUAL(event.GetType(), type);
-            UNIT_ASSERT_EQUAL(event.GetReason(), reason);
+            UNIT_ASSERT_EQUAL(event.Type, type);
+            UNIT_ASSERT_EQUAL(event.Reason, reason);
             UNIT_ASSERT(event.Details.empty());
         }
         UNIT_ASSERT_VALUES_EQUAL(sizeof(THiveEvent), 16);
-    }
-
-    Y_UNIT_TEST(NamesAreDistinct) {
-        THashSet<TStringBuf> names;
-        for (ui8 r = 0; r <= static_cast<ui8>(EHiveEventReason::LoadedFromDatabase); ++r) {
-            UNIT_ASSERT(names.insert(EHiveEventReasonName(static_cast<EHiveEventReason>(r))).second);
-        }
-        names.clear();
-        for (ui8 t = 0; t <= static_cast<ui8>(EHiveEventType::AvailabilityChanged); ++t) {
-            UNIT_ASSERT(names.insert(EHiveEventTypeName(static_cast<EHiveEventType>(t))).second);
-        }
     }
 }

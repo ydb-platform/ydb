@@ -65,34 +65,21 @@ TStringBuf EHiveEventReasonName(EHiveEventReason value);
 // Details is a refcounted pointer (8 bytes, no allocation when empty) shared by the copies
 // in the global and per-node histories.
 struct THiveEvent {
-    ui64 Packed = 0;
+    ui64 TimestampMs : 48; // milliseconds, enough for ~8900 years
+    EHiveEventType Type : 8;
+    EHiveEventReason Reason : 8;
     TString Details; // variable part of the description
-
-    static constexpr ui64 TYPE_SHIFT = 0;
-    static constexpr ui64 TYPE_MASK = 0xFF;
-    static constexpr ui64 REASON_SHIFT = 8;
-    static constexpr ui64 REASON_MASK = 0xFF;
-    static constexpr ui64 TIMESTAMP_SHIFT = 16;
-    static constexpr ui64 TIMESTAMP_MASK = (1ull << 48) - 1; // milliseconds, enough for ~8900 years
 
     THiveEvent() = default;
     THiveEvent(TInstant timestamp, EHiveEventType type, EHiveEventReason reason, TString details)
-        : Packed(((static_cast<ui64>(type) & TYPE_MASK) << TYPE_SHIFT)
-            | ((static_cast<ui64>(reason) & REASON_MASK) << REASON_SHIFT)
-            | ((timestamp.MilliSeconds() & TIMESTAMP_MASK) << TIMESTAMP_SHIFT))
+        : TimestampMs(timestamp.MilliSeconds())
+        , Type(type)
+        , Reason(reason)
         , Details(std::move(details))
     {}
 
-    EHiveEventType GetType() const {
-        return static_cast<EHiveEventType>((Packed >> TYPE_SHIFT) & TYPE_MASK);
-    }
-
-    EHiveEventReason GetReason() const {
-        return static_cast<EHiveEventReason>((Packed >> REASON_SHIFT) & REASON_MASK);
-    }
-
     TInstant GetTimestamp() const {
-        return TInstant::MilliSeconds((Packed >> TIMESTAMP_SHIFT) & TIMESTAMP_MASK);
+        return TInstant::MilliSeconds(TimestampMs);
     }
 };
 

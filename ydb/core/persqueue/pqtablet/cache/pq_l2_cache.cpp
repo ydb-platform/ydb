@@ -80,37 +80,6 @@ void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheKeysRequest::TPtr& ev, const 
     ctx.Send(ev->Sender, response.Release());
 }
 
-void TPersQueueCacheL2::RepairCurrentSize(const TKey& key)
-{
-    const ui64 limit = static_cast<ui64>(Cache.Size()) * static_cast<ui64>(MAX_BLOB_SIZE);
-    if (CurrentSize <= limit) {
-        return;
-    }
-
-    ui64 summed = 0;
-    ui64 maxBlob = 0;
-    for (auto it = Cache.Begin(); it != Cache.End(); ++it) {
-        const ui64 size = it.Value()->GetDataSize();
-        summed += size;
-        if (size > maxBlob) {
-            maxBlob = size;
-        }
-    }
-    if (summed == CurrentSize) {
-        return;
-    }
-
-    LOG_E("PQ Cache (L2). CurrentSize exceeds count * MAX_BLOB_SIZE",
-        {"key", key},
-        {"CurrentSize", CurrentSize},
-        {"SummedSize", summed},
-        {"CacheSize", Cache.Size()},
-        {"MaxBlob", maxBlob},
-        {"Limit", limit},
-        {"MaxBlobSizeConst", static_cast<ui64>(MAX_BLOB_SIZE)});
-    CurrentSize = summed;
-}
-
 /// @return outRemoved - map of evicted items. L1 should be noticed about them
 void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs,
                                  THashMap<TKey, TCacheValue::TPtr>& outEvicted)
@@ -118,27 +87,41 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
     Y_UNUSED(ctx);
     ui32 numUnused = 0;
     for (const TCacheBlobL2& blob : blobs) {
-        const ui64 blobSize = blob.Value->GetDataSize();
-        AFL_ENSURE(blobSize)("d", "Trying to place empty blob into L2 cache");
+        AFL_ENSURE(blob.Value->GetDataSize())("d", "Trying to place empty blob into L2 cache");
 
         TKey key(tabletId, blob);
-        // PQ tablet could send some data twice (if it's restored after die)
-        if (Cache.FindWithoutPromote(key) != Cache.End()) {
+        // The same key can be stored again after a tablet restart, or rewritten
+        // with a different body. Drop the previous bytes before inserting.
+        auto existing = Cache.FindWithoutPromote(key);
+        if (existing != Cache.End()) {
+            const ui64 oldSize = existing.Value()->GetDataSize();
             LOG_W("PQ Cache (L2). Same blob insertion. size",
                 {"key", key},
-                {"valueDataSize", blobSize});
-            continue;
+                {"oldSize", oldSize},
+                {"valueDataSize", blob.Value->GetDataSize()});
+            CurrentSize -= oldSize;
+            Cache.Erase(existing);
         }
 
-        RepairCurrentSize(key);
+        AFL_ENSURE(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE)
+            ("Key", key.ToString())
+            ("CurrentSize", CurrentSize)
+            ("Cache.Size", Cache.Size())
+            ("MAX_BLOB_SIZE", MAX_BLOB_SIZE);
 
-        // Evict until the new blob fits. Its bytes are counted only after Insert
-        // keeps it, so one blob larger than MaxSize stays as the only entry.
-        while (CurrentSize + blobSize > MaxSize) {
+        CurrentSize += blob.Value->GetDataSize();
+
+        // manualy manage LRU size
+        while (CurrentSize > MaxSize) {
             auto oldest = Cache.FindOldest();
-            if (oldest == Cache.End()) {
-                break;
-            }
+            AFL_ENSURE(oldest != Cache.End())
+                ("Tablet", tabletId)
+                ("Cache.Size()", Cache.Size())
+                ("CurrentSize", CurrentSize)
+                ("MaxSize", MaxSize)
+                ("blob.Value->GetDataSize()", blob.Value->GetDataSize())
+                ("blobs.size()", blobs.size())
+                ("outEvicted.size()", outEvicted.size());
 
             TCacheValue::TPtr value = oldest.Value();
             outEvicted.emplace(oldest.Key(), value);
@@ -153,35 +136,11 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
             Cache.Erase(oldest);
         }
 
-        TMaybe<TKey> overflowKey;
-        TCacheValue::TPtr overflowValue;
-        if (!Cache.Empty() && Cache.Size() + 1 > Cache.GetMaxSize()) {
-            auto oldest = Cache.FindOldest();
-            overflowKey = oldest.Key();
-            overflowValue = oldest.Value();
-        }
-
-        if (!Cache.Insert(key, blob.Value)) {
-            LOG_W("PQ Cache (L2). Blob was not stored",
-                {"key", key},
-                {"valueDataSize", blobSize});
-            continue;
-        }
-        CurrentSize += blobSize;
-
-        if (overflowKey && Cache.FindWithoutPromote(*overflowKey) == Cache.End()) {
-            outEvicted.emplace(*overflowKey, overflowValue);
-            if (overflowValue->GetAccessCount() == 0)
-                ++numUnused;
-            LOG_D("PQ Cache (L2). Evicting blob. size",
-                {"key", *overflowKey},
-                {"dataSize", overflowValue->GetDataSize()});
-            CurrentSize -= overflowValue->GetDataSize();
-        }
-
         LOG_D("PQ Cache (L2). Adding blob. size",
             {"key", key},
-            {"valueDataSize", blobSize});
+            {"valueDataSize", blob.Value->GetDataSize()});
+
+        Cache.Insert(key, blob.Value);
     }
 
     { // counters
@@ -243,40 +202,13 @@ void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
         if (oldKey == newKey) {
             continue;
         }
-
-        TCacheValue::TPtr value = *it;
-        const ui64 oldSize = value->GetDataSize();
         if (Cache.FindWithoutPromote(newKey) != Cache.End()) {
-            // Destination is already counted. Dropping the source must drop its bytes.
-            CurrentSize -= oldSize;
+            // Insert does not replace an existing key, but Erase would still drop the source.
+            CurrentSize -= (*it)->GetDataSize();
             Cache.Erase(it);
-            LOG_D("PQ Cache (L2). Renamed. old new",
-                {"oldKey", oldKey},
-                {"newKey", newKey});
-            continue;
-        }
-
-        TMaybe<TKey> overflowKey;
-        TCacheValue::TPtr overflowValue;
-        if (Cache.Size() + 1 > Cache.GetMaxSize()) {
-            auto oldest = Cache.FindOldest();
-            if (oldest != Cache.End()) {
-                overflowKey = oldest.Key();
-                overflowValue = oldest.Value();
-            }
-        }
-
-        const bool inserted = Cache.Insert(newKey, value);
-        if (overflowKey && !(*overflowKey == oldKey) && Cache.FindWithoutPromote(*overflowKey) == Cache.End()) {
-            CurrentSize -= overflowValue->GetDataSize();
-        }
-
-        auto oldIt = Cache.FindWithoutPromote(oldKey);
-        if (oldIt != Cache.End()) {
-            Cache.Erase(oldIt);
-        }
-        if (!inserted) {
-            CurrentSize -= oldSize;
+        } else {
+            Cache.Insert(newKey, *it);
+            Cache.Erase(it);
         }
 
         LOG_D("PQ Cache (L2). Renamed. old new",

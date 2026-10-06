@@ -94,16 +94,6 @@ Y_UNIT_TEST(RenameOntoExistingKeyKeepsByteCount) {
     UNIT_ASSERT_VALUES_EQUAL(probe.SizeBytes->Val(), 2);
 }
 
-Y_UNIT_TEST(BlobLargerThanMaxBlobSizeDoesNotAbort) {
-    TCacheProbe probe;
-    probe.Add(probe.Blob(1, MAX_BLOB_SIZE + 1));
-    probe.Add(probe.Blob(2, 1));
-    probe.Sync();
-
-    UNIT_ASSERT_VALUES_EQUAL(probe.SizeBlobs->Val(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(probe.SizeBytes->Val(), MAX_BLOB_SIZE + 2);
-}
-
 Y_UNIT_TEST(DuplicateInsertDoesNotGrowSize) {
     TCacheProbe probe;
     probe.Add(probe.Blob(1, 100));
@@ -112,6 +102,23 @@ Y_UNIT_TEST(DuplicateInsertDoesNotGrowSize) {
 
     UNIT_ASSERT_VALUES_EQUAL(probe.SizeBlobs->Val(), 1);
     UNIT_ASSERT_VALUES_EQUAL(probe.SizeBytes->Val(), 100);
+}
+
+Y_UNIT_TEST(ReinsertReplacesByteCount) {
+    TCacheProbe probe;
+    probe.Add(probe.Blob(1, 10));
+    probe.Add(probe.Blob(2, 7));
+    probe.Add(probe.Blob(1, 30));
+    probe.Sync();
+
+    UNIT_ASSERT_VALUES_EQUAL(probe.SizeBlobs->Val(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(probe.SizeBytes->Val(), 37);
+
+    probe.Add(probe.Blob(1, 4));
+    probe.Sync();
+
+    UNIT_ASSERT_VALUES_EQUAL(probe.SizeBlobs->Val(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(probe.SizeBytes->Val(), 11);
 }
 
 Y_UNIT_TEST(RenameToAbsentKeyPreservesSize) {

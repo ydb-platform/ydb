@@ -145,8 +145,6 @@ private:
 
     void AddBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs,
                   THashMap<TKey, TCacheValue::TPtr>& outEvicted);
-    // Rebuild CurrentSize from cached values when the byte counter has drifted.
-    void RepairCurrentSize(const TKey& key);
     void RemoveBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs);
     void TouchBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs, bool isHit = true);
     void RegretBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs);

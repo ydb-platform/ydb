@@ -104,11 +104,6 @@ public:
 
     void Enqueue(TWriteTask&& task);
     bool Drain(const bool onWakeup, const TActorContext& ctx);
-
-    // Test-only. Production sets this flag from Drain after a successful report.
-    void SetCompactionOverloadReportedForTest(bool reported) {
-        CompactionOverloadReported = reported;
-    }
 };
 
 }   // namespace NKikimr::NColumnShard

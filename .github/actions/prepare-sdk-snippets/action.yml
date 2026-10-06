@@ -3,7 +3,7 @@ description: Download locked source files and validate documentation regions
 
 inputs:
   isolated-python:
-    description: Use a virtual environment without changing the runner's Python
+    description: Install preparation dependencies separately without changing the runner's Python
     default: 'false'
   docs-root:
     description: Documentation input root containing manifest and lock
@@ -23,12 +23,20 @@ runs:
         ISOLATED_PYTHON: ${{ inputs.isolated-python }}
       run: |
         if [[ "$ISOLATED_PYTHON" == 'true' ]]; then
-          python3 -m venv "$RUNNER_TEMP/sdk-snippets-venv"
-          snippet_python="$RUNNER_TEMP/sdk-snippets-venv/bin/python"
+          snippet_site="$RUNNER_TEMP/sdk-snippets-site"
+          python3 -m pip install --target "$snippet_site" -r "$DOCS_ROOT/tools/sdk_snippets/requirements.txt"
+          snippet_python="$RUNNER_TEMP/sdk-snippets-python"
+          cat > "$snippet_python" <<'PYTHON_WRAPPER'
+        #!/usr/bin/env bash
+        set -euo pipefail
+        exec env PYTHONPATH="$SDK_SNIPPETS_SITE${PYTHONPATH:+:$PYTHONPATH}" python3 "$@"
+        PYTHON_WRAPPER
+          chmod +x "$snippet_python"
+          echo "SDK_SNIPPETS_SITE=$snippet_site" >> "$GITHUB_ENV"
         else
           snippet_python="$(command -v python)"
+          "$snippet_python" -m pip install -r "$DOCS_ROOT/tools/sdk_snippets/requirements.txt"
         fi
-        "$snippet_python" -m pip install -r "$DOCS_ROOT/tools/sdk_snippets/requirements.txt"
         echo "SDK_SNIPPETS_PYTHON=$snippet_python" >> "$GITHUB_ENV"
     - uses: actions/cache@v4
       with:

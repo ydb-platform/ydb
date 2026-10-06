@@ -10,7 +10,7 @@
 
 - C++
 
-  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/tree/6d43ddc861a04ee01f6711b4ecc54d7a9e981b7a/examples/ydb_tech/topic)
+  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/tree/7b6e0f79b138d8f24f396a4e7f049d57f6ada3f8/examples/ydb_tech/topic)
 
 - Go
 
@@ -2012,6 +2012,8 @@
   {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_commit_outside]-[END topic_commit_outside]" %}
 
   Если в момент подтверждения существует активная сессия чтения (например через `CreateReadSession`), рекомендуется передать её идентификатор с помощью опции `ReadSessionId` в `NYdb::NTopic::TCommitOffsetSettings`. Это позволяет серверу не прерывать текущую сессию чтения:
+
+  Серверный идентификатор сессии можно получить через `DescribeConsumer` с `IncludeStats(true)`. Значение `IReadSession::GetSessionId()` используется для диагностики в SDK и отличается от серверного идентификатора:
 
   {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_commit_outside_session]-[END topic_commit_outside_session]" %}
 

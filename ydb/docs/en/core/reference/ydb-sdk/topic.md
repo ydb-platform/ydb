@@ -10,7 +10,7 @@ The snippets below are parts of the complete executable examples linked in the n
 
 - C++
 
-  [Executable example on GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/tree/6d43ddc861a04ee01f6711b4ecc54d7a9e981b7a/examples/ydb_tech/topic)
+  [Executable example on GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/tree/7b6e0f79b138d8f24f396a4e7f049d57f6ada3f8/examples/ydb_tech/topic)
 
 - Go
 
@@ -2135,6 +2135,8 @@ Most often, it is convenient to commit within the reader that receives messages.
 
   If there is an active read session at the time of commit (for example, via `CreateReadSession`), it is recommended to pass its ID using the `ReadSessionId` option in `NYdb::NTopic::TCommitOffsetSettings`. This allows the server not to interrupt the current read session:
 
+
+  Obtain the server session ID from `DescribeConsumer` with `IncludeStats(true)`. The value returned by `IReadSession::GetSessionId()` identifies the SDK session for diagnostics and is different from the server ID:
 
   {% code "/.generated/sdk-snippets/cpp/examples/ydb_tech/topic/main.cpp" lang="cpp" lines="[BEGIN topic_commit_outside_session]-[END topic_commit_outside_session]" %}
 

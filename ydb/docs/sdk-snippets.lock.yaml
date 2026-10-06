@@ -88,11 +88,11 @@ sources:
     requested-ref:
       kind: branch
       name: docs/topic-snippets
-    resolved-commit: 6d43ddc861a04ee01f6711b4ecc54d7a9e981b7a
+    resolved-commit: 7b6e0f79b138d8f24f396a4e7f049d57f6ada3f8
     include:
     - examples/ydb_tech/topic/main.cpp
     files:
       examples/ydb_tech/topic/main.cpp:
-        git-blob: cc083047736da4961f5f80548ad4637bb213f0df
-        size: 23821
-        sha256: 18e69eb221fea4127c16c8d74fd20b4c9d2d0fa535c2c9724a3545afdfb6db3b
+        git-blob: fafc993f33a8d7a901a5bcb869c1589b5f38e7a5
+        size: 24423
+        sha256: 579d45a69dfbfe98ceecedeeb56bb30817166fc90be93b6c9739a00e81a42b91

@@ -2795,7 +2795,7 @@ Y_UNIT_TEST(TestAlreadyWrittenWithoutDeduplication) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds()}, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds()}, {}, tc); //no important clients - delete all right now, except last datablob
         TVector<std::pair<ui64, TString>> data;
         activeZone = true;
 
@@ -2880,7 +2880,7 @@ Y_UNIT_TEST(TestWritePQBigMessage) {
         tc.Runtime->SetScheduledLimit(200);
 
         PQTabletPrepare({.deleteTime = TDuration::Hours(20).Seconds(), .lowWatermark=(8_MB - 512_KB)}, {{"user1", true}}, tc); //nothing dropped
-                //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+                //no important clients - delete all right now, except last datablob
 
         TVector<std::pair<ui64, TString>> data;
 

@@ -91,7 +91,7 @@ This functionality is present in the core to allow rollback from the future 26.3
 * [Fixed](https://github.com/ydb-platform/ydb/pull/40801) handling of `NODATA` responses in the KeyValue API: `NOT_FOUND` or `INTERNAL_ERROR` is returned instead of terminating the process.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41895) IAM authentication for external data sources in Generic Provider and [error handling](https://github.com/ydb-platform/ydb/pull/40761) for provider responses.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41411) a memory leak when loading external data source metadata.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/46739) parsing of tri-state feature flags in YAML configuration that could cause subsequent settings to be lost.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/46739) parsing of tri-state [feature flags](./reference/configuration/feature_flags.md) in YAML configuration that could cause subsequent settings to be lost.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41009) copying and exporting tables with secondary indexes after index implementation tables were removed.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/45958) object filtering and list operations during file-system export.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/47591) Kafka API Metadata responses that could return an empty broker list or an inconsistent controller ID, causing Kafka AdminClient and Kafka Streams operations to time out.
@@ -287,9 +287,9 @@ Release date: May 12, 2026.
 #### Functionality
 
 * [Added](https://github.com/ydb-platform/ydb/pull/21119) support for the Kafka frameworks, such as Kafka Connect, Kafka Streams, Confluent Schema Registry, Kafka Streams, Apache Flink, etc. Now [YDB Topics Kafka API](./reference/kafka-api/index.md) supports the following features:
-  * client-side consumer balancing. To enable it, use the `enable_kafka_native_balancing` flag in the [cluster configuration](./reference/configuration/index.md). For for information, see [How consumer balancing works in Apache Kafka](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb/). When enabled, consumer balancing will work the same way in YDB Topics.
-  * [compacted topics](https://docs.confluent.io/kafka/design/log_compaction.html). To enable topic compaction, use the `enable_topic_compactification_by_key` flag.
-  * [transactions](https://www.confluent.io/blog/transactions-apache-kafka/). To enable transactions, use the `enable_kafka_transactions` flag.
+  * client-side consumer balancing. To enable it, use the [`enable_kafka_native_balancing`](./reference/configuration/feature_flags.md) flag in the [cluster configuration](./reference/configuration/index.md). For for information, see [How consumer balancing works in Apache Kafka](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb/). When enabled, consumer balancing will work the same way in YDB Topics.
+  * [compacted topics](https://docs.confluent.io/kafka/design/log_compaction.html). To enable topic compaction, use the [`enable_topic_compactification_by_key`](./reference/configuration/feature_flags.md) flag.
+  * [transactions](https://www.confluent.io/blog/transactions-apache-kafka/). To enable transactions, use the [`enable_kafka_transactions`](./reference/configuration/feature_flags.md) flag.
 * [Added](https://github.com/ydb-platform/ydb/pull/20982) a [new protocol](https://github.com/ydb-platform/ydb/issues/11064) to [Node Broker](./concepts/glossary.md#node-broker) that eliminates the long startup of nodes on large clusters (more than 1000 servers).
 
 #### YDB UI
@@ -324,19 +324,19 @@ Release date: July 14, 2025.
 * Added [configuration mechanism V2](./devops/configuration-management/configuration-v2/config-overview?version=v25.1) that simplifies the deployment of new {{ ydb-short-name }} clusters and further work with them. [Comparison](./devops/configuration-management/compare-configs?version=v25.1) of configuration mechanisms V1 and V2.
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md?version=v25.1#numeric).
 * [Added](https://github.com/ydb-platform/ydb/pull/8065) the ability to omit the `DECLARE` operator for query parameter type declarations. Parameter types are now automatically inferred from the provided values.
-* [Implemented](https://github.com/ydb-platform/ydb/issues/18017) client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (like Kafka itself). Previously, balancing took place on the server. This mode is enabled by setting the `enable_kafka_native_balancing` flag in the cluster configuration.
-* Added support for [auto-partitioning topics](./concepts/cdc.md?version=v25.1#topic-partitions) for row-oriented tables in CDC. This mode is enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the cluster configuration.
+* [Implemented](https://github.com/ydb-platform/ydb/issues/18017) client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (like Kafka itself). Previously, balancing took place on the server. This mode is enabled by setting the [`enable_kafka_native_balancing`](./reference/configuration/feature_flags.md) flag in the cluster configuration.
+* Added support for [auto-partitioning topics](./concepts/cdc.md?version=v25.1#topic-partitions) for row-oriented tables in CDC. This mode is enabled by setting the [`enable_topic_autopartitioning_for_cdc`](./reference/configuration/feature_flags.md) flag in the cluster configuration.
 * [Added](https://github.com/ydb-platform/ydb/pull/8264) the ability to [alter the retention period of CDC topics](./concepts/cdc.md?version=v25.1#topic-settings) using the `ALTER TOPIC` statement.
 * [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the DEBEZIUM_JSON format](./concepts/cdc.md?version=v25.1#debezium-json-record-structure) for CDC.
 * [Added](https://github.com/ydb-platform/ydb/pull/19507) the ability to create changefeed streams to index tables.
-* [Added](https://github.com/ydb-platform/ydb/issues/19310) the ability to [enable followers (read replicas)](./yql/reference/syntax/alter_table/indexes.md?version=v25.1) for covered secondary indexes. This mode is enabled by setting the `enable_access_to_index_impl_tables` flag in the cluster configuration.
+* [Added](https://github.com/ydb-platform/ydb/issues/19310) the ability to [enable followers (read replicas)](./yql/reference/syntax/alter_table/indexes.md?version=v25.1) for covered secondary indexes. This mode is enabled by setting the [`enable_access_to_index_impl_tables`](./reference/configuration/feature_flags.md) flag in the cluster configuration.
 * The scope of supported objects in backup and restore operations has been expanded:
-  * [Support for changefeeds](https://github.com/ydb-platform/ydb/issues/7054) (enabled with the `enable_changefeeds_export` and `enable_changefeeds_import` flags).
-  * [Support for views](https://github.com/ydb-platform/ydb/issues/12724) (enabled with the `enable_view_export` flag).
-* [Added](https://github.com/ydb-platform/ydb/issues/17734) automatic cleanup of temporary tables and directories during export to S3. This mode is enabled by setting the `enable_export_auto_dropping` flag in the cluster configuration.
+  * [Support for changefeeds](https://github.com/ydb-platform/ydb/issues/7054) (enabled with the [`enable_changefeeds_export`](./reference/configuration/feature_flags.md) and [`enable_changefeeds_import`](./reference/configuration/feature_flags.md) flags).
+  * [Support for views](https://github.com/ydb-platform/ydb/issues/12724) (enabled with the [`enable_view_export`](./reference/configuration/feature_flags.md) flag).
+* [Added](https://github.com/ydb-platform/ydb/issues/17734) automatic cleanup of temporary tables and directories during export to S3. This mode is enabled by setting the [`enable_export_auto_dropping`](./reference/configuration/feature_flags.md) flag in the cluster configuration.
 * [Added](https://github.com/ydb-platform/ydb/pull/12909) automatic integrity checks of backups during import, which prevent restoration from corrupted backups and protect against data loss.
 * [Added](https://github.com/ydb-platform/ydb/pull/15570) the ability to create views that refer to [UDFs](./yql/reference/builtins/basic?version=v25.1#udf) in queries.
-* Added system views with information about [access right settings](./dev/system-views.md?version=v25.1#auth), [history of overloaded partitions](./dev/system-views.md?version=v25.1#top-overload-partitions) - enabled by setting the `enable_followers_stats` flag in the cluster configuration, [history of partitions with broken locks](./dev/system-views?version=v25.1#top-tli-partitions).
+* Added system views with information about [access right settings](./dev/system-views.md?version=v25.1#auth), [history of overloaded partitions](./dev/system-views.md?version=v25.1#top-overload-partitions) - enabled by setting the [`enable_followers_stats`](./reference/configuration/feature_flags.md) flag in the cluster configuration, [history of partitions with broken locks](./dev/system-views?version=v25.1#top-tli-partitions).
 * Added new parameters to the [CREATE USER](./yql/reference/syntax/create-user.md?version=v25.1) and [ALTER USER](./yql/reference/syntax/alter-user.md?version=v25.1) operators:
   * `HASH` — sets a password in encrypted form.
   * `LOGIN` and `NOLOGIN` — unlocks and blocks a user, respectively.
@@ -344,7 +344,7 @@ Release date: July 14, 2025.
   * [Added](https://github.com/ydb-platform/ydb/pull/11963) user [password complexity](./reference/configuration/?version=v25.1#password-complexity) verification.
   * [Implemented](https://github.com/ydb-platform/ydb/pull/12578) [automatic user lockout](./reference/configuration/?version=v25.1#account-lockout) after a specified number of failed attempts to enter the correct password.
   * [Added](https://github.com/ydb-platform/ydb/pull/12983) the ability for users to change their own passwords.
-* [Implemented](https://github.com/ydb-platform/ydb/issues/9748) the ability to toggle functional flags at runtime. Changes to flags that do not specify `(RequireRestart) = true` in the [proto file](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) are applied without a cluster restart.
+* [Implemented](https://github.com/ydb-platform/ydb/issues/9748) the ability to toggle [functional flags](./reference/configuration/feature_flags.md) at runtime. Changes to flags that do not specify `(RequireRestart) = true` in the [proto file](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) are applied without a cluster restart.
 * [Changed](https://github.com/ydb-platform/ydb/pull/11329) lock behavior when shard locks exceed the limit. Once the limit is exceeded, the oldest locks (rather than the newest) are converted into full-shard locks.
 * [Implemented](https://github.com/ydb-platform/ydb/pull/12567) a mechanism to preserve optimistic locks in memory during graceful datashard restarts, reducing `ABORTED` errors caused by lock loss during table balancing.
 * [Implemented](https://github.com/ydb-platform/ydb/pull/12689) a mechanism to abort volatile transactions with the `ABORTED` status during graceful datashard restarts.
@@ -353,9 +353,9 @@ Release date: July 14, 2025.
 * [Increased](https://github.com/ydb-platform/ydb/pull/14219) the maximum number of columns in the primary key from 20 to 30.
 * Improved diagnostics and introspection of memory errors ([#10419](https://github.com/ydb-platform/ydb/pull/10419), [#11968](https://github.com/ydb-platform/ydb/pull/11968)).
 * **_(Experimental)_** [Added](https://github.com/ydb-platform/ydb/pull/14075) an experimental mode with strict access control checks. This mode is enabled by setting these flags:
-  * `enable_strict_acl_check` – do not allow granting rights to non-existent users and delete users with permissions;
-  * `enable_strict_user_management` – enables strict checks for local users (i.e. only the cluster or database administrator can administer local users);
-  * `enable_database_admin` – add the role of database administrator;
+  * [`enable_strict_acl_check`](./reference/configuration/feature_flags.md) – do not allow granting rights to non-existent users and delete users with permissions;
+  * [`enable_strict_user_management`](./reference/configuration/feature_flags.md) – enables strict checks for local users (i.e. only the cluster or database administrator can administer local users);
+  * [`enable_database_admin`](./reference/configuration/feature_flags.md) – add the role of database administrator;
 
 #### Backward Incompatible Changes
 
@@ -734,7 +734,7 @@ Release date: October 12, 2023.
 * Fixed an issue with an incorrect residual predicate for the `IS NULL` condition on a column.
 * Fixed an occurring verification error: `VERIFY failed: SendResult(): requirement ChunksLimiter.Take(sendBytes) failed`.
 * Fixed `ALTER TABLE` for TTL on column-based tables.
-* Implemented a `FeatureFlag` that allows enabling/disabling work with `CS` and `DS`.
+* Implemented a [`FeatureFlag`](./reference/configuration/feature_flags.md) that allows enabling/disabling work with `CS` and `DS`.
 * Fixed a 50ms time difference between coordinator time in 23-2 and 23-3.
 * Fixed an error where the storage endpoint was returning extra groups when the `viewer backend` had the `node_id` parameter in the request.
 * Added a usage filter to the `/storage` endpoint in the `viewer backend`.
@@ -835,7 +835,7 @@ Release date: August 14, 2023.
 
 * For scan queries, you can now effectively search for individual rows using a primary key or secondary indexes. This can bring you a substantial performance gain in many cases. Similarly to regular queries, you need to explicitly specify its name in the query text using the `VIEW` keyword to use a secondary index.
 
-* **_(Experimental)_** Added an option to give control of the system tablets of the database (SchemeShard, Coordinators, Mediators, SysViewProcessor) to its own Hive instead of the root Hive, and do so immediately upon creating a new database. Without this flag, the system tablets of the new database are created in the root Hive, which can negatively impact its load. Enabling this flag makes databases completely isolated in terms of load, that may be particularly relevant for installations, consisting from a roughly hundred or more databases. To enable this feature add `alter_database_create_hive_first: true` under `feature_flags` section into [configuration file](reference/configuration/index.md).
+* **_(Experimental)_** Added an option to give control of the system tablets of the database (SchemeShard, Coordinators, Mediators, SysViewProcessor) to its own Hive instead of the root Hive, and do so immediately upon creating a new database. Without this flag, the system tablets of the new database are created in the root Hive, which can negatively impact its load. Enabling this flag makes databases completely isolated in terms of load, that may be particularly relevant for installations, consisting from a roughly hundred or more databases. To enable this feature add `alter_database_create_hive_first: true` under [`feature_flags`](./reference/configuration/feature_flags.md) section into [configuration file](reference/configuration/index.md).
 
 ### Bug fixes
 

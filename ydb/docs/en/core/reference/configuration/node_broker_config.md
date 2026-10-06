@@ -8,7 +8,7 @@ In a dynamic environment where hostnames often change, such as in Kubernetes, us
 
 A stable name identifies a node within the tenant. It consists of a prefix and a node's sequential number within its tenant. If a dynamic node has been shut down, after a timeout, its stable name can be taken by a new dynamic node serving the same tenant.
 
-To enable stable node names, you need to add the following to the cluster configuration:
+To enable stable node names, set the `enable_stable_node_names` [feature flag](feature_flags.md) in the cluster configuration:
 
 ```yaml
 feature_flags:

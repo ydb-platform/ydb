@@ -19,6 +19,7 @@
 
 #include <util/generic/size_literals.h>
 
+#include <algorithm>
 #include <bit>
 #include <cmath>
 #include <limits>
@@ -987,6 +988,29 @@ private:
     size_t Row = 0;
 };
 
+class TSingleFieldComposite final: public NUdf::TBoxedValue {
+public:
+    explicit TSingleFieldComposite(NUdf::TUnboxedValue value)
+        : Value(std::move(value))
+    {}
+
+    NUdf::TUnboxedValue GetElement(ui32 index) const final {
+        UNIT_ASSERT_VALUES_EQUAL(index, 0);
+        ++AccessCount;
+        return Value;
+    }
+
+    const NUdf::TUnboxedValue* GetElements() const final {
+        ++AccessCount;
+        return &Value;
+    }
+
+    mutable size_t AccessCount = 0;
+
+private:
+    const NUdf::TUnboxedValue Value;
+};
+
 NUdf::TUnboxedValue TemporalAfterUpdates(const NUdf::TUnboxedValue& value, NUdf::EDataSlot slot, size_t updates) {
     using namespace NUdf;
     if (!value) {
@@ -1804,6 +1828,64 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
             UNIT_ASSERT(nextGroups > 1024 && nextGroups < sampleGroups);
             UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output, 4), NUdf::EFetchStatus::Ok);
             UNIT_ASSERT_VALUES_EQUAL(inputRows, 2 * sampleGroups - 1 + 2 * nextGroups - 2);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestNonDirectCompositeKeepsSampleRowLimit, UseLLVM, UseFlow) {
+        for (const bool structure : {false, true}) {
+            TDqSetup<UseLLVM> setup(GetDqNodeFactory());
+            auto& pb = setup.GetDqProgramBuilder();
+            auto* fieldType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+            TType* compositeType = structure ? pb.NewStructType({{"value", fieldType}}) :
+                pb.NewTupleType({fieldType});
+            const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", pb.NewStreamType(pb.NewMultiType({
+                pb.NewDataType(NUdf::TDataType<ui32>::Id), compositeType}))).Build();
+            TRuntimeNode input(source, false);
+            if (UseFlow) input = pb.ToFlow(input, {});
+            auto root = pb.DqHashCombine(input, 16_MB,
+                [](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[0]}; },
+                [](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1]}; },
+                [](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) { return state; },
+                [](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {keys[0], state[0]}; });
+            if (UseFlow) root = pb.FromFlow(root);
+
+            auto* holder = new TSingleFieldComposite(NUdf::TUnboxedValuePod(
+                NUdf::TStringValue("heap-backed indirect aggregation state")));
+            NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(holder);
+            auto graph = setup.BuildGraph(root, {source});
+            size_t inputRows = 0;
+            const size_t rows = 100000;
+            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+                new TGeneratedWideStream(rows, [&](size_t row) {
+                    inputRows = row + 1;
+                    return std::vector<NUdf::TUnboxedValue>{NUdf::TUnboxedValuePod(ui32(row / 2)), value};
+                })));
+            auto stream = graph->GetValue();
+            NUdf::TUnboxedValue output[2];
+            std::vector<bool> seen(rows / 2);
+            const auto checkOutput = [&] {
+                const auto key = output[0].Get<ui32>();
+                UNIT_ASSERT(key < seen.size());
+                seen[key] = true;
+                UNIT_ASSERT(output[1].AsRawBoxed() == holder);
+            };
+            const size_t sampleGroups = 16384;
+            for (size_t batch = 0; batch < 2; ++batch) {
+                for (size_t i = 0; i < sampleGroups; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output, 2), NUdf::EFetchStatus::Ok);
+                    UNIT_ASSERT_VALUES_EQUAL(inputRows, 2 * sampleGroups - 1 + batch * (2 * sampleGroups - 2));
+                    checkOutput();
+                }
+            }
+            for (;;) {
+                const auto status = stream.WideFetch(output, 2);
+                if (status == NUdf::EFetchStatus::Finish) break;
+                UNIT_ASSERT_VALUES_EQUAL(status, NUdf::EFetchStatus::Ok);
+                checkOutput();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(inputRows, rows);
+            UNIT_ASSERT_VALUES_EQUAL(std::count(seen.begin(), seen.end(), true), seen.size());
+            UNIT_ASSERT_VALUES_EQUAL(holder->AccessCount, 0);
         }
     }
 

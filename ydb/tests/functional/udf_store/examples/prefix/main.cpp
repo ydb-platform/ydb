@@ -1,4 +1,5 @@
 #include <ydb/services/udf_store/wasm/abi/udf_cpp_abi.h>
+#include <ydb/services/udf_store/wasm/abi/bridge.h>
 #include <ydb/services/udf_store/wasm/object_framework/object_framework.h>
 
 #include <stdlib.h>
@@ -42,85 +43,58 @@ const TObjectType PrefixType = {
     &PrefixDestroy,
 };
 
-uint64_t AsHandle(const TUnversionedValue* value) {
-    if (!value || value->Type == EValueType::Null) {
-        return 0;
-    }
-    if (value->Type == EValueType::Uint64) {
-        return value->Data.Uint64;
-    }
-    if (value->Type == EValueType::Int64) {
-        return static_cast<uint64_t>(value->Data.Int64);
-    }
-    ThrowException("expected int64/uint64 handle");
-    return 0;
-}
-
 } // namespace
 
 extern "C" {
 
 __attribute__((visibility("default"))) void prefix_create(
     TExpressionContext* /*context*/,
-    TUnversionedValue* result,
-    TUnversionedValue* config)
+    uint64_t* result,
+    uint64_t config)
 {
-    const char* blob = nullptr;
-    size_t blobLen = 0;
-    if (config && config->Type == EValueType::String) {
-        blob = config->Data.String;
-        blobLen = config->Length;
-    } else if (config && config->Type != EValueType::Null) {
-        ThrowException("prefix_create: expected string config");
-    }
+    const char* blob = reinterpret_cast<const char*>(BridgeEnsureString(config));
+    const size_t blobLen = static_cast<size_t>(BridgeGetStringLen(config));
 
     const TObjectHandle handle = ObjectFrameworkCreate(&PrefixType, blob, blobLen);
     if (handle == 0) {
         ThrowException("prefix_create failed");
     }
-    result->Type = EValueType::Uint64;
-    result->Data.Uint64 = handle;
+    *result = MakeUint64(handle).Release();
 }
 
 __attribute__((visibility("default"))) void prefix_apply(
     TExpressionContext* context,
-    TUnversionedValue* result,
-    TUnversionedValue* handleArg,
-    TUnversionedValue* inputArg)
+    uint64_t* result,
+    uint64_t handleArg,
+    uint64_t inputArg)
 {
-    const uint64_t handle = AsHandle(handleArg);
+    const uint64_t handle = BridgeGetUint64(handleArg);
     auto* prefix = static_cast<TPrefix*>(ObjectFrameworkGet(handle, &PrefixType));
     if (!prefix) {
         ThrowException("prefix_apply: unknown handle");
     }
 
-    if (!inputArg || inputArg->Type == EValueType::Null) {
-        result->Type = EValueType::Null;
+    if (BridgeIsNull(inputArg)) {
+        *result = MakeNull().Release();
         return;
     }
-    if (inputArg->Type != EValueType::String) {
-        ThrowException("prefix_apply: expected string input");
-    }
+    const size_t inputLen = static_cast<size_t>(BridgeGetStringLen(inputArg));
+    const char* input = reinterpret_cast<const char*>(BridgeEnsureString(inputArg));
+    const size_t total = prefix->Len + inputLen;
+    char* output = AllocateBytes(context, total);
+    if (prefix->Len) { memcpy(output, prefix->Data, prefix->Len); }
+    if (inputLen) { memcpy(output + prefix->Len, input, inputLen); }
+    *result = MakeString(output, total).Release();
 
-    const size_t total = prefix->Len + inputArg->Length;
-    result->Type = EValueType::String;
-    result->Length = static_cast<uint32_t>(total);
-    result->Data.String = AllocateBytes(context, total);
-    if (prefix->Len > 0) {
-        memcpy(result->Data.String, prefix->Data, prefix->Len);
-    }
-    if (inputArg->Length > 0) {
-        memcpy(result->Data.String + prefix->Len, inputArg->Data.String, inputArg->Length);
-    }
 }
 
 __attribute__((visibility("default"))) void prefix_destroy(
     TExpressionContext* /*context*/,
-    TUnversionedValue* result,
-    TUnversionedValue* handleArg)
+    uint64_t* result,
+    uint64_t handleArg)
 {
-    ObjectFrameworkDestroy(AsHandle(handleArg));
-    result->Type = EValueType::Null;
+    ObjectFrameworkDestroy(BridgeGetUint64(handleArg));
+    *result = MakeNull().Release();
 }
 
 } // extern "C"

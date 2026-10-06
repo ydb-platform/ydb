@@ -1,10 +1,29 @@
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/json_parser.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/raw_parser.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/ut/common/ut_common.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+
+#include <thread>
 
 namespace NFq::NRowDispatcher::NTests {
 
 namespace {
+
+class TCountingQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
+public:
+    using TGuaranteeQuotaManager::TGuaranteeQuotaManager;
+
+    bool AllocateQuota(ui64 size, bool isOptional) override {
+        ++Requests;
+        const bool result = TGuaranteeQuotaManager::AllocateQuota(size, isOptional);
+        PeakQuota = std::max(PeakQuota, GetCurrentQuota());
+        return result;
+    }
+
+    ui64 Requests = 0;
+    ui64 PeakQuota = 0;
+};
 
 class TBaseParserFixture : public TBaseFixture {
 public:
@@ -131,19 +150,19 @@ public:
 
     void PushToParser(ui64 offset, const TString& data) {
         ExpectedBatches++;
-        Parser->ParseMessages({GetMessage(offset, data)});
+        Parser->ParseRecords({GetRecord(offset, data)});
     }
 
     void CheckColumnError(const TString& data, ui64 columnId, TStatusCode statusCode, const TString& message) {
         ExpectedBatches++;
         ParserHandler->ExpectColumnError(columnId, statusCode, message);
-        Parser->ParseMessages({GetMessage(ParserHandler->CurrentOffset, data)});
+        Parser->ParseRecords({GetRecord(ParserHandler->CurrentOffset, data)});
     }
 
     void CheckBatchError(const TString& data, TStatusCode statusCode, const TString& message) {
         ExpectedBatches++;
         ParserHandler->ExpectCommonError(statusCode, message);
-        Parser->ParseMessages({GetMessage(ParserHandler->CurrentOffset, data)});
+        Parser->ParseRecords({GetRecord(ParserHandler->CurrentOffset, data)});
     }
 
 protected:
@@ -173,26 +192,353 @@ public:
 
 protected:
     TValueStatus<ITopicParser::TPtr> CreateParser() override {
-        return CreateJsonParser(ParserHandler, Config, {});
+        return CreateJsonParser(ParserHandler, Config, Counters);
     }
 
 public:
     TJsonParserConfig Config;
+    TCountersDesc Counters;
 };
 
 using TJsonParserFixture = TJsonParserBaseFixture<false>;
 using TJsonParserFixtureSkipErrors = TJsonParserBaseFixture<true>;
 
 class TRawParserFixture : public TBaseParserFixture {
+public:
+    NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager;
+
 protected:
     TValueStatus<ITopicParser::TPtr> CreateParser() override {
-        return CreateRawParser(ParserHandler, FunctionRegistry, {});
+        return CreateRawParser(ParserHandler, FunctionRegistry, {}, MemoryQuotaManager);
     }
 };
 
 }  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TestJsonParser) {
+    Y_UNIT_TEST_F(MemoryQuotaForBuffers, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(8_MB, 8_MB);
+        Config.MemoryQuotaManager = manager;
+        CheckSuccess(MakeParser({"a1"}, "[DataType; String]", [](auto, auto) {}));
+        UNIT_ASSERT_GT(manager->GetCurrentQuota(), Config.BatchSize);
+        {
+            TMemoryQuota competingBuffer(manager);
+            competingBuffer.Resize(8_MB - manager->GetCurrentQuota());
+            ParserHandler->ExpectCommonError(EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded");
+            PushToParser(FIRST_OFFSET, R"({"a1":"hello"})");
+        }
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaRejectsParserCreation, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(1_MB, 1_MB);
+        Config.MemoryQuotaManager = manager;
+        with_lock(Alloc) {
+            UNIT_ASSERT_EXCEPTION(MakeParser({"a1"}, "[DataType; String]", [](auto, auto) {}), NKikimr::TMemoryLimitExceededException);
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaReusesColumnBuffers, TJsonParserFixture) {
+        auto manager = std::make_shared<TCountingQuotaManager>(8_MB, 8_MB);
+        Config.MemoryQuotaManager = manager;
+        CheckSuccess(MakeParser({"a", "b"}, "[DataType; Bool]"));
+        const auto retainedQuota = manager->GetCurrentQuota();
+
+        for (size_t i = 0; i < 3; ++i) {
+            manager->PeakQuota = retainedQuota;
+            CheckSuccess(Parser->ChangeConsumer(ParserHandler));
+            UNIT_ASSERT_VALUES_EQUAL(manager->PeakQuota, retainedQuota);
+            UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), retainedQuota);
+        }
+
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaRejectsInputBufferGrowth, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(4_MB, 4_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 4_KB;
+        CheckSuccess(MakeParser({"a"}, "[DataType; Bool]"));
+        with_lock(Alloc) {
+            UNIT_ASSERT_EXCEPTION(Parser->ParseRecords({GetRecord(FIRST_OFFSET, TString(8_MB, ' '))}), NKikimr::TMemoryLimitExceededException);
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+        }
+        PushToParser(FIRST_OFFSET, R"({"a":true})");
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaRejectsColumnIndexGrowth, TJsonParserFixture) {
+        constexpr ui64 limit = 4_MB;
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(limit, limit);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 4_KB;
+        CheckSuccess(MakeParser({"a"}, "[DataType; Bool]"));
+        // Exceed the retained 1 MiB index reservation before growing column buffers.
+        TVector<TSchemaColumn> columns;
+        for (size_t i = 0; i < 20000; ++i) {
+            columns.push_back({ToString(i), "[DataType; Bool]"});
+        }
+        auto consumer = MakeIntrusive<TParsedDataConsumer>(*this, columns, [](auto, auto) {});
+        {
+            TMemoryQuota competingBuffer(manager);
+            competingBuffer.Resize(limit - manager->GetCurrentQuota());
+            with_lock(Alloc) {
+                UNIT_ASSERT_EXCEPTION_SATISFIES(Parser->ChangeConsumer(consumer), NKikimr::TMemoryLimitExceededException,
+                    [](const auto& error) {
+                        UNIT_ASSERT_STRING_CONTAINS(GetMemoryLimitExceededMessage(error), "bytes for ColumnIndexMemory");
+                        return true;
+                    });
+                Parser.Reset();
+                UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), competingBuffer.GetSize());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaPreservesBufferedMessagesAfterRejectedGrowth, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(4_MB, 4_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 4_KB;
+        Config.LatencyLimit = TDuration::Hours(1);
+        CheckSuccess(MakeParser({"a"}, "[DataType; Bool]", [](ui64 numberRows, auto result) {
+            UNIT_ASSERT_VALUES_EQUAL(numberRows, 2);
+            UNIT_ASSERT(result[0][0].template Get<bool>());
+            UNIT_ASSERT(!result[0][1].template Get<bool>());
+        }));
+
+        Parser->ParseRecords({GetRecord(FIRST_OFFSET, R"({"a":true})")});
+        UNIT_ASSERT_EXCEPTION(Parser->ParseRecords({GetRecord(FIRST_OFFSET + 1, TString(8_MB, ' '))}), NKikimr::TMemoryLimitExceededException);
+        Parser->ParseRecords({GetRecord(FIRST_OFFSET + 1, R"({"a":false})")});
+        UNIT_ASSERT_VALUES_EQUAL(ParserHandler->NumberBatches, 0);
+        ExpectedBatches = 1;
+        Parser->Refresh(true);
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(AllocatorRestoredBetweenBatches, TJsonParserFixture) {
+        Config.BufferCellCount = 2;
+        CheckSuccess(MakeParser({"a"}, "[DataType; Bool]", [this](ui64, auto) {
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+            with_lock(Alloc) {
+                NYql::NUdf::TUnboxedValue value = NKikimr::NMiniKQL::MakeStringNotFilled(1_KB);
+                UNIT_ASSERT_VALUES_EQUAL(value.AsStringRef().Size(), 1_KB);
+            }
+        }));
+
+        TVector<TMessageStreamRecord> records;
+        for (size_t i = 0; i < 5; ++i) {
+            records.push_back(GetRecord(FIRST_OFFSET + i, R"({"a":true})"));
+        }
+        ExpectedBatches = 3;
+        with_lock(Alloc) {
+            Parser->ParseRecords(records);
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+        }
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaReleasedOnAnotherThread, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(64_MB, 64_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 4_KB;
+        Config.LatencyLimit = TDuration::Hours(1);
+        Counters.MkqlCountersName = "ParserBuffers";
+        NKikimr::TAlignedPagePoolCounters poolCounters(Counters.CountersRoot, Counters.MkqlCountersName);
+
+        TVector<TString> names;
+        for (size_t i = 0; i < 128; ++i) {
+            names.push_back(TString(64, 'a') + ToString(i));
+        }
+        CheckSuccess(MakeParser(names, "[OptionalType; [StructType; [[value; [DataType; String]]]]]"));
+
+        with_lock(Alloc) {
+            // Grow and parse once, then leave data buffered for destruction.
+            PushToParser(FIRST_OFFSET, TString(128_KB, ' ') + "{}");
+            Parser->ParseRecords({GetRecord(FIRST_OFFSET + 1, "{}")});
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+        }
+
+        bool allocatorRestored = false;
+        bool foreignMemoryUnchanged = false;
+        std::thread destroyParser([parser = std::move(Parser), &allocatorRestored, &foreignMemoryUnchanged]() mutable {
+            NKikimr::NMiniKQL::TScopedAlloc otherAlloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true);
+            NYql::NUdf::TUnboxedValue value = NKikimr::NMiniKQL::MakeStringNotFilled(1_KB);
+            const auto allocated = otherAlloc.GetAllocated();
+            parser.Reset();
+            allocatorRestored = NKikimr::NMiniKQL::TlsAllocState == &otherAlloc.Ref();
+            foreignMemoryUnchanged = otherAlloc.GetAllocated() == allocated;
+        });
+        destroyParser.join();
+
+        UNIT_ASSERT(allocatorRestored);
+        UNIT_ASSERT(foreignMemoryUnchanged);
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolCounters.TotalBytesAllocatedCntr->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolCounters.LostPagesBytesFreeCntr->Val(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaForWideColumnNames, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(64_MB, 64_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 1_KB;
+
+        TVector<TString> names;
+        for (size_t i = 0; i < 1000; ++i) {
+            names.push_back(ToString(i));
+        }
+        CheckSuccess(MakeParser(names, "[DataType; Bool]"));
+        const auto shortNamesQuota = manager->GetCurrentQuota();
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+
+        for (auto& name : names) {
+            name += TString(1_KB, 'a');
+        }
+        CheckSuccess(MakeParser(names, "[DataType; Bool]"));
+        UNIT_ASSERT_GE(manager->GetCurrentQuota(), shortNamesQuota + names.size() * 1_KB);
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaRejectsColumnStrings, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(2_MB, 2_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 1_KB;
+        Config.BufferCellCount = 1;
+
+        UNIT_ASSERT_EXCEPTION(MakeParser({TString(2_MB, 'a')}, "[DataType; Bool]"), NKikimr::TMemoryLimitExceededException);
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+        UNIT_ASSERT_EXCEPTION(MakeParser({"a"}, TString(2_MB, ' ') + "[DataType; Bool]"), NKikimr::TMemoryLimitExceededException);
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaReleasesNestedColumnMetadata, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(64_MB, 64_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 1_KB;
+        Config.BufferCellCount = 1;
+        Counters.MkqlCountersName = "ColumnMetadata";
+        NKikimr::TAlignedPagePoolCounters poolCounters(Counters.CountersRoot, Counters.MkqlCountersName);
+
+        constexpr size_t membersCount = 128;
+        TStringBuilder type;
+        type << "[StructType; [";
+        for (size_t i = 0; i < membersCount; ++i) {
+            type << "[f" << i << "; [StructType; [[value; [DataType; Bool]]]]];";
+        }
+        type << "]]";
+        CheckSuccess(MakeParser({"a"}, type));
+        const auto nestedQuota = manager->GetCurrentQuota();
+        auto nestedConsumer = ParserHandler;
+
+        ParserHandler = MakeIntrusive<TParsedDataConsumer>(
+            *this, TVector<TSchemaColumn>{{"a", "[DataType; Bool]"}}, [](auto, auto) {});
+        CheckSuccess(Parser->ChangeConsumer(ParserHandler));
+        // MiniKQL retains its reserved pages for reuse until the parser is destroyed.
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), nestedQuota);
+
+        for (size_t i = 0; i < 3; ++i) {
+            CheckSuccess(Parser->ChangeConsumer(nestedConsumer));
+            CheckSuccess(Parser->ChangeConsumer(ParserHandler));
+        }
+        CheckSuccess(Parser->ChangeConsumer(nestedConsumer));
+        CheckSuccess(Parser->ChangeConsumer(MakeIntrusive<TParsedDataConsumer>(
+            *this, TVector<TSchemaColumn>{{"a", type}, {"b", type}}, [](auto, auto) {})));
+        CheckSuccess(Parser->ChangeConsumer(ParserHandler));
+        PushToParser(FIRST_OFFSET, R"({"a":true})");
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolCounters.TotalBytesAllocatedCntr->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolCounters.LostPagesBytesFreeCntr->Val(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaRejectsNestedColumnMetadata, TJsonParserFixture) {
+        Config.BatchSize = 1_KB;
+        Config.BufferCellCount = 1;
+        TStringBuilder type;
+        type << "[StructType; [";
+        for (size_t i = 0; i < 1000; ++i) {
+            type << "[f" << i << "; [DataType; Bool]];";
+        }
+        type << "]]";
+
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(64_MB, 64_MB);
+        Config.MemoryQuotaManager = manager;
+        CheckSuccess(MakeParser({"a"}, type));
+        const auto requiredQuota = manager->GetCurrentQuota();
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+
+        manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(requiredQuota - 1, requiredQuota - 1);
+        Config.MemoryQuotaManager = manager;
+        UNIT_ASSERT_EXCEPTION(MakeParser({"a"}, type), NKikimr::TMemoryLimitExceededException);
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(ColumnErrorsWithExhaustedMemoryQuota, TJsonParserFixture) {
+        constexpr ui64 limit = 64_MB;
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(limit, limit);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 4_KB;
+        Config.BufferCellCount = 1;
+
+        CheckSuccess(MakeParser({"a"}, "[DataType; Bool]"));
+        // Warm the input and simdjson buffers before exhausting the quota.
+        PushToParser(FIRST_OFFSET, TString(1_KB, ' ') + R"({"a":true})");
+        {
+            TMemoryQuota competingBuffer(manager);
+            competingBuffer.Resize(limit - manager->GetCurrentQuota());
+            const TString badMessage = TStringBuilder() << R"({"a":")" << TString(1_KB, 'x') << R"("})";
+            CheckColumnError(badMessage, 0, EStatusId::BAD_REQUEST, "Failed to parse data type Bool from json string");
+            CheckColumnError("{}", 0, EStatusId::PRECONDITION_FAILED, "missing values in non optional column");
+            PushToParser(ParserHandler->CurrentOffset, R"({"a":true})");
+        }
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaGrowthAfterSchemaChange, TJsonParserFixture) {
+        constexpr size_t rows = 1000;
+        auto manager = std::make_shared<TCountingQuotaManager>(64_MB, 64_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BufferCellCount = rows;
+        CheckSuccess(MakeParser({"a", "b"}, "[DataType; Bool]"));
+
+        // Removing a column doubles the row limit beyond the buffers reserved
+        // at construction. Growing them must not request quota for every row.
+        ParserHandler = MakeIntrusive<TParsedDataConsumer>(
+            *this,
+            TVector<TSchemaColumn>{{"a", "[DataType; Bool]"}},
+            [=](ui64 numberRows, auto result) {
+                UNIT_ASSERT_VALUES_EQUAL(numberRows, rows);
+                UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+                for (const auto& value : result[0]) {
+                    UNIT_ASSERT(value.template Get<bool>());
+                }
+            }
+        );
+        CheckSuccess(Parser->ChangeConsumer(ParserHandler));
+
+        TVector<TMessageStreamRecord> records;
+        records.reserve(rows);
+        for (size_t i = 0; i < rows; ++i) {
+            records.push_back(GetRecord(FIRST_OFFSET + i, R"({"a":true})"));
+        }
+        manager->Requests = 0;
+        ExpectedBatches = 1;
+        Parser->ParseRecords(records);
+        UNIT_ASSERT_LT(manager->Requests, 32);
+
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
     Y_UNIT_TEST_F(Simple1, TJsonParserFixture) {
         CheckSuccess(MakeParser({{"a1", "[DataType; String]"}, {"a2", "[OptionalType; [DataType; Uint64]]"}}, [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
@@ -246,9 +592,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         }));
 
         const TString jsonString = TStringBuilder() << "{\"col\": \"" << largeString << "\"}";
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, jsonString),
-            GetMessage(FIRST_OFFSET + 1, jsonString)
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, jsonString),
+            GetRecord(FIRST_OFFSET + 1, jsonString)
         });
     }
 
@@ -264,10 +610,10 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "a2": "101", "event": "event1"})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": "101", "event": "event2"})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a2": "101", "a1": "hello1", "event": "event3"})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "a2": "101", "event": "event1"})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": "101", "event": "event2"})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a2": "101", "a1": "hello1", "event": "event3"})")
         });
     }
 
@@ -292,10 +638,10 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "a2": 101  , "event": "event1"})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello1", "event": "event2"})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a2": "101", "a1": null, "event": "event3"})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "a2": 101  , "event": "event1"})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello1", "event": "event2"})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a2": "101", "a1": null, "event": "event3"})")
         });
     }
 
@@ -319,11 +665,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": {"key": "value"}})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["key1", "key2"]})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3", "nested": "some string"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": 123456})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": {"key": "value"}})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["key1", "key2"]})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3", "nested": "some string"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": 123456})")
         });
     }
 
@@ -356,11 +702,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": ["key1", "key2"]})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": []})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": ["key1", "key2"]})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": []})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
         });
     }
 
@@ -395,11 +741,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": ["key1", 12, true]})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["key2"]})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": ["key1", 12, true]})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["key2"]})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
         });
     }
 
@@ -424,11 +770,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": []})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["foobar", 123, true, null]})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": []})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": ["foobar", 123, true, null]})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
         });
     }
 
@@ -463,11 +809,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": {"a":"key1", "b": 12}})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": {"a":"key2"}})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": {"a":"key1", "b": 12}})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": {"a":"key2"}})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
         });
     }
 
@@ -515,12 +861,12 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("hello5", TString(result[1][4].AsStringRef()));
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "nested": [{"hello1": [10], "hello2": null},"foo"]})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": [{"hello2": []},42]})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
-            GetMessage(FIRST_OFFSET + 4, R"({"a1": "hello5", "nested": [{}, {}]})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "nested": [{"hello1": [10], "hello2": null},"foo"]})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello2", "nested": [{"hello2": []},42]})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello3"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello4", "nested": null})"),
+            GetRecord(FIRST_OFFSET + 4, R"({"a1": "hello5", "nested": [{}, {}]})"),
         });
     }
 
@@ -535,9 +881,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(false, result[0][1].Get<bool>());
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a": true})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a": false})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a": true})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a": false})")
         });
     }
 
@@ -552,9 +898,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(false, result[0][1].Get<bool>());
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a": true, "b": 42})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a": true, "b": 42})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
         });
 
         CheckSuccess(Parser->ChangeConsumer(MakeIntrusive<TParsedDataConsumer>(
@@ -571,9 +917,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         )));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a": true, "b": 42})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a": true, "b": 42})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
         });
 
         CheckSuccess(Parser->ChangeConsumer(MakeIntrusive<TParsedDataConsumer>(
@@ -588,9 +934,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         )));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a": true, "b": 42})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a": true, "b": 42})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
         });
     }
 
@@ -606,9 +952,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         }));
 
         const TString jsonString = TStringBuilder() << "{\"col\": \"" << largeString << "\"}";
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, jsonString),
-            GetMessage(FIRST_OFFSET + 1, jsonString)
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, jsonString),
+            GetRecord(FIRST_OFFSET + 1, jsonString)
         });
     }
 
@@ -624,9 +970,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         }));
 
         const TString jsonString = TStringBuilder() << "{\"col\": \"" << largeString << "\"}";
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, jsonString),
-            GetMessage(FIRST_OFFSET + 1, jsonString)
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, jsonString),
+            GetRecord(FIRST_OFFSET + 1, jsonString)
         });
     }
 
@@ -641,9 +987,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         ParserHandler->ExpectColumnError(1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json messages, found 1 missing values in non optional column 'a2' with type [DataType; Uint64], buffered offsets: ");
         ParserHandler->ExpectColumnError(0, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json messages, found 1 missing values in non optional column 'a1' with type [DataType; Uint64], buffered offsets: ");
         ExpectedBatches++;
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": 101, "a1": 102})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a2": 103, "a2": 104})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": 101, "a1": 102})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a2": 103, "a2": 104})")
         });
     }
 
@@ -658,8 +1004,8 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             dummy << R"(,"a1":)" << t;
         }
         dummy << "}";
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, dummy),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, dummy),
         });
     }
 
@@ -668,9 +1014,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         ParserHandler->ExpectColumnError(1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Struct), expected non-optional field a1");
         ParserHandler->ExpectColumnError(0, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (Struct), expected non-optional field a2");
         ExpectedBatches++;
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1":{"a1": 101, "a1": 102}})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a2": {"a2":103, "a2": 104}})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1":{"a1": 101, "a1": 102}})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a2": {"a2":103, "a2": 104}})")
         });
     }
 
@@ -736,6 +1082,44 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         CheckColumnError(R"({"a1": "456", "a2": 42, "a3": 1.11.1})", 2, EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET + 3 << ", got parsing error for column 'a3' with type [OptionalType; [DataType; Float]] subissue: { <main>: Error: Failed to parse data type Float from json number (raw: '1.11.1') subissue: { <main>: Error: Failed to extract json float number, error: NUMBER_ERROR: Problem while parsing a number } }");
     }
 
+    Y_UNIT_TEST_F(FloatRangeValidation, TJsonParserFixture) {
+        CheckSuccess(MakeParser({{"value", "[DataType; Float]"}}));
+        for (const auto* number : {"3.5e38", "-3.5e38", "1e100", "-1e100"}) {
+            CheckColumnError(TStringBuilder() << "{\"value\":" << number << "}", 0,
+                EStatusId::BAD_REQUEST, "Floating point number is out of range");
+        }
+    }
+
+    Y_UNIT_TEST_F(FloatRangeBoundaries, TJsonParserFixture) {
+        const TVector<float> expected = {Max<float>(), -Max<float>(), 0.0f, 1.5f};
+        size_t row = 0;
+        CheckSuccess(MakeParser({{"value", "[DataType; Float]"}, {"wide", "[DataType; Double]"}},
+            [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+                UNIT_ASSERT_VALUES_EQUAL(numberRows, 1);
+                UNIT_ASSERT_VALUES_EQUAL(result[0][0].Get<float>(), expected.at(row++));
+                UNIT_ASSERT_VALUES_EQUAL(result[1][0].Get<double>(), 1e100);
+            }));
+        for (const auto* number : {"3.40282346638528859811704183484516925440e38", "-3.40282346638528859811704183484516925440e38", "0", "1.5"}) {
+            PushToParser(FIRST_OFFSET + row, TStringBuilder() << "{\"value\":" << number << ",\"wide\":1e100}");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(row, expected.size());
+    }
+
+    Y_UNIT_TEST_F(SkipOutOfRangeFloats, TJsonParserFixtureSkipErrors) {
+        CheckSuccess(MakeParser({{"value", "[DataType; Float]"}},
+            [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+                UNIT_ASSERT_VALUES_EQUAL(numberRows, 1);
+                UNIT_ASSERT_VALUES_EQUAL(result[0][0].Get<float>(), 1.5f);
+                UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[0], FIRST_OFFSET + 1);
+            }, false));
+        ++ExpectedBatches;
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"value":1e100})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"value":1.5})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"value":-1e100})")
+        });
+    }
+
     Y_UNIT_TEST_F(StringsValidation, TJsonParserFixture) {
         CheckSuccess(MakeParser({{"a1", "[OptionalType; [DataType; Uint8]]"}}));
         CheckColumnError(R"({"a1": "-456"})", 0, EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET << ", got parsing error for column 'a1' with type [OptionalType; [DataType; Uint8]] subissue: { <main>: Error: Failed to parse data type Uint8 from json string: '-456' }");
@@ -799,10 +1183,10 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         }));
         ExpectedBatches++;
         ParserHandler->CurrentOffset = FIRST_OFFSET + 2;
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": 101, "a1": 102})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a2": 103, "a2": 104})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": 105, "a2": 106})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": 101, "a1": 102})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a2": 103, "a2": 104})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": 105, "a2": 106})")
         });
     }
 
@@ -871,10 +1255,10 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         }, false));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "a2": "101", "event": "event1"})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": 999, "event": "event2"})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a2": "101", "a1": "hello1", "event": "event3"})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "a2": "101", "event": "event1"})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": 999, "event": "event2"})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a2": "101", "a1": "hello1", "event": "event3"})")
         });
     }
 
@@ -889,9 +1273,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             }
         }, false));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "event": "event1"})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": "101", "event": "event2"})")
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"a1": "hello1", "event": "event1"})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": "101", "event": "event2"})")
         });
     }
 
@@ -901,13 +1285,13 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
         }, false));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET,     R"({"a1": "hello0", "a2": "100"})"),
-            GetMessage(FIRST_OFFSET + 1, "\x80"),
-            GetMessage(FIRST_OFFSET + 2, R"(})"),
-            GetMessage(FIRST_OFFSET + 3, R"(lalala)"),
-            GetMessage(FIRST_OFFSET + 4, R"({"a1": "hello2", "a2": "102"})"),
-            GetMessage(FIRST_OFFSET + 5, "\x80"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET,     R"({"a1": "hello0", "a2": "100"})"),
+            GetRecord(FIRST_OFFSET + 1, "\x80"),
+            GetRecord(FIRST_OFFSET + 2, R"(})"),
+            GetRecord(FIRST_OFFSET + 3, R"(lalala)"),
+            GetRecord(FIRST_OFFSET + 4, R"({"a1": "hello2", "a2": "102"})"),
+            GetRecord(FIRST_OFFSET + 5, "\x80"),
         });
     }
 
@@ -931,13 +1315,13 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT(!result[2][1]);
         }, false));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET,     R"({"a1": "hello0", "a2": "100", "a3": ["a", "b"]})"),
-            GetMessage(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": 101})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello2", "a2": "100", "a3": 123})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello2", "a2": "100", "a3": [123]})"),
-            GetMessage(FIRST_OFFSET + 4, R"({"a2": "102"})"),
-            GetMessage(FIRST_OFFSET + 5, R"({"a1": "hello2", "a2": "100", "a3": {}})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET,     R"({"a1": "hello0", "a2": "100", "a3": ["a", "b"]})"),
+            GetRecord(FIRST_OFFSET + 1, R"({"a1": "hello1", "a2": 101})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello2", "a2": "100", "a3": 123})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello2", "a2": "100", "a3": [123]})"),
+            GetRecord(FIRST_OFFSET + 4, R"({"a2": "102"})"),
+            GetRecord(FIRST_OFFSET + 5, R"({"a1": "hello2", "a2": "100", "a3": {}})"),
         });
     }
 
@@ -947,16 +1331,26 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(3, numberRows);
         }, false));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET,     R"({"a1": "hel)"),
-            GetMessage(FIRST_OFFSET + 1, R"(lo0", "a2": "100"})"),
-            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello1", "a2": "101"})"),
-            GetMessage(FIRST_OFFSET + 3, R"({"a1": "hello2", "a2": "102"})"),
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET,     R"({"a1": "hel)"),
+            GetRecord(FIRST_OFFSET + 1, R"(lo0", "a2": "100"})"),
+            GetRecord(FIRST_OFFSET + 2, R"({"a1": "hello1", "a2": "101"})"),
+            GetRecord(FIRST_OFFSET + 3, R"({"a1": "hello2", "a2": "102"})"),
         });
     }
 }
 
 Y_UNIT_TEST_SUITE(TestRawParser) {
+    Y_UNIT_TEST_F(MemoryQuotaLimitsParsedStrings, TRawParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(1_MB, 1_MB);
+        MemoryQuotaManager = manager;
+        CheckSuccess(MakeParser({"a1"}, "[DataType; String]", [](auto, auto) {}));
+        ParserHandler->ExpectCommonError(EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded");
+        PushToParser(FIRST_OFFSET, TString(2_MB, 'a'));
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
     Y_UNIT_TEST_F(Simple, TRawParserFixture) {
         CheckSuccess(MakeParser({{"data", "[OptionalType; [DataType; String]]"}}, [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
@@ -984,10 +1378,10 @@ Y_UNIT_TEST_SUITE(TestRawParser) {
             i++;
         }));
 
-        Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, data[0]),
-            GetMessage(FIRST_OFFSET + 1, data[1]),
-            GetMessage(FIRST_OFFSET + 2, data[2])
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, data[0]),
+            GetRecord(FIRST_OFFSET + 1, data[1]),
+            GetRecord(FIRST_OFFSET + 2, data[2])
         });
     }
 

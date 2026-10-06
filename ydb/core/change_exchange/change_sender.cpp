@@ -94,6 +94,7 @@ void TChangeSender::KillSenders() {
     }
 
     ReadySenders = 0;
+    UninitSenders = 0;
 }
 
 void TChangeSender::EnqueueRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {

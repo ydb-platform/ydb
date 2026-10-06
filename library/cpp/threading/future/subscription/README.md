@@ -40,7 +40,7 @@ Wait privimitives could be constructed either from an initializer_list or from a
 Subscriptions manager
 ---------------------
 
-The subscription manager can manage multiple links beetween futures and callbacks. Multiple managed subscriptions to a single future shares just a single underlying subscription to the future. That allows dynamic creation and deletion of subscriptions and efficient implementation of different wait primitives.
+The subscription manager can manage multiple links between futures and callbacks. Multiple managed subscriptions to a single future shares just a single underlying subscription to the future. That allows dynamic creation and deletion of subscriptions and efficient implementation of different wait primitives.
 The subscription manager could be used in the following way:
 
 1. Subscribe to a single future:

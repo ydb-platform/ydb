@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_opt.cpp
@@ -42,12 +42,11 @@ PEERDIR(
     yql/essentials/providers/common/mkql
 )
 
-YQL_LAST_ABI_VERSION()
-
 GENERATE_ENUM_SERIALIZATION(kqp_query_plan.h)
 
 END()
 
 RECURSE(
     cbo
+    rbo
 )

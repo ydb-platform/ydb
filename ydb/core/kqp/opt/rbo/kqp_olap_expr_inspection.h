@@ -26,6 +26,8 @@ class TOlapFilterInspector {
 public:
     static TOlapFilterInspection Inspect(const NYql::TExprNode::TPtr& node);
     static TOlapFilterInspection InspectLambda(const NYql::TExprNode::TPtr& lambda);
+    // Renames row-member names only (e.g. ID spellings to storage names);
+    // not an IU binding API.
     static NYql::TExprNode::TPtr RenameColumns(
         const NYql::TExprNode::TPtr& node,
         const THashMap<TString, TString>& renameMap,

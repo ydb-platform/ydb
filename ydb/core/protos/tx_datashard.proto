@@ -319,6 +319,7 @@ message TKqpReadRangesSourceSettings {
     optional uint64 QuerySpanId = 27;
 
     optional string PoolId = 28;
+    optional TReadSampling Sampling = 29;
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given
@@ -919,6 +920,41 @@ message TPersistentSnapshot {
     optional uint64 TimeoutMs = 7;
 }
 
+// Info about the state of a writer to a lock.
+message TWriteSeqNumState {
+    optional uint64 WriterIndex = 1;
+    optional uint64 WriteSeqNum = 2;
+    // Opaque serialized NKikimrDataEvents.TEvWriteResult
+    optional bytes SerializedResult = 3;
+}
+
+// Info about a lock being transferred from src to dst during split/merge.
+message TSplitSrcLockInfo {
+    // Info about locks further up the ancestor chain.
+    message TAncestorLock {
+        optional uint64 TabletId        = 1;  // ancestor shard
+        optional uint32 Generation      = 2;
+        optional uint64 Counter         = 3;
+        optional uint64 CreateTimestamp = 4;
+        optional uint64 Flags           = 5;
+        repeated TWriteSeqNumState WriteSeqNumStates = 6;
+    }
+
+    optional uint64 LockId          = 1;
+    optional uint32 LockNodeId      = 2;
+    optional uint32 Generation      = 3;
+    optional uint64 Counter         = 4;
+    optional uint64 CreateTimestamp = 5;
+    optional uint64 Flags           = 6;
+
+    repeated TWriteSeqNumState WriteSeqNumStates = 7;
+    repeated uint64 Conflicts = 8 [packed = true];
+    repeated TAncestorLock AncestorLocks = 9;
+
+    repeated NKikimrProto.TPathID ReadTables = 10;
+    repeated NKikimrProto.TPathID WriteTables = 11;
+}
+
 // Src datashard -> Dst datashard
 message TEvSplitTransferSnapshot {
     optional uint64 OperationCookie = 1;
@@ -945,6 +981,7 @@ message TEvSplitTransferSnapshot {
     optional uint64 MvccImmediateWriteEdgeStep = 17;
     optional uint64 MvccImmediateWriteEdgeTxId = 18;
     optional bool MvccPerformedUnprotectedReads = 19;
+    repeated TSplitSrcLockInfo Locks = 20;
 }
 
 message TEvSplitTransferSnapshotAck {
@@ -1865,6 +1902,8 @@ message TEvReshuffleKMeansResponse {
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 
     optional bytes LastKeyAck = 13;
+
+    repeated uint32 EmptyClusters = 14;
 }
 
 message TEvRecomputeKMeansRequest {
@@ -2256,6 +2295,8 @@ message TEvKqpScan {
     optional double CpuGroupThreadsLimit = 29;
     optional string CpuGroupName = 30;
     optional bool UseBatchPool = 31 [default = false];
+    optional string DatabaseId = 32;
+    optional string PoolId = 33;
 }
 
 message TEvCompactTable {
@@ -2452,6 +2493,49 @@ message TEvRead {
 
     // Globally unique query trace ID for TLI log linkage
     optional uint64 QuerySpanId = 906;
+
+    // Bernoulli sampling of primary-key units.
+    optional TReadSampling Sampling = 907;
+}
+
+// Full primary-key interval; empty FirstKey/LastKey denote -inf/+inf.
+message TReadSamplingBounds {
+    optional bytes FirstKey = 1;
+    optional bool FirstInclusive = 2 [default = true];
+    optional bytes LastKey = 3;
+    optional bool LastInclusive = 4 [default = false];
+}
+
+// On restart, copy to TEvRead.Sampling.Continuation and honor cursor inclusivity.
+message TReadSamplingContinuation {
+    // LastProcessedKey is an inclusive resume point when this is set.
+    optional bool LastProcessedKeyInclusive = 1 [default = false];
+    // Unfinished selected unit; must start at or before the resume position.
+    optional TReadSamplingBounds PendingSelectedUnit = 2;
+}
+
+message TReadSampling {
+    // Finite requested probability in (0, 1].
+    optional double Rate = 1;
+    optional uint64 Seed = 2;
+    // Positive; keep unchanged across continuations.
+    optional uint32 MemtableStride = 3 [default = 64];
+    // Applies to the first remaining range.
+    optional TReadSamplingContinuation Continuation = 4;
+}
+
+message TReadSamplingStats {
+    optional uint64 UnitsTotal = 1;
+    optional uint64 UnitsSelected = 2;
+    optional uint64 UnitsMemtable = 3;
+    optional uint64 OwnerRowsPerUnitMax = 4;
+    // Owner-page sizes encountered during unit discovery, including skips and retries.
+    optional uint64 OwnerMainGroupBytes = 5;
+    optional uint64 IndexPagesTouched = 6;
+    optional uint32 Parts = 7;
+    optional uint32 Memtables = 8;
+    optional uint32 Slices = 9;
+    optional uint32 Executions = 10;
 }
 
 message TReadContinuationToken {
@@ -2460,10 +2544,12 @@ message TReadContinuationToken {
     // the first query that needs to be resent.
     optional uint32 FirstUnprocessedQuery = 1;
 
-    // TSerializedCellVec of the last observed key before returning the result
-    // When starting a new TEvRead call for the same query, this would be
-    // the first non-inclusive from key for the first range.
+    // TSerializedCellVec resume key for the first remaining range. Exclusive
+    // unless Sampling.LastProcessedKeyInclusive is set.
     optional bytes LastProcessedKey = 2;
+
+    // Present only for sampled reads. Paired with LastProcessedKey.
+    optional TReadSamplingContinuation Sampling = 3;
 }
 
 // Every TEvRead and TEvReadAck produces a result
@@ -2492,6 +2578,10 @@ message TEvReadResult {
     optional NKikimrDataEvents.EDataFormat ResultFormat = 4;
     optional NKikimrProto.TRowVersion Snapshot = 5;
 
+    // On OVERLOADED/NOT_FOUND, a token with Sampling is a terminal checkpoint:
+    // the reader has stopped with no unpublished sampling decisions. A client
+    // may resume only after receiving all preceding SeqNo values. A token from
+    // an earlier successful result cannot recover a lost sampled reader.
     optional bytes ContinuationToken = 6;
 
     // True when shard may have possibly returned more data, but
@@ -2525,6 +2615,8 @@ message TEvReadResult {
     // Indicates that initial read was throttled by KQP Compute Scheduler due to lack of read quota.
     // The reader should retry only after this delay.
     optional uint64 ThrottleDelayMs = 17;
+
+    optional TReadSamplingStats SamplingStats = 18;
 
     // Data for the possibly partial result
     oneof ReadResult {
@@ -2606,6 +2698,7 @@ message TEvApplyReplicationChangesResult {
         REASON_SCHEME_ERROR = 2;
         REASON_BAD_REQUEST = 3;
         REASON_UNEXPECTED_ROW_OPERATION = 4;
+        REASON_OVERLOADED = 5;
         REASON_OUTDATED_SCHEME = 6;
     }
 
@@ -2736,13 +2829,6 @@ message TInMemoryVars {
     optional NKikimrProto.TRowVersion ImmediateWriteEdge = 1;
     optional NKikimrProto.TRowVersion ImmediateWriteEdgeReplied = 2;
     optional NKikimrProto.TRowVersion UnprotectedReadEdge = 3;
-}
-
-message TWriteSeqNumState {
-    optional uint64 WriterIndex = 1;
-    optional uint64 WriteSeqNum = 2;
-    // Opaque serialized NKikimrDataEvents.TEvWriteResult
-    optional bytes SerializedResult = 3;
 }
 
 // In-memory locks

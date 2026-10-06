@@ -1,19 +1,16 @@
 #pragma once
 
+#include "base_test_fixture.h"
 #include "direct_block_group_impl.h"
 #include "partition_direct_service_mock.h"
+#include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/volume_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
-
-#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
-
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/testlib/actors/test_runtime.h>
-
-#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/storage_transport_test_fixture.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -23,19 +20,19 @@ struct TBlockedDetectedState
     bool BlockedGenerationDetected = false;
 };
 
-struct TDBGFixture: public NUnitTest::TBaseFixture
+struct TDBGFixture: public NTransport::NTestLib::TStorageTransportTestFixture
 {
-    static constexpr auto DefaultWaitFutureTimeout = TDuration::Seconds(10);
-    static constexpr auto DefaultExecutorAndRuntimeDuration =
-        TDuration::MilliSeconds(200);
-
-    std::unique_ptr<NActors::TTestActorRuntime> Runtime;
-    TVector<TExecutorPtr> Executors;
-
+    NProto::TStorageServiceConfig StorageServiceConfig;
     TDiskDescription DiskDescription{
         .DiskId = "disk-id",
         .TabletId = 100,
         .Generation = 1};
+    TVolumeConfigPtr VolumeConfig = std::make_shared<TVolumeConfig>(
+        "disk-id",
+        DefaultBlockSize,
+        65536,   // blockCount
+        1024,    // blocksPerStripe
+        DefaultVChunkSize);
     std::shared_ptr<TTraceServiceMock> TraceService =
         std::make_shared<TTraceServiceMock>();
     std::shared_ptr<TPartitionDirectServiceMock> Service;
@@ -44,24 +41,21 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
     // service.
     TVector<IPartitionDirectServicePtr> OldServices;
 
-    void SetUp(NUnitTest::TTestContext& context) override;
-    void TearDown(NUnitTest::TTestContext& context) override;
-
     // Creates a mock service and starts the dbg.
     NThreading::TFuture<void> RunAndGetInitialReady(
         const std::shared_ptr<TDirectBlockGroup>& dbg,
         bool dropScheduledCallbacks = true);
 
-    TExecutorPtr MakeExecutor();
-    // Dispatches one batch of events queued in the runtime.
-    bool DispatchRuntimeOnce(NActors::TDispatchOptions options = {}) const;
-    // Dispatches everything currently queued in the runtime.
-    void DrainRuntime() const;
-
     [[nodiscard]] static TBlockedDetectedState GetBlockedDetected(
         const TExecutorPtr& executor,
         const std::shared_ptr<TDirectBlockGroup>& dbg,
         THostIndex hostIndex,
+        TDuration waitTimeout);
+    [[nodiscard]] static std::array<size_t, MaxHostCount>
+    CountDDisksByHostDebugOnly(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        EDDiskBalanceStrategy strategy,
         TDuration waitTimeout);
     [[nodiscard]] static TVector<ui64> ReadAllDDiskSeqNos(
         const TExecutorPtr& executor,
@@ -108,50 +102,26 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
             dbgConnectionsConfigGeneration);
     }
 
-    // Interleaves the simulated runtime and the coroutine executor: dispatches
-    // everything queued in the runtime and lets the executor run the resumed
-    // coroutines.
-    bool DoExecutorAndRuntimeWorkWithPredicate(
-        const TExecutorPtr& executor,
-        std::function<bool()> predicate,
-        TDuration timeout) const;
-
-    // Pumps runtime + executor for a bounded time so in-flight async work (sent
-    // requests, callbacks) settles, without waiting for a specific condition.
-    void DoAllExecutorAndRuntimeWork(
-        const TExecutorPtr& executor,
-        TDuration duration = DefaultExecutorAndRuntimeDuration) const;
-
-    // Pumps runtime + executor until `future` is resolved, then returns its
-    // value.
-    template <typename T>
-    T WaitFuture(
-        const TExecutorPtr& executor,
-        NThreading::TFuture<T> future,
-        TDuration timeout)
-    {
-        DoExecutorAndRuntimeWorkWithPredicate(
-            executor,
-            [&]() { return future.HasValue() || future.HasException(); },
-            timeout);
-        return future.GetValue(timeout);
-    }
-
-    // Waits for a future and asserts it resolved.
-    void WaitReady(
-        const NThreading::TFuture<void>& future,
-        TDuration timeout = DefaultWaitFutureTimeout);
-
-    // Waits for a future by pumping the runtime + executor, then asserts it
-    // resolved.
-    void WaitReady(
-        const TExecutorPtr& executor,
-        const NThreading::TFuture<void>& future,
-        TDuration timeout = DefaultWaitFutureTimeout);
-
     // Sets all response Promises for update configs requests. Returns executed
     // requests count.
     size_t ReplyUpdateRequests();
+
+    // Waits until the vchunk has restored its dirty map.
+    void WaitDirtyMapReady(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TVChunk>& vchunk);
+
+    // Writes one block through the vchunk and waits for the reply.
+    void WriteBlock(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TVChunk>& vchunk,
+        ui64 blockIndex);
+
+    // Waits until the transport has sent `count` barrier erases.
+    void WaitBarrierErases(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<NTransport::TStorageTransportMock>& transport,
+        size_t count);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

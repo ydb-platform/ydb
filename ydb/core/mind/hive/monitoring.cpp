@@ -1791,10 +1791,16 @@ public:
         out << "<button type='button' class='btn btn-info' data-toggle='modal' data-target='#reassign-groups' style='width:138px'>Reassign Groups</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' data-toggle='modal' data-target='#move-data' style='width:138px'>Move Data</button>";
+        out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=Subactors\";' style='width:138px'>SubActors</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=ManualOperations\";' style='width:138px'>Manual Ops</button>";
+        out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=ShrinkPool\";' style='width:138px'>Shrink Pool</button>";
         out << "</div>";
         out << "</div>";
 
@@ -1934,6 +1940,70 @@ public:
                                <button id='button_query' type='submit' class='btn btn-default' onclick='queryTablets();'>Query</button>
                                <button id='button_reassign' type='submit' class='btn btn-default disabled' onclick='reassignGroups();'>Reassign</button>
                                <button type='button' class='btn btn-default' data-dismiss='modal' onclick='cancel();'>Cancel</button>
+                           </div>
+                       </div>
+                   </div>
+               </div>
+               )___";
+
+        out << R"___(
+               <div class='modal fade' id='move-data' role='dialog'>
+                   <div class='modal-dialog' style='width:60%'>
+                       <div class='modal-content'>
+                           <div class='modal-header'>
+                               <button type='button' class='close' data-dismiss='modal'>&times;</button>
+                               <h4 class='modal-title'>Move Tablets Data</h4>
+                           </div>
+                           <div class='modal-body'>
+                               <div class='row'>
+                                   <div class='col-md-12'>
+                                       <p>Makes tablets that still reference the given groups in their channels history rewrite all their data into the current groups of their channels,
+                                          then restarts them so the old history entries could be cut.
+                                          Tablets whose current group is one of the given groups are not affected: reassign them first.</p>
+                                   </div>
+                               </div>
+                               <div class='row'>
+                                   <div class='col-md-5'>
+                                       <label for='move_data_groups'>Storage groups</label>
+                                       <div class='input-group' style='width:100%'>
+                                           <input id='move_data_groups' type='text' class='form-control' placeholder='group id[,group id...]'>
+                                       </div>
+                                   </div>
+                                   <div class='col-md-4'>
+                                       <label for='move_data_storage_pool'>Storage pool (optional)</label>
+                                       <div class='input-group' style='width:100%'>
+                                           <input id='move_data_storage_pool' type='text' class='form-control'>
+                                       </div>
+                                   </div>
+                                   <div class='col-md-3'>
+                                       <label for='move_data_inflight'>Inflight</label>
+                                       <div class='input-group'>
+                                           <input id='move_data_inflight' type='number' value='1' min='1' max='10' class='form-control'>
+                                           <span class='input-group-addon'>1-10</span>
+                                       </div>
+                                   </div>
+                               </div>
+                               <div class='row' style='margin-top:20px'>
+                                   <div class='col-md-3'>
+                                       <label>Tablets found</label>
+                                       <div><span id='move_data_tablets_found'>-</span></div>
+                                   </div>
+                                   <div class='col-md-3'>
+                                       <div id='move_data_confirm_group' style='visibility:hidden'>
+                                           <label for='move_data_confirm'>Confirm number of tablets</label>
+                                           <input id='move_data_confirm' type='number' class='form-control'>
+                                       </div>
+                                   </div>
+                                   <div class='col-md-6'>
+                                       <h4>Running: <a id='move_data_subactors' href='#'>SubActors</a></h4>
+                                   </div>
+                               </div>
+                           </div>
+                           <div class='modal-footer'>
+                               <span id='move_data_status' style='float:left'></span>
+                               <button id='move_data_button_query' type='submit' class='btn btn-default' onclick='queryMoveData();'>Query</button>
+                               <button id='move_data_button_start' type='submit' class='btn btn-default disabled' onclick='startMoveData();'>Move Data</button>
+                               <button type='button' class='btn btn-default' data-dismiss='modal'>Cancel</button>
                            </div>
                        </div>
                    </div>
@@ -2223,6 +2293,71 @@ function reassignGroups() {
             },
         });
     }
+}
+
+function getMoveDataUrl() {
+    var url = ('?TabletID=' + hiveId + '&page=MoveData&group=' + encodeURIComponent($('#move_data_groups').val()));
+    var storage_pool = $('#move_data_storage_pool').val();
+    if (storage_pool) {
+        url = url + '&storagePool=' + encodeURIComponent(storage_pool);
+    }
+    return url;
+}
+
+function getMoveDataError(jqXHR, status) {
+    if (jqXHR.responseJSON && jqXHR.responseJSON.error) {
+        return jqXHR.responseJSON.error;
+    }
+    return status;
+}
+
+$('#move_data_subactors').attr('href', '?TabletID=' + hiveId + '&page=Subactors');
+$('#move_data_groups, #move_data_storage_pool').on('input', function() {
+    $('#move_data_button_start').addClass('disabled');
+    $('#move_data_tablets_found').text('-');
+    $('#move_data_confirm_group').css({visibility: 'hidden'});
+});
+
+function queryMoveData() {
+    $('#move_data_status').text('');
+    $.ajax({
+        url: getMoveDataUrl() + '&dryRun=1',
+        dataType: 'json',
+        success: function(result) {
+            $('#move_data_tablets_found').text(result.tablets);
+            if (result.tablets > 0) {
+                $('#move_data_button_start').removeClass('disabled');
+            }
+            $('#move_data_confirm_group').css({visibility: result.tablets > maxReassigns ? 'visible' : 'hidden'});
+        },
+        error: function(jqXHR, status) {
+            $('#move_data_status').text(getMoveDataError(jqXHR, status));
+        }
+    });
+}
+
+function startMoveData() {
+    if ($('#move_data_button_start').hasClass('disabled')) {
+        return;
+    }
+    var url = getMoveDataUrl() + '&inflight=' + $('#move_data_inflight').val();
+    var num_tablets = $('#move_data_confirm').val();
+    if (num_tablets) {
+        url = url + '&numTablets=' + num_tablets;
+    }
+    $('#move_data_button_start').addClass('disabled');
+    $.ajax({
+        type: 'POST',
+        url: url,
+        dataType: 'json',
+        success: function(result) {
+            $('#move_data_status').text('Started move data for ' + result.tablets + ' tablets');
+        },
+        error: function(jqXHR, status) {
+            $('#move_data_status').text(getMoveDataError(jqXHR, status));
+            $('#move_data_button_start').removeClass('disabled');
+        },
+    });
 }
 
 function setDown(element, nodeId, down) {
@@ -2770,7 +2905,11 @@ public:
                 TNodeInfo& node = *nodeInfo;
                 TNodeId id = node.Id;
 
-                if (!node.IsAlive() && TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()) < aliveLine) {
+                if (!node.IsAlive()
+                    && TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()) < aliveLine
+                    && !node.Down
+                    && !node.Freeze)
+                {
                     continue;
                 }
 
@@ -3417,6 +3556,140 @@ public:
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
+        }
+    }
+};
+
+class TTxMonEvent_MoveData : public TTransactionBase<THive>, public TLoggedMonTransaction {
+public:
+    struct TMonitoringMoveDataCallback : IMoveDataCallback {
+        virtual IEventBase* MakeEvent(bool success, ui64 tabletsDone) override {
+            NJson::TJsonValue response;
+            response["success"] = success;
+            response["total"] = tabletsDone;
+            return new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(response, false));
+        }
+    };
+
+    TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
+    const TActorId Source;
+    std::vector<TStorageGroupId> GroupIds;
+    TString StoragePool;
+    TString Error;
+    bool DryRun = false;
+    bool Wait = false;
+    ui32 MaxInFlight = 1;
+    i64 NumTablets = MAX_REASSIGNS_WITHOUT_CONFIRMATION;
+    ui64 TabletsFound = 0;
+
+    TTxMonEvent_MoveData(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , TLoggedMonTransaction(ev, hive)
+        , Event(ev->Release())
+        , Source(source)
+    {
+        const auto params = GetParams(Event.Get());
+        for (const auto& group : SplitString(params.Get("group"), ",")) {
+            TStorageGroupId groupId;
+            if (TryFromString(StripString(group), groupId) && groupId != 0) {
+                GroupIds.push_back(groupId);
+            } else {
+                Error = TStringBuilder() << "invalid group id: " << group;
+            }
+        }
+        StoragePool = params.Get("storagePool");
+        DryRun = FromStringWithDefault(params.Get("dryRun"), DryRun);
+        Wait = FromStringWithDefault(params.Get("wait"), Wait);
+        MaxInFlight = std::clamp<ui32>(FromStringWithDefault(params.Get("inflight"), MaxInFlight), 1, 10);
+        NumTablets = FromStringWithDefault(params.Get("numTablets"), NumTablets);
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_MOVE_DATA; }
+
+    // MoveData rewrites all the tablet's data into the current groups of its channels,
+    // so only tablets that still have the requested groups in their channels' past history are affected
+    std::vector<TTabletId> FindTablets() const {
+        std::unordered_set<TStorageGroupId> groups(GroupIds.begin(), GroupIds.end());
+        std::vector<TTabletId> tablets;
+        for (const auto& [tabletId, tablet] : Self->Tablets) {
+            if (tablet.IsDeleting()) {
+                continue;
+            }
+            bool ok = false;
+            for (const auto& channel : tablet.TabletStorageInfo->Channels) {
+                if (StoragePool && channel.StoragePool != StoragePool) {
+                    continue;
+                }
+                const auto* latest = channel.LatestEntry();
+                if (!latest || groups.contains(latest->GroupID)) {
+                    ok = false;
+                    break;
+                }
+                if (std::ranges::any_of(channel.History, [&](auto&& entry) { return groups.contains(entry.GroupID); })) {
+                    ok = true;
+                }
+            }
+            if (ok) {
+                tablets.push_back(tabletId);
+            }
+        }
+        return tablets;
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        if (Error) {
+            return true;
+        }
+        if (GroupIds.empty()) {
+            Error = "must specify group";
+            return true;
+        }
+        if (!DryRun && Event->GetMethod() != HTTP_METHOD_POST) {
+            Error = "Must use POST request";
+            return true;
+        }
+        auto tablets = FindTablets();
+        TabletsFound = tablets.size();
+        if (DryRun) {
+            Wait = false;
+            return true;
+        }
+        if (tablets.empty()) {
+            Wait = false;
+            return true;
+        }
+        if (TabletsFound > MAX_REASSIGNS_WITHOUT_CONFIRMATION && std::abs(static_cast<i64>(TabletsFound) - NumTablets) > REASSIGN_CONFIRMATION_ERROR_MARGIN) {
+            Error = "must confirm number of tablets";
+            return true;
+        }
+
+        TStringBuilder description;
+        if (StoragePool) {
+            description << StoragePool << ", ";
+        }
+        description << "groups " << JoinSeq(",", GroupIds);
+
+        NIceDb::TNiceDb db(txc.DB);
+        NJson::TJsonValue jsonOperation;
+        jsonOperation["MoveData"] = description;
+        WriteOperation(db, jsonOperation);
+
+        Self->StartMoveDataActor(std::move(tablets), GroupIds, Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringMoveDataCallback>(), false);
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        if (Error) {
+            NJson::TJsonValue response;
+            response["error"] = Error;
+            if (TabletsFound) {
+                response["tablets"] = TabletsFound;
+            }
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, NJson::WriteJson(response, false)));
+        } else if (!Wait) {
+            NJson::TJsonValue response;
+            response["tablets"] = TabletsFound;
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::OK, NJson::WriteJson(response, false)));
         }
     }
 };
@@ -4906,6 +5179,87 @@ public:
     }
 };
 
+// Read-only view of what a shrink is still waiting for: which tablets hold history in the pool being removed.
+class TTxMonEvent_ShrinkPool : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+
+    TTxMonEvent_ShrinkPool(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+        , Event(ev->Release())
+    {
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_SHRINK_POOL; }
+
+    bool Execute(TTransactionContext& /*txc*/, const TActorContext& ctx) override {
+        TStringStream str;
+        RenderHTMLPage(str);
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext& /*ctx*/) override {
+    }
+
+    void RenderHTMLPage(IOutputStream& out) {
+        out << "<body>";
+        out << "<h3>Storage pools being shrunk</h3>";
+        bool anyPool = false;
+        for (const auto& [name, pool] : Self->StoragePools) {
+            if (pool.RemainingHistory.empty() && pool.InactiveGroups.empty() && !pool.NeedShrinkFromTenant) {
+                continue;
+            }
+            anyPool = true;
+            std::map<TTabletId, std::vector<const TStoragePoolInfo::THistoryEntry*>> byTablet;
+            for (const auto& entry : pool.RemainingHistory) {
+                byTablet[entry.Tablet].push_back(&entry);
+            }
+            out << "<h4>" << name << "</h4>";
+            out << "<p>inactive groups: " << pool.InactiveGroups.size();
+            for (size_t i = 0; i < pool.InactiveGroups.size(); ++i) {
+                out << (i ? ", " : " (") << pool.InactiveGroups[i];
+            }
+            out << (pool.InactiveGroups.empty() ? "" : ")")
+                << " &middot; remaining entries: " << pool.RemainingHistory.size()
+                << " &middot; tablets: " << byTablet.size() << " &middot; waiting for tenant: " << (pool.NeedShrinkFromTenant ? "yes" : "no")
+                << "</p>";
+            out << "<table class='table simple-table'>";
+            out << "<thead><tr><th>Tablet</th><th>Type</th><th>Entries (channel:fromGeneration)</th></tr></thead><tbody>";
+            for (const auto& [tabletId, entries] : byTablet) {
+                const TLeaderTabletInfo* tablet = Self->FindTablet(tabletId);
+                out << "<tr><td>" << tabletId << "</td><td>";
+                out << (tablet ? TTabletTypes::TypeToStr(tablet->Type) : "?");
+                out << "</td><td>";
+                for (size_t i = 0; i < entries.size(); ++i) {
+                    out << (i ? ", " : "") << entries[i]->Channel << ":" << entries[i]->Generation;
+                }
+                out << "</td></tr>";
+            }
+            out << "</tbody></table>";
+        }
+        if (!anyPool) {
+            out << "<p>no pool is being shrunk</p>";
+        }
+        out << "<h3>MoveData in flight</h3>";
+        bool anyActor = false;
+        for (const auto* subActor : Self->SubActors) {
+            const TString description = subActor->GetDescription();
+            if (!description.StartsWith("MoveData(")) {
+                continue;
+            }
+            anyActor = true;
+            out << "<p>" << description << " &middot; started at " << subActor->StartTime << "</p>";
+        }
+        if (!anyActor) {
+            out << "<p>no MoveData actor is running</p>";
+        }
+        out << "</body>";
+    }
+};
+
 class TTxMonEvent_OperationsLog : public TTransactionBase<THive> {
 public:
     const TActorId Source;
@@ -4996,6 +5350,7 @@ public:
                     <option>SetDown</option>
                     <option>SetFreeze</option>
                     <option>ReassignTablet</option>
+                    <option>MoveData</option>
                     <option>InitMigration</option>
                     <option>MoveTablet</option>
                     <option>StopTablet</option>
@@ -5194,6 +5549,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     if (page == "ReassignTablet") {
         return Execute(new TTxMonEvent_ReassignTablet(ev->Sender, ev, this, GetParams(ev->Get())), ctx);
     }
+    if (page == "MoveData") {
+        return Execute(new TTxMonEvent_MoveData(ev->Sender, ev, this), ctx);
+    }
     if (page == "InitMigration") {
         return Execute(new TTxMonEvent_InitMigration(ev->Sender, ev, this), ctx);
     }
@@ -5250,6 +5608,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "Groups") {
         return Execute(new TTxMonEvent_Groups(ev->Sender, ev, this), ctx);
+    }
+    if (page == "ShrinkPool") {
+        return Execute(new TTxMonEvent_ShrinkPool(ev->Sender, ev, this), ctx);
     }
     if (page == "UpdateResources") {
         TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);

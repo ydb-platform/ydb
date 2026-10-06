@@ -3,13 +3,19 @@
 #include <util/system/compiler.h>
 #include <util/system/yassert.h>
 
+#include <limits>
+
 namespace NKikimr::NPDisk {
 
 TUringOperationBase::~TUringOperationBase() = default;
 
 void TUringOperationBase::PrepareIov(void* buf, size_t size, ui64 offset) {
+    Y_ABORT_UNLESS(size <= static_cast<ui64>(std::numeric_limits<i64>::max()));
+    Y_ABORT_UNLESS(size <= std::numeric_limits<ui64>::max() - offset);
     TotalSize = size;
     DiskOffset = offset;
+    ShortIoCount = 0;
+    IsContinuation = false;
 
 #if defined(__linux__)
     Iov.clear();
@@ -27,6 +33,8 @@ void TUringOperationBase::PrepareScatterGather(size_t count, ui64 offset) {
 
     TotalSize = 0;
     DiskOffset = offset;
+    ShortIoCount = 0;
+    IsContinuation = false;
 
     Iov.clear();
     Iov.reserve(count);
@@ -36,6 +44,8 @@ void TUringOperationBase::PrepareScatterGather(size_t count, ui64 offset) {
 
 void TUringOperationBase::AddIov(void* buf, size_t size) {
     Y_ABORT_UNLESS(Iov.size() < MAX_IOVS);
+    Y_ABORT_UNLESS(size <= static_cast<ui64>(std::numeric_limits<i64>::max()) - TotalSize);
+    Y_ABORT_UNLESS(size <= std::numeric_limits<ui64>::max() - DiskOffset - TotalSize);
     TotalSize += size;
     Iov.push_back({buf, size});
 }
@@ -44,6 +54,8 @@ void TUringOperationBase::AddIov(void* buf, size_t size) {
 void TUringOperationBase::AdvanceIov(size_t bytesProcessed) {
     // On non-Linux there are no short reads/writes via io_uring, so NOP is fine.
 #if defined(__linux__)
+    Y_ABORT_UNLESS(bytesProcessed <= GetOperationBytes());
+    Y_ABORT_UNLESS(bytesProcessed <= std::numeric_limits<ui64>::max() - DiskOffset);
     DiskOffset += bytesProcessed;
     BytesProcessed += bytesProcessed;
 

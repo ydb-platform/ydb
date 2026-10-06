@@ -183,6 +183,11 @@ void TFakeNodeWhiteboardService::Handle(TEvWhiteboard::TEvPDiskStateRequest::TPt
         NKikimrWhiteboard::TPDiskStateInfo &pDiskStateInfo = *record.AddPDiskStateInfo();
         pDiskStateInfo.CopyFrom(pr.second);
     }
+    if (ev->Get()->Record.GetIncludeDDiskState()) {
+        for (const auto& info : node.DDiskStateInfo) {
+            record.AddDDiskStateInfo()->CopyFrom(info);
+        }
+    }
     {
         auto unguard = Unguard(guard);
         response->Record.SetResponseTime(ctx.Now().MilliSeconds());
@@ -540,9 +545,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
         SubstGlobal(staticConfig, "$Node1", Sprintf("%" PRIu32, runtime.GetNodeId(0)));
 
         TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig =
-            new TNodeWardenConfig(STRAND_PDISK && !runtime.IsRealThreads()
-                                  ? static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime))
-                                  : static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory()));
+            new TNodeWardenConfig();
         google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig->MutableServiceSet());
 
         if (nodeIndex == 0) {
@@ -619,6 +622,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
         0);
 
     runtime.LocationCallback = options.NodeLocationCallback;
+    SetupPDiskSubsystem(&runtime, STRAND_PDISK);
     runtime.Initialize(app.Unwrap());
     auto dnsConfig = new TDynamicNameserviceConfig();
     dnsConfig->MaxStaticNodeId = 1000;

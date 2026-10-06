@@ -321,6 +321,9 @@ public:
                     if (domainDescription.GetProcessingParams().HasBackupController()) {
                         Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetBackupController()] = NKikimrTabletBase::TTabletTypes::BackupController;
                     }
+                    if (domainDescription.GetProcessingParams().HasWasmCompileController()) {
+                        Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetWasmCompileController()] = NKikimrTabletBase::TTabletTypes::WasmCompileController;
+                    }
                     TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
                     auto* domain = domains->GetDomain();
                     if (describeResult->GetRecord().GetPathOwnerId() == domain->SchemeRoot && describeResult->GetRecord().GetPathId() == 1) {

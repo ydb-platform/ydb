@@ -42,7 +42,18 @@ public:
             return true;
         }
 
-        if (target->GetStreamState() != TReplication::EStreamState::Creating) {
+        const auto build = Self->IndexBuilds.find({rid, tid});
+        if (build != Self->IndexBuilds.end() && Self->IsCancelledIndexBuild(build->second)) {
+            YDB_LOG_DEBUG_CTX(ctx, "Ignore stream creation result for cancelled index build",
+                {"rid", rid}, {"tid", tid});
+            Replication.Reset();
+            return true;
+        }
+
+        const bool discoveringCapability = target->GetStreamState() == TReplication::EStreamState::Ready
+            && target->GetKind() == TReplication::ETargetKind::Table
+            && !target->GetStreamSchemaChanges().has_value();
+        if (target->GetStreamState() != TReplication::EStreamState::Creating && !discoveringCapability) {
             YDB_LOG_WARN_CTX(ctx, "Stream state mismatch",
                 {"rid", rid},
                 {"tid", tid},
@@ -52,8 +63,9 @@ public:
 
         if (Ev->Get()->IsSuccess()) {
             target->SetStreamState(TReplication::EStreamState::Ready);
+            target->SetStreamSchemaChanges(Ev->Get()->SchemaChanges);
 
-            YDB_LOG_NOTICE_CTX(ctx, "Stream created",
+            YDB_LOG_NOTICE_CTX(ctx, "Stream ready",
                 {"rid", rid},
                 {"tid", tid});
         } else {
@@ -75,7 +87,10 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::SrcStreams>().Key(rid, tid).Update<Schema::SrcStreams::State>(target->GetStreamState());
+        db.Table<Schema::SrcStreams>().Key(rid, tid).Update(
+            NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()),
+            NIceDb::TUpdate<Schema::SrcStreams::SchemaChanges>(target->GetStreamSchemaChanges().value_or(false))
+        );
         db.Table<Schema::Targets>().Key(rid, tid).Update<Schema::Targets::Issue>(target->GetIssue());
         db.Table<Schema::Replications>().Key(rid).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),

@@ -41,6 +41,7 @@ namespace NKikimr {
         const TActorId VDiskActorId;
         const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskCounters;
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskSpaceReportCounters;
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskMemCounters;
         // latency histograms
         NVDiskMon::THistograms Histograms;
@@ -105,7 +106,8 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
                 TReplQuoter::TPtr replNodeRequestQuoter = nullptr,
-                TReplQuoter::TPtr replNodeResponseQuoter = nullptr);
+                TReplQuoter::TPtr replNodeResponseQuoter = nullptr,
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> vdiskSpaceReportCounters = nullptr);
 
         // The function checks response from PDisk. Normally, it's OK.
         // Other alternatives are: 1) shutdown; 2) FAIL
@@ -116,12 +118,18 @@ namespace NKikimr {
             // check status
             switch (ev.Status) {
                 case NKikimrProto::OK:
-                    if constexpr (T::EventType != TEvBlobStorage::EvLogResult) {
-                        // we have different semantics for TEvLogResult StatusFlags
-                        OutOfSpaceState.UpdateLocalChunk(ev.StatusFlags);
-                    } else {
-                        // update log space flags
-                        OutOfSpaceState.UpdateLocalLog(ev.StatusFlags);
+                    if constexpr (T::EventType == TEvBlobStorage::EvLogResult) {
+                        // We have different semantics for TEvLogResult StatusFlags.
+                        OutOfSpaceState.ObserveLocalLog(ev.StatusFlags);
+                    } else if constexpr (T::EventType != TEvBlobStorage::EvCheckSpaceResult) {
+                        // TEvCheckSpaceResult carries both chunk and log flags and
+                        // is applied authoritatively by the polling actor.
+                        OutOfSpaceState.ObserveLocalChunk(ev.StatusFlags);
+                    }
+                    if constexpr (T::EventType != TEvBlobStorage::EvCheckSpaceResult) {
+                        if constexpr (requires { ev.Headroom; }) {
+                            OutOfSpaceState.ObserveSpaceHeadroom(ev.Headroom);
+                        }
                     }
                     return true;
                 case NKikimrProto::INVALID_OWNER:

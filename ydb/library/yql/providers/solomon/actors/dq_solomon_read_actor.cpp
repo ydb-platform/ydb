@@ -166,7 +166,7 @@ public:
     }
 
     void Bootstrap() {
-        if (!MemoryQuotaManager->AllocateQuota(MaxDataInflightBytes + MaxMetadataInflightBytes)) {
+        if (!MemoryQuotaManager->AllocateQuota(MaxDataInflightBytes + MaxMetadataInflightBytes, /* isOptional = */ false)) {
             TIssues issues;
             issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate " << MaxDataInflightBytes + MaxMetadataInflightBytes << "b read buffer"});
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
@@ -175,7 +175,7 @@ public:
 
         if (UseMetricsQueue) {
             Become(&TDqSolomonReadActor::LimitlessModeState);
-            MetricsQueueEvents.Init(TxId, SelfId(), SelfId());
+            MetricsQueueEvents.Init(TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ false, /* useConnect */ true, /* ordered */ false);
             MetricsQueueEvents.OnNewRecipientId(MetricsQueueActor);
 
             if (MetricsQueueConsumersCountDelta > 0) {
@@ -361,7 +361,11 @@ public:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         SOURCE_LOG_D("Handle MetricsQueue undelivered");
-        if (MetricsQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
+        if (MetricsQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
+            return;
+        }
+        MetricsQueueEvents.Unsubscribe();
+        if (!(IsMetricsQueueEmpty && IsConfirmedMetricsQueueFinish && !IsWaitingMetricsQueueResponse)) {
             TIssues issues{TIssue{TStringBuilder() << "MetricsQueue was lost"}};
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
         }
@@ -442,7 +446,7 @@ public:
             TryRequestData();
         }
 
-        finished = LastMetricProcessed();
+        finished = LastMetricProcessed() && (!UseMetricsQueue || !IsWaitingMetricsQueueResponse);
         if (MetricsData.empty()) {
             IngressStats.TryPause();
         }
@@ -509,7 +513,7 @@ private:
     }
 
     void TryRequestMetrics() {
-        if (ListedMetrics.empty() && !IsMetricsQueueEmpty && !IsWaitingMetricsQueueResponse) {
+        if (UseMetricsQueue && ListedMetrics.empty() && !IsMetricsQueueEmpty && !IsWaitingMetricsQueueResponse) {
             RequestMetrics();
         }
     }

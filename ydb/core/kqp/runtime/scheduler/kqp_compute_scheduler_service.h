@@ -5,9 +5,10 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
-#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 
 namespace NKikimr::NKqp::NScheduler {
+
+class TCpuGuaranteeError : public yexception {};
 
 class TComputeScheduler : public std::enable_shared_from_this<TComputeScheduler> {
 public:
@@ -29,28 +30,38 @@ public:
 
     NHdrf::NDynamic::TQueryPtr AddOrUpdateQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs);
     NHdrf::NDynamic::TQueryPtr GetReadQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const;
-    bool RemoveQuery(const NHdrf::TQueryId& queryId);
+    bool RemoveQuery(const NHdrf::TQueryId& queryId, bool isForceRemove = false);
 
     void UpdateFairShare();
 
-    // Returns per-leaf-pool FairShare / TotalCpu, normalized to [0..1],
-    THashMap<NYql::NDq::TWorkScope, double> GetLeafPoolFairShares() const;
+    // Returns per-leaf-pool FairShare / TotalCpu, normalized to [0..1].
+    THashMap<NHdrf::TFullPoolId, double> GetLeafPoolFairShares() const;
 
 private:
+    // TODO: both methods are workaround for serverless scenario with remote node execution,
+    //       when those nodes don't know about databases at all. Remove them later.
+    void SetDefaultDatabaseGuarantee(NHdrf::TStaticAttributes& attrs) const;                 // run under Mutex
+    NHdrf::NDynamic::TDatabasePtr GetOrCreateDatabase(const NHdrf::TDatabaseId& databaseId); // run under Mutex
+
+private:
+
     static constexpr NHdrf::TQueryId READ_QUERY_ID = -1;
 
     std::atomic<bool> Enabled;
 
     TRWMutex Mutex;
-    NHdrf::NDynamic::TRootPtr Root;                                // protected by Mutex
-    THashMap<NHdrf::TQueryId, NHdrf::NDynamic::TQueryPtr> Queries; // protected by Mutex
+    struct TQueryState {
+        ui64 AddQueryCount;
+        NHdrf::NDynamic::TQueryPtr Query;
+    };
+    NHdrf::NDynamic::TRootPtr Root;                 // protected by Mutex
+    THashMap<NHdrf::TQueryId, TQueryState> Queries; // protected by Mutex
 
     // Special virtual queries per each pool to create SchedulableRead upon them, used for datashards and columnshards.
     // TODO: get rid of read queries - just pass somehow the real query to datashards.
-    THashMap<std::pair<NHdrf::TDatabaseId, NHdrf::TPoolId>, NHdrf::NDynamic::TQueryPtr> ReadQueries; // protected by Mutex
+    THashMap<NHdrf::TFullPoolId, NHdrf::NDynamic::TQueryPtr> ReadQueries; // protected by Mutex
 
     const TDelayParams DelayParams;
-    const NHdrf::NSnapshot::ELeafFairShare FairShareMode;
     TIntrusivePtr<TKqpCounters> KqpCounters;
 
     struct {
@@ -107,6 +118,7 @@ struct TEvAddQuery : public TEventLocal<TEvAddQuery, TEvents::EvAddQuery> {
 
 struct TEvRemoveQuery : public TEventLocal<TEvRemoveQuery, TEvents::EvRemoveQuery> {
     NHdrf::TQueryId QueryId;
+    bool IsForceRemove = false;
 };
 
 struct TEvQueryResponse : public TEventLocal<TEvQueryResponse, TEvents::EvQueryResponse> {
@@ -123,5 +135,5 @@ namespace NKikimr::NKqp {
     NScheduler::TComputeSchedulerPtr CreateKqpComputeScheduler(
         const NMonitoring::TDynamicCounterPtr& counters,
         const NKikimrConfig::TAppConfig& appConfig);
-    IActor* CreateKqpComputeSchedulerService(const TDuration& updateFairSharePeriod);
+    IActor* CreateKqpComputeSchedulerService(TDuration updateFairSharePeriod);
 }

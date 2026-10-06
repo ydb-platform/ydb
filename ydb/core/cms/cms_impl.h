@@ -121,6 +121,7 @@ private:
         bool PartialPermissionAllowed;
         i32 Priority;
         TString RequestId;
+        bool CapEnabled = false;
 
         TActionOptions(TDuration dur)
             : PermissionDuration(dur)

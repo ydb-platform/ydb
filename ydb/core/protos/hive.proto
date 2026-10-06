@@ -520,6 +520,7 @@ message TTabletInfo {
     optional EBalancerPolicy BalancerPolicy = 24;
     optional bool InWaitQueue = 25;
     optional bool IsBackup = 26 [default = false];
+    optional uint32 ConfirmedStorageVersion = 27;
 }
 
 message TEvSeizeTabletsReply {

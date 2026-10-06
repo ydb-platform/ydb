@@ -11,6 +11,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/disjoint_interval_tree
     library/cpp/protobuf/interop
     ydb/core/base
     ydb/core/grpc_services
@@ -18,12 +19,18 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/library/actors/core
     ydb/library/yql/providers/pq/gateway/abstract
+    ydb/library/yql/providers/pq/gateway/clients/message_stream
     ydb/library/yql/providers/pq/gateway/clients/local
     ydb/library/yverify_stream
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/services/persqueue_v1/actors
     ydb/services/persqueue_v1
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

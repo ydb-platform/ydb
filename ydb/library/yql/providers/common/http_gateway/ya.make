@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ENV(TZ="UTC+23")
 
@@ -22,12 +22,11 @@ PEERDIR(
     yql/essentials/utils/log
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()
 
 RECURSE(
     mock
+    ut_helpers
 )
 
 RECURSE_FOR_TESTS(

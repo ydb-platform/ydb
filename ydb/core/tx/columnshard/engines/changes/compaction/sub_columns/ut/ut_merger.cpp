@@ -175,4 +175,96 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
         UNIT_ASSERT_VALUES_EQUAL(values, "xxxx;<null>;yyyy;<null>;");
         UNIT_ASSERT_VALUES_EQUAL(RenderDocs(merged), RenderDocs(BuildChunk(docs, settings)));
     }
+
+    // Bug-triggering scenario:
+    // Source portions expose an ancestor and its child as separated columns.
+    // The unselected path must move to Others in merged portion; it must never be remapped to the selected path.
+    Y_UNIT_TEST(ChildAndAncestorPathMix) {
+        auto settings = MakeSettings();
+        settings.SetColumnsLimit(1);
+        const std::vector<TString> ancestorDocs = {
+            R"({"a":["xxxxxxxxxxxxxxxx"]})",
+            R"({"a":["yyyyyyyyyyyyyyyy"]})",
+        };
+        const std::vector<TString> childDocs = {
+            R"({"a":{"b":1}})",
+            R"({"a":{"b":2}})",
+        };
+
+        {
+            auto merged = MergeChunks({ BuildChunk(ancestorDocs, settings), BuildChunk(childDocs, settings) }, settings);
+            const auto& stats = merged->GetColumnsData().GetStats();
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnNameString(0), R"("a")");
+            UNIT_ASSERT_VALUES_EQUAL(
+                RenderDocs(merged), R"({"a":["xxxxxxxxxxxxxxxx"]};{"a":["yyyyyyyyyyyyyyyy"]};{"a":{"b":1}};{"a":{"b":2}};)");
+        }
+
+        const std::vector<TString> scalarAncestorDocs = {
+            R"({"a":1})",
+            R"({"a":2})",
+        };
+        const std::vector<TString> largeChildDocs = {
+            R"({"a":{"b":"xxxxxxxxxxxxxxxx"}})",
+            R"({"a":{"b":"yyyyyyyyyyyyyyyy"}})",
+        };
+
+        {
+            auto merged = MergeChunks({ BuildChunk(scalarAncestorDocs, settings), BuildChunk(largeChildDocs, settings) }, settings);
+            const auto& stats = merged->GetColumnsData().GetStats();
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnNameString(0), R"("a"."b")");
+            UNIT_ASSERT_VALUES_EQUAL(RenderDocs(merged), R"({"a":1};{"a":2};{"a":{"b":"xxxxxxxxxxxxxxxx"}};{"a":{"b":"yyyyyyyyyyyyyyyy"}};)");
+        }
+    }
+
+    Y_UNIT_TEST(PromotesOthersKeyToSelectedColumn) {
+        auto settings = MakeSettings();
+        settings.SetColumnsLimit(1);
+        // "b" is selected in the source, leaving "a" in Others; larger aggregate "a" is selected after merging.
+        const TString largeA(128, 'a');
+        const TString mediumB(64, 'b');
+        const std::vector<TString> othersDocs = {
+            TStringBuilder() << R"({"a":1,"b":")" << mediumB << R"("})",
+            TStringBuilder() << R"({"a":2,"b":")" << mediumB << R"("})",
+        };
+        const std::vector<TString> columnDocs = {
+            TStringBuilder() << R"({"a":")" << largeA << R"("})",
+            TStringBuilder() << R"({"a":")" << largeA << R"("})",
+        };
+
+        auto othersChunk = BuildChunk(othersDocs, settings);
+        UNIT_ASSERT_VALUES_EQUAL(othersChunk->GetColumnsData().GetStats().GetColumnNameString(0), R"("b")");
+        UNIT_ASSERT_VALUES_EQUAL(othersChunk->GetOthersData().GetStats().GetColumnNameString(0), R"("a")");
+
+        auto merged = MergeChunks({ othersChunk, BuildChunk(columnDocs, settings) }, settings);
+        UNIT_ASSERT_VALUES_EQUAL(merged->GetColumnsData().GetStats().GetColumnNameString(0), R"("a")");
+        UNIT_ASSERT_VALUES_EQUAL(
+            RenderDocs(merged), RenderDocs(BuildChunk({ othersDocs[0], othersDocs[1], columnDocs[0], columnDocs[1] }, settings)));
+    }
+
+    Y_UNIT_TEST(KeepsQuotedAndNestedNamesDistinct) {
+        auto settings = MakeSettings();
+        settings.SetColumnsLimit(1);
+        // "z" is selected in the source, leaving flat "a.b" in Others; larger nested "a"."b" is selected after merging.
+        const TString largeB(128, 'b');
+        const TString mediumZ(64, 'z');
+        const std::vector<TString> flatDocs = {
+            TStringBuilder() << R"({"a.b":1,"z":")" << mediumZ << R"("})",
+            TStringBuilder() << R"({"a.b":2,"z":")" << mediumZ << R"("})",
+        };
+        const std::vector<TString> nestedDocs = {
+            TStringBuilder() << R"({"a":{"b":")" << largeB << R"("}})",
+            TStringBuilder() << R"({"a":{"b":")" << largeB << R"("}})",
+        };
+
+        auto flatChunk = BuildChunk(flatDocs, settings);
+        UNIT_ASSERT_VALUES_EQUAL(flatChunk->GetColumnsData().GetStats().GetColumnNameString(0), R"("z")");
+        UNIT_ASSERT_VALUES_EQUAL(flatChunk->GetOthersData().GetStats().GetColumnNameString(0), R"("a.b")");
+
+        auto merged = MergeChunks({ flatChunk, BuildChunk(nestedDocs, settings) }, settings);
+        UNIT_ASSERT_VALUES_EQUAL(merged->GetColumnsData().GetStats().GetColumnNameString(0), R"("a"."b")");
+        UNIT_ASSERT_VALUES_EQUAL(
+            RenderDocs(merged), RenderDocs(BuildChunk({ flatDocs[0], flatDocs[1], nestedDocs[0], nestedDocs[1] }, settings)));
+    }
 }

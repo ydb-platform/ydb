@@ -1,5 +1,7 @@
 PROGRAM(pg_catalog_dump)
 
+NO_BUILD_IF(EXPORT_CMAKE)
+
 SRCS(
     pg_catalog_dump.cpp
 )

@@ -662,7 +662,7 @@ HWY_API Vec256<T> VecFromMask(D d, Mask256<T> m) {
 
 template <class D, HWY_IF_V_SIZE_D(D, 32)>
 HWY_API uint64_t BitsFromMask(D d, MFromD<D> m) {
-  const Half<D> dh;
+  const Half<decltype(d)> dh;
   const uint64_t lo = BitsFromMask(dh, m.m0);
   const uint64_t hi = BitsFromMask(dh, m.m1);
   return (hi << Lanes(dh)) | lo;
@@ -1404,6 +1404,23 @@ HWY_API Vec256<T> SwapAdjacentBlocks(Vec256<T> v) {
   Vec256<T> ret;
   ret.v0 = v.v1;  // swapped order
   ret.v1 = v.v0;
+  return ret;
+}
+
+// ------------------------------ InterleaveEvenBlocks
+template <class D, class V = VFromD<D>, HWY_IF_V_SIZE_D(D, 32)>
+HWY_API V InterleaveEvenBlocks(D, V a, V b) {
+  V ret;
+  ret.v0 = a.v0;
+  ret.v1 = b.v0;
+  return ret;
+}
+// ------------------------------ InterleaveOddBlocks
+template <class D, class V = VFromD<D>, HWY_IF_V_SIZE_D(D, 32)>
+HWY_API V InterleaveOddBlocks(D, V a, V b) {
+  V ret;
+  ret.v0 = a.v1;
+  ret.v1 = b.v1;
   return ret;
 }
 

@@ -189,8 +189,6 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         TDescribeTestServer server{};
         auto* runtime = server.GetRuntime();
 
-        runtime->GetAppData().FeatureFlags.SetEnableIcNodeCache(true);
-        runtime->SetUseRealInterconnect();
         const auto edge = runtime->AllocateEdgeActor();
 
         TString currentTopicName = topicName;
@@ -206,7 +204,7 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         };
 
         auto info = getDescribe();
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(info.Status), static_cast<int>(NPQ::NDescriber::EStatus::SUCCESS));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(info.Status), static_cast<int>(NPQ::NDescriber::EStatus::Success));
         UNIT_ASSERT(info.Info);
         UNIT_ASSERT(info.Self);
         UNIT_ASSERT_VALUES_EQUAL(info.Info->Description.PartitionsSize(), 15u);
@@ -218,7 +216,7 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         info = getDescribe();
         UNIT_ASSERT_VALUES_EQUAL(
             static_cast<int>(info.Status),
-            static_cast<int>(NPQ::NDescriber::EStatus::NOT_FOUND));
+            static_cast<int>(NPQ::NDescriber::EStatus::NotFound));
     }
     Y_UNIT_TEST(GetPartitionDescribe) {
         ui32 partsCount = 15;

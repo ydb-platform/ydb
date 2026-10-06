@@ -22,6 +22,10 @@ message TStatus {
         NO_SUCH_HOST = 10;
         NO_SUCH_DEVICE = 11;
         NO_SUCH_SERVICE = 12;
+        // Temporary disallow: the action would be allowed, but the node currently
+        // hosts a running system tablet. Such actions can still be granted to fill
+        // a batch when no tablet-free nodes are left.
+        DISALLOW_TEMP_SYS_TABLET = 13;
     }
 
     optional ECode   Code = 1;
@@ -755,6 +759,14 @@ enum EDDiskTabletSortBy {
     DDISK_TABLET_SORT_BY_TABLET_ID = 0;
     DDISK_TABLET_SORT_BY_LAST_CHANGED_AT = 1;
     DDISK_TABLET_SORT_BY_GROUPS_COUNT = 2;
+    DDISK_TABLET_SORT_BY_DEGRADE = 3;
+    DDISK_TABLET_SORT_BY_DISK_USAGE = 4;
+}
+
+enum EDDiskTabletGroupBy {
+    DDISK_TABLET_GROUP_BY_NONE = 0;
+    DDISK_TABLET_GROUP_BY_DEGRADE = 1;
+    DDISK_TABLET_GROUP_BY_DISK_USAGE = 2;
 }
 
 message TDDiskTabletListRequest {
@@ -770,9 +782,21 @@ message TDDiskTabletListRequest {
     // Persistent Buffer are returned (evaluated on the CMS side using the
     // latest known PDisk availability, before paging).
     optional bool OnlyProblems = 6 [default = false];
+    // Group by worst DBG first, independently of the secondary sort direction.
+    optional bool GroupByDegrade = 7 [default = false];
+    // Return counts for all matching groups, independently of page and FilterGroup.
+    optional EDDiskTabletGroupBy GroupBy = 8 [default = DDISK_TABLET_GROUP_BY_NONE];
+    // Group name: degrade count, usage range lower bound (0, 10, ..., 100), or "unknown".
+    optional string FilterGroup = 9;
 }
 
 message TDDiskTabletListResponse {
+    message TGroup {
+        optional string Name = 1;
+        optional uint32 Count = 2;
+    }
+    repeated TGroup Groups = 5;
+
     message TTabletRevision {
         optional uint64 TabletId = 1;
         optional uint64 Revision = 2;
@@ -780,6 +804,12 @@ message TDDiskTabletListResponse {
         optional uint64 LastChangedAt = 4;
         optional uint32 UnavailableDDiskCount = 5;
         optional uint32 UnavailablePersistentBufferCount = 6;
+        // Maximum of unavailable DDisk and Persistent Buffer counts across all DBGs.
+        optional uint32 Degrade = 7;
+        // Maximum underlying DDisk owner occupancy across all assigned DDisks.
+        // Absent if any assigned DDisk has no valid, available monitoring sample.
+        optional double DiskUsage = 8;
+        optional string DiskId = 9; // NBS volume identifier; absent for older/unavailable reporters
     }
 
     reserved 2;
@@ -793,6 +823,8 @@ message TDDiskTabletListResponse {
 enum EDDiskDiskSortBy {
     DDISK_DISK_SORT_BY_DISK_ID = 0;
     DDISK_DISK_SORT_BY_TABLETS_COUNT = 1;
+    DDISK_DISK_SORT_BY_DDISK_OCCUPANCY = 2;
+    DDISK_DISK_SORT_BY_PERSISTENT_BUFFER_OCCUPANCY = 3;
 }
 
 message TDDiskDiskListRequest {
@@ -807,6 +839,8 @@ message TDDiskDiskListRequest {
     // If set, only disks currently considered unavailable are returned
     // (evaluated on the CMS side, before paging).
     optional bool OnlyProblems = 7 [default = false];
+    // Preserve tablet lists for legacy clients; overview clients can request counts only.
+    optional bool IncludeTabletIds = 8 [default = true];
 }
 
 message TDDiskDiskListResponse {
@@ -820,6 +854,15 @@ message TDDiskDiskListResponse {
         // states, or "Unknown" if it was never reported to CMS). This is a more
         // detailed status than Available, which is only a coarse up/down flag.
         optional string State = 5;
+        // Fractions, absent when the role is unused or monitoring is unavailable.
+        optional double DDiskOccupancy = 6; // underlying PDisk owner occupancy
+        optional double PersistentBufferOccupancy = 7; // relative to MaxChunks
+        optional uint32 DDiskTabletCount = 8;
+        optional uint32 PersistentBufferTabletCount = 9;
+        optional string StoragePoolName = 10;
+        optional string DDiskPath = 11; // node-relative actor monitoring path
+        optional string PersistentBufferId = 12; // stable service actor ID
+
     }
 
     reserved 2;

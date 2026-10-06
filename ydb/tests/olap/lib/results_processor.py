@@ -7,6 +7,7 @@ import logging
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import (
     external_param_is_true,
+    get_allure_report_url,
     get_external_param,
     get_ci_version,
     get_test_tools_git_info,
@@ -196,11 +197,7 @@ class ResultsProcessor:
                 info['cluster']['endpoint'] = YdbCluster.ydb_endpoint
                 info['cluster']['error'] = str(e)
 
-            report_url = os.getenv('ALLURE_RESOURCE_URL', None)
-            if report_url is None:
-                sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
-                if sandbox_task_id is not None:
-                    report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
+            report_url = get_allure_report_url()
             if report_url is not None:
                 info['report_url'] = report_url
 
@@ -239,6 +236,8 @@ class ResultsProcessor:
                 info['test_tools_git'] = test_git_info
             if os.getenv('CI_TEST_VERSION'):
                 info['test_version'] = os.getenv('CI_TEST_VERSION')
+            tags: str = get_external_param('tags', '')
+            info['tags'] = [t.strip() for t in tags.split(',') if t.strip()]
 
             data = {
                 'Db': cls.get_cluster_id(),
@@ -342,7 +341,7 @@ class ResultsProcessor:
         return endpoint.execute_query(query, parameters)
 
     @classmethod
-    def upload_tpcc_results(cls, results, run_type: str, warmup_start_ts: float):
+    def upload_tpcc_results(cls, results, problems, run_type: str, warmup_start_ts: float):
         if not cls.send_results or not cls.get_tpcc_endpoints():
             return
         with allure.step("Upload TPCC results to YDB"):
@@ -354,11 +353,7 @@ class ResultsProcessor:
             metrics = cls.get_tpcc_metrics(results)
 
             summary = results.get('summary', {})
-            report_url = os.getenv('ALLURE_RESOURCE_URL', None)
-            if report_url is None:
-                sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
-                if sandbox_task_id is not None:
-                    report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
+            report_url = get_allure_report_url()
             # Enrich payload stored in `json` with resolved run knobs / CI context.
             # Keep original CLI summary fields (max_sessions/threads/warmup_seconds when present).
             new_order = results.get('transactions', {}).get('NewOrder', {})
@@ -406,7 +401,8 @@ class ResultsProcessor:
                 'throughput': None,
                 'goodput': None,
                 'newOrderLatency90': metrics['newOrderLatency90'],
-                'json': json_string
+                'json': json_string,
+                'problems': problems if problems is not None or len(problems) > 0 else None
             }
             allure.attach(json.dumps(data), 'data', allure.attachment_type.JSON)
             for endpoint in cls.get_tpcc_endpoints():

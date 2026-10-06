@@ -11,7 +11,6 @@
 namespace NKikimr::NUdfStore::NWasm {
 
 struct TWasmLoadParams {
-    TString Md5;
     TWasmManifest Manifest;
     TString ModuleWasmData;
     TString ModuleObjectCode;

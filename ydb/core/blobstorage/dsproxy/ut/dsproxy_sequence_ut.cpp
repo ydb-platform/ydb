@@ -450,10 +450,12 @@ Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) {
     TSet<TLogoBlobID> okParts;
 
     auto action = [&](TAutoPtr<IEventHandle>& ev, const TActorContext&) {
-        if (ev->Type == TEvents::TSystem::Bootstrap) {
+        // Encoding may yield before the first VPut request is sent.
+        if (ev->Type == TEvents::TSystem::Bootstrap || ev->Type == TEvBlobStorage::EvResume) {
             return true;
         }
-        UNIT_ASSERT(ev->Type == TEvBlobStorage::EvVPutResult);
+        UNIT_ASSERT_C(ev->Type == TEvBlobStorage::EvVPutResult,
+            "Unexpected event type# " << ev->Type);
         TEvBlobStorage::TEvVPutResult *putResult = ev->Get<TEvBlobStorage::TEvVPutResult>();
         UNIT_ASSERT(putResult);
         TVDiskID vDiskId = VDiskIDFromVDiskID(putResult->Record.GetVDiskID());

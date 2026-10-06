@@ -77,7 +77,7 @@ TRangeLock::TRangeLock(
 
 TRangeLock::TRangeLock(
     ILockableRangesWeakPtr lockableRanges,
-    TBlockRange64 range,
+    TBlockRange16 range,
     THostMask mask)
     : LockableRanges(std::move(lockableRanges))
     , Range(range)

@@ -34,7 +34,7 @@ GROUP BY
 ORDER BY
     lochierarchy DESC,
     CASE
-        WHEN lochierarchy == 0 THEN i_category
+        WHEN CAST(lochierarchy AS Int32) == 0 THEN i_category
         ELSE NULL
     END,
     rank_within_parent

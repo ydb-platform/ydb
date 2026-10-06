@@ -9,7 +9,7 @@ class TestClickbenchWM(wm.TestWorkloadManagerClickbenchConcurrentQueryLimit, Fun
 
     @classmethod
     def setup_class(cls) -> None:
-        cls.setup_cluster()
+        cls.setup_cluster_ext(extra_feature_flags=['enable_composite_conveyor_scheduling'])
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column', '--datetime-types=dt64'])
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'import', 'files', '--input', yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")])
         super().setup_class()
@@ -30,7 +30,7 @@ class TestTpchWMS0_1(wm.WorkloadManagerTpchBase, wm.WorkloadManagerConcurrentQue
 
     @classmethod
     def setup_class(cls) -> None:
-        cls.setup_cluster()
+        cls.setup_cluster_ext(extra_feature_flags=['enable_composite_conveyor_scheduling'])
         cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls.get_path()}', 'init', '--store=column', '--datetime-types=dt64'] + cls.addition_init_params())
         cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls.get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
         super().setup_class()
@@ -42,7 +42,7 @@ class TestClickbenchWMComputeSchedulerP1T1(wm.TestWorkloadManagerClickbenchCompu
 
     @classmethod
     def setup_class(cls) -> None:
-        cls.setup_cluster()
+        cls.setup_cluster_ext(extra_feature_flags=['enable_composite_conveyor_scheduling'])
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'init', '--store=column', '--datetime-types=dt64'])
         cls.run_cli(['workload', 'clickbench', '-p', 'olap_yatests/clickbench/hits', 'import', 'files', '--input', yatest.common.source_path("ydb/tests/functional/clickbench/data/hits.csv")])
         super().setup_class()
@@ -67,7 +67,7 @@ class TestWMOltp50(wm.TestWorkloadManagerOltp50, FunctionalTestBase):
 
     @classmethod
     def setup_class(cls) -> None:
-        cls.setup_cluster()
+        cls.setup_cluster_ext(extra_feature_flags=['enable_composite_conveyor_scheduling'])
         cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'init', '--warehouses', str(cls.tpcc_warehouses)])
         cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
         super().setup_class()
@@ -84,12 +84,12 @@ class TestWMOltpTpchS0_1(wm.WorkloadManagerOltpTpch20Base, FunctionalTestBase):
     @classmethod
     def get_resource_pools(cls) -> list[wm.ResourcePool]:
         return [
-            wm.ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=50, resource_weight=4),
+            wm.ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=50),
         ]
 
     @classmethod
     def setup_class(cls) -> None:
-        cls.setup_cluster()
+        cls.setup_cluster_ext(extra_feature_flags=['enable_composite_conveyor_scheduling'])
         cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'init', '--warehouses', str(cls.tpcc_warehouses)])
         cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
         cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls.get_path()}', 'init', '--store=column', '--datetime-types=dt64'])
@@ -104,12 +104,12 @@ class TestWMOltpAdHoc(wm.TestWorkloadManagerOltpAdHoc, FunctionalTestBase):
     @classmethod
     def get_resource_pools(cls) -> list[wm.ResourcePool]:
         return [
-            wm.ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=50, resource_weight=4),
+            wm.ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=50),
         ]
 
     @classmethod
     def setup_class(cls) -> None:
-        cls.setup_cluster()
+        cls.setup_cluster_ext(extra_feature_flags=['enable_composite_conveyor_scheduling'])
         cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'init', '--warehouses', str(cls.tpcc_warehouses)])
         cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
         super().setup_class()

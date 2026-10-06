@@ -582,6 +582,7 @@ public:
     //! Converts promise into future.
     operator TFuture<T>() const;
     TFuture<T> ToFuture() const;
+    explicit operator TUniqueFuture<T>() const;
 
 protected:
     explicit TPromiseBase(TIntrusivePtr<NYT::NDetail::TPromiseState<T>> impl);

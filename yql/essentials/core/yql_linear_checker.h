@@ -6,4 +6,4 @@ namespace NYql {
 
 bool ValidateLinearTypes(const TExprNode& root, TExprContext& ctx);
 
-}
+} // namespace NYql

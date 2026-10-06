@@ -1,11 +1,13 @@
-#include "kqp_proxy_service_impl.h"
 #include "kqp_proxy_service.h"
+#include "kqp_proxy_service_impl.h"
+#include "kqp_query_text_cache_service.h"
 #include "kqp_script_executions.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
@@ -15,23 +17,24 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
+#include <ydb/core/kqp/common/simple/session_id.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/pq_checkpoint_provider_integration.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_pool_cap_pusher.h>
-#include <ydb/services/workload_manager/query_classifier.h>
-#include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -40,37 +43,34 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/library/security/util.h>
-#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
-#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
-
 #include <ydb/library/aclib/user_context.h>
-#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <yql/essentials/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/security/util.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
-#include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_pool_cap_pusher.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
+#include <ydb/services/workload_manager/events.h>
+#include <ydb/services/workload_manager/query_classifier.h>
 
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
-#include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/resource/resource.h>
+#include <library/cpp/string_utils/quote/quote.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
 
@@ -118,6 +118,88 @@ TString EncodeSessionId(ui32 nodeId, const TString& id) {
         << "&id=" << CGIEscapeRet(Base64Encode(id));
 }
 
+std::unique_ptr<TEvKqp::TEvKillSessionResponse> MakeKillSessionResponse(
+    const TString& sessionId, Ydb::StatusIds::StatusCode status, const TString& message = {})
+{
+    auto response = std::make_unique<TEvKqp::TEvKillSessionResponse>();
+    response->Record.SetSessionId(sessionId);
+    response->Record.SetStatus(status);
+    if (!message.empty()) {
+        NYql::TIssues issues;
+        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message));
+        NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+    }
+    return response;
+}
+
+// Keep the remote-node subscription separate from the proxy's attached sessions.
+class TKqpKillSessionRelay : public TActorBootstrapped<TKqpKillSessionRelay> {
+public:
+    TKqpKillSessionRelay(TEvKqp::TEvKillSessionRequest::TPtr request, ui32 nodeId)
+        : Request(std::move(request))
+        , ReplyTo(Request->Sender)
+        , ReplyCookie(Request->Cookie)
+        , SessionId(Request->Get()->Record.GetSessionId())
+        , NodeId(nodeId)
+    {}
+
+    void Bootstrap() {
+        const auto now = TActivationContext::Now();
+        const auto deadline = TInstant::MicroSeconds(Request->Get()->Record.GetDeadlineUs());
+        if (deadline <= now) {
+            Reply(Ydb::StatusIds::TIMEOUT, "Session termination deadline exceeded");
+            return;
+        }
+
+        Become(&TKqpKillSessionRelay::StateWork);
+        if (deadline != TInstant::Max()) {
+            Schedule(deadline - now, new TEvents::TEvWakeup());
+        }
+        Send(MakeKqpProxyID(NodeId), Request->Release().Release(),
+            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    }
+
+private:
+    void Reply(Ydb::StatusIds::StatusCode status, const TString& message) {
+        Send(ReplyTo, MakeKillSessionResponse(SessionId, status, message).release(), 0, ReplyCookie);
+        PassAway();
+    }
+
+    void Handle(TEvKqp::TEvKillSessionResponse::TPtr& ev) {
+        Send(ReplyTo, ev->Release().Release(), 0, ReplyCookie);
+        PassAway();
+    }
+
+    void PassAway() override {
+        Send(TActivationContext::InterconnectProxy(NodeId), new TEvents::TEvUnsubscribe());
+        TActorBootstrapped::PassAway();
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvKqp::TEvKillSessionResponse, Handle);
+            cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
+            cFunc(TEvents::TEvUndelivered::EventType, HandleUnavailable);
+            cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, HandleUnavailable);
+            IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+        }
+    }
+
+    void HandleTimeout() {
+        Reply(Ydb::StatusIds::TIMEOUT, "Session termination deadline exceeded");
+    }
+
+    void HandleUnavailable() {
+        Reply(Ydb::StatusIds::UNAVAILABLE, "Session owner node is unavailable");
+    }
+
+    TEvKqp::TEvKillSessionRequest::TPtr Request;
+    const TActorId ReplyTo;
+    const ui64 ReplyCookie;
+    const TString SessionId;
+    const ui32 NodeId;
+};
+
 class TKqpTempTablesAgentActor: public TActorBootstrapped<TKqpTempTablesAgentActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -151,6 +233,7 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
             EvOnRequestTimeout,
             EvCloseIdleSessions,
             EvWarmupGateFallback,
+            EvKillSessionTimeout,
         };
 
         struct TEvCollectPeerProxyData: public TEventLocal<TEvCollectPeerProxyData, EEv::EvCollectPeerProxyData> {};
@@ -179,6 +262,14 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         };
 
         struct TEvCloseIdleSessions : public TEventLocal<TEvCloseIdleSessions, EEv::EvCloseIdleSessions> {};
+
+        struct TEvKillSessionTimeout : public TEventLocal<TEvKillSessionTimeout, EEv::EvKillSessionTimeout> {
+            explicit TEvKillSessionTimeout(ui64 requestId)
+                : RequestId(requestId)
+            {}
+
+            const ui64 RequestId;
+        };
     };
 
     enum class EDelayedRequestType {
@@ -240,6 +331,12 @@ public:
         }
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
+        if (FederatedQuerySetup) {
+            FederatedQuerySetup->CheckpointProviderIntegrations.try_emplace(
+                TString(NYql::PqProviderName),
+                CreatePqCheckpointProviderIntegration(TActivationContext::ActorSystem(), FederatedQuerySetup->PqGatewayFactory->CreatePqGateway(), *FederatedQuerySetup->Driver, FederatedQuerySetup->CredentialsFactory)
+            );
+        }
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
@@ -343,6 +440,8 @@ public:
             limits.CleanupPeriod = TDuration::MilliSeconds(config.GetCleanupPeriodMs());
             limits.IdlePingPeriod = TDuration::MilliSeconds(config.GetIdlePingPeriodMs());
             limits.IdleDestroyPeriod = TDuration::MilliSeconds(config.GetIdleDestroyPeriodMs());
+            limits.EnableChannelNotifications = config.GetEnableChannelNotifications();
+            limits.UnboundWaitPeriod = TDuration::MilliSeconds(config.GetUnboundWaitPeriodMs());
         } else { // deprecated
             limits.LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes();
             limits.RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes();
@@ -357,6 +456,9 @@ public:
         //         channelPoolId = it->second;
         //     }
         // }
+
+        static_assert(NYql::NDq::DqIcChannelData == TInterconnectChannels::IC_DQ_DATA);
+        static_assert(NYql::NDq::DqIcChannelControl == TInterconnectChannels::IC_DQ_CONTROL);
 
         auto channelServiceActorId = TActivationContext::Register(
             NYql::NDq::CreateLocalChannelServiceActor(TActivationContext::ActorSystem(), SelfId().NodeId(),
@@ -392,8 +494,19 @@ public:
                     ? httpGatewayConfig.GetMaxInFlightCount() : 1024;
                 const auto PoolCapsPushPeriod = TDuration::MilliSeconds(500);
                 const double MinDefaultPoolShare = 0.1;
+
+                auto poolSharesProvider = [scheduler]() {
+                    THashMap<NYql::NDq::TWorkScope, double> result;
+                    for (const auto& [fullPoolId, share] : scheduler->GetLeafPoolFairShares()) {
+                        result[NYql::NDq::TWorkScope{
+                            .Namespace = fullPoolId.DatabaseId,
+                            .Name = fullPoolId.PoolId,
+                        }] = share;
+                    }
+                    return result;
+                };
                 auto* pusher = NYql::CreateHttpPoolCapPusher(
-                    [scheduler]() { return scheduler->GetLeafPoolFairShares(); },
+                    std::move(poolSharesProvider),
                     gateway,
                     PoolCapsPushPeriod,
                     maxHandlers,
@@ -489,7 +602,7 @@ public:
     void SendSessionClose(const TKqpSessionInfo* sessionInfo) {
         auto closeSessionEv = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
         closeSessionEv->Record.MutableRequest()->SetSessionId(sessionInfo->SessionId);
-        Send(sessionInfo->WorkerId, closeSessionEv.release());
+        Send(sessionInfo->WorkerId, closeSessionEv.release(), IEventHandle::FlagTrackDelivery);
     }
 
     void AskSelfNodeInfo() {
@@ -622,6 +735,13 @@ public:
                 break;
             }
 
+            case TKqpEvents::EvCloseSessionRequest: {
+                YDB_LOG_WARN("Session close request was undelivered",
+                    {"targetId", ev->Sender});
+                RemoveSession("", ev->Sender);
+                break;
+            }
+
             default:
                 YDB_LOG_ERROR("Undelivered event with unexpected source",
                     {"type", ev->Get()->SourceType});
@@ -666,10 +786,8 @@ public:
         }
 
         std::unique_ptr<TEvKqp::TEvCreateSessionRequest> remoteRequest = std::make_unique<TEvKqp::TEvCreateSessionRequest>();
-        remoteRequest->Record.SetDeadlineUs(event.GetDeadlineUs());
-        remoteRequest->Record.SetTraceId(event.GetTraceId());
-        remoteRequest->Record.SetSupportsBalancing(event.GetSupportsBalancing());
-        remoteRequest->Record.MutableRequest()->SetDatabase(event.GetRequest().GetDatabase());
+        remoteRequest->Record.CopyFrom(event);
+        remoteRequest->Record.SetCanCreateRemoteSession(false);
 
         Send(MakeKqpProxyID(nodeId), remoteRequest.release(), IEventHandle::FlagTrackDelivery, requestId);
         TDuration timeout = DEFAULT_CREATE_SESSION_TIMEOUT;
@@ -733,16 +851,22 @@ public:
             return;
         }
 
-        // TODO: not the best place for adding database.
-        auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(ev->Get()->GetDatabaseId());
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
-
         const TString& database = ev->Get()->GetDatabase();
         const TString& traceId = ev->Get()->GetTraceId();
         const auto queryType = ev->Get()->GetType();
         const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
+        auto* proxyRequest = PendingRequests.FindPtr(requestId);
+        AFL_ENSURE(proxyRequest);
+        auto& span = proxyRequest->Span;
+        span = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::TopLevel,
+            std::move(ev->TraceId), "Query Proxy", NWilson::EFlags::AUTO_END);
+        span.Attribute("ydb.actor.type", TString("TKqpProxyService"));
+        AddQueryTraceAttributes(span, queryType, queryAction,
+            database ? database : ev->Get()->GetDatabaseId(), ev->Get()->GetQuery());
+        span.Attribute("db.operation.name", FallbackQueryTraceName(queryType, queryAction));
+        ev->TraceId = span.GetTraceId();
         // Hold external client queries until warmup finishes; warmup's own traffic (PREPARE compilations, internal calls, the Metadata-system-user sysview fetch) must pass or it self-deadlocks.
         if (!WarmupGateOpen && !ev->Get()->GetIsWarmupCompilation() && !ev->Get()->IsInternalCall()) {
             const auto& userToken = ev->Get()->GetUserToken();
@@ -756,8 +880,10 @@ public:
         bool explicitSession = true;
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
+            const auto& userToken = ev->Get()->GetUserToken();
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, false, "", "", "", "", "", ev->Get()->GetApplicationName(), Nothing(), result))
+                database, false, "", userToken ? userToken->GetUserSID() : TString(), "", "", "",
+                ev->Get()->GetApplicationName(), Nothing(), result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
@@ -814,11 +940,21 @@ public:
 
         if (sessionInfo) {
             if (sessionInfo->Closing) {
-                TString error = TStringBuilder() << "Session is closing";
-                ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
+                if (!sessionInfo->TerminationReason.empty()) {
+                    ReplyProcessError(Ydb::StatusIds::CANCELLED, sessionInfo->TerminationReason, requestId);
+                } else {
+                    ReplyProcessError(Ydb::StatusIds::BAD_SESSION, "Session is closing", requestId);
+                }
                 return;
             }
-            LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery(), traceId);
+            if (sessionInfo->State != TKqpSessionInfo::EXECUTING) {
+                // A concurrent request must not replace the active query's stats.
+                // The session actor still decides whether to accept the request.
+                LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
+            }
+            if (FeatureFlags.GetEnableKqpRuntimeStats()) {
+                ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval = CurrentQueryStatsReportInterval;
+            }
 
             // Pass WmState from session to the event
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");
@@ -853,6 +989,13 @@ public:
             {"targetId", targetId});
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
+        span.Attribute("ydb.target_node_id", static_cast<i64>(targetId.NodeId()));
+        span.Attribute("ydb.forwarded", targetId.NodeId() != SelfId().NodeId());
+        if (targetId.NodeId() != SelfId().NodeId()) {
+            proxyRequest->RedirectSpan = MakeQueryRedirectTraceSpan(
+                span, SelfId().NodeId(), targetId.NodeId());
+        }
+        proxyRequest->QueryDispatched = true;
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 
@@ -895,6 +1038,124 @@ public:
                 }
             }
         }
+    }
+
+    void Handle(TEvKqp::TEvKillSessionRequest::TPtr& ev) {
+        const auto& request = ev->Get()->Record;
+        const auto& sessionId = request.GetSessionId();
+        const auto reply = [&](Ydb::StatusIds::StatusCode status, const TString& message) {
+            Send(ev->Sender, MakeKillSessionResponse(sessionId, status, message).release(), 0, ev->Cookie);
+        };
+
+        TString initiatorSid;
+        if (!request.GetUserToken().empty()) {
+            NACLibProto::TUserToken token;
+            if (!token.ParseFromString(request.GetUserToken())) {
+                reply(Ydb::StatusIds::UNAUTHORIZED, "Session not found or access denied");
+                return;
+            }
+            initiatorSid = token.GetUserSID();
+        }
+
+        // Empty identities never confer ownership, including sessions created
+        // before the creator identity was recorded.
+        if (!request.GetCanKillAnySession() && initiatorSid.empty()) {
+            reply(Ydb::StatusIds::UNAUTHORIZED, "Session not found or access denied");
+            return;
+        }
+
+        const auto nodeId = ValidateSessionId(sessionId);
+        if (!nodeId) {
+            reply(Ydb::StatusIds::BAD_REQUEST, "Invalid session ID");
+            return;
+        }
+        if (request.GetDatabase().empty()) {
+            reply(Ydb::StatusIds::BAD_REQUEST, "Database is not specified");
+            return;
+        }
+        if (sessionId == request.GetSourceSessionId()) {
+            reply(Ydb::StatusIds::PRECONDITION_FAILED, "KILL SESSION cannot terminate the session executing this command");
+            return;
+        }
+
+        const auto now = TActivationContext::Now();
+        const auto deadline = TInstant::MicroSeconds(request.GetDeadlineUs());
+        if (deadline <= now) {
+            reply(Ydb::StatusIds::TIMEOUT, "Session termination deadline exceeded");
+            return;
+        }
+        if (*nodeId != SelfId().NodeId()) {
+            Register(new TKqpKillSessionRelay(std::move(ev), *nodeId));
+            return;
+        }
+
+        const auto* sessionInfo = LocalSessions->FindPtr(sessionId);
+        if (!sessionInfo) {
+            if (request.GetCanKillAnySession()) {
+                reply(Ydb::StatusIds::PRECONDITION_FAILED, "Session not found");
+            } else {
+                reply(Ydb::StatusIds::UNAUTHORIZED, "Session not found or access denied");
+            }
+            return;
+        }
+        if (CanonizePath(sessionInfo->Database) != CanonizePath(request.GetDatabase())
+            || (!request.GetCanKillAnySession() && (sessionInfo->ClientSID.empty() || sessionInfo->ClientSID != initiatorSid)))
+        {
+            reply(Ydb::StatusIds::UNAUTHORIZED, "Session not found or access denied");
+            return;
+        }
+
+        const ui64 requestId = ++NextKillSessionRequestId;
+        KillSessionWaiters.emplace(requestId, TKillSessionWaiter{ev->Sender, ev->Cookie, sessionId});
+        KillSessionWaitersBySession[sessionId].insert(requestId);
+        if (deadline != TInstant::Max()) {
+            Schedule(deadline - now, new TEvPrivate::TEvKillSessionTimeout(requestId));
+        }
+
+        if (sessionInfo->TerminationReason.empty()) {
+            TString reason = "Query execution was cancelled by KILL SESSION";
+            if (!initiatorSid.empty()) {
+                reason += TStringBuilder() << " (initiator: " << initiatorSid << ")";
+            }
+            LocalSessions->SetSessionTerminating(sessionInfo, reason);
+
+            YDB_LOG_INFO("Administrative session termination requested",
+                {"sessionId", sessionId},
+                {"database", sessionInfo->Database},
+                {"initiatorSid", initiatorSid},
+                {"traceId", request.GetTraceId()});
+
+            auto close = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+            auto* closeRequest = close->Record.MutableRequest();
+            closeRequest->SetSessionId(sessionId);
+            closeRequest->SetAdministrative(true);
+            closeRequest->SetTerminationReason(reason);
+            closeRequest->SetInitiatorSid(initiatorSid);
+            close->Record.SetTraceId(request.GetTraceId());
+            Send(sessionInfo->WorkerId, close.release(), IEventHandle::FlagTrackDelivery);
+        }
+    }
+
+    void FinishKillSessionRequest(ui64 requestId, Ydb::StatusIds::StatusCode status, const TString& message = {}) {
+        const auto it = KillSessionWaiters.find(requestId);
+        if (it == KillSessionWaiters.end()) {
+            return;
+        }
+        const auto& waiter = it->second;
+        Send(waiter.ReplyTo, MakeKillSessionResponse(waiter.SessionId, status, message).release(), 0, waiter.ReplyCookie);
+
+        const auto sessionIt = KillSessionWaitersBySession.find(waiter.SessionId);
+        if (sessionIt != KillSessionWaitersBySession.end()) {
+            sessionIt->second.erase(requestId);
+            if (sessionIt->second.empty()) {
+                KillSessionWaitersBySession.erase(sessionIt);
+            }
+        }
+        KillSessionWaiters.erase(it);
+    }
+
+    void Handle(TEvPrivate::TEvKillSessionTimeout::TPtr& ev) {
+        FinishKillSessionRequest(ev->Get()->RequestId, Ydb::StatusIds::TIMEOUT, "Session termination deadline exceeded");
     }
 
     void Handle(TEvKqp::TEvPingSessionRequest::TPtr& ev) {
@@ -1015,7 +1276,7 @@ public:
             }
         }
 
-        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
+        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
         YDB_LOG_DEBUG("Sent request to target",
             {"requestId", requestId},
             {"targetId", targetId},
@@ -1035,14 +1296,19 @@ public:
         }
 
         const TKqpSessionInfo* info = LocalSessions->FindPtr(proxyRequest->SessionId);
-        if (info && !info->AttachedRpcId) {
+        if (info && !info->AttachedRpcId
+            && (info->State != TKqpSessionInfo::EXECUTING || info->QueryRequestId == requestId)) {
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
+        if constexpr (std::is_same_v<TEvent, TEvKqp::TEvQueryResponse::TPtr>) {
+            EndProxyQueryTraceSpan(proxyRequest->Span, ev->Get()->Record);
+            EndQueryTraceSpan(proxyRequest->RedirectSpan, ev->Get()->Record.GetYdbStatus());
+        }
         Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
-        if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest) {
-            LocalSessions->DetachQueryText(info);
+        if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest && info->QueryRequestId == requestId) {
+            LocalSessions->EndQuery(info);
         }
 
         TKqpRequestInfo requestInfo(proxyRequest->TraceId);
@@ -1450,6 +1716,18 @@ public:
         }
     }
 
+    void Handle(TEvKqp::TEvCurrentQueryStats::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        auto* info = LocalSessions->FindPtr(msg.SessionId);
+        if (!info || info->WorkerId != ev->Sender || info->State != TKqpSessionInfo::EXECUTING
+            || info->QueryRequestId != msg.RequestId || info->CurrentQueryStatsSequenceNo >= msg.SequenceNo) {
+            return;
+        }
+        auto* mutableInfo = const_cast<TKqpSessionInfo*>(info);
+        mutableInfo->CurrentQueryStats = msg.Stats;
+        mutableInfo->CurrentQueryStatsSequenceNo = msg.SequenceNo;
+    }
+
     void SendWhiteboardStats() {
         TActorId whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
         Send(whiteboardId, NNodeWhiteboard::TEvWhiteboard::CreateTotalSessionsUpdateRequest(LocalSessions->size()));
@@ -1469,7 +1747,10 @@ public:
             hFunc(TEvKqp::TEvQueryRequest, Handle);
             hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
+            hFunc(TEvKqp::TEvKillSessionRequest, Handle);
+            hFunc(TEvPrivate::TEvKillSessionTimeout, Handle);
             hFunc(TEvKqp::TEvQueryResponse, ForwardEvent);
+            hFunc(TEvKqp::TEvCurrentQueryStats, Handle);
             hFunc(TEvKqpExecuter::TEvExecuterProgress, ForwardProgress);
             hFunc(TEvKqp::TEvCreateSessionRequest, Handle);
             hFunc(TEvKqp::TEvPingSessionRequest, Handle);
@@ -1546,6 +1827,9 @@ private:
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
         response->Record.SetYdbStatus(ydbStatus);
 
+        if (request->Span && !request->QueryDispatched) {
+            response->Record.SetRejectionStage(NKikimrKqp::TEvQueryResponse::REJECTION_STAGE_PROXY);
+        }
         NYql::IssuesToMessage(issues, response->Record.MutableResponse()->MutableQueryIssues());
         return Send(SelfId(), response.release(), 0, requestId);
     }
@@ -1687,30 +1971,36 @@ private:
         return MakeKqpProxyID(*nodeId);
     }
 
-    void RemoveSession(const TString& sessionId, const TActorId& workerId) {
-        if (!sessionId.empty()) {
-            auto [nodeId, rpcActor] = LocalSessions->Erase(sessionId);
-            KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
-            if (ShutdownRequested) {
-                ShutdownState->Update(LocalSessions->size());
+    void RemoveSession(TString sessionId, const TActorId& workerId) {
+        if (sessionId.empty()) {
+            const auto* sessionInfo = LocalSessions->FindPtr(workerId);
+            if (!sessionInfo) {
+                return;
             }
-
-            // No more session with kqp proxy on this node
-            if (nodeId) {
-                Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
-            }
-
-            if (rpcActor) {
-                Send(rpcActor, CreateEvCloseSessionResponse(sessionId));
-            }
-
-            return;
+            // Keep the id alive after Erase removes the registry entry.
+            sessionId = sessionInfo->SessionId;
         }
 
-        LocalSessions->Erase(workerId);
+        auto [nodeId, rpcActor] = LocalSessions->Erase(sessionId);
         KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
         if (ShutdownRequested) {
             ShutdownState->Update(LocalSessions->size());
+        }
+
+        // No remaining sessions are attached to an RPC actor on this node.
+        if (nodeId) {
+            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
+        }
+
+        if (rpcActor) {
+            Send(rpcActor, CreateEvCloseSessionResponse(sessionId));
+        }
+
+        if (const auto it = KillSessionWaitersBySession.find(sessionId); it != KillSessionWaitersBySession.end()) {
+            const auto waiters = it->second;
+            for (ui64 requestId : waiters) {
+                FinishKillSessionRequest(requestId, Ydb::StatusIds::SUCCESS);
+            }
         }
     }
 
@@ -1824,8 +2114,6 @@ private:
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(requestType), ActorContext())) {
             return false;
         }
-
-        // TODO: add database to scheduler
 
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
@@ -2021,9 +2309,9 @@ private:
     void Handle(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev) {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
             ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->DatabaseId, ev->Get()->Serverless);
+            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddDatabase(ev->Get()->DatabaseId));
         }
         DatabasesCache.UpdateDatabaseInfo(ev, ActorContext());
-        // TODO: update info for compute scheduler too
     }
 
     void Handle(TEvKqp::TEvDelayedRequestError::TPtr& ev) {
@@ -2047,11 +2335,17 @@ private:
         auto counters = Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher");
 
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
+        NFq::TRowDispatcherSettings settings(
+            streamingQueries.GetExternalStorage(),
+            FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
+        );
+
+        if (FeatureFlags.GetEnableRowDispatcherMemoryLimiting()) {
+            settings.SetMemoryQuotaManager(NRm::CreateMemoryQuotaManager(ResourceManager_));
+        }
+
         auto rowDispatcher = NFq::NewRowDispatcherService(
-            NFq::TRowDispatcherSettings(
-                streamingQueries.GetExternalStorage(),
-                FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
-            ),
+            settings,
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,
@@ -2079,7 +2373,9 @@ private:
             "cs",
             NKikimr::CreateYdbCredentialsProviderFactory,
             *FederatedQuerySetup->Driver,
-            Counters->GetKqpCounters()->GetSubgroup("subsystem", "checkpoints_storage_service"));
+            Counters->GetKqpCounters()->GetSubgroup("subsystem", "checkpoints_storage_service"),
+            FederatedQuerySetup->CheckpointProviderIntegrations
+        );
 
         CheckpointStorageService = TActivationContext::Register(service.release());
         TActivationContext::ActorSystem()->RegisterLocalService(
@@ -2137,6 +2433,16 @@ private:
     bool ShutdownRequested = false;
     THashMap<ui64, NKikimrConsole::TConfigItem::EKind> ConfigSubscriptions;
     THashMap<ui64, TActorId> TimeoutTimers;
+
+    struct TKillSessionWaiter {
+        TActorId ReplyTo;
+        ui64 ReplyCookie;
+        TString SessionId;
+    };
+
+    ui64 NextKillSessionRequestId = 0;
+    THashMap<ui64, TKillSessionWaiter> KillSessionWaiters;
+    THashMap<TString, THashSet<ui64>> KillSessionWaitersBySession;
 
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;

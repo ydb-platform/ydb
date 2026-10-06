@@ -19,8 +19,7 @@ void TDescriberActor::Bootstrap() {
 }
 
 void TDescriberActor::DoDescribe() {
-    YDB_LOG_DEBUG("Start describe",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Start describe");
     Become(&TDescriberActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -31,8 +30,7 @@ void TDescriberActor::DoDescribe() {
 }
 
 void TDescriberActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
 
     ChildActorId = {};
 
@@ -41,7 +39,7 @@ void TDescriberActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
 
     auto& topic = topics.begin()->second;
     switch(topic.Status) {
-        case NDescriber::EStatus::SUCCESS: {
+        case NDescriber::EStatus::Success: {
             TopicInfo = std::move(topic);
             auto consumerConfig = GetConsumer(TopicInfo.Info->Description.GetPQTabletConfig(), Settings.Consumer);
             if (!consumerConfig) {
@@ -50,7 +48,7 @@ void TDescriberActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             }
             return DoRuntimeAttributes();
         }
-        case NDescriber::EStatus::BAD_REQUEST: {
+        case NDescriber::EStatus::BadRequest: {
             return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
                 NDescriber::Description(Settings.TopicName, topic.Status));
         }
@@ -69,16 +67,16 @@ STFUNC(TDescriberActor::DescribeState) {
 }
 
 void TDescriberActor::DoRuntimeAttributes() {
-    YDB_LOG_DEBUG("Start DoRuntimeAttributes",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Start DoRuntimeAttributes");
     Become(&TDescriberActor::RuntimeAttributesState);
     SendToTablet(TopicInfo.Info->Description.GetBalancerTabletID(), new TEvPQ::TEvMLPGetRuntimeAttributesRequest(Settings.TopicName, Settings.Consumer));
 }
 
 void TDescriberActor::Handle(TEvPQ::TEvMLPGetRuntimeAttributesResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPGetRuntimeAttributesResponse",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+    LOG_D(
+        "Handle TEvPQ::TEvMLPGetRuntimeAttributesResponse",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     auto* result = ev->Get();
 
     auto response = std::make_unique<TEvDescribeResponse>();
@@ -95,8 +93,7 @@ void TDescriberActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     if (ev->Cookie != Cookie) {
         return;
     }
-    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
     if (Backoff.HasMore()) {
         Backoff.Next();
         return DoRuntimeAttributes();
@@ -115,9 +112,10 @@ STFUNC(TDescriberActor::RuntimeAttributesState) {
 
 
 void TDescriberActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPErrorResponse",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+    LOG_D(
+        "Handle TEvPQ::TEvMLPErrorResponse",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
 }
 
@@ -127,9 +125,10 @@ void TDescriberActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 }
 
 void TDescriberActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    YDB_LOG_INFO("Reply error",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)});
+    LOG_I(
+        "Reply error",
+        {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)}
+    );
     Send(ParentId, new TEvDescribeResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }

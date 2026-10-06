@@ -369,6 +369,8 @@ class TEWHEval : public IStage2ColumnStatisticEval {
     TBorder RangeEnd;
 
     std::optional<ui32> Seq;
+    ui32 CountSeq = 0;
+    ui64 Count = 0;
     std::unique_ptr<TEqWidthHistogram> IntermediateState;
 
 private:
@@ -492,6 +494,7 @@ public:
 
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
         Seq = builder.AddUDAFAggregation(columnName, "EWH", NumBuckets, RangeStart, RangeEnd);
+        CountSeq = builder.AddBuiltinAggregation(columnName, "count");
 
         if (builder.IsIntermediateAggregation()) {
             IntermediateState = std::make_unique<TEqWidthHistogram>(CreateEmpty());
@@ -500,6 +503,8 @@ public:
 
     void Merge(const TVector<NYdb::TValue>& aggColumns) final {
         Y_ENSURE(IntermediateState);
+        NYdb::TValueParser count(aggColumns.at(CountSeq));
+        Count += count.GetUint64();
 
         NYdb::TValueParser val(aggColumns.at(Seq.value()));
         val.OpenOptional();
@@ -513,20 +518,21 @@ public:
     }
 
     TString ExtractData(const TVector<NYdb::TValue>& aggColumns) final {
-        if (IntermediateState) {
-            Merge(aggColumns);
-            return IntermediateState->Serialize();
+        if (!IntermediateState) {
+            IntermediateState = std::make_unique<TEqWidthHistogram>(CreateEmpty());
         }
+        Merge(aggColumns);
 
-        NYdb::TValueParser val(aggColumns.at(Seq.value()));
-        val.OpenOptional();
-        if (!val.IsNull()) {
-            const auto& bytes = val.GetBytes();
-            return TString(bytes.data(), bytes.size());
-        } else {
-            auto empty = CreateEmpty();
-            return empty.Serialize();
+        // The second pass may be empty or read values outside the first pass's min/max,
+        // e.g. after writes or a sampling layout change. Do not publish such a histogram.
+        ui64 histogramCount = 0;
+        for (ui32 i = 0; i < IntermediateState->GetNumBuckets(); ++i) {
+            histogramCount += IntermediateState->GetNumElementsInBucket(i);
         }
+        if (!Count || histogramCount != Count) {
+            return {};
+        }
+        return IntermediateState->Serialize();
     }
 };
 
@@ -557,16 +563,16 @@ bool IStage2ColumnStatisticEval::AreMinMaxNeeded(const NScheme::TTypeInfo& typeI
 
 // Eq-height histogram collection has three integration paths:
 //
-// 1. DataShard PK (sorted input): keys arrive in PK order → AddSorted fast path
-//    → RankUncertainty == 0 (exact). Finalize runs in the YQL query; no actor-side merge.
+// 1. Whole-table DataShard PK (sorted input): keys arrive in PK order → AddSorted
+//    fast path → RankUncertainty == 0 (exact). Finalize in YQL; no actor-side merge.
 //
 // 2. DataShard non-PK (unsorted input): keys arrive in PK order but the histogram
 //    is over non-PK columns → staging buffer → InterleaveInto → RankUncertainty > 0
 //    (bounded approximate). Finalize runs in the YQL query; no actor-side merge.
 //
-// 3. ColumnShard (per-shard): each shard runs Serialize in the YQL query,
-//    returning an intermediate state. The actor merges them here via
-//    IntermediateState->Merge(), then calls Finalize() to produce the final blob.
+// 3. Partitioned scans (ColumnShard per-shard or DataShard per-PK-range): each part
+//    runs Serialize in YQL; the actor merges via IntermediateState->Merge() then
+//    Finalize(). Disjoint PK ranges stay exact (RankUncertainty == 0).
 //    IntermediateState is created only for this path (IsIntermediateAggregation).
 class TMultiColumnEqHeightHistogramEval : public IMultiColumnStatisticEval {
     std::vector<TString> ColumnNames;

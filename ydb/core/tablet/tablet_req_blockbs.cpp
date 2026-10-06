@@ -15,9 +15,9 @@ public:
     ui32 Version;
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { },
-            bool isTabletStorageInfoVersionObsolete = false) {
+            bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0) {
         Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason,
-            isTabletStorageInfoVersionObsolete));
+            isTabletStorageInfoVersionObsolete, actualGeneration));
         PassAway();
     }
 
@@ -44,9 +44,11 @@ public:
         case NKikimrProto::RACE:
         case NKikimrProto::NO_GROUP:
             // The request will never succeed
-            return ReplyAndDie(msg->Status, msg->ErrorReason, msg->IsTabletStorageInfoVersionObsolete);
+            return ReplyAndDie(msg->Status, msg->ErrorReason, msg->IsTabletStorageInfoVersionObsolete,
+                msg->ActualGeneration);
         default:
-            return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason, msg->IsTabletStorageInfoVersionObsolete);
+            return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason, msg->IsTabletStorageInfoVersionObsolete,
+                msg->ActualGeneration);
         }
     }
 
@@ -96,9 +98,9 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { },
-            bool isTabletStorageInfoVersionObsolete = false) {
+            bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0) {
         Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason,
-            isTabletStorageInfoVersionObsolete));
+            isTabletStorageInfoVersionObsolete, actualGeneration));
         PassAway();
     }
 
@@ -114,7 +116,8 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
                 return ReplyAndDie(NKikimrProto::OK);
             break;
         default:
-            return ReplyAndDie(msg->Status, msg->ErrorReason, msg->IsTabletStorageInfoVersionObsolete);
+            return ReplyAndDie(msg->Status, msg->ErrorReason, msg->IsTabletStorageInfoVersionObsolete,
+                msg->ActualGeneration);
         }
     }
 

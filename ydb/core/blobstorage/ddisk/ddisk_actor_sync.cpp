@@ -23,6 +23,7 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         TSyncIt syncIt = SyncsInFlight.end();
         counters.Request(0);
+        CountTabletIo(creds.TabletId, ETabletOperation::Sync, 1, 0);
 
         if (TabletChunkDeletionsInFlight.contains(creds.TabletId)) {
             counters.Reply(false);
@@ -188,6 +189,7 @@ namespace NKikimr::NDDisk {
                     Y_ABORT_UNLESS(requestId == sync.FirstRequestId + sync.Requests.size());
                 }
 
+                CountTabletIo(creds.TabletId, ETabletOperation::Sync, 0, selector.Size);
                 sync.Requests.emplace_back(TSyncReadRequest{
                     .Status=NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
                     .Selector=selector
@@ -243,6 +245,9 @@ namespace NKikimr::NDDisk {
 
     template <typename TEventPtr>
     void TDDiskActor::InternalSyncReadResult(TEventPtr ev) {
+        if (Stopping) {
+            return;
+        }
         YDB_LOG_TRACE_COMP(BS_DDISK, "TDDiskActor::InternalSyncReadResult",
             {"marker", "BSDD26"},
             {"DDiskId", DDiskId},
@@ -308,6 +313,18 @@ namespace NKikimr::NDDisk {
         }
 
         TRope data = ev->Get()->GetPayload(0);
+        if (data.size() != request.Selector.Size) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
+            request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST;
+            request.ErrorReason << "source payload size " << data.size()
+                << " does not match requested size " << request.Selector.Size;
+            sync.ErrorReason << "[request_idx=" << ev->Cookie - sync.FirstRequestId
+                << "] source payload size mismatch; ";
+            if (--sync.RequestsInFlight == 0) {
+                MaybeReplySync(it);
+            }
+            return;
+        }
         if (Config.EnableChecksums) {
             if (!HasRequiredBlockChecksums(record.ChecksumsSize(),
                     request.Selector.OffsetInBytes, request.Selector.Size)) {
@@ -321,7 +338,9 @@ namespace NKikimr::NDDisk {
                 }
                 return;
             }
-            if (const auto validation = ValidatePayloadChecksums(record, data)) {
+            if (const auto validation = Config.CheckChecksumBeforeWrite
+                    ? ValidatePayloadChecksums(record, data)
+                    : std::nullopt) {
                 SyncReadCookiesInFlight.erase(ev->Cookie);
                 request.Status = validation->Status;
                 request.ErrorReason << validation->ErrorReason;
@@ -337,7 +356,7 @@ namespace NKikimr::NDDisk {
             }
         }
 
-        TChunkRef& chunkRef = ChunkRefs[sync.Creds.TabletId][sync.VChunkIndex];
+        TChunkRef& chunkRef = Tablets[sync.Creds.TabletId].ChunkRefs[sync.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
             // Park first: IssueChunkAllocation may place the extent synchronously from the
             // reserve and OpenDataChunkWritePath only drains already-queued events.

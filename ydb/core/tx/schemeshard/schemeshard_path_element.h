@@ -63,6 +63,10 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
 
     bool IsOrphanPlaceholder = false; // in-memory only, never persisted
 
+    // In-memory: this path holds a DbRefCount ref on its parent (orphan
+    // placeholders don't). Acquired at materialize/init, released at remove.
+    bool ParentRefHeld = false;
+
     ui64 DirAlterVersion = 0;
     ui64 ACLVersion = 0;
 

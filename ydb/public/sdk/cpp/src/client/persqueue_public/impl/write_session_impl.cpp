@@ -29,7 +29,6 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-    , PrevToken(DbDriverState->GetCredentialsProvider() ? DbDriverState->GetCredentialsProvider()->GetAuthInfo() : "")
     , InitSeqNoPromise(NThreading::NewPromise<ui64>())
     , WakeupInterval(
             Settings.BatchFlushInterval_ != TDuration::Zero() ?
@@ -167,7 +166,10 @@ void TWriteSessionImpl::DoCdsRequest(TDuration delay) {
                     &Ydb::PersQueue::V1::ClusterDiscoveryService::Stub::AsyncDiscoverClusters,
                     dbState,
                     INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings)); // TODO: make client timeout setting
+                    TRpcRequestSettings::Make(
+                        settings,
+                        {},
+                        TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint)); // TODO: make client timeout setting
             };
             Connections->ScheduleDelayedTask(std::move(cdsRequestCall), TDeadline::SafeDurationCast(delay));
             return;
@@ -428,7 +430,9 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
         auto clientContext = subclient->CreateContext();
         if (!clientContext) {
             AbortImpl();
-            // Grpc and WriteSession is closing right now.
+            // Driver is stopping. Do not keep ClientContext: children of an
+            // existing context can still be created after TDriver::Stop, which
+            // leaves CQ Contexts_ non-empty and deadlocks Stop(true).
             return;
         }
         auto prevClientContext = std::exchange(ClientContext, clientContext);
@@ -443,14 +447,24 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
             connectDelayContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
 
+        const bool missingDelayContext = delay && !connectDelayContext;
+        if (!connectContext || !connectTimeoutContext || missingDelayContext) {
+            Cancel(connectContext);
+            Cancel(connectDelayContext);
+            Cancel(connectTimeoutContext);
+            connectContext.reset();
+            connectDelayContext.reset();
+            connectTimeoutContext.reset();
+            AbortImpl();
+            return;
+        }
+
         // Previous operations contexts.
 
         // Set new context
         prevConnectContext = std::exchange(ConnectContext, connectContext);
         prevConnectTimeoutContext = std::exchange(ConnectTimeoutContext, connectTimeoutContext);
         prevConnectDelayContext = std::exchange(ConnectDelayContext, connectDelayContext);
-        Y_ASSERT(ConnectContext);
-        Y_ASSERT(ConnectTimeoutContext);
 
         if (Processor) {
             Processor->Cancel();
@@ -1246,12 +1260,12 @@ void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& 
 void TWriteSessionImpl::SendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    // External cycle splits ready blocks into multiple gRPC messages. Current gRPC message size hard limit is 64MiB
+    // Split ready blocks into requests bounded by the driver's outbound limit.
     while(IsReadyToSendNextImpl()) {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
         auto sentAtMs = TInstant::Now().MilliSeconds();
-        NGrpc::TRequestSizeLimiter sizeLimiter(2);
+        NGrpc::TRequestSizeLimiter sizeLimiter(2, NGrpc::GetMaxGrpcMessageSize(*Connections));
 
         // Sent blocks while we can without messages reordering
         while (IsReadyToSendNextImpl()) {
@@ -1438,7 +1452,9 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ConnectDelayContext);
         if (Processor)
             Processor->Cancel();
-
+        ConnectContext.reset();
+        ConnectTimeoutContext.reset();
+        ConnectDelayContext.reset();
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
     }

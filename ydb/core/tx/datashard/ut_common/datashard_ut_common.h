@@ -463,6 +463,9 @@ struct TShardedTableOptions {
 
     struct TFamily {
         TString Name;
+        TMaybe<ui32> Id;
+        TMaybe<NKikimrSchemeOp::EColumnCodec> ColumnCodec;
+        TMaybe<NKikimrSchemeOp::EColumnCacheMode> ColumnCacheMode;
         TString LogPoolKind;
         TString SysLogPoolKind;
         TString DataPoolKind;
@@ -470,6 +473,8 @@ struct TShardedTableOptions {
         ui64 DataThreshold = 0;
         ui64 ExternalThreshold = 0;
         ui8 ExternalChannelsCount = 1;
+        bool ResetDataPoolKind = false;
+        bool AllowOtherDataPoolKinds = true;
     };
 
     using TAttributes = THashMap<TString, TString>;
@@ -579,10 +584,17 @@ bool DiscardVolatileSnapshot(
         TRowVersion snapshot);
 
 struct TChange {
+    enum class EOperation {
+        Upsert,
+        Reset,
+        Erase,
+    };
+
     i64 Offset;
     ui64 WriteTxId;
     ui32 Key;
     ui32 Value;
+    EOperation Operation = EOperation::Upsert;
 };
 
 void ApplyChanges(
@@ -592,7 +604,9 @@ void ApplyChanges(
         const TString& sourceId,
         const TVector<TChange>& changes,
         NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus expected =
-            NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
+            NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK,
+        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EReason expectedReason =
+            NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_NONE);
 
 TRowVersion CommitWrites(
         TTestActorRuntime& runtime,
@@ -669,6 +683,19 @@ ui64 AsyncSetColumnFamily(
         const TString& name,
         const TString& colName,
         TShardedTableOptions::TFamily family);
+
+ui64 AsyncAlterColumnFamily(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        TShardedTableOptions::TFamily family);
+
+ui64 AsyncAlterAddColumnToFamily(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        const TString& colName,
+        const TString& familyName);
 
 ui64 AsyncAlterAndDisableShadow(
         Tests::TServer::TPtr server,

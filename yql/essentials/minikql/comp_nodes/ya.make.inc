@@ -45,6 +45,7 @@ SET(ORIG_SOURCES
     mkql_collect.cpp
     mkql_combine.cpp
     mkql_contains.cpp
+    mkql_decimal_add_sub.cpp
     mkql_decimal_div.cpp
     mkql_decimal_mod.cpp
     mkql_decimal_mul.cpp
@@ -198,7 +199,5 @@ CFLAGS(
 )
 
 ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 PROVIDES(MINIKQL_COMP_NODES)

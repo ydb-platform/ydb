@@ -2,8 +2,6 @@
 #include "traces/kqp_rbo_rule_trace.h"
 #include "kqp_plan_conversion_utils.h"
 
-#include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr {
@@ -15,6 +13,46 @@ bool HasProperty(ui32 props, ui32 property) {
     return (props & property) == property;
 }
 
+std::pair<NJson::TJsonValue, NJson::TJsonValue> BuildPlans(const TVector<TIntrusivePtr<TOpRoot>>& roots) {
+    ui64 counter = 0;
+    ui32 operatorIdx = 0;
+    THashMap<IOperator*, ui32> operatorIds;
+    TVector<NJson::TJsonValue> executionJsons;
+    TVector<NJson::TJsonValue> explainJsons;
+
+    for (auto & rootPtr : roots) {
+        executionJsons.push_back(rootPtr->GetExecutionJson(counter, operatorIdx, operatorIds));
+        explainJsons.push_back(rootPtr->GetExplainJson(counter, operatorIds));
+    }
+
+    if (roots.size()==1) {
+        return std::make_pair(executionJsons[0], explainJsons[0]);
+    } else {
+        NJson::TJsonValue execResult;
+        execResult["PlanNodeId"] = counter++;
+        execResult["PlanNodeType"] = "ResultSets";
+        execResult["Node Type"] = "ResultSets";
+
+        auto execList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+        for (auto & execJson : executionJsons) {
+            execList.AppendValue(execJson);
+        }
+        execResult["Plans"] = execList;
+
+        NJson::TJsonValue explainResult;
+        explainResult["PlanNodeId"] = counter++;
+        explainResult["PlanNodeType"] = "ResultSets";
+        explainResult["Node Type"] = "ResultSets";
+
+        auto explainList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+        for (auto & explainJson : explainJsons) {
+            explainList.AppendValue(explainJson);
+        }
+        explainResult["Plans"] = explainList;
+
+        return std::make_pair(execResult, explainResult);
+    }
+}
 } // namespace
 
 bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
@@ -22,13 +60,10 @@ bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext
         return false;
     }
 
-    auto output = SimpleMatchAndApply(input, ctx, props);
-    if (input != output) {
-        input = output;
-        return true;
-    } else {
-        return false;
-    }
+    const auto* previous = input.get();
+    input = SimpleMatchAndApply(input, ctx, props);
+    Y_ENSURE(input, "Rule returned a null plan");
+    return input.get() != previous;
 }
 
 TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IRule>>&& rules)
@@ -72,15 +107,6 @@ void EnsureRequiredProps(TOpRoot& root, ui32 props, ui32& computedProps, TRBOCon
         computedProps |= ERuleProperties::RequireLiveness;
     }
 
-    if (HasProperty(props, ERuleProperties::RequireNameConstraints) && !HasProperty(computedProps, ERuleProperties::RequireNameConstraints)) {
-        ComputePlanNameConstraints(root);
-        computedProps |= ERuleProperties::RequireNameConstraints;
-    }
-
-    if (HasProperty(props, ERuleProperties::RequireAliases) && !HasProperty(computedProps, ERuleProperties::RequireAliases)) {
-        ComputePlanAliases(root);
-        computedProps |= ERuleProperties::RequireAliases;
-    }
 }
 
 void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName) {
@@ -107,16 +133,27 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
         fired = false;
 
         for (const auto& iter : root) {
+            // A Replicate port's child is the producer every port shares: rules
+            // must not rewrite through a port as if it were a pass-through
+            // operator. Producer rewrites use the shared slot.
             for (const auto& rule : Rules) {
-                auto op = iter.Current;
-                if (!rule->QuickMatch(op, root.PlanProps)) {
+                if (!rule->QuickMatch(TIntrusivePtr<IOperator>(iter.Current), root.PlanProps)) {
                     continue;
                 }
 
                 EnsureRequiredProps(root, rule->Props, computedProps, ctx, StageName);
 
                 TRuleTraceAttempt traceAttempt(ctx, rule->RuleName);
+                // Borrowed traversal entries must not be dereferenced after a
+                // destructive rewrite. Edit the owning slot, not a copied owner.
+                auto* parent = iter.Parent;
+                const auto childIndex = iter.ChildIndex;
+                const auto subplanIU = iter.SubplanIU;
+                auto& op = parent ? parent->MutableChild(childIndex)
+                    : subplanIU ? root.PlanProps.Subplans.MutablePlan(*subplanIU)
+                    : root.MutableChild(0);
                 const bool ruleApplied = rule->MatchAndApply(op, ctx, root.PlanProps);
+                Y_ENSURE(op, "Rule left a null plan edge");
                 traceAttempt.CloseRule();
 
                 if (!ruleApplied) {
@@ -128,26 +165,6 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                     fired = true;
 
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
-
-                    if (op != iter.Current) {
-                        Y_ENSURE(HasProperty(computedProps, ERuleProperties::RequireParents),
-                            TStringBuilder() << "Rule " << rule->RuleName << " replaced an operator without requiring parents");
-
-                        // If the original operator had parents, update all parents
-                        if (iter.Current->Parents.size()) {
-                            for (auto & [parent, parentIdx] : iter.Current->Parents) {
-                                parent->Children[parentIdx] = op;
-                            }
-                        }
-                        // Otherwise, if its not a subplan, it was root, so update root
-                        else if (!iter.SubplanIU) {
-                            root.SetInput(op);
-                        }
-                        // Finally, it's a subplan, so update the subplan
-                        else {
-                            root.PlanProps.Subplans.ReplacePlan(*iter.SubplanIU, op);
-                        }
-                    }
 
                     if (needToLog && rule->LogRule) {
                         YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx);
@@ -176,48 +193,59 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx) {
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoot>>& roots, TRBOContext& rboCtx) {
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
     auto& ctx = rboCtx.ExprCtx;
+    int stageCounter = 0;
 
-    SubmitInitialPlanTrace(root, rboCtx);
+    for (auto & rootPtr : roots) {
+        auto & root = *rootPtr;
+        root.PlanProps.StageGraph.StageCounter = stageCounter;
+        SubmitInitialPlanTrace(root, rboCtx);
 
-    if (needToLog) {
-        YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
-    }
-
-    for (const auto& stage : Stages) {
-        if (rboCtx.NeedToLog()) {
-            rboCtx.TraceLog.stage(std::string(stage->StageName.c_str()));
-        }
-        YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
-        if (stage->NeedsInitialProps()) {
-            ComputeRequiredProps(root, stage->Props, rboCtx, stage->StageName);
-        }
         if (needToLog) {
-            YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx);
+            YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
         }
-        stage->RunStage(root, rboCtx);
+
+        for (const auto& stage : Stages) {
+            if (rboCtx.NeedToLog()) {
+                rboCtx.TraceLog.stage(std::string(stage->StageName.c_str()));
+            }
+            YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
+            if (stage->NeedsInitialProps()) {
+                ComputeRequiredProps(root, stage->Props, rboCtx, stage->StageName);
+            }
+            if (needToLog) {
+                YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx);
+            }
+            stage->RunStage(root, rboCtx);
+            if (needToLog) {
+                YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
+            }
+        }
+
+        auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireStatistics
+            | ERuleProperties::RequireLiveness;
+        ComputeRequiredProps(root, convertProps, rboCtx, "Physical plan generaion");
+        TUnorderedIUs live;
+        for (const auto& item : root) {
+            live.UnionWith(GetLiveOut(item.Current));
+        }
+        root.PlanProps.InfoUnitRegistry.FinalizeDisplayNames(live);
         if (needToLog) {
-            YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
+            YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }
+
+        stageCounter = root.PlanProps.StageGraph.StageCounter;
     }
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-    auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireStatistics
-        | ERuleProperties::RequireLiveness;
-    ComputeRequiredProps(root, convertProps, rboCtx, "Physical plan generaion");
-    if (needToLog) {
-        YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
-    }
+    auto [execJson, explainJson] = BuildPlans(roots);
+    rboCtx.ExecutionJson = execJson;
+    rboCtx.ExplainJson = explainJson;
 
-    ui64 counter = 0;
-    THashMap<IOperator*, ui32> operatorIds;
-    rboCtx.ExecutionJson = root.GetExecutionJson(counter, operatorIds);
-    rboCtx.ExplainJson = root.GetExplainJson(counter, operatorIds);
-
-    return ConvertToPhysical(root, rboCtx);
+    return ConvertToPhysical(roots, rboCtx);
 }
 } // namespace NKqp
 } // namespace NKikimr

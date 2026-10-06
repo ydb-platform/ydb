@@ -191,6 +191,17 @@ public:
         const TGetTablePartitionsOptions& options) = 0;
 
     ///
+    /// @brief Split a file into partitions according to the given byte ranges.
+    ///
+    /// One partition is produced per range, preserving range order.
+    /// Each partition can be given to a separate worker for further independent processing.
+    ///
+    virtual TFilePartitions GetFilePartitions(
+        const TYPath& path,
+        const TVector<TFileReadRange>& ranges,
+        const TGetFilePartitionsOptions& options = {}) = 0;
+
+    ///
     /// @brief Get file from file cache.
     ///
     /// @param md5Signature MD5 digest of the file.

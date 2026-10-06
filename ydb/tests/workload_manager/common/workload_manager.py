@@ -13,6 +13,7 @@ from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
 from ydb.tests.olap.load.lib.clickbench import ClickbenchParallelBase
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType
+from ydb.tests.olap.lib.workload_result import WorkloadRunResult
 from ydb.tests.olap.lib.utils import get_external_param
 from threading import Thread, Event
 from datetime import datetime
@@ -133,22 +134,24 @@ class WorkloadManagerBase(LoadSuiteBase):
             if _exists(f'.metadata/workload_manager/pools/{pool.name}'):
                 sessions_pool.execute_with_retries(f'DROP RESOURCE POOL {pool.name}')
 
-            sessions_pool.execute_with_retries(pool.get_create_users_sql())
+            create_users_sql = pool.get_create_users_sql()
+            if create_users_sql:
+                sessions_pool.execute_with_retries(create_users_sql)
             sessions_pool.execute_with_retries(pool.get_create_sql())
 
     @classmethod
-    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_workload(cls, result: WorkloadRunResult):
         pass
 
     @classmethod
-    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def after_workload(cls, result: WorkloadRunResult):
         pass
 
     def test(self):
         check_thread = Thread(target=self.check_signals_thread)
         self.stop_checking.clear()
         check_thread.start()
-        overall_result = YdbCliHelper.WorkloadRunResult()
+        overall_result = WorkloadRunResult()
         try:
             qparams = self._get_query_settings()
             self.save_nodes_state()
@@ -238,12 +241,12 @@ class WorkloadManagerConcurrentQueryLimit(WorkloadManagerBase):
         return [ResourcePool('test_pool', ['testuser'], concurrent_query_limit=cls.query_limit)]
 
     @classmethod
-    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_workload(cls, result: WorkloadRunResult):
         cls.hard_query_limit = cls.query_limit + len(YdbCluster.get_cluster_nodes(db_only=True))
         cls.threads = 2 * cls.hard_query_limit
 
     @classmethod
-    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def after_workload(cls, result: WorkloadRunResult):
         assert cls.max_in_fly > 0, "detector 'max queries in fly' does't work"
 
     @classmethod
@@ -288,12 +291,12 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         <p>In this test, we average the satisfaction across all cluster nodes and over time.</p>'''
 
     @classmethod
-    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_workload(cls, result: WorkloadRunResult):
         cls.metrics = []
         cls.metrics_keys = set()
 
     @classmethod
-    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def after_workload(cls, result: WorkloadRunResult):
         metrics = list(cls.metrics)
         keys = sorted(cls.metrics_keys)
         pools = cls.get_resource_pools()
@@ -314,11 +317,12 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
                     else:
                         prev_t, prev_m = metrics[r - 1]
                         record[k] = (v - prev_m.get(k, 0.)) / (cur_t - prev_t)
-                elif not k.endswith('satisfaction') or v >= 0.:
+                else:
                     record[k] = v
             for p in pools:
-                s = record.get(f'{p.name} satisfaction', -1.)
-                if s >= 0.:
+                # The pool is under load while it has any demand - the classical satisfaction, which was used
+                # for this before, is not exported anymore.
+                if record.get(f'{p.name} demand', 0.) > 0.:
                     if first_i is None:
                         first_i = r
                     last_i = r
@@ -328,8 +332,6 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
             for k in keys:
                 v = record.get(k)
                 empty = empty and v is None
-                if k.find('satisfaction') and v is not None and v < 0:
-                    v = None
                 v = f'{v:.3f}' if v is not None else ''
                 line += f'<td style="padding-left: 10; padding-right: 10">{v}</td>'
             line += '</tr>\n'
@@ -344,8 +346,8 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         for p in range(len(pools)):
             pool = pools[p]
             axs[p].set_title(pool.name)
-            axs[p].plot(times, [m.get(f'{pool.name} satisfaction') for m in norm_metrics], label='satisfaction')
             axs[p].plot(times, [m.get(f'{pool.name} adjusted satisfaction d') for m in norm_metrics], label='adj satisfaction')
+            axs[p].plot(times, [m.get(f'{pool.name} demand') for m in norm_metrics], label='demand')
             if last_i is not None:
                 axs[p].plot([datetime.fromtimestamp(metrics[first_i][0]), datetime.fromtimestamp(metrics[last_i][0])], [1, 1], label='period')
             axs[p].set_ylabel('satisfaction')
@@ -372,7 +374,7 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         metrics_request = {}
         for pool in cls.get_resource_pools():
             metrics_request.update({
-                f'{pool.name} satisfaction': {'schedulerPool': pool.name, 'sensor': 'Satisfaction'},
+                f'{pool.name} demand': {'schedulerPool': pool.name, 'sensor': 'Demand'},
                 f'{pool.name} adjusted satisfaction d': {'schedulerPool': pool.name, 'sensor': 'AdjustedSatisfaction'},
             })
         metrics = YdbCluster.get_metrics(db_only=True, counters='kqp', metrics=metrics_request)
@@ -380,16 +382,16 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         count = {}
         for slot, values in metrics.items():
             for k, v in values.items():
-                if not k.endswith('satisfaction') or v >= 0.:
-                    sum.setdefault(k, 0.)
-                    count.setdefault(k, 0)
-                    sum[k] += v
-                    count[k] += 1
+                sum.setdefault(k, 0.)
+                count.setdefault(k, 0)
+                sum[k] += v
+                count[k] += 1
                 cls.metrics_keys.add(k)
         for k in sum.keys():
             if count[k] > 0:
                 sum[k] /= count[k]
-            if k.find('satisfaction') >= 0:
+            # Both the adjusted satisfaction and the demand are accounted as value * 1e6
+            if k.find('satisfaction') >= 0 or k.find('demand') >= 0:
                 sum[k] /= 1.e6
         cls.metrics.append((time.time(), sum))
         return ''
@@ -401,9 +403,9 @@ class WorkloadManagerComputeSchedulerP3(WorkloadManagerComputeScheduler):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_30', ['testuser30'], total_cpu_limit_percent_per_node=30, resource_weight=4),
-            ResourcePool('test_pool_40', ['testuser40'], total_cpu_limit_percent_per_node=40, resource_weight=4),
-            ResourcePool('test_pool_50', ['testuser50'], total_cpu_limit_percent_per_node=50, resource_weight=4),
+            ResourcePool('test_pool_30', ['testuser30'], total_cpu_limit_percent_per_node=30),
+            ResourcePool('test_pool_40', ['testuser40'], total_cpu_limit_percent_per_node=40),
+            ResourcePool('test_pool_50', ['testuser50'], total_cpu_limit_percent_per_node=50),
         ]
 
 
@@ -413,7 +415,7 @@ class WorkloadManagerComputeSchedulerP1(WorkloadManagerComputeScheduler):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_100', ['testuser100'], total_cpu_limit_percent_per_node=100, resource_weight=4),
+            ResourcePool('test_pool_100', ['testuser100'], total_cpu_limit_percent_per_node=100),
         ]
 
 
@@ -457,7 +459,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     verify_data: bool = False
     _tpcc_executions: list[tuple[str, re.LongRemoteExecution]] = []
     _tpcc_thread: Thread = None
-    _tpcc_results: dict[str, YdbCliHelper.WorkloadRunResult]
+    _tpcc_results: dict[str, WorkloadRunResult]
     _remote_cli_path: str = ''
 
     @classmethod
@@ -499,7 +501,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
             cls._tpcc_executions = []
 
     @classmethod
-    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def after_workload(cls, result: WorkloadRunResult):
         if cls._tpcc_thread is not None:
             cls.terminate_tpcc()
             cls.wait_tpcc()
@@ -523,16 +525,16 @@ class TestWorkloadManagerOltp100(WorkloadManagerOltp):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool(f'test_pool_{cls.tpcc_pool_perc}', [f'testuser{cls.tpcc_pool_perc}'], total_cpu_limit_percent_per_node=cls.tpcc_pool_perc, resource_weight=4),
+            ResourcePool(f'test_pool_{cls.tpcc_pool_perc}', [f'testuser{cls.tpcc_pool_perc}'], total_cpu_limit_percent_per_node=cls.tpcc_pool_perc),
         ]
 
     @classmethod
-    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_workload(cls, result: WorkloadRunResult):
         super().before_workload(result)
         cls.run_tpcc(cls.timeout, user=f'testuser{cls.tpcc_pool_perc}')
 
     @classmethod
-    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def after_workload(cls, result: WorkloadRunResult):
         if cls._tpcc_thread is not None:
             cls.wait_tpcc()
         super().after_workload(result)
@@ -550,11 +552,11 @@ class WorkloadManagerOltpTpch20Base(WorkloadManagerTpchBase, WorkloadManagerOltp
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=20, resource_weight=4),
+            ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=20),
         ]
 
     @classmethod
-    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_workload(cls, result: WorkloadRunResult):
         super().before_workload(result)
         cls.run_tpcc(cls.timeout, user='')
 
@@ -578,11 +580,11 @@ class TestWorkloadManagerOltpAdHoc(WorkloadManagerOltp):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=10, resource_weight=4),
+            ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=10),
         ]
 
     @classmethod
-    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+    def before_workload(cls, result: WorkloadRunResult):
         super().before_workload(result)
         cls.run_tpcc(cls.timeout, user='')
 

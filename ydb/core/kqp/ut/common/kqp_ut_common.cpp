@@ -171,6 +171,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
+    ServerSettings->SetUseRealInterconnect(settings.UseRealInterconnect);
     ServerSettings->SetEnableTablePgTypes(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;
@@ -189,7 +190,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     if (settings.LogStream) {
         auto* logStream = settings.LogStream;
-        auto mutex = std::make_shared<TMutex>();
+        auto mutex = settings.LogStreamMutex ? settings.LogStreamMutex : std::make_shared<TMutex>();
         auto makeBackend = [logStream, mutex]() {
             return new TSynchronizedStreamLogBackend(logStream, mutex);
         };
@@ -684,7 +685,10 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
         // but does require explicit EAccessRights::GenericFull rights.
         // The order is important here, because grants from anonymous user are possible
         // only while AdministrationAllowedSIDs is empty (which means that anyone is an admin).
-        this->Client->TestGrant("/", settings.DomainRoot, settings.AuthToken, NACLib::EAccessRights::GenericFull);
+        RunCall([&] {
+            this->Client->TestGrant("/", settings.DomainRoot, settings.AuthToken, NACLib::EAccessRights::GenericFull);
+            return true;
+        });
         Server->GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back(settings.AuthToken);
     }
 }

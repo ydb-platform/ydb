@@ -121,55 +121,34 @@ namespace NActors {
 
     class TCGroupOomSubSystem : public ISubSystem {
     public:
-        explicit TCGroupOomSubSystem(TCGroupOomConfig config);
+        virtual ~TCGroupOomSubSystem() = default;
 
-        const TCGroupOomConfig& GetConfig() const {
-            return Config;
-        }
-
-        TSubSystemDependencies GetDependencies() const override;
-        void OnDependenciesResolved(const TResolvedSubSystemDependencies& dependencies) override;
+        virtual const TCGroupOomConfig& GetConfig() const = 0;
 
         // Actor subscriptions are local and keyed by ActorId. Repeated
         // Subscribe and Unsubscribe calls are idempotent. Subscription changes
         // are applied asynchronously by the monitor actor.
-        void Subscribe(const TActorId& actorId);
-        void Unsubscribe(const TActorId& actorId);
+        virtual void Subscribe(const TActorId& actorId) = 0;
+        virtual void Unsubscribe(const TActorId& actorId) = 0;
 
         // Sends TEvCGroupOomTrend after the first calculation for the window.
         // The request remains pending while the window is accumulating. Once
         // calculated, the response is sent even when no trend was found.
-        void ReadTrend(
+        virtual void ReadTrend(
             const TActorId& recipient,
             ECGroupOomTrendWindow window,
-            ui64 cookie = 0) const;
+            ui64 cookie = 0) const = 0;
 
         // Repeated actor subscriptions with the same window and threshold are
         // idempotent. Active is delivered after every window recalculation
         // while the threshold is met; Stopped is delivered once when it ceases
         // to hold. UnsubscribeFromTrend removes all trend subscriptions for the
         // actor.
-        void SubscribeToTrend(
+        virtual void SubscribeToTrend(
             const TActorId& actorId,
             ECGroupOomTrendWindow window,
-            TDuration timeToOomThreshold);
-        void UnsubscribeFromTrend(const TActorId& actorId);
-
-        void OnAfterStart(TActorSystem& actorSystem) override;
-        void OnBeforeStop(TActorSystem& actorSystem) override;
-
-    private:
-        void ValidateTrendWindow(ECGroupOomTrendWindow window) const;
-        void ValidateTrendSubscription(
-            ECGroupOomTrendWindow window,
-            TDuration timeToOomThreshold) const;
-
-    private:
-        const TCGroupOomConfig Config;
-        TVector<const ICGroupMemoryStatsProvider*> Providers;
-
-        TActorSystem* ActorSystem = nullptr;
-        TActorId MonitorActorId;
+            TDuration timeToOomThreshold) = 0;
+        virtual void UnsubscribeFromTrend(const TActorId& actorId) = 0;
     };
 
     std::unique_ptr<TCGroupOomSubSystem> MakeCGroupOomSubSystem(TCGroupOomConfig config);

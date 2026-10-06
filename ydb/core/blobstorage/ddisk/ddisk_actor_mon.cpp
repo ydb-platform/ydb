@@ -16,6 +16,31 @@
 
 namespace NKikimr::NDDisk {
 
+void TDDiskActor::InitMemoryMetrics() {
+    if (auto* metrics = GetMetricSystem()) {
+        const std::array<TLabel, 3> labels = {{
+            {.Name = "pdisk", .Value = ToString(BaseInfo.PDiskId)},
+            {.Name = "slot", .Value = ToString(BaseInfo.VDiskSlotId)},
+            {.Name = "incarnation", .Value = SelfId().ToString()},
+        }};
+        MemoryMetric = metrics->CreateLine("ddisk.memory.checksum_cache_estimated_bytes", labels);
+        CollectMemoryMetrics();
+    }
+}
+
+void TDDiskActor::CollectMemoryMetrics() {
+    if (Stopping || !MemoryMetric) {
+        return;
+    }
+    // Before PDisk initialization the enabled checksum cache size is not known yet.
+    if (!Config.EnableChecksums) {
+        MemoryMetric.Append(0);
+    } else if (IntegrityManager) {
+        MemoryMetric.Append(IntegrityManager->CachedBlockStates() * TIntegrityManager::BlockStateApproxBytes);
+    }
+    Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup(EWakeupTag::WakeupCollectMemoryMetrics));
+}
+
 namespace {
 
 TString FormatDuration(TDuration v) {
@@ -110,6 +135,11 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
                 TABLER() { TABLED() { str << "DDiskInstanceGuid"; } TABLED() { str << DDiskInstanceGuid; } }
                 TABLER() { TABLED() { str << "Uptime"; } TABLED() { str << FormatDuration(TInstant::Now() - StartedAt); } }
                 TABLER() { TABLED() { str << "HandlingQueries"; } TABLED() { str << (HandlingQueries ? "true" : "false"); } }
+                TABLER() { TABLED() { str << "Stopping"; } TABLED() { str << (Stopping ? "true" : "false"); } }
+                TABLER() { TABLED() { str << "Waiting for PersistentBuffer"; } TABLED() { str << (Stopping && !PersistentBufferGone); } }
+                TABLER() { TABLED() { str << "Own I/O drained"; } TABLED() { str << OwnDrainComplete; } }
+                TABLER() { TABLED() { str << "I/O stalled"; } TABLED() { str << (IoStalled ? "true" : "false"); } }
+                TABLER() { TABLED() { str << "Router I/O in flight"; } TABLED() { str << GetDirectIoInflight(); } }
                 TABLER() { TABLED() { str << "PendingQueries"; } TABLED() { str << PendingQueries.size(); } }
             }
         }
@@ -185,9 +215,12 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
 
         // --- Section 4: Chunks ------------------------------------------------------
         ui64 dataChunksInUse = 0;
-        for (const auto& [tabletId, perTablet] : ChunkRefs) {
+        ui64 tabletsWithChunks = 0;
+        for (const auto& [tabletId, tablet] : Tablets) {
+            const auto& perTablet = tablet.ChunkRefs;
             Y_UNUSED(tabletId);
             dataChunksInUse += perTablet.size();
+            tabletsWithChunks += !perTablet.empty();
         }
         const ui64 reservedFree = ChunkReserve.size();
         const ui64 commitsInFlight = ChunkMapIncrementsInFlight.size();
@@ -199,7 +232,7 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
                 TABLER() { TABLED() { str << "Reserve refill in flight"; } TABLED() { str << (ReserveInFlight ? "true" : "false"); } }
                 TABLER() { TABLED() { str << "Committed (data)"; } TABLED() { str << dataChunksInUse; } }
                 TABLER() { TABLED() { str << "Commits in flight"; } TABLED() { str << commitsInFlight; } }
-                TABLER() { TABLED() { str << "Tablets using disk"; } TABLED() { str << ChunkRefs.size(); } }
+                TABLER() { TABLED() { str << "Tablets using disk"; } TABLED() { str << tabletsWithChunks; } }
                 TABLER() { TABLED() { str << "Pending chunk allocations"; } TABLED() { str << ChunkAllocateQueue.size(); } }
                 TABLER() {
                     TABLED() { str << "Committed data bytes"; }
@@ -255,9 +288,6 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
                 TABLER() { TABLED() { str << "DirectIO RunningCount counter"; } TABLED() { str << CounterVal(Counters.DirectIO.RunningCount); } }
                 TABLER() { TABLED() { str << "ShortReads"; } TABLED() { str << CounterVal(Counters.DirectIO.ShortReads); } }
                 TABLER() { TABLED() { str << "ShortWrites"; } TABLED() { str << CounterVal(Counters.DirectIO.ShortWrites); } }
-                TABLER() { TABLED() { str << "RegularUringCount"; } TABLED() { str << CounterVal(Counters.DirectIO.RegularUringCount); } }
-                TABLER() { TABLED() { str << "FallbackUringCount"; } TABLED() { str << CounterVal(Counters.DirectIO.FallbackUringCount); } }
-                TABLER() { TABLED() { str << "FallbackPDiskCount"; } TABLED() { str << CounterVal(Counters.DirectIO.FallbackPDiskCount); } }
             }
         }
 

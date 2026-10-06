@@ -32,6 +32,12 @@ namespace NKikimr::NBsController {
         if (config.HasPDiskSpaceColorBorder()) {
             result.AddPDiskSpaceColorBorder(config.GetPDiskSpaceColorBorder());
         }
+        if (config.HasDatabaseSpaceBlockColor()) {
+            result.AddDatabaseSpaceBlockColor(config.GetDatabaseSpaceBlockColor());
+        }
+        if (config.HasDatabaseSpaceUnblockColor()) {
+            result.AddDatabaseSpaceUnblockColor(config.GetDatabaseSpaceUnblockColor());
+        }
         if (config.HasEnableGroupLayoutSanitizer()) {
             result.AddEnableGroupLayoutSanitizer(config.GetEnableGroupLayoutSanitizer());
         }

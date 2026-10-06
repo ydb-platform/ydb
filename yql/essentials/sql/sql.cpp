@@ -7,6 +7,31 @@
 
 namespace NSQLTranslation {
 
+namespace {
+
+void AddDefaultTranslator(TTranslatorsRegistry& registry, TString syntax, TTranslatorPtr translator) {
+    registry.try_emplace(std::move(syntax), [translator = std::move(translator)] { return translator; });
+}
+
+TTranslatorsRegistry MakeRegistry(TTranslatorsRegistry registry, const TTranslatorPtr& v0, const TTranslatorPtr& v1, const TTranslatorPtr& pg) {
+    AddDefaultTranslator(registry, "v0", v0);
+    AddDefaultTranslator(registry, "v1", v1);
+    AddDefaultTranslator(registry, "pg", pg);
+    return registry;
+}
+
+TTranslatorPtr FindCustomTranslator(const TTranslators& translators, const TString& syntax, NYql::TIssues& issues) {
+    const auto* translatorFactory = translators.Registry.FindPtr(syntax);
+    if (!translatorFactory) {
+        issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
+                                       TStringBuilder() << "Unknown syntax: " << syntax));
+        return nullptr;
+    }
+    return (*translatorFactory)();
+}
+
+} // namespace
+
 NYql::TAstParseResult SqlToYql(const TTranslators& translators, const TString& query, const TTranslationSettings& settings,
                                NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo, TTranslationSettings* effectiveSettings)
 {
@@ -35,6 +60,14 @@ NYql::TAstParseResult SqlToYql(const TTranslators& translators, const TString& q
         result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                                               "PG syntax is disabled"));
         return result;
+    }
+
+    if (parsedSettings.Syntax) {
+        auto translator = FindCustomTranslator(translators, *parsedSettings.Syntax, result.Issues);
+        if (!translator) {
+            return result;
+        }
+        return translator->TextToAst(query, parsedSettings, warningRules, stmtParseInfo);
     }
 
     if (parsedSettings.PgParser) {
@@ -77,6 +110,11 @@ google::protobuf::Message* SqlAST(const TTranslators& translators, const TString
         *actualSyntaxVersion = parsedSettings.SyntaxVersion;
     }
 
+    if (parsedSettings.Syntax) {
+        auto translator = FindCustomTranslator(translators, *parsedSettings.Syntax, issues);
+        return translator ? translator->TextToMessage(query, queryName, issues, maxErrors, parsedSettings) : nullptr;
+    }
+
     switch (parsedSettings.SyntaxVersion) {
         case 0:
             if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
@@ -112,6 +150,11 @@ ILexer::TPtr SqlLexer(const TTranslators& translators, const TString& query, NYq
         *actualSyntaxVersion = parsedSettings.SyntaxVersion;
     }
 
+    if (parsedSettings.Syntax) {
+        auto translator = FindCustomTranslator(translators, *parsedSettings.Syntax, issues);
+        return translator ? translator->MakeLexer(parsedSettings) : nullptr;
+    }
+
     switch (parsedSettings.SyntaxVersion) {
         case 0:
             if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
@@ -139,6 +182,14 @@ ILexer::TPtr SqlLexer(const TTranslators& translators, const TString& query, NYq
 NYql::TAstParseResult SqlASTToYql(const TTranslators& translators, const TString& query,
                                   const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings) {
     NYql::TAstParseResult result;
+    if (settings.Syntax) {
+        auto translator = FindCustomTranslator(translators, *settings.Syntax, result.Issues);
+        if (!translator) {
+            return result;
+        }
+        return translator->TextAndMessageToAst(query, protoAst, hints, settings);
+    }
+
     switch (settings.SyntaxVersion) {
         case 0:
             if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
@@ -195,6 +246,14 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TTranslators& translator
         return result;
     }
 
+    if (parsedSettings.Syntax) {
+        auto translator = FindCustomTranslator(translators, *parsedSettings.Syntax, issues);
+        if (!translator) {
+            return result;
+        }
+        return translator->TextToManyAst(query, parsedSettings, warningRules, stmtParseInfo);
+    }
+
     if (parsedSettings.PgParser) {
         return translators.PG->TextToManyAst(query, parsedSettings, warningRules, stmtParseInfo);
     }
@@ -213,11 +272,11 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TTranslators& translator
     }
 }
 
-TTranslators::TTranslators(TTranslatorPtr v0, TTranslatorPtr v1, TTranslatorPtr pg)
+TTranslators::TTranslators(TTranslatorPtr v0, TTranslatorPtr v1, TTranslatorPtr pg, TTranslatorsRegistry registry)
     : V0(v0 ? v0 : MakeDummyTranslator("v0"))
     , V1(v1 ? v1 : MakeDummyTranslator("v1"))
     , PG(pg ? pg : MakeDummyTranslator("pg"))
+    , Registry(MakeRegistry(std::move(registry), V0, V1, PG))
 {
 }
-
 } // namespace NSQLTranslation

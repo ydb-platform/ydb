@@ -4,6 +4,7 @@
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <yql/essentials/core/yql_cost_function.h>
 
@@ -45,10 +46,30 @@ NNodes::TExprBase DqBuildJoin(
     bool shuffleElimination = false,
     bool shuffleEliminationWithMap = false,
     bool buildCollectStage=true,
-    bool blockHashJoinBuildSideLeft = false
+    bool blockHashJoinBuildSideLeft = false,
+    bool enableBlockHashJoinEqualNulls = false
 );
 
-NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, TTypeAnnotationContext& typeCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false, bool blockHashJoinBuildSideLeft = false);
+NNodes::TExprBase DqBuildHashJoin(
+    const NNodes::TDqJoin& join,
+    EHashJoinMode mode,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    TTypeAnnotationContext& typeCtx,
+    bool shuffleElimination,
+    bool shuffleEliminationWithMap,
+    bool useBlockHashJoin = false,
+    bool blockHashJoinBuildSideLeft = false,
+    bool enableBlockHashJoinEqualNulls = false);
+
+// Settings on TDqPhyBlockHashJoin: optional BuildSide=Left; when enableEqualNulls,
+// one EqualNulls Uint32 per join-key position (IS NOT DISTINCT FROM).
+TVector<NNodes::TCoNameValueTuple> BuildBlockHashJoinSettings(
+    TPositionHandle pos,
+    EJoinAlgoType joinAlgo,
+    ui32 keyCount,
+    TExprContext& ctx,
+    bool enableEqualNulls = false);
 
 NNodes::TExprBase DqBuildBlockHashJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
 
@@ -62,7 +83,7 @@ bool DqCollectJoinRelationsWithStats(
     const NNodes::TCoEquiJoin& equiJoin,
     const std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>& collector);
 
-NNodes::TExprBase DqRewriteStreamEquiJoinWithLookup(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx);
+NNodes::TExprBase DqRewriteStreamEquiJoinWithLookup(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx, std::function<TExprNode::TPtr(const NNodes::TExprBase&, TExprContext&)> lookupFromExtra = {});
 
 } // namespace NDq
 } // namespace NYql

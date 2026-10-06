@@ -25,6 +25,7 @@
 
 #include <array>
 #include <functional>
+#include <optional>
 #include <utility>
 #include <variant>
 
@@ -750,19 +751,6 @@ private:
     TString Repr_;
 };
 
-struct TTopicRef {
-    TString RefName;
-    TDeferredAtom Cluster;
-    TNodePtr Consumers;
-    TNodePtr Settings;
-    TNodePtr Keys;
-
-    TTopicRef() = default;
-    TTopicRef(TString refName, TDeferredAtom cluster, TNodePtr keys);
-    TTopicRef(const TTopicRef&) = default;
-    TTopicRef& operator=(const TTopicRef&) = default;
-};
-
 struct TIdentifier {
     TPosition Pos;
     TString Name;
@@ -1247,8 +1235,10 @@ struct TTtlSettings {
     struct TTierSettings {
         TNodePtr EvictionDelay;
         std::optional<TIdentifier> StorageName;
+        std::optional<TIdentifier> ObjectKeyPrefix;
 
-        explicit TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
+        explicit TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt,
+                               const std::optional<TIdentifier>& objectKeyPrefix = std::nullopt);
     };
 
     TIdentifier ColumnName;
@@ -1306,6 +1296,7 @@ struct TIndexDescription {
         GlobalAsync,
         GlobalSyncUnique,
         GlobalVectorKmeansTree,
+        GlobalHnsw,
         GlobalFulltextPlain,
         GlobalFulltextRelevance,
         LocalBloomFilter,
@@ -1401,12 +1392,15 @@ struct TAlterDatabaseParameters {
     THashMap<TString, TNodePtr> DatabaseSettings;
 };
 
-struct TTruncateTableParameters {};
+struct TTruncateTableParameters {
+    THashMap<TString, TNodePtr> Settings;
+};
 
 struct TTableRef;
 struct TAnalyzeParams {
     std::shared_ptr<TTableRef> Table;
     TVector<TString> Columns;
+    TNodePtr SampleRate;
 };
 
 struct TCompactEntry {
@@ -1457,24 +1451,6 @@ struct TAlterTableParameters {
     }
 };
 
-struct TRoleParameters {
-protected:
-    TRoleParameters() = default;
-
-public:
-    TVector<TDeferredAtom> Roles;
-};
-
-struct TUserParameters: TRoleParameters {
-    TMaybe<TDeferredAtom> Password;
-    bool IsPasswordNull = false;
-    bool IsPasswordEncrypted = false;
-    std::optional<bool> CanLogin;
-    TMaybe<TDeferredAtom> Hash;
-};
-
-struct TCreateGroupParameters: TRoleParameters {};
-
 struct TSequenceParameters {
     bool MissingOk = false;
     TMaybe<TDeferredAtom> StartValue;
@@ -1494,87 +1470,12 @@ public:
 
     TMaybe<TDeferredAtom> InheritPermissions;
 
+    // SOURCE="IAM_DELEGATION" makes an external secret (no SOURCE: the value is stored); parameters of IAM delegation secrets:
+    TMaybe<TDeferredAtom> Source;
+    TMaybe<TDeferredAtom> ServiceAccountId;
+    TMaybe<TDeferredAtom> CloudId;
+
     bool ValidateParameters(TContext& ctx, TPosition stmBeginPos, TSecretParameters::EOperationMode mode);
-};
-
-struct TTopicConsumerSettings {
-    struct TLocalSinkSettings {
-        // no special settings
-    };
-
-    TNodePtr Important;
-    NYql::TResetableSetting<TNodePtr, void> AvailabilityPeriod;
-    NYql::TResetableSetting<TNodePtr, void> ReadFromTs;
-    NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
-    TNodePtr Type;
-    TNodePtr KeepMessagesOrder;
-    TNodePtr DefaultProcessingTimeout;
-    TNodePtr MaxProcessingAttempts;
-    TNodePtr DeadLetterPolicy;
-    TNodePtr DeadLetterQueue;
-    TNodePtr ReceiveMessageWaitTime;
-    TNodePtr ReceiveMessageDelay;
-};
-
-struct TTopicConsumerDescription {
-    explicit TTopicConsumerDescription(TIdentifier name)
-        : Name(std::move(name))
-    {
-    }
-
-    TIdentifier Name;
-    TTopicConsumerSettings Settings;
-};
-struct TTopicSettings {
-    NYql::TResetableSetting<TNodePtr, void> MinPartitions;
-    NYql::TResetableSetting<TNodePtr, void> MaxPartitions;
-    NYql::TResetableSetting<TNodePtr, void> RetentionPeriod;
-    NYql::TResetableSetting<TNodePtr, void> RetentionStorage;
-    NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
-    NYql::TResetableSetting<TNodePtr, void> PartitionWriteSpeed;
-    NYql::TResetableSetting<TNodePtr, void> PartitionWriteBurstSpeed;
-    NYql::TResetableSetting<TNodePtr, void> MeteringMode;
-    NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStabilizationWindow;
-    NYql::TResetableSetting<TNodePtr, void> AutoPartitioningUpUtilizationPercent;
-    NYql::TResetableSetting<TNodePtr, void> AutoPartitioningDownUtilizationPercent;
-    NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStrategy;
-    NYql::TResetableSetting<TNodePtr, void> MetricsLevel;
-    NYql::TResetableSetting<TNodePtr, void> ContentBasedDeduplication;
-
-    bool IsSet() const {
-        return MinPartitions ||
-               MaxPartitions ||
-               RetentionPeriod ||
-               RetentionStorage ||
-               SupportedCodecs ||
-               PartitionWriteSpeed ||
-               PartitionWriteBurstSpeed ||
-               MeteringMode ||
-               AutoPartitioningStabilizationWindow ||
-               AutoPartitioningUpUtilizationPercent ||
-               AutoPartitioningDownUtilizationPercent ||
-               AutoPartitioningStrategy ||
-               MetricsLevel ||
-               ContentBasedDeduplication;
-    }
-};
-
-struct TCreateTopicParameters {
-    TVector<TTopicConsumerDescription> Consumers;
-    TTopicSettings TopicSettings;
-    bool ExistingOk;
-};
-
-struct TAlterTopicParameters {
-    TVector<TTopicConsumerDescription> AddConsumers;
-    THashMap<TString, TTopicConsumerDescription> AlterConsumers;
-    TVector<TIdentifier> DropConsumers;
-    TTopicSettings TopicSettings;
-    bool MissingOk;
-};
-
-struct TDropTopicParameters {
-    bool MissingOk;
 };
 
 struct TStreamingQuerySettings {
@@ -1626,7 +1527,7 @@ TNodePtr BuildColumn(TPosition pos, const TString& column = TString(), const TSt
 TNodePtr BuildColumn(TPosition pos, const TNodePtr& column, const TString& source = TString());
 TNodePtr BuildColumn(TPosition pos, const TDeferredAtom& column, const TString& source = TString());
 TNodePtr BuildColumnOrType(TPosition pos, const TString& column = TString());
-TNodePtr BuildYqlColumnRef(TPosition pos);
+TNodePtr BuildYqlColumnRef(TPosition pos, bool maybeType);
 TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup);
 TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
 TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
@@ -1693,16 +1594,6 @@ TNodeResult BuildBuiltinFunc(
     bool warnOnYqlNameSpace = true);
 
 // Implemented in query.cpp
-TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TCreateGroupParameters>& params, TScopedStatePtr scoped);
-TNodePtr BuildControlUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name,
-                          const TMaybe<TUserParameters>& params, TScopedStatePtr scoped, bool isCreateUser);
-TNodePtr BuildRenameUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
-TNodePtr BuildAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TVector<TDeferredAtom>& toChange, bool isDrop,
-                         TScopedStatePtr scoped);
-TNodePtr BuildRenameGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
-TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped);
-TNodePtr BuildGrantPermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
-TNodePtr BuildRevokePermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
@@ -1737,13 +1628,6 @@ TNodePtr BuildSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr
 TNodePtr BuildWorldIfNode(TPosition pos, TNodePtr predicate, TNodePtr thenNode, TNodePtr elseNode, bool isEvaluate);
 TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate, bool isParallel);
 
-TNodePtr BuildCreateTopic(TPosition pos, const TTopicRef& tr, const TCreateTopicParameters& params,
-                          TScopedStatePtr scoped);
-TNodePtr BuildAlterTopic(TPosition pos, const TTopicRef& tr, const TAlterTopicParameters& params,
-                         TScopedStatePtr scoped);
-TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
-                        TScopedStatePtr scoped);
-
 TNodePtr BuildCreateSecret(
     TPosition pos,
     const TString& objectId,
@@ -1776,7 +1660,15 @@ TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) 
     return {};
 }
 
-void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer)>& callback);
+struct TFuncInfo {
+    TString Kind;
+    TMaybe<size_t> ArgCount;
+    TMaybe<size_t> OptionalArgCount;
+    NYql::TLangVersion MinLangVer = NYql::UnknownLangVersion;
+    NYql::TLangVersion MaxLangVer = NYql::UnknownLangVersion;
+};
+
+void EnumerateBuiltins(const std::function<void(std::string_view name, const TFuncInfo& info)>& callback);
 bool Parseui32(TNodePtr from, ui32& to);
 TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
 const TString* DeriveCommonSourceName(const TVector<TNodePtr>& nodes);

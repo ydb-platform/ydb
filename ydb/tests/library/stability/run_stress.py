@@ -22,6 +22,11 @@ from ydb.tests.library.stability.deploy import StressUtilDeployer
 from ydb.tests.library.stability.utils.remote_execution import execute_command
 
 
+_FAILED_RUN_RETRY_DELAY_SECONDS = 10
+_WORKLOAD_TIMEOUT_GRACE_SECONDS = 60
+_PRE_POST_COMMAND_TIMEOUT_SECONDS = 300
+
+
 class StressRunExecutor:
     def __init__(self, ignore_stderr_content, event_process_mode, database, nodes):
         self.database = database
@@ -234,18 +239,27 @@ class StressRunExecutor:
 
                             # Update node statistics
                             node_result.total_execution_time += execution_time
-                            sleep_between_runs = 240
                             if success:
                                 logging.info(
                                     f"Run {current_iteration} on {node_host} completed successfully"
                                 )
-                                remaining_time = planned_end_time - time_module.time()
-                                if remaining_time > 0:
-                                    time_module.sleep(min(sleep_between_runs, remaining_time))
                             else:
                                 logging.warning(
-                                    f"Run {current_iteration} on {node_host} failed. Continuing after {sleep_between_runs}s delay")
-                                time_module.sleep(sleep_between_runs)
+                                    f"Run {current_iteration} on {node_host} failed. "
+                                    f"Continuing after {_FAILED_RUN_RETRY_DELAY_SECONDS}s delay"
+                                )
+
+                            remaining_time = planned_end_time - time_module.time()
+                            if remaining_time > 0:
+                                retry_delay = (
+                                    remaining_time
+                                    if success
+                                    else min(
+                                        _FAILED_RUN_RETRY_DELAY_SECONDS,
+                                        remaining_time,
+                                    )
+                                )
+                                time_module.sleep(retry_delay)
                             current_iteration += 1
                             run_duration = planned_end_time - time_module.time()
 
@@ -344,7 +358,7 @@ class StressRunExecutor:
             run_config = {
                 "iteration_num": 0,
                 "node_host": node_host,
-                "duration": 3600,
+                "duration": _PRE_POST_COMMAND_TIMEOUT_SECONDS,
                 "database": self.database,
             }
             run_name = f"{name}_{node_host}_pre_nemesis"
@@ -416,7 +430,7 @@ class StressRunExecutor:
             run_config = {
                 "iteration_num": 0,
                 "node_host": node_host,
-                "duration": 3600,
+                "duration": _PRE_POST_COMMAND_TIMEOUT_SECONDS,
                 "database": self.database,
             }
             run_name = f"{name}_{node_host}_post_nemesis"
@@ -524,7 +538,7 @@ class StressRunExecutor:
             cmd = f"{env_prefix}stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
             run_config['run_command'] = cmd
             run_timeout = (
-                run_config["duration"] + 600
+                run_config["duration"] + _WORKLOAD_TIMEOUT_GRACE_SECONDS
             )  # Add buffer for completion
 
             execution_result = execute_command(

@@ -1,0 +1,12 @@
+'(
+    (lambda '($1)
+      (WideMap $1 (lambda '($2 $3 $4)
+        (BlockAsStruct '('"URL" $2) '('"UserID" $3))
+        $4
+      )))
+    (lambda '($10) (Member $10 '"URL") (Member $10 '"UserID")) 
+    (lambda '($20 $21 $22) (Uint64 '1)) 
+    (lambda '($30 $31 $32 $33) (AggrAdd $33 (Uint64 '1))) 
+    (lambda '($40 $41 $42) $40 $41 $42)
+    (Uint64 '2)
+)

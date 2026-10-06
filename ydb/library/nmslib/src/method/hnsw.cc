@@ -742,26 +742,33 @@ namespace similarity {
     void
     Hnsw<dist_t>::Search(KNNQuery<dist_t> *query, IdType) const
     {
+        SearchWithEf(query, ef_);
+    }
+
+    template <typename dist_t>
+    void
+    Hnsw<dist_t>::SearchWithEf(KNNQuery<dist_t> *query, size_t efSearch) const
+    {
+        const size_t ef = max<size_t>(efSearch, query->GetK());
         if (this->data_.empty() && this->data_rearranged_.empty()) {
           return;
         }
-        bool useOld = searchAlgoType_ == kOld || (searchAlgoType_ == kHybrid && ef_ >= 1000);
-        // cout << "Ef = " << ef_ << " use old = " << useOld << endl;
+        bool useOld = searchAlgoType_ == kOld || (searchAlgoType_ == kHybrid && ef >= 1000);
         switch (searchMethod_) {
         case 0:
             /// Basic search using Nmslib data structure:
             if (useOld)
-                const_cast<Hnsw *>(this)->baseSearchAlgorithmOld(query);
+                const_cast<Hnsw *>(this)->baseSearchAlgorithmOld(query, ef);
             else
-                const_cast<Hnsw *>(this)->baseSearchAlgorithmV1Merge(query);
+                const_cast<Hnsw *>(this)->baseSearchAlgorithmV1Merge(query, ef);
             break;
         case 3:
         case 4:
             /// Basic search using optimized index for l2, cosine, negative dot product
             if (useOld)
-                const_cast<Hnsw *>(this)->SearchOld(query, iscosine_);
+                const_cast<Hnsw *>(this)->SearchOld(query, iscosine_, ef);
             else
-                const_cast<Hnsw *>(this)->SearchV1Merge(query, iscosine_);
+                const_cast<Hnsw *>(this)->SearchV1Merge(query, iscosine_, ef);
             break;
         default:
                 throw runtime_error("Invalid searchMethod: " + ConvertToString(searchMethod_));
@@ -1138,8 +1145,10 @@ namespace similarity {
 
     template <typename dist_t>
     void
-    Hnsw<dist_t>::baseSearchAlgorithmOld(KNNQuery<dist_t> *query)
+    Hnsw<dist_t>::baseSearchAlgorithmOld(KNNQuery<dist_t> *query, size_t ef)
     {
+        // A filtered caller may request more candidates than the configured
+        // efSearch. Widen this query only; the index is shared by readers.
         VisitedList *vl = visitedlistpool->getFreeVisitedList();
         vl_type *massVisited = vl->mass;
         vl_type currentV = vl->curV;
@@ -1218,12 +1227,12 @@ namespace similarity {
                     massVisited[curId] = currentV;
                     currObj = (*iter)->getData();
                     d = query->DistanceObjLeft(currObj);
-                    if (closestDistQueue1.top().getDistance() > d || closestDistQueue1.size() < ef_) {
+                    if (closestDistQueue1.top().getDistance() > d || closestDistQueue1.size() < ef) {
                         {
                             query->CheckAndAddToResult(d, currObj);
                             candidateQueue.emplace(d, *iter);
                             closestDistQueue1.emplace(d, *iter);
-                            if (closestDistQueue1.size() > ef_) {
+                            if (closestDistQueue1.size() > ef) {
                                 closestDistQueue1.pop();
                             }
                         }
@@ -1236,8 +1245,10 @@ namespace similarity {
 
     template <typename dist_t>
     void
-    Hnsw<dist_t>::baseSearchAlgorithmV1Merge(KNNQuery<dist_t> *query)
+    Hnsw<dist_t>::baseSearchAlgorithmV1Merge(KNNQuery<dist_t> *query, size_t ef)
     {
+        // A filtered caller may request more candidates than the configured
+        // efSearch. Widen this query only; the index is shared by readers.
         VisitedList *vl = visitedlistpool->getFreeVisitedList();
         vl_type *massVisited = vl->mass;
         vl_type currentV = vl->curV;
@@ -1272,7 +1283,7 @@ namespace similarity {
             }
         }
 
-        SortArrBI<dist_t, HnswNode *> sortedArr(max<size_t>(ef_, query->GetK()));
+        SortArrBI<dist_t, HnswNode *> sortedArr(ef);
         sortedArr.push_unsorted_grow(curdist, curNode);
 
         int_fast32_t currElem = 0;
@@ -1289,7 +1300,7 @@ namespace similarity {
         // Extraction of the neighborhood to find k nearest neighbors.
         ////////////////////////////////////////////////////////////////////////////////
 
-        while (currElem < min(sortedArr.size(), ef_)) {
+        while (currElem < min(sortedArr.size(), ef)) {
             auto &e = queueData[currElem];
             CHECK(!e.used);
             e.used = true;
@@ -1318,7 +1329,7 @@ namespace similarity {
                     currObj = (*iter)->getData();
                     d = query->DistanceObjLeft(currObj);
 
-                    if (d < topKey || sortedArr.size() < ef_) {
+                    if (d < topKey || sortedArr.size() < ef) {
                         CHECK_MSG(itemBuff.size() > itemQty,
                                   "Perhaps a bug: buffer size is not enough " + 
                                   ConvertToString(itemQty) + " >= " + ConvertToString(itemBuff.size()));

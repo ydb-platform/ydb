@@ -5,32 +5,20 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 
-#include <google/protobuf/io/coded_stream.h>
-
 #include <optional>
 
 namespace NKikimr {
+
+    template <class TKey, class TMemRec>
+    struct TLevelSegment;
 
     // Accumulates complete tablets into a bounded response batch while retaining
     // only one in-progress tablet and the small all-channel aggregate.
     class TLogoBlobIndexStatStreamAccumulator {
         class TChannelInfo {
         public:
-            void Update(const TLogoBlobID& id, const TMemRecLogoBlob& memRec) {
-                ++Count;
-                DataSize += memRec.DataSize();
-                MinId = Min(MinId, id);
-                MaxId = Max(MaxId, id);
-            }
-
-            void Finish(NKikimrVDisk::ChannelInfo* output) const {
-                output->set_count(Count);
-                output->set_data_size(DataSize);
-                if (Count > 0) {
-                    output->set_min_id(MinId.ToString());
-                    output->set_max_id(MaxId.ToString());
-                }
-            }
+            void Update(const TLogoBlobID& id, const TMemRecLogoBlob& memRec);
+            void Finish(NKikimrVDisk::ChannelInfo* output) const;
 
         private:
             ui64 Count = 0;
@@ -43,19 +31,8 @@ namespace NKikimr {
 
         class TAllChannels {
         public:
-            void Update(const TLogoBlobID& id, const TMemRecLogoBlob& memRec) {
-                const ui8 channel = id.Channel();
-                if (channel >= Channels.size()) {
-                    Channels.resize(channel + 1);
-                }
-                Channels[channel].Update(id, memRec);
-            }
-
-            void Finish(google::protobuf::RepeatedPtrField<NKikimrVDisk::ChannelInfo>* output) const {
-                for (const TChannelInfo& channel : Channels) {
-                    channel.Finish(output->Add());
-                }
-            }
+            void Update(const TLogoBlobID& id, const TMemRecLogoBlob& memRec);
+            void Finish(google::protobuf::RepeatedPtrField<NKikimrVDisk::ChannelInfo>* output) const;
 
         private:
             TVector<TChannelInfo> Channels;
@@ -63,22 +40,11 @@ namespace NKikimr {
 
         class TTabletInfo {
         public:
-            explicit TTabletInfo(ui64 tabletId)
-                : TabletId(tabletId)
-            {}
+            explicit TTabletInfo(ui64 tabletId);
 
-            void Update(const TLogoBlobID& id, const TMemRecLogoBlob& memRec) {
-                Channels.Update(id, memRec);
-            }
-
-            void Finish(NKikimrVDisk::TabletInfo* output) const {
-                output->set_tablet_id(TabletId);
-                Channels.Finish(output->mutable_channels());
-            }
-
-            ui64 GetTabletId() const {
-                return TabletId;
-            }
+            void Update(const TLogoBlobID& id, const TMemRecLogoBlob& memRec);
+            void Finish(NKikimrVDisk::TabletInfo* output) const;
+            ui64 GetTabletId() const;
 
         private:
             const ui64 TabletId;
@@ -86,55 +52,29 @@ namespace NKikimr {
         };
 
     public:
-        explicit TLogoBlobIndexStatStreamAccumulator(ui64 maxBatchBytes)
-            : MaxBatchBytes(Max<ui64>(maxBatchBytes, 1))
-        {}
+        explicit TLogoBlobIndexStatStreamAccumulator(ui64 maxBatchBytes);
 
-        void Update(const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec) {
-            Y_ABORT_UNLESS(!Finished);
+        void BeginKey(const TKeyLogoBlob&);
 
-            const TLogoBlobID id = key.LogoBlobID();
-            if (!CurrentTablet || CurrentTablet->GetTabletId() != id.TabletID()) {
-                AppendCurrentTablet();
-                CurrentTablet.emplace(id.TabletID());
-            }
+        void UpdateFreshRecord(
+            const TMemRecLogoBlob& memRec,
+            const TRope*,
+            const TKeyLogoBlob& key,
+            ui64);
 
-            CurrentTablet->Update(id, memRec);
-            AllChannels.Update(id, memRec);
-        }
+        void UpdateLevelRecord(const TMemRecLogoBlob& memRec, const TDiskPart*,
+                const TKeyLogoBlob& key, ui64,
+                const TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>*);
 
-        bool IsBatchReady() const {
-            return BatchBytes >= MaxBatchBytes;
-        }
+        void FinishKey(const TKeyLogoBlob&);
 
-        void ExtractBatch(NKikimrVDisk::LogoBlobIndexStat* output) {
-            Y_ABORT_UNLESS(output);
-            output->Clear();
-            output->Swap(&Batch);
-            BatchBytes = 0;
-        }
-
-        void Finish() {
-            Y_ABORT_UNLESS(!Finished);
-            AppendCurrentTablet();
-            AllChannels.Finish(Batch.mutable_channels());
-            Finished = true;
-        }
+        void Update(const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec);
+        bool IsBatchReady() const;
+        void ExtractBatch(NKikimrVDisk::LogoBlobIndexStat* output);
+        void Finish();
 
     private:
-        void AppendCurrentTablet() {
-            if (!CurrentTablet) {
-                return;
-            }
-
-            NKikimrVDisk::TabletInfo* output = Batch.add_tablets();
-            CurrentTablet->Finish(output);
-            CurrentTablet.reset();
-
-            const ui64 tabletSize = output->ByteSizeLong();
-            // LogoBlobIndexStat.tablets is field 1, so its tag occupies one byte.
-            BatchBytes += 1 + google::protobuf::io::CodedOutputStream::VarintSize64(tabletSize) + tabletSize;
-        }
+        void AppendCurrentTablet();
 
     private:
         const ui64 MaxBatchBytes;

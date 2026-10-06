@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    common.cpp
     tx_scan.cpp
     tx_internal_scan.cpp
 )

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yql/essentials/utils/meta/reflection.h>
+
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/generic/string.h>
@@ -12,6 +14,7 @@ namespace NSQLComplete {
 struct TFolderEntry {
     static constexpr const char* Folder = "Folder";
     static constexpr const char* Table = "Table";
+    static constexpr const char* View = "View";
 
     static THashSet<TString> KnownTypes;
 
@@ -67,3 +70,9 @@ public:
 };
 
 } // namespace NSQLComplete
+
+namespace NYql::NReflection {
+
+YQL_DEFINE_REFLECTING(NSQLComplete::TFolderEntry, (Type)(Name));
+
+} // namespace NYql::NReflection

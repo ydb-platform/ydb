@@ -215,6 +215,11 @@ void ThreadedContourGenerator::export_lines(
     }
 }
 
+const char* ThreadedContourGenerator::get_name() const
+{
+    return "threaded";
+}
+
 index_t ThreadedContourGenerator::get_thread_count() const
 {
     return _n_threads;
@@ -262,7 +267,7 @@ void ThreadedContourGenerator::thread_function(std::vector<py::list>& return_lis
 {
     // Function that is executed by each of the threads.
     // _next_chunk starts at zero and increases up to 2*_n_chunks.  A thread in need of work reads
-    // _next_chunk and incremements it, then processes that chunk.  For _next_chunk < _n_chunks this
+    // _next_chunk and increments it, then processes that chunk.  For _next_chunk < _n_chunks this
     // is stage 1 (init cache levels and starting locations) and for _next_chunk >= _n_chunks this
     // is stage 2 (trace contours).  There is a synchronisation barrier between the two stages so
     // that the cache initialisation is complete before being used by the contour trace.

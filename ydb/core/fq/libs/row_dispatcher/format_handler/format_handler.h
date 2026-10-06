@@ -6,6 +6,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/json_parser.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_session.h>
 #include <ydb/library/actors/util/rope.h>
 
 namespace NFq::NRowDispatcher {
@@ -36,6 +37,9 @@ struct TDataBatch {
     TRope SerializedData;
     TVector<ui64> Offsets;
     TMaybe<TInstant> Watermark;
+    ui64 TotalSize = 0;
+    ui64 Rows = 0;
+    ui64 DataSize = 0; // Packed bytes reported by AddDataToClient, before finalizing the batch.
 };
 
 class ITopicFormatHandler : public TNonCopyable {
@@ -55,9 +59,10 @@ public:
     };
 
 public:
-    virtual void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) = 0;
+    virtual void ParseRecords(const std::vector<TMessageStreamRecord>& records) = 0;
 
-    virtual TQueue<TDataBatch> ExtractClientData(NActors::TActorId clientId) = 0;
+    virtual TQueue<TDataBatch> ExtractClientData(NActors::TActorId clientId, ui64 maxBatchSize) = 0;
+    virtual bool HasClientData(NActors::TActorId clientId) const = 0;
 
     virtual TStatus AddClient(IClientDataConsumer::TPtr client) = 0;
     virtual void RemoveClient(NActors::TActorId clientId) = 0;
@@ -75,6 +80,7 @@ struct TFormatHandlerConfig {
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TJsonParserConfig JsonParserConfig;
     TTopicFiltersConfig FiltersConfig;
+    std::shared_ptr<NYql::NDq::IMemoryQuotaManager> MemoryQuotaManager;
 };
 
 ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters);
@@ -82,7 +88,7 @@ TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& row
 
 namespace NTests {
 
-ITopicFormatHandler::TPtr CreateTestFormatHandler(const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings);
+ITopicFormatHandler::TPtr CreateTestFormatHandler(const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters = {});
 
 }  // namespace NTests
 

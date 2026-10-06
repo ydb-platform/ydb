@@ -14,6 +14,31 @@ namespace NKikimr {
 
         class TGroupGeometryInfo;
 
+        struct TGroupLayoutPolicy {
+            enum class EMode {
+                RequireCorrect,
+                PreserveConstraints,
+                IgnoreConstraints,
+            };
+
+            EMode Mode = EMode::RequireCorrect;
+
+            static TGroupLayoutPolicy FromFlags(bool ignoreChecks, bool requireCorrect) {
+                if (ignoreChecks) {
+                    return {EMode::IgnoreConstraints};
+                }
+                return {requireCorrect ? EMode::RequireCorrect : EMode::PreserveConstraints};
+            }
+
+            bool AllowsRelaxedPlacement() const {
+                return Mode == EMode::IgnoreConstraints;
+            }
+
+            bool Accepts(bool layoutCorrect) const {
+                return layoutCorrect || Mode != EMode::RequireCorrect;
+            }
+        };
+
         struct TGroupMapperError {
             struct TStats {
                 TString Domain;
@@ -121,21 +146,25 @@ namespace NKikimr {
                 const TPDiskId PDiskId;
                 const TNodeLocation Location;
                 const bool Usable;
-                ui32 NumSlots;
-                const ui32 MaxSlots;
+                ui32 NumActiveSlots;
+                ui64 NumActiveUnits = 0;
+                const ui32 ExpectedSlotCount;
                 const ui32 SlotSizeInUnits;
                 const ui64 SlotSizeInBytes;
                 TStackVec<ui32, 16> Groups;
-                i64 SpaceAvailable;
+                i64 SpaceAvailable; // PDisk free bytes after margin and replication adjustments.
                 const bool Operational;
                 const bool Decommitted;
                 TString WhyUnusable;
                 TBridgePileId BridgePileId;
                 std::optional<TString> DiskScope;
+                std::optional<ui64> CapacityUnits;
+                std::optional<ui64> EnforcedDynamicSlotSize;
             };
 
             struct TPDiskSpaceState {
                 std::optional<ui64> EnforcedDynamicSlotSize;
+                std::optional<ui64> UserChunkPoolSize;
                 ui64 AvailableSize = 0;
                 ui64 TotalSize = 0;
             };
@@ -144,8 +173,9 @@ namespace NKikimr {
                 TPDiskId PDiskId;
                 TNodeLocation Location;
                 bool Usable = true;
-                ui32 NumSlots = 0;
-                ui32 MaxSlots = 0;
+                ui32 NumActiveSlots = 0;
+                ui64 NumActiveUnits = 0;
+                ui32 ExpectedSlotCount = 0;
                 ui32 SlotSizeInUnits = 0;
                 ui64 SlotSizeInBytes = 0;
                 std::optional<TPDiskSpaceState> Space;
@@ -164,7 +194,7 @@ namespace NKikimr {
                 std::optional<ui32> GroupId;
                 ui32 GroupGeneration = 0;
                 TVDiskIdShort VDiskId;
-                bool CountedInNumSlots = true;
+                bool CountedInNumActiveSlots = true;
                 bool OccupiedByGroup = true;
                 bool Ready = false;
                 bool Replicating = false;
@@ -237,11 +267,13 @@ namespace NKikimr {
                 i64 MinimumRequiredSpace = Min<i64>();
                 bool ExistingGroup = true;
                 bool TryToRelocateLocallyFirst = false;
+                bool IgnoreGroupLayoutChecks = false;
                 TBridgePileId BridgePileId;
             };
 
             struct TReassignmentOutcome {
                 bool Success = false;
+                bool LayoutCorrect = false;
                 TGroupDefinition Group;
                 i64 RequiredSpace = Min<i64>();
                 TGroupMapperError Error;
@@ -267,8 +299,12 @@ namespace NKikimr {
                        && colorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW;
             }
 
-            static i64 CalculateSpaceAvailable(const TPDiskSpaceState& space,
-                                               NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder, ui32 marginPromille);
+            static i64 CalculateSpaceAvailable(const TPDiskSpaceState& space, ui32 marginPromille);
+            static std::optional<ui64> CalculateCapacityUnits(std::optional<ui64> userChunkPoolSize,
+                                                             std::optional<ui64> enforcedDynamicSlotSize) {
+                return userChunkPoolSize && enforcedDynamicSlotSize && *enforcedDynamicSlotSize
+                    ? std::make_optional(*userChunkPoolSize / *enforcedDynamicSlotSize) : std::nullopt;
+            }
             static constexpr bool AcceptsNewSlots(NKikimrBlobStorage::EDriveStatus status,
                                                   NKikimrBlobStorage::TMaintenanceStatus::E maintenanceStatus) {
                 return status == NKikimrBlobStorage::EDriveStatus::ACTIVE
@@ -312,7 +348,8 @@ namespace NKikimr {
             // Register PDisk inside mapper to use it in subsequent map operations
             bool RegisterPDisk(const TPDiskRecord& pdisk);
 
-            TReassignmentOutcome PlanGroupReassignment(TReassignmentRequest request);
+            // Allocates replacement slots in mapper without creating persistent VSlots.
+            TReassignmentOutcome AllocateGroupReassignment(TReassignmentRequest request);
 
             // Remove PDisk from the table.
             TPDiskRecord UnregisterPDisk(TPDiskId pdiskId);

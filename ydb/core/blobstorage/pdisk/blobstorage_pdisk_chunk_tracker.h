@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "blobstorage_pdisk_color_limits.h"
+#include "blobstorage_pdisk_allocation.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_keeper_params.h"
@@ -10,6 +11,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/queue.h>
+#include <algorithm>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -24,16 +26,12 @@ class TPerOwnerQuotaTracker {
     TColorLimits ColorLimits;
     i64 Total;
     size_t ExpectedOwnerCount; // 0 means 'add and remove owners as you go'
-    i64 ExpectedOwnerSize; // 0 means 'derive owner quota from expected/active owner count'
+    i64 ExpectedOwnerSize; // Per-unit owner quota in chunks; 0 means 'derive owner quota from expected/active owner count'
 
     TStackVec<TOwner, 256> ActiveOwnerIds; // Can be accessed only from the main thread (changes only when owner is
                                         // added or removed).
     std::array<TQuotaRecord, 256> QuotaForOwner; // Always allocated, can be read from anywhere
     static_assert(sizeof(TOwner) == 1, "Make sure to use large enough QuotaForOwner buffer");
-
-    ui32 NormalizeOwnerWeight(ui32 weight) const {
-        return ExpectedOwnerSize ? 1 : weight;
-    }
 
 public:
     TPerOwnerQuotaTracker() {
@@ -73,11 +71,6 @@ public:
         Y_VERIFY(newOwnerSize >= 0);
         ExpectedOwnerCount = newOwnerCount;
         ExpectedOwnerSize = newOwnerSize;
-        if (ExpectedOwnerSize) {
-            for (TOwner id : ActiveOwnerIds) {
-                QuotaForOwner[id].SetWeight(1);
-            }
-        }
         RedistributeQuotas();
     }
 
@@ -97,7 +90,8 @@ public:
     void RedistributeQuotas() {
         if (ExpectedOwnerSize) {
             for (TOwner id : ActiveOwnerIds) {
-                ForceHardLimit(id, ExpectedOwnerSize);
+                const i64 capacityUnits = Max(1u, QuotaForOwner[id].GetGroupSizeInUnits());
+                ForceHardLimit(id, ExpectedOwnerSize > Total / capacityUnits ? Total : ExpectedOwnerSize * capacityUnits);
             }
         } else {
             size_t parts = Max(ExpectedOwnerCount, GetNumActiveSlots());
@@ -113,24 +107,30 @@ public:
         }
     }
 
-    void AddOwner(TOwner id, TVDiskID vdiskId, ui32 weight) {
+    void AddOwner(TOwner id, TVDiskID vdiskId, ui32 weight, ui32 groupSizeInUnits = 0) {
         TQuotaRecord &record = QuotaForOwner[id];
         Y_VERIFY(record.GetHardLimit() == 0);
         Y_VERIFY(record.GetFree() == 0);
         record.SetName(TStringBuilder() << "Owner# " << id);
         record.SetVDiskId(vdiskId);
-        record.SetWeight(NormalizeOwnerWeight(weight));
+        record.SetWeight(weight);
+        record.SetGroupSizeInUnits(groupSizeInUnits);
 
         ActiveOwnerIds.push_back(id);
         RedistributeQuotas();
     }
 
     void SetOwnerWeight(TOwner id, ui32 weight) {
+        SetOwnerSettings(id, weight, QuotaForOwner[id].GetGroupSizeInUnits());
+    }
+
+    void SetOwnerSettings(TOwner id, ui32 weight, ui32 groupSizeInUnits) {
         auto it = std::find(ActiveOwnerIds.begin(), ActiveOwnerIds.end(), id);
         Y_VERIFY(it != ActiveOwnerIds.end());
 
         TQuotaRecord &record = QuotaForOwner[id];
-        record.SetWeight(NormalizeOwnerWeight(weight));
+        record.SetWeight(weight);
+        record.SetGroupSizeInUnits(groupSizeInUnits);
         RedistributeQuotas();
     }
 
@@ -183,6 +183,10 @@ public:
     // Tread-safe status flag getter
     NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(TOwner id, i64 allocationSize, double *occupancy) const {
         return QuotaForOwner[id].EstimateSpaceColor(allocationSize, occupancy);
+    }
+
+    i64 GetHeadroomBelow(TOwner id, NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
+        return QuotaForOwner[id].GetHeadroomBelow(color);
     }
 
     bool TryAllocate(TOwner id, i64 count, TString &outErrorReason) {
@@ -310,6 +314,9 @@ using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
     // Sum of the unused reserves, i.e. the free space of the shared quota that is hidden from the other owners
     TAtomic StaticReserveFreeTotal = 0;
     TStackVec<TOwner, 8> StaticOwners; // Can be accessed only from the main thread
+    TStackVec<TOwner, 8> DynamicOwners; // Likewise; used by the compaction arbiter
+    ui64 SystemReserveChunks = 0;
+    ui64 MaintenanceReserveChunks = 0;
 
     TColor::E ColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
     double ColorBorderOccupancy = 0;
@@ -334,7 +341,7 @@ public:
     bool Reset(const TKeeperParams &params, const TColorLimits &limits, TString &outErrorReason) {
         Params = params;
         ColorLimits = limits;
-        ChunkLimits = TColorLimits::MakeChunkLimits(params.ChunkBaseLimit);
+        ChunkLimits = TColorLimits::MakeChunkLimits(params.ChunkBaseLimit, params.TightSpaceColorFloors);
         IsResetting = true;
 
         GlobalQuota->Reset(params.TotalChunks, limits);
@@ -408,10 +415,13 @@ public:
         }
         AtomicSet(StaticReserveFreeTotal, 0);
         StaticOwners.clear();
+        DynamicOwners.clear();
+        SystemReserveChunks = 0;
+        MaintenanceReserveChunks = 0;
 
         for (auto& [ownerId, ownerInfo] : params.OwnersInfo) {
             i64 chunks = ownerInfo.ChunksOwned;
-            AddOwner(ownerId, ownerInfo.VDiskId, ownerInfo.Weight);
+            AddOwner(ownerId, ownerInfo.VDiskId, ownerInfo.Weight, ownerInfo.GroupSizeInUnits);
             if (chunks) {
                 OwnerQuota->InitialAllocate(ownerId, chunks);
                 bool isOk = SharedQuota->InitialAllocate(chunks);
@@ -445,11 +455,13 @@ public:
         return true;
     }
 
-    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight = 1) {
+    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight = 1, ui32 groupSizeInUnits = 0) {
         Y_VERIFY(IsOwnerUser(owner));
-        OwnerQuota->AddOwner(owner, vdiskId, weight);
+        OwnerQuota->AddOwner(owner, vdiskId, weight, groupSizeInUnits);
         if (IsStaticGroupVDisk(vdiskId)) {
             StaticOwners.push_back(owner);
+        } else {
+            DynamicOwners.push_back(owner);
         }
         RecomputeCommonStaticLog();
         RecomputeStaticReserve();
@@ -461,8 +473,17 @@ public:
         RecomputeStaticReserve();
     }
 
+    void SetOwnerSettings(TOwner owner, ui32 weight, ui32 groupSizeInUnits) {
+        Y_VERIFY(IsOwnerUser(owner));
+        OwnerQuota->SetOwnerSettings(owner, weight, groupSizeInUnits);
+        RecomputeStaticReserve();
+    }
+
     void RemoveOwner(TOwner owner) {
         Y_VERIFY(IsOwnerUser(owner));
+        if (auto it = std::find(DynamicOwners.begin(), DynamicOwners.end(), owner); it != DynamicOwners.end()) {
+            DynamicOwners.erase(it);
+        }
         for (ui64 idx = 0; idx < StaticOwners.size(); ++idx) {
             if (StaticOwners[idx] == owner) {
                 StaticOwners[idx] = StaticOwners.back();
@@ -539,6 +560,81 @@ public:
         return SharedQuota->GetHardLimit();
     }
 
+    // The colour of the chunk pool the owners share, before anybody's personal quota or static reserve.
+    TColor::E GetSharedPoolColor() const {
+        double occupancy;
+        return SharedQuota->EstimateSpaceColor(0, &occupancy);
+    }
+
+    // Called on the PDisk worker thread. A dynamic owner's usable space can run
+    // out while the shared pool is still green, because of static reserves or
+    // its personal quota. Start coordinating before that owner runs out of room.
+    TColor::E GetCompactionPressureColor() const {
+        const ui64 reserved = SystemReserveChunks ? SystemReserveChunks + MaintenanceReserveChunks : 0;
+        double occupancy;
+        TColor::E color = SharedQuota->EstimateSpaceColor(reserved, &occupancy);
+        for (TOwner owner : DynamicOwners) {
+            color = Max(color, EstimateSpaceColor(owner, reserved, &occupancy));
+        }
+        return color;
+    }
+
+    void SetAllocationReserves(ui64 system, ui64 maintenance) {
+        SystemReserveChunks = system;
+        MaintenanceReserveChunks = maintenance;
+    }
+
+    // Chunks `owner` may still allocate for `purpose` below RED without touching
+    // the reserves that purpose has to leave alone (see EAllocationPurpose). The
+    // room is the owner's own, as GetHeadroomBelow() has it: an owner at its
+    // personal quota does not take the room of its neighbours with it.
+    // Physical reservations consume this headroom immediately, before any I/O.
+    // There is no forecast credit: only releasing actual chunks restores it.
+    // A zero system reserve disables the policy for staged rollout/recovery.
+    // Called on the worker thread, like GetCompactionPressureColor().
+    ui64 GetAllocationHeadroom(TOwner owner, EAllocationPurpose purpose) const {
+        const ui64 reserve = GetAllocationReserve(purpose);
+        if (!reserve) {
+            return Max<ui64>();
+        }
+        const i64 room = IsOwnerUser(owner)
+            ? GetHeadroomBelow(owner, TColor::RED)
+            : SharedQuota->GetHeadroomBelow(TColor::RED);
+        return ui64(Max<i64>(room, 0)) > reserve ? ui64(room) - reserve : 0;
+    }
+
+    // The least headroom any dynamic owner has for `purpose`, for monitoring.
+    ui64 GetWorstAllocationHeadroom(EAllocationPurpose purpose) const {
+        const ui64 reserve = GetAllocationReserve(purpose);
+        if (!reserve) {
+            return Max<ui64>();
+        }
+        i64 room = SharedQuota->GetHeadroomBelow(TColor::RED);
+        for (TOwner owner : DynamicOwners) {
+            room = Min(room, GetHeadroomBelow(owner, TColor::RED));
+        }
+        return ui64(Max<i64>(room, 0)) > reserve ? ui64(room) - reserve : 0;
+    }
+
+    // What an allocation of `purpose` has to leave alone; zero when it is not held back at all.
+    ui64 GetAllocationReserve(EAllocationPurpose purpose) const {
+        if (!SystemReserveChunks) {
+            return 0;
+        }
+        switch (purpose) {
+            case EAllocationPurpose::User:
+                return SystemReserveChunks + MaintenanceReserveChunks;
+            case EAllocationPurpose::Recovery:
+                return SystemReserveChunks;
+            case EAllocationPurpose::System:
+            case EAllocationPurpose::Maintenance:
+                return 0;
+            case EAllocationPurpose::Count:
+                break;
+        }
+        Y_ABORT("invalid allocation purpose");
+    }
+
     TColor::E GetPDiskCapacityAlert() const {
         double occupancy;
         TColor::E sharedColor = SharedQuota->EstimateSpaceColor(0, &occupancy);
@@ -591,6 +687,67 @@ public:
             return EstimateSpaceColor(OwnerSystem, 0, occupancy);
         }
         return EstimateSpaceColor(owner, 0, occupancy);
+    }
+
+    // How much an owner may still take before each of the boundaries that gate
+    // writes. Follows the same two-quota rule as EstimateSpaceColor: a user owner
+    // is as badly off as the worse of its personal quota, capped by the color
+    // border, and the shared quota it competes for with its neighbours.
+    TSpaceHeadroom GetSpaceHeadroom(TOwner owner) const {
+        TSpaceHeadroom headroom;
+        headroom.Valid = true;
+        headroom.ToPreOrange = GetHeadroomBelow(owner, TColor::PRE_ORANGE);
+        headroom.ToOrange = GetHeadroomBelow(owner, TColor::ORANGE);
+        headroom.ToRed = GetHeadroomBelow(owner, TColor::RED);
+        headroom.ToBlack = GetHeadroomBelow(owner, TColor::BLACK);
+        // Housekeeping is Maintenance, which the allocation reserves do not hold back.
+        headroom.AllocatableToBlack = GetAllocatableHeadroomBelowBlack(owner);
+        return headroom;
+    }
+
+    // Room below BLACK an allocation marked as housekeeping still has: the same two-quota
+    // rule, with the static group reserve deliberately left out. See EstimateAllocationColor.
+    i64 GetAllocatableHeadroomBelowBlack(TOwner owner) const {
+        if (!IsOwnerUser(owner)) {
+            return 0;
+        }
+        const i64 personal = ColorBorder < TColor::BLACK
+            ? Max<i64>()
+            : OwnerQuota->GetHeadroomBelow(owner, TColor::BLACK);
+        return Max<i64>(0, Min(personal, SharedQuota->GetHeadroomBelow(TColor::BLACK)));
+    }
+
+    i64 GetHeadroomBelow(TOwner owner, TColor::E color) const {
+        if (!IsOwnerUser(owner)) {
+            // Only user owners hold Fresh, and only they project their color ahead.
+            return 0;
+        }
+        // The personal quota is reported no worse than the color border, so a border
+        // below the boundary in question takes it out of the picture entirely.
+        const i64 personal = ColorBorder < color
+            ? Max<i64>()
+            : OwnerQuota->GetHeadroomBelow(owner, color);
+        const i64 shared = SharedQuota->GetHeadroomBelow(color) - GetStaticReserveFloor(owner);
+        return Max<i64>(0, Min(personal, shared));
+    }
+
+    // The colour an allocation has to pass. Housekeeping -- compaction output -- is judged
+    // without the static group reserve: PDisk cannot tell a write that brings in new user
+    // data from a compaction that is trying to free some, so holding the reserve against
+    // both would stop the only thing that can give space back on a full disk, and the disk
+    // would never come out of it. The reserve is enforced through the colour the owners are
+    // told about instead: they stop taking user writes long before this point and keep
+    // compacting and cutting the log down to black.
+    TColor::E EstimateAllocationColor(TOwner owner, i64 allocationSize, bool housekeeping,
+            double *occupancy) const {
+        if (!housekeeping || !IsOwnerUser(owner)) {
+            return EstimateSpaceColor(owner, allocationSize, occupancy);
+        }
+        double ownerOccupancy, sharedOccupancy;
+        TColor::E ret = Min(ColorBorder, OwnerQuota->EstimateSpaceColor(owner, allocationSize, &ownerOccupancy));
+        ret = Max(ret, SharedQuota->EstimateSpaceColor(allocationSize, &sharedOccupancy));
+        *occupancy = Max(Min(ColorBorderOccupancy, ownerOccupancy), sharedOccupancy);
+        return ret;
     }
 
     // Estimate status flags after allocation of allocatinoSize

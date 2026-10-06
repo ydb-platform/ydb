@@ -38,7 +38,7 @@ TWindowFrameSettingBound ConvertToFrameBound(
         .Seal()
         .Build();
     // clang-format on
-    return TWindowFrameSettingBound({node,  Nothing(), Nothing(), Nothing()}, value.GetDirection());
+    return TWindowFrameSettingBound({node, Nothing(), Nothing(), Nothing()}, value.GetDirection());
 }
 
 TWindowFrame<TWindowFrameSettingBound> ConvertToFrameBound(

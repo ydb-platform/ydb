@@ -95,20 +95,30 @@ struct TTaskDistribution {
     // test that means to cover the mapping must require this to be non-zero.
     ui32 ShuffleEliminationOrderSensitiveMappings = 0;
 
+    // StageId of the first stage of each transaction, see TKqpTasksGraph::GetStageIdBases(). The tests address a
+    // stage by its transaction-local index, while the graph keys stages by a graph-wide unique StageId.
+    TVector<ui64> StageIdBases;
+
+    THashMap<TStageId, TVector<NKikimrTxDataShard::TKqpReadRangesSourceSettings>> SampledSources;
+
+    TStageId Key(ui32 txIdx, ui32 stageIdx) const {
+        return TStageId(txIdx, StageIdBases.at(txIdx) + stageIdx);
+    }
+
     ui32 Count(ui32 txIdx = 0, ui32 stageIdx = 0) const {
-        auto it = TasksPerStage.find(TStageId(txIdx, stageIdx));
+        auto it = TasksPerStage.find(Key(txIdx, stageIdx));
         return it != TasksPerStage.end() ? it->second : 0;
     }
 
     // Number of distinct nodes the stage's tasks landed on.
     ui32 NodesUsed(ui32 txIdx = 0, ui32 stageIdx = 0) const {
-        auto it = TasksPerStageNode.find(TStageId(txIdx, stageIdx));
+        auto it = TasksPerStageNode.find(Key(txIdx, stageIdx));
         return it != TasksPerStageNode.end() ? static_cast<ui32>(it->second.size()) : 0;
     }
 
     // Tasks of the stage placed on a given node.
     ui32 OnNode(ui64 nodeId, ui32 txIdx = 0, ui32 stageIdx = 0) const {
-        auto it = TasksPerStageNode.find(TStageId(txIdx, stageIdx));
+        auto it = TasksPerStageNode.find(Key(txIdx, stageIdx));
         if (it == TasksPerStageNode.end()) {
             return 0;
         }
@@ -131,7 +141,7 @@ struct TTaskDistribution {
     // Node-count agnostic, so it stays compact and stable regardless of how many cluster nodes there are.
     THashMap<ui32, ui32> NodeHistogram(ui32 txIdx = 0, ui32 stageIdx = 0) const {
         THashMap<ui32, ui32> histogram;
-        auto it = TasksPerStageNode.find(TStageId(txIdx, stageIdx));
+        auto it = TasksPerStageNode.find(Key(txIdx, stageIdx));
         if (it != TasksPerStageNode.end()) {
             for (const auto& [_, tasks] : it->second) {
                 histogram[tasks]++;
@@ -189,6 +199,10 @@ class TStubResourceManager : public NRm::IKqpResourceManager {
 public:
     const TIntrusivePtr<TKqpCounters>& GetCounters() const override {
         return Counters_;
+    }
+
+    NRm::TMemoryResourceCookies GetMemoryResourceCookies(const TString&, const TString&, double) override {
+        return {};
     }
 
     NRm::TKqpRMAllocateResult AllocateResources(NRm::TTxState&, ui64, const NRm::TKqpResourcesRequest&) override {
@@ -299,7 +313,15 @@ public:
             const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
             if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                 bool isFullScan = false;
-                stageInfo.Meta.PrunedPartitions.emplace_back(pruner.Prune(stage.GetSources(0).GetReadRangesSource(), stageInfo, isFullScan));
+                const auto& source = stage.GetSources(0).GetReadRangesSource();
+                stageInfo.Meta.PrunedPartitions.emplace_back(pruner.Prune(source, stageInfo, isFullScan));
+                const auto& partitions = stageInfo.Meta.PrunedPartitions.back();
+                if (!partitions.empty() && (stage.GetIsSinglePartition()
+                    || source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()))
+                {
+                    auto [startShard, shardInfo] = pruner.MakeVirtualTablePartition(source, stageInfo);
+                    stageInfo.Meta.VirtualPartition.emplace(startShard, std::move(shardInfo));
+                }
             } else if (Graph->GetMeta().IsScan || stageInfo.Meta.IsOlap()) {
                 for (const auto& op : stage.GetTableOps()) {
                     bool isFullScan = false;
@@ -367,6 +389,7 @@ public:
             {"tasksGraphDump", Graph->DumpToString()});
 
         auto reply = MakeHolder<TEvBuildTasksDone>();
+        reply->Result.StageIdBases = Graph->GetStageIdBases();
         for (const auto& [stageId, stageInfo] : Graph->GetStagesInfo()) {
             reply->Result.TasksPerStage[stageId] = static_cast<ui32>(stageInfo.Tasks.size());
             for (ui64 taskId : stageInfo.Tasks) {
@@ -375,6 +398,11 @@ public:
                     reply->Result.TasksPerStageNode[stageId][*task.Meta.ExpectedNodeId]++;
                 } else {
                     ++reply->Result.UnplacedTasks;
+                }
+                for (const auto& input : task.Inputs) {
+                    if (input.Meta.SourceSettings && input.Meta.SourceSettings->HasSampling()) {
+                        reply->Result.SampledSources[stageId].push_back(*input.Meta.SourceSettings);
+                    }
                 }
             }
         }
@@ -412,7 +440,7 @@ private:
             .UserToken = userToken,
             .Deadline = TInstant::Max(),
             .StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE,
-            .WithProgressStats = false,
+            .StatsReportingSettings = {},
             .RlPath = rlPath,
             .ExecuterSpan = executerSpan,
             .ResourcesSnapshot = snapshot,
@@ -866,6 +894,91 @@ inline void AssertShuffleEliminationHashMapping(const TTaskDistribution& dist, u
 // ============================================================================
 
 Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
+
+    Y_UNIT_TEST_F(SamplingBudgetAcrossNodes, TKqpTasksGraphBuildFixture<4>) {
+        Execute(R"(
+            CREATE TABLE `/Root/Sampled` (Key Uint64 NOT NULL, Value Uint64, PRIMARY KEY (Key))
+            WITH (UNIFORM_PARTITIONS = 32, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 32);
+        )");
+        TBuildConfig config;
+        config.NodeCount = 32;
+        const auto dist = BuildTasks(R"(
+            SELECT SUM(Value) FROM `/Root/Sampled`
+            WITH (sampling_rate="0.5", sampling_seed="42", sampling_memtable_stride="16");
+        )", config);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.SampledSources.size(), 1);
+        const auto& [stageId, sources] = *dist.SampledSources.begin();
+        UNIT_ASSERT(sources.size() > 1);
+        UNIT_ASSERT(sources.size() <= 12);
+        UNIT_ASSERT(dist.TasksPerStageNode.at(stageId).size() > 1);
+        ui64 slots = 0;
+        ui32 ranges = 0;
+        for (const auto& source : sources) {
+            UNIT_ASSERT(source.GetMaxInFlightShards() > 0);
+            slots += source.GetMaxInFlightShards();
+            ranges += source.GetRanges().KeyRangesSize();
+            UNIT_ASSERT_VALUES_EQUAL(source.GetSampling().GetRate(), 0.5);
+            UNIT_ASSERT_VALUES_EQUAL(source.GetSampling().GetSeed(), 42);
+            UNIT_ASSERT_VALUES_EQUAL(source.GetSampling().GetMemtableStride(), 16);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(slots, 12);
+        UNIT_ASSERT_VALUES_EQUAL(ranges, 32);
+    }
+
+    Y_UNIT_TEST_F(SamplingBudgetSharedBySources, TKqpTasksGraphBuildFixture<4>) {
+        Execute(R"(
+            CREATE TABLE `/Root/SampledA` (Key Uint64 NOT NULL, Value Uint64, PRIMARY KEY (Key))
+            WITH (UNIFORM_PARTITIONS = 16, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+            CREATE TABLE `/Root/SampledB` (Key Uint64 NOT NULL, Value Uint64, PRIMARY KEY (Key))
+            WITH (UNIFORM_PARTITIONS = 16, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+        )");
+        TBuildConfig config;
+        config.NodeCount = 16;
+        const auto dist = BuildTasks(R"(
+            SELECT SUM(Value) FROM `/Root/SampledA` WITH (sampling_rate="0.5", sampling_seed="42")
+            UNION ALL
+            SELECT SUM(Value) FROM `/Root/SampledB` WITH (sampling_rate="0.5", sampling_seed="43");
+        )", config);
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.SampledSources.size(), 2);
+        ui64 slots = 0;
+        ui32 actors = 0;
+        ui32 ranges = 0;
+        for (const auto& [_, sources] : dist.SampledSources) {
+            UNIT_ASSERT(!sources.empty());
+            actors += sources.size();
+            for (const auto& source : sources) {
+                UNIT_ASSERT(source.GetMaxInFlightShards() > 0);
+                slots += source.GetMaxInFlightShards();
+                ranges += source.GetRanges().KeyRangesSize();
+            }
+        }
+        UNIT_ASSERT(actors <= 12);
+        UNIT_ASSERT_VALUES_EQUAL(slots, 12);
+        UNIT_ASSERT_VALUES_EQUAL(ranges, 32);
+    }
+
+    Y_UNIT_TEST_F(SamplingBudgetAllowsSplitChildren, TKqpTasksGraphBuildFixture<4>) {
+        Execute(R"(
+            CREATE TABLE `/Root/Sampled` (Key Uint64 NOT NULL, Value Uint64, PRIMARY KEY (Key))
+            WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        )");
+        const auto dist = BuildTasks(R"(
+            SELECT SUM(Value) FROM `/Root/Sampled` WITH (sampling_rate="0.5", sampling_seed="42");
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(dist.SampledSources.size(), 1);
+        const auto& sources = dist.SampledSources.begin()->second;
+        UNIT_ASSERT(!sources.empty());
+        UNIT_ASSERT(sources.size() <= 2);
+        ui64 slots = 0;
+        for (const auto& source : sources) {
+            UNIT_ASSERT(source.GetMaxInFlightShards() > 1);
+            slots += source.GetMaxInFlightShards();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(slots, 12);
+    }
 
     Y_UNIT_TEST_F(TpchQuery01, TKqpTasksGraphTpchFixture) {
         const TString& queryText = R"(
@@ -1354,10 +1467,9 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         auto dist = BuildTasks(queryText);
         AssertNoCrossNodeCopyChannels(dist);
 
-        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 3840);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
@@ -1365,7 +1477,6 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         AssertNodeDistribution(dist, 0, {
             /* stage 0 */ { {32, 120} },
             /* stage 1 */ { {1, 1} },
-            /* stage 2 */ { {1, 1} },
         });
     }
 
@@ -2147,28 +2258,34 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         auto dist = BuildTasks(queryText);
         AssertNoCrossNodeCopyChannels(dist);
 
-        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 570);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 570);
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 10u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 690);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 517);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 570);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  0), 215);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  1), 215);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  2), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  3), 215);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  4), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  5), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  6), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
         AssertNodeDistribution(dist, 0, {
-            /* stage 0 */ { {4, 30}, {5, 90} },
-            /* stage 1 */ { {4, 30}, {5, 90} },
+            /* stage 0 */ { {5, 30}, {6, 90} },
+            /* stage 1 */ { {4, 83}, {5, 37} },
             /* stage 2 */ { {1, 1} },
-            /* stage 3 */ { {1, 1} },
-            /* stage 4 */ { {4, 30}, {5, 90} },
-            /* stage 5 */ { {2, 104}, {3, 16} },
-            /* stage 6 */ { {2, 104}, {3, 16} },
-            /* stage 7 */ { {1, 1} },
+        });
+        AssertNodeDistribution(dist, 1, {
+            /* stage 3 */ { {1, 25}, {2, 95} },
+            /* stage 4 */ { {1, 25}, {2, 95} },
+            /* stage 5 */ { {1, 1} },
+            /* stage 6 */ { {1, 25}, {2, 95} },
+            /* stage 7 */ { {2, 104}, {3, 16} },
+            /* stage 8 */ { {2, 104}, {3, 16} },
+            /* stage 9 */ { {1, 1} },
         });
     }
 
@@ -2453,12 +2570,11 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         auto dist = BuildTasks(queryText);
         AssertNoCrossNodeCopyChannels(dist);
 
-        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1680);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
@@ -2468,7 +2584,6 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
             /* stage 1 */ { {14, 120} },
             /* stage 2 */ { {2, 104}, {3, 16} },
             /* stage 3 */ { {1, 1} },
-            /* stage 4 */ { {1, 1} },
         });
     }
 
@@ -2722,28 +2837,32 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         auto dist = BuildTasks(queryText);
         AssertNoCrossNodeCopyChannels(dist);
 
-        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 8u);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 9u);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 1110);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 390);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 438);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 438);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  0), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  2), 256);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  3), 346);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  4), 416);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  5), 416);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(1,  6), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
         UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
 
         AssertNodeDistribution(dist, 0, {
-            /* stage 0 */ { {2, 104}, {3, 16} },
+            /* stage 0 */ { {9, 90}, {10, 30} },
             /* stage 1 */ { {1, 1} },
-            /* stage 2 */ { {1, 1} },
-            /* stage 3 */ { {2, 104}, {3, 16} },
-            /* stage 4 */ { {3, 90}, {4, 30} },
-            /* stage 5 */ { {3, 42}, {4, 78} },
-            /* stage 6 */ { {3, 42}, {4, 78} },
-            /* stage 7 */ { {1, 1} },
+        });
+        AssertNodeDistribution(dist, 1, {
+            /* stage 2 */ { {2, 104}, {3, 16} },
+            /* stage 3 */ { {1, 1} },
+            /* stage 4 */ { {2, 104}, {3, 16} },
+            /* stage 5 */ { {2, 14}, {3, 106} },
+            /* stage 6 */ { {3, 64}, {4, 56} },
+            /* stage 7 */ { {3, 64}, {4, 56} },
+            /* stage 8 */ { {1, 1} },
         });
     }
 

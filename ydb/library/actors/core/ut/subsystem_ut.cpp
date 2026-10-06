@@ -1,6 +1,8 @@
 #include "actorsystem.h"
+#include "thread_context.h"
 #include "executor_pool_basic.h"
 #include "scheduler_basic.h"
+#include "subsystems/stats.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -9,6 +11,31 @@
 using namespace NActors;
 
 Y_UNIT_TEST_SUITE(TSubSystemTest) {
+
+    template<int Id>
+    class TWorkerSubSystem : public ISubSystem {
+    public:
+        TWorkerSubSystem(TVector<int>* lifecycle, bool* valid)
+            : Lifecycle(lifecycle), Valid(valid)
+        {}
+        TSubSystemDependencies GetDependencies() const override {
+            if constexpr (Id == 2) {
+                return DependsOn<TWorkerSubSystem<1>>();
+            }
+            return {};
+        }
+        void OnExecutorThreadStart(TThreadContext* context) override {
+            *Valid &= TlsThreadContext == context;
+            Lifecycle->push_back(Id);
+        }
+        void OnExecutorThreadStop(TThreadContext* context) override {
+            *Valid &= TlsThreadContext == context;
+            Lifecycle->push_back(-Id);
+        }
+    private:
+        TVector<int>* Lifecycle;
+        bool* Valid;
+    };
 
     class TRootSubSystem : public ISubSystem {
     public:
@@ -89,6 +116,97 @@ Y_UNIT_TEST_SUITE(TSubSystemTest) {
 
     class TMissingSubSystem : public ISubSystem {
     };
+
+    class TMockActorSystemStatsSubSystem : public TActorSystemStatsSubSystem {
+    public:
+        TSubSystemDependencies GetDependencies() const override {
+            return DependsOn<TRootSubSystem>();
+        }
+
+        void GetPoolStats(ui32, TExecutorPoolStats&,
+                TVector<TExecutorThreadStats>&) const override {
+            ++GetPoolStatsCalls;
+        }
+
+        void GetPoolStats(ui32, TExecutorPoolStats&,
+                TVector<TExecutorThreadStats>&,
+                TVector<TExecutorThreadStats>&) const override {
+            ++GetPoolStatsWithSharedCalls;
+        }
+
+        void GetExecutorPoolState(i16, TExecutorPoolState&) const override {
+            ++GetExecutorPoolStateCalls;
+        }
+
+        void GetExecutorPoolStates(std::vector<TExecutorPoolState>&) const override {
+            ++GetExecutorPoolStatesCalls;
+        }
+
+        void GetHarmonizerStats(THarmonizerStats&) const override {
+            ++GetHarmonizerStatsCalls;
+        }
+
+        mutable ui32 GetPoolStatsCalls = 0;
+        mutable ui32 GetPoolStatsWithSharedCalls = 0;
+        mutable ui32 GetExecutorPoolStateCalls = 0;
+        mutable ui32 GetExecutorPoolStatesCalls = 0;
+        mutable ui32 GetHarmonizerStatsCalls = 0;
+    };
+
+    struct TTrackingStatsSubSystemState {
+        ui32 Destroyed = 0;
+        TVector<int> Lifecycle;
+    };
+
+    class TTrackingActorSystemStatsSubSystem : public TMockActorSystemStatsSubSystem {
+    public:
+        explicit TTrackingActorSystemStatsSubSystem(TTrackingStatsSubSystemState* state)
+            : State(state)
+        {
+        }
+
+        ~TTrackingActorSystemStatsSubSystem() override {
+            ++State->Destroyed;
+        }
+
+        void OnAfterStart(TActorSystem&) override {
+            State->Lifecycle.push_back(1);
+        }
+
+        void OnBeforeStop(TActorSystem&) override {
+            State->Lifecycle.push_back(-1);
+        }
+
+    private:
+        TTrackingStatsSubSystemState* State;
+    };
+
+    class TStatsConsumerSubSystem : public ISubSystem {
+    public:
+        TSubSystemDependencies GetDependencies() const override {
+            return DependsOn<TActorSystemStatsSubSystem>();
+        }
+
+        void OnDependenciesResolved(const TResolvedSubSystemDependencies& dependencies) override {
+            UNIT_ASSERT_VALUES_EQUAL(dependencies.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                dependencies[0].Type,
+                TSubSystemRegistry::TItem<TActorSystemStatsSubSystem>::Index());
+            Stats = static_cast<TActorSystemStatsSubSystem*>(dependencies[0].Instance);
+        }
+
+        TActorSystemStatsSubSystem* Stats = nullptr;
+    };
+
+    THolder<TActorSystemSetup> MakeActorSystemSetup() {
+        auto setup = MakeHolder<TActorSystemSetup>();
+        setup->NodeId = 1;
+        setup->ExecutorsCount = 1;
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
+        setup->Executors[0] = new TBasicExecutorPool(0, 1, 10, "system");
+        setup->Scheduler = new TBasicSchedulerThread;
+        return setup;
+    }
 
     class TDependsOnMissingSubSystem : public ISubSystem {
     public:
@@ -187,6 +305,24 @@ Y_UNIT_TEST_SUITE(TSubSystemTest) {
         return DependsOn<TAlternativeCycleBSubSystem>() || DependsOn<TRootSubSystem>();
     }
 
+    Y_UNIT_TEST(ExecutorThreadHooksFollowDependencyOrderAndKeepTlsUntilCleanup) {
+        TVector<int> lifecycle;
+        bool valid = true;
+        auto setup = MakeActorSystemSetup();
+        setup->RegisterSubSystem(std::make_unique<TWorkerSubSystem<2>>(&lifecycle, &valid));
+        setup->RegisterSubSystem(std::make_unique<TWorkerSubSystem<1>>(&lifecycle, &valid));
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+        actorSystem.Stop();
+        actorSystem.Cleanup();
+        UNIT_ASSERT(valid);
+        UNIT_ASSERT_VALUES_EQUAL(lifecycle.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(lifecycle[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(lifecycle[1], 2);
+        UNIT_ASSERT_VALUES_EQUAL(lifecycle[2], -2);
+        UNIT_ASSERT_VALUES_EQUAL(lifecycle[3], -1);
+    }
+
     Y_UNIT_TEST(ResolvesSubSystemsInTopologicalOrder) {
         TSubSystems subSystems;
         RegisterSubSystem(subSystems, std::make_unique<TLeafSubSystem>());
@@ -207,6 +343,34 @@ Y_UNIT_TEST_SUITE(TSubSystemTest) {
         auto order = ResolveSubSystemDependencies(subSystems);
         UNIT_ASSERT(order.has_value());
         UNIT_ASSERT(order->empty());
+    }
+
+    Y_UNIT_TEST(RegistersStatsMockByInterfaceType) {
+        TSubSystems subSystems;
+        auto mock = std::make_unique<TMockActorSystemStatsSubSystem>();
+        auto* mockPtr = mock.get();
+        auto consumer = std::make_unique<TStatsConsumerSubSystem>();
+        auto* consumerPtr = consumer.get();
+        RegisterSubSystem<TActorSystemStatsSubSystem>(subSystems, std::move(mock));
+        RegisterSubSystem(subSystems, std::move(consumer));
+        RegisterSubSystem(subSystems, std::make_unique<TRootSubSystem>());
+
+        auto order = ResolveSubSystemDependencies(subSystems);
+        UNIT_ASSERT(order);
+        UNIT_ASSERT_VALUES_EQUAL(GetSubSystem<TActorSystemStatsSubSystem>(subSystems), mockPtr);
+        const TSubSystems& constSubSystems = subSystems;
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetSubSystem<TActorSystemStatsSubSystem>(constSubSystems),
+            static_cast<const TActorSystemStatsSubSystem*>(mockPtr));
+        UNIT_ASSERT_VALUES_EQUAL(consumerPtr->Stats, mockPtr);
+
+        const auto root = TSubSystemRegistry::TItem<TRootSubSystem>::Index();
+        const auto stats = TSubSystemRegistry::TItem<TActorSystemStatsSubSystem>::Index();
+        const auto rootPosition = std::find(order->begin(), order->end(), root);
+        const auto statsPosition = std::find(order->begin(), order->end(), stats);
+        UNIT_ASSERT(rootPosition != order->end());
+        UNIT_ASSERT(statsPosition != order->end());
+        UNIT_ASSERT(rootPosition < statsPosition);
     }
 
     Y_UNIT_TEST(StoresDependencyExpressionsInDnf) {
@@ -305,12 +469,7 @@ Y_UNIT_TEST_SUITE(TSubSystemTest) {
     Y_UNIT_TEST(RunsSubSystemLifecycleInDependencyOrder) {
         TVector<int> lifecycle;
 
-        auto setup = MakeHolder<TActorSystemSetup>();
-        setup->NodeId = 1;
-        setup->ExecutorsCount = 1;
-        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
-        setup->Executors[0] = new TBasicExecutorPool(0, 1, 10, "system");
-        setup->Scheduler = new TBasicSchedulerThread;
+        auto setup = MakeActorSystemSetup();
         setup->RegisterSubSystem(std::make_unique<TLeafSubSystem>(&lifecycle));
         setup->RegisterSubSystem(std::make_unique<TMiddleSubSystem>(&lifecycle));
         setup->RegisterSubSystem(std::make_unique<TRootSubSystem>(&lifecycle));
@@ -327,5 +486,123 @@ Y_UNIT_TEST_SUITE(TSubSystemTest) {
         UNIT_ASSERT_VALUES_EQUAL(lifecycle[3], -3);
         UNIT_ASSERT_VALUES_EQUAL(lifecycle[4], -2);
         UNIT_ASSERT_VALUES_EQUAL(lifecycle[5], -1);
+    }
+
+    Y_UNIT_TEST(UsesRegisteredStatsMockAndDispatchesItsVirtualMethods) {
+        auto setup = MakeActorSystemSetup();
+        auto mock = std::make_unique<TMockActorSystemStatsSubSystem>();
+        auto* mockPtr = mock.get();
+        auto consumer = std::make_unique<TStatsConsumerSubSystem>();
+        auto* consumerPtr = consumer.get();
+        setup->RegisterSubSystem<TActorSystemStatsSubSystem>(std::move(mock));
+        setup->RegisterSubSystem(std::move(consumer));
+        setup->RegisterSubSystem(std::make_unique<TRootSubSystem>());
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+        const auto& stats = GetActorSystemStats(actorSystem);
+        UNIT_ASSERT_VALUES_EQUAL(&stats, mockPtr);
+        UNIT_ASSERT_VALUES_EQUAL(consumerPtr->Stats, mockPtr);
+
+        TExecutorPoolStats poolStats;
+        TVector<TExecutorThreadStats> threadStats;
+        TVector<TExecutorThreadStats> sharedThreadStats;
+        TExecutorPoolState poolState;
+        std::vector<TExecutorPoolState> poolStates;
+        THarmonizerStats harmonizerStats;
+        stats.GetPoolStats(0, poolStats, threadStats);
+        stats.GetPoolStats(0, poolStats, threadStats, sharedThreadStats);
+        stats.GetExecutorPoolState(0, poolState);
+        stats.GetExecutorPoolStates(poolStates);
+        stats.GetHarmonizerStats(harmonizerStats);
+
+        UNIT_ASSERT_VALUES_EQUAL(mockPtr->GetPoolStatsCalls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(mockPtr->GetPoolStatsWithSharedCalls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(mockPtr->GetExecutorPoolStateCalls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(mockPtr->GetExecutorPoolStatesCalls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(mockPtr->GetHarmonizerStatsCalls, 1);
+
+        actorSystem.Stop();
+    }
+
+    Y_UNIT_TEST(InstallsDefaultStatsSubSystemAndAllowsReplacementBeforeStart) {
+        auto setup = MakeActorSystemSetup();
+        TActorSystem actorSystem(setup);
+        UNIT_ASSERT(actorSystem.GetSubSystem<TActorSystemStatsSubSystem>());
+
+        auto mock = std::make_unique<TMockActorSystemStatsSubSystem>();
+        auto* mockPtr = mock.get();
+        actorSystem.RegisterSubSystem<TActorSystemStatsSubSystem>(std::move(mock));
+        actorSystem.RegisterSubSystem(std::make_unique<TRootSubSystem>());
+        actorSystem.Start();
+        UNIT_ASSERT_VALUES_EQUAL(&GetActorSystemStats(actorSystem), mockPtr);
+        actorSystem.Stop();
+    }
+
+    Y_UNIT_TEST(RegistersStatsMocksFromTemporaryAndBaseTypedUniquePtr) {
+        auto setup = MakeActorSystemSetup();
+        setup->RegisterSubSystem(std::make_unique<TRootSubSystem>());
+        setup->RegisterSubSystem<TActorSystemStatsSubSystem>(
+            std::make_unique<TMockActorSystemStatsSubSystem>());
+        UNIT_ASSERT(GetSubSystem<TActorSystemStatsSubSystem>(setup->SubSystems));
+
+        std::unique_ptr<TActorSystemStatsSubSystem> mock =
+            std::make_unique<TMockActorSystemStatsSubSystem>();
+        auto* mockPtr = mock.get();
+        setup->RegisterSubSystem(std::move(mock));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetSubSystem<TActorSystemStatsSubSystem>(setup->SubSystems), mockPtr);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+        UNIT_ASSERT_VALUES_EQUAL(&GetActorSystemStats(actorSystem), mockPtr);
+        actorSystem.Stop();
+    }
+
+    Y_UNIT_TEST(ConcreteStatsMockDoesNotReplaceDefaultInterfaceSubSystem) {
+        auto setup = MakeActorSystemSetup();
+        setup->RegisterSubSystem(std::make_unique<TRootSubSystem>());
+        auto mock = std::make_unique<TMockActorSystemStatsSubSystem>();
+        auto* mockPtr = mock.get();
+        setup->RegisterSubSystem(std::move(mock));
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+        const auto* defaultStats = actorSystem.GetSubSystem<TActorSystemStatsSubSystem>();
+        UNIT_ASSERT(defaultStats);
+        UNIT_ASSERT(defaultStats != mockPtr);
+        UNIT_ASSERT_VALUES_EQUAL(
+            actorSystem.GetSubSystem<TMockActorSystemStatsSubSystem>(), mockPtr);
+        actorSystem.Stop();
+    }
+
+    Y_UNIT_TEST(ReplacingStatsMockDestroysOldInstanceAndKeepsNewOneUntilSystemDestruction) {
+        TTrackingStatsSubSystemState oldState;
+        TTrackingStatsSubSystemState newState;
+        {
+            auto setup = MakeActorSystemSetup();
+            setup->RegisterSubSystem(std::make_unique<TRootSubSystem>());
+            setup->RegisterSubSystem<TActorSystemStatsSubSystem>(
+                std::make_unique<TTrackingActorSystemStatsSubSystem>(&oldState));
+
+            TActorSystem actorSystem(setup);
+            auto mock = std::make_unique<TTrackingActorSystemStatsSubSystem>(&newState);
+            auto* mockPtr = mock.get();
+            actorSystem.RegisterSubSystem<TActorSystemStatsSubSystem>(std::move(mock));
+            UNIT_ASSERT_VALUES_EQUAL(oldState.Destroyed, 1);
+
+            actorSystem.Start();
+            UNIT_ASSERT_VALUES_EQUAL(&GetActorSystemStats(actorSystem), mockPtr);
+            UNIT_ASSERT_VALUES_EQUAL(newState.Lifecycle.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(newState.Lifecycle[0], 1);
+
+            actorSystem.Stop();
+            UNIT_ASSERT_VALUES_EQUAL(newState.Destroyed, 0);
+            UNIT_ASSERT_VALUES_EQUAL(newState.Lifecycle.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(newState.Lifecycle[1], -1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(oldState.Destroyed, 1);
+        UNIT_ASSERT(oldState.Lifecycle.empty());
+        UNIT_ASSERT_VALUES_EQUAL(newState.Destroyed, 1);
     }
 }

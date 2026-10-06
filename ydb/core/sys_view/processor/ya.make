@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     processor.h
@@ -16,6 +16,7 @@ SRCS(
     tx_interval_summary.cpp
     tx_interval_metrics.cpp
     tx_top_partitions.cpp
+    tx_cleanup_hour_metrics.cpp
 )
 
 PEERDIR(
@@ -24,11 +25,14 @@ PEERDIR(
     ydb/core/grpc_services/counters
     ydb/core/kqp/counters
     ydb/core/protos
+    ydb/core/sys_view/service
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/scheme_cache
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

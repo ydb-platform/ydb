@@ -685,6 +685,7 @@ private:
                 extraTypes = Ctx_.NewCallable(node->Head().Pos(), "TupleType", {});
             }
 
+            // clang-format off
             funcArgs.push_back(Ctx_.Builder(node->Head().Pos())
                 .Callable("Udf")
                     .Atom(0, TString(node->Head().Child(0)->Content()) + (renameFunc ? "_BlocksImpl" : ""))
@@ -707,14 +708,17 @@ private:
                     .Add(3, node->Head().ChildPtr(3))
                 .Seal()
                 .Build());
+            // clang-format on
 
             if (HasSetting(*node->Head().Child(7), "strict")) {
+                // clang-format off
                 auto newArg = Ctx_.Builder(node->Head().Pos())
                     .Callable("EnsureStrict")
                         .Add(0, funcArgs.back())
                         .Atom(1, TStringBuilder() << "Block version of " << node->Head().Child(0)->Content() << " is not marked as strict")
                     .Seal()
                     .Build();
+                // clang-format on
                 funcArgs.back() = std::move(newArg);
             }
         } else {

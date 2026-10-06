@@ -547,6 +547,7 @@ namespace NKikimr {
                             Config->GarbageThresholdToRunFullCompactionPerMille,
                             logFunc);
             }
+            LocRecCtx->RepairedHuge->StripeAllocatorEnabled = Config->UseHeapAllocator;
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(LocRecCtx->VCtx->VDiskLogPrefix,
                 LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(), Config->BlobHeaderMode,
                 LocRecCtx->PDiskCtx->Dsk->ChunkSize);
@@ -616,7 +617,11 @@ namespace NKikimr {
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,
                         Config->HullCompLevel0MaxSstsAtOnce,
-                        Config->HullCompSortedPartsNum);
+                        Config->HullCompSortedPartsNum,
+                        AppData(ctx)->FeatureFlags.GetEnableVDiskFreshSpaceProjection()
+                            && Config->FreshCompaction && !Config->BaseInfo.ReadOnly,
+                        LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
+                        AppData(ctx)->FeatureFlags.GetEnableCollectByCompleteDeletionBlock());
 
                 // create THullDbRecovery, which creates THullDs
                 LocRecCtx->HullDbRecovery = std::make_shared<THullDbRecovery>(hullCtx);

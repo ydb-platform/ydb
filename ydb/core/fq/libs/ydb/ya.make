@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     local_session.cpp
@@ -31,8 +31,6 @@ PEERDIR(
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

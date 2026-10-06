@@ -554,6 +554,11 @@ void TChunkWriterOptions::EnableValidationOptions(bool validateAnyIsValidYson)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+i64 TMinHashDigestConfig::GetTotalTimestampCount() const
+{
+    return static_cast<i64>(WriteTimestampCount) + DeleteTimestampCount;
+}
+
 void TMinHashDigestConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("write_timestamp_count", &TThis::WriteTimestampCount)

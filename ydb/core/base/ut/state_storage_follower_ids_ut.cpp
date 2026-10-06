@@ -106,11 +106,7 @@ void SetupRuntimeAndHive(TTestBasicRuntime& runtime) {
         THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> allNodeWardenConfigs;
 
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-            TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig = new TNodeWardenConfig(
-                !runtime.IsRealThreads()
-                    ? static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime))
-                    : static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())
-            );
+            TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig = new TNodeWardenConfig();
 
             auto serviceSet = nodeWardenConfig->BlobStorageConfig->MutableServiceSet();
             serviceSet->AddAvailabilityDomains(0);
@@ -231,6 +227,7 @@ void SetupRuntimeAndHive(TTestBasicRuntime& runtime) {
             SetupNodeWhiteboard(runtime, nodeIndex);
         }
 
+        SetupPDiskSubsystem(&runtime);
         runtime.Initialize(app.Unwrap());
     }
 

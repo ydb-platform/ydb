@@ -123,6 +123,38 @@ Y_UNIT_TEST_SUITE(RuntimeFeatureFlags) {
             "EnableDataShardVolatileTransactions: false\n");
     }
 
+    // EnableNbsDisksSsdIoV2 is read at process start. A runtime config update
+    // must not turn it on and must not clear it.
+    Y_UNIT_TEST(EnableNbsDisksSsdIoV2RequiresRestart) {
+        TRuntimeFeatureFlags flags;
+
+        NKikimrConfig::TFeatureFlags proto;
+        proto.SetEnableNbsDisksSsdIoV2(true);
+        proto.SetEnableDataShardVolatileTransactions(false);
+
+        // Runtime update does not turn the restart-only flag on.
+        flags.CopyRuntimeFrom(proto);
+        UNIT_ASSERT_VALUES_EQUAL(flags.HasEnableNbsDisksSsdIoV2(), false);
+        UNIT_ASSERT_VALUES_EQUAL(flags.GetEnableNbsDisksSsdIoV2(), false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            NKikimrConfig::TFeatureFlags(flags).DebugString(),
+            "EnableDataShardVolatileTransactions: false\n");
+
+        flags.SetEnableNbsDisksSsdIoV2(true);
+        flags.SetEnableDataShardVolatileTransactions(true);
+        proto.SetEnableNbsDisksSsdIoV2(false);
+
+        // Runtime update does not clear the restart-only flag.
+        // EnableDataShardVolatileTransactions is a runtime flag and is updated.
+        flags.CopyRuntimeFrom(proto);
+        UNIT_ASSERT_VALUES_EQUAL(flags.HasEnableNbsDisksSsdIoV2(), true);
+        UNIT_ASSERT_VALUES_EQUAL(flags.GetEnableNbsDisksSsdIoV2(), true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            NKikimrConfig::TFeatureFlags(flags).DebugString(),
+            "EnableDataShardVolatileTransactions: false\n"
+            "EnableNbsDisksSsdIoV2: true\n");
+    }
+
 } // Y_UNIT_TEST_SUITE(RuntimeFeatureFlags)
 
 } // namespace NKikimr

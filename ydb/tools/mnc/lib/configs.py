@@ -202,8 +202,13 @@ def add_nbs_config(builder: ydb_config.YdbConfigBuilder, config: dict):
             'legacy',
         ],
     })
+    # add_manual_config_field replaces the key. overridden_configs is applied
+    # first, so merge the nbs2 switch into flags already stored on the builder.
+    stored_feature_flags = builder.manual_config_fields.get('feature_flags') or {}
+    feature_flags = dict(stored_feature_flags)
+    feature_flags['enable_nbs_disks_ssd_io_v2'] = True
+    builder.add_manual_config_field('feature_flags', feature_flags)
     builder.add_manual_config_field('nbs_config', {
-        'enabled': True,
         'nbs_storage_config': {
             'scheme_shard_dir': f"/{domain['name']}/{nbs_config['database']}",
             'folder_id': nbs_config['folder_id'],

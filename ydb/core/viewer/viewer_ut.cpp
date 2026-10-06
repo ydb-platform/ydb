@@ -22,6 +22,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 
@@ -3597,6 +3598,84 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
         auto resultSets = json["Databases"].GetArray();
         UNIT_ASSERT_EQUAL_C(1, resultSets.size(), response);
+    }
+
+    // Settings.Features lists only bool feature flags that are true.
+    // A missing Features object counts as the nbs2 key being absent.
+    bool HasNbs2Capability(const NJson::TJsonValue& json) {
+        if (!json.Has("Settings") || !json["Settings"].Has("Features")) {
+            return false;
+        }
+        return json["Settings"]["Features"].Has("EnableNbsDisksSsdIoV2");
+    }
+
+    Y_UNIT_TEST(Nbs2CapabilityOff) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Accept"] = "application/json";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet("/viewer/capabilities", &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        NJson::TJsonReaderConfig jsonCfg;
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+        UNIT_ASSERT_C(!HasNbs2Capability(json), response);
+    }
+
+    Y_UNIT_TEST(Nbs2CapabilityOn) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+        // AppData feature flags are copied from AppConfig when TServer starts.
+        settings.AppConfig->MutableFeatureFlags()->SetEnableNbsDisksSsdIoV2(true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Accept"] = "application/json";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet("/viewer/capabilities", &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        NJson::TJsonReaderConfig jsonCfg;
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+        UNIT_ASSERT_C(HasNbs2Capability(json), response);
+        const auto& flag = json["Settings"]["Features"]["EnableNbsDisksSsdIoV2"];
+        UNIT_ASSERT_C(flag.IsBoolean(), response);
+        UNIT_ASSERT_C(flag.GetBoolean(), response);
     }
 
     static const ui32 ROWS_N = 15;

@@ -648,7 +648,6 @@ class KikimrConfigGenerator(object):
             # in-mem pdisks have 32 mb chunks, default is 128 mb
             vchunk_size = 32 * (1 << 20) if self.__use_in_memory_pdisks else 128 * (1 << 20)
             self.yaml_config["nbs_config"] = {
-                "enabled": True,
                 "nbs_storage_config": {
                     "scheme_shard_dir": nbs_database_name,
                     "folder_id": "testFolder",
@@ -719,6 +718,8 @@ class KikimrConfigGenerator(object):
                     "info": {}
                 }
             ]
+            # simple_config pops feature_flags above. Set the nbs2 switch after that pop.
+            self.yaml_config.setdefault("feature_flags", {})["enable_nbs_disks_ssd_io_v2"] = True
 
         if system_tablet_backup_config:
             self.yaml_config["system_tablet_backup_config"] = system_tablet_backup_config

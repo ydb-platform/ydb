@@ -1238,6 +1238,12 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
             server.AddService(new NGRpcService::TTestShardSetGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
+        // EnableNbsDisksSsdIoV2 is the nbs2 switch, read at process start.
+        // Applied after services_enabled / services_disabled so an explicit
+        // services_enabled: [nbs] cannot turn the service on while the flag is false.
+        if (!appConfig.GetFeatureFlags().GetEnableNbsDisksSsdIoV2()) {
+            hasNbs = false;
+        }
         if (hasNbs) {
             server.AddService(new NGRpcService::TNbsGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }

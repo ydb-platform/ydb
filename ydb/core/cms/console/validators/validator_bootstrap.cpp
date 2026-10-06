@@ -3,6 +3,7 @@
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
 
 #include <util/string/builder.h>
@@ -70,7 +71,8 @@ bool TBootstrapConfigValidator::CheckTablets(const NKikimrConfig::TAppConfig &co
         NKikimrConfig::TBootstrap::TENANT_SLOT_BROKER,
     };
 
-    if (config.HasNbsConfig() && config.GetNbsConfig().GetEnabled()) {
+    // EnableNbsDisksSsdIoV2 is the nbs2 switch, read at process start.
+    if (config.GetFeatureFlags().GetEnableNbsDisksSsdIoV2()) {
         importantTablets.insert(NKikimrConfig::TBootstrap::DBS_CONTROLLER);
     }
 

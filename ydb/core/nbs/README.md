@@ -207,8 +207,9 @@ config:
   grpc_config:
     services_enabled:
     - legacy
+  feature_flags:
+    enable_nbs_disks_ssd_io_v2: true
   nbs_config:
-    enabled: true
     nbs_storage_config:
       scheme_shard_dir: /Root/NBS
       folder_id: "testFolder"

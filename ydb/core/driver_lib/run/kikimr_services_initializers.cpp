@@ -1161,7 +1161,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     }
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
-    if (Config.HasNbsConfig() && Config.GetNbsConfig().GetEnabled()) {
+    // EnableNbsDisksSsdIoV2 is the nbs2 switch, read at process start.
+    if (Config.HasNbsConfig() && Config.GetFeatureFlags().GetEnableNbsDisksSsdIoV2()) {
         auto ssProxy = NYdb::NBS::NStorage::CreateSSProxy(Config.GetNbsConfig().GetNbsStorageConfig());
 
         setup->LocalServices.emplace_back(
@@ -1265,7 +1266,8 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     }
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
-    if (Config.HasNbsConfig() && Config.GetNbsConfig().HasNbsStorageConfig() && Config.GetNbsConfig().GetEnabled()) {
+    // EnableNbsDisksSsdIoV2 is the nbs2 switch, read at process start.
+    if (Config.HasNbsConfig() && Config.GetNbsConfig().HasNbsStorageConfig() && Config.GetFeatureFlags().GetEnableNbsDisksSsdIoV2()) {
         const auto& storageConfig = Config.GetNbsConfig().GetNbsStorageConfig();
         if (storageConfig.HasGlobalDDiskConfig()) {
             nodeWardenConfig->DDiskConfig = storageConfig.GetGlobalDDiskConfig();
@@ -1444,9 +1446,12 @@ void TLocalServiceInitializer::InitializeServices(
     addToLocalConfig(TTabletTypes::BackupController, &NBackup::CreateBackupController, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::WasmCompileController, &NUdfStore::CreateWasmCompileController, TMailboxType::ReadAsFilled, appData->UserPoolId);
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
-    addToLocalConfig(TTabletTypes::BlockStoreVolumeDirect, &NYdb::NBS::NStorage::CreateVolumeTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
-    addToLocalConfig(TTabletTypes::BlockStorePartitionDirect, &NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
-    addToLocalConfig(TTabletTypes::DbsController, &NYdb::NBS::NBlockStore::NStorage::NDbsController::CreateDbsControllerTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    // EnableNbsDisksSsdIoV2 is the nbs2 switch, read at process start.
+    if (Config.GetFeatureFlags().GetEnableNbsDisksSsdIoV2()) {
+        addToLocalConfig(TTabletTypes::BlockStoreVolumeDirect, &NYdb::NBS::NStorage::CreateVolumeTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
+        addToLocalConfig(TTabletTypes::BlockStorePartitionDirect, &NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
+        addToLocalConfig(TTabletTypes::DbsController, &NYdb::NBS::NBlockStore::NStorage::NDbsController::CreateDbsControllerTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    }
 #endif
 
     if (Config.GetShutdownConfig().HasDrainTimeoutSeconds()) {
@@ -3555,6 +3560,11 @@ TNbsServiceInitializer::TNbsServiceInitializer(const TKikimrRunConfig &runConfig
 void TNbsServiceInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
     Y_UNUSED(setup);
     Y_UNUSED(appData);
+
+    // EnableNbsDisksSsdIoV2 is the nbs2 switch, read at process start.
+    if (!Config.GetFeatureFlags().GetEnableNbsDisksSsdIoV2()) {
+        return;
+    }
 
     const auto& config = Config.GetNbsConfig();
     NYdb::NBS::NBlockStore::CreateNbsService(config);

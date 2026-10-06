@@ -1131,7 +1131,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
 
     THolder<TEvPQ::TEvRead> event = MakeHolder<TEvPQ::TEvRead>(0, userInfo.Offset, 0, 0, 1, "",
                                                                user, 0, MAX_BLOB_PART_SIZE * 2, false,
-                                                               !AppData(ctx)->FeatureFlags.GetEnableTopicReadPriorRetention(),
+                                                               false,
                                                                0, 0, "", false, TActorId{});
 
     ctx.Send(ctx.SelfID, event.Release());

@@ -73,6 +73,20 @@ void ExpectBoth(const TVector<ui64>& offsets) {
     UNIT_ASSERT_VALUES_EQUAL(offsets[1], 1u);
 }
 
+ui64 CommittedWriteTimestampMs(TTestContext& tc, const TString& user) {
+    THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
+    auto* req = request->Record.MutablePartitionRequest();
+    req->SetPartition(0);
+    req->MutableCmdGetClientOffset()->SetClientId(user);
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
+    const auto& resp = result->Record.GetPartitionResponse().GetCmdGetClientOffsetResult();
+    return resp.HasWriteTimestampMS() ? resp.GetWriteTimestampMS() : 0;
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(ReadInsideRetention) {
@@ -189,6 +203,31 @@ Y_UNIT_TEST(DirectReadPastRetentionReturnsEmpty) {
     UNIT_ASSERT_VALUES_EQUAL(prepared.GetDirectReadId(), 1u);
     UNIT_ASSERT_C(!prepared.HasWriteTimestampMS(), result->Record.DebugString());
     UNIT_ASSERT_GE_C(prepared.GetReadOffset(), prepared.GetEndOffset(), result->Record.DebugString());
+}
+
+// Both messages stay stored. The commit is moved back to the older one after it is past retention.
+// The timestamp cache must keep that message's write time.
+Y_UNIT_TEST(TimestampLookupUsesStoredCommitOffset) {
+    TReadEnv env;
+    PreparePartition(env.Tc, RetentionTopic(), {TConsumerPreparationParameters{.Name = "user"}});
+    WriteMsg(env.Tc, 1, true);
+    WriteMsg(env.Tc, 2, false);
+
+    const auto written = CmdReadAndGetResult(TPQCmdReadSettings("", 0, 0, 10, Max<i32>(), 0, false, {}, 0, 0, "user"), env.Tc);
+    UNIT_ASSERT_VALUES_EQUAL(written.ResultSize(), 2u);
+    const ui64 atCommit = written.GetResult(0).GetWriteTimestampMS();
+    UNIT_ASSERT(atCommit != written.GetResult(1).GetWriteTimestampMS());
+
+    CmdSetOffset(0, "user", 1, false, env.Tc);
+    env.Tc.Runtime->UpdateCurrentTime(env.Tc.Runtime->GetCurrentTime() + TDuration::Seconds(LifetimeSec + 2));
+    PQGetPartInfo(0, 2, env.Tc);
+    CmdSetOffset(0, "user", 0, false, env.Tc);
+
+    ui64 observed = 0;
+    for (int attempt = 0; attempt < 5 && observed != atCommit; ++attempt) {
+        observed = CommittedWriteTimestampMs(env.Tc, "user");
+    }
+    UNIT_ASSERT_VALUES_EQUAL(observed, atCommit);
 }
 
 } // Y_UNIT_TEST_SUITE

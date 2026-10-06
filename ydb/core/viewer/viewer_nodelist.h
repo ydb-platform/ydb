@@ -69,6 +69,15 @@ public:
                 if (nodeInfo.Location != TNodeLocation()) {
                     NActorsInterconnect::TNodeLocation location;
                     nodeInfo.Location.Serialize(&location, false);
+                    if (location.GetDataCenter().empty()) {
+                        location.ClearDataCenter();
+                    }
+                    if (location.GetRack().empty()) {
+                        location.ClearRack();
+                    }
+                    if (location.GetUnit().empty() || location.GetUnit() == "0") {
+                        location.ClearUnit();
+                    }
                     Proto2Json(location, jsonNodeInfo["Location"]);
 
                     NJson::TJsonValue& jsonPhysicalLocation = jsonNodeInfo["PhysicalLocation"];
@@ -113,8 +122,16 @@ public:
                                             Port:
                                                 type: integer
         )___");
+        auto locationSchema = TProtoToYaml::ProtoToYamlSchema<NActorsInterconnect::TNodeLocation>();
+        for (const auto* field : {"DataCenterNum", "RoomNum", "RackNum", "BodyNum", "Body"}) {
+            locationSchema["properties"].remove(field);
+        }
+        locationSchema["description"] =
+            "Node location from nameservice. Omitted if no location is supplied. "
+            "Empty DataCenter and Rack, and empty or \"0\" Unit, are omitted. "
+            "The object can be empty after normalization.";
         node["get"]["responses"]["200"]["content"]["application/json"]["schema"]["items"]["properties"]["Location"] =
-            TProtoToYaml::ProtoToYamlSchema<NActorsInterconnect::TNodeLocation>();
+            locationSchema;
         return node;
     }
 };

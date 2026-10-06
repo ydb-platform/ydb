@@ -9454,11 +9454,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50000,
-                "Location": {
-                    "DataCenter": "",
-                    "Rack": "",
-                    "Unit": "0"
-                },
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,
@@ -9476,11 +9472,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50001,
-                "Location": {
-                    "DataCenter": "",
-                    "Rack": "",
-                    "Unit": "0"
-                },
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,
@@ -9498,11 +9490,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50001,
-                "Location": {
-                    "DataCenter": "",
-                    "Rack": "",
-                    "Unit": "0"
-                },
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,
@@ -9540,11 +9528,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50001,
-                "Location": {
-                    "DataCenter": "",
-                    "Rack": "",
-                    "Unit": "0"
-                },
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,
@@ -9560,11 +9544,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50000,
-                "Location": {
-                    "DataCenter": "",
-                    "Rack": "",
-                    "Unit": "0"
-                },
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,

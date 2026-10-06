@@ -330,16 +330,33 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NActorsInterconnect::TNodeLocation partialLocation;
         partialLocation.SetRack("rack-only");
 
+        NActorsInterconnect::TNodeLocation unsetLocation;
+        unsetLocation.SetDataCenter("");
+        unsetLocation.SetRack("");
+        unsetLocation.SetUnit("0");
+
+        auto zeroUnitLocation = modernLocation;
+        zeroUnitLocation.SetUnit("0");
+
+        NActorsInterconnect::TNodeLocation zeroNamedLocation;
+        zeroNamedLocation.SetDataCenter("0");
+        zeroNamedLocation.SetRack("0");
+        zeroNamedLocation.SetUnit("1");
+
         const TVector<TNodeLocation> locations = {
             TNodeLocation(modernLocation),
             TNodeLocation(legacyLocation),
             TNodeLocation(partialLocation),
+            TNodeLocation(unsetLocation),
+            TNodeLocation(zeroUnitLocation),
+            TNodeLocation(zeroNamedLocation),
             TNodeLocation(),
         };
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
                 auto* event = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
                 auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+                UNIT_ASSERT(!(*event)->Get()->Nodes.empty());
                 const auto sample = (*event)->Get()->Nodes.front();
                 for (size_t i = 0; i < locations.size(); ++i) {
                     auto& node = nodes->emplace_back(sample);
@@ -369,7 +386,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NJson::ReadJsonTree(R"([
             {"BridgePileName":"pile-1","DataCenter":"sas","Module":"module-1","Rack":"rack/a=b","Unit":"42"},
             {"DataCenter":"1","Module":"2","Rack":"7","Unit":"3"},
-            {"Rack":"rack-only"}
+            {"Rack":"rack-only"},
+            {},
+            {"BridgePileName":"pile-1","DataCenter":"sas","Module":"module-1","Rack":"rack/a=b"},
+            {"DataCenter":"0","Rack":"0","Unit":"1"}
         ])", &expectedLocations, true);
         const auto& nodes = json.GetArray();
         UNIT_ASSERT_VALUES_EQUAL(nodes.size(), locations.size());
@@ -388,13 +408,23 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(legacyPhysicalLocation.at("Room").GetUInteger(), 2);
         UNIT_ASSERT_VALUES_EQUAL(legacyPhysicalLocation.at("Rack").GetUInteger(), 7);
         UNIT_ASSERT_VALUES_EQUAL(legacyPhysicalLocation.at("Body").GetUInteger(), 3);
-        UNIT_ASSERT(!nodes[3].GetMap().contains("Location"));
-        UNIT_ASSERT(!nodes[3].GetMap().contains("PhysicalLocation"));
+        const auto& unsetPhysicalLocation = nodes[3].GetMap().at("PhysicalLocation").GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(unsetPhysicalLocation.at("Location").GetString(), "DC=/R=/U=0/");
+        UNIT_ASSERT_VALUES_EQUAL(unsetPhysicalLocation.at("Body").GetUInteger(), 0);
+        UNIT_ASSERT(!nodes.back().GetMap().contains("Location"));
+        UNIT_ASSERT(!nodes.back().GetMap().contains("PhysicalLocation"));
 
         const auto schema = TJsonNodeList::GetSwagger()["get"]["responses"]["200"]["content"]["application/json"]["schema"];
         const auto locationSchema = schema["items"]["properties"]["Location"];
         UNIT_ASSERT_VALUES_EQUAL(locationSchema["type"].as<std::string>(), "object");
-        UNIT_ASSERT_VALUES_EQUAL(locationSchema["properties"]["Rack"]["type"].as<std::string>(), "string");
+        const auto locationProperties = locationSchema["properties"];
+        UNIT_ASSERT_VALUES_EQUAL(locationProperties.size(), 5);
+        for (const auto* field : {"BridgePileName", "DataCenter", "Module", "Rack", "Unit"}) {
+            UNIT_ASSERT_VALUES_EQUAL(locationProperties[field]["type"].as<std::string>(), "string");
+        }
+        for (const auto* field : {"DataCenterNum", "RoomNum", "RackNum", "BodyNum", "Body"}) {
+            UNIT_ASSERT(!locationProperties[field]);
+        }
     }
 
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {

@@ -901,6 +901,36 @@ Y_UNIT_TEST(TypeCheckSelectColumn) {
     UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
 }
 
+Y_UNIT_TEST(TypeCheckSqlInWithUniversalLookup) {
+    TChecksRequest request;
+    request.Program = R"sql(
+        USE hahn;
+
+        $xs = AsList("1", "2", "3", "4", "5");
+
+        $p = ($a) -> {
+            RETURN IF($a == "", CAST(NULL AS String), $a) IN $xs;
+        };
+
+        INSERT INTO @x (a) VALUES ('');
+
+        COMMIT;
+
+        SELECT
+            EnsureType($p(a), Bool?),
+        FROM @x;
+    )sql";
+    request.ClusterMode = EClusterMode::Unknown;
+    request.Syntax = ESyntax::YQL;
+    request.Filters.ConstructInPlace();
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
+
+    auto res = RunChecks(request);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "typecheck");
+    UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
+}
+
 Y_UNIT_TEST(TypeCheckInsert) {
     TChecksRequest request;
     request.Program = R"sql(

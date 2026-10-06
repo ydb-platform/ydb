@@ -209,7 +209,7 @@ protected:
     friend class TTxMonEvent_ObjectStats;
     friend class TTxMonEvent_StorageRebalance;
     friend class TTxMonEvent_Subactors;
-    friend class TTxMonEvent_NodeEvents;
+    friend class TTxMonEvent_Events;
     friend class TTxMonEvent_NodeInfo;
     friend class TTxMonEvent_ShrinkPool;
     friend class TTxKillNode;

@@ -354,6 +354,11 @@ public:
     }
 };
 
+// link to the NodeInfo page (node details and event history) shown instead of a bare node id
+static TString GetNodeInfoLink(ui64 hiveId, TNodeId nodeId) {
+    return TStringBuilder() << "<a href='?TabletID=" << hiveId << "&page=NodeInfo&node=" << nodeId << "'>" << nodeId << "</a>";
+}
+
 class TTxMonEvent_MemStateNodes : public TTransactionBase<THive> {
 public:
     const TActorId Source;
@@ -403,7 +408,7 @@ public:
         for (const auto& [nodeId, nodeInfoPtr] : nodeIdIndex) {
             const TNodeInfo& x = *nodeInfoPtr;
             out << "<tr>";
-            out << "<td>" << nodeId << "</td>";
+            out << "<td>" << GetNodeInfoLink(Self->TabletID(), nodeId) << "</td>";
             out << "<td>" << x.Local << "</td>";
             out << "<td>" << x.ServicedDomains << "</td>";
             out << "<td>" << x.GetTabletsScheduled() << "</td>";
@@ -1777,7 +1782,7 @@ public:
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=OperationsLog&max=100\";' style='width:138px'>Operations Log</button>";
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
-        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=NodeEvents\";' style='width:138px'>Node Events</button>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=Events\";' style='width:138px'>Events</button>";
         out << "</div>";
         out << "</div>";
 
@@ -5337,10 +5342,6 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
-static TString GetNodeInfoLink(ui64 hiveId, TNodeId nodeId) {
-    return TStringBuilder() << "<a href='?TabletID=" << hiveId << "&page=NodeInfo&node=" << nodeId << "'>" << nodeId << "</a>";
-}
-
 static void RenderNodeEventRow(IOutputStream& out, const TNodeEvent& event) {
     out << "<td>" << event.GetTimestamp().ToStringLocalUpToSeconds() << "</td>"
         << "<td>" << ENodeEventName(event.GetType()) << "</td>"
@@ -5357,15 +5358,15 @@ static NJson::TJsonValue NodeEventToJson(const TNodeEvent& event) {
     return json;
 }
 
-// Recent node events across the whole Hive
-class TTxMonEvent_NodeEvents : public TTransactionBase<THive> {
+// Recent events across the whole Hive: node events now, tablet events are expected to join on the same page
+class TTxMonEvent_Events : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     THolder<NMon::TEvRemoteHttpInfo> Event;
     ui64 MaxCount = THive::RECENT_NODE_EVENTS_SIZE;
     bool Json = false;
 
-    TTxMonEvent_NodeEvents(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+    TTxMonEvent_Events(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
         , Source(source)
         , Event(ev->Release())
@@ -5375,14 +5376,14 @@ public:
         Json = params.Get("format") == "json";
     }
 
-    TTxType GetTxType() const override { return NHive::TXTYPE_MON_NODE_EVENTS; }
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_EVENTS; }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         const auto& history = Self->RecentNodeEvents;
         size_t count = std::min<size_t>(MaxCount, history.Size());
         if (Json) {
             NJson::TJsonValue json;
-            NJson::TJsonValue& events = json["NodeEvents"];
+            NJson::TJsonValue& events = json["Events"];
             events.SetType(NJson::JSON_ARRAY);
             for (size_t i = 0; i < count; ++i) {
                 const TRecentNodeEvent& recent = history.FromNewest(i);
@@ -5587,7 +5588,7 @@ public:
             out << "<p>Node " << NodeId << " is not known to this Hive.</p>";
         } else {
             out << "<h3>Node " << NodeId << " " << EncodeHtmlPcdata(node->Name) << "</h3>";
-            out << "<p><a href='?TabletID=" << Self->TabletID() << "&page=NodeEvents'>All recent node events</a>"
+            out << "<p><a href='?TabletID=" << Self->TabletID() << "&page=Events'>All recent events</a>"
                 << " | <a href='?TabletID=" << Self->TabletID() << "&page=NodeInfo&node=" << NodeId << "&format=json'>JSON</a></p>";
             out << "<table class='table simple-table2'>";
             out << "<tbody>";
@@ -5947,8 +5948,8 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     if (page == "ManualOperations") {
         return Execute(new TTxMonEvent_ManualOps(ev->Sender, ev, this), ctx);
     }
-    if (page == "NodeEvents") {
-        return Execute(new TTxMonEvent_NodeEvents(ev->Sender, ev, this), ctx);
+    if (page == "Events") {
+        return Execute(new TTxMonEvent_Events(ev->Sender, ev, this), ctx);
     }
     if (page == "NodeInfo") {
         return Execute(new TTxMonEvent_NodeInfo(ev->Sender, ev, this), ctx);

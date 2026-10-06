@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     bsc_proxy.cpp
+    deleted_ddisk_storage.cpp
     delete_partition.cpp
     load_actor_adapter.cpp
     part_add_host_to_dbg.cpp
@@ -15,6 +16,7 @@ SRCS(
     part_storevolumeconfig.cpp
     part_setvchunktouched.cpp
     part_updatevchunkstate.cpp
+    part_vchunk.cpp
     partition_cleanup_actor.cpp
     partition_direct.cpp
     partition_direct_actor.cpp

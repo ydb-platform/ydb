@@ -252,6 +252,10 @@ public:
     // Translate host index to NodeId.
     [[nodiscard]] virtual ui32 GetNodeId(THostIndex host) const = 0;
 
+    // Translate host index to the current DDisk id.
+    [[nodiscard]] virtual NKikimr::NBsController::TDDiskId GetDDiskId(
+        THostIndex host) const = 0;
+
     // Query dump for DirectBlockGroup and VChunks.
     virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
 

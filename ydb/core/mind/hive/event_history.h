@@ -2,14 +2,14 @@
 
 #include "hive.h"
 
-#include <vector>
+#include <library/cpp/containers/ring_buffer/ring_buffer.h>
 
 namespace NKikimr {
 namespace NHive {
 
 // In-memory history of important Hive events for debugging. Every event is written to the Hive log
-// at INFO level and kept in memory in bounded ring buffers: per subject (e.g. TNodeInfo::EventHistory)
-// and across the whole Hive (e.g. THive::RecentNodeEvents), see THive::RecordNodeEvent.
+// at INFO level and kept in memory in bounded ring buffers (TStaticRingBuffer): per subject
+// (e.g. TNodeInfo::EventHistory) and across the whole Hive (e.g. THive::RecentNodeEvents), see THive::RecordNodeEvent.
 //
 // THiveEvent and the two enums below are shared by all kinds of events: node events today,
 // tablet events and Hive settings changes are expected to follow.
@@ -97,49 +97,6 @@ struct THiveEvent {
 };
 
 static_assert(sizeof(THiveEvent) <= 16, "THiveEvent is expected to stay compact");
-
-// Ring buffer with a fixed capacity that allocates lazily: an idle node costs nothing.
-template <typename T, size_t Capacity>
-class TLazyRingBuffer {
-    std::vector<T> Items;
-    size_t Begin = 0; // index of the oldest item once the buffer is full
-
-public:
-    static constexpr size_t CAPACITY = Capacity;
-
-    size_t Size() const {
-        return Items.size();
-    }
-
-    bool Empty() const {
-        return Items.empty();
-    }
-
-    void Push(T&& item) {
-        if (Items.size() < Capacity) {
-            if (Items.size() == Items.capacity()) {
-                Items.reserve(std::min(std::max<size_t>(4, Items.capacity() * 2), Capacity));
-            }
-            Items.push_back(std::move(item));
-        } else {
-            Items[Begin] = std::move(item);
-            Begin = (Begin + 1) % Capacity;
-        }
-    }
-
-    // index 0 is the newest item
-    const T& FromNewest(size_t index) const {
-        Y_ASSERT(index < Items.size());
-        return Items[(Begin + Items.size() - 1 - index) % Items.size()];
-    }
-
-    template <typename TCallback>
-    void ForEachNewestFirst(TCallback&& callback) const {
-        for (size_t i = 0; i < Items.size(); ++i) {
-            callback(FromNewest(i));
-        }
-    }
-};
 
 struct TRecentNodeEvent {
     TNodeId NodeId = 0;

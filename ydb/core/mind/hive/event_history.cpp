@@ -80,8 +80,8 @@ void THive::RecordNodeEvent(TNodeInfo& node, EHiveEventType type, EHiveEventReas
         {"restarts", node.GetRestartsPerPeriod()},
         {"reason", EHiveEventReasonName(reason)},
         {"details", event.Details});
-    RecentNodeEvents.Push(TRecentNodeEvent{.NodeId = node.Id, .Event = event});
-    node.EventHistory.Push(std::move(event));
+    RecentNodeEvents.PushBack(TRecentNodeEvent{.NodeId = node.Id, .Event = event});
+    node.EventHistory.PushBack(event);
 }
 
 } // NHive

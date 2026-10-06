@@ -359,6 +359,15 @@ static TString GetNodeInfoLink(ui64 hiveId, TNodeId nodeId) {
     return TStringBuilder() << "<a href='?TabletID=" << hiveId << "&page=NodeInfo&node=" << nodeId << "'>" << nodeId << "</a>";
 }
 
+// calls callback for the items of a TSimpleRingBuffer starting from the newest one, at most maxCount of them
+template <typename TBuffer, typename TCallback>
+static void ForEachNewestFirst(const TBuffer& buffer, size_t maxCount, TCallback&& callback) {
+    size_t count = 0;
+    for (size_t i = buffer.TotalSize(); i > buffer.FirstIndex() && count < maxCount; --i, ++count) {
+        callback(buffer[i - 1]);
+    }
+}
+
 class TTxMonEvent_MemStateNodes : public TTransactionBase<THive> {
 public:
     const TActorId Source;
@@ -5380,19 +5389,17 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         const auto& history = Self->RecentNodeEvents;
-        size_t count = std::min<size_t>(MaxCount, history.Size());
         if (Json) {
             NJson::TJsonValue json;
             NJson::TJsonValue& events = json["Events"];
             events.SetType(NJson::JSON_ARRAY);
-            for (size_t i = 0; i < count; ++i) {
-                const TRecentNodeEvent& recent = history.FromNewest(i);
+            ForEachNewestFirst(history, MaxCount, [&](const TRecentNodeEvent& recent) {
                 NJson::TJsonValue& jsonEvent = events.AppendValue(NodeEventToJson(recent.Event));
                 jsonEvent["NodeId"] = recent.NodeId;
                 if (const TNodeInfo* node = Self->FindNode(recent.NodeId)) {
                     jsonEvent["NodeName"] = node->Name;
                 }
-            }
+            });
             TStringStream out;
             NJson::WriteJson(&out, &json);
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(out.Str()));
@@ -5415,15 +5422,14 @@ public:
         out << "<tr><th>Timestamp</th><th>Event</th><th>Reason</th><th>Details</th><th>Node</th><th>Name</th></tr>";
         out << "</thead>";
         out << "<tbody>";
-        for (size_t i = 0; i < count; ++i) {
-            const TRecentNodeEvent& recent = history.FromNewest(i);
+        ForEachNewestFirst(history, MaxCount, [&](const TRecentNodeEvent& recent) {
             const TNodeInfo* node = Self->FindNode(recent.NodeId);
             out << "<tr>";
             RenderNodeEventRow(out, recent.Event);
             out << "<td>" << GetNodeInfoLink(Self->TabletID(), recent.NodeId) << "</td>";
             out << "<td>" << (node ? EncodeHtmlPcdata(node->Name) : TString("(deleted)")) << "</td>";
             out << "</tr>";
-        }
+        });
         out << "</tbody>";
         out << "</table>";
         out << "</body>";
@@ -5566,7 +5572,7 @@ public:
                 }
                 NJson::TJsonValue& events = json["Events"];
                 events.SetType(NJson::JSON_ARRAY);
-                node->EventHistory.ForEachNewestFirst([&events](const THiveEvent& event) {
+                ForEachNewestFirst(node->EventHistory, Max<size_t>(), [&events](const THiveEvent& event) {
                     events.AppendValue(NodeEventToJson(event));
                 });
             }
@@ -5604,7 +5610,7 @@ public:
             out << "<tr><th>Timestamp</th><th>Event</th><th>Reason</th><th>Details</th></tr>";
             out << "</thead>";
             out << "<tbody>";
-            node->EventHistory.ForEachNewestFirst([&out](const THiveEvent& event) {
+            ForEachNewestFirst(node->EventHistory, Max<size_t>(), [&out](const THiveEvent& event) {
                 out << "<tr>";
                 RenderNodeEventRow(out, event);
                 out << "</tr>";

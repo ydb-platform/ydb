@@ -527,7 +527,7 @@ protected:
 
     // last events across all nodes, per-node history lives in TNodeInfo::EventHistory
     static constexpr size_t RECENT_NODE_EVENTS_SIZE = 256;
-    TLazyRingBuffer<TRecentNodeEvent, RECENT_NODE_EVENTS_SIZE> RecentNodeEvents;
+    TStaticRingBuffer<TRecentNodeEvent, RECENT_NODE_EVENTS_SIZE> RecentNodeEvents;
     std::vector<TTabletMoveInfo> TabletMoveSamplesForLog; // stores (at most) MOVE_SAMPLES_PER_LOG_ENTRY highest priority moves in a heap
     static constexpr size_t MOVE_SAMPLES_PER_LOG_ENTRY = 10;
     std::unordered_map<TTabletTypes::EType, ui64> TabletMovesByTypeForLog;

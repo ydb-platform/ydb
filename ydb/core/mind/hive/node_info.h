@@ -109,7 +109,8 @@ public:
     TBridgePileId BridgePileId;
     THiveDrain* DrainActor = nullptr;
     static constexpr size_t EVENT_HISTORY_SIZE = 50;
-    TLazyRingBuffer<THiveEvent, EVENT_HISTORY_SIZE> EventHistory; // newest events of this node, see THive::RecordNodeEvent
+    // newest events of this node, see THive::RecordNodeEvent; capacity is reserved upfront (EVENT_HISTORY_SIZE * sizeof(THiveEvent))
+    TStaticRingBuffer<THiveEvent, EVENT_HISTORY_SIZE> EventHistory;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;

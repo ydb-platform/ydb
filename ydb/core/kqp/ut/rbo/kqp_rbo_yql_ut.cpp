@@ -6923,6 +6923,14 @@ FROM (
                 FROM `/Root/t1`
                 ORDER BY a;
             )"},
+            {"interval sum without a partition", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a,
+                    Sum(Interval("PT1S")) OVER () AS total
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
             {"running aggregates over a not null measure", R"(
                 PRAGMA YqlSelect = "force";
 

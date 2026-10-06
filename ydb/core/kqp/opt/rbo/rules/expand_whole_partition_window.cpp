@@ -73,10 +73,10 @@ TIntrusivePtr<IOperator> TExpandWholePartitionWindowRule::SimpleMatchAndApply(co
         const auto aggregated = registry.AddCopy(output);
         aggregations.Add(aggregated, TOpAggregationTraits{rebindings.At(argument), func.Function});
 
-        // A scalar aggregate is optional even over a non-optional input, but every
+        // A scalar aggregate is optional even where the window aggregate is not, but every
         // row joined to it comes from a non-empty input, so the value is never NULL.
         auto value = MakeColumnAccess(aggregated, pos, &ctx, &props);
-        if (func.Function != "count" && !grouped && !IsNullableIU(windowInput, argument, ctx)) {
+        if (func.Function != "count" && !grouped && !IsNullableIU(input, output, ctx)) {
             value = MakeUnaryCallable("Unwrap", value);
         }
         results.Add(output, std::move(value));

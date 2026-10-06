@@ -1007,29 +1007,6 @@ private:
         Send(SelfId(), new TEvPrivate::TEvSourceDataReady(), 0, 1 + clusterIndex);
     }
 
-    void CheckAvailableClusters() {
-        const bool isLogbroker =  Clusters.size() > 2;
-        if (!isLogbroker) {
-            return;
-        }
-
-        std::vector<std::string> unavailableClusters;
-        for (const auto& state : Clusters) {
-            if (!state.Available) {
-                unavailableClusters.push_back(state.Info.Name);
-            }
-        }
-        if (unavailableClusters.size() >= 2) {
-            TStringBuilder message;
-            message << "Failed to read topic \"" << SourceParams.GetTopicPath()
-                << "\": " << unavailableClusters.size() << " clusters are unavailable simultaneously: "
-                << JoinSeq(", ", unavailableClusters);
-            SRC_LOG_E(message);
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::UNAVAILABLE));
-            return;
-        }
-    }
-
     // must be called (visited) with bound allocator
     struct TTopicEventProcessor {
         void operator()(NFq::TMessageStreamDataEvent& event) {
@@ -1121,7 +1098,31 @@ private:
 
             ClusterState.Available = false;
             Self.UpdateAvailableClustersMetric();
-            Self.CheckAvailableClusters();
+
+            const bool isLogbroker =  Self.Clusters.size() > 2;
+            if (!isLogbroker) {
+                TIssue issue(message);
+                for (const auto& subIssue : ev.Issues) {
+                    issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
+                }
+                Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({issue}), NYql::NDqProto::StatusIds::BAD_REQUEST));
+                return;
+            }
+
+            std::vector<std::string> unavailableClusters;
+            for (const auto& state : Self.Clusters) {
+                if (!state.Available) {
+                    unavailableClusters.push_back(state.Info.Name);
+                }
+            }
+            if (unavailableClusters.size() >= 2) {
+                TStringBuilder message;
+                message << "Failed to read topic \"" << Self.SourceParams.GetTopicPath()
+                    << "\": " << unavailableClusters.size() << " clusters are unavailable simultaneously: "
+                    << JoinSeq(", ", unavailableClusters);
+                SRC_LOG_E(message);
+                Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::UNAVAILABLE));
+            }
 
             if (!ClusterState.ReconnectScheduled) {
                 ClusterState.ReconnectScheduled = true;

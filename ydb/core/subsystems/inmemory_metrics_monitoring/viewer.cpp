@@ -318,7 +318,7 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
   if(fixed){[begin,end]=fixed;}else{end=series.length?Math.max(...series.map(s=>s.end)):Date.now();begin=end-Number($('period').value)*1000;}
 
   legend();for(const chart of charts)chart.destroy();charts=[];$('charts').replaceChildren();$('notes').replaceChildren();
-  if(series.some(s=>s.truncated))$('notes').append(text('p','History is truncated to the latest 1000 points per line.','imm-note'));
+  if(series.some(s=>s.truncated))$('notes').append(text('p','History is truncated to the latest 65,536 points per line.','imm-note'));
   if(limited)$('notes').append(text('p','Comparison is limited to 16 matching series per query and 64 series in total.','imm-note'));
   const separate=$('separate').checked;$('charts').classList.toggle('imm-separated',separate);$('charts').style.setProperty('--columns',$('columns').value);$('columns-label').hidden=!separate;updateSettingsTargets();
   const groups=separate&&appliedQueries.length?appliedQueries.map((q,index)=>({id:q.id,title:'Query '+String.fromCharCode(65+index)+' \u00b7 '+q.metric})): [{id:null,title:'All queries'}];

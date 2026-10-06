@@ -52,6 +52,7 @@ std::optional<size_t> EstimateCompositeSize(TType* type, TEstimate&& estimate) {
     const auto* tuple = type->IsTuple() ? AS_TYPE(TTupleType, type) : nullptr;
     const auto* structure = type->IsStruct() ? AS_TYPE(TStructType, type) : nullptr;
     const ui32 count = tuple ? tuple->GetElementsCount() : structure->GetMembersCount();
+    // Tuple/struct contents are generally boxed into a TDirectArrayHolderInplace instance
     size_t result = sizeof(TUnboxedValuePod) + sizeof(TDirectArrayHolderInplace);
     for (ui32 i = 0; i < count; ++i) {
         const auto itemSize = estimate(i, tuple ? tuple->GetElementType(i) : structure->GetMemberType(i));
@@ -66,6 +67,9 @@ std::optional<size_t> EstimateCompositeSize(TType* type, TEstimate&& estimate) {
 std::optional<size_t> GetStaticUvSizeBound(TType* type) {
     if (type->IsOptional()) {
         return GetStaticUvSizeBound(AS_TYPE(TOptionalType, type)->GetItemType());
+    }
+    if (type->IsTagged()) {
+        return GetStaticUvSizeBound(AS_TYPE(TTaggedType, type)->GetBaseType());
     }
     if (type->IsData()) {
         const auto slot = AS_TYPE(TDataType, type)->GetDataSlot();
@@ -101,8 +105,8 @@ std::optional<size_t> TDqHashCombineTupleLayout::EstimateValueMemorySize(const T
     if (!value.IsBoxed()) {
         return {};
     }
-    while (type->IsOptional()) {
-        type = AS_TYPE(TOptionalType, type)->GetItemType();
+    while (type->IsOptional() || type->IsTagged()) {
+        type = type->IsOptional() ? AS_TYPE(TOptionalType, type)->GetItemType() : AS_TYPE(TTaggedType, type)->GetBaseType();
     }
     return EstimateCompositeSize(type, [&](ui32 index, TType* itemType) {
         return EstimateValueMemorySize(value.GetElement(index), itemType);

@@ -1790,7 +1790,13 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
                 UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output, 4), NUdf::EFetchStatus::Ok);
                 UNIT_ASSERT_VALUES_EQUAL(inputRows, 2 * sampleGroups - 1);
             }
-            const size_t recordBytes = 40;
+            const auto* outputType = AS_TYPE(TMultiType, AS_TYPE(TStreamType, root.GetStaticType())->GetItemType());
+            const std::vector<TType*> keyTypes = {outputType->GetElementType(0)};
+            const std::vector<TType*> stateTypes = {
+                outputType->GetElementType(1), outputType->GetElementType(2), outputType->GetElementType(3),
+            };
+            const size_t recordBytes = TDqHashCombineLayout(keyTypes, stateTypes).GetRecordSize();
+            // One sampled group has an extra string byte, so the average rounds up by one byte
             const size_t externalBytes = sizeof(TDirectArrayHolderInplace) + 2 * sizeof(NUdf::TUnboxedValuePod) +
                 sizeof(*string.AsRawStringValue()) + text.size() + 1;
             using TMap = TDqRobinHoodHashSet<char*, TDqHashCombinePackedEqual, std::allocator<char>>;

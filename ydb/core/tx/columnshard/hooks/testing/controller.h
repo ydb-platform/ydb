@@ -127,8 +127,7 @@ private:
 
     public:
         TBlobInfo(const NOlap::TUnifiedBlobId& blobId)
-            : BlobId(blobId)
-        {
+            : BlobId(blobId) {
         }
 
         void AddOwner(const ui64 tabletId) {
@@ -341,6 +340,12 @@ public:
     ui32 GetShardActualsCount() const {
         TGuard<TMutex> g(Mutex);
         return ShardActuals.size();
+    }
+
+    const ::NKikimr::NColumnShard::TColumnShard* GetTheOnlyShard() const {
+        TGuard<TMutex> g(Mutex);
+        AFL_VERIFY(ShardActuals.size() == 1);
+        return ShardActuals.begin()->second;
     }
 
     void DisableBackground(const EBackground id) {

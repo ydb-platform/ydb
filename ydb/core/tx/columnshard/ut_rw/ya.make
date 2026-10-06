@@ -21,11 +21,8 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
-<<<<<<< HEAD
-=======
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/tx_proxy
->>>>>>> 6744d62c8b2 (Fix leaked locks of not proposed transactions (#54223))
     ydb/library/testlib/s3_recipe_helper
     ydb/public/lib/yson_value
     ydb/services/metadata

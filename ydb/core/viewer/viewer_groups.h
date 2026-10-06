@@ -2828,9 +2828,12 @@ public:
         stateInfo["properties"]["Status"]["description"] = "one of: ok, starting, replicating, degraded, dead";
         stateInfo["properties"]["Count"]["description"] =
             "Number after the colon in State: missing or not-ready disks for none/block-4-2, "
-            "affected fail realms for mirror-3-dc. Omitted for ok.";
+            "affected fail realms for mirror-3-dc. Mirror-3-dc counts include only disks with a known non-READY status. "
+            "Omitted for ok.";
         stateInfo["properties"]["FailedDomainsPerRealm"]["description"] =
             "For mirror-3-dc, non-zero failed-domain counts per affected fail realm, sorted in descending order. "
+            "Only disks with a known non-READY status contribute; disks without status data are excluded, "
+            "so the sum can differ from MissingDisks. "
             "Matches the values in parentheses in State. Omitted for other erasure schemes and ok.";
         storageGroupProperties["State"]["description"] =
             "could be one of: \n"
@@ -2838,7 +2841,9 @@ public:
             " * `starting:n` - group is okay, but n disks are starting\n"
             " * `replicating:n` - group is okay, all disks are available, but n disks are replicating\n"
             " * `degraded:n(m, m...)` - group is okay, but n data centers / racks are not available (with m devices)\n"
-            " * `dead:n` - group is not okay, n data centers / racks are not available\n";
+            " * `dead:n` - group is not okay, n data centers / racks are not available\n"
+            "When a known state cannot be determined, the legacy value can be `:0()` "
+            "(mirror-3-dc with missing disk status data), or State can be omitted.";
         storageGroupProperties["Kind"]["description"] = "kind of the disks in this group (specified by the user)";
         storageGroupProperties["MediaType"]["description"] = "actual physical media type of the disks in this group";
         storageGroupProperties["MissingDisks"]["description"] = "number of disks missing";

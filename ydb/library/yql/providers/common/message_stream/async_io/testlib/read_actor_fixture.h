@@ -71,6 +71,8 @@ struct TFixture {
     std::shared_ptr<TClient> Client = std::make_shared<TClient>(Session);
     TFakeCASetup Setup;
     bool Finished = false;
+    bool WatermarksEnabled = false;
+    TMaybe<TInstant> LastWatermark;
     bool EnableStreamingAutopartitioning = false;
     NThreading::TFuture<std::shared_ptr<IMessageStreamReadSession>> PendingSession;
 
@@ -84,6 +86,8 @@ struct TFixture {
             settings.Consumer = "consumer";
             settings.StopAtCurrentEndOffsets = !streaming;
             settings.RequireWriteTime = requireTime;
+            settings.WatermarksEnabled = WatermarksEnabled;
+            settings.WatermarkGranularity = TDuration::Seconds(1);
             settings.EnableStreamingAutopartitioning = EnableStreamingAutopartitioning;
             settings.MetricsSource = "test";
             settings.HolderFactory = &actor.GetHolderFactory();
@@ -117,6 +121,7 @@ struct TFixture {
             NKikimr::NMiniKQL::TUnboxedValueBatch batch;
             TMaybe<TInstant> watermark;
             actor.DqAsyncInput->GetAsyncInputData(batch, watermark, Finished, space);
+            LastWatermark = watermark;
             batch.ForEachRow([&](const NUdf::TUnboxedValue& value) { rows.emplace_back(value.AsStringRef()); });
         });
         return rows;

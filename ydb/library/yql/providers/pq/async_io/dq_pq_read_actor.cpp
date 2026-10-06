@@ -76,8 +76,6 @@ public:
     void StopConsumerOffsetInitialization() override { TPqReadState::StopConsumerOffsetInitialization(); }
     void HandleConsumerOffsets(TEvents::TEvInvokeResult::TPtr& event) override { TPqReadState::HandleConsumerOffsets(event); }
 private:
-    void InitWatermarkTracker() override {} // The common actor owns watermark tracking.
-    void SchedulePartitionIdlenessCheck(TInstant) override {}
     void OnConsumerOffsetsInitialized() override {
         TActivationContext::Send(new IEventHandle(ComputeActorId, TActivationContext::AsActorContext().SelfID,
             new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex)));

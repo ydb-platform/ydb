@@ -602,7 +602,7 @@ private:
             settings.PartitionIds.push_back(NFq::TMessageStreamPartitionId{partitionId});
         }
         settings.ReadFromWriteTime = StartingMessageTimestamp;
-        settings.RequireWriteTime = Settings.RequireWriteTime;
+        settings.RequireWriteTime = Settings.RequireWriteTime || Settings.WatermarksEnabled;
         settings.MaxMemoryUsageBytes = BufferSize;
         settings.TraceId = LogPrefix;
         settings.AutoPartitioningSupport = !Settings.StopAtCurrentEndOffsets;
@@ -833,7 +833,7 @@ private:
                     needSkip = true;
                 }
 
-                if (Self.Settings.RequireWriteTime && !record.WriteTime) {
+                if ((Self.Settings.RequireWriteTime || Self.Settings.WatermarksEnabled) && !record.WriteTime) {
                     ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::Unsupported)
                         << "MessageStream reader requires backend message write time";
                 }

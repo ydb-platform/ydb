@@ -364,8 +364,6 @@ void TPqReadState::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, TSourc
 }
 
 void TPqReadState::LoadState(const TSourceState& state) {
-    InitWatermarkTracker();
-
     TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
     ui64 ingressBytes = 0;
     for (const auto& data : state.Data) {
@@ -408,36 +406,6 @@ const NYql::NDq::TDqAsyncStats& TPqReadState::GetIngressStats() const {
 
 TString TPqReadState::GetSessionId() const {
     return "empty";
-}
-
-void TPqReadState::InitWatermarkTracker(TDuration lateArrivalDelay, TDuration idleTimeout, const ::NMonitoring::TDynamicCounterPtr& counters) {
-    const auto granularity = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs());
-    SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: " << granularity
-        << " late arrival delay: " << lateArrivalDelay
-        << " idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
-        << " idle timeout: " << idleTimeout
-    );
-
-    if (!SourceParams.GetWatermarks().GetEnabled()) {
-        return;
-    }
-
-    WatermarkTracker.ConstructInPlace(
-        granularity,
-        SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
-        lateArrivalDelay,
-        idleTimeout,
-        LogPrefix,
-        counters
-    );
-}
-
-void TPqReadState::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime) {
-    Y_DEBUG_ABORT_UNLESS(WatermarkTracker);
-    if (const auto nextIdleCheckAt = WatermarkTracker->PrepareIdlenessCheck(systemTime)) {
-        SRC_LOG_T("Next idleness check scheduled at " << *nextIdleCheckAt);
-        SchedulePartitionIdlenessCheck(*nextIdleCheckAt);
-    }
 }
 
 TString TPqReadState::LogPartitionToOffset() const {

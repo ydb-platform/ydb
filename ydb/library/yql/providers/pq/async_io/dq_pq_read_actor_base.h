@@ -3,7 +3,6 @@
 
 #include <ydb/library/actors/core/invoke.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
 #include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
@@ -23,8 +22,6 @@ protected:
     TVector<NPq::NProto::TDqReadTaskParams> ReadParams;
     const NActors::TActorId ComputeActorId;
     const ui64 TaskId = 0;
-    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
-    // << Initialized when watermark tracking is enabled
 
 public:
     virtual ~TPqReadState() = default;
@@ -48,15 +45,7 @@ public:
     const TDqAsyncStats& GetIngressStats() const;
 
 protected:
-    virtual void SchedulePartitionIdlenessCheck(TInstant) = 0;
-
-    virtual void InitWatermarkTracker() = 0;
-
     virtual TString GetSessionId() const;
-
-    void InitWatermarkTracker(TDuration, TDuration, const ::NMonitoring::TDynamicCounterPtr& counters = {});
-
-    void MaybeSchedulePartitionIdlenessCheck(TInstant systemTime);
 
     void HandleConsumerOffsets(NActors::TEvents::TEvInvokeResult::TPtr& ev);
 

@@ -41,6 +41,26 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         UNIT_ASSERT_STRING_CONTAINS(error.GetValue().ToString(), "auto partitioning is not supported");
         UNIT_ASSERT_VALUES_EQUAL(f.Control->Exhausted, 0);
     }
+    Y_UNIT_TEST(WatermarksRequireWriteTime) {
+        TFixture f;
+        f.WatermarksEnabled = true;
+        f.Init(true);
+        f.Start(std::nullopt);
+        f.Data(0);
+        UNIT_ASSERT_EXCEPTION(f.Read(), TMessageStreamException);
+        UNIT_ASSERT(f.Client->Settings.RequireWriteTime);
+    }
+    Y_UNIT_TEST(WatermarkIsDeliveredWithTimestampedRecord) {
+        TFixture f;
+        f.WatermarksEnabled = true;
+        f.Init(true);
+        f.Start(std::nullopt);
+        f.Data(0, "payload", true);
+        UNIT_ASSERT_VALUES_EQUAL(f.Read().size(), 1);
+        UNIT_ASSERT(f.Client->Settings.RequireWriteTime);
+        UNIT_ASSERT(f.LastWatermark.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(*f.LastWatermark, TInstant::Seconds(1));
+    }
     Y_UNIT_TEST(RequiredWriteTimeIsValidated) {
         TFixture f;
         f.Init(true, true);

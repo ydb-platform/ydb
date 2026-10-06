@@ -30,6 +30,7 @@
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 
 #include <optional>
@@ -61,6 +62,23 @@ private:
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
 
     NActors::TActorId BscProxy;
+
+    // Which operation sent a BSC request. The reply carries the cookie back.
+    enum class EBscRequest
+    {
+        // First bulk allocation that creates the direct block groups.
+        InitialAllocation,
+        // Add one host to an existing direct block group.
+        AddHost,
+        // Remove one host from an existing direct block group.
+        RemoveHost,
+    };
+
+    // Cookie on the next BSC request.
+    ui64 NextBscCookie = 1;
+    // BSC requests waiting for a reply, by cookie. Up to two: the proxy
+    // rejects a second send with TRYLATER while the first is still in flight.
+    THashMap<ui64, EBscRequest> BscRequestsInFlight;
 
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
@@ -131,13 +149,17 @@ private:
     // Remove tablet and wipe disk
     STFUNC(StateDelete);
 
-    // SendData via the BSC proxy actor (created on first use).
+    // Sends request through the BSC proxy (created on first use). kind is
+    // recorded under a fresh cookie so the reply is delivered to that
+    // operation. Skipped in StateDelete.
     void SendToBsc(
         const NActors::TActorContext& ctx,
-        THolder<NActors::IEventBase> request,
-        ui64 cookie = 0);
+        EBscRequest kind,
+        THolder<NActors::IEventBase> request);
 
-    // Poison the BSC proxy and drop the id. No-op if it was never created.
+    // Poison the BSC proxy and drop the id. Outstanding BSC cookies are
+    // forgotten, so replies already on the way are dropped as unknown. No-op
+    // on the proxy if it was never created.
     void StopBscProxy(const NActors::TActorContext& ctx);
 
     // Common handlers in different states
@@ -188,12 +210,15 @@ private:
         NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
     MakeAllocateDDiskBlockGroupRequest() const;
 
+    // Delivers a BSC reply to the operation that sent the request, found by
+    // cookie. A reply whose cookie is not outstanding is logged and dropped.
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    // Sets up the group from the first (bulk) allocation response.
+    // Sets up the group from the first (bulk) allocation response. Ignores a
+    // later one from a repeated request.
     void HandleInitialAllocationResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,

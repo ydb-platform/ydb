@@ -41,6 +41,38 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 using namespace NKikimr;
 using namespace NActors;
 
+namespace {
+
+using TVolume = NNbs1CompatApi::NBlockStore::NProto::TVolume;
+using TEvStatVolumeResponse =
+    NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeResponse;
+
+// Fills TVolume for a StatVolume reply from the stored config. Clients
+// stays empty.
+void FillVolume(const NKikimrBlockStore::TVolumeConfig& config, TVolume* volume)
+{
+    Y_ABORT_UNLESS(config.PartitionsSize() > 0);
+
+    volume->SetDiskId(config.GetDiskId());
+    volume->SetBlockSize(config.GetBlockSize());
+    volume->SetBlocksCount(config.GetPartitions(0).GetBlockCount());
+    volume->SetStorageMediaKind(
+        static_cast<NNbs1CompatApi::NProto::EStorageMediaKind>(
+            config.GetStorageMediaKind()));
+    volume->SetConfigVersion(config.GetVersion());
+    if (config.HasProjectId()) {
+        volume->SetProjectId(config.GetProjectId());
+    }
+    if (config.HasFolderId()) {
+        volume->SetFolderId(config.GetFolderId());
+    }
+    if (config.HasCloudId()) {
+        volume->SetCloudId(config.GetCloudId());
+    }
+}
+
+}   // namespace
+
 TPartitionActor::TPartitionActor(
     const TActorId& tablet,
     NKikimr::TTabletStorageInfo* info)
@@ -851,6 +883,36 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
 }
 
+void TPartitionActor::HandleStatVolume(
+    const NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest::TPtr&
+        ev,
+    const NActors::TActorContext& ctx)
+{
+    if (VolumeConfig.PartitionsSize() == 0) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Reject StatVolume: volume config is not loaded",
+            LogTitle.GetWithTime().c_str());
+
+        auto response = std::make_unique<TEvStatVolumeResponse>(
+            MakeError(E_REJECTED, "volume config is not loaded"));
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Handle StatVolume for %s",
+        LogTitle.GetWithTime().c_str(),
+        VolumeConfig.GetDiskId().c_str());
+
+    auto response = std::make_unique<TEvStatVolumeResponse>();
+    FillVolume(VolumeConfig, response->Record.MutableVolume());
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
 void TPartitionActor::HandleMountSession(
     const TEvPartitionSession::TEvMount::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -1032,6 +1094,9 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
             HandleUpdateVolumeConfig);
+        HFunc(
+            NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest,
+            HandleStatVolume);
         HFunc(
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
             HandleUpdateVChunkConfig);

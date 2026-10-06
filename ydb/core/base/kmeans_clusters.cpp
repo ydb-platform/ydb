@@ -95,16 +95,6 @@ namespace {
         return result;
     }
 
-    ui64 ParseUInt64(const TString& name, const TString& value, ui64 minValue, ui64 maxValue, TString& error) {
-        ui64 result = 0;
-        if (!TryFromString(value, result)) {
-            error = TStringBuilder() << "Invalid " << name << ": " << value;
-            return result;
-        }
-        ValidateSettingInRange(name, result, minValue, maxValue, error);
-        return result;
-    }
-
     double ParseDouble(const TString& name, const TString& value, TString& error) {
         double result = 0;
         if (!TryFromString(value, result)) {
@@ -747,21 +737,6 @@ namespace {
             return false;
         }
 
-        if ((settings.has_min_rows() && settings.min_rows() == 0)
-                || (settings.has_delta_rows() && settings.delta_rows() == 0)) {
-            error = "min_rows and delta_rows must be positive";
-            return false;
-        }
-
-        if (settings.has_m()
-            && !ValidateSettingInRange("M", settings.m(), 1, MaxHnswM, error)) {
-            return false;
-        }
-        if (settings.has_ef_construction()
-            && !ValidateSettingInRange("ef_construction", settings.ef_construction(), 1, MaxHnswEfConstruction, error)) {
-            return false;
-        }
-
         if (partial) {
             if (settings.has_vector_type()) {
                 if (settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED) {
@@ -1175,18 +1150,6 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
         settings.set_overlap_ratio(ParseDouble(nameLower, value, error));
     } else if (nameLower == "adaptive_clusters") {
         settings.set_adaptive_clusters(ParseBool(nameLower, value, error));
-    } else if (nameLower == "min_rows") {
-        settings.mutable_settings()->set_min_rows(
-            ParseUInt64(nameLower, value, 1, Max<ui64>(), error));
-    } else if (nameLower == "m") {
-        settings.mutable_settings()->set_m(
-            ParseUInt32(nameLower, value, 1, MaxHnswM, error));
-    } else if (nameLower == "ef_construction") {
-        settings.mutable_settings()->set_ef_construction(
-            ParseUInt32(nameLower, value, 1, MaxHnswEfConstruction, error));
-    } else if (nameLower == "delta_rows") {
-        settings.mutable_settings()->set_delta_rows(
-            ParseUInt64(nameLower, value, 1, Max<ui64>(), error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;

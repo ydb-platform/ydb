@@ -12,8 +12,8 @@
 #include <yt/yt/core/concurrency/thread_affinity.h>
 #include <yt/yt/core/concurrency/context_switch.h>
 
-#include <library/cpp/yt/threading/event_count.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/event_count.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
@@ -318,7 +318,7 @@ protected:
     std::atomic<int> FutureRefCount_;
 
     //! Protects the following section of members.
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::atomic<bool> Canceled_ = false;
     std::atomic<bool> Set_;
     std::atomic<bool> AbandonedUnset_ = false;
@@ -327,7 +327,7 @@ protected:
     TError ResultError_;
     TVoidResultHandlers VoidResultHandlers_;
     TCancelHandlers CancelHandlers_;
-    mutable std::unique_ptr<NThreading::TEvent> ReadyEvent_;
+    mutable std::unique_ptr<TEvent> ReadyEvent_;
 
     explicit constexpr TFutureState(TOKFutureTag)
         : TCancelableStateBase(TOKFutureTag())
@@ -357,10 +357,10 @@ protected:
     virtual void ResetResult();
     virtual void SetResultError(const TError& error);
     virtual bool TrySetError(const TError& error);
-    virtual void SetErrorGuarded(const TError& error, TGuard<NThreading::TSpinLock>&& guard);
+    virtual void SetErrorGuarded(const TError& error, TGuard<TSpinLock>&& guard);
 
     template <bool MustSet, class F>
-    bool DoRunSetter(F setter, TGuard<NThreading::TSpinLock>&& guard)
+    bool DoRunSetter(F setter, TGuard<TSpinLock>&& guard)
     {
         YT_ASSERT_SPINLOCK_AFFINITY(*guard.GetMutex());
         YT_ASSERT(!AbandonedUnset_);
@@ -373,7 +373,7 @@ protected:
         Set_ = true;
 
         bool canceled = Canceled_;
-        NThreading::TEvent* readyEvent = ReadyEvent_.get();
+        TEvent* readyEvent = ReadyEvent_.get();
 
         guard.Release();
 
@@ -393,7 +393,7 @@ protected:
     }
 
     template <bool MustSet>
-    bool DoTrySet(const TError& error, TGuard<NThreading::TSpinLock>&& guard)
+    bool DoTrySet(const TError& error, TGuard<TSpinLock>&& guard)
     {
         // Calling subscribers may release the last reference to this.
         TIntrusivePtr<TFutureState<void>> this_(this);
@@ -405,7 +405,7 @@ protected:
             std::move(guard));
     }
 
-    virtual bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard);
+    virtual bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<TSpinLock>* guard);
 
     void WaitUntilSet() const;
     bool CheckIfSet() const;
@@ -434,7 +434,7 @@ protected:
         TFutureCallbackMap<T>* map,
         TFutureCallbackCookie cookie,
         ui32 base,
-        TGuard<NThreading::TSpinLock>* guard)
+        TGuard<TSpinLock>* guard)
     {
         auto index = TryDecodeFutureCallbackCookie(cookie, base);
         if (index == InvalidSlotMapIndex) {
@@ -493,7 +493,7 @@ private:
     }
 
     template <bool MustSet, class U>
-    bool DoTrySet(U&& value, TGuard<NThreading::TSpinLock>&& guard) noexcept
+    bool DoTrySet(U&& value, TGuard<TSpinLock>&& guard) noexcept
     {
         // Calling subscribers may release the last reference to this.
         TIntrusivePtr<TFutureState<void>> this_(this);
@@ -553,7 +553,7 @@ private:
         return TrySet(error);
     }
 
-    void SetErrorGuarded(const TError& error, TGuard<NThreading::TSpinLock>&& guard) override
+    void SetErrorGuarded(const TError& error, TGuard<TSpinLock>&& guard) override
     {
         DoTrySet<true>(error, std::move(guard));
     }
@@ -570,7 +570,7 @@ private:
         Result_.emplace(error);
     }
 
-    bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard) override
+    bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<TSpinLock>* guard) override
     {
         YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
         return
@@ -613,7 +613,7 @@ public:
                 return GetUniqueResult();
             }
             if (!ReadyEvent_) {
-                ReadyEvent_.reset(new NThreading::TEvent());
+                ReadyEvent_.reset(new TEvent());
             }
         }
 
@@ -2236,7 +2236,7 @@ private:
     const TFutureCombinerOptions Options_;
     const TPromise<T> Promise_ = NewPromise<T>();
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ErrorsLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, ErrorsLock_);
     std::vector<TError> Errors_;
 
     void OnFutureSet(const TErrorOr<T>& result)
@@ -2334,7 +2334,7 @@ private:
     const TFutureCombinerOptions Options_;
     const TPromise<TAnySetMatchingResult<T>> Promise_ = NewPromise<TAnySetMatchingResult<T>>();
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::vector<std::optional<TErrorOr<T>>> Results_;
     int ResponseCount_ = 0;
     std::atomic<bool> ResultObtained_ = false;
@@ -2536,7 +2536,7 @@ private:
     std::atomic<int> ResponseCount_ = 0;
     std::atomic<int> FillCount_ = 0;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ErrorsLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, ErrorsLock_);
     std::vector<TError> Errors_;
 
     void OnFutureSet(int /*index*/, const TErrorOr<T>& result)
@@ -2816,7 +2816,7 @@ private:
     const int ConcurrencyLimit_;
     const TPromise<std::vector<TErrorOr<T>>> Promise_ = NewPromise<std::vector<TErrorOr<T>>>();
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::optional<TError> Error_;
     std::vector<TFuture<void>> Futures_;
     std::vector<TErrorOr<T>> Results_;

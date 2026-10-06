@@ -2,7 +2,7 @@
 
 #include "signal_safe_profiler.h"
 
-#include <library/cpp/yt/threading/spin_wait_hook.h>
+#include <library/cpp/yt/system/spin_wait_hook.h>
 
 #include <mutex>
 
@@ -69,12 +69,12 @@ private:
     static void OnEvent(
         TCpuDuration cpuDelay,
         const ::TSourceLocation& location,
-        NThreading::ESpinLockActivityKind activityKind);
+        ESpinLockActivityKind activityKind);
 
     void RecordEvent(
         TCpuDuration cpuDelay,
         const ::TSourceLocation& location,
-        NThreading::ESpinLockActivityKind activityKind);
+        ESpinLockActivityKind activityKind);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

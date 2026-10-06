@@ -164,7 +164,7 @@ bool TFutureState<void>::BlockingWait(TInstant deadline) const
             return true;
         }
         if (!ReadyEvent_) {
-            ReadyEvent_.reset(new NThreading::TEvent());
+            ReadyEvent_.reset(new TEvent());
         }
     }
 
@@ -206,12 +206,12 @@ bool TFutureState<void>::TrySetError(const TError& error)
     return TrySet(error);
 }
 
-void TFutureState<void>::SetErrorGuarded(const TError& error, TGuard<NThreading::TSpinLock>&& guard)
+void TFutureState<void>::SetErrorGuarded(const TError& error, TGuard<TSpinLock>&& guard)
 {
     DoTrySet<true>(error, std::move(guard));
 }
 
-bool TFutureState<void>::DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard)
+bool TFutureState<void>::DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<TSpinLock>* guard)
 {
     YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
     return TryUnsubscribe(&VoidResultHandlers_, cookie, VoidResultHandlerCookieBase, guard);
@@ -232,7 +232,7 @@ void TFutureState<void>::WaitUntilSet() const
             return;
         }
         if (!ReadyEvent_) {
-            ReadyEvent_ = std::make_unique<NThreading::TEvent>();
+            ReadyEvent_ = std::make_unique<TEvent>();
         }
     }
 

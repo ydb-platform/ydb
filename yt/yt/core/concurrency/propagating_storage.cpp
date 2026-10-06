@@ -4,7 +4,7 @@
 
 #include <library/cpp/yt/containers/static_ring_queue.h>
 
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 

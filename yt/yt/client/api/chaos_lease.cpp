@@ -43,7 +43,7 @@ private:
 
     const NLogging::TLogger Logger;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TPromise<void> AbortPromise_;
 
     TSingleShotCallbackList<TAbortedHandlerSignature> Aborted_;

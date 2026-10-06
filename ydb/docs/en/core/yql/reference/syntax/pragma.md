@@ -70,7 +70,7 @@ The prefix is not added if the table name is an absolute path (starts with /).
 | --- | --- |
 | String | — |
 
-Sets the root of schema object paths relative to the database root. The `RelativePathPrefix` value must be a relative string literal: paths starting with `/` are not supported. Specify the pragma only once, only at the top level, and before SQL statements. It cannot be combined with `TablePathPrefix`. Absolute schema object paths in the query remain unchanged.
+Sets the prefix for schema object paths relative to the database root. The `RelativePathPrefix` value must be a relative string literal: paths starting with `/` are not supported. Specify the pragma only once, only at the top level, and before SQL statements. It cannot be combined with `TablePathPrefix`. Absolute schema object paths in the query remain unchanged.
 
 ```yql
 PRAGMA RelativePathPrefix = "folder";

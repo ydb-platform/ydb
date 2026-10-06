@@ -583,8 +583,7 @@ public:
             context.MemChanges.GrabNewTableSnapshot(context.SS, tablePath.Base()->PathId, OperationId.GetTxId());
             context.DbChanges.PersistTableSnapshot(tablePath.Base()->PathId, OperationId.GetTxId());
 
-            context.SS->TablesWithSnapshots.emplace(tablePath.Base()->PathId, OperationId.GetTxId());
-            context.SS->SnapshotTables[OperationId.GetTxId()].insert(tablePath.Base()->PathId);
+            context.SS->AddTableSnapshot(tablePath.Base()->PathId, OperationId.GetTxId());
         }
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));

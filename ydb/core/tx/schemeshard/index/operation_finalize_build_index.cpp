@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -45,7 +46,9 @@ public:
 
         txState->ClearShardsInProgress();
 
-        const TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
+        auto buildInfoPtr = context.SS->IndexBuilds.FindPtr(TIndexBuildId(ui64(txState->BuildIndexId)));
+        Y_ABORT_UNLESS(buildInfoPtr && (*buildInfoPtr)->InitiateTxId);
+        const TTxId snapshotTxId = (*buildInfoPtr)->InitiateTxId;
         const TStepId snapshotStepId = context.SS->SnapshotsStepIds.at(snapshotTxId);
 
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
@@ -117,13 +120,10 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
         TPathId tableId = txState->TargetPathId;
-        TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(tableId);
-        context.SS->SnapshotsStepIds.erase(snapshotTxId);
-        context.SS->SnapshotTables.at(snapshotTxId).erase(tableId);
-        if (context.SS->SnapshotTables.at(snapshotTxId).empty()) {
-            context.SS->SnapshotTables.erase(snapshotTxId);
-        }
-        context.SS->TablesWithSnapshots.erase(tableId);
+        auto buildInfoPtr = context.SS->IndexBuilds.FindPtr(TIndexBuildId(ui64(txState->BuildIndexId)));
+        Y_ABORT_UNLESS(buildInfoPtr && (*buildInfoPtr)->InitiateTxId);
+        const TTxId snapshotTxId = (*buildInfoPtr)->InitiateTxId;
+        context.SS->RemoveTableSnapshot(tableId, snapshotTxId);
 
         context.SS->PersistDropSnapshot(db, snapshotTxId, tableId);
 
@@ -315,24 +315,13 @@ public:
             return result;
         }
 
-        if (!context.SS->TablesWithSnapshots.contains(tablePathId)) {
-            errStr = TStringBuilder()
-                << "No snapshot presents for table"
-                << ", tableId:" << tablePathId
-                << ", txId: " << OperationId.GetTxId();
-            result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
-            return result;
-        }
-
-        TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(tablePathId);
-        if (TTxId(finalizeMainTable.GetSnapshotTxId()) != snapshotTxId) {
+        const TTxId snapshotTxId = TTxId(finalizeMainTable.GetSnapshotTxId());
+        if (!context.SS->HasTableSnapshot(tablePathId, snapshotTxId)) {
             errStr = TStringBuilder()
                 << "No snapshot with requested txId presents for table"
                 << ", tableId:" << tablePathId
                 << ", txId: " << OperationId.GetTxId()
-                << ", requested snapshotTxId: " << finalizeMainTable.GetSnapshotTxId()
-                << ", snapshotTxId: " << snapshotTxId
-                << ", snapshotStepId: " << context.SS->SnapshotsStepIds.at(snapshotTxId);
+                << ", requested snapshotTxId: " << finalizeMainTable.GetSnapshotTxId();
             result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
             return result;
         }

@@ -1,99 +1,34 @@
 LIBRARY()
 
-PEERDIR(
-    contrib/libs/protobuf
-    library/cpp/containers/absl
-    library/cpp/histogram/hdr
-    library/cpp/monlib/dynamic_counters/percentile
-    library/cpp/monlib/service/pages
-    ydb/core/base
-    ydb/core/blobstorage/backpressure
-    ydb/core/blobstorage/base
-    ydb/core/blobstorage/ddisk
-    ydb/core/blobstorage/pdisk
-    ydb/core/control/lib
-    ydb/core/keyvalue
-    ydb/core/jaeger_tracing
-    ydb/core/kqp/common
-    ydb/core/kqp/rm_service
-    ydb/core/mind/hive
-    ydb/core/tablet
-    ydb/core/tablet_flat
-    ydb/core/tx/columnshard
-    ydb/core/tx/datashard
-    ydb/core/util
-    ydb/library/workload/abstract
-    ydb/library/workload/kv
-    ydb/library/workload/stock
-    ydb/public/lib/base
-    ydb/public/sdk/cpp/src/library/operation_id
-    ydb/public/sdk/cpp/src/client/proto
-    ydb/services/kesus
-    ydb/services/metadata
-    ydb/services/persqueue_cluster_discovery
-    ydb/services/ydb
-)
-
 SRCS(
     aggregated_result.cpp
     archive.cpp
     config_examples.cpp
-    ddisk_load.cpp
-    events.cpp
-    interconnect_load.cpp
-    keyvalue_write.cpp
-    kqp.cpp
-    memory.cpp
-    nbs_dbg_like_alloc_helper.cpp
-    nbs_dbg_like_load.cpp
-    nbs_dbg_like_load_service.cpp
-    nbs_dbg_like_load_tablet.cpp
-    persistent_buffer_write.cpp
-    pdisk_log.cpp
-    pdisk_read.cpp
-    pdisk_write.cpp
     service_actor.cpp
-    group_write.cpp
-    util.cpp
-    vdisk_write.cpp
-    yql_single_query.cpp
-
-    ycsb/actors.h
-    ycsb/bulk_mkql_upsert.cpp
-    ycsb/common.h
-    ycsb/common.cpp
-    ycsb/defs.h
-    ycsb/info_collector.h
-    ycsb/info_collector.cpp
-    ycsb/kqp_select.cpp
-    ycsb/kqp_upsert.cpp
-    ycsb/test_load_actor.cpp
-    ycsb/test_load_actor.h
-    ycsb/test_load_read_iterator.cpp
 )
 
-IF (OS_LINUX)
-    SRCS(
-        nbs2_load_actor.cpp
-    )
-
-    PEERDIR(
-        ydb/core/nbs/cloud/blockstore/libs/common
-        ydb/core/nbs/cloud/blockstore/libs/service
-        ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib
-        ydb/core/nbs/cloud/storage/core/libs/common
-        ydb/core/nbs/cloud/storage/core/libs/diagnostics
-    )
-ENDIF()
-
-# Make NBS protos available for include checking on all platforms
-# even though they're only used on Linux
 PEERDIR(
-    ydb/core/nbs/cloud/storage/core/protos
+    library/cpp/json
+    library/cpp/json/writer
+    library/cpp/monlib/service/pages
+    library/cpp/time_provider
+    ydb/core/base
+    ydb/core/blobstorage/base
+    ydb/core/load_test/blobstorage
+    ydb/core/load_test/common
+    ydb/core/load_test/ddisk
+    ydb/core/load_test/interconnect
+    ydb/core/load_test/keyvalue
+    ydb/core/load_test/kqp
+    ydb/core/load_test/nbs
+    ydb/core/load_test/ycsb
+    ydb/core/protos
+    ydb/library/actors/interconnect
+    ydb/library/mkql_proto/protos
+    ydb/public/lib/base
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/library/operation_id
 )
-
-GENERATE_ENUM_SERIALIZATION_WITH_HEADER(nbs_dbg_like_load_defs.h)
-GENERATE_ENUM_SERIALIZATION(percentile.h)
 
 END()
 

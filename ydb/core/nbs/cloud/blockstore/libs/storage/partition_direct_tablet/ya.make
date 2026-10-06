@@ -27,6 +27,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/storage/api
     ydb/core/nbs/cloud/blockstore/libs/storage/core
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos

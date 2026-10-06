@@ -83,6 +83,8 @@ public:
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
+    class TTxListDDiskInfoTablets;
+    class TTxGetDDiskInfoTablet;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -1493,6 +1495,7 @@ private:
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     TActorId ResponsivenessActorID;
+    TActorId CmsPipe;
     TTabletResponsivenessPinger* ResponsivenessPinger;
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
@@ -2600,6 +2603,13 @@ public:
     class TTxAllocateDDiskBlockGroup;
 
     void Handle(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::TPtr ev);
+    void Handle(TEvBlobStorage::TEvControllerDDiskInfoListTablets::TPtr ev);
+    void Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTablet::TPtr ev);
+
+    // Handles both the CMS notification pipe (CmsPipe) and forwards other
+    // client pipes (e.g. Console) to their respective owners.
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // NODE WARDEN PIPE LIFETIME MANAGEMENT

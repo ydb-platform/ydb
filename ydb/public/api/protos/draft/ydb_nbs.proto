@@ -49,6 +49,29 @@ message CreatePartitionResult {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Partition resize request/response.
+
+message ResizePartitionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Disk id of the partition to grow.
+    string DiskId = 2;
+
+    // New maximum number of blocks stored in the partition. Must be greater
+    // than or equal to the current BlocksCount; shrinking is not allowed.
+    uint64 BlocksCount = 3;
+}
+
+message ResizePartitionResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ResizePartitionResult {
+    // New maximum number of blocks in the partition.
+    uint64 BlocksCount = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Partition delete request/response.
 
 message DeletePartitionRequest {

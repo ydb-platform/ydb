@@ -296,10 +296,7 @@ TValidateSettings MakeSettings(
 
 TCommandValidate::TCommandValidate()
     : TClientCommandTree("validate", {},
-        "Check byte-level integrity of a full backup or exported schema objects without restoring them. "
-        "A successful result does not prove that the backup can be imported. "
-        "Progress is written to stderr: phase changes, the worker thread count, and during data-file checks a checked/remaining line about every 30 seconds. "
-        "-v, -vv, and -vvv add detail.")
+        "Check byte-level integrity of exported schema objects without restoring them.")
 {
     AddCommand(std::make_unique<TCommandValidateFromS3>());
     AddCommand(std::make_unique<TCommandValidateFromNfs>());
@@ -311,11 +308,7 @@ void TCommandValidate::Config(TConfig& config) {
 }
 
 TCommandValidateBase::TCommandValidateBase(const TString& name, const TString& description)
-    : TYdbCommand(name, {}, TStringBuilder() << description
-        << " Progress is written to stderr: phase changes and the worker thread count by default, "
-        "checked and remaining data files about every 30 seconds, "
-        "each object's metadata and data checks with -v, "
-        "and per-file traces with -vv and -vvv.")
+    : TYdbCommand(name, {}, description)
 {
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Path of a full backup or one exported object", true}},
@@ -332,42 +325,26 @@ void TCommandValidateBase::Config(TConfig& config) {
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
     config.Opts->AddLongOption("scheme-only",
-            "Check file composition, metadata structure, and checksum sidecars only. "
-            "Data file bytes are not read. This is not a restore dry run: CSV and Parquet rows "
-            "are not parsed against the table schema.")
+            "Check file composition, metadata structure, and checksum sidecars only.")
         .StoreTrue(&SchemeOnly);
 
-    config.Opts->AddLongOption("format",
-            "Expected backup layout. auto (default) treats the path as a full backup when "
-            "metadata.json has kind SimpleExportV0, when any file remains under SchemaMapping/ "
-            "(including checksum sidecars and encrypted files), or when metadata.json.sha256 "
-            "remains without metadata.json; otherwise as an item-style export. "
-            "full requires a full backup with SimpleExportV0 metadata. "
-            "item scans schema objects and does not use SchemaMapping for completeness. "
-            "Supported values: auto, full, item.")
+    config.Opts->AddLongOption("format", "Expected backup layout.")
         .RequiredArgument("auto|full|item")
         .DefaultValue(Format)
         .StoreResult(&Format)
         .ChoicesWithCompletion({
-            {"auto", "Detect a full backup from SimpleExportV0 metadata, SchemaMapping files, or an orphan metadata.json.sha256"},
-            {"full", "Require a full backup with SchemaMapping"},
-            {"item", "Treat as an item-style export without SchemaMapping completeness checks"},
+            {"auto", "Detect a full backup from metadata files, with fallback to item style"},
+            {"full", "Require a full backup"},
+            {"item", "Treat as an item-style export"},
         });
 
     config.Opts->AddLongOption("metadata-checksums",
-            "Checksum sidecars of metadata.json. always (default) requires a sidecar for the backup root, "
-            "SchemaMapping/metadata.json, SchemaMapping/mapping.json, and every exported object. "
-            "auto follows the backup: a full backup requires them when metadata.json has checksum sha256; "
-            "an item export requires an object's metadata checksum when version is greater than 0, "
-            "or when scheme.pb.sha256 or create_view.sql.sha256 is present. "
-            "ignore does not require or read metadata checksum sidecars. "
-            "Scheme and data-file checksums are not affected. "
-            "Supported values: always, auto, ignore.")
+            "Metadata checksums validation mode")
         .RequiredArgument("always|auto|ignore")
         .DefaultValue(MetadataChecksums)
         .StoreResult(&MetadataChecksums)
         .ChoicesWithCompletion({
-            {"always", "Require a checksum sidecar for every metadata.json"},
+            {"always", "Require a checksum sidecar for every metadata file"},
             {"auto", "Follow the backup's own checksum declaration"},
             {"ignore", "Do not check metadata checksum sidecars"},
         });
@@ -379,15 +356,11 @@ void TCommandValidateBase::Config(TConfig& config) {
 
     Threads = DefaultValidateThreads();
     config.Opts->AddLongOption("threads",
-            "Maximum number of threads used to validate data and metadata. "
-            "If omitted, one less than the number of available processors, but at least 1. "
-            "Same default as import file csv.")
+            "Maximum number of threads used to validate data and metadata.")
         .RequiredArgument("NUM").StoreResult(&Threads).DefaultValue(Threads);
 
     config.Opts->AddLongOption("encryption-key-file",
-            "Accepted for compatibility with ydb import. Encrypted backup files are not validated; "
-            "the key is not used. File path that contains the encryption key, or env that contains "
-            "a hex encoded key value.")
+            "Accepted for compatibility with ydb import ONLY, ignored. Encrypted backup files are not validated.")
         .Env("YDB_ENCRYPTION_KEY_FILE", true, "encryption key file")
         .Env("YDB_ENCRYPTION_KEY", false)
         .FileName("encryption key file").RequiredArgument("PATH")
@@ -395,14 +368,7 @@ void TCommandValidateBase::Config(TConfig& config) {
         .StoreResult(&EncryptionKey);
 
     config.Opts->AddLongOption("expected-objects",
-            "Text file listing objects expected in a backup created with --item (one name per line, "
-            "relative to the validated path). Empty lines are ignored. "
-            "An object found in the backup and absent from the file is a warning. "
-            "An object listed in the file and absent from the backup is an error. "
-            "Index implementation tables stored under a listed object are part of that object. "
-            "The option does not apply to backups that contain SchemaMapping. "
-            "Without this file, an item-style export is not checked for missing objects; "
-            "success means the objects found in the prefix are intact.")
+            "Text file listing objects expected in a backup created with item-style export.")
         .RequiredArgument("PATH").StoreResult(&ExpectedObjectsFile);
 }
 
@@ -429,13 +395,11 @@ bool TCommandValidateBase::DecodeEncryptionKey() {
 }
 
 TCommandValidateFromS3::TCommandValidateFromS3()
-    : TCommandValidateBase("s3", "Check byte-level integrity of a backup stored in S3-compatible storage. "
-        "The backup is read by this command; a YDB connection is not required. "
-        "Success does not prove that the backup can be imported.")
+    : TCommandValidateBase("s3", "Check byte-level integrity of a backup stored in S3-compatible storage.")
 {
     TItemS3::DefineFields({
-        {"Source", {{"source", "src", "s"}, "S3 object key prefix of a full backup or one exported object", true}},
-        {"Destination", {{"destination", "dst", "d"}, "Accepted for compatibility with ydb import s3 and ignored", false}},
+        {"Source", {{"source", "src", "s"}, "S3 object key prefix of a backup", true}},
+        {"Destination", {{"destination", "dst", "d"}, "Accepted for compatibility with ydb import s3 ONLY, ignored", false}},
     });
 }
 
@@ -473,8 +437,7 @@ void TCommandValidateFromS3::Config(TConfig& config) {
         .DefaultValue(AwsDefaultProfileName);
 
     config.Opts->AddLongOption("source-prefix",
-            "Key prefix of a full backup or one exported object. "
-            "Used when --item is not set. With --item, each item source is a full key prefix, same as ydb import s3.")
+            "Key prefix of a full backup or single exported object. Incompatible with --item option.")
         .RequiredArgument("PREFIX").StoreResult(&CommonSourcePrefix);
 
     config.Opts->AddLongOption("item", TItemS3::FormatHelp("Object to validate", config.HelpCommandVerbosityLevel, 2))
@@ -530,23 +493,18 @@ int TCommandValidateFromS3::Run(TConfig& config) {
 }
 
 TCommandValidateFromNfs::TCommandValidateFromNfs()
-    : TCommandValidateBase("nfs", "Check byte-level integrity of a backup stored on a local or mounted filesystem. "
-        "The backup is read by this command; a YDB connection is not required. "
-        "Success does not prove that the backup can be imported.")
+    : TCommandValidateBase("nfs", "Check byte-level integrity of a backup stored on a local or mounted filesystem.")
 {
     TItemNfs::DefineFields({
-        {"Source", {{"source", "src", "s"}, "Path of a full backup or one exported object, relative to --fs-path", true}},
-        {"Destination", {{"destination", "dst", "d"}, "Accepted for compatibility with ydb import nfs and ignored", false}},
+        {"Source", {{"source", "src", "s"}, "Path of a backup, relative to --fs-path", true}},
+        {"Destination", {{"destination", "dst", "d"}, "Accepted for compatibility with ydb import nfs ONLY, ignored", false}},
     });
 }
 
 void TCommandValidateFromNfs::Config(TConfig& config) {
     TCommandValidateBase::Config(config);
 
-    config.Opts->AddLongOption("fs-path",
-            "Directory that contains the backup. "
-            "Without --item, this directory itself is validated. "
-            "With --item, each source path is relative to this directory.")
+    config.Opts->AddLongOption("fs-path", "Directory that contains the backup.")
         .Required().RequiredArgument("PATH").StoreResult(&FsPath);
 
     config.Opts->AddLongOption("item", TItemNfs::FormatHelp("Object to validate", config.HelpCommandVerbosityLevel, 2))

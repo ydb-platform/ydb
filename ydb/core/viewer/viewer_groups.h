@@ -2682,6 +2682,7 @@ public:
                           * `Erasure`
                           * `MissingDisks`
                           * `State`
+                          * `StateInfo` (alias for `State`)
                           * `Usage`
                           * `GroupId`
                           * `Used`
@@ -2716,6 +2717,7 @@ public:
                           * `MediaType`
                           * `MissingDisks`
                           * `State`
+                          * `StateInfo` (alias for `State`)
                           * `Latency`
                           * `CapacityAlert`
                     required: false
@@ -2735,6 +2737,7 @@ public:
                           * `MediaType`
                           * `MissingDisks`
                           * `State`
+                          * `StateInfo` (alias for `State`)
                           * `Latency`
                           * `CapacityAlert`
                     required: false
@@ -2819,6 +2822,16 @@ public:
         properties["NeedLimit"]["description"] = "true if limit couldn't be applied";
         properties["Problems"]["description"] = "list of problems collecting the data";
         YAML::Node storageGroupProperties(properties["StorageGroups"]["items"]["properties"]);
+        YAML::Node stateInfo(storageGroupProperties["StateInfo"]);
+        stateInfo["description"] =
+            "Structured group state. Can be omitted even when State is present if CalcState cannot determine a known status.";
+        stateInfo["properties"]["Status"]["description"] = "one of: ok, starting, replicating, degraded, dead";
+        stateInfo["properties"]["Count"]["description"] =
+            "Number after the colon in State: missing or not-ready disks for none/block-4-2, "
+            "affected fail realms for mirror-3-dc. Omitted for ok.";
+        stateInfo["properties"]["FailedDomainsPerRealm"]["description"] =
+            "For mirror-3-dc, non-zero failed-domain counts per affected fail realm, sorted in descending order. "
+            "Matches the values in parentheses in State. Omitted for other erasure schemes and ok.";
         storageGroupProperties["State"]["description"] =
             "could be one of: \n"
             " * `ok` - group is okay\n"

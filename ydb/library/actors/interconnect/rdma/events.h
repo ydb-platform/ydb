@@ -18,6 +18,24 @@ namespace NInterconnect::NRdma {
         EvRdmaIoDone,
         EvRdmaReadDone,
         EvRdmaIoReceiveDone,
+        EvQpCacheReady,
+        EvQpCacheNoResources,
+        EvQpCacheError,
+        EvPrivateFillCache,
+        EvPrivateRegisterCache,
+        EvPrivateDestroyQp,
+        EvPrivateDoFillCache,
+        EvPrivateStopCache,
+        EvPrivateInvalidateCq,
+    };
+
+    struct TEvQpCacheReady: public NActors::TEventLocal<TEvQpCacheReady, ui32(ERdma::EvQpCacheReady)> {
+    };
+
+    struct TEvQpCacheNoResources: public NActors::TEventLocal<TEvQpCacheNoResources, ui32(ERdma::EvQpCacheNoResources)> {
+    };
+
+    struct TEvQpCacheError: public NActors::TEventLocal<TEvQpCacheError, ui32(ERdma::EvQpCacheError)> {
     };
 
     struct TEvGetCqHandle: public NActors::TEventLocal<TEvGetCqHandle, ui32(ERdma::EvGetCqHandle)> {

@@ -370,6 +370,21 @@ static ui32 GetInterconnectThreadPoolId(const NKikimr::TAppData* appData) {
         return appData->SystemPoolId;
 }
 
+static ui32 GetPoolIdForQpCache(const NActors::TActorSystemSetup* setup,
+        const NKikimr::TAppData* appData, const TString& poolName) {
+    Y_DEBUG_ABORT_UNLESS(setup != nullptr);
+    Y_DEBUG_ABORT_UNLESS(appData != nullptr);
+    if (!poolName) {
+        return appData->BatchPoolId;
+    }
+    for (ui32 poolId = 0; poolId < setup->GetExecutorsCount(); ++poolId) {
+        if (setup->GetPoolName(poolId) == poolName) {
+            return poolId;
+        }
+    }
+    return appData->BatchPoolId;
+}
+
 static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInterconnectConfig& config, ui32 numNodes, ui32 numDataCenters) {
     TInterconnectSettings result;
 
@@ -785,9 +800,11 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                             break;
                     }
                 }
+                const ui32 qpCachePoolId = GetPoolIdForQpCache(setup, appData, icConfig.GetRdmaQpCachePoolName());
                 setup->LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
                     TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
-                        CreateRdmaRuntimeParams(static_cast<int>(icConfig.GetRdmaMaxWr()), icConfig.GetEnableRdmaSendReceive()),
+                        CreateRdmaRuntimeParams(static_cast<int>(icConfig.GetRdmaMaxWr()),
+                            icConfig.GetEnableRdmaSendReceive(), qpCachePoolId)),
                         rdmaCqMode,
                         interconectCounters.Get()),
                         TMailboxType::ReadAsFilled, interconnectPoolId));

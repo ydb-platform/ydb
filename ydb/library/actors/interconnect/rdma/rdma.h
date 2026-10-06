@@ -20,6 +20,7 @@ struct ibv_send_wr;
 
 namespace NActors {
     class TActorSystem;
+    struct TActorContext;
 }
 
 namespace NMonitoring {
@@ -52,12 +53,17 @@ struct TRdmaRuntimeParams {
     int MaxWr;    // max number of work request in the pool (for READ verbs)
     int MaxSrqWr; // max number of work request for shared recieve queue
     int RecieveBufSz; // Size of one wr buffer
+    ui16 KeepQpPreinited;
+    ui16 MaxWrPerQp;
+    ui32 QpActorPoolId;
 };
+
+class TQueuePair;
 
 // Wrapper for ibv Completion Queue
 // Hides logic to controll work request count
 // https://www.rdmamojo.com/2012/11/03/ibv_create_cq/
-class ICq {
+class ICq : public std::enable_shared_from_this<ICq>{
     ICq() {};
     friend class TCqCommon;
     friend class TCqActor;
@@ -98,12 +104,21 @@ public:
     static bool IsWrErr(const TAllocResult& ar) {
         return std::holds_alternative<TErr>(ar);
     }
+
+    // QP cache part
+    struct TQpCacheEmpty {}; // The cache is being filled asynchronously.
+    struct TQpNoResources {}; // Temporary resource exhaustion; the caller should back off.
+    struct TQpCacheError {}; // Terminal cache or CQ error.
+    using TGetQpResult = std::variant<std::shared_ptr<TQueuePair>, TQpCacheEmpty, TQpNoResources, TQpCacheError>;
+    virtual TGetQpResult GetQp(const NActors::TActorContext& actorCtx) noexcept = 0;
 private:
     virtual void NotifyErr() noexcept = 0;
 };
 
-ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept;
-ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept;
+class IQpCache;
+
+ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter, std::shared_ptr<IQpCache> qpCache = {}) noexcept;
+ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter, std::shared_ptr<IQpCache> qpCache = {}) noexcept;
 
 struct THandshakeData {
     ui32 QpNum;

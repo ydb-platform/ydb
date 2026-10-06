@@ -9,10 +9,18 @@
 #include <ydb/library/actors/interconnect/rdma/events.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
+#include <ydb/library/actors/interconnect/rdma/rdma_qp_cache_impl.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/metrics/histogram_collector.h>
+#include <library/cpp/threading/bounded_queue/bounded_queue.h>
 
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
 
+#include <atomic>
 #include <cerrno>
+
+#include <util/system/hp_timer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
 
@@ -20,9 +28,393 @@ using namespace NActors;
 
 namespace NInterconnect::NRdma {
 
-using TCqFactory = std::function<ICq::TPtr(const TRdmaCtx*, std::shared_ptr<IMemPool>)>;
+using TCqFactory = std::function<ICq::TPtr(const TRdmaCtx*, std::shared_ptr<IMemPool>, IQpCache::TPtr qpCache)>;
 
 static const TDuration PeriodicActionInterval = TDuration::Seconds(1);
+
+struct TRdmaActorParams {
+    TRdmaActorParams(const TRdmaRuntimeParams& params) noexcept
+        : KeepQpPreinited(params.KeepQpPreinited)
+        , MaxWrPerQp(params.MaxWrPerQp)
+        , QpActorPoolId(params.QpActorPoolId)
+    {}
+    ui16 KeepQpPreinited;
+    ui16 MaxWrPerQp;
+    ui32 QpActorPoolId;
+};
+
+struct TQpCacheCounters {
+    explicit TQpCacheCounters(NMonitoring::TDynamicCounters* counters)
+        : Counters(counters ? counters : new NMonitoring::TDynamicCounters())
+        , Hits(Counters->GetCounter("RdmaQpCacheHits", true))
+        , Misses(Counters->GetCounter("RdmaQpCacheMisses", true))
+        , QpsCreated(Counters->GetCounter("RdmaQpCacheQpsCreated", true))
+        , FillTimeUs(Counters->GetHistogram(
+            "RdmaQpCacheFillTimeUs", NMonitoring::ExponentialHistogram(24, 2, 1)))
+    {}
+
+    NMonitoring::TDynamicCounterPtr Counters;
+    NMonitoring::TDynamicCounters::TCounterPtr Hits;
+    NMonitoring::TDynamicCounters::TCounterPtr Misses;
+    NMonitoring::TDynamicCounters::TCounterPtr QpsCreated;
+    NMonitoring::THistogramPtr FillTimeUs;
+};
+
+struct TEvPrivateFillCache : NActors::TEventLocal<TEvPrivateFillCache, (ui32)ERdma::EvPrivateFillCache> {
+    explicit TEvPrivateFillCache(ICq::TPtr cq)
+        : Cq(std::move(cq))
+    {}
+
+    ICq::TPtr Cq;
+};
+
+struct TEvPrivateDoFillCache : NActors::TEventLocal<TEvPrivateDoFillCache, (ui32)ERdma::EvPrivateDoFillCache> {
+};
+
+struct TEvPrivateStopCache : NActors::TEventLocal<TEvPrivateStopCache, (ui32)ERdma::EvPrivateStopCache> {
+};
+
+struct TEvPrivateInvalidateCq : NActors::TEventLocal<TEvPrivateInvalidateCq, (ui32)ERdma::EvPrivateInvalidateCq> {
+    TEvPrivateInvalidateCq(const TRdmaCtx* ctx, ICq::TPtr cq, int error)
+        : Ctx(ctx)
+        , Cq(std::move(cq))
+        , Error(error)
+    {}
+
+    const TRdmaCtx* const Ctx;
+    ICq::TPtr Cq;
+    const int Error;
+};
+
+struct TEvPrivateDestroyQp : NActors::TEventLocal<TEvPrivateDestroyQp, (ui32)ERdma::EvPrivateDestroyQp> {
+    TEvPrivateDestroyQp(std::unique_ptr<TQueuePair> qp, ICq::TPtr cq)
+        : Qp(std::move(qp))
+        , Cq(std::move(cq))
+    {}
+
+    ~TEvPrivateDestroyQp() {
+        // QP must be destroyed before the CQ referenced by it.
+        Qp.reset();
+    }
+
+    std::unique_ptr<TQueuePair> Qp;
+    ICq::TPtr Cq;
+};
+
+class TQpDeleter {
+public:
+    TQpDeleter(const TActorSystem* actorSystem, TActorId destroyerActorId, const ICq::TPtr& cq)
+        : ActorSystem(actorSystem)
+        , DestroyerActorId(destroyerActorId)
+        , Cq(std::weak_ptr<ICq>(cq))
+    {}
+
+    void AcquireCq() noexcept {
+        Y_DEBUG_ABORT_UNLESS(std::holds_alternative<std::weak_ptr<ICq>>(Cq));
+        auto cq = std::get<std::weak_ptr<ICq>>(Cq).lock();
+        Y_DEBUG_ABORT_UNLESS(cq);
+        Cq = std::move(cq);
+    }
+
+    void operator()(TQueuePair* qp) noexcept {
+        ICq::TPtr cq;
+        if (auto* owner = std::get_if<ICq::TPtr>(&Cq)) {
+            cq = std::move(*owner);
+        } else {
+            cq = std::get<std::weak_ptr<ICq>>(Cq).lock();
+        }
+        if (!cq) {
+            // This is possible while the CQ itself is being destroyed. In this
+            // case its cache is drained before ibv_destroy_cq is called.
+            delete qp;
+            return;
+        }
+        ActorSystem->Send(DestroyerActorId,
+            new TEvPrivateDestroyQp(std::unique_ptr<TQueuePair>(qp), std::move(cq)));
+    }
+
+private:
+    const TActorSystem* const ActorSystem;
+    const TActorId DestroyerActorId;
+    std::variant<std::weak_ptr<ICq>, ICq::TPtr> Cq;
+};
+
+class TQpCache final : public IQpCache {
+public:
+    enum class EFillStatus {
+        Ready,
+        NoResources,
+        Error,
+    };
+
+    TQpCache(ui16 keepQpPreinited, TActorId filler, const TActorSystem* actorSystem,
+            std::shared_ptr<TQpCacheCounters> counters)
+        : Cache(Max<size_t>(2, FastClp2(static_cast<size_t>(keepQpPreinited))))
+        , MaxCachedQps(keepQpPreinited)
+        , CacheFiller(filler)
+        , ActorSystem(actorSystem)
+        , Counters(std::move(counters))
+    {}
+
+    ICq::TGetQpResult GetQp(const NActors::TActorContext& actorCtx, ICq::TPtr cq) noexcept {
+        TQueuePair::TPtr qp;
+        if (Cache.Dequeue(qp)) {
+            const size_t cachedQps = CachedQps.fetch_sub(1, std::memory_order_acq_rel);
+            Y_DEBUG_ABORT_UNLESS(cachedQps > 0);
+            Counters->Hits->Inc();
+            std::get_deleter<TQpDeleter>(qp)->AcquireCq();
+            return qp;
+        }
+
+        if (Stopped.load(std::memory_order_acquire)) {
+            return ICq::TQpCacheError();
+        }
+
+        Counters->Misses->Inc();
+        FillRequested.store(true, std::memory_order_release);
+        if (!actorCtx.Send(CacheFiller, new TEvPrivateFillCache(std::move(cq)))) {
+            return ICq::TQpCacheError();
+        }
+        return ICq::TQpCacheEmpty();
+    }
+
+    void Stop() noexcept {
+        DrainLock.Acquire();
+        Stopped.store(true, std::memory_order_release);
+        FillRequested.store(false, std::memory_order_release);
+        TQueuePair::TPtr qp;
+        while(Cache.Dequeue(qp)) {
+            const size_t cachedQps = CachedQps.fetch_sub(1, std::memory_order_relaxed);
+            Y_DEBUG_ABORT_UNLESS(cachedQps > 0);
+            qp.reset();
+        }
+        ActorSystem->Send(CacheFiller, new TEvPrivateStopCache);
+    }
+
+    bool IsStopped() const noexcept {
+        return Stopped.load(std::memory_order_acquire);
+    }
+
+    bool IsFillRequested() const noexcept {
+        return FillRequested.load(std::memory_order_acquire);
+    }
+
+    bool HasCachedQps() const noexcept {
+        return CachedQps.load(std::memory_order_acquire) != 0;
+    }
+
+    bool TryEnqueue(TQueuePair::TPtr qp) noexcept {
+        size_t cachedQps = CachedQps.load(std::memory_order_relaxed);
+        while (cachedQps < MaxCachedQps) {
+            if (CachedQps.compare_exchange_weak(cachedQps, cachedQps + 1,
+                    std::memory_order_acq_rel, std::memory_order_relaxed)) {
+                if (Cache.Enqueue(std::move(qp))) {
+                    return true;
+                }
+                CachedQps.fetch_sub(1, std::memory_order_release);
+                return false;
+            }
+        }
+        return false;
+    }
+
+    template<typename TCb>
+    EFillStatus TryAcquireAndFeed(TCb cb) noexcept {
+        // Protect we are not under deletion
+        if (DrainLock.TryAcquire()) {
+            // Requests arriving during the fill must remain visible after this
+            // cycle completes and trigger another refill if consumers drain it.
+            FillRequested.store(false, std::memory_order_release);
+            EFillStatus fillStatus = cb();
+            DrainLock.Release();
+            return fillStatus;
+        }
+        return EFillStatus::Error;
+    }
+private:
+    NThreading::TBoundedQueue<TQueuePair::TPtr> Cache;
+    const size_t MaxCachedQps;
+    NActors::TActorId CacheFiller;
+    const TActorSystem* const ActorSystem;
+    std::shared_ptr<TQpCacheCounters> Counters;
+    std::atomic<bool> FillRequested = false;
+    std::atomic<bool> Stopped = false;
+    std::atomic<size_t> CachedQps = 0;
+    TSpinLock DrainLock;
+};
+
+struct TEvPrivateRegisterCache : NActors::TEventLocal<TEvPrivateRegisterCache, (ui32)ERdma::EvPrivateRegisterCache> {
+    TEvPrivateRegisterCache(std::weak_ptr<TQpCache> cache)
+        : Cache(cache)
+    {}
+    std::weak_ptr<TQpCache> Cache;
+};
+
+class TQpCacheFillerActor : public TActor<TQpCacheFillerActor> {
+public:
+    TQpCacheFillerActor(const TRdmaCtx* ctx, ui16 cacheSize, ui16 maxWr, TActorId cqActorId,
+            TActorId qpDestroyerActorId, std::shared_ptr<TQpCacheCounters> counters)
+        : TActor(&TQpCacheFillerActor::StateFunc)
+        , Ctx(ctx)
+        , CacheSize(cacheSize)
+        , MaxWr(maxWr)
+        , CqActorId(cqActorId)
+        , QpDestroyerActorId(qpDestroyerActorId)
+        , Counters(std::move(counters))
+    {}
+
+private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvPrivateFillCache, Handle);
+        hFunc(TEvPrivateDoFillCache, Handle);
+        hFunc(TEvPrivateRegisterCache, Handle);
+        hFunc(TEvPrivateStopCache, Handle);
+    )
+
+    void Handle(TEvPrivateFillCache::TPtr& ev) {
+        auto cache = Cache.lock();
+        if (!cache || cache->IsStopped()) {
+            Notify(ev->Sender, TQpCache::EFillStatus::Error);
+            return;
+        }
+        if (cache->HasCachedQps()) {
+            Notify(ev->Sender, TQpCache::EFillStatus::Ready);
+            return;
+        }
+        // The request may have been queued while the previous fill was in progress
+        // and handled after it completed. Notify it with that fill result instead
+        // of starting another fill for an already replenished cache.
+        if (!cache->IsFillRequested()) {
+            Notify(ev->Sender, LastFillStatus);
+            return;
+        }
+
+        Waiters.push_back(ev->Sender);
+        if (!FillScheduled) {
+            FillScheduled = true;
+            FillCq = std::move(ev->Get()->Cq);
+            Send(SelfId(), new TEvPrivateDoFillCache);
+        }
+    }
+
+    void Handle(TEvPrivateDoFillCache::TPtr&) {
+        FillScheduled = false;
+        auto cq = std::move(FillCq);
+        auto cache = Cache.lock();
+        int terminalError = 0;
+        if (cache) {
+            THPTimer timer;
+            LastFillStatus = cache->TryAcquireAndFeed([&] {
+                bool ready = false;
+                for (ui16 i = 0; i < CacheSize; ++i) {
+                    auto qp = std::unique_ptr<TQueuePair>(new TQueuePair());
+                    const int error = qp->Init(const_cast<TRdmaCtx*>(Ctx), cq.get(), MaxWr);
+                    if (error) {
+                        if (!IsResourceExhaustion(error)) {
+                            terminalError = error;
+                            return TQpCache::EFillStatus::Error;
+                        }
+                        return ready
+                            ? TQpCache::EFillStatus::Ready
+                            : TQpCache::EFillStatus::NoResources;
+                    }
+                    Counters->QpsCreated->Inc();
+                    TQueuePair::TPtr sharedQp(qp.release(), TQpDeleter(
+                        TlsActivationContext->ActorSystem(), QpDestroyerActorId, cq));
+                    if (!cache->TryEnqueue(std::move(sharedQp))) {
+                        return TQpCache::EFillStatus::Ready;
+                    }
+                    ready = true;
+                    // A notification does not reserve the QP, but waking one
+                    // waiter per new QP avoids a thundering herd during refill.
+                    NotifyOneWaiter(TQpCache::EFillStatus::Ready);
+                }
+                return TQpCache::EFillStatus::Ready;
+            });
+            if (LastFillStatus != TQpCache::EFillStatus::Error) {
+                Counters->FillTimeUs->Collect(timer.Passed() * 1'000'000);
+            }
+        } else {
+            LastFillStatus = TQpCache::EFillStatus::Error;
+        }
+        // If there are more waiters than the refill produced QPs, let them
+        // retry and request the next cycle after the cache is drained.
+        NotifyWaiters(LastFillStatus);
+        if (terminalError) {
+            Send(CqActorId, new TEvPrivateInvalidateCq(Ctx, std::move(cq), terminalError));
+        }
+    }
+
+    static bool IsResourceExhaustion(int error) noexcept {
+        return error == ENOMEM || error == ENOSPC || error == EAGAIN || error == ENOBUFS;
+    }
+
+    void NotifyOneWaiter(TQpCache::EFillStatus status) {
+        if (!Waiters.empty()) {
+            const TActorId waiter = Waiters.back();
+            Waiters.pop_back();
+            Notify(waiter, status);
+        }
+    }
+
+    void NotifyWaiters(TQpCache::EFillStatus status) {
+        for (const auto& waiter : Waiters) {
+            Notify(waiter, status);
+        }
+        Waiters.clear();
+    }
+
+    void Notify(TActorId waiter, TQpCache::EFillStatus status) {
+        switch (status) {
+            case TQpCache::EFillStatus::Ready:
+                Send(waiter, new TEvQpCacheReady);
+                break;
+            case TQpCache::EFillStatus::NoResources:
+                Send(waiter, new TEvQpCacheNoResources);
+                break;
+            case TQpCache::EFillStatus::Error:
+                Send(waiter, new TEvQpCacheError);
+                break;
+        }
+    }
+
+    void Handle(TEvPrivateRegisterCache::TPtr& ev) {
+        Cache = ev->Get()->Cache;
+    }
+
+    void Handle(TEvPrivateStopCache::TPtr&) {
+        NotifyWaiters(TQpCache::EFillStatus::Error);
+        PassAway();
+    }
+    const TRdmaCtx* const Ctx;
+    const ui16 CacheSize;
+    const ui16 MaxWr;
+    const TActorId CqActorId;
+    const TActorId QpDestroyerActorId;
+    std::shared_ptr<TQpCacheCounters> Counters;
+    std::weak_ptr<TQpCache> Cache;
+    std::vector<TActorId> Waiters;
+    ICq::TPtr FillCq;
+    TQpCache::EFillStatus LastFillStatus = TQpCache::EFillStatus::Error;
+    bool FillScheduled = false;
+};
+
+class TQpDestroyerActor : public TActor<TQpDestroyerActor> {
+public:
+    TQpDestroyerActor()
+        : TActor(&TQpDestroyerActor::StateFunc)
+    {}
+
+private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvPrivateDestroyQp, Handle);
+    )
+
+    void Handle(TEvPrivateDestroyQp::TPtr& ev) {
+        ev->Get()->Qp.reset();
+        ev->Get()->Cq.reset();
+    }
+};
 
 class TCqActor: public TInterconnectLoggingBase, public TActorBootstrapped<TCqActor> {
     class TAsyncEventDesctiptor : public TSharedDescriptor {
@@ -41,9 +433,11 @@ class TCqActor: public TInterconnectLoggingBase, public TActorBootstrapped<TCqAc
     };
 
 public:
-    TCqActor(TCqFactory cqFactory)
+    TCqActor(TCqFactory cqFactory, TRdmaActorParams params, NMonitoring::TDynamicCounters* counters)
         : TInterconnectLoggingBase("CqActor")
         , CqFactory(std::move(cqFactory))
+        , RdmaActorParams(params)
+        , QpCacheCounters(std::make_shared<TQpCacheCounters>(counters))
     {}
 
     static constexpr IActor::EActivityType ActorActivityType() {
@@ -61,6 +455,9 @@ public:
             }
         }
 
+        QpDestroyerActorId = Register(new TQpDestroyerActor(),
+                TMailboxType::HTSwap, RdmaActorParams.QpActorPoolId);
+
         Schedule(PeriodicActionInterval, new TEvents::TEvWakeup());
     }
 
@@ -69,6 +466,7 @@ public:
         hFunc(NActors::TEvPollerRegisterResult, Handle);
         hFunc(NActors::TEvPollerReady, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
+        hFunc(TEvPrivateInvalidateCq, Handle);
     )
 
     bool RegisterForAsyncEvent(const TRdmaCtx* ctx) {
@@ -115,7 +513,19 @@ public:
             {"marker", "ICRDMA"},
             {"fd", ev->Get()->Socket.Get()->GetDescriptor()});
         auto rdmaCtx = static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get())->GetContext();
-        auto cqPtr = CqFactory(rdmaCtx, MemPool);
+        std::shared_ptr<TQpCache> qpCache;
+        if (RdmaActorParams.KeepQpPreinited > 0) {
+            auto fillerActor = Register(new TQpCacheFillerActor(rdmaCtx,
+                RdmaActorParams.KeepQpPreinited, RdmaActorParams.MaxWrPerQp,
+                SelfId(), QpDestroyerActorId, QpCacheCounters),
+                TMailboxType::HTSwap, RdmaActorParams.QpActorPoolId);
+            const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
+            qpCache = std::make_shared<TQpCache>(RdmaActorParams.KeepQpPreinited,
+                fillerActor, actorSystem, QpCacheCounters);
+            Send(fillerActor, new TEvPrivateRegisterCache(qpCache));
+        }
+
+        auto cqPtr = CqFactory(rdmaCtx, MemPool, qpCache);
         auto it = CqMap.find(rdmaCtx);
         Y_ABORT_UNLESS(it != CqMap.end());
         Y_ABORT_UNLESS(it->second.index() == 1);
@@ -234,6 +644,26 @@ private:
         c.Cq->NotifyErr();
     }
 
+    void Handle(TEvPrivateInvalidateCq::TPtr& ev) {
+        auto it = CqMap.find(ev->Get()->Ctx);
+        if (it == CqMap.end() || it->second.index() != 0) {
+            return;
+        }
+
+        TCtxData& data = std::get<0>(it->second);
+        if (data.Cq != ev->Get()->Cq) {
+            return;
+        }
+
+        YDB_LOG_ERROR("Terminal error while filling RDMA QP cache",
+            {"marker", "ICRDMA"},
+            {"rdmaCtx", ev->Get()->Ctx->ToString().data()},
+            {"error", ev->Get()->Error},
+            {"strerror", strerror(ev->Get()->Error)});
+        data.Cq->NotifyErr();
+        CqMap.erase(it);
+    }
+
     enum class EProcessAsyncEventResult {
         Processed,
         WouldBlock,
@@ -302,19 +732,23 @@ private:
     std::map<const TRdmaCtx*, std::variant<TCtxData, TWaitPollerReg>> CqMap;
     TCqFactory CqFactory;
     std::shared_ptr<NInterconnect::NRdma::IMemPool> MemPool;
+    const TRdmaActorParams RdmaActorParams;
+    std::shared_ptr<TQpCacheCounters> QpCacheCounters;
+
+    TActorId QpDestroyerActorId;
 };
 
 NActors::IActor* CreateCqActor(const TRdmaRuntimeParams& runtimeParams, ECqMode mode, NMonitoring::TDynamicCounters* counters) {
     switch (mode) {
         case NInterconnect::NRdma::ECqMode::POLLING:
-            return new TCqActor([runtimeParams, counters](const TRdmaCtx* ctx, std::shared_ptr<IMemPool> memPool) {
-                return CreateSimpleCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), runtimeParams, std::move(memPool), counters);
-            });
+            return new TCqActor([runtimeParams, counters](const TRdmaCtx* ctx, std::shared_ptr<IMemPool> memPool, IQpCache::TPtr qpCache) {
+                return CreateSimpleCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), runtimeParams, std::move(memPool), counters, std::move(qpCache));
+            }, runtimeParams, counters);
 
         case NInterconnect::NRdma::ECqMode::EVENT:
-            return new TCqActor([runtimeParams, counters](const TRdmaCtx* ctx, std::shared_ptr<IMemPool> memPool) {
-                return CreateSimpleEventDrivenCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), runtimeParams, std::move(memPool), counters);
-            });
+            return new TCqActor([runtimeParams, counters](const TRdmaCtx* ctx, std::shared_ptr<IMemPool> memPool, IQpCache::TPtr qpCache) {
+                return CreateSimpleEventDrivenCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), runtimeParams, std::move(memPool), counters, std::move(qpCache));
+            }, runtimeParams, counters);
     }
 }
 

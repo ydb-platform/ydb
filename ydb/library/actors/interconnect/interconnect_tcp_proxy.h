@@ -15,7 +15,7 @@
 
 namespace NActors {
 
-    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(int maxWr, bool enableSendReceive) noexcept;
+    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(int maxWr, bool enableSendReceive, ui32 qpCachePoolId) noexcept;
 
     /* WARNING: all proxy actors should be alive during actorsystem activity */
     class TInterconnectProxyTCP

@@ -11,13 +11,16 @@
 #define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
 
 namespace NActors {
-    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(int maxWr, bool enableSendReceive) noexcept {
+    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(int maxWr, bool enableSendReceive, ui32 qpCachePoolId) noexcept {
         const int rdmaReceiveBufSize = TTcpPacketBuf::FullPacketSize;
         return {
             -1,
             maxWr,
             enableSendReceive ? maxWr : 0,
             enableSendReceive ? rdmaReceiveBufSize : 0,
+            1024,
+            1024,
+            qpCachePoolId,
         };
     }
 
@@ -392,6 +395,9 @@ namespace NActors {
 
         bool runDelayedRdmaHandshakeTimer = false;
         const bool rdmaHandshakeSucceeded = msg->RdmaHanshakeResult.IsOk();
+        if (auto rdmaDisabled = msg->RdmaHanshakeResult.GetDisabled()) {
+            runDelayedRdmaHandshakeTimer = rdmaDisabled->RunDelayedHandshake;
+        }
 
         const auto handshakeSuccessLogPriority = HoldByErrorWakeupDuration != TDuration::Zero()
             ? NLog::PRI_NOTICE
@@ -406,9 +412,6 @@ namespace NActors {
         } else if (ev->Sender == OutgoingHandshakeActor) {
             YDB_LOG_COMP(handshakeSuccessLogPriority, NActorsServices::INTERCONNECT, "Outgoing handshake succeeded",
                 {"marker", "ICP20"});
-            if (auto rdmaDisabled = ev->Get()->RdmaHanshakeResult.GetDisabled()) {
-                runDelayedRdmaHandshakeTimer = rdmaDisabled->RunDelayedHandshake;
-            }
             DropIncomingHandshake();
             DropOutgoingHandshake(false);
         } else {

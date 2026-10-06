@@ -3,6 +3,7 @@
 #include "ctx.h"
 #include "events.h"
 #include "rdma.h"
+#include "rdma_qp_cache_impl.h"
 #include "mem_pool.h"
 
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
@@ -14,9 +15,9 @@
 #include <library/cpp/threading/queue/mpsc_read_as_filled.h>
 
 
-
 #include <util/thread/lfqueue.h>
 #include <util/system/guard.h>
+#include <util/system/rwlock.h>
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
 #include <util/system/yield.h>
@@ -395,6 +396,8 @@ private:
     absl::flat_hash_map<ui32, NActors::TActorId> QpActors;
 };
 
+
+
 class TCqCommon : public ICq {
 public:
     TCqCommon(NActors::TActorSystem* as)
@@ -414,7 +417,8 @@ public:
         return Srq.Get();
     }
 
-    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool, struct ibv_comp_channel* ch) noexcept {
+    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool, struct ibv_comp_channel* ch, IQpCache::TPtr qpCache) noexcept {
+        QpCache = std::move(qpCache);
         Cq = ibv_create_cq(ctx->GetContext(), params.MaxCqe, nullptr, ch, 0);
         if (!Cq) {
             return errno;
@@ -439,6 +443,7 @@ public:
     }
 
     int DestroyCq() noexcept {
+        DrainQpCache();
         if (const int err = Srq.Destroy()) {
             return err;
         }
@@ -453,10 +458,33 @@ public:
         return 0;
     }
 
+    TGetQpResult GetQp(const NActors::TActorContext& actorCtx) noexcept {
+        TReadGuard guard(QpCacheLock);
+        if (!QpCache) {
+            return TQpNoResources();
+        }
+        return QpCache->GetQp(actorCtx, shared_from_this());
+    }
+
 protected:
+    void DrainQpCache() {
+        IQpCache::TPtr cache;
+        {
+            TWriteGuard guard(QpCacheLock);
+            cache.swap(QpCache);
+        }
+        if (cache) {
+            cache->Stop();
+        }
+    }
+
     NActors::TActorSystem* const As;
     ibv_cq* Cq;
     TSrq Srq;
+private:
+    TRWMutex QpCacheLock;
+    IQpCache::TPtr QpCache;
+
 };
 
 class TWr : public ICq::IWr {
@@ -534,7 +562,7 @@ private:
 };
 
 template<class TCq>
-static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept {
+static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter, IQpCache::TPtr qpCache) noexcept {
     const ibv_device_attr& attr = ctx->GetDevAttr();
     if (runtimeParams.MaxCqe <= 0) {
         runtimeParams.MaxCqe = attr.max_cqe;
@@ -555,7 +583,7 @@ static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaR
     }
 
     auto p = std::make_shared<TCq>(as, runtimeParams.MaxWr, counter);
-    int err = p->Init(ctx, runtimeParams, std::move(memPool));
+    int err = p->Init(ctx, runtimeParams, std::move(memPool), std::move(qpCache));
     if (err) {
         return nullptr;
     }
@@ -610,6 +638,7 @@ public:
 
     void SetTerminalError(int error) noexcept {
         TerminalError.store(error ? error : TSrq::CqTerminalError, std::memory_order_relaxed);
+        DrainQpCache();
     }
 
     TWrStats GetWrStats() const noexcept override {

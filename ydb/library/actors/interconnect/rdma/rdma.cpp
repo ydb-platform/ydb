@@ -41,8 +41,8 @@ public:
         : TSimpleCqBase(as, sz, c, true)
     {}
 
-    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool) noexcept {
-        return TSimpleCqBase::Init(ctx, params, std::move(memPool), nullptr);
+    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool, IQpCache::TPtr qpCache) noexcept {
+        return TSimpleCqBase::Init(ctx, params, std::move(memPool), nullptr, qpCache);
     }
 
     virtual ~TSimpleCq() {
@@ -63,13 +63,13 @@ public:
         : TSimpleCqBase(as, sz, c, false)
     {}
 
-    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool) noexcept {
+    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool, IQpCache::TPtr qpCache) noexcept {
         CompChannel = ibv_create_comp_channel(ctx->GetContext());
         if (!CompChannel) {
             return errno;
         }
 
-        int err = TSimpleCqBase::Init(ctx, params, std::move(memPool), CompChannel);
+        int err = TSimpleCqBase::Init(ctx, params, std::move(memPool), CompChannel, qpCache);
         if (err) {
             return err;
         }
@@ -146,12 +146,12 @@ private:
     ibv_comp_channel* CompChannel = nullptr;
 };
 
-ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept {
-    return CreateCq<TSimpleCq>(ctx, as, runtimeParams, std::move(memPool), counter);
+ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter, IQpCache::TPtr qpCache) noexcept {
+    return CreateCq<TSimpleCq>(ctx, as, runtimeParams, std::move(memPool), counter, std::move(qpCache));
 }
 
-ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept {
-    return CreateCq<TSimpleEventDrivenCq>(ctx, as, runtimeParams, std::move(memPool), counter);
+ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter, IQpCache::TPtr qpCache) noexcept {
+    return CreateCq<TSimpleEventDrivenCq>(ctx, as, runtimeParams, std::move(memPool), counter, std::move(qpCache));
 }
 
 const int TQueuePair::UnknownQpState = IBV_QPS_UNKNOWN;

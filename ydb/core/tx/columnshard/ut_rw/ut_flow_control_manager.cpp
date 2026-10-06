@@ -30,16 +30,6 @@
 #include <cmath>
 #include <functional>
 
-namespace NKikimr::NColumnShard {
-
-struct TWriteTasksQueueTestAccess {
-    static void SetCompactionOverloadReported(TWriteTasksQueue& queue, bool reported) {
-        queue.CompactionOverloadReported = reported;
-    }
-};
-
-}   // namespace NKikimr::NColumnShard
-
 namespace NKikimr {
 namespace {
 
@@ -67,8 +57,7 @@ void ApplyDrainParamsToFlowControl(
 class TStartLongTxWriteActor: public TActorBootstrapped<TStartLongTxWriteActor> {
 public:
     explicit TStartLongTxWriteActor(TLongTxWrite longTxWrite)
-        : LongTxWrite(std::move(longTxWrite))
-    {
+        : LongTxWrite(std::move(longTxWrite)) {
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -83,8 +72,7 @@ private:
 class TDoLongTxWriteSameMailboxActor: public TActorBootstrapped<TDoLongTxWriteSameMailboxActor> {
 public:
     TDoLongTxWriteSameMailboxActor(TLongTxWrite longTxWrite)
-        : LongTxWrite(std::move(longTxWrite))
-    {
+        : LongTxWrite(std::move(longTxWrite)) {
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -109,8 +97,7 @@ public:
     TRequestReleaseResourcesActor(ui64 writesCount, ui64 writesSize, EMode mode)
         : WritesCount(writesCount)
         , WritesSize(writesSize)
-        , Mode(mode)
-    {
+        , Mode(mode) {
     }
 
     void Bootstrap(const TActorContext&) {
@@ -141,15 +128,14 @@ struct TWriteTasksQueueShutdownState {
 class TPrepareWriteTasksQueueActor: public TActorBootstrapped<TPrepareWriteTasksQueueActor> {
 public:
     explicit TPrepareWriteTasksQueueActor(std::shared_ptr<TWriteTasksQueueShutdownState> state)
-        : State(std::move(state))
-    {
+        : State(std::move(state)) {
     }
 
     void Bootstrap(const TActorContext&) {
         State->Info = MakeIntrusive<TTabletStorageInfo>(ui64(42), TTabletTypes::ColumnShard);
         State->Shard = std::make_unique<TColumnShard>(State->Info.Get(), SelfId());
         State->Queue = std::make_unique<TWriteTasksQueue>(State->Shard.get());
-        NColumnShard::TWriteTasksQueueTestAccess::SetCompactionOverloadReported(*State->Queue, true);
+        State->Queue->SetCompactionOverloadReportedForTest(true);
         State->Ready.store(true);
         PassAway();
     }
@@ -161,8 +147,7 @@ private:
 class TDestroyColumnShardActor: public TActorBootstrapped<TDestroyColumnShardActor> {
 public:
     explicit TDestroyColumnShardActor(std::shared_ptr<TWriteTasksQueueShutdownState> state)
-        : State(std::move(state))
-    {
+        : State(std::move(state)) {
     }
 
     void Bootstrap(const TActorContext&) {
@@ -183,8 +168,7 @@ private:
 class TFlowControlManagerTestEnv {
 public:
     explicit TFlowControlManagerTestEnv(TTestBasicRuntime& runtime)
-        : Runtime(runtime)
-    {
+        : Runtime(runtime) {
         // Fast drain jitter in UTs by default; keep queue capacity high unless a test shrinks it.
         // Drain rate params: leave process defaults (or whatever the test set before construction);
         // FCM copies them at RegisterServices time.
@@ -265,7 +249,8 @@ public:
         // local test node, so a fake service Sender is what lets tests heat node 42.
         const TActorId sender(nodeId, TStringBuf("seedFcmStat"));
         Runtime.Send(new IEventHandle(TFlowControlManagerServiceOperator::MakeServiceId(Runtime.GetNodeId(0)), sender,
-                         new TEvNodeOverloadStatus(status, generation)), 0, true);
+                         new TEvNodeOverloadStatus(status, generation)),
+            0, true);
         return generation;
     }
 
@@ -2071,8 +2056,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             if (event->GetTypeRewrite() == TEvNodeOverloadStatus::EventType) {
                 const auto& record = event->Get<TEvNodeOverloadStatus>()->Record;
                 if (event->Sender.NodeId() == localNodeId &&
-                    record.GetStatus() == NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED)
-                {
+                    record.GetStatus() == NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED) {
                     statusSeen = true;
                 }
             }
@@ -2081,7 +2065,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
 
         env.SeedTabletLocation(shardTabletId, localNodeId);
         runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), seedSender,
-                         new NOverload::TEvCompactionOverloadState(shardTabletId, true)), 0, true);
+                         new NOverload::TEvCompactionOverloadState(shardTabletId, true)),
+            0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
 
         TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/0);
@@ -2095,7 +2080,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
 
         // Clear compaction flag so process-global OM state does not leak into later UTs.
         runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), seedSender,
-                         new NOverload::TEvCompactionOverloadState(shardTabletId, false)), 0, true);
+                         new NOverload::TEvCompactionOverloadState(shardTabletId, false)),
+            0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
     }
 
@@ -2187,7 +2173,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         });
 
         runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
-                         new NOverload::TEvPublishNodeOverloadStatus(NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED)), 0, true);
+                         new NOverload::TEvPublishNodeOverloadStatus(NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED)),
+            0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
         UNIT_ASSERT(!statusSeen);
     }
@@ -2235,13 +2222,15 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        runtime.Register(new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0,
-                             TRequestReleaseResourcesActor::EMode::RequestOnly), 0, runtime.GetAppData(0).UserPoolId);
+        runtime.Register(
+            new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0, TRequestReleaseResourcesActor::EMode::RequestOnly), 0,
+            runtime.GetAppData(0).UserPoolId);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
         UNIT_ASSERT(overloadedSeen);
 
-        runtime.Register(new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0,
-                             TRequestReleaseResourcesActor::EMode::ReleaseOnly), 0, runtime.GetAppData(0).UserPoolId);
+        runtime.Register(
+            new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0, TRequestReleaseResourcesActor::EMode::ReleaseOnly), 0,
+            runtime.GetAppData(0).UserPoolId);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
         UNIT_ASSERT(readySeen);
     }
@@ -2255,8 +2244,9 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         runtime.GetAppData(0).FeatureFlags.SetEnableCsFlowControl(false);
         runtime.GetAppData(0).ColumnShardConfig.SetWritingInFlightRequestsCountLimit(1);
 
-        runtime.Register(new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0,
-                             TRequestReleaseResourcesActor::EMode::RequestOnly), 0, runtime.GetAppData(0).UserPoolId);
+        runtime.Register(
+            new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0, TRequestReleaseResourcesActor::EMode::RequestOnly), 0,
+            runtime.GetAppData(0).UserPoolId);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
         UNIT_ASSERT(NOverload::TOverloadManagerServiceOperator::IsWriteSideOverloaded());
         UNIT_ASSERT_VALUES_EQUAL(NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly(), 1);
@@ -2350,7 +2340,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
 
         constexpr ui64 tabletId = 42;
         runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
-                         new NOverload::TEvCompactionOverloadState(tabletId, true)), 0, true);
+                         new NOverload::TEvCompactionOverloadState(tabletId, true)),
+            0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
         UNIT_ASSERT(overloadedSeen);
         UNIT_ASSERT(NOverload::TOverloadManagerServiceOperator::IsCompactionOverloaded());
@@ -2358,7 +2349,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         // Writes still OK → clearing compaction should publish READY.
         readySeen = false;
         runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
-                         new NOverload::TEvCompactionOverloadState(tabletId, false)), 0, true);
+                         new NOverload::TEvCompactionOverloadState(tabletId, false)),
+            0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
         UNIT_ASSERT(readySeen);
         UNIT_ASSERT(!NOverload::TOverloadManagerServiceOperator::IsCompactionOverloaded());
@@ -2385,25 +2377,29 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         });
 
         // Cross write limit first.
-        runtime.Register(new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0,
-                             TRequestReleaseResourcesActor::EMode::RequestOnly), 0, runtime.GetAppData(0).UserPoolId);
+        runtime.Register(
+            new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0, TRequestReleaseResourcesActor::EMode::RequestOnly), 0,
+            runtime.GetAppData(0).UserPoolId);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
 
         constexpr ui64 tabletId = 42;
         runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
-                         new NOverload::TEvCompactionOverloadState(tabletId, true)), 0, true);
+                         new NOverload::TEvCompactionOverloadState(tabletId, true)),
+            0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
         readySeen = false;
         runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
-                         new NOverload::TEvCompactionOverloadState(tabletId, false)), 0, true);
+                         new NOverload::TEvCompactionOverloadState(tabletId, false)),
+            0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
         UNIT_ASSERT_C(!readySeen, "READY must not clear FCM while write resources are still overloaded");
         UNIT_ASSERT(!NOverload::TOverloadManagerServiceOperator::IsCompactionOverloaded());
 
         // Cleanup process-wide write resource counters for other UTs.
-        runtime.Register(new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0,
-                             TRequestReleaseResourcesActor::EMode::ReleaseOnly), 0, runtime.GetAppData(0).UserPoolId);
+        runtime.Register(
+            new TRequestReleaseResourcesActor(/*writesCount=*/1, /*writesSize=*/0, TRequestReleaseResourcesActor::EMode::ReleaseOnly), 0,
+            runtime.GetAppData(0).UserPoolId);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
     }
 
@@ -2431,12 +2427,14 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
 
         constexpr ui64 tabletId = 7;
         runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
-                         new NOverload::TEvCompactionOverloadState(tabletId, true)), 0, true);
+                         new NOverload::TEvCompactionOverloadState(tabletId, true)),
+            0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         UNIT_ASSERT_C(overloadedCount >= 1, "expected OVERLOADED on compaction enter");
 
         runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
-                         new NOverload::TEvCompactionOverloadState(tabletId, false)), 0, true);
+                         new NOverload::TEvCompactionOverloadState(tabletId, false)),
+            0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         UNIT_ASSERT_C(readyCount >= 1, "expected READY on compaction leave");
 
@@ -2453,7 +2451,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
 
         // While OVERLOADED the same refresh must re-assert for late FCMs.
         runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
-                         new NOverload::TEvCompactionOverloadState(tabletId, true)), 0, true);
+                         new NOverload::TEvCompactionOverloadState(tabletId, true)),
+            0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         const ui32 overloadedBeforeHotRefresh = overloadedCount;
         UNIT_ASSERT_C(overloadedBeforeHotRefresh > overloadedBeforeRefresh, "expected OVERLOADED on re-enter");
@@ -2504,7 +2503,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         });
 
         runtime.Send(new IEventHandle(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), env.GetReplyTo(),
-                         new NOverload::TEvPublishNodeOverloadStatus(NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED)), 0, true);
+                         new NOverload::TEvPublishNodeOverloadStatus(NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED)),
+            0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
 
         UNIT_ASSERT_VALUES_EQUAL(statusCount, 2);

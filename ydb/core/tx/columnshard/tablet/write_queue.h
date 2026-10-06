@@ -69,8 +69,7 @@ public:
         , IsBulk(isBulk)
         , OverloadSubscribeSeqNo(overloadSubscribeSeqNo)
         , Orbit(std::move(orbit))
-        , ReceivedAt(receivedAt)
-    {
+        , ReceivedAt(receivedAt) {
     }
 
     const TInternalPathId& GetInternalPathId() const {
@@ -87,11 +86,7 @@ public:
     void FailByOverload(TColumnShard* owner, const EOverloadStatus overloadStatus, const TActorContext& ctx) const;
 };
 
-struct TWriteTasksQueueTestAccess;
-
 class TWriteTasksQueue {
-    friend struct TWriteTasksQueueTestAccess;
-
 private:
     bool WriteTasksOverloadCheckerScheduled = false;
     bool CompactionOverloadReported = false;
@@ -100,14 +95,18 @@ private:
 
 public:
     TWriteTasksQueue(TColumnShard* owner)
-        : Owner(owner)
-    {
+        : Owner(owner) {
     }
 
     ~TWriteTasksQueue();
 
     void Enqueue(TWriteTask&& task);
     bool Drain(const bool onWakeup, const TActorContext& ctx);
+
+    // Test-only. Production sets this flag from Drain after a successful report.
+    void SetCompactionOverloadReportedForTest(bool reported) {
+        CompactionOverloadReported = reported;
+    }
 };
 
 }   // namespace NKikimr::NColumnShard

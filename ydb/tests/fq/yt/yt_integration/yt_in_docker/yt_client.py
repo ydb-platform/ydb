@@ -544,7 +544,11 @@ class YtClient:
         Otherwise *input_data* is used as-is (raw YSON or other format).
         """
         if rows is not None:
-            input_data = "\n".join(json.dumps(row) for row in rows) + "\n"
+            # YT JSON reserves keys starting with a single "$" for metadata.
+            input_data = "\n".join(
+                json.dumps({("$" + key if key.startswith("$") else key): value for key, value in row.items()})
+                for row in rows
+            ) + "\n"
         self._run_yt_cli([
             "push-queue-producer", producer_path, queue_path,
             "--session-id", session_id,

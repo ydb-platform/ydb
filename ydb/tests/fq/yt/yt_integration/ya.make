@@ -22,6 +22,7 @@ DATA(
 
 TEST_SRCS(
     test_queue_api.py
+    test_yt_client.py
     yt_in_docker/__init__.py
     yt_in_docker/yt_client.py
 )

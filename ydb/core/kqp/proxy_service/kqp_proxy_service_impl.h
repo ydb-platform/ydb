@@ -102,9 +102,10 @@ public:
             ExitTimeUs.store(ts, std::memory_order_release);
         }
 
-        State.store(state, std::memory_order_release);
+        const auto previousState = State.exchange(state, std::memory_order_acq_rel);
 
-        if (state == EState::PENDING || state == EState::DELAYED || state == EState::EXITED) {
+        if (state == EState::PENDING || state == EState::DELAYED || state == EState::EXITED ||
+            (state == EState::NONE && NWorkloadManager::IsWmStateQueued(previousState))) {
             TActorId observer;
             ui64 observerCookie;
             TString poolId;
@@ -303,7 +304,7 @@ public:
         auto curNow = TInstant::Now();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = curNow;
         const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
-        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState->Clean();
+        // EndQuery detached the previous updater; reuse the fresh idle state.
     }
 
     void EndQuery(const TKqpSessionInfo* sessionInfo) {
@@ -315,7 +316,10 @@ public:
         auto curNow = TInstant::Now();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = TInstant::Zero();
         const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
-        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState->Clean();
+        // Admission callbacks can outlive the proxy's timeout response. Never
+        // reuse their updater for another query, even if the session is IDLE.
+        sessionInfo->WmState->SetStateObserver({}, 0);
+        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState = std::make_shared<TWmSessionUpdater>();
     }
 
     TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,

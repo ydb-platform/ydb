@@ -4,6 +4,10 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
+PEERDIR(
+    ydb/core/util
+)
+
 SRCS(
     audit_ut.cpp
     url_matcher_ut.cpp

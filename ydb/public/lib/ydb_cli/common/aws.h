@@ -85,4 +85,21 @@ std::unique_ptr<IS3ClientWrapper> CreateS3ClientWrapper(const NImport::TImportFr
 void InitAwsAPI();
 void ShutdownAwsAPI();
 
+// Aws::ShutdownAPI drops the CRT allocator. S3 clients allocate a CRT endpoint
+// rule engine, and releasing it afterwards aborts in aws_mem_release. Declare
+// this guard first so those clients are destroyed while the allocator is alive.
+class TAwsApiGuard {
+public:
+    TAwsApiGuard() {
+        InitAwsAPI();
+    }
+
+    ~TAwsApiGuard() {
+        ShutdownAwsAPI();
+    }
+
+    TAwsApiGuard(const TAwsApiGuard&) = delete;
+    TAwsApiGuard& operator=(const TAwsApiGuard&) = delete;
+};
+
 }

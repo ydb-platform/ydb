@@ -259,6 +259,7 @@ namespace NKikimr::NStorage {
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimitBytes;
 
         TControlWrapper EnableChunkKeeper;
+        TControlWrapper SpaceReportPeriodSeconds;
 
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;

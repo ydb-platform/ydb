@@ -76,6 +76,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , PhantomFlagStorageLimitPerVDiskBytes(10'000'000, 0, 100'000'000'000)
     , VolatilePhantomFlagStorageBlobSizeLimitBytes(1'000'000, 1, 10'000'000)
     , EnableChunkKeeper(0, 0, 1)
+    , SpaceReportPeriodSeconds(0, 0, 86400)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , MaxCommonLogChunksSSD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , CommonStaticLogChunks(NPDisk::CommonStaticLogChunks, 1, 1'000'000)
@@ -477,6 +478,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(VolatilePhantomFlagStorageBlobSizeLimitBytes,
                 icb->VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes);
         TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
+        TControlBoard::RegisterSharedControl(SpaceReportPeriodSeconds, icb->VDiskControls.SpaceReportPeriodSeconds);
 
         TControlBoard::RegisterSharedControl(MaxInProgressStartupDataSyncCount, icb->VDiskControls.MaxInProgressStartupDataSyncCount);
         TControlBoard::RegisterSharedControl(MaxInProgressStartupDataSyncPerPDiskCount, icb->VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount);

@@ -231,6 +231,7 @@ namespace NKikimr {
         TDuration StatsUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
+        TControlWrapper SpaceReportPeriodSeconds = TControlWrapper(0, 0, 86400);
         bool UseActorSystemTimeInBSQueue = false;
         ui32 GroupSizeInUnits = 0;
 

@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    library/cpp/html/escape
     ydb/core/base
     ydb/core/blobstorage/vdisk/balance
     ydb/core/blobstorage/vdisk/hulldb/base

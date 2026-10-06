@@ -839,6 +839,49 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    Y_UNIT_TEST(OrderByCosineExpressionLimit) {
+        // A LIMIT (top-K) that is an arbitrary expression rather than a bare literal or
+        // parameter must be honored by both the legacy StreamLookup lowering and the new
+        // vector search actor. Regression guard: the actor path only knew how to encode a
+        // literal or a query parameter in the physical TopK value, so any other expression
+        // (e.g. `$topK + 1`) failed to compile.
+        for (bool enableVectorSearchActor : {false, true}) {
+            NKikimrConfig::TFeatureFlags featureFlags;
+            auto setting = NKikimrKqp::TKqpSetting();
+            auto serverSettings = TKikimrSettings()
+                .SetFeatureFlags(featureFlags)
+                .SetKqpSettings({setting});
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
+
+            TKikimrRunner kikimr(serverSettings);
+            auto db = kikimr.GetTableClient();
+            auto session = DoCreateTableAndVectorIndex(db);
+
+            const TString query(Q1_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                DECLARE $topK AS Uint64;
+                $target = "\x67\x71\x02";
+                SELECT pk FROM `/Root/TestTable` VIEW index1
+                ORDER BY Knn::CosineDistance(emb, $target)
+                LIMIT ($topK + 1);
+            )"));
+
+            for (ui64 topK : {ui64(2), ui64(0)}) {
+                auto params = TParamsBuilder()
+                    .AddParam("$topK").Uint64(topK).Build()
+                    .Build();
+
+                auto result = session.ExecuteDataQuery(
+                    query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params)
+                    .ExtractValueSync();
+                const TString ctx = TStringBuilder()
+                    << "enableVectorSearchActor=" << enableVectorSearchActor << " topK=" << topK;
+                UNIT_ASSERT_C(result.IsSuccess(), ctx << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSet(0).RowsCount(), topK + 1, ctx);
+            }
+        }
+    }
+
     void DoTestVectorIndexInconsistentOnlineRO(int flags, bool enableVectorSearchActor) {
         // Inconsistent online RO takes neither an MVCC snapshot nor a lock, so the reads
         // must carry AllowInconsistentReads. Regression guard: the vector search actor did

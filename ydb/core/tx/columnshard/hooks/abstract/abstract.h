@@ -16,7 +16,6 @@
 #include <util/generic/refcount.h>
 #include <util/generic/singleton.h>
 
-#include <atomic>
 #include <memory>
 
 namespace NKikimr::NColumnShard {
@@ -459,21 +458,14 @@ public:
 
 class TControllers {
 private:
-    std::atomic<ICSController::TPtr*> CSControllerPtr{ new ICSController::TPtr(std::make_shared<ICSController>()) };
+    ICSController::TPtr CSController = std::make_shared<ICSController>();
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
 
     void ReplaceCSController(const ICSController::TPtr& newController) {
-        auto* newPtr = new ICSController::TPtr(newController);
-        auto* oldPtr = CSControllerPtr.exchange(newPtr);
-        delete oldPtr;
+        std::atomic_store(&CSController, newController);
     }
 
 public:
-    ~TControllers() {
-        auto* ptr = CSControllerPtr.load();
-        delete ptr;
-    }
-
     template <class TController>
     class TGuard: TMoveOnly {
     private:
@@ -518,7 +510,7 @@ public:
 
     static ICSController::TPtr GetColumnShardController() {
         auto* controllers = Singleton<TControllers>();
-        return *controllers->CSControllerPtr.load();
+        return std::atomic_load(&controllers->CSController);
     }
 
     template <class T>

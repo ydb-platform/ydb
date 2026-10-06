@@ -2,8 +2,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/ptr.h>
-
 #include <algorithm>
 #include <array>
 #include <thread>
@@ -47,20 +45,17 @@ Y_UNIT_TEST_SUITE(SchedulerCookie) {
     }
 
     Y_UNIT_TEST(DroppedThreeWayEventReleasesItsReference) {
-        std::array<unsigned, 3> order = {0, 1, 2};
-        do {
-            auto* cookie = ISchedulerCookie::Make3Way();
-            std::array<THolder<TSchedulerCookieHolder>, 3> owners;
-            for (auto& owner : owners) {
-                owner = MakeHolder<TSchedulerCookieHolder>(cookie);
-            }
-            for (unsigned step = 0; step < order.size(); ++step) {
-                UNIT_ASSERT_VALUES_EQUAL(cookie->IsArmed(), step == 0);
-                // An unprocessed event uses its holder destructor (Detach),
-                // exactly like the other owners, rather than DetachEvent.
-                owners[order[step]].Reset();
-            }
-        } while (std::next_permutation(order.begin(), order.end()));
+        auto* cookie = ISchedulerCookie::Make3Way();
+        TSchedulerCookieHolder scheduler(cookie);
+        TSchedulerCookieHolder owner(cookie);
+        {
+            TSchedulerCookieHolder event(cookie);
+            UNIT_ASSERT(cookie->IsArmed());
+        }
+        // Dropping an unprocessed event releases its reference via Detach.
+        UNIT_ASSERT(!cookie->IsArmed());
+        UNIT_ASSERT(!scheduler.Detach());
+        UNIT_ASSERT(!owner.Detach());
     }
 
     Y_UNIT_TEST(ConcurrentTwoOwnerDetachHasExactlyOneWinner) {

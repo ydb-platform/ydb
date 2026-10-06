@@ -459,6 +459,8 @@ ydb/services/keyvalue/ut KeyValueGRPCService.S3ErrorInIssuesV1
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleCreateAlterDropVolume
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatusV1
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatusV2
+ydb/services/keyvalue/ut KeyValueGRPCService.SimpleWriteListRangeV1
+ydb/services/keyvalue/ut KeyValueGRPCService.SimpleWriteListRangeV2
 ydb/services/keyvalue/ut unittest.sole chunk
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestAllFnxClustersHiddenWithoutBalancer
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestTrackerDoesNotAlterClusterSchema

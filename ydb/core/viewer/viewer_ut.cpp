@@ -1912,7 +1912,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             group.CalcState();
             UNIT_ASSERT_VALUES_EQUAL(group.MissingDisks, 1);
             UNIT_ASSERT_VALUES_EQUAL(group.State, erasure == TErasureType::ErasureMirror3dc ? ":0()" : "");
-            UNIT_ASSERT_VALUES_EQUAL(group.Overall, NKikimrViewer::Grey);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(group.Overall), static_cast<int>(NKikimrViewer::Grey));
             UNIT_ASSERT(group.StateInfo.GetStatus().empty());
             UNIT_ASSERT(!group.StateInfo.HasCount());
             UNIT_ASSERT_VALUES_EQUAL(group.StateInfo.FailedDomainsPerRealmSize(), 0);

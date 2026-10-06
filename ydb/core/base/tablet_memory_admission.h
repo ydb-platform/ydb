@@ -4,7 +4,6 @@
 
 #include <util/generic/deque.h>
 #include <util/generic/hash.h>
-#include <util/generic/ptr.h>
 
 namespace NKikimr::NMemory {
 
@@ -19,7 +18,14 @@ struct TMemoryAdmissionStats {
     }
 };
 
+// Tells the owner whether the item is starting on the Admit call or after a wait in the queue
+enum class EAdmitSource {
+    Immediate,
+    FromQueue,
+};
+
 // Gates the start of memory-charged items by the node zone: FIFO, no growth in Yellow, one at a time in Red
+// One admission belongs to one tablet and runs only in that tablet's actor context, so it takes no locks by design
 template <class TItem, class TOwner>
 class TMemoryAdmission {
 public:
@@ -29,9 +35,9 @@ public:
     }
 
     // Starts the item now or queues it behind the items already waiting
-    void Admit(ui64 uid, THolder<TItem>&& item, ui64 charge) {
+    void Admit(ui64 uid, TItem&& item, ui64 charge) {
         if (Queue.empty() && Admits(charge)) {
-            Run(uid, std::move(item), charge, /* postponed */ false);
+            Run(uid, std::move(item), charge, EAdmitSource::Immediate);
             return;
         }
         PostponedBytes += charge;
@@ -75,7 +81,7 @@ private:
     struct TEntry {
         ui64 Uid;
         ui64 Charge;
-        THolder<TItem> Item;
+        TItem Item;
     };
 
     bool Admits(ui64 charge) const {
@@ -90,11 +96,11 @@ private:
         return true;
     }
 
-    void Run(ui64 uid, THolder<TItem>&& item, ui64 charge, bool postponed) {
+    void Run(ui64 uid, TItem&& item, ui64 charge, EAdmitSource source) {
         RunningBytes += charge;
         ++RunningCount;
         Charges[uid] = charge;
-        Owner.StartAdmitted(std::move(item), postponed);
+        Owner.StartAdmitted(std::move(item), source);
     }
 
     void Drain() {
@@ -106,13 +112,13 @@ private:
             TEntry entry = std::move(Queue.front());
             Queue.pop_front();
             PostponedBytes -= entry.Charge;
-            Run(entry.Uid, std::move(entry.Item), entry.Charge, /* postponed */ true);
+            Run(entry.Uid, std::move(entry.Item), entry.Charge, EAdmitSource::FromQueue);
         }
         Draining = false;
     }
 
 private:
-    TOwner& Owner; // starts what the gate lets through: StartAdmitted(THolder<TItem>&&, bool postponed)
+    TOwner& Owner; // starts what the gate lets through: StartAdmitted(TItem&&, EAdmitSource)
 
     EMemoryZone Zone = EMemoryZone::Green;
     ui64 Watermark = 0;

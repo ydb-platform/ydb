@@ -9,21 +9,19 @@ namespace NKikimr::NMemory {
 
 namespace {
 
-struct TRequest {
-    ui64 Id = 0;
-};
-
 // Stands in for the tablet that owns an admission: starts what it lets through and remembers it
 struct TFixture {
     TVector<ui64> Started;
-    TMemoryAdmission<TRequest, TFixture> Admission{*this};
+    TVector<EAdmitSource> Sources;
+    TMemoryAdmission<ui64, TFixture> Admission{*this};
 
-    void StartAdmitted(THolder<TRequest>&& request, bool) {
-        Started.push_back(request->Id);
+    void StartAdmitted(ui64&& id, EAdmitSource source) {
+        Started.push_back(id);
+        Sources.push_back(source);
     }
 
     void Admit(ui64 id, ui64 charge) {
-        Admission.Admit(id, MakeHolder<TRequest>(TRequest{.Id = id}), charge);
+        Admission.Admit(id, ui64(id), charge);
     }
 
     void SetZone(EMemoryZone zone) {
@@ -43,6 +41,7 @@ Y_UNIT_TEST(GreenAdmitsEverything) {
     UNIT_ASSERT_VALUES_EQUAL(fixture.Started.size(), 4u);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Admission.GetStats().RunningBytes, 40u);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Admission.GetStats().PostponedCount, 0u);
+    UNIT_ASSERT(fixture.Sources.back() == EAdmitSource::Immediate);
 }
 
 Y_UNIT_TEST(YellowForbidsGrowthAboveTheWatermark) {
@@ -62,6 +61,7 @@ Y_UNIT_TEST(YellowForbidsGrowthAboveTheWatermark) {
     UNIT_ASSERT_VALUES_EQUAL(fixture.Started.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Admission.GetStats().RunningBytes, 110u);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Admission.GetStats().PostponedCount, 0u);
+    UNIT_ASSERT(fixture.Sources.back() == EAdmitSource::FromQueue);
 }
 
 Y_UNIT_TEST(RedRunsOneAtATime) {

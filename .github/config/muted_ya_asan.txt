@@ -51,6 +51,7 @@ ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboOlap.CountWhereColumnIsNull
+ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlockExecutionPerQuery
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlocksOnColumnsLimit
 ydb/core/kqp/ut/rbo KqpRboOlap.DoubleOutOfRangeInJson
 ydb/core/kqp/ut/rbo KqpRboOlap.OlapFilterPeephole
@@ -252,6 +253,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultMultipleTimes+EnableCompileTimeD
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultMultipleTimes-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultNotNullColumn_InsertOrReplace+IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultNotNullColumn_InsertOrReplace-IsInsert
+ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultNullableColumn_InsertOrReplace+IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultNullableColumn_InsertOrReplace-IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.UpdateDoesNotApplyDefaultWithIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.UpdateDoesNotApplyDefaultWithIndex-EnableIndexStreamWrite

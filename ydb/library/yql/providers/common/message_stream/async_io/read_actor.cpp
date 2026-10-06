@@ -204,6 +204,7 @@ public:
         , BeginOffset(Settings.BeginOffset), EndOffset(Settings.EndOffset)
         , BeginWriteTime(Settings.BeginWriteTime), EndWriteTime(Settings.EndWriteTime)
     {
+        Y_ENSURE(Alloc, "Message stream read actor requires an allocator");
         InitWatermarkTracker();
         IngressStats.Level = Settings.StatsLevel;
         if (BeginWriteTime && StartingMessageTimestamp < *BeginWriteTime) {
@@ -213,12 +214,8 @@ public:
 
     ~TMessageStreamReadActor() override {
         CloseSessions();
-        if (Alloc) {
-            TGuard<TScopedAlloc> guard(*Alloc);
-            ClearMkqlData();
-        } else {
-            ClearMkqlData();
-        }
+        TGuard<TScopedAlloc> guard(*Alloc);
+        ClearMkqlData();
     }
 
     ui64 GetInputIndex() const override { return InputIndex; }

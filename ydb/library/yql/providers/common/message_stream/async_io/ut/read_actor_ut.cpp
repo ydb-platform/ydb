@@ -3,6 +3,12 @@
 
 namespace NFq::NMessageStream::NTest {
 Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
+    Y_UNIT_TEST(AllocatorIsRequired) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            CreateMessageStreamReadActor(TMessageStreamReadActorSettings{}, std::make_unique<TState>()),
+            yexception,
+            "Message stream read actor requires an allocator");
+    }
     Y_UNIT_TEST(StreamingDoesNotRequireWriteTimeOrEndOffset) {
         TFixture f;
         f.Client->SupportsWriteTime = false;

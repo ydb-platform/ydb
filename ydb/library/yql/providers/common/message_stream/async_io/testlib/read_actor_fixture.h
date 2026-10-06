@@ -107,6 +107,8 @@ struct TFixture {
             settings.EnableStreamingAutopartitioning = EnableStreamingAutopartitioning;
             settings.MetricsSource = "test";
             settings.HolderFactory = &actor.GetHolderFactory();
+            // The fake compute actor owns the allocator and outlives its input actor.
+            settings.Alloc = std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>(&actor.Alloc, [](auto*) {});
             TMessageStreamReadCluster cluster;
             cluster.PartitionsCount = PartitionIds.size();
             cluster.Partitions = PartitionIds;

@@ -650,6 +650,34 @@ class TestStreamingAggregation(StreamingTestBase):
             self.write_stream([json.dumps(dict(key=key, value=5)) for key in keys], endpoint=endpoint)
             self.check_rows(kikimr, result, [(key, 4, 11) for key in keys])
 
+    @pytest.mark.parametrize("kikimr", [{"enable_streaming_query_state_recompute": True}], indirect=True)
+    def test_alter_text_preserves_output_state(self, kikimr, entity_name):
+        names, endpoint, body = self.setup_validation(kikimr, entity_name, ValidationCase("alter"))
+        query, table = names["query"], names["first"]
+        body = """
+            PRAGMA ydb.MaxTasksPerStage = '1';
+            PRAGMA ydb.OverridePlanner = @@ [
+                {"tx": 0, "stage": 0, "tasks": 1},
+                {"tx": 0, "stage": 1, "tasks": 1}
+            ] @@;
+        """ + body
+        rows = f"SELECT key, subkey, value FROM `{table}` ORDER BY key, subkey;"
+        with self.running_query(kikimr, query, body):
+            self.write_stream([json.dumps(dict(key="a", subkey="b", value=v)) for v in (2, 3)], endpoint=endpoint)
+            self.check_rows(kikimr, rows, [("a", "b", 5)])
+            self.wait_completed_checkpoints(kikimr, query)
+            updated = body.replace("GROUP BY key, subkey", "WHERE value > 0 GROUP BY key, subkey")
+            kikimr.ydb_client.query(
+                f"ALTER STREAMING QUERY `{query}` SET (FORCE = FALSE) AS DO BEGIN {updated} END DO;"
+            )
+            self.write_stream([json.dumps(dict(key="a", subkey="b", value=v)) for v in (4, -100)], endpoint=endpoint)
+            self.check_rows(kikimr, rows, [("a", "b", 9)])
+            self.wait_completed_checkpoints(kikimr, query)
+            self.restart_streaming_node(kikimr)
+            self.wait_completed_checkpoints(kikimr, query)
+            self.write_stream([json.dumps(dict(key="a", subkey="b", value=1))], endpoint=endpoint)
+            self.check_rows(kikimr, rows, [("a", "b", 10)])
+
     @pytest.mark.parametrize("valid_load", [False, True], ids=["invalid_load", "checkpoint_recovery"])
     def test_udaf_serialization_use_defaults(self, kikimr, entity_name, valid_load):
         source, endpoint = self.get_input_name(kikimr, "udaf", False, entity_name)

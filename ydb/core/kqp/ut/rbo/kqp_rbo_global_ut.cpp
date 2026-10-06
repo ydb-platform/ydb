@@ -1,11 +1,350 @@
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+
 #include "kqp_rbo_test_helpers.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <regex>
+
 namespace NKikimr::NKqp {
 using NTests::TIdTestContext;
 
+namespace {
+
+void ExpandReplicates(TOpRoot& root, TRBOContext& ctx) {
+    TVector<std::unique_ptr<IRule>> rules;
+    rules.emplace_back(std::make_unique<TExpandReplicateRule>());
+    TRuleBasedStage("Expand Replicate", std::move(rules)).RunStage(root, ctx);
+    root.RecomputeOutputIUsSubtree();
+    root.ComputeParents();
+}
+
+size_t CountOperators(TOpRoot& root, EOperator kind) {
+    size_t count = 0;
+    for (const auto& item : root) {
+        count += item.Current->Kind == kind;
+    }
+    return count;
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(KqpRboGlobalIUs) {
+    Y_UNIT_TEST(ExpandReplicateReplacesAllPorts) {
+        TIdTestContext f;
+        f.Config->_KqpEnableSpilling = false;
+        const auto source = f.Id(), call = f.Id(), result = f.Id();
+        TIntrusivePtr<IOperator> producer = f.Read({source});
+        auto hub = TReplicate::Create(producer, f.Pos, f.Props.InfoUnitRegistry);
+        auto left = hub->AddOutput(), right = hub->AddOutput(), subplan = hub->AddOutput();
+        const auto rightId = right->GetRebindings().At(source);
+        const auto subplanId = subplan->GetRebindings().At(source);
+        f.Props.Subplans.Add(call, std::move(subplan), ESubplanType::EXPR, {}, subplanId);
+        auto join = MakeIntrusive<TOpJoin>(std::move(left), std::move(right), f.Pos, "Cross", TJoinIUs{});
+        auto root = f.Root(f.Copies(join, {{result, call}}), {{source, "left"}, {rightId, "right"}, {result, "subplan"}});
+
+        ExpandReplicates(*root, f.RboCtx);
+        UNIT_ASSERT_VALUES_EQUAL(CountOperators(*root, EOperator::Replicate), 0);
+        UNIT_ASSERT(join->GetLeftInput() == producer);
+        UNIT_ASSERT(join->GetRightInput() != producer);
+        UNIT_ASSERT(join->GetRightInput()->GetOutputIUs() == TUnorderedIUs{rightId});
+        UNIT_ASSERT(root->PlanProps.Subplans.At(call).Plan->GetOutputIUs() == TUnorderedIUs{subplanId});
+        NTests::AssertIdInvariants(*join, root->PlanProps);
+    }
+
+    Y_UNIT_TEST(ExpandReplicatePreservesNestedConsumerBindings) {
+        // Direct rule application is independent of pipeline configuration.
+        for (const bool spilling : {false, true}) {
+            for (const bool keepPrimary : {false, true}) {
+                TIdTestContext f;
+                f.Config->_KqpEnableSpilling = spilling;
+                f.QueryCtx->Type = EKikimrQueryType::Query;
+                const auto a = f.Id(), b = f.Id(), mapped = f.Id(), total = f.Id();
+                const auto read = f.Read({a, b});
+                auto source = TReplicate::Create(read, f.Pos, f.Props.InfoUnitRegistry);
+                auto primary = source->AddOutput(), secondary = source->AddOutput();
+                auto mapInput = keepPrimary ? primary : source->AddOutput();
+                const auto inputA = keepPrimary ? a : mapInput->GetRebindings().At(a);
+                const auto key = keepPrimary ? b : mapInput->GetRebindings().At(b);
+                auto map = f.Copies(mapInput, {{mapped, inputA}});
+                TAggregationIUs aggregations;
+                aggregations.Add(total, TOpAggregationTraits{mapped, "count"});
+                auto aggregate = MakeIntrusive<TOpAggregate>(map, std::move(aggregations), TOrderedIUs<>{key},
+                    EOpPhase::Final, false, f.Pos);
+                auto shared = TReplicate::Create(aggregate, f.Pos, f.Props.InfoUnitRegistry);
+                auto nested = TReplicate::Create(shared->AddOutput(), f.Pos, f.Props.InfoUnitRegistry);
+                auto left = nested->AddOutput(), right = nested->AddOutput();
+                const auto rightTotal = right->GetRebindings().At(total);
+                auto pair = MakeIntrusive<TOpJoin>(left, right, f.Pos, "Inner",
+                    TJoinIUs{{key, right->GetRebindings().At(key)}});
+                auto root = f.Root(MakeIntrusive<TOpJoin>(pair, secondary, f.Pos, "Cross", TJoinIUs{}),
+                    {{total, "left"}, {rightTotal, "right"}});
+                const auto outputs = root->GetInput()->GetOutputIUs();
+
+                ExpandReplicates(*root, f.RboCtx);
+                // Consumers keep their IDs; a copy Map may also forward the producer's.
+                UNIT_ASSERT(outputs.IsSubsetOf(root->GetInput()->GetOutputIUs()));
+                NTests::AssertIdInvariants(*root, root->PlanProps);
+                // A consumer keeps the original read, even without the primary port.
+                bool keepsRead = false;
+                for (const auto& item : *root) {
+                    keepsRead |= item.Current == read.Get();
+                    UNIT_ASSERT_VALUES_EQUAL(item.Current->Parents.size(), 1);
+                }
+                UNIT_ASSERT(keepsRead);
+                UNIT_ASSERT_VALUES_EQUAL(CountOperators(*root, EOperator::Replicate), 0);
+                UNIT_ASSERT_VALUES_EQUAL(CountOperators(*root, EOperator::Source), 3);
+                const auto before = root->PlanToString(f.ExprCtx);
+                ExpandReplicates(*root, f.RboCtx);
+                UNIT_ASSERT_VALUES_EQUAL(root->PlanToString(f.ExprCtx), before);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ExpandReplicateCopiesOnlyRepeatableProducers) {
+        enum class EProducer { Sum, Some, RandomNumber, Limit, TopSort, Window };
+        for (const auto kind : {EProducer::Sum, EProducer::Some, EProducer::RandomNumber,
+                               EProducer::Limit, EProducer::TopSort, EProducer::Window}) {
+            TIdTestContext f;
+            f.Config->_KqpEnableSpilling = false;
+            const auto k = f.Id("k"), v = f.Id("v"), x = f.Id("x");
+            TIntrusivePtr<IOperator> producer = f.Read({k, v});
+            if (kind == EProducer::Sum || kind == EProducer::Some) {
+                TAggregationIUs aggregations;
+                aggregations.Add(x, TOpAggregationTraits{v, kind == EProducer::Sum ? "sum" : "some"});
+                producer = MakeIntrusive<TOpAggregate>(producer, std::move(aggregations), TOrderedIUs<>{k},
+                    EOpPhase::Undefined, false, f.Pos);
+            } else if (kind == EProducer::RandomNumber) {
+                TMapIUs definitions;
+                definitions.Add(x, MakeUnaryCallable("RandomNumber", f.Column(v)));
+                producer = MakeIntrusive<TOpMap>(producer, f.Pos, std::move(definitions));
+            } else if (kind == EProducer::Limit) {
+                producer = MakeIntrusive<TOpLimit>(producer, f.Pos, f.Constant(), EOpPhase::Undefined);
+            } else if (kind == EProducer::TopSort) {
+                producer = MakeIntrusive<TOpSort>(producer, f.Pos, TPhysicalOpProps{},
+                    TSortIUs{{k, {true, false}}}, f.Constant(), EOpPhase::Undefined);
+            } else {
+                TWindowIUs functions;
+                functions.Add(x, TOpWindowFunc{"sum", EWindowFuncKind::Aggregate, {v}});
+                producer = MakeIntrusive<TOpWindow>(producer, f.Pos, std::move(functions),
+                    TOrderedIUs<>{k}, TSortIUs{}, TOpWindowFrame{});
+            }
+            auto hub = TReplicate::Create(producer, f.Pos, f.Props.InfoUnitRegistry);
+            auto left = hub->AddOutput(), right = hub->AddOutput();
+            const auto out = f.Id();
+            auto root = f.Root(f.Union(left, right, {{out, k, right->GetRebindings().At(k)}}), {{out, "k"}});
+            ExpandReplicates(*root, f.RboCtx);
+            const bool duplicated = kind == EProducer::Sum;
+            UNIT_ASSERT_VALUES_EQUAL(CountOperators(*root, EOperator::Replicate), duplicated ? 0 : 2);
+            UNIT_ASSERT_VALUES_EQUAL(CountOperators(*root, producer->Kind), duplicated ? 2 : 1);
+            NTests::AssertIdInvariants(*root, root->PlanProps);
+        }
+    }
+
+    Y_UNIT_TEST(ExpandReplicateRejectsLargeProducers) {
+        TIdTestContext f;
+        f.Config->_KqpEnableSpilling = false;
+        const auto key = f.Id("key");
+        TIntrusivePtr<IOperator> producer = f.Read({key});
+        for (size_t i = 0; i < 1001; ++i) {
+            producer = MakeIntrusive<TOpFilter>(producer, f.Pos,
+                MakeBinaryPredicate("==", f.Column(key), f.Constant()));
+        }
+        auto hub = TReplicate::Create(producer, f.Pos, f.Props.InfoUnitRegistry);
+        auto left = hub->AddOutput(), right = hub->AddOutput();
+        auto root = f.Root(MakeIntrusive<TOpJoin>(left, right, f.Pos, "Cross", TJoinIUs{}),
+            {{key, "left"}, {right->GetRebindings().At(key), "right"}});
+
+        ExpandReplicates(*root, f.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountOperators(*root, EOperator::Replicate), 2);
+        UNIT_ASSERT_VALUES_EQUAL(CountOperators(*root, EOperator::Source), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountOperators(*root, EOperator::Filter), 1001);
+        NTests::AssertIdInvariants(*root, root->PlanProps);
+    }
+
+    Y_UNIT_TEST(ExpandReplicateCopiesRepeatableSubplansWithFreshCaptures) {
+        TIdTestContext f;
+        f.Config->_KqpEnableSpilling = false;
+        const auto source = f.Id("source"), local = f.Id("local"), call = f.Id("call"), result = f.Id("result");
+        TDependencyIUs captures;
+        captures.Add(local, TCapturedIU{source, f.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64)});
+        auto subplan = MakeIntrusive<TOpAddDependencies>(MakeIntrusive<TOpEmptySource>(f.Pos), f.Pos, std::move(captures));
+        f.Props.Subplans.Add(call, subplan, ESubplanType::EXPR, {}, local);
+        f.Props.Subplans.RefreshDependencies(call);
+        auto producer = f.Copies(f.Read({source}), {{result, call}});
+        auto hub = TReplicate::Create(producer, f.Pos, f.Props.InfoUnitRegistry);
+        auto left = hub->AddOutput(), right = hub->AddOutput();
+        const auto rightResult = right->GetRebindings().At(result);
+        const auto rightSource = right->GetRebindings().At(source);
+        auto join = MakeIntrusive<TOpJoin>(left, right, f.Pos, "Cross", TJoinIUs{});
+        auto root = f.Root(join, {{result, "left"}, {rightResult, "right"}});
+
+        ExpandReplicates(*root, f.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountOperators(*root, EOperator::Replicate), 0);
+        UNIT_ASSERT(join->GetLeftInput() == producer);
+        auto& copy = CastOperator<TOpMap>(*join->GetRightInput());
+        const auto copiedCall = copy.GetMapElements().At(rightResult).GetColumnAccess();
+        UNIT_ASSERT(copiedCall != call);
+        const auto& copiedEntry = root->PlanProps.Subplans.At(copiedCall);
+        UNIT_ASSERT(copiedEntry.Plan != subplan);
+        UNIT_ASSERT(copiedEntry.DependentIUs == TUnorderedIUs{rightSource});
+        auto& copiedCaptures = CastOperator<TOpAddDependencies>(*copiedEntry.Plan);
+        UNIT_ASSERT_VALUES_EQUAL(copiedCaptures.GetDependencies().At(*copiedEntry.ResultIU).Outer, rightSource);
+        UNIT_ASSERT(root->PlanProps.Subplans.At(call).Plan == subplan);
+        UNIT_ASSERT(root->PlanProps.Subplans.At(call).DependentIUs == TUnorderedIUs{source});
+        NTests::AssertIdInvariants(*root, root->PlanProps);
+    }
+
+    Y_UNIT_TEST(StageAssignmentRejectsSharingAfterExpandingSafeSubtrees) {
+        TIdTestContext f;
+        f.Config->_KqpEnableSpilling = false;
+        const auto safe = f.Id(), unsafe = f.Id();
+        auto safeHub = TReplicate::Create(f.Read({safe}), f.Pos, f.Props.InfoUnitRegistry);
+        auto left = safeHub->AddOutput(), right = safeHub->AddOutput();
+        auto safeJoin = MakeIntrusive<TOpJoin>(left, right, f.Pos, "Cross", TJoinIUs{});
+        auto limit = MakeIntrusive<TOpLimit>(f.Read({unsafe}), f.Pos, f.Constant(), EOpPhase::Undefined);
+        auto unsafeHub = TReplicate::Create(limit, f.Pos, f.Props.InfoUnitRegistry);
+        auto first = unsafeHub->AddOutput(), second = unsafeHub->AddOutput();
+        auto unsafeJoin = MakeIntrusive<TOpJoin>(first, second, f.Pos, "Cross", TJoinIUs{});
+        auto root = f.Root(MakeIntrusive<TOpJoin>(safeJoin, unsafeJoin, f.Pos, "Cross", TJoinIUs{}),
+            {{safe, "safe"}, {unsafe, "unsafe"}});
+
+        ExpandReplicates(*root, f.RboCtx);
+
+        UNIT_ASSERT(safeJoin->GetLeftInput()->Kind == EOperator::Source);
+        UNIT_ASSERT(safeJoin->GetRightInput()->Kind == EOperator::Source);
+        UNIT_ASSERT(safeJoin->GetLeftInput() != safeJoin->GetRightInput());
+        UNIT_ASSERT(unsafeJoin->GetLeftInput() == first);
+        UNIT_ASSERT(unsafeJoin->GetRightInput() == second);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TAssignStagesStage().RunStage(*root, f.RboCtx),
+            yexception, "Cannot execute shared Limit with channel spilling disabled");
+    }
+
+    Y_UNIT_TEST(ExpansionRejectsUnsafeCalledSubplansBeforeCopying) {
+        TIdTestContext f;
+        const auto call = f.Id(), value = f.Id(), source = f.Id(), result = f.Id();
+        TMapIUs definitions;
+        definitions.Add(value, MakeUnaryCallable("RandomNumber", f.Constant()));
+        auto subplan = MakeIntrusive<TOpMap>(MakeIntrusive<TOpEmptySource>(f.Pos), f.Pos, std::move(definitions));
+        f.Props.Subplans.Add(call, subplan, ESubplanType::EXPR, {}, value);
+        auto producer = f.Copies(f.Read({source}), {{result, call}});
+        auto hub = TReplicate::Create(producer, f.Pos, f.Props.InfoUnitRegistry);
+        auto left = hub->AddOutput(), right = hub->AddOutput();
+        auto root = f.Root(MakeIntrusive<TOpJoin>(left, right, f.Pos, "Cross", TJoinIUs{}),
+            {{result, "left"}, {right->GetRebindings().At(result), "right"}});
+        const auto size = root->PlanProps.InfoUnitRegistry.Size();
+
+        ExpandReplicates(*root, f.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountOperators(*root, EOperator::Replicate), 2);
+        UNIT_ASSERT_VALUES_EQUAL(root->PlanProps.InfoUnitRegistry.Size(), size);
+        UNIT_ASSERT(root->PlanProps.Subplans.At(call).Plan == subplan);
+        NTests::AssertIdInvariants(*root, root->PlanProps);
+    }
+
+    Y_UNIT_TEST(StageAssignmentRequiresChannelSpillingForSharedInputs) {
+        for (const auto& [serviceSpilling, querySpilling, type, allowed] :
+                TVector<std::tuple<bool, bool, EKikimrQueryType, bool>>{
+                    {true, true, EKikimrQueryType::Query, true},
+                    {true, true, EKikimrQueryType::Scan, true},
+                    {true, true, EKikimrQueryType::Dml, false},
+                    {false, true, EKikimrQueryType::Query, false},
+                    {true, false, EKikimrQueryType::Query, false}}) {
+            TIdTestContext f;
+            f.Config->SetEnableQueryServiceSpilling(serviceSpilling);
+            f.Config->_KqpEnableSpilling = querySpilling;
+            f.QueryCtx->Type = type;
+            const auto source = f.Id();
+            auto hub = TReplicate::Create(f.Read({source}), f.Pos, f.Props.InfoUnitRegistry);
+            auto left = hub->AddOutput(), right = hub->AddOutput();
+            auto root = f.Root(MakeIntrusive<TOpJoin>(left, right, f.Pos, "Cross", TJoinIUs{}), {{source, "source"}});
+            // Also covers sharing introduced after the expansion stage.
+            if (allowed) {
+                TAssignStagesStage().RunStage(*root, f.RboCtx);
+                UNIT_ASSERT(left->Props.StageId == right->Props.StageId);
+                UNIT_ASSERT(left->Props.StageOutputIndex != right->Props.StageOutputIndex);
+            } else {
+                UNIT_ASSERT_EXCEPTION_CONTAINS(TAssignStagesStage().RunStage(*root, f.RboCtx),
+                    yexception, "with channel spilling disabled");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ExpandReplicateExecutesSharedSubqueries) {
+        for (const auto& [serviceSpilling, querySpilling] : {std::pair{true, false}, std::pair{true, true}, std::pair{false, true}}) {
+            const bool spilling = serviceSpilling && querySpilling;
+            NKikimrConfig::TAppConfig config;
+            config.MutableTableServiceConfig()->SetEnableNewRBO(true);
+            config.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+            config.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+            config.MutableTableServiceConfig()->SetEnableQueryServiceSpilling(serviceSpilling);
+            NKikimrKqp::TKqpSetting setting;
+            setting.SetName("_KqpEnableSpilling");
+            setting.SetValue(querySpilling ? "true" : "false");
+            TKikimrRunner kikimr(TKikimrSettings(config).SetKqpSettings({setting}).SetWithSampleTables(false));
+            auto client = kikimr.GetQueryClient();
+            auto created = client.ExecuteQuery("CREATE TABLE `/Root/KeyValue` (Key Uint64, PRIMARY KEY (Key));",
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const ui64 key : {1, 2}) {
+                rows.AddListItem().BeginStruct().AddMember("Key").Uint64(key).EndStruct();
+            }
+            auto inserted = kikimr.GetTableClient().BulkUpsert("/Root/KeyValue", rows.EndList().Build()).ExtractValueSync();
+            UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+            for (const auto& [query, expected] : TVector<std::pair<TString, TString>>{
+                {R"(
+                    PRAGMA YqlSelect = 'force';
+                    $shared = (SELECT Key, SUM(Key) AS Value FROM `/Root/KeyValue` WHERE Key > 0 GROUP BY Key);
+                    SELECT Unwrap(SUM(l.Value + r.Value)) FROM $shared AS l
+                    INNER JOIN $shared AS r ON l.Key = r.Key;
+                )", "[[6u]]"},
+                {R"(
+                    PRAGMA YqlSelect = 'force';
+                    $shared = (SELECT Key, SUM(CAST(Key AS Double)) AS Value FROM `/Root/KeyValue` GROUP BY Key);
+                    SELECT Unwrap(CAST(SUM(l.Value + r.Value) AS Uint64)) FROM $shared AS l
+                    INNER JOIN $shared AS r ON l.Key = r.Key;
+                )", "[[6u]]"},
+                {R"(
+                    PRAGMA YqlSelect = 'force';
+                    $shared = (SELECT Key, SUM(CAST(Key AS Decimal(22, 9))) AS Value FROM `/Root/KeyValue` GROUP BY Key);
+                    SELECT Unwrap(CAST(SUM(l.Value + r.Value) AS Uint64)) FROM $shared AS l
+                    INNER JOIN $shared AS r ON l.Key = r.Key;
+                )", "[[6u]]"},
+                // Copy elimination renames the read column in the second consumer.
+                {R"(
+                    PRAGMA YqlSelect = 'force';
+                    $shared = (SELECT key, COUNT(*) AS c FROM (SELECT Key AS key FROM `/Root/KeyValue`) GROUP BY key);
+                    SELECT Unwrap(SUM(l.c + r.c)) FROM $shared AS l INNER JOIN $shared AS r ON l.key = r.key;
+                )", "[[4u]]"},
+            }) {
+                auto explain = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)).ExtractValueSync();
+                UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+                const TString ast{*explain.GetStats()->GetAst()};
+                // A stage output other than the first, quoted or not.
+                const bool shared = std::regex_search(ast.c_str(), std::regex(R"(\(TDqOutput [^ ]+ '"?[1-9][0-9]*"?\))"));
+                UNIT_ASSERT_VALUES_EQUAL_C(shared, spilling, query << ast);
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), expected);
+            }
+            const TString query = R"(
+                PRAGMA YqlSelect = 'force';
+                $shared = (SELECT Key, AVG(Key) AS Value FROM `/Root/KeyValue` GROUP BY Key);
+                SELECT SUM(l.Value + r.Value) FROM $shared AS l INNER JOIN $shared AS r ON l.Key = r.Key;
+            )";
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), spilling, query << result.GetIssues().ToString());
+            if (!spilling) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "with channel spilling disabled");
+            }
+        }
+    }
+
     Y_UNIT_TEST(SingletonReplicateCollapsesEitherPortAndIgnoresHubReferences) {
         for (const bool secondary : {false, true}) {
             TIdTestContext f;

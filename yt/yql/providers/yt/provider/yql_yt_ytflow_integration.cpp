@@ -296,8 +296,9 @@ public:
                     pathInfo.Table->Cluster, pathInfo.Table->Name, pathInfo.Table->Epoch);
                 const auto& expressionColumns = tableDescription.RowSpec->ExpressionColumns;
 
+                const auto foreignSort = pathInfo.Table->RowSpec->GetForeignSort();
                 TVector<TStringBuf> sortKeys;
-                for (const auto& [key, _] : pathInfo.Table->RowSpec->GetForeignSort()) {
+                for (const auto& [key, _] : foreignSort) {
                     if (!expressionColumns.contains(key)) {
                         sortKeys.push_back(key);
                     }

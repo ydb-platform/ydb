@@ -4,7 +4,8 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <cstring>
+#include <util/system/byteorder.h>
+#include <util/system/unaligned_mem.h>
 
 namespace {
 
@@ -26,8 +27,8 @@ namespace {
     TString UuidBytesFromHalves(ui64 low, ui64 high) {
         TString bytes;
         bytes.resize(16);
-        memcpy(bytes.begin(), &low, sizeof(ui64));
-        memcpy(bytes.begin() + sizeof(ui64), &high, sizeof(ui64));
+        WriteUnaligned<ui64>(bytes.begin(), HostToLittle(low));
+        WriteUnaligned<ui64>(bytes.begin() + sizeof(ui64), HostToLittle(high));
         return bytes;
     }
 
@@ -55,10 +56,8 @@ namespace {
     }
 
     std::pair<ui64, ui64> UuidHalves(const TString& bytes) {
-        ui64 low = 0;
-        ui64 high = 0;
-        memcpy(&low, bytes.data(), sizeof(ui64));
-        memcpy(&high, bytes.data() + sizeof(ui64), sizeof(ui64));
+        const ui64 low = LittleToHost(ReadUnaligned<ui64>(bytes.data()));
+        const ui64 high = LittleToHost(ReadUnaligned<ui64>(bytes.data() + sizeof(ui64)));
         return {low, high};
     }
 
@@ -300,6 +299,32 @@ Y_UNIT_TEST_SUITE(MatchPredicate) {
         UNIT_ASSERT(MatchPredicate(
             TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildUuidStats(lo, hi)}}},
             BuildPredicate(ComparisonPredicate("col1", "EQ", "INT64", "int64_value: 1"))));
+    }
+
+    Y_UNIT_TEST(UuidBetweenInvalidStatsKeepsGroup) {
+        const auto bound = UuidHalves(TString(16, '\x30'));
+        const auto predicate = BuildPredicate(TStringBuilder()
+            << "between { value { column: \"col1\" }"
+            << " least { typed_value { type { type_id: UUID } value { low_128: " << bound.first
+            << " high_128: " << bound.second << " } } }"
+            << " greatest { typed_value { type { type_id: UUID } value { low_128: " << bound.first
+            << " high_128: " << bound.second << " } } } }");
+        for (const size_t lowSize : {0, 8, 16, 32}) {
+            for (const size_t highSize : {0, 8, 16, 32}) {
+                const auto stats = BuildUuidStats(TString(lowSize, '\x10'), TString(highSize, '\x20'));
+                const bool matched = MatchPredicate(
+                    TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{"col1", stats}}, predicate);
+                UNIT_ASSERT_VALUES_EQUAL(matched, lowSize != 16 || highSize != 16);
+            }
+        }
+        auto stats = BuildUuidStats(TString(16, '\x10'), TString(16, '\x20'));
+        stats.UuidStats->lowValue.Clear();
+        UNIT_ASSERT(MatchPredicate(
+            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{"col1", stats}}, predicate));
+        stats.UuidStats->lowValue = TString(16, '\x10');
+        stats.UuidStats->highValue.Clear();
+        UNIT_ASSERT(MatchPredicate(
+            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{"col1", stats}}, predicate));
     }
 
     Y_UNIT_TEST(UuidStatsWrongLengthKeepsGroup) {

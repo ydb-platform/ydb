@@ -2661,7 +2661,7 @@ class Cuda(object):
 
     def auto_cuda_version(self):
         if self.use_arcadia_cuda.value:
-            return '12.9'
+            return '13.0'
 
         if not self.have_cuda.value:
             return None
@@ -2761,6 +2761,9 @@ class Cuda(object):
 
         if version >= (12, 9):
             architectures.extend(['sm_100f', 'sm_103', 'sm_103a', 'sm_103f', 'sm_120f'])
+
+        if version >= (13, 0):
+            architectures.extend(['sm_121', 'sm_121a', 'sm_121f'])
 
         return ':'.join(architectures)
 

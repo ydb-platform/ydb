@@ -1,5 +1,6 @@
 ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
+ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.SyncLogDuplicateFreeChunkRealPDiskWithoutRestart
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
 ydb/core/driver_lib/run/ut unittest.[*/*] chunk
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
@@ -47,10 +48,16 @@ ydb/core/persqueue/ut TPQTest.TestPQPartialRead
 ydb/core/persqueue/ut TPQTest.TestPQReadWithoutReadToBlobEnd
 ydb/core/persqueue/ut TPQTest.TestReadSessions
 ydb/core/persqueue/ut TPQTest.TestSetClientOffset
+ydb/core/statistics/aggregator/ut AnalyzeSampling.CollectAndPersistStatistics+ColumnShard-SmallHistogramBudget
 ydb/core/sys_view/ut_large SystemViewLarge.AuthOwners_DropSubtreeDuringScan
 ydb/core/tablet/ut BootstrapperTest.MultipleBootstrappers
 ydb/core/tablet_flat/ut TFlatTableExecutor_CutTabletHistory.TestDoNotCutHistoryEnabledAfterBoot
+ydb/core/tx/replication/controller/ut_schema_change AttachmentLifecycle.DropCascadeDuringAttachment
+ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithoutSchemaChangesReportsError
+ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropSyncIndexWithGlobalConsistency
 ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
+ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactWithIndexCreation[TabletRebootsBucket2]
+ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots FulltextIndexBuildTestReboots.BaseCase[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCaseWithDataColumns[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
@@ -82,17 +89,22 @@ ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.te
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_join[mixed_prestable-26-4-1_and_stable-26-3-1-True]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-4-1_and_stable-26-3-1]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[default-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[max_tasks_per_stage_2-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[max_tasks_per_stage_2-True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_cascade_hopping_window[2-no_shared-False]
+ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_cascade_hopping_window[2-no_shared-True]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_late_events_policy[ADJUST-expected1-True-2-no_shared]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_watermarks[2-no_shared-False]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_watermarks_kqp_slj[kikimr0-False-2-no_shared]
+ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_wm_after_parsing[False-2-no_shared]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_wm_after_parsing[True-2-no_shared]
 ydb/tests/fq/streaming/logbroker py3test.sole chunk
 ydb/tests/fq/streaming/logbroker test_logbroker.py.TestLogbroker.test_read_write
 ydb/tests/fq/yds test_disposition.py.TestDisposition.test_disposition_from_time[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
+ydb/tests/functional/config py3test.[test_distconf.py */*] chunk
+ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_replace_config_unknown_fields[host_config]
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/federation_test TFederationWriteReadTest.CreateRemoteMirrorRuleWithGaps
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA

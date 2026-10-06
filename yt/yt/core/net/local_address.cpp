@@ -5,10 +5,7 @@
 
 #include <yt/yt/core/misc/proc.h>
 
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
-
 #include <library/cpp/yt/system/handle_eintr.h>
-#include <library/cpp/yt/system/exit.h>
 
 #ifdef _unix_
     #include <sys/types.h>
@@ -29,98 +26,17 @@ namespace NYT::NNet {
 
 namespace {
 
-class TStaticName
-{
-public:
-    TStringBuf Read() const noexcept
-    {
-        // Writer-side imposes AcqRel ordering, so all preceding writes must be visible.
-        char* ptr = Ptr_.load(std::memory_order::relaxed);
-        return ptr ? ptr : Buffer_;
-    }
-
-    std::string Get() const
-    {
-        return std::string(Read());
-    }
-
-    void Write(TStringBuf value) noexcept
-    {
-        char* ptr = Ptr_.load(std::memory_order::relaxed);
-        ptr = ptr ? ptr : Buffer_;
-
-        if (TStringBuf(ptr) == value) {
-            // No changes; just return.
-            return;
-        }
-
-        ptr = ptr + strlen(ptr) + 1;
-
-        if (ptr + value.length() + 1 >= Buffer_ + BufferSize) {
-            AbortProcessDramatically(
-                EProcessExitCode::InternalError,
-                "TStaticName is out of buffer space");
-        }
-
-        ::memcpy(ptr, value.data(), value.length());
-        *(ptr + value.length()) = 0;
-
-        Ptr_.store(ptr, std::memory_order::seq_cst);
-    }
-
-private:
-    static constexpr size_t BufferSize = 1024;
-    char Buffer_[BufferSize] = "(unknown)";
-    std::atomic<char*> Ptr_;
-};
-
 // All static variables below must be constinit.
-constinit TStaticName LocalHostName;
-constinit TStaticName LocalYPCluster;
 constinit std::atomic<bool> IPv6Enabled = false;
 
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStringBuf GetLocalHostNameRaw() noexcept
-{
-    NYT::NDetail::EnableErrorOriginOverrides();
-    return LocalHostName.Read();
-}
-
-TStringBuf GetLocalYPClusterRaw() noexcept
-{
-    // Writer-side imposes AcqRel ordering, so all preceding writes must be visible.
-    return LocalYPCluster.Read();
-}
-
-void SetLocalHostName(TStringBuf hostName) noexcept
-{
-    NYT::NDetail::EnableErrorOriginOverrides();
-
-    static YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock);
-    auto guard = Guard(Lock);
-
-    LocalHostName.Write(hostName);
-
-    if (auto ypCluster = InferYPClusterFromHostNameRaw(hostName)) {
-        LocalYPCluster.Write(*ypCluster);
-    }
-}
-
-std::string GetLocalHostName()
-{
-    return LocalHostName.Get();
-}
-
-std::string GetLocalYPCluster()
-{
-    return LocalYPCluster.Get();
-}
-
 void UpdateLocalHostName(const TAddressResolverConfigPtr& config)
 {
+    NYT::NDetail::EnableErrorOriginOverrides();
+
     // See https://man7.org/linux/man-pages/man7/hostname.7.html
     std::array<char, 256> hostName{};
 

@@ -35,13 +35,6 @@ TString ErrorDistinctByGroupKey(const TString& column) {
     return TStringBuilder() << "Unable to use DISTINCT by grouping column: " << column << ". You should leave one of them.";
 }
 
-TTopicRef::TTopicRef(TString refName, TDeferredAtom cluster, TNodePtr keys)
-    : RefName(std::move(refName))
-    , Cluster(std::move(cluster))
-    , Keys(std::move(keys))
-{
-}
-
 INode::INode(TPosition pos)
     : Pos_(std::move(pos))
 {

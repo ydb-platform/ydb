@@ -6,6 +6,7 @@ ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
+ydb/core/kqp/ut/sysview KqpSystemView.CompileCacheUserIsolation
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk

@@ -462,8 +462,7 @@ public:
                 if (auto filter = options.Filter()) {
                     auto exprCtx = options.ExprCtx();
                     YQL_ENSURE(exprCtx);
-                    TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
-                        Services_->GetFunctionRegistry()->SupportsSizedAllocators());
+                    TScopedAlloc alloc(__LOCATION__);
                     alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                     auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
                     TVector<TFileLinkPtr> externalFiles;
@@ -750,8 +749,7 @@ public:
             outSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, std::move(outSpec));
 
             auto content = Services_->GetTableContent(tableInfo.Name);
-            TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
-                Services_->GetFunctionRegistry()->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             TMemoryUsageInfo memInfo("Stat");
             TTypeEnvironment env(alloc);
             NKikimr::NMiniKQL::TTypeBuilder typeBuilder(env);
@@ -800,8 +798,7 @@ public:
         // TODO: fixme
         try {
             TSession* session = GetSession(options);
-            TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
-                Services_->GetFunctionRegistry()->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
@@ -852,8 +849,7 @@ public:
 
             append = append && NFs::Exists(destFilePath);
 
-            TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
-                Services_->GetFunctionRegistry()->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
@@ -1425,8 +1421,7 @@ private:
     bool ExecuteResult(TSession& session, NYson::TYsonWriter& writer, TExprBase input, TExprContext& exprCtx,
         TResOrPullOptions&& options, const TVector<TString>& columns) const
     {
-        TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
-            Services_->GetFunctionRegistry()->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__);
         alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
         auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
         TVector<TFileLinkPtr> externalFiles;
@@ -1508,8 +1503,7 @@ private:
         TFsQueryCacheItem queryCacheItem(*options.Config(), cluster, Services_->GetTmpDir(), options.OperationHash(),
              outTablePaths, options.OutputHash());
         if (!queryCacheItem.Lookup(FakeQueue_)) {
-            TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
-                Services_->GetFunctionRegistry()->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;

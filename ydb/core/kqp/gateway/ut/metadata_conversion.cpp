@@ -206,7 +206,7 @@ TEST(MetadataConversion, MessageStreamKeepsConnectionType) {
     ydb.InitObjectKind(EKind::MessageStream);
     EXPECT_TRUE(ydb.IsMessageStream());
     EXPECT_TRUE(ydb.IsYdb());
-    EXPECT_EQ(ydb.GetType(), "Ydb");
+    EXPECT_EQ(ydb.GetDatabaseType(), NYql::EDatabaseType::Ydb);
     EXPECT_EQ(ydb.BuildConnectorProperties().at("source_type"), "Ydb");
     EXPECT_EQ(ydb.GetProviderName(factory), NYql::PqProviderName);
 }

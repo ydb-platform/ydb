@@ -482,7 +482,7 @@ class ShardProgressTest(unittest.TestCase):
         body = shard_progress.render_comment(state, "2026-10-04T12:05:00Z")
         self.assertIn("**Progress:** 1/4", body)
         self.assertIn("**ETA:** 15m", body)
-        self.assertIn("**Status:** running", body)
+        self.assertIn("Tests still running (1/4 shards).", body)
         self.assertIn("shard 0 **failure**", body)
         self.assertIn("`ydb/a/unittest/Foo`", body)
         self.assertIn("shard_0", body)
@@ -534,9 +534,12 @@ class ShardProgressTest(unittest.TestCase):
                 run_url="https://example.test/run/99",
             )
         body = shard_progress.render_comment(state, "2026-10-04T12:04:00Z")
-        self.assertIn("**Progress:** 2/2", body)
-        self.assertIn("**ETA:** done", body)
-        self.assertIn("**Status:** failure", body)
+        self.assertIn("### Run-tests `relwithdebinfo`", body)
+        self.assertIn("Some tests failed, follow the links below.", body)
+        self.assertIn("| TESTS |", body)
+        self.assertIn("Failures:", body)
+        self.assertNotIn("**Progress:**", body)
+        self.assertNotIn("still running", body)
         parsed = shard_progress.parse_state(body)
         self.assertIsNotNone(parsed)
         assert parsed is not None
@@ -772,7 +775,7 @@ class ShardProgressTest(unittest.TestCase):
             "https://example.test/comments?page=2",
         )
 
-    def test_comment_update_retries_without_if_match_on_http_400(self) -> None:
+    def test_comment_update_does_not_send_if_match(self) -> None:
         class _Fake(shard_progress.GithubCommentStore):
             def __init__(self) -> None:
                 super().__init__("token", "ydb-platform/ydb", 1)
@@ -786,7 +789,7 @@ class ShardProgressTest(unittest.TestCase):
 
         store = _Fake()
         store.update(1, "body", '"etag-1"')
-        self.assertEqual(store.calls, ['"etag-1"', None])
+        self.assertEqual(store.calls, [None])
 
     def test_shard_job_note_is_not_the_combined_table(self) -> None:
         state = shard_progress.apply_shard(

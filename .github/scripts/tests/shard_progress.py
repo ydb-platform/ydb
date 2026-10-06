@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -95,6 +96,17 @@ def format_time(value: datetime) -> str:
 
 def marker(run_id: str, preset: str) -> str:
     return f"<!-- shard-progress run={run_id} preset={preset} -->"
+
+
+_MARKER_RE = re.compile(r"^<!-- shard-progress run=(\S+) preset=(\S+) -->")
+
+
+def marker_parts(body: str) -> tuple[str, str] | None:
+    first = (body or "").split("\n", 1)[0].strip()
+    match = _MARKER_RE.match(first)
+    if not match:
+        return None
+    return match.group(1), match.group(2)
 
 
 COUNT_KEYS = ("tests", "passed", "errors", "failed", "skipped", "muted")
@@ -489,19 +501,16 @@ def _md(text: str) -> str:
 def render_comment(state: dict[str, Any], now: str) -> str:
     total = int(state.get("total") or 0)
     received = received_count(state)
-    eta = eta_label(received, total, elapsed_seconds(state, now))
     status = overall_status(state)
     lines = [
         marker(str(state.get("run_id") or ""), str(state.get("preset") or "")),
-        f"### Sharded Run-tests `{_md(str(state.get('preset') or ''))}`",
+        f"### Run-tests `{_md(str(state.get('preset') or ''))}`",
         "",
-        f"**Progress:** {received}/{total}",
-        f"**ETA:** {eta}",
-        f"**Status:** {status}",
     ]
-    target = str(state.get("target") or "")
-    if target:
-        lines.append(f"**Target:** `{_md(target)}`")
+    if status == "running":
+        eta = eta_label(received, total, elapsed_seconds(state, now))
+        lines.append(f"**Progress:** {received}/{total}")
+        lines.append(f"**ETA:** {eta}")
     run_url = str(state.get("run_url") or "")
     if run_url:
         lines.append(f"**Run:** {run_url}")
@@ -640,21 +649,14 @@ class GithubCommentStore:
         return RestComment(int(payload["id"]), body, "")
 
     def update(self, comment_id: int, body: str, etag: str) -> None:
+        # Do not send If-Match: issue-comment PATCH answers HTTP 400.
         status, _headers, payload = self._request(
             "PATCH",
             f"https://api.github.com/repos/{self._repository}/issues/comments/{comment_id}",
             {"body": body},
-            etag=etag,
         )
         if status == 412:
             raise Conflict(str(comment_id))
-        # Issue-comment PATCH rejects If-Match with HTTP 400. Retry bare.
-        if status == 400 and etag:
-            status, _headers, payload = self._request(
-                "PATCH",
-                f"https://api.github.com/repos/{self._repository}/issues/comments/{comment_id}",
-                {"body": body},
-            )
         if status != 200:
             raise RuntimeError(f"update comment {comment_id} failed: HTTP {status}: {payload}")
 
@@ -700,15 +702,18 @@ class GithubCommentStore:
 
 
 def sync_comment(store: CommentStore, header: str, state: dict[str, Any], now: str) -> str:
-    """Write one comment. On ETag conflict, re-read every marker comment and merge."""
+    """Write one comment per build. Older runs of the same preset are removed."""
     body = ""
+    preset = str(state.get("preset") or "")
+    run_id = str(state.get("run_id") or "")
     for _attempt in range(RETRY_LIMIT):
         matches = store.list_marker(header)
         if not matches:
             body = render_comment(state, now)
-            store.create(body)
+            created = store.create(body)
             matches = store.list_marker(header)
             if len(matches) <= 1:
+                _cleanup_comments(store, matches, created.id, preset, run_id)
                 return body
         canonical = min(matches, key=lambda item: item.id)
         fresh = store.get(canonical.id)
@@ -725,25 +730,42 @@ def sync_comment(store: CommentStore, header: str, state: dict[str, Any], now: s
         merged = merge_states([item for item in parsed if item])
         body = render_comment(merged, now)
         if fresh.body == body:
-            _delete_extras(store, matches, fresh.id)
+            _cleanup_comments(store, matches, fresh.id, preset, run_id)
             return body
         try:
             store.update(fresh.id, body, fresh.etag)
         except Conflict:
             time.sleep(1)
             continue
-        _delete_extras(store, matches, fresh.id)
+        _cleanup_comments(store, matches, fresh.id, preset, run_id)
         return body
     raise RuntimeError("shard progress comment kept conflicting; retries exhausted")
 
 
-def _delete_extras(store: CommentStore, matches: list[CommentRecord], keep_id: int) -> None:
-    for item in matches:
-        if item.id != keep_id:
-            try:
-                store.delete(item.id)
-            except RuntimeError as exc:
-                print(f"warning: {exc}", file=sys.stderr)
+def _cleanup_comments(
+    store: CommentStore,
+    matches: list[CommentRecord],
+    keep_id: int,
+    preset: str,
+    run_id: str,
+) -> None:
+    extra = [item for item in matches if item.id != keep_id]
+    if preset:
+        for item in store.list_marker("<!-- shard-progress "):
+            if item.id == keep_id:
+                continue
+            parts = marker_parts(item.body)
+            if parts and parts[1] == preset and parts[0] != run_id:
+                extra.append(item)
+    seen: set[int] = set()
+    for item in extra:
+        if item.id in seen:
+            continue
+        seen.add(item.id)
+        try:
+            store.delete(item.id)
+        except RuntimeError as exc:
+            print(f"warning: {exc}", file=sys.stderr)
 
 
 def load_report(path: str) -> dict[str, Any] | None:
@@ -982,10 +1004,14 @@ def _cmd_finalize(args: argparse.Namespace) -> int:
         return 0
     merged = merge_states(states)
     now = args.now or format_time(datetime.now(timezone.utc))
-    # Reuse the sync path so a racing shard is merged instead of overwritten.
-    written = sync_comment(store, header, merged, now)
+    written = render_comment(merged, now)
     heading = f"## Combined Run-tests `{_md(args.preset)}`\n\n"
     _write_summary(args.summary_file, heading + visible_comment(written) + "\n")
+    try:
+        written = sync_comment(store, header, merged, now)
+    except (OSError, RuntimeError, urllib.error.URLError, json.JSONDecodeError, TimeoutError, ValueError) as exc:
+        print(f"warning: comment update failed ({exc}); wrote the combined summary only.", file=sys.stderr)
+        return 0
     return 0
 
 

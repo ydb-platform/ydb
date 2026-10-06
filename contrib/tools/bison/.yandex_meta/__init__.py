@@ -109,7 +109,7 @@ def post_install(self):
         yamake.after(
             "CFLAGS",
             """
-IF (OPENSOURCE AND NOT OS_DARWIN)
+IF (OPENSOURCE)
     LDFLAGS(-Wl,--allow-multiple-definition)
 ENDIF()
             """,

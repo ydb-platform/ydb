@@ -1,7 +1,13 @@
 #pragma once
 #include "defs.h"
+#include "datashard_user_table.h"
 
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tablet_flat/flat_scan_iface.h>
+
+namespace Ydb {
+class ResultSet;
+}
 
 namespace NKikimr {
 namespace NDataShard {
@@ -19,6 +25,12 @@ public:
     bool IsFatalError;
     bool SchemaChanged;
 };
+
+bool AddRowToYdbResultSet(
+    Ydb::ResultSet& resultSet,
+    TConstArrayRef<NScheme::TTypeInfo> types,
+    TConstArrayRef<TCell> cells,
+    TString& error);
 
 TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId,
                                         ui64 shardId,

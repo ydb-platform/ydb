@@ -119,11 +119,12 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.OptimizerHints='JoinType(L R Broadcast)';
                 PRAGMA ydb.UseScalarHashJoinForMap=")" << (useScalarHashJoin ? "true" : "false") << R"(";
-                $l = SELECT id, k, Just(v) AS jv FROM L;
-                SELECT L.id AS lid, R.id AS rid, L.jv AS jv
+                -- Aggregate so that Just is not pulled above the join
+                $l = SELECT k, SOME(Just(v)) AS jv FROM L GROUP BY k;
+                SELECT L.k AS lk, R.id AS rid, L.jv AS jv
                 FROM $l AS L
                 INNER JOIN R ON L.k = R.k
-                ORDER BY lid, rid;
+                ORDER BY lk, rid;
             )";
         };
         const TString scalarQuery = makeQuery(true);

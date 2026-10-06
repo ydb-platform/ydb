@@ -658,6 +658,7 @@ def kikimr_cfg_for_dynamic_node(
     yql_txt_enabled=False,
     fq_txt_enabled=False,
     use_auth_token_file=False,
+    grpc_port=2135,
 ):
     return "\n".join(
         [
@@ -665,6 +666,7 @@ def kikimr_cfg_for_dynamic_node(
                 tenant,
                 node_broker_port=node_broker_port,
                 ic_port=ic_port,
+                grpc_port=grpc_port,
                 mon_port=mon_port,
                 kikimr_home=kikimr_home,
                 kikimr_binaries_base_path=kikimr_binaries_base_path,

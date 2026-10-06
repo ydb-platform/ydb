@@ -215,6 +215,10 @@ class StaticConfigGenerator(object):
 
     @property
     def grpc_txt(self):
+        if self.__grpc_port is not None:
+            grpc_config = copy.deepcopy(self.__cluster_details.grpc_config)
+            grpc_config["port"] = int(self.__grpc_port)
+            return self.__proto_config("grpc.txt", config_pb2.TGRpcConfig, grpc_config)
         return self.__proto_config("grpc.txt", config_pb2.TGRpcConfig, self.__cluster_details.grpc_config)
 
     @property
@@ -602,6 +606,7 @@ class StaticConfigGenerator(object):
                 audit_txt_enabled=self.audit_txt_enabled,
                 fq_txt_enabled=self.fq_txt_enabled,
                 use_auth_token_file=self._use_auth_token_file,
+                grpc_port=self.__grpc_port,
             )
 
         if self.__cluster_details.use_new_style_kikimr_cfg:

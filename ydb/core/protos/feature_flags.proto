@@ -229,12 +229,12 @@ message TFeatureFlags {
     optional bool EnableDataShardWriteAlwaysVolatile = 199 [default = true];
     optional bool EnableMirroredTopicSplitMerge = 200 [default = true];
     optional bool EnableFulltextIndex = 201 [default = true];
-    optional bool EnableSetColumnConstraint = 202 [default = false];
+    optional bool EnableSetColumnConstraint = 202 [default = true];
     optional bool EnableSchemaSecrets = 203 [default = true];
     optional bool EnableTableCacheModes = 204 [default = true];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = true];
     optional bool EnableStreamingQueries = 206 [default = true];
-    optional bool EnableTinyDisks = 207 [default = false];
+    optional bool EnableTinyDisks = 207 [default = true];
     optional bool EnableMetricsLevel = 208 [default = true];
     optional bool EnableCompileCacheView = 209 [default = true];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
@@ -385,7 +385,7 @@ message TFeatureFlags {
     optional bool EnableCheckpointsCompression = 325 [default = false];
     optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
-    optional bool EnableStreamingAggregation = 328 [default = false];
+    optional bool EnableStreamingAggregation = 328 [default = true];
     optional bool EnableTableBackupAsSql = 329 [default = false];
     optional bool EnableRowDispatcherMemoryLimiting = 330 [default = false];
     // Judges a VDisk write by the space color the disk will be in once the Fresh
@@ -438,4 +438,10 @@ message TFeatureFlags {
     optional bool EnableKillSession = 355 [default = false];
     // Enables SAVEPOINT, ROLLBACK TO SAVEPOINT and RELEASE SAVEPOINT in interactive transactions.
     optional bool EnableSavepoints = 356 [default = false];
+    optional bool EnablePqSourceRescaling = 357 [default = false];
+    optional bool EnableStreamingQueryTopicAutopartitioning = 358 [default = true];
+    optional bool EnableQYT = 359 [default = false]; //YT queues (QYT) in federated and streaming queries
+    // Enables memory of table partitions split/merge demands
+    optional bool EnableSplitMergeDemandTracking = 360 [default = false];
+    optional bool EnableStreamingQuerySchemeOperations = 361 [default = true];
 }

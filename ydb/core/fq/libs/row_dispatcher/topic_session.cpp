@@ -12,10 +12,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
-#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
-
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 #include <util/generic/queue.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
@@ -26,6 +23,11 @@ using namespace NActors;
 using namespace NRowDispatcher;
 
 namespace {
+
+NYql::NDqProto::StatusIds::StatusCode StreamStatusToDqStatus(EMessageStreamStatus status) {
+    // Client transport statuses have no server status code; report GENERIC_ERROR.
+    return NYql::NDq::YdbStatusToDqStatus(NYql::ToYdbStatus(status).value_or(Ydb::StatusIds::GENERIC_ERROR));
+}
 
 NMonitoring::TDynamicCounterPtr GetReadGroupSubgroup(
     NMonitoring::TDynamicCounterPtr counters,
@@ -140,7 +142,7 @@ private:
     struct TClientsInfo : public IClientDataConsumer {
         using TPtr = TIntrusivePtr<TClientsInfo>;
 
-        TClientsInfo(TTopicSession& self, const TString& logPrefix, const ITopicFormatHandler::TSettings& handlerSettings, const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev, const NMonitoring::TDynamicCounterPtr& counters, const TString& readGroup, TMaybe<ui64> offset, bool enableStreamingQueriesCounters)
+        TClientsInfo(TTopicSession& self, const TString& logPrefix, const ITopicFormatHandler::TSettings& handlerSettings, const TEvRowDispatcher::TEvStartSession::TPtr& ev, const NMonitoring::TDynamicCounterPtr& counters, const TString& readGroup, TMaybe<ui64> offset, bool enableStreamingQueriesCounters)
             : Self(&self)
             , LogPrefix(logPrefix)
             , HandlerSettings(handlerSettings)
@@ -313,14 +315,13 @@ private:
     };
 
     struct TTopicEventProcessor {
-        void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event);
-        void operator()(NYdb::NTopic::TSessionClosedEvent& event);
-        void operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event);
-        void operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event);
-        void operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event);
-        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& event);
-        void operator()(NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) {}
-        void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }
+        void operator()(TMessageStreamDataEvent& event);
+        void operator()(TMessageStreamSessionClosedEvent& event);
+        void operator()(TMessageStreamPartitionStartRequestedEvent& event);
+        void operator()(TMessageStreamPartitionStopRequestedEvent& event);
+        void operator()(TMessageStreamPartitionExhaustedEvent& event);
+        void operator()(TMessageStreamPartitionClosedEvent& event);
+        void operator()(TMessageStreamPartitionStatusEvent&) {}
 
         TTopicSession& Self;
         const TString& LogPrefix;
@@ -349,8 +350,8 @@ private:
     TDuration ReconnectPeriod;
 
     TMemoryQuota ReadSessionMemory;
-    NYql::ITopicClient::TPtr TopicClient;
-    std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
+    std::shared_ptr<IMessageStreamClient> TopicClient;
+    std::shared_ptr<IMessageStreamReadSession> ReadSession;
     std::map<ITopicFormatHandler::TSettings, ITopicFormatHandler::TPtr> FormatHandlers;
     std::unordered_map<TActorId, TClientsInfo::TPtr> Clients;
 
@@ -399,12 +400,12 @@ public:
 
 private:
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(bool useSsl, bool useActorSystemThreads);
-    NYql::ITopicClient& GetTopicClient(bool useSsl, bool useActorSystemThreads);
-    NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(const TString& consumerName) const;
+    IMessageStreamClient& GetTopicClient(bool useSsl, bool useActorSystemThreads);
+    TMessageStreamReadSessionSettings GetReadSessionSettings(const TString& consumerName) const;
     void CreateTopicSession();
     void CloseTopicSession();
     void SubscribeOnNextEvent(bool checkIsWaitingEvents = true);
-    void SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
+    void SendToParsing(const std::vector<TMessageStreamRecord>& records);
     void SendData(TClientsInfo& info);
     void FatalError(const TStatus& status);
     void ThrowFatalError(const TStatus& status);
@@ -415,21 +416,21 @@ private:
     TInstant GetMinStartingMessageTimestamp() const;
     void StartClientSession(TClientsInfo& info);
 
-    void Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&);
-    void Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&);
-    void Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&);
-    void Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&);
-    void Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&);
+    void Handle(TEvPrivate::TEvPqEventsReady::TPtr&);
+    void Handle(TEvPrivate::TEvCreateSession::TPtr&);
+    void Handle(TEvPrivate::TEvReconnectSession::TPtr&);
+    void Handle(TEvPrivate::TEvSendStatistic::TPtr&);
+    void Handle(TEvPrivate::TEvGetEventByTimerEvent::TPtr&);
     void Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&);
-    void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev);
-    void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
-    void HandleError(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
+    void Handle(TEvRowDispatcher::TEvStopSession::TPtr& ev);
+    void Handle(TEvRowDispatcher::TEvStartSession::TPtr& ev);
+    void HandleError(TEvRowDispatcher::TEvStartSession::TPtr& ev);
     void HandleException(const std::exception& err);
     void HandleMemoryLimitException(const NKikimr::TMemoryLimitExceededException&);
 
     void SendStatistics();
-    bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
-    TMaybe<ui64> GetOffset(const NFq::NRowDispatcherProto::TEvStartSession& settings);
+    bool CheckNewClient(TEvRowDispatcher::TEvStartSession::TPtr& ev);
+    TMaybe<ui64> GetOffset(const NRowDispatcherProto::TEvStartSession& settings);
     void SendSessionError(TActorId readActorId, TStatus status, bool isFatalError, ui64 generation);
     void RestartSessionIfOldestClient(const TClientsInfo& info);
     void RefreshParsers();
@@ -438,15 +439,15 @@ private:
 
     STRICT_STFUNC_EXC(StateFunc,
         hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
-        hFunc(NFq::TEvPrivate::TEvPqEventsReady, Handle);
-        hFunc(NFq::TEvPrivate::TEvCreateSession, Handle);
-        hFunc(NFq::TEvPrivate::TEvSendStatistic, Handle);
-        hFunc(NFq::TEvPrivate::TEvReconnectSession, Handle);
-        hFunc(NFq::TEvPrivate::TEvGetEventByTimerEvent, Handle);
+        hFunc(TEvPrivate::TEvPqEventsReady, Handle);
+        hFunc(TEvPrivate::TEvCreateSession, Handle);
+        hFunc(TEvPrivate::TEvSendStatistic, Handle);
+        hFunc(TEvPrivate::TEvReconnectSession, Handle);
+        hFunc(TEvPrivate::TEvGetEventByTimerEvent, Handle);
         hFunc(TEvRowDispatcher::TEvGetNextBatch, Handle);
-        hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
+        hFunc(TEvRowDispatcher::TEvStartSession, Handle);
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
-        hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);,
+        hFunc(TEvRowDispatcher::TEvStopSession, Handle);,
         ExceptionFunc(NKikimr::TMemoryLimitExceededException, HandleMemoryLimitException)
         ExceptionFunc(std::exception, HandleException)
     )
@@ -454,14 +455,14 @@ private:
     STRICT_STFUNC_EXC(ErrorState,
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
-        IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
-        IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
+        IgnoreFunc(TEvPrivate::TEvPqEventsReady);
+        IgnoreFunc(TEvPrivate::TEvCreateSession);
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
-        hFunc(NFq::TEvRowDispatcher::TEvStartSession, HandleError);
-        IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
-        IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
-        IgnoreFunc(NFq::TEvPrivate::TEvReconnectSession);
-        IgnoreFunc(NFq::TEvPrivate::TEvGetEventByTimerEvent);,
+        hFunc(TEvRowDispatcher::TEvStartSession, HandleError);
+        IgnoreFunc(TEvRowDispatcher::TEvStopSession);
+        IgnoreFunc(TEvPrivate::TEvSendStatistic);
+        IgnoreFunc(TEvPrivate::TEvReconnectSession);
+        IgnoreFunc(TEvPrivate::TEvGetEventByTimerEvent);,
         ExceptionFunc(NKikimr::TMemoryLimitExceededException, HandleMemoryLimitException)
         ExceptionFunc(std::exception, HandleException)
     )
@@ -512,8 +513,8 @@ void TTopicSession::Bootstrap() {
     YDB_LOG_INFO("Bootstrap",
         {"logPrefix", LogPrefix},
         {"timeout", Config.GetTimeoutBeforeStartSession()});
-    Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
-    Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
+    Schedule(TDuration::Seconds(SendStatisticPeriodSec), new TEvPrivate::TEvSendStatistic());
+    Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new TEvPrivate::TEvGetEventByTimerEvent());
 }
 
 void TTopicSession::PassAway() {
@@ -553,7 +554,7 @@ void TTopicSession::SubscribeOnNextEvent(bool checkIsWaitingEvents) {
     TActorSystem* actorSystem = TActivationContext::ActorSystem();
     WaitEventStartedAt = TInstant::Now();
     ReadSession->WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
-        actorSystem->Send(selfId, new NFq::TEvPrivate::TEvPqEventsReady());
+        actorSystem->Send(selfId, new TEvPrivate::TEvPqEventsReady());
     });
 }
 
@@ -572,9 +573,9 @@ NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(bool us
     return opts;
 }
 
-NYql::ITopicClient& TTopicSession::GetTopicClient(bool useSsl, bool useActorSystemThreads) {
+IMessageStreamClient& TTopicSession::GetTopicClient(bool useSsl, bool useActorSystemThreads) {
     if (!TopicClient) {
-        TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings(useSsl, useActorSystemThreads));
+        TopicClient = PqGateway->GetTopicClient(TopicPath, Driver, GetTopicClientSettings(useSsl, useActorSystemThreads));
     }
     return *TopicClient;
 }
@@ -589,11 +590,7 @@ TInstant TTopicSession::GetMinStartingMessageTimestamp() const {
     return result;
 }
 
-NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const TString& consumerName) const {
-    NYdb::NTopic::TTopicReadSettings topicReadSettings;
-    topicReadSettings.Path(TopicPath);
-    topicReadSettings.AppendPartitionIds(PartitionId);
-
+TMessageStreamReadSessionSettings TTopicSession::GetReadSessionSettings(const TString& consumerName) const {
     TInstant minTime = GetMinStartingMessageTimestamp();
     YDB_LOG_INFO("Create topic session",
         {"logPrefix", LogPrefix},
@@ -602,33 +599,28 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const T
         {"bufferSize", BufferSize},
         {"consumerMode", Config.GetConsumerMode()});
 
-    auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
-        /* minDelay           */ TDuration::MilliSeconds(500),
-        /* minLongRetryDelay  */ TDuration::Seconds(5),
-        /* maxDelay           */ TDuration::Seconds(20),
-        /* maxRetries         */ 100,
-        /* maxTime            */ TDuration::Seconds(60),
-        /* scaleFactor        */ 2.0,
-        /* customRetryClass   */ [](NYdb::EStatus status) {
-            if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
-                return ERetryErrorClass::LongRetry;
-            }
-            return NYdb::NTopic::GetRetryErrorClass(status);
-        });
-
-    auto settings = NYdb::NTopic::TReadSessionSettings()
-        .TraceId(LogPrefix)
-        .AppendTopics(topicReadSettings)
-        .MaxMemoryUsageBytes(BufferSize)
-        .ReadFromTimestamp(minTime)
-        .AutoPartitioningSupport(true)
-        .RetryPolicy(retryPolicy);
+    TMessageStreamReadSessionSettings settings;
+    settings.PartitionIds = {TMessageStreamPartitionId{PartitionId}};
+    settings.ReadFromWriteTime = minTime;
+    settings.RequireWriteTime = true;
+    settings.MaxMemoryUsageBytes = BufferSize;
+    settings.TraceId = LogPrefix;
+    settings.AutoPartitioningSupport = true;
+    settings.Retry = TMessageStreamRetrySettings{
+        .MinDelay = TDuration::MilliSeconds(500),
+        .MinLongRetryDelay = TDuration::Seconds(5),
+        .MaxDelay = TDuration::Seconds(20),
+        .MaxRetries = 100,
+        .MaxTime = TDuration::Seconds(60),
+        .ScaleFactor = 2.0,
+        .RetryAuthenticationErrors = true,
+    };
 
     if (Config.GetConsumerMode() == TRowDispatcherSettings::EConsumerMode::Without
      || (Config.GetConsumerMode() == TRowDispatcherSettings::EConsumerMode::Auto && !consumerName)) {
-        settings.WithoutConsumer();
+        settings.Consumer.reset();
     } else {
-        settings.ConsumerName(consumerName);
+        settings.Consumer = consumerName;
     }
 
     return settings;
@@ -656,13 +648,13 @@ void TTopicSession::CreateTopicSession() {
                 {"logPrefix", LogPrefix},
                 {"reconnectPeriod", ReconnectPeriod});
             Metrics.ReconnectRate->Inc();
-            Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
+            Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
             InflightReconnect = true;
         }
     }
 }
 
-void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
+void TTopicSession::Handle(TEvPrivate::TEvPqEventsReady::TPtr&) {
     YDB_LOG_TRACE("TEvPqEventsReady",
         {"logPrefix", LogPrefix});
     Metrics.InFlySubscribe->Set(0);
@@ -673,14 +665,14 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
     SubscribeOnNextEvent();
 }
 
-void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
+void TTopicSession::Handle(TEvPrivate::TEvCreateSession::TPtr&) {
     CreateSessionScheduled = false;
     CreateTopicSession();
 }
 
-void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
+void TTopicSession::Handle(TEvPrivate::TEvReconnectSession::TPtr&) {
     Metrics.ReconnectRate->Inc();
-    Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
+    Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
     if (Clients.empty()) {
         return;
     }
@@ -729,14 +721,14 @@ bool TTopicSession::HandleNewEvents() {
                 {"queuedBytes", QueuedBytes});
             break;
         }
-        std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
-        if (!event) {
+        auto events = ReadSession->GetEvents({.Block = false, .MaxEventsCount = 1});
+        if (events.empty()) {
             break;
         }
         readSomething = true;
 
         try {
-            std::visit(TTopicEventProcessor{*this, LogPrefix, handledEventsSize}, *event);
+            std::visit(TTopicEventProcessor{*this, LogPrefix, handledEventsSize}, events.front());
         } catch (const TDecompressionException& e) {
             ThrowFatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, e.what()));
         }
@@ -753,77 +745,91 @@ void TTopicSession::CloseTopicSession() {
     }
     YDB_LOG_DEBUG("Close session",
         {"logPrefix", LogPrefix});
-    ReadSession->Close(TDuration::Zero());
+    ReadSession->Close();
     ReadSession.reset();
 }
 
-void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+void TTopicSession::TTopicEventProcessor::operator()(TMessageStreamDataEvent& event) {
     ui64 dataSize = 0;
-    auto& messages = event.GetMessages();
+    auto& records = event.Records;
 
-    bool hasOldMessages = false;
-    auto it = messages.begin();
-    for (; it != messages.end(); ++it) {
-        if (it->GetWriteTime() >= Self.StartingMessageTimestamp) {
-            break;
+    for (const auto& record : records) {
+        if (!record.WriteTime) {
+            ythrow TMessageStreamException(EMessageStreamStatus::Unsupported)
+                << "Row dispatcher requires backend message write time";
         }
-        hasOldMessages = true;
     }
 
-    if (hasOldMessages) {
+    bool hasOldRecords = false;
+    auto it = records.begin();
+    for (; it != records.end(); ++it) {
+        if (*it->WriteTime >= Self.StartingMessageTimestamp) {
+            break;
+        }
+        hasOldRecords = true;
+    }
+
+    if (hasOldRecords) {
         YDB_LOG_TRACE("Skip data",
             {"logPrefix", LogPrefix},
             {"startingMessageTimestamp", Self.StartingMessageTimestamp},
-            {"writeTime", messages.begin()->GetWriteTime()});
-        Self.LastMessageOffset = std::prev(it)->GetOffset();
-        messages.erase(messages.begin(), it);
+            {"writeTime", *records.begin()->WriteTime});
+        Self.LastMessageOffset = std::prev(it)->Id.Offset;
+        records.erase(records.begin(), it);
     }
 
-    for (const auto& message : messages) {
+    for (const auto& record : records) {
+        if (record.DecompressionError) {
+            throw TDecompressionException(record.Id.Offset, *record.DecompressionError);
+        }
+        if (!record.Data) {
+            ythrow TMessageStreamException(EMessageStreamStatus::Unsupported)
+                << "Row dispatcher does not support null message payloads";
+        }
         YDB_LOG_TRACE("Data received",
             {"logPrefix", LogPrefix},
-            {"data", message.DebugString(true)});
-
-        try {
-            dataSize += message.GetData().size();
-        } catch (...) {
-            throw TDecompressionException(message.GetOffset(), CurrentExceptionMessage());
-        }
-        Self.LastMessageOffset = message.GetOffset();
+            {"offset", record.Id.Offset},
+            {"dataSize", record.Data->size()});
+        dataSize += record.Data->size();
+        Self.LastMessageOffset = record.Id.Offset;
     }
 
-    Self.Statistics.Add(dataSize, messages.size());
+    Self.Statistics.Add(dataSize, records.size());
     Self.Metrics.SessionDataRate->Add(dataSize);
     Self.Metrics.AllSessionsDataRate->Add(dataSize);
     DataReceivedEventSize += dataSize;
-    Self.SendToParsing(messages);
+    Self.SendToParsing(records);
 }
 
-void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
+void TTopicSession::TTopicEventProcessor::operator()(TMessageStreamSessionClosedEvent& ev) {
     const TString message = TStringBuilder() << "Read session to topic \"" << Self.TopicPathPartition << "\" was closed";
     YDB_LOG_DEBUG("Dump close session event",
         {"logPrefix", LogPrefix},
         {"message", message},
-        {"ev", ev.DebugString()});
+        {"error", ev.Issues.ToOneLineString()});
 
-    Self.ThrowFatalError(TStatus::Fail(
-        NYql::NDq::YdbStatusToDqStatus(static_cast<Ydb::StatusIds::StatusCode>(ev.GetStatus())),
-        NYdb::NAdapters::ToYqlIssues(ev.GetIssues())
-    ).AddParentIssue(message));
+    const auto dqStatus = StreamStatusToDqStatus(ev.Status);
+    auto failed = ev.Issues ? TStatus::Fail(dqStatus, ev.Issues) : TStatus::Fail(dqStatus, message);
+    Self.ThrowFatalError(failed.AddParentIssue(message));
 }
 
-void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
+void TTopicSession::TTopicEventProcessor::operator()(TMessageStreamPartitionStartRequestedEvent& event) {
+    if (!event.EndOffset) {
+        ythrow TMessageStreamException(EMessageStreamStatus::Unsupported)
+            << "PQ reader requires a partition end offset";
+    }
+    const auto endOffset = *event.EndOffset;
     YDB_LOG_DEBUG("StartPartitionSessionEvent received",
         {"logPrefix", LogPrefix});
 
     std::optional<ui64> minOffset;
     for (const auto& [_, info] : Self.Clients) {
-        if (info->NextMessageOffset && *info->NextMessageOffset > event.GetEndOffset()) {
+        if (info->NextMessageOffset && *info->NextMessageOffset > endOffset) {
             Self.ThrowFatalError(TStatus::Fail(
                 EStatusId::BAD_REQUEST,
                 TStringBuilder() << "Requested offsets do not exist in the topic \"" << Self.TopicPath
                     << "\": offset " << *info->NextMessageOffset << " for partition " << Self.PartitionId
-                    << " exceeds the end offset " << event.GetEndOffset()
+                    << " exceeds the end offset " << endOffset
                     << ". The topic may have been recreated. Recreate or restart the streaming query \""
                     << info->QueryId << "\"."));
             return;
@@ -835,7 +841,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
     YDB_LOG_DEBUG("Confirm StartPartitionSession",
         {"logPrefix", LogPrefix},
         {"minOffset", minOffset});
-    event.Confirm(minOffset);
+    event.PartitionControl->ConfirmStart(minOffset, std::nullopt);
     if (minOffset) {
         // ensure we restart session if new client wants earlier offset
         Self.LastMessageOffset = std::max(*minOffset, ui64{1}) - 1;
@@ -844,14 +850,14 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
     }
 }
 
-void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {
+void TTopicSession::TTopicEventProcessor::operator()(TMessageStreamPartitionStopRequestedEvent& event) {
     YDB_LOG_DEBUG("StopPartitionSessionEvent received",
         {"logPrefix", LogPrefix},
         {"sessionId", Self.GetSessionId()});
-    event.Confirm();
+    event.PartitionControl->ConfirmStop();
 }
 
-void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& /*event*/) {
+void TTopicSession::TTopicEventProcessor::operator()(TMessageStreamPartitionExhaustedEvent& /*event*/) {
     YDB_LOG_WARN("TEndPartitionSessionEvent",
         {"logPrefix", LogPrefix});
 
@@ -860,7 +866,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
         TStringBuilder() << "Topic (" << Self.TopicPath << ") with auto partitioning is not supported."));
 }
 
-void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& /*event*/) {
+void TTopicSession::TTopicEventProcessor::operator()(TMessageStreamPartitionClosedEvent& /*event*/) {
     YDB_LOG_WARN("TPartitionSessionClosedEvent",
         {"logPrefix", LogPrefix});
 }
@@ -869,13 +875,13 @@ TString TTopicSession::GetSessionId() const {
     return ReadSession ? TString{ReadSession->GetSessionId()} : TString{"empty"};
 }
 
-void TTopicSession::SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
+void TTopicSession::SendToParsing(const std::vector<TMessageStreamRecord>& records) {
     YDB_LOG_TRACE("SendToParsing",
         {"logPrefix", LogPrefix},
-        {"messages", messages.size()});
+        {"messages", records.size()});
     for (const auto& [_, formatHandler] : FormatHandlers) {
         if (formatHandler->HasClients()) {
-            formatHandler->ParseMessages(messages);
+            formatHandler->ParseRecords(records);
         }
     }
 }
@@ -975,11 +981,11 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
             return;
         }
         CreateSessionScheduled = true;
-        Schedule(Config.GetTimeoutBeforeStartSession(), new NFq::TEvPrivate::TEvCreateSession());
+        Schedule(Config.GetTimeoutBeforeStartSession(), new TEvPrivate::TEvCreateSession());
     }
 }
 
-void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
+void TTopicSession::Handle(TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto offset = GetOffset(ev->Get()->Record);
     const auto& source = ev->Get()->Record.GetSource();
     YDB_LOG_INFO("New client",
@@ -1021,12 +1027,12 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     SendStatistics();
 }
 
-void TTopicSession::HandleError(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
+void TTopicSession::HandleError(TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     Y_ENSURE(ErrorStatus, "ErrorStatus should be set in ErrorState");
     SendSessionError(ev->Sender, ErrorStatus.GetRef(), true, ev->Cookie);
 }
 
-void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
+void TTopicSession::Handle(TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     YDB_LOG_DEBUG("TEvStopSession",
         {"logPrefix", LogPrefix},
         {"sender", ev->Sender},
@@ -1094,7 +1100,7 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
     StopReadSession();
 
     if (!ReadSession) {
-        Schedule(Config.GetTimeoutBeforeStartSession(), new NFq::TEvPrivate::TEvCreateSession());
+        Schedule(Config.GetTimeoutBeforeStartSession(), new TEvPrivate::TEvCreateSession());
     }
 }
 
@@ -1142,10 +1148,10 @@ void TTopicSession::StopReadSession() {
     if (ReadSession) {
         YDB_LOG_DEBUG("Close read session",
             {"logPrefix", LogPrefix});
-        ReadSession->Close(TDuration::Zero());
+        ReadSession->Close();
         ReadSession.reset();
     }
-    TopicClient.Reset();
+    TopicClient.reset();
 }
 
 void TTopicSession::SendDataArrived(TClientsInfo& info) {
@@ -1218,12 +1224,12 @@ void TTopicSession::SendStatistics() {
     Statistics.Clear();
 }
 
-void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
+void TTopicSession::Handle(TEvPrivate::TEvSendStatistic::TPtr&) {
     SendStatistics();
-    Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
+    Schedule(TDuration::Seconds(SendStatisticPeriodSec), new TEvPrivate::TEvSendStatistic());
 }
 
-void TTopicSession::Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&) {
+void TTopicSession::Handle(TEvPrivate::TEvGetEventByTimerEvent::TPtr&) {
     YDB_LOG_TRACE("TEvGetEventByTimerEvent",
         {"logPrefix", LogPrefix});
     // Workaround for a partition reading bug:
@@ -1232,14 +1238,14 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&) {
     // (TEvGetEventByTimerEvent) that explicitly triggers reading of new events from the partition. If new data is found,
     // and the session is waiting for events, we re-subscribe to ensure continuous data flow. This timer-based approach
     // helps to recover from situations where the normal event-driven mechanism fails to deliver new data.
-    Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
+    Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new TEvPrivate::TEvGetEventByTimerEvent());
     bool readSomething = HandleNewEvents();
     if (readSomething && IsWaitingEvents) {
         SubscribeOnNextEvent(false);
     }
 }
 
-bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
+bool TTopicSession::CheckNewClient(TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto it = Clients.find(ev->Sender);
     if (it != Clients.end()) {
         YDB_LOG_ERROR("Such a client already exists",
@@ -1269,7 +1275,7 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
     return true;
 }
 
-TMaybe<ui64> TTopicSession::GetOffset(const NFq::NRowDispatcherProto::TEvStartSession& settings) {
+TMaybe<ui64> TTopicSession::GetOffset(const NRowDispatcherProto::TEvStartSession& settings) {
     for (auto p : settings.GetOffsets()) {
         if (p.GetPartitionId() != PartitionId) {
             continue;

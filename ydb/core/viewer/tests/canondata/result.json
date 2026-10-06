@@ -754,7 +754,7 @@
             "text": "Unable to parse the 'pdisk_id' parameter"
         },
         "storage_nodes_database": {
-            "FieldsAvailable": "0000010000000110011000000110100000011",
+            "FieldsAvailable": "0000010000000110000000000110100000011",
             "FieldsRequired": "0000000000000000000000000000000000011",
             "FoundNodes": "0",
             "MaximumDisksPerNode": "1",
@@ -881,7 +881,8 @@
                                 "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
-                                "TotalSize": "not-zero-number-text"
+                                "TotalSize": "not-zero-number-text",
+                                "UserChunkPoolSize": "not-zero-number-text"
                             }
                         },
                         "Status": "READY",
@@ -994,7 +995,8 @@
                                 "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
-                                "TotalSize": "not-zero-number-text"
+                                "TotalSize": "not-zero-number-text",
+                                "UserChunkPoolSize": "not-zero-number-text"
                             }
                         },
                         "Status": "READY",
@@ -1107,7 +1109,8 @@
                                 "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
-                                "TotalSize": "not-zero-number-text"
+                                "TotalSize": "not-zero-number-text",
+                                "UserChunkPoolSize": "not-zero-number-text"
                             }
                         },
                         "Status": "READY",
@@ -1221,7 +1224,8 @@
                                 "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
-                                "TotalSize": "not-zero-number-text"
+                                "TotalSize": "not-zero-number-text",
+                                "UserChunkPoolSize": "not-zero-number-text"
                             }
                         },
                         "Status": "READY",
@@ -1335,7 +1339,8 @@
                                 "SlotSizeInUnits": 1,
                                 "State": "Normal",
                                 "SystemSize": "not-zero-number-text",
-                                "TotalSize": "not-zero-number-text"
+                                "TotalSize": "not-zero-number-text",
+                                "UserChunkPoolSize": "not-zero-number-text"
                             }
                         },
                         "Status": "READY",

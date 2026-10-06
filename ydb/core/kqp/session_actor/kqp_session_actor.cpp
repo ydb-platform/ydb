@@ -738,7 +738,9 @@ public:
         QueryState->ContinueTime = TInstant::Now();
         EndQueryTraceSpan(QueryState->AdmissionSpan, ev->Get()->Status);
 
-        if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
+        using EAdmissionResult = NWorkloadManager::TEvContinueRequest::EAdmissionResult;
+        const auto admissionResult = ev->Get()->GetAdmissionResult();
+        if (admissionResult == EAdmissionResult::ContinueWithoutPool) {
             YDB_LOG_TRACE("Failed to place request in resource pool, feature flag is disabled",
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
@@ -749,7 +751,7 @@ public:
         }
 
         const TString& poolId = ev->Get()->PoolId;
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && !ev->Get()->IsDiskFull()) {
+        if (admissionResult == EAdmissionResult::Reject) {
             google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
             NYql::IssuesToMessage(std::move(ev->Get()->Issues), &issues);
             ReplyQueryError(ev->Get()->Status, TStringBuilder() << "Query failed during adding/waiting in workload pool " << poolId, issues);
@@ -3281,6 +3283,17 @@ public:
                 response->SetEffectivePoolId(NResourcePool::DEFAULT_POOL_ID);
             } else {
                 response->SetEffectivePoolId(QueryState->UserRequestContext->PoolId);
+            }
+        }
+        if (!QueryState->RequestEv) {
+            return;
+        }
+        if (auto updater = QueryState->RequestEv->GetWmSessionUpdater()) {
+            const auto state = updater->GetState();
+            response->SetWmState(NWorkloadManager::WmStateToProto(state));
+            const auto classifiedBy = updater->GetClassifiedBy();
+            if (!classifiedBy.empty()) {
+                response->SetWmClassifiedBy(classifiedBy);
             }
         }
     }

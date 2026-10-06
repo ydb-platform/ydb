@@ -24,7 +24,7 @@ NYql::TExternalDataSource MakeDataSource(const TString& type,
 TEST(MetadataConversion, MakeAuthTest) {
     NKikimrSchemeOp::TAuth noneAuthProto;
     noneAuthProto.MutableNone();
-    NYql::TExternalDataSource externalSource = MakeDataSource("test", noneAuthProto);
+    NYql::TExternalDataSource externalSource = MakeDataSource("ObjectStorage", noneAuthProto);
     auto auth = externalSource.MakeExternalSourceMetadata().Auth;
     ASSERT_TRUE(std::holds_alternative<NExternalSource::NAuth::TNone>(auth));
 
@@ -33,7 +33,7 @@ TEST(MetadataConversion, MakeAuthTest) {
         auto* sa = authProto.MutableServiceAccount();
         sa->SetId("sa-id");
         sa->SetSecretName("sa-name-of-secret");
-        externalSource = MakeDataSource("test", authProto);
+        externalSource = MakeDataSource("ObjectStorage", authProto);
     }
     externalSource.InitSecretValues({"sa-id-signature"});
     auth = externalSource.MakeExternalSourceMetadata().Auth;
@@ -50,7 +50,7 @@ TEST(MetadataConversion, MakeAuthTest) {
         aws->SetAwsAccessKeyIdSecretName("aws-ak-secret-name");
         aws->SetAwsSecretAccessKeySecretName("aws-sak-secret-name");
         aws->SetAwsRegion("aws-region");
-        externalSource = MakeDataSource("test", authProto);
+        externalSource = MakeDataSource("ObjectStorage", authProto);
     }
     externalSource.InitSecretValues({"aws-ak", "aws-sak"});
     auth = externalSource.MakeExternalSourceMetadata().Auth;
@@ -66,14 +66,14 @@ TEST(MetadataConversion, MakeAuthTest) {
 TEST(MetadataConversion, ExternalDataSourceMetadataConversion) {
     NKikimrSchemeOp::TAuth auth;
     auth.MutableNone();
-    auto source = MakeDataSource("type", auth, "ds-path", "ds-loc", "installation");
+    auto source = MakeDataSource("ObjectStorage", auth, "ds-path", "ds-loc", "installation");
     auto externalMetadata = source.MakeExternalSourceMetadata();
     externalMetadata.Attributes = {{"key1", "val1"}, {"key2", "val2"}};
 
     EXPECT_TRUE(externalMetadata.TableLocation.empty());
     EXPECT_EQ(externalMetadata.DataSourceLocation, "ds-loc");
     EXPECT_EQ(externalMetadata.DataSourcePath, "ds-path");
-    EXPECT_EQ(externalMetadata.Type, "type");
+    EXPECT_EQ(externalMetadata.Type, "ObjectStorage");
     ASSERT_TRUE(std::holds_alternative<NExternalSource::NAuth::TNone>(externalMetadata.Auth));
 }
 
@@ -83,11 +83,11 @@ TEST(MetadataConversion, InferredMetadataUpdateIsAtomic) {
     NYql::TExternalDataSource source = MakeDataSource("ObjectStorage", auth, "original");
 
     EXPECT_ANY_THROW(source.ApplyInferredMetadata("", "changed"));
-    EXPECT_EQ(source.GetType(), "ObjectStorage");
+    EXPECT_EQ(source.GetDatabaseType(), NYql::EDatabaseType::ObjectStorage);
     EXPECT_EQ(source.GetDataSourcePath(), "original");
 
     source.ApplyInferredMetadata("ObjectStorage", "inferred-path");
-    EXPECT_EQ(source.GetType(), "ObjectStorage");
+    EXPECT_EQ(source.GetDatabaseType(), NYql::EDatabaseType::ObjectStorage);
     EXPECT_EQ(source.GetDataSourcePath(), "inferred-path");
 }
 
@@ -142,7 +142,7 @@ TEST(MetadataConversion, ExternalTableEnrichmentIsOneWay) {
 
     sourceMetadata->ExternalSource = MakeDataSource("ObjectStorage", auth, "resolved-source", "source-location");
     table.InitExternalDataSource(sourceMetadata);
-    EXPECT_EQ(table.GetUnderlyingDataSource().GetType(), "ObjectStorage");
+    EXPECT_EQ(table.GetUnderlyingDataSource().GetDatabaseType(), NYql::EDatabaseType::ObjectStorage);
     EXPECT_EQ(table.GetDataSourcePath(), "resolved-source");
     EXPECT_EQ(table.GetLocation(), "table-location");
     EXPECT_EQ(table.GetUnderlyingDataSource().GetLocation(), "source-location");
@@ -153,14 +153,27 @@ TEST(MetadataConversion, ExternalTableEnrichmentIsOneWay) {
     EXPECT_EQ(table.GetDataSourcePath(), "updated-source");
 }
 
-TEST(MetadataConversion, YdbTopicTypeCanOnlyBeSetForYdbSource) {
+TEST(MetadataConversion, ObjectKindCanOnlyBeInitializedOnceForYdbSource) {
+    using EKind = NYql::TExternalDataSource::EKind;
+
     NKikimrSchemeOp::TAuth auth;
     auth.MutableNone();
     auto source = MakeDataSource("Ydb", auth, "source-path", "grpc://example.com");
-    source.SetYdbTopicType();
-    EXPECT_EQ(source.GetType(), "YdbTopics");
+    EXPECT_ANY_THROW(source.InitObjectKind(EKind::Unknown));
+    source.InitObjectKind(EKind::Topic);
+    EXPECT_EQ(source.GetDatabaseType(), NYql::EDatabaseType::Ydb);
+    EXPECT_TRUE(source.IsYdbTopics());
     EXPECT_EQ(source.GetDataSourcePath(), "source-path");
-    EXPECT_ANY_THROW(source.SetYdbTopicType());
+    EXPECT_ANY_THROW(source.InitObjectKind(EKind::Topic));
+
+    auto tableSource = MakeDataSource("Ydb", auth, "table-path", "grpc://example.com");
+    tableSource.InitObjectKind(EKind::Table);
+    EXPECT_ANY_THROW(tableSource.InitObjectKind(EKind::Table));
+    EXPECT_ANY_THROW(tableSource.InitObjectKind(EKind::Topic));
+
+    auto objectStorageSource = MakeDataSource("ObjectStorage", auth);
+    EXPECT_ANY_THROW(objectStorageSource.InitObjectKind(EKind::Table));
+    EXPECT_ANY_THROW(objectStorageSource.InitObjectKind(EKind::Topic));
 }
 
 TEST(MetadataConversion, SecretsCanOnlyBeSetOnce) {

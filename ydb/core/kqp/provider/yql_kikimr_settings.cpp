@@ -120,6 +120,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseDqHashCombine);
     REGISTER_SETTING(*this, UseDqHashAggregate);
     REGISTER_SETTING(*this, DqHashOperatorsUseBlocks);
+    REGISTER_SETTING(*this, DqHashAggregationDescriptorVersion);
     REGISTER_SETTING(*this, DqHashCombineExportTypeInfo);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
@@ -158,7 +159,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, HybridSearchFactor);
     REGISTER_SETTING(*this, HybridSearchK);
     REGISTER_SETTING(*this, DisableCheckpoints);
-    REGISTER_SETTING(*this, EnableStreamingAggregation);
+    REGISTER_SETTING(*this, UseInMemoryStreamingAggregation);
     REGISTER_SETTING(*this, StreamingAggregationStateTablePath);
 
     REGISTER_SETTING(*this, DefaultTxMode).Parser(
@@ -396,6 +397,10 @@ bool TKikimrConfiguration::GetDqHashCombineExportTypeInfo() const {
 
 bool TKikimrConfiguration::GetDqHashOperatorsUseBlocks() const {
     return DqHashOperatorsUseBlocks.Get().GetOrElse(TTableServiceConfig::GetDqHashOperatorsUseBlocks());
+}
+
+ui32 TKikimrConfiguration::GetDqHashAggregationDescriptorVersion() const {
+    return DqHashAggregationDescriptorVersion.Get().GetOrElse(TTableServiceConfig::GetDqHashAggregationDescriptorVersion());
 }
 
 bool TKikimrConfiguration::GetUseBlockHashJoin() const {

@@ -1312,14 +1312,19 @@ protected:
             {"database", Database});
 
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
-        *event->Record.MutableTransaction()->MutableModifyScheme() = SchemeTx;
         event->Record.SetDatabaseName(Database);
+
+        auto& schemeTx = *event->Record.MutableTransaction()->MutableModifyScheme();
+        schemeTx = SchemeTx;
+        if (schemeTx.HasCreateStreamingQuery() && !AppData()->FeatureFlags.GetEnableStreamingQuerySchemeOperations()) {
+            schemeTx.MutableCreateStreamingQuery()->ClearOperationOwnerActorId();
+        }
 
         if (UserToken) {
             event->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
-        const auto recipient = SchemeTx.GetCreateStreamingQuery().HasOperationOwnerActorId()
+        const auto recipient = schemeTx.GetCreateStreamingQuery().HasOperationOwnerActorId()
             ? NMetadata::NProvider::MakeServiceId(SelfId().NodeId()) : MakeTxProxyID();
         Send(recipient, std::move(event), IEventHandle::FlagTrackDelivery);
     }
@@ -3368,7 +3373,7 @@ private:
         const auto queryTextValue = queryText.DetachResult();
         const bool stateRecomputeEnabled = AppData()->FeatureFlags.GetEnableStreamingQueryStateRecompute();
         if (queryTextValue && force.GetResult() != "true" && !stateRecomputeEnabled) {
-            return TStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED, "Changing the query text will result in the loss of the checkpoint. Please use FORCE=true to change the request text");
+            return TStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED, "Changing the query text will result in the loss of the checkpoint.");
         }
 
         const auto streamingDispositionValue = streamingDisposition.DetachResult();

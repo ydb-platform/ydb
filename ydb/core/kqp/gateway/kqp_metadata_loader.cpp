@@ -1115,11 +1115,18 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             auto loadDynamicMetadata = [promise, settings, table, database, externalPath] (const TTableMetadataResult& externalDataSourceMetadata) mutable {
                                 NExternalSource::IExternalSource::TPtr externalSource;
                                 if (settings.ExternalSourceFactory) {
+                                    const auto& databaseType = externalDataSourceMetadata.Metadata->ExternalDataSource().GetDatabaseType();
+                                    if (!databaseType) {
+                                        TTableMetadataResult wrapper;
+                                        wrapper.SetException(yexception() << "couldn't get external source with type <unknown>, unknown source type");
+                                        promise.SetValue(wrapper);
+                                        return;
+                                    }
                                     try {
-                                        externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalDataSource().GetType());
+                                        externalSource = settings.ExternalSourceFactory->GetOrCreate(*databaseType);
                                     } catch (const std::exception& exception) {
                                         TTableMetadataResult wrapper;
-                                        wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalDataSource().GetType() << ", " <<  exception.what());
+                                        wrapper.SetException(yexception() << "couldn't get external source with type " << ToString(*databaseType) << ", " <<  exception.what());
                                         promise.SetValue(wrapper);
                                         return;
                                     }
@@ -1158,7 +1165,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     wrapper.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
                                     wrapper.AddIssue(NYql::TIssue(TStringBuilder()
                                         << "Schema inference (with_infer) is not enabled for external source '"
-                                        << externalDataSourceMetadata.Metadata->ExternalDataSource().GetType()
+                                        << ToStringDatabaseType(externalDataSourceMetadata.Metadata->ExternalDataSource().GetDatabaseType(), "<unknown>")
                                         << "'. Please contact your system administrator to enable the "
                                         << "EnableExternalSourceSchemaInference feature flag."));
                                     promise.SetValue(wrapper);
@@ -1193,7 +1200,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     useTls,
                                     structuredTokenJson,
                                     path)
-                                    .Subscribe([externalDataSourceMetadata, externalSourceFactory = settings.ExternalSourceFactory, routing, f = loadDynamicMetadata, promise] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
+                                    .Subscribe([externalDataSourceMetadata, routing, f = loadDynamicMetadata, promise] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
                                         TGetSchemeEntryResult value = result.GetValue();
                                         if (!value.EntryType) {
                                             NYql::TIssue rootIssue("Couldn't determine external YDB entity type");
@@ -1209,20 +1216,15 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                         }
 
                                         if (*value.EntryType == NYdb::NScheme::ESchemeEntryType::Topic) {
-                                            if (!externalSourceFactory || !externalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
-                                                TTableMetadataResult result;
-                                                result.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
-                                                result.AddIssue(NYql::TIssue("External source with type YdbTopics is disabled"));
-                                                promise.SetValue(result);
-                                                return;
-                                            }
-                                            externalDataSourceMetadata.Metadata->ExternalDataSource().SetYdbTopicType();
+                                            externalDataSourceMetadata.Metadata->ExternalDataSource().InitObjectKind(NYql::TExternalDataSource::EKind::Topic);
                                         } else if (routing == EYdbDataSourceRouting::Ydb) {
                                             TTableMetadataResult result;
                                             result.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
                                             result.AddIssue(NYql::TIssue("External YDB entity is not a topic, and its database is not configured for connector table access"));
                                             promise.SetValue(result);
                                             return;
+                                        } else {
+                                            externalDataSourceMetadata.Metadata->ExternalDataSource().InitObjectKind(NYql::TExternalDataSource::EKind::Table);
                                         }
                                         f(externalDataSourceMetadata);
                                     });

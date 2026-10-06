@@ -335,6 +335,164 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         });
     }
 
+    Y_UNIT_TEST_TWIN_F(SysViewCreatedByModifiedByColumns, IdmPermissions, TStreamingSysViewTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableIdmPermissionsManagement(IdmPermissions);
+        Setup();
+
+        constexpr char modifier[] = "modifier@builtin";
+        ExecQuery(fmt::format("GRANT ALL ON `/Root` TO `{}`;", modifier));
+        TQueryClient modifierClient(*GetInternalDriver(), TClientSettings().AuthToken(modifier));
+        const auto execAsModifier = [&](const std::string& query) {
+            const auto result = modifierClient.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        };
+
+        constexpr char queryName[] = "createdByQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` WITH (
+                RUN = FALSE
+            ) AS DO BEGIN{text}END DO)",
+            "query_name"_a = queryName,
+            "text"_a = GetQueryText(queryName)
+        ));
+
+        // Service finalization must preserve the user who last modified the query.
+        // After CREATE: created_by, modified_by, created_at, modified_at must be set; started_by, stopped_by must be null
+        {
+            const auto& queryResult = ExecQuery(fmt::format(R"(
+                SELECT CreatedBy, ModifiedBy, CreatedAt, ModifiedAt, StartedBy, StoppedBy
+                FROM `.sys/streaming_queries`
+                WHERE Path = '/Root/{name}'
+            )", "name"_a = queryName));
+            CheckScriptResult(queryResult[0], 6, 1, [&](TResultSetParser& rs) {
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_C(rs.ColumnParser("CreatedAt").GetOptionalTimestamp().has_value(), "CreatedAt must be set after CREATE");
+                UNIT_ASSERT_C(rs.ColumnParser("ModifiedAt").GetOptionalTimestamp().has_value(), "ModifiedAt must be set after CREATE");
+                UNIT_ASSERT_C(!rs.ColumnParser("StartedBy").GetOptionalUtf8().has_value(), "StartedBy must be null after CREATE with RUN=FALSE");
+                UNIT_ASSERT_C(!rs.ColumnParser("StoppedBy").GetOptionalUtf8().has_value(), "StoppedBy must be null after CREATE with RUN=FALSE");
+            });
+        }
+
+        // A different user starts the query; finalization must preserve that user's attribution.
+        execAsModifier(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            ))",
+            "query_name"_a = queryName
+        ));
+
+        // After start ALTER: started_by must be set; stopped_by must still be null; created_by preserved
+        {
+            const auto& queryResult = ExecQuery(fmt::format(R"(
+                SELECT CreatedBy, ModifiedBy, StartedBy, StoppedBy
+                FROM `.sys/streaming_queries`
+                WHERE Path = '/Root/{name}'
+            )", "name"_a = queryName));
+            CheckScriptResult(queryResult[0], 4, 1, [&](TResultSetParser& rs) {
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), modifier);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), modifier);
+                UNIT_ASSERT_C(!rs.ColumnParser("StoppedBy").GetOptionalUtf8().has_value(), "StoppedBy must be null after starting");
+            });
+        }
+
+        // ALTER: turn the query off (RUN = FALSE) — this should set stopped_by
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            ))",
+            "query_name"_a = queryName
+        ));
+
+        // After stop ALTER: stopped_by must be set; created_by must be unchanged
+        {
+            const auto& queryResult = ExecQuery(fmt::format(R"(
+                SELECT CreatedBy, ModifiedBy, StartedBy, StoppedBy
+                FROM `.sys/streaming_queries`
+                WHERE Path = '/Root/{name}'
+            )", "name"_a = queryName));
+            CheckScriptResult(queryResult[0], 4, 1, [&](TResultSetParser& rs) {
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), modifier);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StoppedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+            });
+        }
+
+        // Replacing the query must preserve the counterpart of each run transition.
+        for (bool run : {true, false}) {
+            execAsModifier(fmt::format(R"(
+                CREATE OR REPLACE STREAMING QUERY `{query_name}` WITH (
+                    RUN = {run}
+                ) AS DO BEGIN{text}END DO)",
+                "query_name"_a = queryName,
+                "run"_a = run ? "TRUE" : "FALSE",
+                "text"_a = GetQueryText(queryName)
+            ));
+            const auto& queryResult = ExecQuery(fmt::format(R"(
+                SELECT CreatedBy, ModifiedBy, StartedBy, StoppedBy
+                FROM `.sys/streaming_queries`
+                WHERE Path = '/Root/{name}'
+            )", "name"_a = queryName));
+            CheckScriptResult(queryResult[0], 4, 1, [&](TResultSetParser& rs) {
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), modifier);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), modifier);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StoppedBy").GetOptionalUtf8(), run ? BUILTIN_ACL_ROOT : modifier);
+            });
+        }
+
+        constexpr char runningQueryName[] = "createdRunningQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` WITH (
+                RUN = TRUE
+            ) AS DO BEGIN{text}END DO)",
+            "query_name"_a = runningQueryName,
+            "text"_a = GetQueryText(runningQueryName)
+        ));
+
+        // CREATE with RUN=TRUE starts the query and records the user who started it.
+        {
+            const auto& queryResult = ExecQuery(fmt::format(R"(
+                SELECT CreatedBy, ModifiedBy, StartedBy, StoppedBy
+                FROM `.sys/streaming_queries`
+                WHERE Path = '/Root/{name}'
+            )", "name"_a = runningQueryName));
+            CheckScriptResult(queryResult[0], 4, 1, [&](TResultSetParser& rs) {
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_C(!rs.ColumnParser("StoppedBy").GetOptionalUtf8().has_value(), "StoppedBy must be null after CREATE with RUN=TRUE");
+            });
+        }
+    }
+
+    Y_UNIT_TEST_F(SysViewTimestampColumns, TStreamingSysViewTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+        Setup();
+
+        // Wait for the query to actually start: CREATE completion does not guarantee
+        // that the script execution entry has already been created.
+        StartQuery("tsQuery");
+        pqGateway->WaitWriteSession(TString{OutputTopic});
+
+        // Both timestamps come from the current script execution. A running query
+        // must have been submitted and started.
+        const auto& queryResult = ExecQuery(R"(
+            SELECT SubmittedAt, StartedAt
+            FROM `.sys/streaming_queries`
+            WHERE Path = '/Root/tsQuery'
+        )");
+            CheckScriptResult(queryResult[0], 2, 1, [&](TResultSetParser& rs) {
+                const auto submittedAt = rs.ColumnParser("SubmittedAt").GetOptionalTimestamp();
+                const auto startedAt = rs.ColumnParser("StartedAt").GetOptionalTimestamp();
+                UNIT_ASSERT_C(submittedAt.has_value(), "SubmittedAt must be set for a running query");
+                UNIT_ASSERT_C(startedAt.has_value(), "StartedAt must be set for a running query");
+                UNIT_ASSERT_VALUES_EQUAL(*startedAt, *submittedAt);
+            });
+    }
+
     Y_UNIT_TEST_F(ReadSysViewWithRowCountBackPressure, TStreamingSysViewTestFixture) {
         LogSettings.Freeze = true;
         SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);

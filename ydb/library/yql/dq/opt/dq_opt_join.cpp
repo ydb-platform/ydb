@@ -495,7 +495,7 @@ std::pair<TVector<TCoAtom>, TVector<TCoAtom>> GetJoinKeys(const TDqJoin& join, T
 }
 
 TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, const TExprBase& rightInput,
-    TExprContext& ctx, bool useGraceCore)
+    TExprContext& ctx, bool useGraceCore, bool useScalarHashJoin)
 {
     static const std::set<std::string_view> supportedTypes = {"Inner"sv, "Left"sv, "LeftOnly"sv, "LeftSemi"sv};
     auto joinType = join.JoinType().Value();
@@ -520,7 +520,18 @@ TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, co
     auto leftFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), leftInput, leftFilterKeys);
     auto rightFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), rightInput, rightFilterKeys);
 
-    if (useGraceCore) {
+    if (useScalarHashJoin) {
+        return Build<TDqPhyScalarHashJoin>(ctx, join.Pos())
+            .LeftInput(leftFilteredInput)
+            .LeftLabel(join.LeftLabel())
+            .RightInput(rightFilteredInput)
+            .RightLabel(join.RightLabel())
+            .JoinType(join.JoinType())
+            .JoinKeys(join.JoinKeys())
+            .LeftJoinKeyNames(join.LeftJoinKeyNames())
+            .RightJoinKeyNames(join.RightJoinKeyNames())
+            .Done();
+    } else if (useGraceCore) {
         auto flags = Build<TCoAtomList>(ctx, join.Pos())
             .Add<TCoAtom>().Value("Broadcast").Build()
             .Done();
@@ -830,7 +841,95 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
         .Done();
 }
 
-TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage) {
+namespace {
+
+bool HasVariantOrResource(const TTypeAnnotationNode* type) {
+    switch (type->GetKind()) {
+        case ETypeAnnotationKind::Variant:
+        case ETypeAnnotationKind::Resource:
+            return true;
+        case ETypeAnnotationKind::Optional:
+            return HasVariantOrResource(type->Cast<TOptionalExprType>()->GetItemType());
+        case ETypeAnnotationKind::Tagged:
+            return HasVariantOrResource(type->Cast<TTaggedExprType>()->GetBaseType());
+        case ETypeAnnotationKind::Tuple:
+            for (const auto* item : type->Cast<TTupleExprType>()->GetItems()) {
+                if (HasVariantOrResource(item)) {
+                    return true;
+                }
+            }
+            return false;
+        case ETypeAnnotationKind::Struct:
+            for (const auto* item : type->Cast<TStructExprType>()->GetItems()) {
+                if (HasVariantOrResource(item->GetItemType())) {
+                    return true;
+                }
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
+} // anonymous namespace
+
+bool DqCanUseScalarHashJoinForMap(const TDqJoin& join, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
+    const auto joinType = join.JoinType().Value();
+    if (joinType != "Inner"sv && joinType != "Left"sv && joinType != "LeftSemi"sv && joinType != "LeftOnly"sv) {
+        return false;
+    }
+    if (join.JoinKeys().Empty()) {
+        return false;
+    }
+
+    const auto* leftItemType = GetSequenceItemType(join.LeftInput(), false);
+    const auto* rightItemType = GetSequenceItemType(join.RightInput(), false);
+    if (!leftItemType || !rightItemType
+        || leftItemType->GetKind() != ETypeAnnotationKind::Struct
+        || rightItemType->GetKind() != ETypeAnnotationKind::Struct)
+    {
+        return false;
+    }
+    const auto* leftStructType = leftItemType->Cast<TStructExprType>();
+    const auto* rightStructType = rightItemType->Cast<TStructExprType>();
+
+    // The runtime converter only handles arrow compatible types, has no Variant support,
+    // and keeps Resource as raw pointers that cannot be spilled
+    const auto supported = [&](const TTypeAnnotationNode* type) {
+        return IsSupportedAsBlockType(join.Pos(), *type, ctx, typeCtx) && !HasVariantOrResource(type);
+    };
+    for (const auto* item : leftStructType->GetItems()) {
+        if (!supported(item->GetItemType())) {
+            return false;
+        }
+    }
+    for (const auto* item : rightStructType->GetItems()) {
+        if (!supported(item->GetItemType())) {
+            return false;
+        }
+        // The runtime wraps these into Optional, but the join type keeps them as is
+        const auto kind = item->GetItemType()->GetKind();
+        if (joinType == "Left"sv && kind != ETypeAnnotationKind::Optional && item->GetItemType()->IsOptionalOrNull()) {
+            return false;
+        }
+    }
+
+    const auto [leftJoinKeys, rightJoinKeys] = GetJoinKeys(join, ctx);
+    for (size_t i = 0; i < leftJoinKeys.size(); ++i) {
+        const auto* leftKeyType = leftStructType->FindItemType(leftJoinKeys[i].Value());
+        const auto* rightKeyType = rightStructType->FindItemType(rightJoinKeys[i].Value());
+        if (!leftKeyType || !rightKeyType) {
+            return false;
+        }
+        bool hasOptional = false;
+        if (!JoinDryKeyType(leftKeyType, rightKeyType, hasOptional, ctx)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage, bool useScalarHashJoinForMap) {
     static const std::set<std::string_view> supportedTypes = {
         "Inner"sv,
         "Left"sv,
@@ -990,7 +1089,7 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
 
     TMaybeNode<TExprBase> phyJoin;
     if (join.JoinType().Value() != "Cross"sv) {
-        phyJoin = DqMakePhyMapJoin(join, leftInputArg, joinRightInput, ctx, useGraceCoreForMap);
+        phyJoin = DqMakePhyMapJoin(join, leftInputArg, joinRightInput, ctx, useGraceCoreForMap, useScalarHashJoinForMap);
     } else {
         YQL_ENSURE(join.JoinKeys().Empty());
 

@@ -383,7 +383,8 @@ protected:
                     msgId.SetMsgId(1);
                     msgId.SetSequenceId(1);
                     auto queueId = x->Record.GetMsgQoS().GetExtQueueId();
-                    GroupQueues->Send(*this, BsInfo->GetTopology(), std::move(x), 0, NWilson::TTraceId(), vDiskId, queueId);
+                    GroupQueues->Send(*this, BsInfo->GetTopology(), std::move(x), 0, false, NWilson::TTraceId(),
+                        vDiskId, queueId);
                   break;
                 }
                 [[fallthrough]];
@@ -1431,7 +1432,7 @@ class TTestBlobStorageProxyVPutVGet : public TTestBlobStorageProxy {
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
                    new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[0].OwnedString, vDiskId, false,
-                                               nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob));
+                                               nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob, false));
                 ctx.Send(Env->VDisks[vDiskIdx], vPut.Release());
                 break;
             }
@@ -1521,7 +1522,7 @@ class TTestBlobStorageProxyVPutVGetLimit : public TTestBlobStorageProxy {
 
                     TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
                         new TEvBlobStorage::TEvVPut(id, partSet.Parts[partIdx].OwnedString, vDiskId, false,
-                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob));
+                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob, false));
                     auto& msgId = *vPut->Record.MutableMsgQoS()->MutableMsgId();
                     msgId.SetMsgId(i);
                     msgId.SetSequenceId(1);
@@ -1660,7 +1661,7 @@ private:
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
                         new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[parametrs.PartId-1].OwnedString, *vDiskId,
-                            false, nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob));
+                            false, nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob, false));
                 ctx.Send(Env->VDisks[realVDiskIdx], vPut.Release());
                 break;
             }
@@ -1890,7 +1891,7 @@ class TTestBlobStorageProxyVBlockVPutVGet : public TTestBlobStorageProxy {
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> x(
                     new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[0].OwnedString, vDiskId, false,
-                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob));
+                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob, false));
                 auto& msgId = *x->Record.MutableMsgQoS()->MutableMsgId();
                 msgId.SetMsgId(0);
                 msgId.SetSequenceId(1);
@@ -2647,7 +2648,7 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
                     new TEvBlobStorage::TEvVPut(from, partSet.Parts[0].OwnedString, vDiskId, false, nullptr,
-                                                TInstant::Max(), NKikimrBlobStorage::TabletLog));
+                                                TInstant::Max(), NKikimrBlobStorage::TabletLog, false));
                 auto& msgId = *vPut->Record.MutableMsgQoS()->MutableMsgId();
                 msgId.SetMsgId(MsgIdx);
                 msgId.SetSequenceId(9990);
@@ -2685,7 +2686,7 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
                     new TEvBlobStorage::TEvVPut(from, partSet.Parts[0].OwnedString, vDiskId, false, nullptr,
-                                                TInstant::Max(), NKikimrBlobStorage::TabletLog));
+                                                TInstant::Max(), NKikimrBlobStorage::TabletLog, false));
                 auto& msgId = *vPut->Record.MutableMsgQoS()->MutableMsgId();
                 msgId.SetMsgId(MsgIdx);
                 msgId.SetSequenceId(9990);
@@ -3311,7 +3312,7 @@ class TTestBlobStorageProxyVPutVCollectVGetRace : public TTestBlobStorageProxy {
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> x(
                     new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[0].OwnedString, vDiskId, false,
-                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob));
+                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob, false));
                 auto& msgId = *x->Record.MutableMsgQoS()->MutableMsgId();
                 msgId.SetMsgId(0);
                 msgId.SetSequenceId(1);

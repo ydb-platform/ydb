@@ -33,6 +33,7 @@ namespace NKikimr {
                 ui8 partId,
                 const TIngress &ingress,
                 TRope buffer,
+                std::optional<ui64> checksum,
                 ui64 lsn,
                 EOpMode mode);
 

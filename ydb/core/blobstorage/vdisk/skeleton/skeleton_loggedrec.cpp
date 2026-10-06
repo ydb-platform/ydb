@@ -24,6 +24,7 @@ namespace NKikimr {
             const TLogoBlobID &id,
             const TIngress &ingress,
             TRope &&buffer,
+            std::optional<ui64> checksum,
             std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
             const TActorId &recipient,
             ui64 recipientCookie,
@@ -33,6 +34,7 @@ namespace NKikimr {
         , Id(id)
         , Ingress(ingress)
         , Buffer(std::move(buffer))
+        , Checksum(checksum)
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
@@ -46,7 +48,7 @@ namespace NKikimr {
 
     void TLoggedRecVPut::Replay(THull &hull, const TActorContext &ctx) {
         TLogoBlobID genId(Id, 0);
-        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Seg.Point());
+        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Checksum, Seg.Point());
 
         LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix << "TEvVPut: reply;"
                 << " id# " << Id
@@ -71,6 +73,7 @@ namespace NKikimr {
             const TLogoBlobID &id,
             const TIngress &ingress,
             TRope &&buffer,
+            std::optional<ui64> checksum,
             std::unique_ptr<TEvVMultiPutItemResult> result,
             const TActorId &recipient,
             ui64 recipientCookie,
@@ -80,6 +83,7 @@ namespace NKikimr {
         , Id(id)
         , Ingress(ingress)
         , Buffer(std::move(buffer))
+        , Checksum(checksum)
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
@@ -92,7 +96,7 @@ namespace NKikimr {
 
     void TLoggedRecVMultiPutItem::Replay(THull &hull, const TActorContext &ctx) {
         TLogoBlobID genId(Id, 0);
-        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Seg.Point());
+        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Checksum, Seg.Point());
 
         LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix
                 << "TEvVMultiPut: item reply;"

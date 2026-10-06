@@ -463,7 +463,7 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
-                            Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
+                            Config->MaxLogoBlobDataSize + TDiskBlob::MaxHeaderSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
                             Config->GarbageThresholdToRunFullCompactionPerMille,
@@ -485,7 +485,7 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
-                            Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
+                            Config->MaxLogoBlobDataSize + TDiskBlob::MaxHeaderSize,
                             Config->HugeBlobOverhead,
                             Config->HugeBlobsFreeChunkReservation,
                             lsn,
@@ -494,8 +494,7 @@ namespace NKikimr {
                             logFunc);
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(
-                    LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),
-                    Config->AddHeader);
+                LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(), Config->BlobHeaderMode);
             HugeKeeperInitialized = true;
             return true;
         }
@@ -543,8 +542,7 @@ namespace NKikimr {
                         Config->HullCompFreeSpaceThreshold,
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
-                        Config->HullCompStorageRatioMaxCalcDuration,
-                        Config->AddHeader);
+                        Config->HullCompStorageRatioMaxCalcDuration);
 
                 // create THullDbRecovery, which creates THullDs
                 LocRecCtx->HullDbRecovery = std::make_shared<THullDbRecovery>(hullCtx);

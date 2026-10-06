@@ -1141,6 +1141,117 @@ Y_UNIT_TEST(RetryValidateIoRetriesThenSucceeds) {
     UNIT_ASSERT_VALUES_EQUAL(failedCalls, 2);
 }
 
+TVector<TString> ProgressOf(
+    const IBackupStorage& storage,
+    const TString& path,
+    ui32 verbosity,
+    bool schemeOnly = false,
+    bool failFast = false)
+{
+    TValidateSettings settings;
+    settings.SchemeOnly = schemeOnly;
+    settings.FailFast = failFast;
+    settings.Threads = 1;
+    settings.Verbosity = verbosity;
+    TVector<TString> lines;
+    settings.Progress = [&lines](TStringBuf line) {
+        lines.emplace_back(line);
+    };
+    ValidateBackup(storage, path, settings);
+    return lines;
+}
+
+bool ContainsLine(const TVector<TString>& lines, TStringBuf part) {
+    for (const TString& line : lines) {
+        if (line.Contains(part)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+size_t LineIndex(const TVector<TString>& lines, TStringBuf exact) {
+    for (size_t index = 0; index < lines.size(); ++index) {
+        if (lines[index] == exact) {
+            return index;
+        }
+    }
+    return lines.size();
+}
+
+Y_UNIT_TEST(ProgressFollowsVerbosity) {
+    TMemoryStorage storage;
+    AddTable(storage, "t", 1, "row\n", true);
+
+    const TVector<TString> phases = ProgressOf(storage, "t", 0);
+    UNIT_ASSERT(ContainsLine(phases, "phase: detect backup format for t"));
+    UNIT_ASSERT(ContainsLine(phases, "phase: exported schema objects"));
+    UNIT_ASSERT(!ContainsLine(phases, "object:"));
+    UNIT_ASSERT(!ContainsLine(phases, "file:"));
+    UNIT_ASSERT(!ContainsLine(phases, "trace:"));
+    UNIT_ASSERT(!ContainsLine(phases, "phase: scheme only"));
+
+    const TVector<TString> objects = ProgressOf(storage, "t", 1);
+    const size_t metadata = LineIndex(objects, "object: t: checking metadata");
+    const size_t data = LineIndex(objects, "object: t: checking data");
+    UNIT_ASSERT(metadata < data);
+    UNIT_ASSERT(data < objects.size());
+    UNIT_ASSERT(!ContainsLine(objects, "file:"));
+    UNIT_ASSERT(!ContainsLine(objects, "trace:"));
+
+    const TVector<TString> files = ProgressOf(storage, "t", 2);
+    UNIT_ASSERT_LT(LineIndex(files, "file: read t/scheme.pb"), files.size());
+    UNIT_ASSERT_LT(LineIndex(files, "file: checksum t/scheme.pb.sha256"), files.size());
+    UNIT_ASSERT_LT(LineIndex(files, "file: read t/data_00.csv"), files.size());
+    UNIT_ASSERT(!ContainsLine(files, "trace:"));
+
+    const TVector<TString> trace = ProgressOf(storage, "t", 3);
+    UNIT_ASSERT(ContainsLine(trace, "trace: exists t/scheme.pb yes"));
+    UNIT_ASSERT(ContainsLine(trace, "trace: read t/data_00.csv "));
+    UNIT_ASSERT(ContainsLine(trace, "trace: checksum t/scheme.pb expected "));
+
+    const TVector<TString> schemeOnly = ProgressOf(storage, "t", 2, true);
+    UNIT_ASSERT(ContainsLine(schemeOnly, "phase: scheme only; data file bytes are not read"));
+    UNIT_ASSERT(ContainsLine(schemeOnly, "object: t: checking data"));
+    UNIT_ASSERT_EQUAL(LineIndex(schemeOnly, "file: read t/data_00.csv"), schemeOnly.size());
+    UNIT_ASSERT_LT(LineIndex(schemeOnly, "file: read t/data_00.csv.sha256"), schemeOnly.size());
+
+    TMemoryStorage full;
+    full.PutChecked("metadata.json", "{\"kind\":\"SimpleExportV0\",\"checksum\":\"sha256\"}");
+    full.PutChecked("SchemaMapping/metadata.json", "{\"kind\":\"SchemaMappingV0\"}");
+    full.PutChecked("SchemaMapping/mapping.json",
+        "{\"exportedObjects\":{\"/t1\":{\"exportPrefix\":\"t1\"},\"/t2\":{\"exportPrefix\":\"t2\"}}}");
+    AddTable(full, "t1", 1, "a\n", true);
+    AddTable(full, "t2", 1, "b\n", true);
+    const TVector<TString> fullPhases = ProgressOf(full, "", 0);
+    const size_t detected = LineIndex(fullPhases, "phase: detect backup format for .");
+    const size_t fullBackup = LineIndex(fullPhases, "phase: full backup");
+    const size_t backupMeta = LineIndex(fullPhases, "phase: check backup metadata");
+    const size_t mapping = LineIndex(fullPhases, "phase: check schema mapping");
+    const size_t schemaObjects = LineIndex(fullPhases, "phase: check 2 schema objects");
+    const size_t unmapped = LineIndex(fullPhases, "phase: check unmapped schema files");
+    UNIT_ASSERT(detected < fullBackup);
+    UNIT_ASSERT(fullBackup < backupMeta);
+    UNIT_ASSERT(backupMeta < mapping);
+    UNIT_ASSERT(mapping < schemaObjects);
+    UNIT_ASSERT(schemaObjects < unmapped);
+    UNIT_ASSERT(unmapped < fullPhases.size());
+
+    const TVector<TString> fullObjects = ProgressOf(full, "", 1);
+    const size_t t1Meta = LineIndex(fullObjects, "object: t1: checking metadata");
+    const size_t t1Data = LineIndex(fullObjects, "object: t1: checking data");
+    const size_t t2Meta = LineIndex(fullObjects, "object: t2: checking metadata");
+    UNIT_ASSERT(t1Meta < t1Data);
+    UNIT_ASSERT(t1Data < t2Meta);
+    UNIT_ASSERT(t2Meta < LineIndex(fullObjects, "phase: check unmapped schema files"));
+
+    TMemoryStorage damaged;
+    damaged.Put("SchemaMapping/mapping.json", "{}");
+    const TVector<TString> stopped = ProgressOf(damaged, "", 0, false, true);
+    UNIT_ASSERT(ContainsLine(stopped, "phase: full backup"));
+    UNIT_ASSERT(ContainsLine(stopped, "phase: stopped after the first error"));
+}
+
 } // Y_UNIT_TEST_SUITE(ValidateBackup)
 
 } // namespace NYdb::NConsoleClient

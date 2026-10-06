@@ -300,11 +300,129 @@ i64 JsonInteger(const NJson::TJsonValue& value) {
 // must not wait for another pool, or the two levels deadlock.
 thread_local bool InValidateWorker = false;
 
+class TValidateLog {
+public:
+    explicit TValidateLog(const TValidateSettings& settings)
+        : Verbosity(settings.Verbosity)
+        , Sink(settings.Progress)
+    {
+    }
+
+    void Phase(const TString& text) const {
+        Write(0, TStringBuilder() << "phase: " << text);
+    }
+
+    void Object(const TString& text) const {
+        Write(1, TStringBuilder() << "object: " << text);
+    }
+
+    void File(const TString& text) const {
+        Write(2, TStringBuilder() << "file: " << text);
+    }
+
+    void Trace(const TString& text) const {
+        Write(3, TStringBuilder() << "trace: " << text);
+    }
+
+private:
+    void Write(ui32 level, const TString& text) const {
+        if (!Sink || Verbosity < level) {
+            return;
+        }
+        std::lock_guard<std::mutex> lock(Mu);
+        Sink(text);
+    }
+
+    const ui32 Verbosity = 0;
+    const std::function<void(TStringBuf)> Sink;
+    mutable std::mutex Mu;
+};
+
+thread_local const TValidateLog* TlValidateLog = nullptr;
+
+class TLogScope {
+public:
+    explicit TLogScope(const TValidateLog* log)
+        : Previous(TlValidateLog)
+    {
+        TlValidateLog = log;
+    }
+
+    ~TLogScope() {
+        TlValidateLog = Previous;
+    }
+
+    TLogScope(const TLogScope&) = delete;
+    TLogScope& operator=(const TLogScope&) = delete;
+
+private:
+    const TValidateLog* Previous;
+};
+
+TString ShownPath(const TString& path) {
+    return path.empty() ? TString(".") : path;
+}
+
+// Logs backup I/O. Exists probes are trace-only; reads and listings are file traces.
+class TLoggingStorage : public IBackupStorage {
+public:
+    TLoggingStorage(const IBackupStorage& inner, const TValidateLog& log)
+        : Inner(inner)
+        , Log(log)
+    {
+    }
+
+    bool Exists(const TString& key) const override {
+        const bool found = Inner.Exists(key);
+        Log.Trace(TStringBuilder() << "exists " << key << (found ? " yes" : " no"));
+        return found;
+    }
+
+    TVector<TString> List(const TString& prefix) const override {
+        Log.File(TStringBuilder() << "list " << ShownPath(prefix));
+        TVector<TString> keys = Inner.List(prefix);
+        Log.Trace(TStringBuilder() << "list " << ShownPath(prefix) << " " << keys.size() << " keys");
+        return keys;
+    }
+
+    TString Read(const TString& key) const override {
+        Log.File(TStringBuilder() << "read " << key);
+        TString data = Inner.Read(key);
+        Log.Trace(TStringBuilder() << "read " << key << " " << data.size() << " bytes");
+        return data;
+    }
+
+    void ReadChunks(
+        const TString& key,
+        const std::function<void()>& beginAttempt,
+        const std::function<void(TStringBuf)>& onChunk) const override
+    {
+        Log.File(TStringBuilder() << "read " << key);
+        ui64 bytes = 0;
+        Inner.ReadChunks(
+            key,
+            [&] {
+                bytes = 0;
+                beginAttempt();
+            },
+            [&](TStringBuf chunk) {
+                bytes += chunk.size();
+                onChunk(chunk);
+            });
+        Log.Trace(TStringBuilder() << "read " << key << " " << bytes << " bytes");
+    }
+
+private:
+    const IBackupStorage& Inner;
+    const TValidateLog& Log;
+};
+
 class TValidator {
 public:
-    TValidator(const IBackupStorage& storage, const TValidateSettings& settings)
+    TValidator(const IBackupStorage& storage, const TValidateSettings& settings, const TValidateLog& log)
         : Storage(storage)
         , Settings(settings)
+        , Log(log)
         , Threads(settings.Threads == 0 ? DefaultValidateThreads() : settings.Threads)
     {
     }
@@ -326,6 +444,10 @@ public:
 
     TValidationReport ValidatePath() {
         const TString root = RootPath;
+        Log.Phase(TStringBuilder() << "detect backup format for " << RootLabel());
+        if (Settings.SchemeOnly) {
+            Log.Phase("scheme only; data file bytes are not read");
+        }
         const TString metadataKey = JoinKey(root, "metadata.json");
         const bool forceFull = Settings.Format == EValidateFormat::Full;
         const bool forceItem = Settings.Format == EValidateFormat::Item;
@@ -375,6 +497,7 @@ public:
         const bool looksFull = isSimpleExport || fullBackupMarker;
         const bool validateAsFull = forceFull || (!forceItem && looksFull);
         if (validateAsFull) {
+            Log.Phase("full backup");
             if (metadata.Status == EReadStatus::Missing) {
                 Error(metadataKey, schemaMapping
                     ? "full backup is missing metadata.json; SchemaMapping is present"
@@ -405,6 +528,7 @@ public:
             Warning(metadataKey, "path looks like a full backup; --format=item skips SchemaMapping completeness checks");
         }
 
+        Log.Phase("exported schema objects");
         const bool self = ValidateObject(root, /*expectChecksums*/ Nothing(), /*expectCompressed*/ Nothing());
         // Exports created with --item have no backup-level metadata.json and no SchemaMapping.
         // The destination prefix is a directory of objects, and index tables may sit under a table
@@ -421,6 +545,7 @@ public:
             Checked(root.empty() ? "backup" : root);
         }
         if (Settings.ExpectedObjects.Defined() && !Stopped()) {
+            Log.Phase("check expected objects");
             CheckExpectedObjects(root);
         } else if (!Settings.ExpectedObjects.Defined() && nested && !self && !Stopped()) {
             Warning(root ? root : ".",
@@ -433,6 +558,7 @@ public:
 private:
     const IBackupStorage& Storage;
     const TValidateSettings& Settings;
+    const TValidateLog& Log;
     const ui64 Threads = 1;
     TValidationReport Report;
     THashSet<TString> AllowedObjectDirs;
@@ -459,6 +585,9 @@ private:
         if (Settings.EncryptionKey && !SawEncryption.load()) {
             Warning(RootLabel(),
                 "encryption key is unused; encrypted backup files are not validated by this command");
+        }
+        if (Settings.FailFast && !Report.Issues.empty()) {
+            Log.Phase("stopped after the first error");
         }
         return Report;
     }
@@ -528,6 +657,7 @@ private:
         pool.reserve(workers);
         for (size_t worker = 0; worker < workers; ++worker) {
             pool.emplace_back([&] {
+                TLogScope scope(&Log);
                 InValidateWorker = true;
                 while (!Stopped()) {
                     const size_t index = next.fetch_add(1, std::memory_order_relaxed);
@@ -644,6 +774,7 @@ private:
 
     void VerifyChecksum(const TString& contentKey, const TString& content, bool required) {
         const TString sidecar = contentKey + ".sha256";
+        Log.File(TStringBuilder() << "checksum " << sidecar);
         if (!Exists(sidecar)) {
             if (required) {
                 Error(sidecar, "checksum sidecar is missing");
@@ -663,6 +794,7 @@ private:
             return;
         }
         const TString got = Sha256Hex(content);
+        Log.Trace(TStringBuilder() << "checksum " << contentKey << " expected " << expected << " got " << got);
         if (expected != got) {
             Error(contentKey, TStringBuilder() << "checksum mismatch: expected " << expected << ", got " << got);
         }
@@ -706,6 +838,7 @@ private:
             return;
         }
         AllowDir(dir);
+        Log.Object(TStringBuilder() << ShownPath(dir) << ": checking metadata");
         const bool checksums = ResolveChecksums(dir, expectChecksums);
         const TString key = JoinKey(dir, fileName);
         auto content = ReadPlainFile(key);
@@ -970,6 +1103,7 @@ private:
         if (Stopped()) {
             return;
         }
+        Log.Object(TStringBuilder() << ShownPath(dir) << ": checking metadata");
         const bool checksums = ResolveChecksums(dir, expectChecksums);
         const TString schemeKey = JoinKey(dir, "scheme.pb");
         auto schemeText = ReadPlainFile(schemeKey);
@@ -1016,6 +1150,7 @@ private:
             return;
         }
         if (partitions > 0) {
+            Log.Object(TStringBuilder() << ShownPath(dir) << ": checking data");
             CheckDataFiles(dir, partitions, checksums, expectCompressed);
         }
         Checked(dir.empty() ? "scheme.pb" : dir);
@@ -1206,6 +1341,7 @@ private:
     }
 
     void ValidateFullBackup(const TString& root, const TString& metadataKey, const TString& metadataText, const NJson::TJsonValue& json) {
+        Log.Phase("check backup metadata");
         const TString checksumAlgo = JsonString(json, "checksum");
         if (json.Has("checksum") && checksumAlgo != "sha256") {
             Error(metadataKey, TStringBuilder() << "unsupported checksum algorithm \"" << checksumAlgo << "\"");
@@ -1226,6 +1362,7 @@ private:
         if (Stopped()) {
             return;
         }
+        Log.Phase("check schema mapping");
         const TString mappingMetaKey = JoinKey(root, "SchemaMapping/metadata.json");
         auto mappingMeta = ReadPlainFile(mappingMetaKey);
         if (mappingMeta) {
@@ -1276,6 +1413,8 @@ private:
         std::sort(objects.begin(), objects.end(), [](const TMappedObject& a, const TMappedObject& b) {
             return a.Prefix < b.Prefix;
         });
+        Log.Phase(TStringBuilder() << "check " << objects.size() << " schema object"
+            << (objects.size() == 1 ? "" : "s"));
         ParallelFor(objects.size(), [&](size_t index) {
             const TMappedObject& object = objects[index];
             const TString objectDir = JoinKey(root, object.Prefix);
@@ -1286,6 +1425,7 @@ private:
         if (Stopped()) {
             return;
         }
+        Log.Phase("check unmapped schema files");
         CheckUnexpectedObjects(root);
         Checked(root.empty() ? "backup" : root);
     }
@@ -1418,8 +1558,18 @@ TString MakeChecksumSidecar(TStringBuf data, const TString& fileName) {
     return Sha256Hex(data) + " " + fileName + "\n";
 }
 
+void NoteValidateIoRetry(ui32 attempt, const std::exception& ex) {
+    if (TlValidateLog == nullptr) {
+        return;
+    }
+    TlValidateLog->Trace(TStringBuilder() << "retry " << attempt << ": " << ex.what());
+}
+
 TValidationReport ValidateBackup(const IBackupStorage& storage, const TString& path, const TValidateSettings& settings) {
-    return TValidator(storage, settings).Run(path);
+    const TValidateLog log(settings);
+    const TLogScope scope(&log);
+    const TLoggingStorage logged(storage, log);
+    return TValidator(logged, settings, log).Run(path);
 }
 
 } // namespace NYdb::NConsoleClient

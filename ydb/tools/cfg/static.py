@@ -215,10 +215,6 @@ class StaticConfigGenerator(object):
 
     @property
     def grpc_txt(self):
-        if self.__grpc_port is not None:
-            grpc_config = copy.deepcopy(self.__cluster_details.grpc_config)
-            grpc_config["port"] = int(self.__grpc_port)
-            return self.__proto_config("grpc.txt", config_pb2.TGRpcConfig, grpc_config)
         return self.__proto_config("grpc.txt", config_pb2.TGRpcConfig, self.__cluster_details.grpc_config)
 
     @property

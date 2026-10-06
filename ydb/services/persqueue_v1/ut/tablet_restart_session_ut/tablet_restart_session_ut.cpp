@@ -20,6 +20,7 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/thread/pool.h>
 
@@ -1073,7 +1074,15 @@ protected:
         // far and the concurrent write (if any) has finished. The 25s
         // deadline is a diagnostics bound; the outer wall-clock timeout in
         // RunWithDispatchAndReboot is the real backstop.
+        //
+        // A reboot can advance simulated time by more than max_lag after the
+        // write. The partition then skips those messages, and the sessions
+        // will never observe their SeqNos. Stop once the data is older than
+        // max_lag; VerifyFullCoverage checks that only those messages are
+        // missing.
         const TInstant deadline = TInstant::Now() + TDuration::Seconds(25);
+        const TDuration maxLag = TDuration::Seconds(step.ReadSettings.MaxLagSeconds);
+        TMaybe<TInstant> writeDoneAt;
         bool gotData = false;
         while (true) {
             bool writeDone = (step.Count == 0) || writeFuture.HasValue() || writeFuture.HasException();
@@ -1087,6 +1096,21 @@ protected:
             if (writeDone && allSessionsDone) {
                 gotData = true;
                 break;
+            }
+            if (writeDone && maxLag) {
+                if (!writeDoneAt) {
+                    writeDoneAt = Runtime().GetCurrentTime();
+                }
+                if (Runtime().GetCurrentTime() - *writeDoneAt > maxLag) {
+                    for (size_t i = 0; i < states.size(); ++i) {
+                        Cerr << "=== GRPC_READ_SESSION_MAX_LAG session=" << i
+                             << " consumer=" << states[i]->Consumer
+                             << " lastSeqNo=" << states[i]->LastSeqNo.load()
+                             << " delivered=" << states[i]->DeliveredCount.load()
+                             << " totalNow=" << totalNow << Endl;
+                    }
+                    break;
+                }
             }
             if (TInstant::Now() >= deadline) {
                 for (size_t i = 0; i < states.size(); ++i) {
@@ -1505,8 +1529,15 @@ protected:
         }
 
         AssertNoErrorClose("scenario concurrent step");
-        UNIT_ASSERT_C(gotData,
-            "scenario concurrent step: not all expected data delivered");
+        // Once the step itself outlives max_lag, unread messages are the
+        // skip set that VerifyFullCoverage accepts. A step that stayed
+        // inside the lag must still deliver everything.
+        const bool agedPastMaxLag = step.ReadSettings.MaxLagSeconds > 0
+            && timing.StepEndTime - timing.WriteStartTime > TDuration::Seconds(step.ReadSettings.MaxLagSeconds);
+        if (!agedPastMaxLag) {
+            UNIT_ASSERT_C(gotData,
+                "scenario concurrent step: not all expected data delivered");
+        }
         return true;
     }
 

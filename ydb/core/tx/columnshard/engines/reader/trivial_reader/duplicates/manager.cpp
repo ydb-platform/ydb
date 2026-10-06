@@ -40,8 +40,7 @@ public:
         : NGroupedMemoryManager::IAllocation(mem)
         , Owner(owner)
         , Request(request)
-        , RequestGuard(std::move(requestGuard))
-    {
+        , RequestGuard(std::move(requestGuard)) {
     }
 };
 
@@ -108,12 +107,12 @@ TDuplicateManager::TDuplicateManager(
               std::make_unique<NArrow::NMerger::TMergePartialStream>(PKSchema, nullptr,
                   context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumnNames(),
                   GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()),
-                  GetVersionBatch(TSnapshot::Max(), 0)), Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions,
-              GetFetchingColumns()), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
+                  GetVersionBatch(TSnapshot::Max(), 0)),
+              Counters, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Portions, GetFetchingColumns()),
+          portions, context.GetCommonContext()->GetReadMetadata(), Counters)
     , FiltersStore(context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Counters)
-    , AbortionFlag(std::make_shared<TAtomicCounter>(0))
-    , HangTracker(inflightTimeout)
-{
+    , AbortionFlag(context.GetDuplicatesAbortionFlag())
+    , HangTracker(inflightTimeout) {
 }
 
 bool TDuplicateManager::HasInflightFetchOrMerge() const {

@@ -63,7 +63,7 @@ private:
     }
 
     virtual ui32 GetRecordsCountVirtual() const override {
-        AFL_VERIFY(HasStageData())("tablet_id", GetTabletId())("source_id", GetSourceIdx());
+        AFL_VERIFY(HasPortionAccessor())("tablet_id", GetTabletId())("source_id", GetSourceIdx());
         return GetPortionAccessor().GetRecordsVerified().size() + GetPortionAccessor().GetIndexesVerified().size();
     }
 
@@ -82,8 +82,7 @@ public:
         : TBase(sourceIdx, pathId, tabletId, std::move(start), std::move(finish), std::nullopt, portion->RecordSnapshotMin(),
               portion->RecordSnapshotMin(), context)
         , Portion(std::move(portion))
-        , Schema(std::move(schema))
-    {
+        , Schema(std::move(schema)) {
     }
 };
 

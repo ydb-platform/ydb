@@ -4,6 +4,8 @@ ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 
 ENV(YDB_ERASURE=block_4-2)
 
+ENV(YDB_FEATURE_FLAGS="enable_fulltext_index,enable_fulltext_index_row_id,enable_compact_fulltext_index,enable_json_index,enable_json_index_auto_select,enable_add_unique_index,enable_index_materialization")
+
 PEERDIR(
     library/cpp/threading/local_executor
     library/cpp/yson

@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/kqp/compile_service/helpers
     ydb/library/actors/interconnect
     ydb/library/query_actor
+    ydb/library/ydb_issue
     ydb/library/security
     library/cpp/protobuf/json
 )

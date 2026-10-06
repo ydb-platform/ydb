@@ -438,6 +438,11 @@ public:
         return LocalSessions.FindPtr(sessionId);
     }
 
+    const TKqpSessionInfo* FindPtr(const TActorId& workerId) const {
+        const auto* sessionId = TargetIdIndex.FindPtr(workerId);
+        return sessionId ? FindPtr(*sessionId) : nullptr;
+    }
+
     const THashSet<const TKqpSessionInfo*>& FindSessions(const TNodeId& nodeId) const {
         auto it = AttachedNodesIndex.find(nodeId);
         if (it == AttachedNodesIndex.end()) {
@@ -445,17 +450,6 @@ public:
             return empty;
         }
         return it->second;
-    }
-
-    std::pair<TNodeId, TActorId> Erase(const TActorId& targetId) {
-        auto result = std::make_pair<TNodeId, TActorId>(0, TActorId());
-
-        auto it = TargetIdIndex.find(targetId);
-        if (it != TargetIdIndex.end()){
-            result = Erase(it->second);
-        }
-
-        return result;
     }
 
     template<typename TCb>

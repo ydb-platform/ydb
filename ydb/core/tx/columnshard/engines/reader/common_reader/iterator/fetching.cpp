@@ -63,7 +63,7 @@ void TStepAction::CacheSourceStats() {
     CachedBlobBytes = source.ExtractTotalBytesRead();
     CachedRawBytes = source.GetUsedRawBytesOptional();
     CachedFilteredRows = source.GetFilteredRowsCount();
-    CachedTotalRows = source.GetRecordsCount();
+    CachedTotalRows = source.GetRecordsCountOptional().value_or(0);
     CachedTotalReservedBytes = source.GetReservedMemory();
 }
 
@@ -72,8 +72,7 @@ TStepAction::TStepAction(std::unique_ptr<TDataSourceLease> sourceLease, TFetchin
     : TBase(ownerActorId, sourceLease->GetSource().GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard())
     , SourceLease(std::move(sourceLease))
     , Cursor(std::move(cursor))
-    , CachedSourceId(SourceLease->GetSource().GetSourceId())
-{
+    , CachedSourceId(SourceLease->GetSource().GetSourceId()) {
     if (changeSyncSection) {
         SourceLease->GetSource().StartAsyncSection();
     } else {

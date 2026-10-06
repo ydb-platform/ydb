@@ -172,6 +172,9 @@ runs:
         set -x
 
         echo "$(pwd)/ydb/ci/scripts" >> $GITHUB_PATH
+        if [ "${{ inputs.publish_github_status }}" != "true" ]; then
+          echo "SKIP_PR_COMMENT=1" >> "$GITHUB_ENV"
+        fi
 
         export TMP_DIR=$(pwd)/tmp
         rm -rf $TMP_DIR

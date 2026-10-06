@@ -560,6 +560,14 @@ def write_summary(summary: TestSummary):
     else:
         fp = sys.stdout
 
+    shard = os.environ.get("S3_SUBDIR") or ""
+    if shard:
+        fp.write(f"### This shard only (`{shard}`)\n\n")
+        fp.write(
+            "These tables are this job's tries. The combined TESTS table is "
+            "the PR comment and the `shard_result` job after every shard finishes.\n\n"
+        )
+
     for line in summary.render(add_footnote=True):
         fp.write(f"{line}\n")
 

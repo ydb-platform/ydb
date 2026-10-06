@@ -772,6 +772,46 @@ class ShardProgressTest(unittest.TestCase):
             "https://example.test/comments?page=2",
         )
 
+    def test_comment_update_retries_without_if_match_on_http_400(self) -> None:
+        class _Fake(shard_progress.GithubCommentStore):
+            def __init__(self) -> None:
+                super().__init__("token", "ydb-platform/ydb", 1)
+                self.calls: list[str | None] = []
+
+            def _request(self, method, url, payload=None, etag=None):
+                self.calls.append(etag)
+                if etag:
+                    return 400, {}, {"message": "Invalid request"}
+                return 200, {}, {"id": 1}
+
+        store = _Fake()
+        store.update(1, "body", '"etag-1"')
+        self.assertEqual(store.calls, ['"etag-1"', None])
+
+    def test_shard_job_note_is_not_the_combined_table(self) -> None:
+        state = shard_progress.apply_shard(
+            _progress_state(2),
+            shard_id=0,
+            result="failure",
+            started_at="2026-10-04T12:00:00Z",
+            finished_at="2026-10-04T12:05:00Z",
+            job_url="https://example.test/job/0",
+            log_prefix="shard_0",
+            failed_tests=["ydb/a"],
+            run_url="https://example.test/run/99",
+            counts={"tests": 10, "passed": 8, "errors": 0, "failed": 2, "skipped": 0, "muted": 0},
+        )
+        note = shard_progress.render_shard_job_note(state, 0)
+        self.assertIn("This shard only", note)
+        self.assertIn("FAILED 2", note)
+        self.assertNotIn("| TESTS |", note)
+        combined = shard_progress.render_comment(state, "2026-10-04T12:05:00Z")
+        self.assertIn("| TESTS |", combined)
+        self.assertEqual(
+            shard_progress.visible_comment(combined).count("shard-progress-state"),
+            0,
+        )
+
     def test_count_links_encode_spaces_in_the_workflow_name(self) -> None:
         raw = "https://storage.example/ydb/Run and debug tests/1/ya-test.html"
         encoded = "https://storage.example/ydb/Run%20and%20debug%20tests/1/ya-test.html"

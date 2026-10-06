@@ -526,13 +526,14 @@ def render_comment(state: dict[str, Any], now: str) -> str:
         failures.append(
             f"- shard {shard_id} **{row.get('result')}** — {shown} — {link_text} — logs `{_md(prefix)}`"
         )
+    fail_title = "Failures so far:" if status == "running" else "Failures:"
     if failures:
-        lines.append("Failures so far:")
+        lines.append(fail_title)
         lines.extend(failures)
     elif status == "running":
         lines.append("Failures so far: none yet")
     else:
-        lines.append("Failures so far: none")
+        lines.append("Failures: none")
     lines.append("")
     lines.append("| Shard | Result | Job | Logs |")
     lines.append("| ---: | --- | --- | --- |")
@@ -639,7 +640,7 @@ class GithubCommentStore:
         return RestComment(int(payload["id"]), body, "")
 
     def update(self, comment_id: int, body: str, etag: str) -> None:
-        status, _headers, _payload = self._request(
+        status, _headers, payload = self._request(
             "PATCH",
             f"https://api.github.com/repos/{self._repository}/issues/comments/{comment_id}",
             {"body": body},
@@ -647,8 +648,15 @@ class GithubCommentStore:
         )
         if status == 412:
             raise Conflict(str(comment_id))
+        # Issue-comment PATCH rejects If-Match with HTTP 400. Retry bare.
+        if status == 400 and etag:
+            status, _headers, payload = self._request(
+                "PATCH",
+                f"https://api.github.com/repos/{self._repository}/issues/comments/{comment_id}",
+                {"body": body},
+            )
         if status != 200:
-            raise RuntimeError(f"update comment {comment_id} failed: HTTP {status}")
+            raise RuntimeError(f"update comment {comment_id} failed: HTTP {status}: {payload}")
 
     def delete(self, comment_id: int) -> None:
         status, _headers, _payload = self._request(
@@ -867,6 +875,31 @@ def _event_state(args: argparse.Namespace) -> dict[str, Any]:
     )
 
 
+def render_shard_job_note(state: dict[str, Any], shard_id: int) -> str:
+    """One job-summary line for this shard. The combined table is written later."""
+    row = (state.get("shards") or {}).get(str(shard_id)) or {}
+    counts = row.get("counts") or empty_counts()
+    preset = _md(str(state.get("preset") or ""))
+    return (
+        f"### This shard only (`{preset}` shard {shard_id})\n"
+        f"\n"
+        f"Job result: **{row.get('result') or 'unknown'}**. "
+        f"TESTS {int(counts.get('tests') or 0)}, "
+        f"PASSED {int(counts.get('passed') or 0)}, "
+        f"FAILED {int(counts.get('failed') or 0)}, "
+        f"MUTED {int(counts.get('muted') or 0)}.\n"
+        f"\n"
+        f"The combined TESTS table is the PR comment and the `shard_result` job "
+        f"after every shard finishes. Tables above are this job's tries only.\n"
+    )
+
+
+def visible_comment(body: str) -> str:
+    """Drop the hidden JSON state so job summaries stay readable."""
+    start = body.find(STATE_BEGIN)
+    return body[:start].rstrip() + "\n" if start >= 0 else body
+
+
 def _write_summary(path: str, body: str) -> None:
     if not path:
         return
@@ -907,10 +940,9 @@ def _cmd_publish(args: argparse.Namespace) -> int:
                 state["combined_url"] = args.combined_url
     # Disk copy survives a comment API failure so finalize can still merge it.
     _write_state(args.state_output, state)
+    _write_summary(args.summary_file, render_shard_job_note(state, args.shard_id))
     if not args.pr:
-        body = render_comment(state, args.finished_at)
-        _write_summary(args.summary_file, body)
-        print("No PR number; wrote the shard summary only.", file=sys.stderr)
+        print("No PR number; wrote the shard note only.", file=sys.stderr)
         return 0
     token = os.environ.get("GITHUB_TOKEN", "")
     repository = os.environ.get("GITHUB_REPOSITORY", "")
@@ -924,7 +956,6 @@ def _cmd_publish(args: argparse.Namespace) -> int:
     except (OSError, RuntimeError, urllib.error.URLError, json.JSONDecodeError, TimeoutError) as exc:
         print(f"warning: comment update failed ({exc}); shard result is on disk.", file=sys.stderr)
         return 0 if args.state_output else 1
-    _write_summary(args.summary_file, written)
     sys.stdout.write(written)
     return 0
 
@@ -953,7 +984,8 @@ def _cmd_finalize(args: argparse.Namespace) -> int:
     now = args.now or format_time(datetime.now(timezone.utc))
     # Reuse the sync path so a racing shard is merged instead of overwritten.
     written = sync_comment(store, header, merged, now)
-    _write_summary(args.summary_file, written)
+    heading = f"## Combined Run-tests `{_md(args.preset)}`\n\n"
+    _write_summary(args.summary_file, heading + visible_comment(written) + "\n")
     return 0
 
 

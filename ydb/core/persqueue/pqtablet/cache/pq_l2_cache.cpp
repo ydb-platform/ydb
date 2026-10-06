@@ -202,13 +202,20 @@ void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
         if (oldKey == newKey) {
             continue;
         }
-        if (Cache.FindWithoutPromote(newKey) != Cache.End()) {
-            // Insert does not replace an existing key, but Erase would still drop the source.
-            CurrentSize -= (*it)->GetDataSize();
-            Cache.Erase(it);
-        } else {
-            Cache.Insert(newKey, *it);
-            Cache.Erase(it);
+
+        // The renamed body is the source value. A cached destination can hold
+        // different bytes; drop those before moving the source onto newKey.
+        TCacheValue::TPtr value = *it;
+        auto dest = Cache.FindWithoutPromote(newKey);
+        if (dest != Cache.End()) {
+            CurrentSize -= dest.Value()->GetDataSize();
+            Cache.Erase(dest);
+        }
+
+        Cache.Insert(newKey, value);
+        auto oldIt = Cache.FindWithoutPromote(oldKey);
+        if (oldIt != Cache.End()) {
+            Cache.Erase(oldIt);
         }
 
         LOG_D("PQ Cache (L2). Renamed. old new",

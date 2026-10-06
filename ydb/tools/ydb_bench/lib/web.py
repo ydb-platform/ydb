@@ -6157,8 +6157,26 @@ class RunService:
         return self.comparisons(selected)
 
     def detail(self, run_id):
-        item = self.model().get(run_id)
+        try:
+            directory = _run_directory(self.output, run_id)
+            manifest = load_manifest(directory / "run.json")
+        except BenchmarkError:
+            return None
+        if "topology" not in manifest and "steps" not in manifest:
+            return None
+        # Preserve read-model IDs, including nested imported runs, without walking
+        # unrelated logs and telemetry directories on every status refresh.
+        if directory.relative_to(self.output.resolve()).as_posix() != run_id:
+            return None
+        item = run_record(run_id, manifest, self.output.resolve())
         with self._lock:
+            positions = {
+                queued["id"]: index
+                for index, queued in enumerate(
+                    (entry for entry in self._queue if entry["store"].manifest["state"] == "queued"), 1
+                )
+            }
+            item.update(current_run_id=self._active_run_id, queue_position=positions.get(run_id))
             run = self._runs.get(run_id)
             if item and run:
                 with run["lock"]:

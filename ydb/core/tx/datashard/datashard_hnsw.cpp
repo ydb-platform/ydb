@@ -174,7 +174,8 @@ public:
         }
         auto& entry = it->second;
         entry.RebuildScheduled = false;
-        if (entry.Building || !entry.Index || !entry.Changes->Valid
+        if (!AppData()->FeatureFlags.GetEnableHNSWIndex()
+                || entry.Building || !entry.Index || !entry.Changes->Valid
                 || !entry.Index->NeedsRebuild(GetHnswDeltaRows(entry.Settings))) {
             return true;
         }
@@ -243,6 +244,9 @@ std::shared_ptr<THnswIndex> TDataShard::GetHnswIndex(ui32 localTid, ui32 vectorC
 
 bool TDataShard::TryStartHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
         const Ydb::Table::VectorIndexSettings& settings, TRowVersion baseVersion) {
+    if (!AppData()->FeatureFlags.GetEnableHNSWIndex()) {
+        return false;
+    }
     auto& entry = HnswIndexCache[localTid];
     if (entry.Building) {
         return false;
@@ -337,6 +341,11 @@ void TDataShard::PrepareFollowerHnswIndex(ui32 localTid, const NTable::TDatabase
 void TDataShard::SetHnswIndex(ui32 localTid, std::shared_ptr<THnswIndex> index,
         std::shared_ptr<void> memoryReservation, ui64 rowCountAtBuild, ui32 vectorColumnTag,
         const Ydb::Table::VectorIndexSettings& settings, TRowVersion baseVersion, ui64 buildToken) {
+    if (!AppData()->FeatureFlags.GetEnableHNSWIndex()) {
+        InvalidateHnswIndex(localTid);
+        SetHnswIndexBuilding(localTid, false);
+        return;
+    }
     if (buildToken && !IsHnswBuildCurrent(localTid, buildToken)) {
         return;
     }
@@ -387,6 +396,10 @@ void TDataShard::SetHnswIndex(ui32 localTid, std::shared_ptr<THnswIndex> index,
 }
 
 void TDataShard::PruneHnswIndexes() {
+    if (!AppData()->FeatureFlags.GetEnableHNSWIndex()) {
+        InvalidateHnswIndexes();
+        return;
+    }
     const auto low = SnapshotManager.GetLowWatermark();
     for (auto& [tid, entry] : HnswIndexCache) {
         TRowVersion nextBase = entry.Index ? entry.Index->GetBaseVersion() : TRowVersion::Max();
@@ -544,7 +557,7 @@ void TDataShard::AbortHnswIndexChanges(ui32 localTid, ui64 txId, NTable::TDataba
 }
 
 void TDataShard::ScheduleHnswRebuild(ui32 localTid) {
-    if (IsFollower()) {
+    if (!AppData()->FeatureFlags.GetEnableHNSWIndex() || IsFollower()) {
         return;
     }
     auto& entry = HnswIndexCache.at(localTid);

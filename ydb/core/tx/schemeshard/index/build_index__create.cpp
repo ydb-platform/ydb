@@ -418,6 +418,10 @@ private:
         case Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex: {
             const bool isHnsw = index.type_case()
                 == Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex;
+            if (isHnsw && !Self->EnableHNSWIndex) {
+                explain = "HNSW index support is disabled (EnableHNSWIndex)";
+                return false;
+            }
             const auto& requestedSettings = isHnsw
                 ? index.global_hnsw_index().vector_settings()
                 : index.global_vector_kmeans_tree_index().vector_settings();

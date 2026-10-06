@@ -42,6 +42,7 @@ public:
     FEATURE_FLAG_SETTER(EnableScriptExecutionOperations)
     FEATURE_FLAG_SETTER(EnableExternalDataSources)
     FEATURE_FLAG_SETTER(EnableForceImmediateEffectsExecution)
+    FEATURE_FLAG_SETTER(EnableHNSWIndex)
     FEATURE_FLAG_SETTER(EnableTempTables)
     FEATURE_FLAG_SETTER(EnableChangefeedDynamoDBStreamsFormat)
     FEATURE_FLAG_SETTER(EnableChangefeedDebeziumJsonFormat)

@@ -171,6 +171,9 @@ protected:
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         PageFault = false;
         RetryScheduled = false;
+        if (!AppData()->FeatureFlags.GetEnableHNSWIndex()) {
+            return false;
+        }
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
@@ -290,6 +293,13 @@ protected:
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
+        if (!AppData()->FeatureFlags.GetEnableHNSWIndex()) {
+            DataShard.InvalidateHnswIndex(LocalTid);
+            DataShard.SetHnswIndexBuilding(LocalTid, false);
+            op->SetAsyncJobResult(nullptr);
+            tx->SetAsyncJobActor(TActorId());
+            return true;
+        }
         auto* result = CheckedCast<THnswIndexBuildProduct*>(op->AsyncJobResult().Get());
         bool retry = false;
         if (result->Index) {

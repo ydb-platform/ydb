@@ -443,4 +443,7 @@ message TFeatureFlags {
     optional bool EnableQYT = 359 [default = false]; //YT queues (QYT) in federated and streaming queries
     // Enables memory of table partitions split/merge demands
     optional bool EnableSplitMergeDemandTracking = 360 [default = false];
+    // Allows HNSW index creation/rebuild and use of the in-memory HNSW cache.
+    // Disabled reads retain the exact-scan fallback for existing indexes.
+    optional bool EnableHNSWIndex = 361 [default = false];
 }

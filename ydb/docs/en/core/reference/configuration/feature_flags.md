@@ -4,7 +4,7 @@ YDB implements feature flags following the established [feature toggling](https:
 
 Feature flags are settings that enable or disable individual YDB capabilities. They allow new functionality to be enabled gradually: its code may already be present in the installed YDB version while the functionality itself is still unavailable to users.
 
-## Who changes feature flags {#management}
+## Who Changes Feature Flags {#management}
 
 Feature flags can be changed by the feature owner, who understands its internal implementation. Changing a flag is a complex process: it requires considering the cluster state, dependencies between capabilities, and compatibility between versions and data formats.
 
@@ -16,9 +16,9 @@ Enabling a flag may affect data compatibility and prevent rolling YDB back to a 
 
 {% endnote %}
 
-## Experimental functionality {#experimental}
+## Experimental Functionality {#experimental}
 
-### Why a flag may be disabled {#availability}
+### Why a Flag May Be Disabled {#availability}
 
 Some functionality is included in a release in an experimental state. It is still under development and is therefore disabled by default. Its behavior, syntax, API, or data storage format may change without backward compatibility. Such functionality may remain experimental for a long time or be removed without ever becoming generally available.
 
@@ -26,7 +26,7 @@ However, not every disabled flag indicates experimental functionality. Some flag
 
 A capability being described in the documentation or its code being included in a release does not necessarily mean that it is enabled on your database's cluster.
 
-### Risks of enabling experimental functionality {#risks}
+### Risks of Enabling Experimental Functionality {#risks}
 
 Stability, performance, and backward compatibility are not guaranteed for experimental functionality. Enabling its flag may lead to:
 
@@ -38,31 +38,31 @@ In the last case, disabling the flag does not necessarily restore the previous d
 
 Do not enable experimental functionality in production clusters. Use a separate test cluster with data you can afford to lose.
 
-## How to check whether functionality is available {#check-availability}
+## How to Check Whether Functionality Is Available {#check-availability}
 
 When checking availability, consider the installed YDB version and the cluster configuration.
 
 1. Read the documentation and release notes for the relevant version. Check the functionality's limitations and any indication of its experimental status.
-2. Check the corresponding flag's value in your cluster configuration. Flag descriptions are provided in the [configuration reference](#functional-flags).
+2. [Generate the final configuration](../../devops/configuration-management/configuration-v1/dynamic-config-selectors.md#selectors-resolve) for the nodes that serve the target database and check the corresponding flag's value. Flag descriptions are provided in the [configuration reference](#functional-flags).
 
 The default flag value is determined by the code of the corresponding YDB version. The value in the cluster configuration may differ from the default. The flag reference therefore does not replace checking actual availability on your cluster.
 
-## How functionality becomes generally available {#general-availability}
+## How Functionality Becomes Generally Available {#general-availability}
 
 When experimental functionality is ready for general use, its flag is enabled by default in the corresponding YDB version. The experimental status warning is removed from that version's documentation, and the release notes announce the functionality's availability.
 
 After upgrading the cluster, check its configuration: an explicitly set flag value may differ from the new default.
 
-## Configuring flags {#configuration}
+## Configuring Flags {#configuration}
 
-The `feature_flags` section enables or disables certain {{ ydb-short-name }} features using boolean flags. To enable a feature, set the corresponding feature flag to `true` in the cluster configuration. For example, to enable auto-partitioning of topics in CDC, add the following lines to the configuration:
+The `feature_flags` section enables or disables certain {{ ydb-short-name }} features in the main cluster configuration. With [dynamic configuration selectors](../../devops/configuration-management/configuration-v1/dynamic-config-selectors.md), you can override flags for individual databases or node groups. To enable a feature, set the corresponding feature flag to `true`. For example, to enable auto-partitioning of topics in CDC, add the following lines to the configuration:
 
 ```yaml
 feature_flags:
   enable_topic_autopartitioning_for_cdc: true
 ```
 
-## Feature flags {#functional-flags}
+## Feature Flags {#functional-flags}
 
 | Flag | Function |
 | --- | --- |
@@ -87,3 +87,7 @@ feature_flags:
 | `enable_external_data_sources` | Enabling [external data sources](../../concepts/datamodel/external_data_source.md) |
 | `enable_grpc_audit` | Enabling [audit](../../security/audit-log.md#grpc-connection) of gRPC connection state changes |
 | `enable_fs_backups` | Enabling [backup and restore operations to a network file system](../../concepts/backup.md#nfs) |
+| `switch_to_config_v2` | Switching from configuration V1 to [configuration V2](../../devops/configuration-management/migration/migration-to-v2.md) |
+| `enable_streaming_queries` | Enabling [streaming queries](../../concepts/streaming-query/streaming-query.md) |
+| `enable_stable_node_names` | Enabling [stable names for dynamic nodes](node_broker_config.md) |
+| `alter_database_create_hive_first` | Creating a dedicated Hive for a database's system tablets when the database is created |

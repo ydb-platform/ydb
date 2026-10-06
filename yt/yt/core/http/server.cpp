@@ -79,7 +79,7 @@ public:
         , RequestPathMatcher_(std::move(requestPathMatcher))
         , CompressionInvoker_(std::move(compressionInvoker))
     {
-        if (Config_->EnableContentEncoding && !CompressionInvoker_) {
+        if (Config_->EnableContentEncoding.value_or(false) && !CompressionInvoker_) {
             CompressionThreadPool_ = CreateThreadPool(Config_->CompressionThreadCount, Config_->ServerName + "Compress");
             CompressionInvoker_ = CompressionThreadPool_->GetInvoker();
         }
@@ -326,7 +326,7 @@ private:
             if (handler) {
                 closeResponse = false;
 
-                if (Config_->EnableContentEncoding) {
+                if (Config_->EnableContentEncoding.value_or(false)) {
                     handler = CreateContentEncodingHttpHandler(std::move(handler), CompressionInvoker_);
                 }
 

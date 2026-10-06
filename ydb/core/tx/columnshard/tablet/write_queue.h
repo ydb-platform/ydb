@@ -69,7 +69,8 @@ public:
         , IsBulk(isBulk)
         , OverloadSubscribeSeqNo(overloadSubscribeSeqNo)
         , Orbit(std::move(orbit))
-        , ReceivedAt(receivedAt) {
+        , ReceivedAt(receivedAt)
+    {
     }
 
     const TInternalPathId& GetInternalPathId() const {
@@ -95,7 +96,8 @@ private:
 
 public:
     TWriteTasksQueue(TColumnShard* owner)
-        : Owner(owner) {
+        : Owner(owner)
+    {
     }
 
     ~TWriteTasksQueue();

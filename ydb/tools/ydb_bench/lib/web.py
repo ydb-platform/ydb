@@ -6157,8 +6157,9 @@ class RunService:
         return self.comparisons(selected)
 
     def detail(self, run_id):
+        root = self.output.resolve()
         try:
-            directory = _run_directory(self.output, run_id)
+            directory = root if run_id == "." else _run_directory(root, run_id)
             manifest = load_manifest(directory / "run.json")
         except BenchmarkError:
             return None
@@ -6166,9 +6167,9 @@ class RunService:
             return None
         # Preserve read-model IDs, including nested imported runs, without walking
         # unrelated logs and telemetry directories on every status refresh.
-        if directory.relative_to(self.output.resolve()).as_posix() != run_id:
+        if directory.relative_to(root).as_posix() != run_id:
             return None
-        item = run_record(run_id, manifest, self.output.resolve())
+        item = run_record(run_id, manifest, root)
         with self._lock:
             positions = {
                 queued["id"]: index

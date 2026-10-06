@@ -7687,6 +7687,12 @@ class WebTest(unittest.TestCase):
                     self.assertIsNone(service.detail(missing))
                 (self.root / "complete" / "run.json").write_text("invalid", encoding="utf-8")
                 self.assertIsNone(service.detail("complete"))
+                # CLI output can itself be a run directory, represented by ".".
+                self._manifest(self.root)
+                root_manifest = web.load_manifest(self.root / "run.json")
+                root_record = web.run_record(".", root_manifest, self.root)
+                root_record.update(current_run_id=None, queue_position=None)
+                self.assertEqual(service.detail("."), root_record)
         finally:
             service.shutdown()
 

@@ -548,6 +548,7 @@ public:
     }
 
     TValidationReport ValidatePath() {
+        Log.Phase(TStringBuilder() << "use " << Threads << " worker thread" << (Threads == 1 ? "" : "s"));
         const TString root = RootPath;
         Log.Phase(TStringBuilder() << "detect backup format for " << RootLabel());
         if (Settings.SchemeOnly) {

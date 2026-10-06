@@ -1,7 +1,14 @@
 #include "ydb_tools_validate.h"
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/validate/validate.h>
+
+#include <library/cpp/logger/log.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 
 #include <util/folder/path.h>
@@ -261,8 +268,26 @@ TValidateSettings MakeSettings(
     settings.Format = format;
     settings.MetadataChecksums = metadataChecksums;
     settings.Verbosity = verbosity;
-    settings.Progress = [](TStringBuf line) {
-        Cerr << line << Endl;
+    // Same logger as `ydb tools dump` and `ydb tools restore`: timestamp, priority, stderr.
+    // Phase and progress lines stay plain, because they are shown at verbosity 0.
+    // -v is NOTICE, -vv is INFO, -vvv is DEBUG, matching VerbosityLevelToELogPriority.
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(verbosity)));
+    log->SetFormatter(GetPrefixLogFormatter(""));
+    settings.Progress = [log](TStringBuf line) {
+        ELogPriority priority = TLOG_INFO;
+        if (line.StartsWith("trace: ")) {
+            priority = TLOG_DEBUG;
+        } else if (line.StartsWith("file: ")) {
+            priority = TLOG_INFO;
+        } else if (line.StartsWith("object: ")) {
+            priority = TLOG_NOTICE;
+        } else {
+            Cerr << line << Endl;
+            return;
+        }
+        if (log->FiltrationLevel() >= priority) {
+            log->Write(priority, TString(line));
+        }
     };
     return settings;
 }
@@ -273,7 +298,7 @@ TCommandValidate::TCommandValidate()
     : TClientCommandTree("validate", {},
         "Check byte-level integrity of a full backup or exported schema objects without restoring them. "
         "A successful result does not prove that the backup can be imported. "
-        "Progress is written to stderr: phase changes, and during data-file checks a checked/remaining line about every 30 seconds. "
+        "Progress is written to stderr: phase changes, the worker thread count, and during data-file checks a checked/remaining line about every 30 seconds. "
         "-v, -vv, and -vvv add detail.")
 {
     AddCommand(std::make_unique<TCommandValidateFromS3>());
@@ -287,7 +312,7 @@ void TCommandValidate::Config(TConfig& config) {
 
 TCommandValidateBase::TCommandValidateBase(const TString& name, const TString& description)
     : TYdbCommand(name, {}, TStringBuilder() << description
-        << " Progress is written to stderr: phase changes by default, "
+        << " Progress is written to stderr: phase changes and the worker thread count by default, "
         "checked and remaining data files about every 30 seconds, "
         "each object's metadata and data checks with -v, "
         "and per-file traces with -vv and -vvv.")

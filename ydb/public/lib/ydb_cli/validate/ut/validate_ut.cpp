@@ -1200,7 +1200,9 @@ Y_UNIT_TEST(ProgressFollowsVerbosity) {
     AddTable(storage, "t", 1, "row\n", true);
 
     const TVector<TString> phases = ProgressOf(storage, "t", 0);
+    UNIT_ASSERT_VALUES_EQUAL(LineIndex(phases, "phase: use 1 worker thread"), 0);
     UNIT_ASSERT(ContainsLine(phases, "phase: detect backup format for t"));
+    UNIT_ASSERT(LineIndex(phases, "phase: use 1 worker thread") < LineIndex(phases, "phase: detect backup format for t"));
     const size_t findObjects = LineIndex(phases, "phase: find schema objects in t");
     const size_t checkTable = LineIndex(phases, "phase: check t");
     const size_t listObjects = LineIndex(phases, "phase: list schema objects in t");

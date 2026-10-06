@@ -5,9 +5,9 @@
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_objects.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
-#include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
 #include <library/cpp/getopt/small/completer.h>
 #include <util/string/builder.h>
@@ -29,15 +29,6 @@ namespace {
 
     bool FilterTables(const NScheme::TSchemeEntry& entry) {
         return entry.Type == NScheme::ESchemeEntryType::Table;
-    }
-
-    bool FilterAllSupportedSchemeObjects(const NScheme::TSchemeEntry& entry) {
-        return IsIn({
-            NScheme::ESchemeEntryType::Table,
-            NScheme::ESchemeEntryType::ColumnTable,
-            NScheme::ESchemeEntryType::View,
-            NScheme::ESchemeEntryType::Topic,
-        }, entry.Type);
     }
 
     // The legacy replica-table rule is independent of __omit_backup.
@@ -460,7 +451,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     TTableClient tableClient(driver);
 
     if (expandItems) {
-        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
+        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, IsExportableSchemeObject);
         if (settings.Item_.empty()) {
             if (!ExclusionPatterns.empty()) {
                 Cerr << "No items to export after applying exclude filters" << Endl;

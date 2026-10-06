@@ -47,7 +47,7 @@ The data client is optional: other sources can provide the same series format.
 `request({line, seconds, signal})` reads the viewer's existing JSON protocol;
 `queryMany(queries, {seconds, signal, catalog})` returns `{catalog, series, limited}`.
 It fetches histories sequentially and reuses each line response within the batch.
-Limits remain 8 selectors, 16 lines per selector, and 64 series per batch. Use an
+Limits remain 8 selectors, 16 matching series per selector, and 64 series per batch. Use an
 AbortController and discard stale results when switching requests. Authentication
 uses the existing same-origin monitoring session. Cross-origin access requires
 configuration of the destination server; the module does not change access rules.

@@ -1,9 +1,10 @@
 # Embedding metric charts
 
-Add `ydb/core/mon/metric_chart` to the C++ consumer's `PEERDIR`. During monitoring
+Add `ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart` to the C++ consumer's `PEERDIR`. During monitoring
 setup, call `NKikimr::NMetricChart::RegisterResources(mon)` once. This publishes
 `static/metric-chart/chart.js`, `client.js` and `chart.css` from binary resources.
-No external CDN or JavaScript framework is required.
+ChartKit, its Yagr Canvas renderer, React and styles are bundled into the binary.
+No external CDN or browser-side package resolution is required.
 
 Load the stylesheet and import the modules relative to the monitoring root.
 For a page under `/actors/`, the following paths also work through `/node/<id>/`:
@@ -72,9 +73,10 @@ allows chart settings per query and appearance overrides per retained line.
 `area` renders stacked layers: each layer thickness is its raw value, with
 positive and negative values stacked separately. Tooltip values remain raw.
 `fill: true` shades the region under ordinary lines without stacking them;
-per-series `fill` overrides the chart setting. Stack baselines use a shared
-grid capped at 1000 timestamps plus each series' own samples, preserving its
-changes and gaps. Automatic numeric formatting uses three significant digits;
+per-series `fill` overrides the chart setting. The adapter aligns both sides of each timestamp, preserving steps and gaps.
+Aligned graph data is capped at one million cells. Larger timestamp unions
+are sampled for display; tooltip values and statistics use retained samples.
+A note below the chart indicates when display sampling is active. Automatic numeric formatting uses three significant digits;
 axis labels reserve space according to their length.
 
 Set `settings.format` to a series name template. `{metric}`, `{name}`, `{query}`
@@ -86,8 +88,8 @@ format; series metadata uses `metric`, `queryLabel` and `labelValues` (the label
 name/value array). The shared JSON client supplies these fields. Names are plain
 text and never HTML, and formatting does not change series keys or query matching.
 
-Chart geometry uses CSS pixel coordinates without a scaled SVG viewBox, so
-axis text keeps its 12 px font at every chart width and configured height.
+ChartKit uses Yagr/uPlot to draw axes and series in Canvas.
+Axis text keeps its 12 px font at every chart width and configured height.
 Overview chunks stack used and free counts; together they cover the chunk pool.
 Memory compares allocated chunk capacity and recorded payload as ordinary lines.
 
@@ -101,3 +103,42 @@ Import `createAllocationBar` from `static/metric-chart/allocation.js` and load `
 Overview uses `lines[].chunks` from the viewer JSON endpoint: retained snapshot chunks per storage line, including shared group fields only once. Counts describe the current snapshot and do not depend on the history interval. Reserved or retiring chunks absent from the line snapshot appear as unattributed allocation. Registry statistics and line capture can differ during concurrent writes; the bar scales to the larger observed total rather than creating negative segments.
 
 Set `legend:false` when the owner table acts as the legend. `getColor(key)` returns the displayed owner color (including the aggregate color for omitted owners), and `highlight(key)` highlights its bar segment. The bar tooltip uses a body portal, flips at viewport edges, lists bounded owner values and percentages, and can be pinned by clicking a segment.
+
+### Shared cursor
+
+Use one cursor group for charts with the same time interval:
+
+```js
+import {createMetricChart, createMetricChartCursorGroup} from './chart.js';
+const cursorGroup = createMetricChartCursorGroup();
+const chart = createMetricChart(host, {cursorGroup, plotLeft: 100});
+chart.setData({series, begin, end, title: 'Metrics'});
+```
+
+The active chart updates the other charts by timestamp. Moving to another chart
+releases the previous pinned tooltip, so only one timestamp is selected in the
+group. `destroy()` removes the chart from the group. `plotLeft` reserves a common
+minimum width for the Y axis; use the same value on aligned dashboard charts.
+Charts without a cursor group keep independent pinned tooltips.
+
+Pointer positions use the Canvas plot overlay and Yagr's coordinate conversion.
+Layout width is measured before replacing content, to avoid measuring the
+temporary disappearance of a page scrollbar during redraw.
+
+### Bundled engine
+
+The prebuilt `chartkit.js` and `chartkit.css` resources contain ChartKit with
+its Yagr plugin, React and styles. The JavaScript bundle exports `mountChartKit`
+behind the plain JavaScript embedding API. The adapter retains exact-value
+tooltips, legends, cursor groups and range selection. ChartKit assets are
+lazy-loaded on the first nonempty chart.
+
+The adapter aligns independent histories to one timeline, retaining both sides
+of on-change transitions and null gaps. Stacked areas use explicit Canvas bands
+so positive and negative layers remain separate; tooltips and statistics read
+original samples. The existing client limits apply before alignment.
+
+Build sources, package manifests and lockfiles for this bundle are not kept in
+this repository. When replacing the prebuilt resources, update
+`chartkit.js.LEGAL.txt` and `THIRD_PARTY_LICENSES.txt` to match the included
+libraries. The C++ build embeds these assets directly without invoking npm.

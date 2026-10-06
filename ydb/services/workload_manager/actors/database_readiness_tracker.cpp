@@ -24,34 +24,17 @@ std::optional<TString> TDatabaseReadinessTracker::AddSubscriber(const TString& d
     return MarkFetchInFlight(DatabaseIdToDatabase(databaseId));
 }
 
-std::optional<TString> TDatabaseReadinessTracker::OnWarmup(const TString& path, TInstant now) {
-    if (const auto pathIt = PathToId_.find(path); pathIt != PathToId_.end()) {
-        if (const auto it = Entries_.find(pathIt->second); it != Entries_.end() && it->second.State == EDatabaseState::Ready) {
+std::optional<TString> TDatabaseReadinessTracker::OnWarmup(const TString& path) {
+    for (const auto& [databaseId, _] : Entries_) {
+        if (DatabaseIdToDatabase(databaseId) == path) {
             return std::nullopt;
         }
-    }
-
-    bool known = false;
-    bool requery = false;
-    for (auto& [databaseId, entry] : Entries_) {
-        if (DatabaseIdToDatabase(databaseId) != path) {
-            continue;
-        }
-        known = true;
-        if ((entry.State == EDatabaseState::Failed || entry.State == EDatabaseState::TimedOut) && now - entry.StateAt > RequestTimeout_) {
-            entry.StateAt = now;
-            requery = true;
-        }
-    }
-
-    if (known && !requery) {
-        return std::nullopt;
     }
     return MarkFetchInFlight(path);
 }
 
-bool TDatabaseReadinessTracker::OnFetchResult(const TString& path, const TString& databaseId, Ydb::StatusIds::StatusCode status,
-                                              const TString& message, bool serverless, TInstant now) {
+std::vector<TSubscriberReply> TDatabaseReadinessTracker::OnFetchResult(const TString& path, const TString& databaseId, Ydb::StatusIds::StatusCode status,
+                                                                       const TString& message, bool serverless, TInstant now) {
     InFlightFetches_.erase(path);
 
     if (path != databaseId) {
@@ -63,34 +46,41 @@ bool TDatabaseReadinessTracker::OnFetchResult(const TString& path, const TString
         }
     }
 
-    if (status != Ydb::StatusIds::SUCCESS) {
+    if (status == Ydb::StatusIds::UNSUPPORTED) {
         Entries_.try_emplace(databaseId);
         for (auto& [id, entry] : Entries_) {
             if (DatabaseIdToDatabase(id) != path || entry.State == EDatabaseState::Ready) {
                 continue;
             }
+            entry.State = EDatabaseState::Unsupported;
             entry.StateAt = now;
-            if (status == Ydb::StatusIds::UNSUPPORTED) {
-                entry.State = EDatabaseState::Unsupported;
-            } else if (IsRetryable(status)) {
-                entry.State = EDatabaseState::TimedOut;
-            } else {
-                entry.State = EDatabaseState::Failed;
-                entry.FailureStatus = status;
-                entry.FailureMessage = message;
-            }
         }
-        return true;
+        return {};
+    }
+
+    if (status != Ydb::StatusIds::SUCCESS) {
+        const bool retryable = IsRetryable(status);
+        const auto replyStatus = retryable ? Ydb::StatusIds::UNAVAILABLE : status;
+        const TString replyMessage = retryable ? TString(WORKLOAD_MANAGER_NOT_READY_MESSAGE) : message;
+
+        std::vector<TSubscriberReply> replies;
+        for (auto it = Entries_.begin(); it != Entries_.end();) {
+            if (DatabaseIdToDatabase(it->first) != path || it->second.State == EDatabaseState::Ready) {
+                ++it;
+                continue;
+            }
+            AppendReplies(it->second, replyStatus, replyMessage, replies);
+            it = Entries_.erase(it);
+        }
+        return replies;
     }
 
     auto& entry = Entries_[databaseId];
     entry.State = EDatabaseState::Ready;
     entry.StateAt = now;
     entry.Serverless = serverless;
-    entry.FailureStatus = Ydb::StatusIds::SUCCESS;
-    entry.FailureMessage.clear();
     PathToId_[path] = databaseId;
-    return true;
+    return {};
 }
 
 std::vector<TPendingSubscriber> TDatabaseReadinessTracker::OnDatabaseDeleted(const TString& databaseId, const TString& path) {
@@ -105,16 +95,17 @@ std::vector<TPendingSubscriber> TDatabaseReadinessTracker::OnDatabaseDeleted(con
     return subscribers;
 }
 
-bool TDatabaseReadinessTracker::TimeOutPending(TInstant now) {
-    bool changed = false;
-    for (auto& [_, entry] : Entries_) {
-        if (entry.State == EDatabaseState::Pending && now - entry.StateAt > RequestTimeout_) {
-            entry.State = EDatabaseState::TimedOut;
-            entry.StateAt = now;
-            changed = true;
+std::vector<TSubscriberReply> TDatabaseReadinessTracker::TimeOutPending(TInstant now) {
+    std::vector<TSubscriberReply> replies;
+    for (auto it = Entries_.begin(); it != Entries_.end();) {
+        if (it->second.State != EDatabaseState::Pending || now - it->second.StateAt <= RequestTimeout_) {
+            ++it;
+            continue;
         }
+        AppendReplies(it->second, Ydb::StatusIds::UNAVAILABLE, TString(WORKLOAD_MANAGER_NOT_READY_MESSAGE), replies);
+        it = Entries_.erase(it);
     }
-    return changed;
+    return replies;
 }
 
 bool TDatabaseReadinessTracker::HasPending() const {
@@ -132,24 +123,11 @@ std::vector<TSubscriberReply> TDatabaseReadinessTracker::TakeSettledSubscribers(
         if (entry.Subscribers.empty() || !IsSettled(entry, metadata)) {
             continue;
         }
-        auto status = Ydb::StatusIds::SUCCESS;
-        TString message;
-        if (entry.State == EDatabaseState::Failed) {
-            status = entry.FailureStatus;
-            message = entry.FailureMessage;
-        } else if (entry.State == EDatabaseState::TimedOut || (entry.State == EDatabaseState::Ready && metadata == EMetadataState::TimedOut)) {
-            status = Ydb::StatusIds::UNAVAILABLE;
-            message = WORKLOAD_MANAGER_NOT_READY_MESSAGE;
+        if (entry.State == EDatabaseState::Ready && metadata == EMetadataState::TimedOut) {
+            AppendReplies(entry, Ydb::StatusIds::UNAVAILABLE, TString(WORKLOAD_MANAGER_NOT_READY_MESSAGE), replies);
+        } else {
+            AppendReplies(entry, Ydb::StatusIds::SUCCESS, {}, replies);
         }
-        for (const auto& sub : entry.Subscribers) {
-            replies.push_back(TSubscriberReply{
-                .Actor = sub.Actor,
-                .Cookie = sub.Cookie,
-                .Status = status,
-                .Message = message,
-            });
-        }
-        entry.Subscribers.clear();
     }
     return replies;
 }
@@ -168,8 +146,6 @@ void TDatabaseReadinessTracker::Fill(TSnapshot& snapshot) const {
         snapshot.Databases[databaseId] = TDatabaseInfo{
             .State = entry.State,
             .Serverless = entry.Serverless,
-            .FailureStatus = entry.FailureStatus,
-            .FailureMessage = entry.FailureMessage,
         };
     }
     for (const auto& [path, databaseId] : PathToId_) {
@@ -177,6 +153,19 @@ void TDatabaseReadinessTracker::Fill(TSnapshot& snapshot) const {
             snapshot.ReadyPaths.insert(path);
         }
     }
+}
+
+void TDatabaseReadinessTracker::AppendReplies(TEntry& entry, Ydb::StatusIds::StatusCode status, const TString& message,
+                                              std::vector<TSubscriberReply>& replies) {
+    for (const auto& sub : entry.Subscribers) {
+        replies.push_back(TSubscriberReply{
+            .Actor = sub.Actor,
+            .Cookie = sub.Cookie,
+            .Status = status,
+            .Message = message,
+        });
+    }
+    entry.Subscribers.clear();
 }
 
 std::optional<TString> TDatabaseReadinessTracker::MarkFetchInFlight(const TString& path) {
@@ -203,8 +192,6 @@ bool TDatabaseReadinessTracker::IsSettled(const TEntry& entry, EMetadataState me
             return false;
         case EDatabaseState::Ready:
             return metadata != EMetadataState::Pending;
-        case EDatabaseState::Failed:
-        case EDatabaseState::TimedOut:
         case EDatabaseState::Unsupported:
             return true;
     }

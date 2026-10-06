@@ -149,19 +149,13 @@ Y_UNIT_TEST_SUITE(WorkloadManagerGateway) {
     // Database state mapping, metadata Ready. EnsureReady returns:
     // - Pending for an unknown or Pending database,
     // - Ready for a Ready database, Disabled for a serverless one,
-    // - Failed with the fetch status for a Failed database,
-    // - Failed with retryable UNAVAILABLE for TimedOut, Disabled for Unsupported.
+    // - Disabled for an Unsupported database.
     Y_UNIT_TEST_F(TestEnsureReadyDatabaseStates, TGatewayFixture) {
         using EState = NPrivate::EDatabaseState;
-        auto failed = DatabaseInfo(EState::Failed);
-        failed.FailureStatus = Ydb::StatusIds::NOT_FOUND;
-        failed.FailureMessage = "fetch failed";
         Publish({
             {"/Root/pending", DatabaseInfo(EState::Pending)},
             {"/Root/ready", DatabaseInfo(EState::Ready)},
             {"/Root/serverless", DatabaseInfo(EState::Ready, /*serverless=*/true)},
-            {"/Root/failed", failed},
-            {"/Root/timedout", DatabaseInfo(EState::TimedOut)},
             {"/Root/unsupported", DatabaseInfo(EState::Unsupported)},
         });
 
@@ -169,15 +163,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerGateway) {
         UNIT_ASSERT(EnsureReady("/Root/pending").State == EReadyState::Pending);
         UNIT_ASSERT(EnsureReady("/Root/ready").State == EReadyState::Ready);
         UNIT_ASSERT(EnsureReady("/Root/serverless").State == EReadyState::Disabled);
-        const auto timedOut = EnsureReady("/Root/timedout");
-        UNIT_ASSERT(timedOut.State == EReadyState::Failed);
-        UNIT_ASSERT_VALUES_EQUAL(timedOut.FailureStatus, Ydb::StatusIds::UNAVAILABLE);
         UNIT_ASSERT(EnsureReady("/Root/unsupported").State == EReadyState::Disabled);
-
-        const auto info = EnsureReady("/Root/failed");
-        UNIT_ASSERT(info.State == EReadyState::Failed);
-        UNIT_ASSERT_VALUES_EQUAL(info.FailureStatus, Ydb::StatusIds::NOT_FOUND);
-        UNIT_ASSERT_VALUES_EQUAL(info.FailureMessage, "fetch failed");
     }
 
     // Ready database, metadata state mapping. EnsureReady returns:
@@ -201,24 +187,21 @@ Y_UNIT_TEST_SUITE(WorkloadManagerGateway) {
         UNIT_ASSERT(EnsureReady("/Root/ready").State == EReadyState::Disabled);
     }
 
-    // Degraded database. EnsureReady:
-    // - sends a warmup to the state actor for Failed and TimedOut databases,
-    // - sends nothing for a Ready database.
+    // Classifier metadata timed out. EnsureReady:
+    // - sends nothing while metadata is Ready,
+    // - sends a warmup to the state actor once metadata timed out.
     Y_UNIT_TEST_F(TestEnsureReadyRequestsWarmup, TGatewayFixture) {
-        Publish({
+        const THashMap<TString, NPrivate::TDatabaseInfo> databases = {
             {"/Root/ready", DatabaseInfo(NPrivate::EDatabaseState::Ready)},
-            {"/Root/failed", DatabaseInfo(NPrivate::EDatabaseState::Failed)},
-            {"/Root/timedout", DatabaseInfo(NPrivate::EDatabaseState::TimedOut)},
-        });
+            {"/Root/timedout", DatabaseInfo(NPrivate::EDatabaseState::Ready)},
+        };
 
+        Publish(databases, NPrivate::EMetadataState::Ready);
         EnsureReady("/Root/ready");
-        EnsureReady("/Root/failed");
-        auto warmup = Runtime.GrabEdgeEvent<TEvWarmupDatabaseInfo>(StateActorEdge, TDuration::Seconds(10));
-        UNIT_ASSERT(warmup);
-        UNIT_ASSERT_VALUES_EQUAL(warmup->Get()->DatabasePath, "/Root/failed");
 
+        Publish(databases, NPrivate::EMetadataState::TimedOut);
         EnsureReady("/Root/timedout");
-        warmup = Runtime.GrabEdgeEvent<TEvWarmupDatabaseInfo>(StateActorEdge, TDuration::Seconds(10));
+        auto warmup = Runtime.GrabEdgeEvent<TEvWarmupDatabaseInfo>(StateActorEdge, TDuration::Seconds(10));
         UNIT_ASSERT(warmup);
         UNIT_ASSERT_VALUES_EQUAL(warmup->Get()->DatabasePath, "/Root/timedout");
     }

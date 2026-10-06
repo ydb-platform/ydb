@@ -22,8 +22,8 @@ struct TDatabaseTrackerFixture : public NUnitTest::TBaseFixture {
         Tracker.OnFetchResult(path, databaseId, Ydb::StatusIds::SUCCESS, {}, serverless, now);
     }
 
-    void FetchFailed(Ydb::StatusIds::StatusCode status, const TString& message = {}, const TString& path = DATABASE, TInstant now = T0) {
-        Tracker.OnFetchResult(path, path, status, message, false, now);
+    std::vector<TSubscriberReply> FetchFailed(Ydb::StatusIds::StatusCode status, const TString& message = {}, const TString& path = DATABASE, TInstant now = T0) {
+        return Tracker.OnFetchResult(path, path, status, message, false, now);
     }
 
     TSnapshot Snapshot() const {
@@ -88,8 +88,8 @@ Y_UNIT_TEST_SUITE(DatabaseReadinessTracker) {
     }
 
     // Database info fetch fails. The tracker:
-    // - marks the database Failed and replies with the fetch status and message for a non-retryable error,
-    // - marks it TimedOut and replies with retryable UNAVAILABLE for a retryable error,
+    // - replies with the fetch status and message for a non-retryable error and forgets the database,
+    // - replies with retryable UNAVAILABLE for a retryable error and forgets the database,
     // - marks UNSUPPORTED as Unsupported and replies with SUCCESS.
     Y_UNIT_TEST_F(TestFetchFailure, TDatabaseTrackerFixture) {
         const TString retryable = "/Root/retryable";
@@ -98,70 +98,79 @@ Y_UNIT_TEST_SUITE(DatabaseReadinessTracker) {
         Subscribe(2, retryable);
         Subscribe(3, unsupported);
 
-        FetchFailed(Ydb::StatusIds::NOT_FOUND, "fetch failed");
-        FetchFailed(Ydb::StatusIds::UNAVAILABLE, "retry limit exceeded", retryable);
-        FetchFailed(Ydb::StatusIds::UNSUPPORTED, {}, unsupported);
+        const auto failed = FetchFailed(Ydb::StatusIds::NOT_FOUND, "fetch failed");
+        UNIT_ASSERT_VALUES_EQUAL(failed.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(failed[0].Cookie, 1);
+        UNIT_ASSERT_VALUES_EQUAL(failed[0].Status, Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(failed[0].Message, "fetch failed");
+        UNIT_ASSERT(!Contains(DATABASE));
 
-        UNIT_ASSERT(State() == EDatabaseState::Failed);
-        UNIT_ASSERT(State(retryable) == EDatabaseState::TimedOut);
+        const auto retried = FetchFailed(Ydb::StatusIds::UNAVAILABLE, "retry limit exceeded", retryable);
+        UNIT_ASSERT_VALUES_EQUAL(retried.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(retried[0].Cookie, 2);
+        UNIT_ASSERT_VALUES_EQUAL(retried[0].Status, Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT(!Contains(retryable));
+
+        UNIT_ASSERT(FetchFailed(Ydb::StatusIds::UNSUPPORTED, {}, unsupported).empty());
         UNIT_ASSERT(State(unsupported) == EDatabaseState::Unsupported);
 
         const auto replies = TakeSettled(EMetadataState::Pending);
-        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 3);
-        for (const auto& reply : replies) {
-            if (reply.Cookie == 1) {
-                UNIT_ASSERT_VALUES_EQUAL(reply.Status, Ydb::StatusIds::NOT_FOUND);
-                UNIT_ASSERT_VALUES_EQUAL(reply.Message, "fetch failed");
-            } else if (reply.Cookie == 2) {
-                UNIT_ASSERT_VALUES_EQUAL(reply.Status, Ydb::StatusIds::UNAVAILABLE);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(reply.Status, Ydb::StatusIds::SUCCESS);
-            }
-        }
+        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(replies[0].Cookie, 3);
+        UNIT_ASSERT_VALUES_EQUAL(replies[0].Status, Ydb::StatusIds::SUCCESS);
     }
 
     // Database info fetch hangs. The tracker:
     // - keeps the database Pending before the limit,
-    // - moves it to TimedOut past the limit and releases subscribers with retryable UNAVAILABLE,
+    // - releases subscribers with retryable UNAVAILABLE past the limit and forgets the database,
+    // - does not start a second fetch while the first one is in flight,
     // - accepts a late fetch result and becomes Ready.
     Y_UNIT_TEST_F(TestPendingTimesOut, TDatabaseTrackerFixture) {
         Subscribe(1);
 
-        UNIT_ASSERT(!Tracker.TimeOutPending(T0 + TIMEOUT / 2));
+        UNIT_ASSERT(Tracker.TimeOutPending(T0 + TIMEOUT / 2).empty());
         UNIT_ASSERT(Tracker.HasPending());
 
-        UNIT_ASSERT(Tracker.TimeOutPending(T0 + TIMEOUT * 2));
-        UNIT_ASSERT(!Tracker.HasPending());
-        UNIT_ASSERT(State() == EDatabaseState::TimedOut);
-
-        const auto replies = TakeSettled(EMetadataState::Pending);
+        const auto replies = Tracker.TimeOutPending(T0 + TIMEOUT * 2);
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(replies[0].Status, Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT(!Tracker.HasPending());
+        UNIT_ASSERT(!Contains(DATABASE));
+
+        UNIT_ASSERT(!Subscribe(2, DATABASE, T0 + TIMEOUT * 2));
+        UNIT_ASSERT(!Tracker.OnWarmup(DATABASE));
 
         FetchSucceeded(DATABASE, DATABASE, false, T0 + TIMEOUT * 3);
         UNIT_ASSERT(State() == EDatabaseState::Ready);
+
+        const auto ready = TakeSettled();
+        UNIT_ASSERT_VALUES_EQUAL(ready.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ready[0].Cookie, 2);
+        UNIT_ASSERT_VALUES_EQUAL(ready[0].Status, Ydb::StatusIds::SUCCESS);
     }
 
-    // Database info fetch failed. Warmup:
-    // - does not refetch before the limit,
-    // - refetches once past the limit, keeping the Failed state until the result,
-    // - turns the database Ready on a successful refetch.
-    Y_UNIT_TEST_F(TestFailedRequeryRecovers, TDatabaseTrackerFixture) {
+    // Database info fetch failed. The error is not cached:
+    // - the next warmup starts a new fetch at once,
+    // - the next subscriber waits for that fetch and gets SUCCESS once the database is Ready.
+    Y_UNIT_TEST_F(TestFailureNotCached, TDatabaseTrackerFixture) {
         Subscribe(1);
         FetchFailed(Ydb::StatusIds::NOT_FOUND, "fetch failed");
-        TakeSettled();
 
-        UNIT_ASSERT(!Tracker.OnWarmup(DATABASE, T0 + TIMEOUT / 2));
-
-        const TInstant requeryAt = T0 + TIMEOUT * 2;
-        const auto fetch = Tracker.OnWarmup(DATABASE, requeryAt);
+        const auto fetch = Tracker.OnWarmup(DATABASE);
         UNIT_ASSERT(fetch);
         UNIT_ASSERT_VALUES_EQUAL(*fetch, DATABASE);
-        UNIT_ASSERT(!Tracker.OnWarmup(DATABASE, requeryAt));
-        UNIT_ASSERT(State() == EDatabaseState::Failed);
+        UNIT_ASSERT(!Tracker.OnWarmup(DATABASE));
 
-        FetchSucceeded(DATABASE, DATABASE, false, requeryAt);
+        UNIT_ASSERT(!Subscribe(2));
+        UNIT_ASSERT(TakeSettled().empty());
+
+        FetchSucceeded();
         UNIT_ASSERT(State() == EDatabaseState::Ready);
+
+        const auto replies = TakeSettled();
+        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(replies[0].Cookie, 2);
+        UNIT_ASSERT_VALUES_EQUAL(replies[0].Status, Ydb::StatusIds::SUCCESS);
     }
 
     // Serverless database subscribed by its path before the composite id is known. On fetch success:
@@ -198,7 +207,7 @@ Y_UNIT_TEST_SUITE(DatabaseReadinessTracker) {
         UNIT_ASSERT_VALUES_EQUAL(subscribers[0].Cookie, 1);
         UNIT_ASSERT(!Contains(DATABASE));
 
-        const auto fetch = Tracker.OnWarmup(DATABASE, T0);
+        const auto fetch = Tracker.OnWarmup(DATABASE);
         UNIT_ASSERT(fetch);
         UNIT_ASSERT_VALUES_EQUAL(*fetch, DATABASE);
     }

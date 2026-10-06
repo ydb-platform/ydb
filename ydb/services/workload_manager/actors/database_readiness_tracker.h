@@ -36,10 +36,8 @@ struct TSubscriberReply {
 class TDatabaseReadinessTracker {
     struct TEntry {
         EDatabaseState State = EDatabaseState::Pending;
-        TInstant StateAt;  // last state change or requery; drives timeout and requery
+        TInstant StateAt;  // last state change; drives the Pending timeout
         bool Serverless = false;
-        Ydb::StatusIds::StatusCode FailureStatus = Ydb::StatusIds::SUCCESS;
-        TString FailureMessage;
         std::vector<TPendingSubscriber> Subscribers;
     };
 
@@ -50,26 +48,25 @@ public:
     /// Returns the path to fetch if a fetch must be started.
     std::optional<TString> AddSubscriber(const TString& databaseId, TPendingSubscriber subscriber, TInstant now);
 
-    /// Returns the path to fetch for an unknown DB, or to requery a Failed/TimedOut DB past the timeout.
-    std::optional<TString> OnWarmup(const TString& path, TInstant now);
+    /// Returns the path to fetch for an unknown DB.
+    std::optional<TString> OnWarmup(const TString& path);
 
-    /// Applies a fetch result to all non-Ready entries of the path: Ready, Unsupported,
-    /// TimedOut for retryable errors (retryable UNAVAILABLE, requery later) or Failed for other errors.
-    /// Returns true if the state changed.
-    bool OnFetchResult(const TString& path, const TString& databaseId, Ydb::StatusIds::StatusCode status,
-                       const TString& message, bool serverless, TInstant now);
+    /// Applies a fetch result to all non-Ready entries of the path: Ready or Unsupported.
+    /// Errors are not cached: the entries are removed and their subscribers are returned with
+    /// retryable UNAVAILABLE for retryable errors or the fetch status otherwise.
+    std::vector<TSubscriberReply> OnFetchResult(const TString& path, const TString& databaseId, Ydb::StatusIds::StatusCode status,
+                                                const TString& message, bool serverless, TInstant now);
 
     /// Removes the entry; returns its subscribers (to be answered NOT_FOUND).
     std::vector<TPendingSubscriber> OnDatabaseDeleted(const TString& databaseId, const TString& path);
 
-    /// Moves Pending entries past the timeout to TimedOut. Returns true if any changed.
-    bool TimeOutPending(TInstant now);
+    /// Removes Pending entries past the timeout; returns their subscribers with retryable UNAVAILABLE.
+    std::vector<TSubscriberReply> TimeOutPending(TInstant now);
 
     /// True if any DB fetch is still Pending.
     bool HasPending() const;
 
-    /// Takes subscribers whose DB is settled given the metadata state; Failed carries its error,
-    /// TimedOut (DB or metadata) replies retryable UNAVAILABLE.
+    /// Takes subscribers whose DB is settled given the metadata state; metadata TimedOut replies retryable UNAVAILABLE.
     std::vector<TSubscriberReply> TakeSettledSubscribers(EMetadataState metadata);
 
     /// Takes all subscribers regardless of state (pools disabled, actor shutdown).
@@ -80,6 +77,8 @@ public:
 
 private:
     std::optional<TString> MarkFetchInFlight(const TString& path);
+    static void AppendReplies(TEntry& entry, Ydb::StatusIds::StatusCode status, const TString& message,
+                              std::vector<TSubscriberReply>& replies);
     static bool IsRetryable(Ydb::StatusIds::StatusCode status);
     static bool IsSettled(const TEntry& entry, EMetadataState metadata);
 

@@ -193,21 +193,22 @@ Y_UNIT_TEST_SUITE(KqpProxyWorkloadManager) {
     }
 
     ///
-    /// Test query fails fast for DB which has error in the wlm
+    /// Test wlm does not cache a db info fetch error: the next query fetches again and succeeds
     ///
-    Y_UNIT_TEST(QueryFailsFastOnCachedWlmFailure) {
+    Y_UNIT_TEST(QueryRefetchesAfterWlmFailure) {
         TWlmFixture fx;
 
-        // Every real SUCCESS fetch response is rewritten to NOT_FOUND — state actor marks the
-        // database Failed with NOT_FOUND.
-        fx.Runtime->SetEventFilter([runtime = fx.Runtime](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> bool {
-            if (ev->GetTypeRewrite() != NWorkloadManager::TEvFetchDatabaseResponse::EventType) {
+        // Only the first real SUCCESS fetch response is rewritten to NOT_FOUND.
+        bool rewritten = false;
+        fx.Runtime->SetEventFilter([runtime = fx.Runtime, &rewritten](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> bool {
+            if (rewritten || ev->GetTypeRewrite() != NWorkloadManager::TEvFetchDatabaseResponse::EventType) {
                 return false;
             }
             const auto* original = ev->Get<NWorkloadManager::TEvFetchDatabaseResponse>();
             if (original->Status != Ydb::StatusIds::SUCCESS) {
                 return false;
             }
+            rewritten = true;
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue("simulated: DB not found"));
             auto* replacement = new NWorkloadManager::TEvFetchDatabaseResponse(
@@ -221,31 +222,14 @@ Y_UNIT_TEST_SUITE(KqpProxyWorkloadManager) {
             return true;
         });
 
-        // Count SubscribeOnReady to distinguish the park path from the sync-Failed path.
-        int subscribes = 0;
-        fx.Runtime->SetObserverFunc([&subscribes](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NWorkloadManager::TEvSubscribeOnWorkloadManagerReady::EventType) {
-                ++subscribes;
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-
-        // First query: EnsureReady returns Pending, proxy parks, state actor's failed fetch
-        // notifies subscribers, proxy routes NOT_FOUND to the client via TEvDelayedRequestError.
         fx.Runtime->Send(new IEventHandle(fx.KqpProxy, fx.Sender, MakeSelect42Query("/Root").Release()));
         auto reply1 = fx.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(fx.Sender);
         UNIT_ASSERT_VALUES_EQUAL(reply1->Get()->Record.GetYdbStatus(), Ydb::StatusIds::NOT_FOUND);
-        const int subscribesAfterFirst = subscribes;
-        UNIT_ASSERT_C(subscribesAfterFirst >= 1, "First query should have taken the park path");
 
-        // Second query for the same DB: state actor's snapshot has the database Failed,
-        // EnsureReady returns Failed synchronously — proxy replies via TEvDelayedRequestError
-        // without calling SubscribeOnReady again.
         fx.Runtime->Send(new IEventHandle(fx.KqpProxy, fx.Sender, MakeSelect42Query("/Root").Release()));
         auto reply2 = fx.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(fx.Sender);
-        UNIT_ASSERT_VALUES_EQUAL(reply2->Get()->Record.GetYdbStatus(), Ydb::StatusIds::NOT_FOUND);
-        UNIT_ASSERT_VALUES_EQUAL_C(subscribes, subscribesAfterFirst,
-                                    "Second query should hit the sync-Failed path (no extra SubscribeOnReady)");
+        UNIT_ASSERT_VALUES_EQUAL_C(reply2->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,
+                                    reply2->Get()->Record.GetResponse().GetQueryIssues());
     }
 
     ///

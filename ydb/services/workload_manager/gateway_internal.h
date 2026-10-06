@@ -20,8 +20,6 @@ inline constexpr TStringBuf WORKLOAD_MANAGER_NOT_READY_MESSAGE = "Workload manag
 enum class EDatabaseState {
     Pending,
     Ready,
-    Failed,
-    TimedOut,
     Unsupported,
 };
 
@@ -34,8 +32,6 @@ enum class EMetadataState {
 struct TDatabaseInfo {
     EDatabaseState State = EDatabaseState::Pending;
     bool Serverless = false;
-    Ydb::StatusIds::StatusCode FailureStatus = Ydb::StatusIds::SUCCESS;
-    TString FailureMessage;
 };
 
 ///

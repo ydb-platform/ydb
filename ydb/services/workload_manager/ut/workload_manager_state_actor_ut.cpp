@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
 
     // Subscribe, database info fetch fails. The state actor:
     // - replies with the fetch status and message,
-    // - publishes the database as Failed, so EnsureReady returns Failed.
+    // - does not cache the error: EnsureReady returns Pending and the next subscriber starts a new fetch.
     Y_UNIT_TEST(TestSubscribeWhenError) {
         TFixture fx;
         fx.Init();
@@ -242,8 +242,12 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         UNIT_ASSERT_STRING_CONTAINS(ready->Get()->Message, "scheme cache miss");
 
         auto info = fx.EnsureReady("/Root/db1");
-        UNIT_ASSERT(info.State == EReadyState::Failed);
-        UNIT_ASSERT_EQUAL(info.FailureStatus, Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT(info.State == EReadyState::Pending);
+
+        fx.SubscribeOnReady("/Root/db1", subscriber, /*cookie=*/10);
+        auto navigate = fx.Runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySet>(fx.SchemeCacheEdge, WAIT_TIMEOUT);
+        UNIT_ASSERT(navigate);
+        UNIT_ASSERT_VALUES_EQUAL(GetNavigatePath(navigate), "/Root/db1");
     }
 
     // Pool subscription requests. The state actor:
@@ -333,7 +337,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
 
     // Database info fetch hangs. The state actor:
     // - releases the subscriber with retryable UNAVAILABLE once the request times out,
-    // - publishes the database as TimedOut, so EnsureReady returns Failed with UNAVAILABLE.
+    // - does not cache the timeout: EnsureReady returns Pending.
     Y_UNIT_TEST(TestSubscribeTimesOutToUnavailable) {
         TFixture fx;
         fx.Init();
@@ -349,8 +353,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         UNIT_ASSERT_EQUAL(ready->Get()->Status, Ydb::StatusIds::UNAVAILABLE);
 
         auto info = fx.EnsureReady("/Root/db1");
-        UNIT_ASSERT(info.State == EReadyState::Failed);
-        UNIT_ASSERT_EQUAL(info.FailureStatus, Ydb::StatusIds::UNAVAILABLE);
+        UNIT_ASSERT(info.State == EReadyState::Pending);
     }
 
     // State actor stopped while a subscriber waits. The state actor:

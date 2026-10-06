@@ -106,14 +106,6 @@ TReadyInfo NPrivate::TWorkloadManagerGateway::EnsureReady(const TString& databas
         case EDatabaseState::Unsupported:
             return TReadyInfo{.State = EReadyState::Disabled};
 
-        case EDatabaseState::Failed:
-            DoWarmupRequest(snapshot->StateActorId, databaseId);
-            return TReadyInfo{.State = EReadyState::Failed, .FailureStatus = info.FailureStatus, .FailureMessage = info.FailureMessage};
-
-        case EDatabaseState::TimedOut:
-            DoWarmupRequest(snapshot->StateActorId, databaseId);
-            return TReadyInfo{.State = EReadyState::Failed, .FailureStatus = Ydb::StatusIds::UNAVAILABLE, .FailureMessage = TString(WORKLOAD_MANAGER_NOT_READY_MESSAGE)};
-
         case EDatabaseState::Ready:
             break;
     }
@@ -309,7 +301,7 @@ private:
             AskMetadataForClassifiers();
         }
 
-        if (const auto fetchPath = DatabaseTracker_.OnWarmup(path, now)) {
+        if (const auto fetchPath = DatabaseTracker_.OnWarmup(path)) {
             StartFetchDatabaseInfo(*fetchPath);
         }
     }
@@ -346,8 +338,9 @@ private:
             LOG_W("Failed to fetch database info, path: " << msg->Database << ", status: " << msg->Status << ", issues: " << message);
         }
 
-        DatabaseTracker_.OnFetchResult(msg->Database, msg->DatabaseId, msg->Status, message, msg->Serverless, TActivationContext::Now());
+        const auto replies = DatabaseTracker_.OnFetchResult(msg->Database, msg->DatabaseId, msg->Status, message, msg->Serverless, TActivationContext::Now());
         PublishAndReply();
+        Reply(replies);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev) {
@@ -374,13 +367,15 @@ private:
         InFlightRequestsCheckScheduled_ = false;
         const TInstant now = TActivationContext::Now();
 
-        if (DatabaseTracker_.TimeOutPending(now)) {
+        const auto timedOut = DatabaseTracker_.TimeOutPending(now);
+        if (!timedOut.empty()) {
             LOG_W("Database info request timed out, waiting queries get retryable UNAVAILABLE");
         }
         if (MetadataTracker_.TimeOutPending(now)) {
             LOG_W("Classifier metadata request timed out, waiting queries get retryable UNAVAILABLE");
         }
         PublishAndReply();
+        Reply(timedOut);
 
         if (HasInFlightRequests()) {
             ScheduleInFlightRequestsCheck();
@@ -394,7 +389,11 @@ private:
     }
 
     void ReplySettled() {
-        for (const auto& reply : DatabaseTracker_.TakeSettledSubscribers(MetadataTracker_.GetState())) {
+        Reply(DatabaseTracker_.TakeSettledSubscribers(MetadataTracker_.GetState()));
+    }
+
+    void Reply(const std::vector<NPrivate::TSubscriberReply>& replies) {
+        for (const auto& reply : replies) {
             Send(reply.Actor, new TEvWorkloadManagerReady(reply.Cookie, reply.Status, reply.Message));
         }
     }

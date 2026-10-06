@@ -42,6 +42,25 @@ TDqHashCombineTupleLayout::EStorage GetStorage(EDataSlot slot) {
     }
 }
 
+template <typename TEstimate>
+std::optional<size_t> EstimateCompositeSize(TType* type, TEstimate&& estimate) {
+    if (!type->IsTuple() && !type->IsStruct()) {
+        return {};
+    }
+    const auto* tuple = type->IsTuple() ? AS_TYPE(TTupleType, type) : nullptr;
+    const auto* structure = type->IsStruct() ? AS_TYPE(TStructType, type) : nullptr;
+    const ui32 count = tuple ? tuple->GetElementsCount() : structure->GetMembersCount();
+    size_t result = sizeof(TUnboxedValuePod) + sizeof(TDirectArrayHolderInplace);
+    for (ui32 i = 0; i < count; ++i) {
+        const auto itemSize = estimate(i, tuple ? tuple->GetElementType(i) : structure->GetMemberType(i));
+        if (!itemSize) {
+            return {};
+        }
+        result += *itemSize;
+    }
+    return result;
+}
+
 std::optional<size_t> GetStaticUvSizeBound(TType* type) {
     if (type->IsOptional()) {
         return GetStaticUvSizeBound(AS_TYPE(TOptionalType, type)->GetItemType());
@@ -52,6 +71,8 @@ std::optional<size_t> GetStaticUvSizeBound(TType* type) {
             return {};
         }
         switch (*slot) {
+            case EDataSlot::Uuid:
+                return sizeof(TUnboxedValuePod) + NUdf::UUID_SIZE;
             case EDataSlot::DyNumber:
             case EDataSlot::Json:
             case EDataSlot::JsonDocument:
@@ -63,21 +84,12 @@ std::optional<size_t> GetStaticUvSizeBound(TType* type) {
                 return sizeof(TUnboxedValuePod);
         }
     }
-    if (type->IsTuple()) {
-        size_t result = sizeof(TUnboxedValuePod) + sizeof(TDirectArrayHolderInplace);
-        for (TType* item : AS_TYPE(TTupleType, type)->GetElements()) {
-            const auto itemSize = GetStaticUvSizeBound(item);
-            if (!itemSize) {
-                return {};
-            }
-            result += *itemSize;
-        }
-        return result;
-    }
-    return {};
+    return EstimateCompositeSize(type, [](ui32, TType* itemType) { return GetStaticUvSizeBound(itemType); });
 }
 
-std::optional<size_t> EstimateUvSize(const TUnboxedValuePod& value, TType* type) {
+} // namespace
+
+std::optional<size_t> TDqHashCombineTupleLayout::EstimateValueMemorySize(const TUnboxedValuePod& value, TType* type) {
     if (!value.HasValue() || value.IsEmbedded() || value.IsInvalid()) {
         return sizeof(TUnboxedValuePod);
     }
@@ -90,23 +102,10 @@ std::optional<size_t> EstimateUvSize(const TUnboxedValuePod& value, TType* type)
     while (type->IsOptional()) {
         type = AS_TYPE(TOptionalType, type)->GetItemType();
     }
-    if (!type->IsTuple()) {
-        return {};
-    }
-
-    const auto elements = AS_TYPE(TTupleType, type)->GetElements();
-    size_t result = sizeof(TUnboxedValuePod) + sizeof(TDirectArrayHolderInplace);
-    for (size_t i = 0; i < elements.size(); ++i) {
-        const auto itemSize = EstimateUvSize(value.GetElement(i), elements[i]);
-        if (!itemSize) {
-            return {};
-        }
-        result += *itemSize;
-    }
-    return result;
+    return EstimateCompositeSize(type, [&](ui32 index, TType* itemType) {
+        return EstimateValueMemorySize(value.GetElement(index), itemType);
+    });
 }
-
-} // anonymous namespace
 
 TDqHashCombineTupleLayout::TDqHashCombineTupleLayout(TArrayRef<TType* const> types)
     : Types(types.begin(), types.end())
@@ -261,7 +260,7 @@ std::optional<size_t> TDqHashCombineTupleLayout::EstimateExternalMemorySize(cons
             continue;
         }
         const auto& value = *reinterpret_cast<const TUnboxedValuePod*>(static_cast<const char*>(storage) + item.Offset);
-        const auto size = EstimateUvSize(value, Types[item.LogicalIndex]);
+        const auto size = EstimateValueMemorySize(value, Types[item.LogicalIndex]);
         if (!size) {
             return {};
         }

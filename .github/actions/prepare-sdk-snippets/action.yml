@@ -28,4 +28,7 @@ runs:
         DOCS_ROOT: ${{ inputs.docs-root }}
         SDK_SNIPPETS_CACHE: ${{ runner.temp }}/sdk-snippets-cache
         GH_TOKEN: ${{ github.token }}
-      run: python "$DOCS_ROOT/tools/sdk-snippets" --manifest "$DOCS_ROOT/sdk-snippets.yaml" prepare
+      run: |
+        python "$DOCS_ROOT/tools/sdk-snippets" --manifest "$DOCS_ROOT/sdk-snippets.yaml" prepare
+        echo "SDK_SNIPPETS_PYTHON=$(command -v python)" >> "$GITHUB_ENV"
+        echo "SDK_SNIPPETS_CACHE=$SDK_SNIPPETS_CACHE" >> "$GITHUB_ENV"

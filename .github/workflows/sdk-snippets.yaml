@@ -5,12 +5,16 @@ on:
     paths:
       - 'ydb/docs/**'
       - '.github/actions/prepare-sdk-snippets/**'
+      - '.github/actions/test_ya/**'
+      - '.github/scripts/graph_compare.py'
       - '.github/workflows/sdk-snippets.yaml'
   push:
     branches: [main, docs/topic-snippets]
     paths:
       - 'ydb/docs/**'
       - '.github/actions/prepare-sdk-snippets/**'
+      - '.github/actions/test_ya/**'
+      - '.github/scripts/graph_compare.py'
       - '.github/workflows/sdk-snippets.yaml'
 
 concurrency:
@@ -30,7 +34,7 @@ jobs:
       - uses: ./.github/actions/prepare-sdk-snippets
       - name: Test source selection and strict validation
         working-directory: ydb/docs/tools
-        run: python -m unittest sdk_snippets.test_cli
+        run: python -m unittest sdk_snippets.test_cli sdk_snippets.test_ci
       - name: Verify offline preparation
         env:
           SDK_SNIPPETS_CACHE: ${{ runner.temp }}/sdk-snippets-cache

@@ -20,6 +20,11 @@ The same preparation action runs before PR and release documentation builds.
 SDK examples execute in their own repository CI. Documentation CI treats downloaded
 source as text and validates all referenced files and named regions.
 
+Run preparation before `./ya make ydb/docs` as well: the `DOCS()` target copies
+the prepared source files into its isolated build input. Native CI prepares them
+before creating build graphs, refreshing the staging directory against each
+commit's lock when the incremental comparison switches between base and HEAD.
+
 ## Update one SDK
 
 ```sh

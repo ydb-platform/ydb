@@ -302,7 +302,7 @@ namespace {
         if (IsPersistentBufferActor) {
             *Counters.PersistentBuffer.RegisteredTablets = 0;
             *Counters.PersistentBuffer.RegisteredTabletsLimit =
-                ui64(PersistentBufferFormat.MaxBarriersLimit) * TPersistentBufferBarriers::MaxBarriersPerHeader;
+                TPersistentBufferBarriersManager::MaxRegistrations(PersistentBufferFormat.MaxBarriersLimit);
         }
 
 #undef COUNTER_VALUE

@@ -60,7 +60,20 @@ struct TDiskHandle {
     ui32 SlotId;
     ui32 FirstChunkId;
     bool EnableChecksums = true;
+    TIntrusivePtr<NMonitoring::TDynamicCounters> DiskCounters;
 };
+
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetDiskCounters(
+        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+        const TVDiskConfig::TBaseInfo& baseInfo, const TBlobStorageGroupInfo& groupInfo) {
+    return counters
+            ->GetSubgroup("counters", "ddisks")
+            ->GetSubgroup("ddiskPool", baseInfo.StoragePoolName)
+            ->GetSubgroup("group", Sprintf("%09u", groupInfo.GroupID))
+            ->GetSubgroup("orderNumber", Sprintf("%02u", groupInfo.GetOrderNumber(baseInfo.VDiskIdShort)))
+            ->GetSubgroup("pdisk", Sprintf("%09u", baseInfo.PDiskId))
+            ->GetSubgroup("media", to_lower(NPDisk::DeviceTypeStr(baseInfo.DeviceType, true)));
+}
 
 class TTestContext {
     template<typename TEvent>
@@ -143,6 +156,7 @@ public:
             NKikimrBlobStorage::TVDiskKind::Default,
             1,
             "ddisk_pool");
+        const auto diskCounters = GetDiskCounters(Counters, baseInfo, *groupInfo);
         NDDisk::TPersistentBufferFormat pbFormat = customFormat.value_or(
             NDDisk::TPersistentBufferFormat{256, 4, BlockSize * 128, 8, 5000, 512 * 1024});
         const TActorId ddiskActor = Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
@@ -159,7 +173,8 @@ public:
             pdiskId,
             slotId,
             100000 + pdiskId * 1000,
-            enableChecksums};
+            enableChecksums,
+            diskCounters};
     }
 
     std::set<TActorId> ClientWaitEdges(std::initializer_list<TActorId> extra = {}) const {
@@ -1039,26 +1054,12 @@ public:
     }
 };
 
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetDirectIoCounters(TTestContext& ctx, const TDiskHandle& disk) {
-    return ctx.Counters
-        ->GetSubgroup("counters", "ddisks")
-        ->GetSubgroup("ddiskPool", "ddisk_pool")
-        ->GetSubgroup("group", Sprintf("%09u", 0u))
-        ->GetSubgroup("orderNumber", Sprintf("%02u", 0u))
-        ->GetSubgroup("pdisk", Sprintf("%09u", disk.PDiskId))
-        ->GetSubgroup("media", "nvme")
-        ->GetSubgroup("subsystem", "direct_io");
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetDirectIoCounters(TTestContext&, const TDiskHandle& disk) {
+    return disk.DiskCounters->GetSubgroup("subsystem", "direct_io");
 }
 
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetPersistentBufferCounters(TTestContext& ctx, const TDiskHandle& disk) {
-    return ctx.Counters
-        ->GetSubgroup("counters", "ddisks")
-        ->GetSubgroup("ddiskPool", "ddisk_pool")
-        ->GetSubgroup("group", Sprintf("%09u", 0u))
-        ->GetSubgroup("orderNumber", Sprintf("%02u", 0u))
-        ->GetSubgroup("pdisk", Sprintf("%09u", disk.PDiskId))
-        ->GetSubgroup("media", "nvme")
-        ->GetSubgroup("subsystem", "persistent_buffer");
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetPersistentBufferCounters(TTestContext&, const TDiskHandle& disk) {
+    return disk.DiskCounters->GetSubgroup("subsystem", "persistent_buffer");
 }
 
 bool IsIntegrityUringWrite(NPDisk::TUringOperationBase* op) {
@@ -3472,7 +3473,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const auto count = counters->GetCounter("RegisteredTablets", false);
         UNIT_ASSERT_VALUES_EQUAL(count->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("RegisteredTabletsLimit", false)->Val(),
-            ui64(format.MaxBarriersLimit) * NDDisk::TPersistentBufferBarriers::MaxBarriersPerHeader);
+            NDDisk::TPersistentBufferBarriersManager::MaxRegistrations(format.MaxBarriersLimit));
         const auto creds = Connect(ctx, disk.PBServiceId, 100, 1, 7, false);
         ctx.Runtime.Schedule(TDuration::Seconds(10), new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
         WaitFromDDisk<TEvents::TEvWakeup>(ctx);
@@ -3503,6 +3504,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT_VALUES_EQUAL(initial->Barriers[0].DirectBlockGroupIndex, 7);
         UNIT_ASSERT_VALUES_EQUAL(initial->Barriers[0].Generation, 0);
         UNIT_ASSERT_VALUES_EQUAL(initial->Barriers[0].Lsn, 0);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 1);
         AssertNoClientReplyBeforeSentinel(ctx, "registration must wait for durable barrier");
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(ctx, disk.PBServiceId,
             new NDDisk::TEvListPersistentBuffer(creds)), TReplyStatus::BUSY);
@@ -3540,6 +3542,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const auto removedData = removal->Get()->Data.ConvertToString();
         const auto* removed = reinterpret_cast<const NDDisk::TPersistentBufferBarriers*>(removedData.data());
         UNIT_ASSERT_VALUES_EQUAL(removed->Barriers[0].TabletId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 1);
         AssertNoClientReplyBeforeSentinel(ctx, "removal must wait for durable barrier deletion");
         ctx.SendPDiskResponse(disk, *removal, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         AssertStatus(WaitFromDDisk<NDDisk::TEvUnregisterPersistentBufferResult>(ctx), TReplyStatus::OK);
@@ -6996,6 +6999,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             NKikimrBlobStorage::TVDiskKind::Default,
             1,
             "ddisk_pool");
+        const auto diskCounters = GetDiskCounters(ctx.Counters, baseInfo, *groupInfo);
         const TActorId ddiskActor = ctx.Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
             std::move(pbFormat), NDDisk::TDDiskConfig{}, ctx.Counters),
             NodeId);
@@ -7010,7 +7014,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             pdiskId,
             slotId,
             100000 + pdiskId * 1000,
-            true};
+            true,
+            diskCounters};
 
         const NPDisk::TOwner Owner = 1;
         const NPDisk::TOwnerRound OwnerRound = 1;

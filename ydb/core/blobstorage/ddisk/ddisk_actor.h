@@ -212,6 +212,7 @@ namespace NKikimr::NDDisk {
 
             struct {
                 // Registrations are keyed by (TabletId, DirectBlockGroupIndex), including empty ones.
+                // In production, a tablet registers only one direct block group per buffer.
                 NMonitoring::TDynamicCounters::TCounterPtr RegisteredTablets;
                 NMonitoring::TDynamicCounters::TCounterPtr RegisteredTabletsLimit;
                 NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunks;
@@ -1254,6 +1255,7 @@ namespace NKikimr::NDDisk {
         // The flag requests reclamation once this sector's own write has completed.
         absl::flat_hash_map<TPersistentBufferLocation, bool> PersistentBufferBarrierWrites;
         void ReleasePersistentBufferBarrierSector(TPersistentBufferSectorInfo sector);
+        void UpdateRegisteredTabletsCounter();
         void CompletePersistentBufferBarrierWrite(TPersistentBufferDiskOperationInFlight& inflight);
         NKikimrBlobStorage::NDDisk::TReplyStatus::E CheckPersistentBufferOwnership(const TQueryCredentials& creds) const;
         struct TPersistentBufferRegistrationToken {

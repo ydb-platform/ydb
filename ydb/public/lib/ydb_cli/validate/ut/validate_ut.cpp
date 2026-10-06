@@ -1185,7 +1185,13 @@ Y_UNIT_TEST(ProgressFollowsVerbosity) {
 
     const TVector<TString> phases = ProgressOf(storage, "t", 0);
     UNIT_ASSERT(ContainsLine(phases, "phase: detect backup format for t"));
-    UNIT_ASSERT(ContainsLine(phases, "phase: exported schema objects"));
+    const size_t findObjects = LineIndex(phases, "phase: find schema objects in t");
+    const size_t checkTable = LineIndex(phases, "phase: check t");
+    const size_t listObjects = LineIndex(phases, "phase: list schema objects in t");
+    UNIT_ASSERT(findObjects < checkTable);
+    UNIT_ASSERT(checkTable < listObjects);
+    UNIT_ASSERT(listObjects < phases.size());
+    UNIT_ASSERT(!ContainsLine(phases, "phase: exported schema objects"));
     UNIT_ASSERT(!ContainsLine(phases, "object:"));
     UNIT_ASSERT(!ContainsLine(phases, "file:"));
     UNIT_ASSERT(!ContainsLine(phases, "trace:"));
@@ -1194,6 +1200,7 @@ Y_UNIT_TEST(ProgressFollowsVerbosity) {
     const TVector<TString> objects = ProgressOf(storage, "t", 1);
     const size_t metadata = LineIndex(objects, "object: t: checking metadata");
     const size_t data = LineIndex(objects, "object: t: checking data");
+    UNIT_ASSERT(LineIndex(objects, "phase: check t") < metadata);
     UNIT_ASSERT(metadata < data);
     UNIT_ASSERT(data < objects.size());
     UNIT_ASSERT(!ContainsLine(objects, "file:"));
@@ -1241,9 +1248,27 @@ Y_UNIT_TEST(ProgressFollowsVerbosity) {
     const size_t t1Meta = LineIndex(fullObjects, "object: t1: checking metadata");
     const size_t t1Data = LineIndex(fullObjects, "object: t1: checking data");
     const size_t t2Meta = LineIndex(fullObjects, "object: t2: checking metadata");
+    UNIT_ASSERT(LineIndex(fullObjects, "phase: check t1") < t1Meta);
     UNIT_ASSERT(t1Meta < t1Data);
+    UNIT_ASSERT(t1Data < LineIndex(fullObjects, "phase: check t2"));
+    UNIT_ASSERT(LineIndex(fullObjects, "phase: check t2") < t2Meta);
     UNIT_ASSERT(t1Data < t2Meta);
     UNIT_ASSERT(t2Meta < LineIndex(fullObjects, "phase: check unmapped schema files"));
+
+    TMemoryStorage item;
+    AddTable(item, "t1", 1, "a\n", true);
+    AddTable(item, "t2", 1, "b\n", true);
+    const TVector<TString> itemPhases = ProgressOf(item, "", 0);
+    const size_t itemFind = LineIndex(itemPhases, "phase: find schema objects in .");
+    const size_t itemList = LineIndex(itemPhases, "phase: list schema objects in .");
+    const size_t itemCount = LineIndex(itemPhases, "phase: check 2 schema objects");
+    const size_t itemT1 = LineIndex(itemPhases, "phase: check t1");
+    const size_t itemT2 = LineIndex(itemPhases, "phase: check t2");
+    UNIT_ASSERT(itemFind < itemList);
+    UNIT_ASSERT(itemList < itemCount);
+    UNIT_ASSERT(itemCount < itemT1);
+    UNIT_ASSERT(itemT1 < itemT2);
+    UNIT_ASSERT(itemT2 < itemPhases.size());
 
     TMemoryStorage damaged;
     damaged.Put("SchemaMapping/mapping.json", "{}");

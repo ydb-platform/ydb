@@ -1,4 +1,4 @@
-#include <ydb/library/yql/providers/yt/actors/yql_yt_message_stream_source.h>
+#include <ydb/library/yql/providers/yt/async_io/yql_yt_message_stream_source.h>
 #include "kqp_compute_actor.h"
 #include "kqp_compute_actor_impl.h"
 

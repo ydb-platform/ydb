@@ -14,7 +14,7 @@ PEERDIR(
     ydb/library/yql/providers/pq/async_io
     ydb/library/yql/providers/pq/gateway/clients/composite
     ydb/library/yql/providers/pq/gateway/clients/message_stream
-    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

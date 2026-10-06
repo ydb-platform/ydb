@@ -393,11 +393,11 @@ class YtClient:
         """Set an attribute value at the given path.
 
         If *as_json* is True, *value* will be serialized as JSON and passed
-        with --format=json to the yt CLI.
+        with --attributes-format=json to the yt CLI.
         """
         if as_json:
             self._run_yt_cli(
-                ["set", "--format", "json", path, json.dumps(value)],
+                ["set", "--attributes-format", "json", path, json.dumps(value)],
                 check=True, timeout=timeout,
             )
         else:

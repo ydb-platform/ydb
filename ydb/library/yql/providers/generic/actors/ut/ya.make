@@ -5,8 +5,7 @@ PEERDIR(
     ydb/core/kqp/ut/federated_query/common
     ydb/library/actors/testlib
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
-    yql/essentials/parser/pg_wrapper
-    yql/essentials/sql/pg
+    yql/essentials/sql/pg_dummy
 )
 
 IF (NOT OS_WINDOWS)

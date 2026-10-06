@@ -3,12 +3,17 @@ import os
 import signal
 import time
 import grpc
+from concurrent import futures
 
 import ydb
 import ydb.coordination
 
-from ydb.public.api.grpc import ydb_rate_limiter_v1_pb2_grpc
-from ydb.public.api.protos import ydb_rate_limiter_pb2
+from ydb.public.api.grpc import (
+    ydb_discovery_v1_pb2_grpc,
+    ydb_federation_discovery_v1_pb2_grpc,
+    ydb_rate_limiter_v1_pb2_grpc,
+)
+from ydb.public.api.protos import ydb_federation_discovery_pb2, ydb_rate_limiter_pb2, ydb_status_codes_pb2
 import yatest.common
 from yatest.common import process
 from library.python import port_manager
@@ -69,7 +74,7 @@ def _exec_queries(pool, queries):
 
 
 class LogbrokerFederation(object):
-    def __init__(self, ydb_cluster_names=("cluster_a", "cluster_b")):
+    def __init__(self, ydb_cluster_names=("cluster_a", "cluster_b"), MockFederationDiscovery: bool = False):
         logger.info("Setup federation recipe")
         assert len(ydb_cluster_names) > 0
         self.__clusters = {}
@@ -79,10 +84,95 @@ class LogbrokerFederation(object):
         self.__cm_pid = None
         self.__cm_stderr_file = None
         self.__cm_endpoint = None
+        self.__mock_federation_discovery = MockFederationDiscovery
+        self.__discovery_server = None
+        self.__discovery_executor = None
+        self.__discovery_endpoint = None
 
         for name in ydb_cluster_names:
             self.__clusters[name] = None
             self.__port_allocators[name] = KikimrPortManagerPortAllocator(self.__port_manager)
+
+    @property
+    def cm_endpoint(self):
+        return self.__cm_endpoint
+
+    @property
+    def discovery_endpoint(self):
+        return self.__discovery_endpoint
+
+    @property
+    def ydb_cluster_endpoints(self):
+        return {name: f"localhost:{port}" for name, port in self.__cluster_ports.items()}
+
+    @staticmethod
+    def _forward_to_cm(method, request, context):
+        # Keep database/auth metadata and the caller's deadline intact.
+        try:
+            response, call = method.with_call(
+                request,
+                metadata=context.invocation_metadata(),
+                timeout=context.time_remaining(),
+            )
+        except grpc.RpcError as error:
+            context.set_trailing_metadata(error.trailing_metadata() or ())
+            context.abort(error.code(), error.details())
+        context.send_initial_metadata(call.initial_metadata() or ())
+        context.set_trailing_metadata(call.trailing_metadata() or ())
+        return response
+
+    def _start_mock_federation_discovery(self):
+        federation = self
+        accounts = PRE_INSTALLED_ACCOUNTS + ("admin",)
+
+        class DiscoveryService(ydb_discovery_v1_pb2_grpc.DiscoveryServiceServicer):
+            def ListEndpoints(self, request, context):
+                # Ordinary SDK clients need CM's endpoints before loading metadata.
+                with grpc.insecure_channel(federation.cm_endpoint) as channel:
+                    stub = ydb_discovery_v1_pb2_grpc.DiscoveryServiceStub(channel)
+                    return federation._forward_to_cm(stub.ListEndpoints, request, context)
+
+        class FederationDiscoveryService(ydb_federation_discovery_v1_pb2_grpc.FederationDiscoveryServiceServicer):
+            def ListFederationDatabases(self, request, context):
+                database = dict(context.invocation_metadata()).get("x-ydb-database", "")
+                response = ydb_federation_discovery_pb2.ListFederationDatabasesResponse()
+                response.operation.ready = True
+                if database not in tuple(f"/logbroker-federation/{account}" for account in accounts):
+                    response.operation.status = ydb_status_codes_pb2.StatusIds.BAD_REQUEST
+                    response.operation.issues.add(message=f"Unknown federation database: {database!r}")
+                    return response
+
+                result = ydb_federation_discovery_pb2.ListFederationDatabasesResult(
+                    control_plane_endpoint=federation.cm_endpoint,
+                    self_location=next(iter(federation.ydb_cluster_endpoints)),
+                )
+                for name, endpoint in federation.ydb_cluster_endpoints.items():
+                    result.federation_databases.add(
+                        name=name,
+                        id=name,
+                        path=f"/Root{database}",
+                        endpoint=endpoint,
+                        location=name,
+                        status=ydb_federation_discovery_pb2.DatabaseInfo.AVAILABLE,
+                        weight=100,
+                    )
+                response.operation.status = ydb_status_codes_pb2.StatusIds.SUCCESS
+                response.operation.result.Pack(result)
+                logger.info("Federation discovery for %s: %s", database, result)
+                return response
+
+        port = self.__port_manager.get_port()
+        self.__discovery_executor = futures.ThreadPoolExecutor(max_workers=4)
+        self.__discovery_server = grpc.server(self.__discovery_executor)
+        ydb_discovery_v1_pb2_grpc.add_DiscoveryServiceServicer_to_server(DiscoveryService(), self.__discovery_server)
+        ydb_federation_discovery_v1_pb2_grpc.add_FederationDiscoveryServiceServicer_to_server(
+            FederationDiscoveryService(), self.__discovery_server,
+        )
+        if not self.__discovery_server.add_insecure_port(f"[::]:{port}"):
+            raise RuntimeError(f"Failed to bind federation discovery port {port}")
+        self.__discovery_server.start()
+        self.__discovery_endpoint = f"localhost:{port}"
+        logger.info("Federation discovery listening on port %s", port)
 
     def _start_single_ydb(self, name):
         logger.info("Start ydb cluster {}".format(name))
@@ -566,15 +656,25 @@ class LogbrokerFederation(object):
         _setenv("CM_PORT", str(grpc_port))
         logger.info("CM started on port {}".format(grpc_port))
 
-    def start(self, args):
+    def start(self, args=None):
         for name in list(self.__clusters.keys()):
             cluster, port = self._start_single_ydb(name)
             self._setup_ydb_cluster(name, cluster, port)
         self._start_cm()
         self._setup_cm_topics_consumers(self.__cluster_ports)
         time.sleep(20)
+        if self.__mock_federation_discovery:
+            self._start_mock_federation_discovery()
 
-    def stop(self, args):
+    def stop(self, args=None):
+        if self.__discovery_server is not None:
+            self.__discovery_server.stop(grace=0).wait()
+            self.__discovery_server = None
+        if self.__discovery_executor is not None:
+            self.__discovery_executor.shutdown(wait=True)
+            self.__discovery_executor = None
+        self.__discovery_endpoint = None
+
         if self.__cm_pid is not None:
             logger.info('Stopping CM, pid = {}'.format(self.__cm_pid))
             try:

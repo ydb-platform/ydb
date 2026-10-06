@@ -1312,14 +1312,19 @@ protected:
             {"database", Database});
 
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
-        *event->Record.MutableTransaction()->MutableModifyScheme() = SchemeTx;
         event->Record.SetDatabaseName(Database);
+
+        auto& schemeTx = *event->Record.MutableTransaction()->MutableModifyScheme();
+        schemeTx = SchemeTx;
+        if (schemeTx.HasCreateStreamingQuery() && !AppData()->FeatureFlags.GetEnableStreamingQuerySchemeOperations()) {
+            schemeTx.MutableCreateStreamingQuery()->ClearOperationOwnerActorId();
+        }
 
         if (UserToken) {
             event->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
-        const auto recipient = SchemeTx.GetCreateStreamingQuery().HasOperationOwnerActorId()
+        const auto recipient = schemeTx.GetCreateStreamingQuery().HasOperationOwnerActorId()
             ? NMetadata::NProvider::MakeServiceId(SelfId().NodeId()) : MakeTxProxyID();
         Send(recipient, std::move(event), IEventHandle::FlagTrackDelivery);
     }

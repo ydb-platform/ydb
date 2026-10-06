@@ -357,117 +357,10 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
 
     - Recommended approach
 
-<<<<<<< HEAD
+        Use `NYdb::NValueHelpers::Embedding` from C++ SDK v3.24.0 or later to serialize the vector.
+
         ```cpp
-        std::string ConvertVectorToBytes(const std::vector<float>& vector)
-        {
-            std::string result;
-            for (const auto& value : vector) {
-                const char* bytes = reinterpret_cast<const char*>(&value);
-                result += std::string(bytes, sizeof(float));
-=======
-    Use `NYdb::NValueHelpers::Embedding` from C++ SDK v3.24.0 or later to serialize the vector.
-
-    ```cpp
-    #include <ydb-cpp-sdk/client/value/embedding.h>
-
-    void InsertItemsAsBytes(
-        NYdb::NQuery::TQueryClient& client,
-        const std::string& tableName,
-        const std::vector<TItem>& items)
-    {
-        std::string query = std::format(R"(
-            DECLARE $items AS List<Struct<
-                id: Utf8,
-                document: Utf8,
-                embedding: Bytes
-            >>;
-            UPSERT INTO `{0}`
-            (
-                id,
-                document,
-                embedding
-            )
-            SELECT
-                id,
-                document,
-                embedding,
-            FROM AS_TABLE($items);
-        )", tableName);
-
-        NYdb::TParamsBuilder paramsBuilder;
-        auto& valueBuilder = paramsBuilder.AddParam("$items");
-        valueBuilder.BeginList();
-        for (const auto& item : items) {
-            valueBuilder.AddListItem();
-            valueBuilder.BeginStruct();
-            valueBuilder.AddMember("id").Utf8(item.Id);
-            valueBuilder.AddMember("document").Utf8(item.Document);
-            valueBuilder.AddMember("embedding", NYdb::NValueHelpers::Embedding(item.Embedding));
-            valueBuilder.EndStruct();
-        }
-        valueBuilder.EndList();
-        valueBuilder.Build();
-
-        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query](NYdb::NQuery::TSession session) {
-            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-        }));
-
-        std::cout << items.size() << " items inserted" << std::endl;
-    }
-    ```
-
-
-  - Alternative approach
-
-    {% note warning %}
-
-    Passing the vector as `List<Float>` with conversion on the YQL side via `Knn::ToBinaryStringFloat` yields worse performance than encoding a byte array on the client.
-
-    {% endnote %}
-
-
-    ```cpp
-    void InsertItemsAsFloatList(
-        NYdb::NQuery::TQueryClient& client,
-        const std::string& tableName,
-        const std::vector<TItem>& items)
-    {
-        std::string query = std::format(R"(
-            DECLARE $items AS List<Struct<
-                id: Utf8,
-                document: Utf8,
-                embedding: List<Float>
-            >>;
-
-            UPSERT INTO `{}`
-            (
-                id,
-                document,
-                embedding
-            )
-            SELECT
-                id,
-                document,
-                Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
-            FROM AS_TABLE($items);
-        )", tableName);
-
-        NYdb::TParamsBuilder paramsBuilder;
-        auto& valueBuilder = paramsBuilder.AddParam("$items");
-        valueBuilder.BeginList();
-        for (const auto& item : items) {
-            valueBuilder.AddListItem();
-            valueBuilder.BeginStruct();
-            valueBuilder.AddMember("id").Utf8(item.Id);
-            valueBuilder.AddMember("document").Utf8(item.Document);
-            valueBuilder.AddMember("embedding").BeginList();
-            for (const auto& value : item.Embedding) {
-                valueBuilder.AddListItem().Float(value);
->>>>>>> 8fe78bac27f (docs: use C++ embedding helper in vector search recipes (#55012))
-            }
-            return result + "\x01";
-        }
+        #include <ydb-cpp-sdk/client/value/embedding.h>
 
         void InsertItemsAsBytes(
             NYdb::NQuery::TQueryClient& client,
@@ -478,7 +371,7 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
                 DECLARE $items AS List<Struct<
                     id: Utf8,
                     document: Utf8,
-                    embedding: String
+                    embedding: Bytes
                 >>;
                 UPSERT INTO `{0}`
                 (
@@ -501,7 +394,7 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
                 valueBuilder.BeginStruct();
                 valueBuilder.AddMember("id").Utf8(item.Id);
                 valueBuilder.AddMember("document").Utf8(item.Document);
-                valueBuilder.AddMember("embedding").String(ConvertVectorToBytes(item.Embedding));
+                valueBuilder.AddMember("embedding", NYdb::NValueHelpers::Embedding(item.Embedding));
                 valueBuilder.EndStruct();
             }
             valueBuilder.EndList();
@@ -514,12 +407,6 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
             std::cout << items.size() << " items inserted" << std::endl;
         }
         ```
-
-        {% note info %}
-
-        The `ConvertVectorToBytes` function assumes a [little-endian](https://en.wikipedia.org/wiki/Endianness) byte order on the client (e.g. x86_64). If a different byte order is used, adapt the `ConvertVectorToBytes` function accordingly.
-
-        {% endnote %}
 
     - Alternative approach
 
@@ -1144,14 +1031,8 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
 - C++
 
     ```cpp
-<<<<<<< HEAD
     void AddIndex(
         NYdb::TDriver& driver,
-=======
-    #include <ydb-cpp-sdk/client/value/embedding.h>
-
-    std::vector<TResultItem> SearchItemsAsBytes(
->>>>>>> 8fe78bac27f (docs: use C++ embedding helper in vector search recipes (#55012))
         NYdb::NQuery::TQueryClient& client,
         const std::string& database,
         const std::string& tableName,
@@ -1162,7 +1043,6 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
         std::uint64_t clusters)
     {
         std::string query = std::format(R"(
-<<<<<<< HEAD
             ALTER TABLE `{0}`
             ADD INDEX {1}__temp
             GLOBAL USING vector_kmeans_tree
@@ -1179,38 +1059,6 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
 
         NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
             return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-=======
-            PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
-            DECLARE $embedding as Bytes;
-            SELECT
-                id,
-                document,
-                Knn::{2}(embedding, $embedding) as score
-            FROM {0} {1}
-            ORDER BY score {3}
-            LIMIT {4};
-        )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
-
-        auto params = NYdb::TParamsBuilder()
-            .AddParam("$embedding", NYdb::NValueHelpers::Embedding(embedding))
-            .Build();
-
-        std::vector<TResultItem> result;
-
-        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params, &query, &result](NYdb::NQuery::TSession session) {
-            auto execResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-            if (execResult.IsSuccess()) {
-                auto parser = execResult.GetResultSetParser(0);
-                while (parser.TryNextRow()) {
-                    result.push_back({
-                        .Id = *parser.ColumnParser(0).GetOptionalUtf8(),
-                        .Document = *parser.ColumnParser(1).GetOptionalUtf8(),
-                        .Score = *parser.ColumnParser(2).GetOptionalFloat()
-                    });
-                }
-            }
-            return execResult;
->>>>>>> 8fe78bac27f (docs: use C++ embedding helper in vector search recipes (#55012))
         }));
 
         NYdb::NTable::TTableClient tableClient(driver);
@@ -1465,6 +1313,8 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
     - Recommended approach
 
         ```cpp
+        #include <ydb-cpp-sdk/client/value/embedding.h>
+
         std::vector<TResultItem> SearchItemsAsBytes(
             NYdb::NQuery::TQueryClient& client,
             const std::string& tableName,
@@ -1479,7 +1329,7 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
             std::string query = std::format(R"(
                 PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
-                DECLARE $embedding as String;
+                DECLARE $embedding as Bytes;
                 SELECT
                     id,
                     document,
@@ -1490,9 +1340,7 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
             )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
             auto params = NYdb::TParamsBuilder()
-                .AddParam("$embedding")
-                    .String(ConvertVectorToBytes(embedding))
-                    .Build()
+                .AddParam("$embedding", NYdb::NValueHelpers::Embedding(embedding))
                 .Build();
 
             std::vector<TResultItem> result;

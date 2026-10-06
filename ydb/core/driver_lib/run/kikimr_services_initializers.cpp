@@ -1,3 +1,4 @@
+#include <ydb/core/subsystems/actor_system_monitoring/subsystem.h>
 #include <ydb/core/subsystems/inmemory_metrics_monitoring/subsystem.h>
 #include <ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart/resources.h>
 #include <library/cpp/monlib/service/pages/resource_mon_page.h>
@@ -640,6 +641,41 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     }));
 
     if (auto* mon = appData->Mon) {
+        NActorSystemMonitoring::TConfig monitoring;
+        monitoring.ExecutorPool = appData->BatchPoolId;
+        monitoring.AutoConfigured = useAutoConfig;
+        auto systemParameters = systemConfig;
+        systemParameters.ClearExecutor();
+        monitoring.SystemParameters = systemParameters.DebugString();
+        for (const auto& executor : systemConfig.GetExecutor()) {
+            auto& pool = monitoring.Pools.emplace_back();
+            pool.Name = executor.GetName();
+            pool.IsIo = executor.GetType() == NKikimrConfig::TActorSystemConfig::TExecutor::IO;
+            if (executor.HasThreads()) {
+                pool.Threads = ToString(executor.GetThreads());
+            }
+            if (executor.HasMinThreads()) {
+                pool.MinThreads = ToString(executor.GetMinThreads());
+            }
+            if (executor.HasMaxThreads()) {
+                pool.MaxThreads = ToString(executor.GetMaxThreads());
+            }
+            if (executor.HasPriority()) {
+                pool.Priority = ToString(executor.GetPriority());
+            }
+            if (executor.GetAllThreadsAreShared()) {
+                pool.SharedThreads = "All";
+            } else if (executor.HasHasSharedThread()) {
+                pool.SharedThreads = executor.GetHasSharedThread() ? "One" : "None";
+            }
+            pool.Parameters = executor.DebugString();
+        }
+        monitoring.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
+            auto* actors = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actors, "system", "Actor system", false, &system, actor, /*useAuth=*/true);
+        };
+        setup->RegisterSubSystem(NActorSystemMonitoring::MakeActorSystemMonitoring(std::move(monitoring)));
+
         NMetricChart::RegisterResources(mon);
         mon->Register(new NMonitoring::TResourceMonPage("static/inmemory-metrics/overview.js",
             "inmemory-metrics/overview.js", NMonitoring::TResourceMonPage::JAVASCRIPT));

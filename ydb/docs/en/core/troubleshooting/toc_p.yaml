@@ -9,6 +9,8 @@ items:
   include:
     mode: link
     path: spilling/toc_p.yaml
+- name: Client clock skew
+  href: client-clock-skew.md
 - name: Diagnostic examples
   items:
     - name: Overloaded shard

@@ -916,39 +916,39 @@ int TAsyncExpiringCache<TKey, TValue>::GetShardIndex(const THeterogenousKey& key
 }
 
 template <class TKey, class TValue>
-NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock> TAsyncExpiringCache<TKey, TValue>::MakeReaderGuardForKey(const TKey& key)
+TReaderGuard<TReaderWriterSpinLock> TAsyncExpiringCache<TKey, TValue>::MakeReaderGuardForKey(const TKey& key)
 {
     auto shardIndex = GetShardIndex(key);
     const auto& shard = MapShards_[shardIndex];
-    return NThreading::ReaderGuard(shard.EntryMapSpinLock);
+    return ReaderGuard(shard.EntryMapSpinLock);
 }
 
 template <class TKey, class TValue>
-std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
+std::pair<TReaderGuard<TReaderWriterSpinLock>, const typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
 TAsyncExpiringCache<TKey, TValue>::LockAndGetReadableShard(int shardIndex)
 {
     const auto& shard = MapShards_[shardIndex];
-    return {NThreading::ReaderGuard(shard.EntryMapSpinLock), shard.EntryMap};
+    return {ReaderGuard(shard.EntryMapSpinLock), shard.EntryMap};
 }
 
 template <class TKey, class TValue>
 template <class THeterogenousKey>
-std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
+std::pair<TReaderGuard<TReaderWriterSpinLock>, const typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
 TAsyncExpiringCache<TKey, TValue>::LockAndGetReadableShardForKey(const THeterogenousKey& key)
 {
     return LockAndGetReadableShard(GetShardIndex(key));
 }
 
 template <class TKey, class TValue>
-std::pair<NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>, typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
+std::pair<TWriterGuard<TReaderWriterSpinLock>, typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
 TAsyncExpiringCache<TKey, TValue>::LockAndGetWritableShard(int shardIndex)
 {
     auto& shard = MapShards_[shardIndex];
-    return {NThreading::WriterGuard(shard.EntryMapSpinLock), shard.EntryMap};
+    return {WriterGuard(shard.EntryMapSpinLock), shard.EntryMap};
 }
 
 template <class TKey, class TValue>
-std::pair<NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>, typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
+std::pair<TWriterGuard<TReaderWriterSpinLock>, typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
 TAsyncExpiringCache<TKey, TValue>::LockAndGetWritableShardForKey(const TKey& key)
 {
     return LockAndGetWritableShard(GetShardIndex(key));

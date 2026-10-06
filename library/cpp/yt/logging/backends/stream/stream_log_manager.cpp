@@ -6,7 +6,7 @@
 
 #include <library/cpp/yt/string/raw_formatter.h>
 
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 
 namespace NYT::NLogging {
 
@@ -65,7 +65,7 @@ public:
 private:
     IOutputStream* const Output_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, SpinLock_);
     THashMap<std::string, std::unique_ptr<TLoggingCategory>, THash<TStringBuf>, TEqualTo<TStringBuf>> NameToCategory_;
     std::atomic<int> Version_ = 1;
 

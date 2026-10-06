@@ -26,7 +26,7 @@ void TInvokerWrapper<VirtualizeBase>::Invoke(TMutableRange<TClosure> callbacks)
 }
 
 template <bool VirtualizeBase>
-NThreading::TThreadId TInvokerWrapper<VirtualizeBase>::GetThreadId() const
+TThreadId TInvokerWrapper<VirtualizeBase>::GetThreadId() const
 {
     return UnderlyingInvoker_->GetThreadId();
 }

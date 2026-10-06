@@ -54,9 +54,8 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
 void TQuery::InitSnapshot(const NSnapshot::TPool& pool) {
     auto snapshot = std::make_shared<NSnapshot::TQuery>(std::get<TQueryId>(GetId()), shared_from_this());
 
-    // Like the leaf pool gives its fair-share to the queries. But the zero fair-share would make the tasks wait for
-    // the maximum delay (see TSchedulableBase::CalculateDelay) - then it's what the query has without a snapshot.
-    snapshot->FairShare = pool.FairShare > 0 ? pool.FairShare : AllowMinFairShare;
+    snapshot->CpuFairShare = pool.CpuFairShare > 0 ? pool.CpuFairShare : AllowMinFairShare;
+    snapshot->MemoryFairShare = pool.MemoryFairShare;
 
     SetSnapshot(snapshot);
 }
@@ -162,7 +161,9 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
 }
 
 NSnapshot::TPool* TPool::TakeSnapshot() {
-    auto* newPool = new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, *this);
+    auto* newPool = CreateSnapshot();
+
+    newPool->MemoryUsage = MemoryUsage.load();
 
     if (Counters) {
         Counters->Limit->Set(GetCpuLimit() * 1'000'000);
@@ -193,6 +194,24 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
     return newPool;
 }
 
+NSnapshot::TPool* TPool::CreateSnapshot() const {
+    return new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, *this);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// TDefaultPool
+///////////////////////////////////////////////////////////////////////////////
+
+TDefaultPool::TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs)
+    : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id, attrs)
+    , TPool(id, counters, attrs)
+{
+}
+
+NSnapshot::TPool* TDefaultPool::CreateSnapshot() const {
+    return new NSnapshot::TDefaultPool(std::get<TPoolId>(GetId()), Counters, *this);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // TDatabase
 ///////////////////////////////////////////////////////////////////////////////
@@ -221,8 +240,8 @@ TRoot::TRoot(const TIntrusivePtr<TKqpCounters>& counters)
 {
     Y_ASSERT(counters);
     auto group = counters->GetKqpCounters();
-    Counters.TotalLimit = group->GetCounter("scheduler/TotalLimit", false);
-    Counters.MemoryTotalLimit = group->GetCounter("scheduler/MemoryTotalLimit", false);
+    Counters.TotalCpuLimit = group->GetCounter("scheduler/TotalLimit", false);
+    Counters.TotalMemoryLimit = group->GetCounter("scheduler/TotalMemoryLimit", false);
 }
 
 void TRoot::AddDatabase(const TDatabasePtr& database) {
@@ -240,13 +259,14 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
 NSnapshot::TRoot* TRoot::TakeSnapshot() {
     auto* newRoot = new NSnapshot::TRoot();
 
-    const ui64 totalLimit = TotalLimit.load();
+    const ui64 totalCpuLimit = TotalCpuLimit.load();
+    const ui64 totalMemoryLimit = TotalMemoryLimit.load();
 
-    Counters.TotalLimit->Set(totalLimit * 1'000'000);
-    Counters.MemoryTotalLimit->Set(MemoryTotalLimit);
+    Counters.TotalCpuLimit->Set(totalCpuLimit * 1'000'000);
+    Counters.TotalMemoryLimit->Set(totalMemoryLimit);
 
-    newRoot->TotalLimit = totalLimit;
-    newRoot->MemoryTotalLimit = MemoryTotalLimit;
+    newRoot->TotalCpuLimit = totalCpuLimit;
+    newRoot->TotalMemoryLimit = totalMemoryLimit;
     ForEachChild<TDatabase>([&](TDatabase* database, size_t) {
         newRoot->AddDatabase(NSnapshot::TDatabasePtr(database->TakeSnapshot()));
     });

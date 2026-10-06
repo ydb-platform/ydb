@@ -24,8 +24,18 @@ public:
     void SetTotalCpuLimit(ui64 cpu);
     ui64 GetTotalCpuLimit() const;
 
+    // The memory of all the queries on the node never exceeds it
     void SetTotalMemoryLimit(ui64 bytes);
     ui64 GetTotalMemoryLimit() const;
+
+    // The memory of all the queries on the node.
+    ui64 GetTotalMemoryUsage() const;
+    // The expected memory of all the queries on the node: the initial (M) and the elastic (E) memory of their tasks.
+    ui64 GetTotalMemoryDemand() const;
+
+    // The pool which accounts the memory of the queries of the given pool - the memory of any query is accounted,
+    // so the database and the pool are created if needed. An empty pool means the default one.
+    NHdrf::NDynamic::TPoolPtr GetOrCreateMemoryPool(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId);
 
     void AddOrUpdateDatabase(const NHdrf::TDatabaseId& databaseId, const NHdrf::TStaticAttributes& attrs);
 
@@ -45,6 +55,8 @@ private:
     //       when those nodes don't know about databases at all. Remove them later.
     void SetDefaultDatabaseGuarantee(NHdrf::TStaticAttributes& attrs) const;                 // run under Mutex
     NHdrf::NDynamic::TDatabasePtr GetOrCreateDatabase(const NHdrf::TDatabaseId& databaseId); // run under Mutex
+
+    NHdrf::NDynamic::TPoolPtr CreatePool(const NHdrf::NDynamic::TDatabasePtr& database, const NHdrf::TPoolId& poolId, const NHdrf::TStaticAttributes& attrs); // run under Mutex
 
 private:
 

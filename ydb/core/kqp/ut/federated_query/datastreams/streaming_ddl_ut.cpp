@@ -1,7 +1,6 @@
 #include "common.h"
 
 #include <ydb/core/base/counters.h>
-#include <ydb/core/base/localdb.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
@@ -207,14 +206,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         auto& resourceManager = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
         resourceManager.SetQueryMemoryLimit(memoryLimit);
         resourceManager.SetKqpLevelCacheMaxSizeBytes(0);
-        // the memory arena charges the prepaid memory of the query tasks to the same node total: no headroom, units
-        // almost free and small MKQL limits keep that charge to about 1 MiB next to the row dispatcher allocations
+        appConfig.MutableMemoryControllerConfig()->SetQueryExecutionLimitBytes(memoryLimit);
+        // the prepaid memory of the query tasks is charged to the same node total: units almost free and small MKQL
+        // limits keep that charge small next to the row dispatcher allocations
         resourceManager.SetExecutionUnitMemory(100);
-        resourceManager.SetMemoryArenaMinFreeSize(0);
-        resourceManager.SetMemoryArenaMaxFreeSize(0);
-        auto* queue = appConfig.MutableResourceBrokerConfig()->AddQueues();
-        queue->SetName(NLocalDb::KqpResourceManagerQueue);
-        queue->MutableLimit()->SetMemory(memoryLimit);
         resourceManager.SetMkqlLightProgramMemoryLimit(128_KB);
         resourceManager.SetMkqlHeavyProgramMemoryLimit(128_KB);
         resourceManager.SetChannelBufferSize(128_KB);

@@ -432,6 +432,8 @@ class YdbTenant(BaseTenant):
     def fill_config(self, control_plane):
         self.config_generator.yaml_config["table_service_config"]["bindings_mode"] = "BM_DROP"
         self.config_generator.yaml_config["table_service_config"]["resource_manager"] = {"query_memory_limit": 64424509440}
+        # the memory of the queries is limited by the compute scheduler, its limit comes from the memory controller
+        self.config_generator.yaml_config.setdefault("memory_controller_config", {})["query_execution_limit_bytes"] = 64424509440
         self.config_generator.yaml_config["resource_broker_config"] = {}
         self.config_generator.yaml_config["resource_broker_config"]["queues"] = [{"limit": {"memory": 64424509440}, "weight": 30, "name": "queue_kqp_resource_manager"}]
         self.config_generator.yaml_config["resource_broker_config"]["resource_limit"] = {"memory": 64424509440}

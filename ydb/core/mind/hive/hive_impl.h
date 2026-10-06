@@ -293,7 +293,7 @@ protected:
                                            TEvLocal::TEvTabletStatus::EStatus status,
                                            TEvTablet::TEvTabletDead::EReason reason);
     ITransaction* CreateBootTablet(TTabletId tabletId);
-    ITransaction* CreateKillNode(TNodeId nodeId, const TActorId& local, ENodeEventReason reason, TString reasonDetails);
+    ITransaction* CreateKillNode(TNodeId nodeId, const TActorId& local, EHiveEventReason reason, TString reasonDetails);
     ITransaction* CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TGroupMetrics::TGroupParameters> groups = {});
     ITransaction* CreateCheckTablets();
     ITransaction* CreateSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec);
@@ -721,7 +721,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void ReportStoppedToWhiteboard(const TLeaderTabletInfo& tablet);
     void ReportDeletedToWhiteboard(const TLeaderTabletInfo& tablet);
     TTabletCategoryInfo& GetTabletCategory(TTabletCategoryId tabletCategoryId);
-    void KillNode(TNodeId nodeId, const TActorId& local, ENodeEventReason reason, TString reasonDetails = {});
+    void KillNode(TNodeId nodeId, const TActorId& local, EHiveEventReason reason, TString reasonDetails = {});
     void AddToBootQueue(TTabletInfo* tablet, TNodeId node = 0);
     void UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff);
     void UpdateDomainTabletsAlive(const TSubDomainKey& objectDomain, i64 tabletsAliveDiff, const TSubDomainKey& tabletNodeDomain);
@@ -746,7 +746,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void OnShrinkMoveDataFinished();
     void RecordTabletMove(const TTabletMoveInfo& info);
     // details is the variable part of the description, reason covers the constant part
-    void RecordNodeEvent(TNodeInfo& node, ENodeEvent type, ENodeEventReason reason, TString details = {});
+    void RecordNodeEvent(TNodeInfo& node, EHiveEventType type, EHiveEventReason reason, TString details = {});
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
     void ProcessWaitQueue();

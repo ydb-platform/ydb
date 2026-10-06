@@ -57,7 +57,7 @@ public:
                     if (!node->Down && Settings.DownPolicy == NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART) {
                         node->BecomeUpOnRestart = true;
                     }
-                    node->SetDown(true, ENodeEventReason::DrainDownPolicy, NKikimrHive::EDrainDownPolicy_Name(Settings.DownPolicy));
+                    node->SetDown(true, EHiveEventReason::DrainDownPolicy, NKikimrHive::EDrainDownPolicy_Name(Settings.DownPolicy));
                     if (Settings.Persist) {
                         db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::BecomeUpOnRestart>(node->BecomeUpOnRestart);
                         if (Settings.DownPolicy == NKikimrHive::DRAIN_POLICY_KEEP_DOWN) {
@@ -66,7 +66,7 @@ public:
                     }
                 }
                 if (StartingDrain) {
-                    Self->RecordNodeEvent(*node, ENodeEvent::DrainStarted, ENodeEventReason::DrainRequested,
+                    Self->RecordNodeEvent(*node, EHiveEventType::DrainStarted, EHiveEventReason::DrainRequested,
                         TStringBuilder() << "initiator=" << Initiator
                             << " persist=" << Settings.Persist
                             << " downPolicy=" << NKikimrHive::EDrainDownPolicy_Name(Settings.DownPolicy)
@@ -136,7 +136,7 @@ public:
         if (std::holds_alternative<TNodeId>(Target)) {
             TNodeInfo* node = Self->FindNode(std::get<TNodeId>(Target));
             if (node != nullptr) {
-                Self->RecordNodeEvent(*node, ENodeEvent::DrainFinished, ENodeEventReason::DrainSwitchedOff,
+                Self->RecordNodeEvent(*node, EHiveEventType::DrainFinished, EHiveEventReason::DrainSwitchedOff,
                     TStringBuilder() << "status=" << NKikimrProto::EReplyStatus_Name(Status)
                         << " movements=" << Movements
                         << " tabletsRunning=" << node->GetTabletsRunning());

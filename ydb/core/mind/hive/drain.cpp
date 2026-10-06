@@ -66,7 +66,7 @@ protected:
             TNodeInfo* nodeInfo = Hive->FindNode(nodeId);
             if (nodeInfo != nullptr) {
                 if (!downBefore) {
-                    nodeInfo->SetDown(false, ENodeEventReason::DrainFinished);
+                    nodeInfo->SetDown(false, EHiveEventReason::DrainFinished);
                 }
             }
         }
@@ -232,7 +232,7 @@ public:
                     }
                 }
                 DownBefore[nodeId] = nodeInfo->Down;
-                nodeInfo->SetDown(true, ENodeEventReason::DrainStarted);
+                nodeInfo->SetDown(true, EHiveEventReason::DrainStarted);
             } else {
                 return ReplyAndDie(NKikimrProto::ERROR);
             }

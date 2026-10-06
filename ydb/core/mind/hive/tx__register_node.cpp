@@ -62,18 +62,18 @@ public:
             if (node.LastSeenServicedDomains != servicedDomains) {
                 // new tenant - new rules
                 if (!node.LastSeenServicedDomains.empty()) {
-                    Self->RecordNodeEvent(node, ENodeEvent::TenantChanged, ENodeEventReason::ServicedDomainsChanged,
+                    Self->RecordNodeEvent(node, EHiveEventType::TenantChanged, EHiveEventReason::ServicedDomainsChanged,
                         TStringBuilder() << "from=" << node.LastSeenServicedDomains << " to=" << servicedDomains);
                 }
-                node.SetDown(false, ENodeEventReason::TenantChanged);
-                node.SetFreeze(false, ENodeEventReason::TenantChanged);
+                node.SetDown(false, EHiveEventReason::TenantChanged);
+                node.SetFreeze(false, EHiveEventReason::TenantChanged);
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::Freeze>(false, false);
             }
             if (node.BecomeUpOnRestart) {
                 YDB_LOG_TRACE("THive::TTxRegisterNode::Execute node became up on restart",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", Local.NodeId()});
-                node.SetDown(false, ENodeEventReason::BecomeUpOnRestart);
+                node.SetDown(false, EHiveEventReason::BecomeUpOnRestart);
                 node.BecomeUpOnRestart = false;
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(false, false);
             }
@@ -102,7 +102,7 @@ public:
             }
         }
         if (Record.HasSystemLocation() && Record.GetSystemLocation().HasDataCenter()) {
-            node.SetLocation(TNodeLocation(Record.GetSystemLocation()), ENodeEventReason::RegisterNode);
+            node.SetLocation(TNodeLocation(Record.GetSystemLocation()), EHiveEventReason::RegisterNode);
         }
         node.TabletAvailability.clear();
         for (const NKikimrLocal::TTabletAvailability& tabletAvailability : Record.GetTabletAvailability()) {
@@ -122,8 +122,8 @@ public:
             details << " domains=" << node.ServicedDomains
                 << " location=" << GetLocationString(node.Location)
                 << " tabletTypesAvailable=" << node.TabletAvailability.size();
-            Self->RecordNodeEvent(node, ENodeEvent::Registered,
-                localChanged ? ENodeEventReason::NewLocalActor : ENodeEventReason::SameLocalActor, details);
+            Self->RecordNodeEvent(node, EHiveEventType::Registered,
+                localChanged ? EHiveEventReason::NewLocalActor : EHiveEventReason::SameLocalActor, details);
         }
         return true;
     }

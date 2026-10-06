@@ -109,7 +109,7 @@ public:
     TBridgePileId BridgePileId;
     THiveDrain* DrainActor = nullptr;
     static constexpr size_t EVENT_HISTORY_SIZE = 50;
-    TLazyRingBuffer<TNodeEvent, EVENT_HISTORY_SIZE> EventHistory; // newest events of this node, see THive::RecordNodeEvent
+    TLazyRingBuffer<THiveEvent, EVENT_HISTORY_SIZE> EventHistory; // newest events of this node, see THive::RecordNodeEvent
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -271,9 +271,9 @@ public:
     void Ping();
     void SendReconnect(const TActorId& local);
     // reason and details describe who/what initiated the change, see THive::RecordNodeEvent
-    void SetDown(bool down, ENodeEventReason reason, TString details = {});
-    void SetFreeze(bool freeze, ENodeEventReason reason, TString details = {});
-    void SetLocation(const TNodeLocation& location, ENodeEventReason reason);
+    void SetDown(bool down, EHiveEventReason reason, TString details = {});
+    void SetFreeze(bool freeze, EHiveEventReason reason, TString details = {});
+    void SetLocation(const TNodeLocation& location, EHiveEventReason reason);
     void UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics);
 
     TResourceRawValues GetResourceCurrentValues() const;

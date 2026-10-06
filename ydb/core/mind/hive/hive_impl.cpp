@@ -146,7 +146,7 @@ void THive::RestartPipeTx(ui64 tabletId) {
 
 bool THive::TryToDeleteNode(TNodeInfo* node) {
     if (node->CanBeDeleted(TActivationContext::Now())) {
-        RecordNodeEvent(*node, ENodeEvent::Deleted, ENodeEventReason::NodeExpired,
+        RecordNodeEvent(*node, EHiveEventType::Deleted, EHiveEventReason::NodeExpired,
             TStringBuilder() << "lastAlive=" << TInstant::MilliSeconds(node->Statistics.GetLastAliveTimestamp())
                 << " nodeDeletePeriod=" << GetNodeDeletePeriod());
         if (BridgeInfo) {
@@ -1066,7 +1066,7 @@ void THive::Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
         NodesInfo[node->NodeId] = nodeInfo;
         TNodeInfo* hiveNodeInfo = FindNode(nodeInfo.NodeId);
         if (hiveNodeInfo != nullptr) {
-            hiveNodeInfo->SetLocation(nodeInfo.Location, ENodeEventReason::NameService);
+            hiveNodeInfo->SetLocation(nodeInfo.Location, EHiveEventReason::NameService);
             YDB_LOG_DEBUG("Handle TEvInterconnect::TEvNodeInfo: updated node location",
                 {"logPrefix", GetLogPrefix()},
                 {"nodeId", nodeInfo.NodeId},
@@ -1098,7 +1098,7 @@ void THive::ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode>
             Send(SelfId(), event.Release());
         }
     } else {
-        KillNode(event->NodeId, event->Local, ENodeEventReason::InterconnectDisconnected);
+        KillNode(event->NodeId, event->Local, EHiveEventReason::InterconnectDisconnected);
     }
 }
 
@@ -1240,7 +1240,7 @@ void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
                 // ping continiousily until we fully disconnected from the node
                 node->Ping();
             } else {
-                KillNode(node->Id, node->Local, ENodeEventReason::PingUndelivered);
+                KillNode(node->Id, node->Local, EHiveEventReason::PingUndelivered);
             }
         }
         ProcessNodePingQueue();
@@ -2005,7 +2005,7 @@ TTabletCategoryInfo& THive::GetTabletCategory(TTabletCategoryId tabletCategoryId
     return it->second;
 }
 
-void THive::KillNode(TNodeId nodeId, const TActorId& local, ENodeEventReason reason, TString reasonDetails) {
+void THive::KillNode(TNodeId nodeId, const TActorId& local, EHiveEventReason reason, TString reasonDetails) {
     TNodeInfo* node = FindNode(nodeId);
     if (node != nullptr) {
         TVector<TTabletInfo*> tabletsToKill;

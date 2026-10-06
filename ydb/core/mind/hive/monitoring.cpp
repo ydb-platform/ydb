@@ -1570,7 +1570,7 @@ public:
             Self->ObjectDistributions.AddNode(*Node);
             Self->ProcessWaitQueue();
             WriteOperation(db, jsonOperation);
-            Self->RecordNodeEvent(*Node, ENodeEvent::AvailabilityChanged, ENodeEventReason::MonitoringRequest, eventDetails << "user=" << GetUserForLog());
+            Self->RecordNodeEvent(*Node, EHiveEventType::AvailabilityChanged, EHiveEventReason::MonitoringRequest, eventDetails << "user=" << GetUserForLog());
         }
         return true;
     }
@@ -3009,7 +3009,7 @@ public:
         , TLoggedMonTransaction(ev, hive)
         , Event(ev->Release())
     {
-        Reason = ENodeEventReason::MonitoringRequest;
+        Reason = EHiveEventReason::MonitoringRequest;
         ReasonDetails = TStringBuilder() << "user=" << GetUserForLog();
     }
 
@@ -3074,7 +3074,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
-            node->SetFreeze(Freeze, ENodeEventReason::MonitoringRequest, TStringBuilder() << "user=" << GetUserForLog());
+            node->SetFreeze(Freeze, EHiveEventReason::MonitoringRequest, TStringBuilder() << "user=" << GetUserForLog());
             db.Table<Schema::Node>().Key(NodeId).Update(NIceDb::TUpdate<Schema::Node::Freeze>(Freeze));
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
@@ -5342,18 +5342,18 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
-static void RenderNodeEventRow(IOutputStream& out, const TNodeEvent& event) {
+static void RenderNodeEventRow(IOutputStream& out, const THiveEvent& event) {
     out << "<td>" << event.GetTimestamp().ToStringLocalUpToSeconds() << "</td>"
-        << "<td>" << ENodeEventName(event.GetType()) << "</td>"
-        << "<td>" << EncodeHtmlPcdata(ENodeEventReasonName(event.GetReason())) << "</td>"
+        << "<td>" << EHiveEventTypeName(event.GetType()) << "</td>"
+        << "<td>" << EncodeHtmlPcdata(EHiveEventReasonName(event.GetReason())) << "</td>"
         << "<td>" << EncodeHtmlPcdata(event.Details) << "</td>";
 }
 
-static NJson::TJsonValue NodeEventToJson(const TNodeEvent& event) {
+static NJson::TJsonValue NodeEventToJson(const THiveEvent& event) {
     NJson::TJsonValue json;
     json["Timestamp"] = event.GetTimestamp().MilliSeconds();
-    json["Event"] = TString(ENodeEventName(event.GetType()));
-    json["Reason"] = TString(ENodeEventReasonName(event.GetReason()));
+    json["Event"] = TString(EHiveEventTypeName(event.GetType()));
+    json["Reason"] = TString(EHiveEventReasonName(event.GetReason()));
     json["Details"] = event.Details;
     return json;
 }
@@ -5566,7 +5566,7 @@ public:
                 }
                 NJson::TJsonValue& events = json["Events"];
                 events.SetType(NJson::JSON_ARRAY);
-                node->EventHistory.ForEachNewestFirst([&events](const TNodeEvent& event) {
+                node->EventHistory.ForEachNewestFirst([&events](const THiveEvent& event) {
                     events.AppendValue(NodeEventToJson(event));
                 });
             }
@@ -5604,7 +5604,7 @@ public:
             out << "<tr><th>Timestamp</th><th>Event</th><th>Reason</th><th>Details</th></tr>";
             out << "</thead>";
             out << "<tbody>";
-            node->EventHistory.ForEachNewestFirst([&out](const TNodeEvent& event) {
+            node->EventHistory.ForEachNewestFirst([&out](const THiveEvent& event) {
                 out << "<tr>";
                 RenderNodeEventRow(out, event);
                 out << "</tr>";

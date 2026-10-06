@@ -1273,7 +1273,7 @@ public:
                 } else if (const auto databaseType = NYql::DatabaseTypeFromString(type)) {
                     availableTypes.insert(*databaseType);
                 } else {
-                    YDB_LOG_WARN_COMP(NKikimrServices::KQP, "Unknown external data source type, ignoring it",
+                    YDB_LOG_WARN_COMP(NKikimrServices::KQP_GATEWAY, "Unknown external data source type, ignoring it",
                         {"sourceType", type});
                 }
             }

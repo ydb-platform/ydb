@@ -5,6 +5,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_value_builder.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -31,6 +32,7 @@ public:
         , Env(Alloc)
         , MemInfo("DqHashCombineLayoutTest")
         , HolderFactory(Alloc.Ref(), MemInfo)
+        , ValueBuilder(HolderFactory)
     {
     }
 
@@ -45,7 +47,7 @@ public:
 
     TUnboxedValue Array(std::initializer_list<TUnboxedValuePod> values) {
         TUnboxedValue* items = nullptr;
-        TUnboxedValue result = HolderFactory.CreateDirectArrayHolder(values.size(), items);
+        TUnboxedValue result = ValueBuilder.NewArray(values.size(), items);
         for (const auto& value : values) {
             *items++ = value;
         }
@@ -61,6 +63,7 @@ public:
 private:
     TMemoryUsageInfo MemInfo;
     THolderFactory HolderFactory;
+    TDefaultValueBuilder ValueBuilder;
 };
 
 class TStorage {
@@ -288,17 +291,32 @@ Y_UNIT_TEST_SUITE(TDqHashCombineLayoutTest) {
 
     Y_UNIT_TEST(EmptyCompositeMemoryEstimation) {
         TLayoutTestEnv env;
-        TUnboxedValue value = env.Array({});
+        const TUnboxedValue empty = env.Array({});
+        auto* holder = new TIndirectComposite({});
+        const TUnboxedValue indirect = TUnboxedValuePod(holder);
+        const TUnboxedValue string = TUnboxedValuePod(NUdf::TStringValue("heap-backed field beside an empty composite"));
+        const size_t emptySize = sizeof(TUnboxedValuePod) + sizeof(TDirectArrayHolderInplace);
         const std::vector<TType*> types = {
             TTupleType::Create(0, nullptr, env.Env), TStructType::Create(nullptr, 0, env.Env),
         };
         for (auto* type : types) {
-            UNIT_ASSERT(!TDqHashCombineTupleLayout::EstimateValueMemorySize(value, type));
             TDqHashCombineTupleLayout layout(std::vector<TType*>{type});
             UNIT_ASSERT_VALUES_EQUAL(*layout.GetStaticExternalMemorySize(), sizeof(TDirectArrayHolderInplace));
             UNIT_ASSERT_VALUES_EQUAL(*TDqHashCombineTupleLayout::EstimateValueMemorySize({}, env.Optional(type)),
                 sizeof(TUnboxedValuePod));
+            for (const auto& value : {empty, indirect}) {
+                const std::vector<TType*> wrappedTypes = {type, env.Optional(type), TTaggedType::Create(type, "tag", env.Env)};
+                for (auto* wrapped : wrappedTypes) {
+                    UNIT_ASSERT_VALUES_EQUAL(*TDqHashCombineTupleLayout::EstimateValueMemorySize(value, wrapped), emptySize);
+                    const std::vector<TType*> nestedTypes = {wrapped, env.Data<char*>()};
+                    auto* nestedType = TTupleType::Create(nestedTypes.size(), nestedTypes.data(), env.Env);
+                    const auto nested = env.Array({value, string});
+                    UNIT_ASSERT_VALUES_EQUAL(*TDqHashCombineTupleLayout::EstimateValueMemorySize(nested, nestedType),
+                        2 * emptySize + sizeof(TUnboxedValuePod) + StringHeaderSize + string.AsStringRef().Size());
+                }
+            }
         }
+        UNIT_ASSERT_VALUES_EQUAL(holder->AccessCount, 0);
     }
 
     Y_UNIT_TEST(TaggedMemoryEstimation) {

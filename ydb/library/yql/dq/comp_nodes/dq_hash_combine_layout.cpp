@@ -113,11 +113,18 @@ std::optional<size_t> TDqHashCombineTupleLayout::EstimateValueMemorySize(const T
         return {};
     }
 
+    const ui32 count = type->IsTuple() ? AS_TYPE(TTupleType, type)->GetElementsCount() :
+        AS_TYPE(TStructType, type)->GetMembersCount();
+    if (!count) {
+        return sizeof(TUnboxedValuePod) + sizeof(TDirectArrayHolderInplace);
+    }
+
     static_assert(std::is_final_v<TDirectArrayHolderInplace>, "Memory estimation requires an exact holder type");
     const auto* holder = dynamic_cast<const TDirectArrayHolderInplace*>(value.AsRawBoxed());
     if (!holder) {
         return {};
     }
+    MKQL_ENSURE(holder->GetSize() >= count, "Composite holder has fewer elements than its type");
 
     const auto* elements = holder->GetPtr();
     return EstimateCompositeSize(type, [&](ui32 index, TType* itemType) {

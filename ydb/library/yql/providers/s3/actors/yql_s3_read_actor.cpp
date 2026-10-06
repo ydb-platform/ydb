@@ -1072,19 +1072,27 @@ public:
     }
 
     void HandleRetry(TEvS3Provider::TEvRetryEventFunc::TPtr& retry) {
+        // A gateway-wide failure may finish the new request without a start callback.
+        ResetDownloadAttempt();
         retry->Get()->Functor();
     }
 
-    void Handle(TEvS3Provider::TEvDownloadStart::TPtr& ev) {
-        HttpResponseCode = ev->Get()->HttpResponseCode;
-        CurlResponseCode = ev->Get()->CurlResponseCode;
+    void ResetDownloadAttempt() {
         // A new attempt starts: the error state of the previous (retried) attempt must not leak into it.
         // Its issues have already been reported as retriable.
+        HttpResponseCode = 0;
+        CurlResponseCode = CURLE_OK;
         RetryStuff->NextRetryDelay = {};
         ErrorText.clear();
         ServerReturnedError = false;
         Issues.Clear();
         FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
+    }
+
+    void Handle(TEvS3Provider::TEvDownloadStart::TPtr& ev) {
+        ResetDownloadAttempt();
+        HttpResponseCode = ev->Get()->HttpResponseCode;
+        CurlResponseCode = ev->Get()->CurlResponseCode;
         LOG_CORO_D("TEvDownloadStart, Http code: " << HttpResponseCode);
     }
 

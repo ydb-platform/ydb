@@ -2,11 +2,11 @@
 
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_objects.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <util/generic/hash_set.h>
-#include <util/generic/is_in.h>
 #include <util/generic/vector.h>
 #include <util/stream/file.h>
 #include <util/stream/output.h>
@@ -27,15 +27,6 @@ namespace {
 
 using namespace NScheme;
 using namespace NTable;
-
-bool IsExportableSchemeObject(const TSchemeEntry& entry) {
-    return IsIn({
-        ESchemeEntryType::Table,
-        ESchemeEntryType::ColumnTable,
-        ESchemeEntryType::View,
-        ESchemeEntryType::Topic,
-    }, entry.Type);
-}
 
 bool IsTransientIndexImplTable(TStringBuf name) {
     return name.EndsWith("0build") || name.EndsWith("1build") || name.EndsWith("rowidsrc");
@@ -72,14 +63,6 @@ TVector<TString> IndexImplTableNames(const TIndexDescription& index) {
         default:
             return {"indexImplTable"};
     }
-}
-
-bool IsAsyncReplicaTable(TSession& session, const TString& path) {
-    const auto describeResult = session.DescribeTable(path).ExtractValueSync();
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
-    const auto& attributes = describeResult.GetTableDescription().GetAttributes();
-    const auto it = attributes.find("__async_replica");
-    return it != attributes.end() && it->second == "true";
 }
 
 void AppendIndexImplObjects(
@@ -119,14 +102,7 @@ TVector<TString> ListObjects(
 
     TVector<TSchemeEntry> entries = std::move(listing.Entries);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(tableClient.RetryOperationSync([&entries](TSession session) {
-        try {
-            std::erase_if(entries, [&session](const TSchemeEntry& entry) {
-                return entry.Type == ESchemeEntryType::Table && IsAsyncReplicaTable(session, TString{entry.Name});
-            });
-        } catch (NStatusHelpers::TYdbErrorException& e) {
-            return e.ExtractStatus();
-        }
-        return TStatus(EStatus::SUCCESS, {});
+        return RemoveAsyncReplicaTables(session, entries);
     }));
 
     THashSet<TString> names;

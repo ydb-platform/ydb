@@ -180,6 +180,8 @@ class TMessageStreamReadActor : public TActor<TMessageStreamReadActor>, public I
     };
 
 public:
+    static constexpr char ActorName[] = "DQ_MESSAGE_STREAM_READ_ACTOR";
+
     TMessageStreamReadActor(TMessageStreamReadActorSettings settings,
         std::unique_ptr<IMessageStreamReadActorState> state)
         : TActor<TMessageStreamReadActor>(&TMessageStreamReadActor::StateFunc)

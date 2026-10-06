@@ -17,6 +17,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session_control.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/chaos_injector_control.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 

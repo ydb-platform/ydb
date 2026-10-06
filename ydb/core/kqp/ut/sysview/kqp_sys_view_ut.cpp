@@ -1955,6 +1955,20 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             return true;
         });
+        // Wait for the scheme cache to observe the new owner and inherited permissions.
+        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        for (const auto& path : {"/Root", "/Root/EightShard"}) {
+            auto& entry = navigate->ResultSet.emplace_back();
+            entry.Path = SplitPath(path);
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+            entry.SyncVersion = true;
+        }
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeSchemeCacheID(), edge,
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.Release())));
+        auto response = runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Request->ErrorCount, 0);
+
         auto& appData = runtime.GetAppData();
         appData.AdministrationAllowedSIDs = {"root@builtin"};
         appData.FeatureFlags.SetEnableDatabaseAdmin(true);

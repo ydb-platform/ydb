@@ -199,6 +199,7 @@ STFUNC(TKqpComputeActor::StateFunc) {
             hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);
             hFunc(TEvKqpCompute::TEvScanData, HandleExecute);
             hFunc(TEvKqpCompute::TEvScanError, HandleExecute);
+            hFunc(TEvKqpCompute::TEvScanWarning, HandleExecute);
             default:
                 BaseStateFuncBody(ev);
         }
@@ -369,16 +370,14 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
     Ydb::StatusIds::StatusCode status = ev->Get()->Record.GetStatus();
     IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
 
-    // System views use SUCCESS to report a partial scan without interrupting it.
-    if (status == Ydb::StatusIds::SUCCESS) {
-        YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "Got system view scan warning",
-            {"logPrefix", this->LogPrefix},
-            {"issues", issues.ToOneLineString()});
-        return;
-    }
-
     State = NDqProto::COMPUTE_STATE_FAILURE;
     ReportStateAndMaybeDie(YdbStatusToDqStatus(status, EStatusCompatibilityLevel::WithUnauthorized), issues);
+}
+
+void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanWarning::TPtr& ev) {
+    YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "Got system view scan warning",
+        {"logPrefix", this->LogPrefix},
+        {"issues", ev->Get()->Issues.ToOneLineString()});
 }
 
 ui64 TKqpComputeActor::CalculateFreeSpace() const {

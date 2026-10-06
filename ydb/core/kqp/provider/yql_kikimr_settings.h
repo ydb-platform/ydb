@@ -78,6 +78,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
     NCommon::TConfSetting<bool, Static> UseDqHashAggregate;
     NCommon::TConfSetting<bool, Static> DqHashOperatorsUseBlocks;
+    NCommon::TConfSetting<ui32, Static> DqHashAggregationDescriptorVersion;
     NCommon::TConfSetting<bool, Static> DqHashCombineExportTypeInfo;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
@@ -265,6 +266,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetUseDqHashCombine() const;
     bool GetUseDqHashAggregate() const;
     bool GetDqHashOperatorsUseBlocks() const;
+    ui32 GetDqHashAggregationDescriptorVersion() const;
     bool GetDqHashCombineExportTypeInfo() const;
     bool GetUseBlockHashJoin() const;
     bool GetUseBlockHashJoinForCross() const;

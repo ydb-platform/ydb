@@ -61,6 +61,7 @@ SRCS(
     ut_shared_sausagecache_actor.cpp
     ut_slice.cpp
     ut_slice_loader.cpp
+    ut_tablet_memory.cpp
     ut_vacuum.cpp
     ut_versions.cpp
     ut_backup.cpp

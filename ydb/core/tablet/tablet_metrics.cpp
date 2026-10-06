@@ -23,6 +23,12 @@ void TResourceMetricsValues::Fill(NKikimrTabletBase::TMetrics& metrics) const {
     if (Memory.IsValueReady()) {
         metrics.SetMemory(Memory.GetValue());
     }
+    if (MemoryDemand.IsValueReady()) {
+        metrics.SetMemoryDemand(MemoryDemand.GetValue());
+    }
+    if (MemoryReclaimable.IsValueReady()) {
+        metrics.SetMemoryReclaimable(MemoryReclaimable.GetValue());
+    }
     if (Network.IsValueReady()) {
         metrics.SetNetwork(Network.GetValue());
     }
@@ -165,6 +171,27 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         src.Memory.Set(0);
         metrics.SetMemory(0);
         have = true;
+    }
+
+    // Untouched by a tablet that does not report its memory, so nothing of these reaches the wire
+    if (src.MemoryDemand.IsValueReady()) {
+        const ui64 demand = !src.MemoryDemand.IsValueObsolete(now) ? src.MemoryDemand.GetValue() : 0;
+        const ui32 level = demand / SignificantChangeMemory;
+        if (level != LevelMemoryDemand || force) {
+            metrics.SetMemoryDemand(demand);
+            LevelMemoryDemand = level;
+            have = true;
+        }
+    }
+
+    if (src.MemoryReclaimable.IsValueReady()) {
+        const ui64 reclaimable = !src.MemoryReclaimable.IsValueObsolete(now) ? src.MemoryReclaimable.GetValue() : 0;
+        const ui32 level = reclaimable / SignificantChangeMemory;
+        if (level != LevelMemoryReclaimable || force) {
+            metrics.SetMemoryReclaimable(reclaimable);
+            LevelMemoryReclaimable = level;
+            have = true;
+        }
     }
 
     if (src.Network.IsValueReady()) {

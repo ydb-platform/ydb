@@ -387,6 +387,7 @@ struct TEvPQ {
         ui32 Timeout;
         ui32 Size;
         bool ReadToBlobEnd;
+        bool LimitReadToRetention = false;
         ui32 MaxTimeLagMs;
         ui64 ReadTimestampMs;
         TString ClientDC;
@@ -394,9 +395,6 @@ struct TEvPQ {
         TActorId PipeClient;
         ui64 LastOffset;
         TActorId ReplyTo;
-        // Client CmdRead and ReadTimestampForOffset, while EnableTopicReadPriorRetention is off.
-        // Compaction leaves this false and is not cut by retention.
-        bool LimitReadToRetention = false;
 
         bool IsInternal() {
             return !!ReplyTo;

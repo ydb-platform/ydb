@@ -630,23 +630,16 @@ Y_UNIT_TEST(ReportsEveryIndependentError) {
 }
 
 Y_UNIT_TEST(FailFastStopsAtFirstError) {
+    // Metadata of later objects is read before any data file. Fail-fast still
+    // skips data bytes that follow the first error.
     class TGuard : public TMemoryStorage {
     public:
-        bool Armed = false;
-
-        TString Read(const TString& key) const override {
-            if (Armed && key.StartsWith("b/")) {
-                ythrow yexception() << "read past the first error: " << key;
-            }
-            return TMemoryStorage::Read(key);
-        }
-
         void ReadChunks(
             const TString& key,
             const std::function<void()>& beginAttempt,
             const std::function<void(TStringBuf)>& onChunk) const override
         {
-            if (Armed && key.StartsWith("b/")) {
+            if (key.StartsWith("b/")) {
                 ythrow yexception() << "read past the first error: " << key;
             }
             TMemoryStorage::ReadChunks(key, beginAttempt, onChunk);
@@ -658,7 +651,6 @@ Y_UNIT_TEST(FailFastStopsAtFirstError) {
     AddTable(tables, "b", 1, "b\n", true);
     tables.Files["a/data_00.csv"] = "changed-a\n";
     tables.Files["b/data_00.csv"] = "changed-b\n";
-    tables.Armed = true;
     const TValidationReport firstTable = RunFast(tables, "");
     UNIT_ASSERT_VALUES_EQUAL(firstTable.Issues.size(), 1);
     UNIT_ASSERT(HasIssue(firstTable, "a/data_00.csv", "checksum mismatch"));
@@ -1212,9 +1204,14 @@ Y_UNIT_TEST(ProgressFollowsVerbosity) {
     const size_t findObjects = LineIndex(phases, "phase: find schema objects in t");
     const size_t checkTable = LineIndex(phases, "phase: check t");
     const size_t listObjects = LineIndex(phases, "phase: list schema objects in t");
+    const size_t dataPhase = LineIndex(phases, "phase: check 1 data file");
+    const size_t dataStarted = LineIndex(phases, "progress: checked 0 of 1 data file, 1 remaining, 0 bytes read");
+    const size_t dataDone = LineIndex(phases, "progress: checked 1 of 1 data file, 0 remaining, 4 bytes read");
     UNIT_ASSERT(findObjects < checkTable);
     UNIT_ASSERT(checkTable < listObjects);
-    UNIT_ASSERT(listObjects < phases.size());
+    UNIT_ASSERT(listObjects < dataPhase);
+    UNIT_ASSERT(dataPhase < dataStarted);
+    UNIT_ASSERT(dataStarted < dataDone);
     UNIT_ASSERT(!ContainsLine(phases, "phase: exported schema objects"));
     UNIT_ASSERT(!ContainsLine(phases, "object:"));
     UNIT_ASSERT(!ContainsLine(phases, "file:"));
@@ -1223,10 +1220,13 @@ Y_UNIT_TEST(ProgressFollowsVerbosity) {
 
     const TVector<TString> objects = ProgressOf(storage, "t", 1);
     const size_t metadata = LineIndex(objects, "object: t: checking metadata");
+    const size_t objectDataPhase = LineIndex(objects, "phase: check 1 data file");
     const size_t data = LineIndex(objects, "object: t: checking data");
     UNIT_ASSERT(LineIndex(objects, "phase: check t") < metadata);
-    UNIT_ASSERT(metadata < data);
-    UNIT_ASSERT(data < objects.size());
+    UNIT_ASSERT(metadata < objectDataPhase);
+    UNIT_ASSERT(objectDataPhase < LineIndex(objects, "progress: checked 0 of 1 data file, 1 remaining, 0 bytes read"));
+    UNIT_ASSERT(LineIndex(objects, "progress: checked 0 of 1 data file, 1 remaining, 0 bytes read") < data);
+    UNIT_ASSERT(data < LineIndex(objects, "progress: checked 1 of 1 data file, 0 remaining, 4 bytes read"));
     UNIT_ASSERT(!ContainsLine(objects, "file:"));
     UNIT_ASSERT(!ContainsLine(objects, "trace:"));
 
@@ -1244,6 +1244,8 @@ Y_UNIT_TEST(ProgressFollowsVerbosity) {
     const TVector<TString> schemeOnly = ProgressOf(storage, "t", 2, true);
     UNIT_ASSERT(ContainsLine(schemeOnly, "phase: scheme only; data file bytes are not read"));
     UNIT_ASSERT(ContainsLine(schemeOnly, "object: t: checking data"));
+    UNIT_ASSERT(!ContainsLine(schemeOnly, "phase: check 1 data file"));
+    UNIT_ASSERT(!ContainsLine(schemeOnly, "progress:"));
     UNIT_ASSERT_EQUAL(LineIndex(schemeOnly, "file: read t/data_00.csv"), schemeOnly.size());
     UNIT_ASSERT_LT(LineIndex(schemeOnly, "file: read t/data_00.csv.sha256"), schemeOnly.size());
 
@@ -1261,23 +1263,30 @@ Y_UNIT_TEST(ProgressFollowsVerbosity) {
     const size_t mapping = LineIndex(fullPhases, "phase: check schema mapping");
     const size_t schemaObjects = LineIndex(fullPhases, "phase: check 2 schema objects");
     const size_t unmapped = LineIndex(fullPhases, "phase: check unmapped schema files");
+    const size_t fullData = LineIndex(fullPhases, "phase: check 2 data files");
     UNIT_ASSERT(detected < fullBackup);
     UNIT_ASSERT(fullBackup < backupMeta);
     UNIT_ASSERT(backupMeta < mapping);
     UNIT_ASSERT(mapping < schemaObjects);
     UNIT_ASSERT(schemaObjects < unmapped);
-    UNIT_ASSERT(unmapped < fullPhases.size());
+    UNIT_ASSERT(unmapped < fullData);
+    UNIT_ASSERT(fullData < LineIndex(fullPhases, "progress: checked 0 of 2 data files, 2 remaining, 0 bytes read"));
+    UNIT_ASSERT(LineIndex(fullPhases, "progress: checked 0 of 2 data files, 2 remaining, 0 bytes read")
+        < LineIndex(fullPhases, "progress: checked 2 of 2 data files, 0 remaining, 4 bytes read"));
 
     const TVector<TString> fullObjects = ProgressOf(full, "", 1);
     const size_t t1Meta = LineIndex(fullObjects, "object: t1: checking metadata");
-    const size_t t1Data = LineIndex(fullObjects, "object: t1: checking data");
     const size_t t2Meta = LineIndex(fullObjects, "object: t2: checking metadata");
+    const size_t t1Data = LineIndex(fullObjects, "object: t1: checking data");
+    const size_t t2Data = LineIndex(fullObjects, "object: t2: checking data");
     UNIT_ASSERT(LineIndex(fullObjects, "phase: check t1") < t1Meta);
-    UNIT_ASSERT(t1Meta < t1Data);
-    UNIT_ASSERT(t1Data < LineIndex(fullObjects, "phase: check t2"));
+    UNIT_ASSERT(t1Meta < LineIndex(fullObjects, "phase: check t2"));
     UNIT_ASSERT(LineIndex(fullObjects, "phase: check t2") < t2Meta);
-    UNIT_ASSERT(t1Data < t2Meta);
     UNIT_ASSERT(t2Meta < LineIndex(fullObjects, "phase: check unmapped schema files"));
+    UNIT_ASSERT(LineIndex(fullObjects, "phase: check unmapped schema files") < LineIndex(fullObjects, "phase: check 2 data files"));
+    UNIT_ASSERT(LineIndex(fullObjects, "phase: check 2 data files") < t1Data);
+    UNIT_ASSERT(t1Data < t2Data);
+    UNIT_ASSERT(t2Data < LineIndex(fullObjects, "progress: checked 2 of 2 data files, 0 remaining, 4 bytes read"));
 
     TMemoryStorage item;
     AddTable(item, "t1", 1, "a\n", true);
@@ -1290,9 +1299,11 @@ Y_UNIT_TEST(ProgressFollowsVerbosity) {
     const size_t itemT2 = LineIndex(itemPhases, "phase: check t2");
     UNIT_ASSERT(itemFind < itemList);
     UNIT_ASSERT(itemList < itemCount);
+    const size_t itemData = LineIndex(itemPhases, "phase: check 2 data files");
     UNIT_ASSERT(itemCount < itemT1);
     UNIT_ASSERT(itemT1 < itemT2);
-    UNIT_ASSERT(itemT2 < itemPhases.size());
+    UNIT_ASSERT(itemT2 < itemData);
+    UNIT_ASSERT(ContainsLine(itemPhases, "progress: checked 2 of 2 data files, 0 remaining, 4 bytes read"));
 
     TMemoryStorage damaged;
     damaged.Put("SchemaMapping/mapping.json", "{}");

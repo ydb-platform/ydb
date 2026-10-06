@@ -91,14 +91,14 @@ std::pair<TStringBuf, TStringBuf> TWindowSortedColumnPusher::GetRangeSortedColum
             getSortedColumnName(GetSortedBoundNodeKeyForDedup(rangeFrame.GetLast()))};
 }
 
-TVector<TStringBuf> TWindowSortedColumnPusher::GetAllSortedColumnNames() const {
-    TVector<TStringBuf> sortedColumns;
+TVector<TString> TWindowSortedColumnPusher::GetAllSortedColumnNames() const {
+    TVector<TString> sortedColumns;
     if (!ShouldAddSortedColumn()) {
         YQL_ENSURE(MappedSortedColumnsToNames_.empty(), "No sort column type is provided, but extrasorted columns are provided");
         return sortedColumns;
     }
     sortedColumns.reserve(MappedSortedColumnsToNames_.size() + 1);
-    sortedColumns.push_back(SortedColumnMemberName);
+    sortedColumns.emplace_back(SortedColumnMemberName);
 
     std::transform(MappedSortedColumnsToNames_.begin(), MappedSortedColumnsToNames_.end(), std::back_inserter(sortedColumns), [](const auto& item) {
         const auto& [keyNode, transformAndColumnName] = item;

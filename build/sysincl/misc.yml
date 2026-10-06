@@ -72,10 +72,6 @@
   includes:
     - error.h:       contrib/libs/cppkafka/include/cppkafka/error.h
 
-- source_filter: "^contrib/libs/llvm"
-  includes:
-    - plugin-api.h # GNU linker plugin API.
-
 - source_filter: "^contrib/libs/zbar"
   includes:
     - error.h:       contrib/libs/zbar/zbar/error.h

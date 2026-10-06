@@ -242,21 +242,6 @@ protected:
     template <typename T>
     std::tuple<bool, T, TString> GetIndexSettingValue(const TRule_index_setting_value& node);
 
-    TIdentifier GetTopicConsumerId(const TRule_topic_consumer_ref& node);
-    bool CreateConsumerSettings(const TRule_topic_consumer_settings& settingsNode, TTopicConsumerSettings& settings);
-    bool CreateTopicSettings(const TRule_topic_settings& node, TTopicSettings& params);
-    bool CreateTopicConsumer(const TRule_topic_create_consumer_entry& node,
-                             TVector<TTopicConsumerDescription>& consumers);
-    bool CreateTopicEntry(const TRule_create_topic_entry& node, TCreateTopicParameters& params);
-
-    bool AlterTopicConsumer(const TRule_alter_topic_alter_consumer& node,
-                            THashMap<TString, TTopicConsumerDescription>& alterConsumers);
-
-    bool AlterTopicConsumerEntry(const TRule_alter_topic_alter_consumer_entry& node,
-                                 TTopicConsumerDescription& alterConsumer);
-
-    bool AlterTopicAction(const TRule_alter_topic_action& node, TAlterTopicParameters& params);
-
     TNodePtr TypeSimple(const TRule_type_name_simple& node, bool onlyDataAllowed);
     TNodePtr TypeDecimal(const TRule_type_name_decimal& node);
     TNodePtr AddOptionals(const TNodePtr& node, size_t optionalCount);
@@ -277,7 +262,6 @@ protected:
     TMaybe<TTableHints> TableHintsImpl(const TRule_table_hints& node, const TString& provider, const TString& keyFunc = "");
     bool TableHintImpl(const TRule_table_hint& rule, TTableHints& hints, const TString& provider, const TString& keyFunc = "");
     bool SimpleTableRefImpl(const TRule_simple_table_ref& node, TTableRef& result);
-    bool TopicRefImpl(const TRule_topic_ref& node, TTopicRef& result);
     TWindowSpecificationPtr WindowSpecification(const TRule_window_specification_details& rule);
     bool OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy);
     bool SortSpecificationList(const TRule_sort_specification_list& node, TVector<TSortSpecificationPtr>& sortSpecs);
@@ -357,6 +341,7 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);
 bool StoreString(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
 bool StoreInt(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
 bool StoreString(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {});
+bool StoreStringOrInt(const TNodePtr& from, NYql::TResetableSetting<TNodePtr, void>& to);
 
 template <typename TChar>
 struct TPatternComponent {

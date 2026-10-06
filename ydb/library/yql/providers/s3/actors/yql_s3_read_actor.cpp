@@ -190,6 +190,8 @@ struct TReadSpec {
 };
 
 struct TRetryStuff {
+    // After registration, the reader coroutine owns this state. Retries must execute in its
+    // mailbox too: AsyncDecoding gives the parent and the coroutine different mailboxes.
     using TPtr = std::shared_ptr<TRetryStuff>;
 
     TRetryStuff(
@@ -1003,6 +1005,7 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
+        hFunc(TEvS3Provider::TEvRetryEventFunc, HandleRetry);
         hFunc(TEvS3Provider::TEvDownloadStart, Handle);
         hFunc(TEvS3Provider::TEvDownloadData, Handle);
         hFunc(TEvS3Provider::TEvDownloadFinish, Handle);
@@ -1068,6 +1071,10 @@ public:
         return {};
     }
 
+    void HandleRetry(TEvS3Provider::TEvRetryEventFunc::TPtr& retry) {
+        retry->Get()->Functor();
+    }
+
     void Handle(TEvS3Provider::TEvDownloadStart::TPtr& ev) {
         HttpResponseCode = ev->Get()->HttpResponseCode;
         CurlResponseCode = ev->Get()->CurlResponseCode;
@@ -1077,6 +1084,7 @@ public:
         ErrorText.clear();
         ServerReturnedError = false;
         Issues.Clear();
+        FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
         LOG_CORO_D("TEvDownloadStart, Http code: " << HttpResponseCode);
     }
 
@@ -1162,8 +1170,9 @@ public:
             if (Work) {
                 retryContext = MakeIntrusive<TDefaultHttpRequestContext>(Work->GetWorkScope());
             }
-            // Through the activation context, like TActorCoroImpl::Schedule: the coroutine runs on the actor thread
-            TActivationContext::Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(retryContext)))));
+            // Serialize installing the new cancel hook with cancellation in the reader's mailbox.
+            // Through the activation context, like TActorCoroImpl::Schedule: the coroutine runs on the actor thread.
+            TActivationContext::Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(SelfActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(retryContext)))));
             if (!InputBuffer.empty()) {
                 RetryStuff->Offset -= InputBuffer.size();
                 RetryStuff->SizeLimit += InputBuffer.size();
@@ -1911,7 +1920,6 @@ private:
     }
 
     STRICT_STFUNC_EXC(StateFunc,
-        hFunc(TEvS3Provider::TEvRetryEventFunc, HandleRetry);
         hFunc(TEvS3Provider::TEvNextBlock, HandleNextBlock);
         hFunc(TEvS3Provider::TEvNextRecordBatch, HandleNextRecordBatch);
         hFunc(TEvS3Provider::TEvFileFinished, HandleFileFinished);
@@ -1976,10 +1984,6 @@ private:
         LOG_W("TS3StreamReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
         issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
         OnFatalError(std::move(issues), result->Get()->Record.GetFatalCode());
-    }
-
-    void HandleRetry(TEvS3Provider::TEvRetryEventFunc::TPtr& retry) {
-        return retry->Get()->Functor();
     }
 
     void HandleNextBlock(TEvS3Provider::TEvNextBlock::TPtr& next) {

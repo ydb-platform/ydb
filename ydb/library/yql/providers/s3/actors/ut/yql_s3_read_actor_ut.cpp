@@ -39,6 +39,7 @@ public:
     using TRangeScript = std::function<TResult(const TString& url, size_t offset, size_t size)>;
 
     TStreamScript StreamScript;
+    std::function<TCancelHook(const TString& url, int attempt)> StreamCancelHook;
     // Called with the callback; the script decides whether (and how) to answer. Default: serve Body.
     std::function<void(const TString& url, size_t offset, size_t size, TOnResult& callback)> RangeScript;
     TString Body;
@@ -77,6 +78,9 @@ public:
             attempt = ++StreamCallsByUrl[url];
         }
         StreamScript(url, attempt, onStart, onData, onFinish);
+        if (StreamCancelHook) {
+            return StreamCancelHook(url, attempt);
+        }
         return [](TIssue) {};
     }
 
@@ -199,7 +203,6 @@ struct TSimulatedCA {
     using TError = TSourceError;
 
     const bool RealThreads;
-    TTestActorRuntimeBase Runtime;
     const TActorId FakeActorId{0, "FakeActor"};
     std::shared_ptr<TAsyncInputPromises> InputPromises = std::make_shared<TAsyncInputPromises>();
     std::shared_ptr<TAsyncOutputPromises> OutputPromises = std::make_shared<TAsyncOutputPromises>();
@@ -210,6 +213,8 @@ struct TSimulatedCA {
     bool Terminated = false;
     ui64 Rows = 0; // items returned by the source: ClickHouse blocks or arrow batches (the tests use one row per block/batch)
     bool Finished = false;
+    // Stop worker threads before destroying the state referenced by actors and observers.
+    TTestActorRuntimeBase Runtime;
 
     explicit TSimulatedCA(bool realThreads = false)
         : RealThreads(realThreads)
@@ -250,9 +255,13 @@ struct TSimulatedCA {
         std::exception_ptr exception = nullptr;
         auto promise = NThreading::NewPromise();
         Runtime.Send(new IEventHandle(FakeActorId, Runtime.AllocateEdgeActor(), new TEvPrivate::TEvExecute(promise, callback, exception)));
-        TDispatchOptions options;
-        options.CustomFinalCondition = [&] { return promise.HasValue(); };
-        Runtime.DispatchEvents(options, TDuration::Seconds(10));
+        if (RealThreads) {
+            promise.GetFuture().Wait(TDuration::Seconds(10));
+        } else {
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&] { return promise.HasValue(); };
+            Runtime.DispatchEvents(options, TDuration::Seconds(10));
+        }
         UNIT_ASSERT_C(promise.HasValue(), "fake compute actor did not run the callback");
         if (exception) {
             std::rethrow_exception(exception);
@@ -278,13 +287,14 @@ struct TSimulatedCA {
     }
 
     void CreateReader(std::shared_ptr<TFakeS3Gateway> gateway, NS3::TSource source, ui32 files, ui64 fileSize,
-                      IHTTPGateway::TRetryPolicy::TPtr retryPolicy = GetHTTPDefaultRetryPolicy()) {
+                      IHTTPGateway::TRetryPolicy::TPtr retryPolicy = GetHTTPDefaultRetryPolicy(),
+                      TS3ReadActorFactoryConfig config = {}) {
         Execute([&](TFakeActor& actor) {
             auto [input, inputActor] = CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory,
                 std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {}),
                 gateway, std::move(source), 0, TCollectStatsLevel::None, TTxId{}, THashMap<TString, TString>{}, THashMap<TString, TString>{},
                 TVector<TString>{EncodeRanges(files, fileSize)}, EventsCollectorId, CreateStructuredTokenCredentialsFactory(),
-                retryPolicy, TS3ReadActorFactoryConfig{}, nullptr, nullptr,
+                retryPolicy, config, nullptr, nullptr,
                 std::make_shared<TGuaranteeQuotaManager>(1_GB, 1_GB), false, nullptr);
             actor.InitAsyncInput(input, inputActor);
         });
@@ -458,41 +468,219 @@ Y_UNIT_TEST_SUITE(TS3ReadCoro) {
         }
     }
 
+    // A final error without an S3 body has the same status with and without a preceding retry.
+    Y_UNIT_TEST(RetryDoesNotInheritFatalStatus) {
+        for (bool asyncDecoding : {false, true}) {
+            for (bool curlFailure : {false, true}) {
+                for (bool failFirst : {false, true}) {
+                    TSimulatedCA ca;
+                    auto gateway = std::make_shared<TFakeS3Gateway>();
+                    gateway->StreamScript = [=, gateway = gateway.get()](const TString&, int attempt, auto& onStart, auto& onData, auto& onFinish) {
+                        if (failFirst && attempt == 1) {
+                            onStart(CURLE_OK, 503);
+                            onData(gateway->Content("<html>Service temporarily unavailable</html>"));
+                            onFinish(CURLE_OK, TIssues{});
+                        } else if (curlFailure) {
+                            onStart(CURLE_COULDNT_CONNECT, 0);
+                            onFinish(CURLE_COULDNT_CONNECT, TIssues{TIssue("Cannot connect to object storage")});
+                        } else {
+                            onStart(CURLE_OK, 404);
+                            onFinish(CURLE_OK, TIssues{});
+                        }
+                    };
+                    auto source = CsvSource();
+                    source.SetAsyncDecoding(asyncDecoding);
+                    auto retryPolicy = IHTTPGateway::TRetryPolicy::GetFixedIntervalPolicy(
+                        [](CURLcode, long code) { return code == 503 ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry; },
+                        TDuration::MilliSeconds(10), TDuration::MilliSeconds(10));
+                    ca.CreateReader(gateway, std::move(source), 1, 100, retryPolicy);
+                    ca.ReadToEnd(TDuration::MilliSeconds(100));
+                    UNIT_ASSERT_VALUES_EQUAL(gateway->StreamCalls.load(), failFirst ? 2 : 1);
+                    const auto fatal = ca.FatalErrors();
+                    UNIT_ASSERT_VALUES_EQUAL_C(fatal.size(), 1, ca.Describe());
+                    UNIT_ASSERT_C(fatal.front().Code == NDqProto::StatusIds::EXTERNAL_ERROR, ca.Describe());
+                    UNIT_ASSERT_STRING_CONTAINS(fatal.front().Issues.ToOneLineString(), curlFailure ? "Cannot connect" : "404");
+                }
+            }
+        }
+    }
+
+    // Every attempt must execute in the actor that owns the stream and its cancellation hook,
+    // even when decoding has its own mailbox.
+    Y_UNIT_TEST(RetryRunsInReaderActor) {
+        for (bool asyncDecoding : {false, true}) {
+            std::vector<TActorId> attempts;
+            TSimulatedCA ca;
+            auto gateway = std::make_shared<TFakeS3Gateway>();
+            const TString data = "a\nx\n";
+            gateway->StreamScript = [&, gateway = gateway.get()](const TString&, int attempt, auto& onStart, auto& onData, auto& onFinish) {
+                attempts.push_back(TActivationContext::AsActorContext().SelfID);
+                if (attempt == 1) {
+                    onStart(CURLE_OK, 503);
+                    onData(gateway->Content(S3Error("SlowDown", "Retry later")));
+                } else {
+                    onStart(CURLE_OK, 206);
+                    onData(gateway->Content(data));
+                }
+                onFinish(CURLE_OK, TIssues{});
+            };
+            auto source = CsvSource();
+            source.SetAsyncDecoding(asyncDecoding);
+            ca.CreateReader(gateway, std::move(source), 1, data.size());
+            ca.ReadToEnd(TDuration::MilliSeconds(100));
+            UNIT_ASSERT_C(ca.Finished && ca.Rows == 1 && ca.FatalErrors().empty(), ca.Describe());
+            UNIT_ASSERT_VALUES_EQUAL(attempts.size(), 2);
+            UNIT_ASSERT_C(attempts[0] == attempts[1], "asyncDecoding=" << asyncDecoding << ": retry ran in a different actor");
+        }
+    }
+
+    // A reader waiting for downstream capacity must still process its retry timer.
+    Y_UNIT_TEST(RetryWhileDownstreamPaused) {
+        for (bool asyncDecoding : {false, true}) {
+            auto gateway = std::make_shared<TFakeS3Gateway>();
+            // Leave enough buffered data for the parser to publish a block before it needs EOF.
+            const TString firstPart = TStringBuilder() << "a\n" << TString(128_KB, 'x') << "\ny\n";
+            gateway->StreamScript = [gateway = gateway.get(), firstPart](const TString&, int attempt, auto& onStart, auto& onData, auto& onFinish) {
+                onStart(CURLE_OK, 206);
+                onData(gateway->Content(attempt == 1 ? firstPart : "z\n"));
+                onFinish(attempt == 1 ? CURLE_RECV_ERROR : CURLE_OK,
+                    attempt == 1 ? TIssues{TIssue("Connection interrupted")} : TIssues{});
+            };
+            bool blockArrived = false;
+            TAutoPtr<IEventHandle> retry;
+            TSimulatedCA ca;
+            ca.Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvS3Provider::TEvNextBlock::EventType) {
+                    blockArrived = true;
+                }
+                if (ev->GetTypeRewrite() == TEvS3Provider::TEvRetryEventFunc::EventType) {
+                    retry = ev.Release();
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+            auto source = CsvSource();
+            source.SetAsyncDecoding(asyncDecoding);
+            TS3ReadActorFactoryConfig config;
+            config.RowsInBatch = 1;
+            config.DataInflight = 1; // the first unread row exhausts downstream capacity
+            auto retryPolicy = IHTTPGateway::TRetryPolicy::GetFixedIntervalPolicy(
+                [](CURLcode, long) { return ERetryErrorClass::ShortRetry; }, TDuration::Seconds(1), TDuration::Seconds(1));
+            ca.CreateReader(gateway, std::move(source), 1, firstPart.size() + 2, retryPolicy, config);
+            ca.Settle(TDuration::MilliSeconds(10));
+            UNIT_ASSERT_C(blockArrived, "parser did not publish a block before retry: " << ca.Describe());
+            UNIT_ASSERT(retry);
+            UNIT_ASSERT_VALUES_EQUAL(gateway->StreamCalls.load(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ca.Rows, 0); // no read/TEvContinue yet
+            ca.Runtime.SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
+            ca.Runtime.Send(retry.Release());
+            ca.Settle(TDuration::Seconds(2));
+            UNIT_ASSERT_VALUES_EQUAL_C(gateway->StreamCalls.load(), 2, "paused reader did not retry");
+            ca.ReadToEnd();
+            UNIT_ASSERT_C(ca.Finished && ca.Rows == 3 && ca.FatalErrors().empty(), ca.Describe());
+        }
+    }
+
+    // Queue cancellation while the gateway is still returning a retry's hook. The stream owner
+    // must process it after installing that hook, not cancel the previous attempt on another thread.
+    Y_UNIT_TEST(AsyncRetryCancellationDuringHookPublication) {
+        auto entered = NThreading::NewPromise<TActorId>();
+        auto owner = NThreading::NewPromise<TActorId>();
+        auto release = NThreading::NewPromise();
+        auto cancelled = NThreading::NewPromise();
+        auto previousCancelled = NThreading::NewPromise();
+        std::atomic<int> firstCancelled = 0;
+        std::atomic<int> retryCancelled = 0;
+        auto gateway = std::make_shared<TFakeS3Gateway>();
+        gateway->StreamScript = [&, gateway = gateway.get()](const TString&, int attempt, auto& onStart, auto& onData, auto& onFinish) {
+            if (attempt == 1) {
+                owner.SetValue(TActivationContext::AsActorContext().SelfID);
+                onStart(CURLE_OK, 503);
+                onData(gateway->Content(S3Error("SlowDown", "Retry later")));
+                onFinish(CURLE_OK, TIssues{});
+            } else {
+                onStart(CURLE_OK, 206); // leave the stream open until cancelled
+            }
+        };
+        gateway->StreamCancelHook = [&](const TString&, int attempt) -> IHTTPGateway::TCancelHook {
+            if (attempt == 1) {
+                return [&](TIssue) {
+                    ++firstCancelled;
+                    previousCancelled.TrySetValue();
+                    cancelled.TrySetValue();
+                };
+            }
+            entered.SetValue(TActivationContext::AsActorContext().SelfID);
+            UNIT_ASSERT_C(release.GetFuture().Wait(TDuration::Seconds(10)), "retry hook was not released");
+            // If the retry escaped to another actor, that mailbox can run cancellation while
+            // Download is blocked. Force this reachable interleaving; never wait on our own mailbox.
+            if (TActivationContext::AsActorContext().SelfID != owner.GetFuture().GetValue()) {
+                UNIT_ASSERT_C(previousCancelled.GetFuture().Wait(TDuration::Seconds(10)), "stream owner did not process cancellation");
+            }
+            return [&](TIssue) {
+                ++retryCancelled;
+                cancelled.TrySetValue();
+            };
+        };
+        // Construct last so that the runtime stops before destroying anything captured by the gateway.
+        TSimulatedCA ca(/* realThreads */ true);
+        auto source = CsvSource();
+        source.SetAsyncDecoding(true);
+        auto retryPolicy = IHTTPGateway::TRetryPolicy::GetFixedIntervalPolicy(
+            [](CURLcode, long) { return ERetryErrorClass::ShortRetry; }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(10));
+        ca.CreateReader(gateway, std::move(source), 1, 100, retryPolicy);
+        const bool retryEntered = entered.GetFuture().Wait(TDuration::Seconds(10));
+        if (retryEntered) {
+            ca.Runtime.Send(new IEventHandle(owner.GetFuture().GetValue(), {}, new TEvents::TEvPoison()));
+        }
+        release.TrySetValue(); // also unblock worker teardown if the precondition failed
+        UNIT_ASSERT_C(retryEntered, "retry did not reach hook publication");
+        UNIT_ASSERT_C(cancelled.GetFuture().Wait(TDuration::Seconds(10)), "stream was not cancelled");
+        UNIT_ASSERT_VALUES_EQUAL(firstCancelled.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(retryCancelled.load(), 1);
+        UNIT_ASSERT_C(owner.GetFuture().GetValue() == entered.GetFuture().GetValue(), "retry escaped the stream owner's mailbox");
+        UNIT_ASSERT_VALUES_EQUAL(gateway->StreamCalls.load(), 2);
+        ca.Terminate();
+    }
+
     // A retry scheduled before the coroutine was cancelled (LIMIT reached)
     // must not start a new download.
     Y_UNIT_TEST(RetryStopsOnCancel) {
-        TSimulatedCA ca;
-        auto gateway = std::make_shared<TFakeS3Gateway>();
-        // A limit above 1000 rows keeps parallel downloads on (a smaller one forces ParallelDownloadCount = 1).
-        constexpr ui64 rowsLimit = 1001;
-        TStringBuilder data;
-        data << "a\n";
-        for (ui64 i = 0; i < rowsLimit; ++i) {
-            data << "x\n";
-        }
-        gateway->StreamScript = [&, gateway = gateway.get()](const TString& url, int, auto& onStart, auto& onData, auto& onFinish) {
-            if (url.EndsWith("file0")) {
-                onStart(CURLE_OK, 206);
-                onData(gateway->Content(data));
-            } else {
-                onStart(CURLE_OK, 503);
-                onData(gateway->Content(S3Error("SlowDown", "Please reduce your request rate.")));
+        for (bool asyncDecoding : {false, true}) {
+            TSimulatedCA ca;
+            auto gateway = std::make_shared<TFakeS3Gateway>();
+            // A limit above 1000 rows keeps parallel downloads on (a smaller one forces ParallelDownloadCount = 1).
+            constexpr ui64 rowsLimit = 1001;
+            TStringBuilder data;
+            data << "a\n";
+            for (ui64 i = 0; i < rowsLimit; ++i) {
+                data << "x\n";
             }
-            onFinish(CURLE_OK, TIssues{});
-        };
-        auto source = CsvSource();
-        source.SetRowsLimitHint(rowsLimit);
-        source.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", "2"});
-        source.MutableSettings()->insert({"fileQueueBatchSizeLimit", "1000000"});
-        // A backoff long enough for file0 to reach the limit (and cancel file1) before the retry fires.
-        auto retryPolicy = IHTTPGateway::TRetryPolicy::GetFixedIntervalPolicy(
-            [](CURLcode, long) { return ERetryErrorClass::LongRetry; }, TDuration::Seconds(1), TDuration::Seconds(1));
-        ca.CreateReader(gateway, std::move(source), 2, data.size(), retryPolicy);
-        ca.ReadToEnd(TDuration::MilliSeconds(50));
-        UNIT_ASSERT_C(ca.Finished && ca.FatalErrors().empty(), ca.Describe());
-        ca.Settle(TDuration::Seconds(2)); // the backoff of the failed download has expired
-        UNIT_ASSERT_VALUES_EQUAL(gateway->StreamCallsFor("http://fake/file0"), 1);
-        UNIT_ASSERT_VALUES_EQUAL_C(gateway->StreamCallsFor("http://fake/file1"), 1, "retry started after the coroutine had been cancelled");
+            gateway->StreamScript = [&, gateway = gateway.get()](const TString& url, int, auto& onStart, auto& onData, auto& onFinish) {
+                if (url.EndsWith("file0")) {
+                    onStart(CURLE_OK, 206);
+                    onData(gateway->Content(data));
+                } else {
+                    onStart(CURLE_OK, 503);
+                    onData(gateway->Content(S3Error("SlowDown", "Please reduce your request rate.")));
+                }
+                onFinish(CURLE_OK, TIssues{});
+            };
+            auto source = CsvSource();
+            source.SetAsyncDecoding(asyncDecoding);
+            source.SetRowsLimitHint(rowsLimit);
+            source.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", "2"});
+            source.MutableSettings()->insert({"fileQueueBatchSizeLimit", "1000000"});
+            // A backoff long enough for file0 to reach the limit (and cancel file1) before the retry fires.
+            auto retryPolicy = IHTTPGateway::TRetryPolicy::GetFixedIntervalPolicy(
+                [](CURLcode, long) { return ERetryErrorClass::LongRetry; }, TDuration::Seconds(1), TDuration::Seconds(1));
+            ca.CreateReader(gateway, std::move(source), 2, data.size(), retryPolicy);
+            ca.ReadToEnd(TDuration::MilliSeconds(50));
+            UNIT_ASSERT_C(ca.Finished && ca.FatalErrors().empty(), ca.Describe());
+            ca.Settle(TDuration::Seconds(2)); // the backoff of the failed download has expired
+            UNIT_ASSERT_VALUES_EQUAL(gateway->StreamCallsFor("http://fake/file0"), 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(gateway->StreamCallsFor("http://fake/file1"), 1, "retry started after the coroutine had been cancelled");
+        }
     }
 
     // The async decompressor actor dies with its coroutine when parsing fails.

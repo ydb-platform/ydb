@@ -866,6 +866,28 @@ Y_UNIT_TEST(TypeCheckBasicOk) {
     UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
 }
 
+Y_UNIT_TEST(TypeCheckSeqModeEvaluateIf) {
+    TChecksRequest request;
+    request.Program = R"sql(
+        PRAGMA SeqMode;
+
+        EVALUATE IF TRUE DO BEGIN
+            SELECT
+                1
+            ;
+        END DO;
+    )sql";
+    request.ClusterMode = EClusterMode::Unknown;
+    request.Syntax = ESyntax::YQL;
+    request.Filters.ConstructInPlace();
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
+
+    const auto res = RunChecks(request);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "typecheck");
+    UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
+}
+
 Y_UNIT_TEST(TypeCheckBasicFail) {
     TChecksRequest request;
     request.Program = R"sql(

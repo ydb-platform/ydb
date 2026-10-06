@@ -10,11 +10,15 @@
 
 namespace NKikimr::NConsole {
 
+// CMS builds a validator's input only from the kinds listed here
+// (TModificationsValidator::BuildConfigs).
+// FeatureFlagsItem  makes a feature-flag-only update run this check.
 TBootstrapConfigValidator::TBootstrapConfigValidator()
     : IConfigValidator("bootstrap",
                        { (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem,
                          (ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem,
-                         (ui32)NKikimrConsole::TConfigItem::ResourceBrokerConfigItem, })
+                         (ui32)NKikimrConsole::TConfigItem::ResourceBrokerConfigItem,
+                         (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem, })
 {
 }
 

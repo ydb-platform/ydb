@@ -8,6 +8,8 @@ It is important to keep system clocks on the {{ ydb-short-name }} servers in syn
 
 {% endnote %}
 
+For clock skew on client application hosts and related authentication errors, see [{#T}](../../client-clock-skew.md).
+
 ## Symptoms and thresholds {#symptoms-thresholds}
 
 Typical symptoms of clock skew across nodes:

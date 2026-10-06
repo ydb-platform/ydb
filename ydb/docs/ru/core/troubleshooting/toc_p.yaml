@@ -9,6 +9,8 @@ items:
   include:
     mode: link
     path: spilling/toc_p.yaml
+- name: Расхождение времени между клиентскими хостами и кластером
+  href: client-clock-skew.md
 - name: Примеры диагностики
   items:
     - name: Перегруженный шард

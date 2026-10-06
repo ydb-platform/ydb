@@ -273,7 +273,8 @@ TCommandValidate::TCommandValidate()
     : TClientCommandTree("validate", {},
         "Check byte-level integrity of a full backup or exported schema objects without restoring them. "
         "A successful result does not prove that the backup can be imported. "
-        "Progress is written to stderr. -v, -vv, and -vvv add detail.")
+        "Progress is written to stderr: phase changes, and during data-file checks a checked/remaining line about every 30 seconds. "
+        "-v, -vv, and -vvv add detail.")
 {
     AddCommand(std::make_unique<TCommandValidateFromS3>());
     AddCommand(std::make_unique<TCommandValidateFromNfs>());
@@ -287,6 +288,7 @@ void TCommandValidate::Config(TConfig& config) {
 TCommandValidateBase::TCommandValidateBase(const TString& name, const TString& description)
     : TYdbCommand(name, {}, TStringBuilder() << description
         << " Progress is written to stderr: phase changes by default, "
+        "checked and remaining data files about every 30 seconds, "
         "each object's metadata and data checks with -v, "
         "and per-file traces with -vv and -vvv.")
 {

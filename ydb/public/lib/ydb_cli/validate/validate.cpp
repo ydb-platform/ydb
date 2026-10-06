@@ -25,6 +25,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <exception>
 #include <mutex>
 #include <thread>
@@ -228,13 +230,25 @@ TString FinishSha256(SHA256_CTX* ctx) {
 // SHA-256 of the stored object. Bytes are hashed as they arrive.
 // Compressed objects are decompressed in the same pass, because export checksums
 // are computed from uncompressed plaintext. Neither form is buffered whole.
-TString HashStoredFile(const IBackupStorage& storage, const TString& key, bool compressed) {
+// onStoredBytes receives the size of each stored chunk, including compressed bytes.
+TString HashStoredFile(
+    const IBackupStorage& storage,
+    const TString& key,
+    bool compressed,
+    const std::function<void(ui64)>& onStoredBytes)
+{
+    auto note = [&](TStringBuf chunk) {
+        if (chunk && onStoredBytes) {
+            onStoredBytes(chunk.size());
+        }
+    };
     SHA256_CTX ctx;
     if (!compressed) {
         storage.ReadChunks(
             key,
             [&] { SHA256_Init(&ctx); },
             [&](TStringBuf chunk) {
+                note(chunk);
                 if (chunk) {
                     SHA256_Update(&ctx, chunk.data(), chunk.size());
                 }
@@ -259,6 +273,7 @@ TString HashStoredFile(const IBackupStorage& storage, const TString& key, bool c
             lastRet = 1;
         },
         [&](TStringBuf chunk) {
+            note(chunk);
             if (!chunk) {
                 return;
             }
@@ -312,6 +327,10 @@ public:
         Write(0, TStringBuilder() << "phase: " << text);
     }
 
+    void Progress(const TString& text) const {
+        Write(0, TStringBuilder() << "progress: " << text);
+    }
+
     void Object(const TString& text) const {
         Write(1, TStringBuilder() << "object: " << text);
     }
@@ -339,6 +358,92 @@ private:
 };
 
 thread_local const TValidateLog* TlValidateLog = nullptr;
+
+// Heartbeat while data files are read. wait_for is woken when the stage ends,
+// so a short check does not block for the whole period.
+constexpr std::chrono::seconds DataProgressPeriod{30};
+
+TString DataFileCount(ui64 count) {
+    return TStringBuilder() << count << " data file" << (count == 1 ? "" : "s");
+}
+
+TString FormatDataProgress(ui64 checked, ui64 total, ui64 bytesRead) {
+    const ui64 remaining = checked < total ? total - checked : 0;
+    return TStringBuilder()
+        << "checked " << checked << " of " << DataFileCount(total)
+        << ", " << remaining << " remaining, "
+        << bytesRead << (bytesRead == 1 ? " byte read" : " bytes read");
+}
+
+class TDataProgressTicker {
+public:
+    TDataProgressTicker(
+        const TValidateLog& log,
+        const std::atomic<ui64>& checked,
+        const std::atomic<ui64>& bytesRead,
+        ui64 total)
+        : Log(log)
+        , Checked(checked)
+        , BytesRead(bytesRead)
+        , Total(total)
+    {
+    }
+
+    TDataProgressTicker(const TDataProgressTicker&) = delete;
+    TDataProgressTicker& operator=(const TDataProgressTicker&) = delete;
+
+    ~TDataProgressTicker() {
+        Stop();
+    }
+
+    void Start() {
+        Report();
+        Thread = std::thread([this] {
+            std::unique_lock<std::mutex> lock(Mu);
+            while (!Done) {
+                if (Cv.wait_for(lock, DataProgressPeriod, [this] { return Done; })) {
+                    return;
+                }
+                lock.unlock();
+                Report();
+                lock.lock();
+            }
+        });
+    }
+
+    void Finish() {
+        Stop();
+        Report();
+    }
+
+private:
+    void Stop() {
+        {
+            std::lock_guard<std::mutex> lock(Mu);
+            Done = true;
+        }
+        Cv.notify_all();
+        if (Thread.joinable()) {
+            Thread.join();
+        }
+    }
+
+    void Report() const {
+        Log.Progress(FormatDataProgress(
+            Checked.load(std::memory_order_relaxed),
+            Total,
+            BytesRead.load(std::memory_order_relaxed)));
+    }
+
+    const TValidateLog& Log;
+    const std::atomic<ui64>& Checked;
+    const std::atomic<ui64>& BytesRead;
+    const ui64 Total = 0;
+    std::mutex Mu;
+    std::condition_variable Cv;
+    bool Done = false;
+    std::thread Thread;
+};
 
 class TLogScope {
 public:
@@ -566,6 +671,17 @@ private:
     std::atomic<bool> SawEncryption{false};
     mutable std::mutex Mu;
 
+    // Data bytes are hashed after every object's metadata. Scheme-only checks
+    // never queue files: they only read checksum sidecars.
+    struct TPendingDataFile {
+        TString Dir;
+        TString StoredKey;
+        TString PlainKey;
+        bool Compressed = false;
+    };
+
+    TVector<TPendingDataFile> PendingDataFiles;
+
     void Error(const TString& path, const TString& message) {
         std::lock_guard<std::mutex> lock(Mu);
         Report.Issues.push_back({path, message});
@@ -581,6 +697,7 @@ private:
     }
 
     TValidationReport Finish() {
+        RunPendingDataChecks();
         if (Settings.EncryptionKey && !SawEncryption.load()) {
             Warning(RootLabel(),
                 "encryption key is unused; encrypted backup files are not validated by this command");
@@ -1151,7 +1268,11 @@ private:
             return;
         }
         if (partitions > 0) {
-            Log.Object(TStringBuilder() << ShownPath(dir) << ": checking data");
+            // Scheme-only reads checksum sidecars here. Full checks queue the files
+            // and hash them after every object's metadata, with a progress heartbeat.
+            if (Settings.SchemeOnly) {
+                Log.Object(TStringBuilder() << ShownPath(dir) << ": checking data");
+            }
             CheckDataFiles(dir, partitions, checksums, expectCompressed);
         }
         Checked(dir.empty() ? "scheme.pb" : dir);
@@ -1294,17 +1415,16 @@ private:
         if (!Settings.SchemeOnly && !verifyChecksums) {
             Error(dir, "data file checksums are absent; content integrity cannot be verified");
         }
-        ParallelFor(parts.size(), [&](size_t index) {
-            const TDataPart& part = parts[index];
-            if (part.Encrypted) {
+        if (Settings.SchemeOnly) {
+            if (!verifyChecksums) {
                 return;
             }
-            const TString plainKey = JoinKey(dir, part.PlainName);
-            if (Settings.SchemeOnly) {
-                if (!verifyChecksums) {
+            ParallelFor(parts.size(), [&](size_t index) {
+                const TDataPart& part = parts[index];
+                if (part.Encrypted) {
                     return;
                 }
-                const TString sidecar = plainKey + ".sha256";
+                const TString sidecar = JoinKey(dir, part.PlainName) + ".sha256";
                 if (!Exists(sidecar)) {
                     Error(sidecar, "checksum sidecar is missing");
                     return;
@@ -1317,28 +1437,80 @@ private:
                 } catch (const std::exception& ex) {
                     Error(sidecar, TStringBuilder() << "failed to read checksum: " << ex.what());
                 }
-                return;
+            });
+            return;
+        }
+        if (!verifyChecksums || Stopped()) {
+            return;
+        }
+        std::lock_guard<std::mutex> lock(Mu);
+        for (const auto& part : parts) {
+            if (part.Encrypted) {
+                continue;
             }
-            if (!verifyChecksums) {
-                return;
+            PendingDataFiles.push_back({
+                dir,
+                part.Key,
+                JoinKey(dir, part.PlainName),
+                part.Compressed,
+            });
+        }
+    }
+
+    // Metadata and file layout are already done. Read and hash every queued data file.
+    void RunPendingDataChecks() {
+        if (Stopped()) {
+            return;
+        }
+        TVector<TPendingDataFile> files;
+        {
+            std::lock_guard<std::mutex> lock(Mu);
+            files.swap(PendingDataFiles);
+        }
+        if (files.empty()) {
+            return;
+        }
+        Log.Phase(TStringBuilder() << "check " << DataFileCount(files.size()));
+        std::atomic<ui64> checked{0};
+        std::atomic<ui64> bytesRead{0};
+        std::mutex announceMu;
+        THashSet<TString> announced;
+        TDataProgressTicker ticker(Log, checked, bytesRead, files.size());
+        if (Settings.Progress) {
+            ticker.Start();
+        }
+        ParallelFor(files.size(), [&](size_t index) {
+            const TPendingDataFile& file = files[index];
+            bool firstForDir = false;
+            {
+                std::lock_guard<std::mutex> lock(announceMu);
+                firstForDir = announced.insert(file.Dir).second;
+            }
+            if (firstForDir) {
+                Log.Object(TStringBuilder() << ShownPath(file.Dir) << ": checking data");
             }
             try {
-                const TString digest = HashStoredFile(Storage, part.Key, part.Compressed);
-                const TString sidecar = plainKey + ".sha256";
+                const TString digest = HashStoredFile(Storage, file.StoredKey, file.Compressed, [&](ui64 n) {
+                    bytesRead.fetch_add(n, std::memory_order_relaxed);
+                });
+                const TString sidecar = file.PlainKey + ".sha256";
                 if (!Exists(sidecar)) {
                     Error(sidecar, "checksum sidecar is missing");
-                    return;
-                }
-                const TString expected = ChecksumToken(Storage.Read(sidecar));
-                if (!IsHex(expected)) {
-                    Error(sidecar, "checksum sidecar does not contain a SHA-256 hex digest");
-                } else if (expected != digest) {
-                    Error(part.Key, TStringBuilder() << "checksum mismatch: expected " << expected << ", got " << digest);
+                } else {
+                    const TString expected = ChecksumToken(Storage.Read(sidecar));
+                    if (!IsHex(expected)) {
+                        Error(sidecar, "checksum sidecar does not contain a SHA-256 hex digest");
+                    } else if (expected != digest) {
+                        Error(file.StoredKey, TStringBuilder()
+                            << "checksum mismatch: expected " << expected << ", got " << digest);
+                    }
                 }
             } catch (const std::exception& ex) {
-                Error(part.Key, TStringBuilder() << "failed to read data file: " << ex.what());
+                Error(file.StoredKey, TStringBuilder() << "failed to read data file: " << ex.what());
             }
+            checked.fetch_add(1, std::memory_order_relaxed);
         });
+        ticker.Finish();
     }
 
     void ValidateFullBackup(const TString& root, const TString& metadataKey, const TString& metadataText, const NJson::TJsonValue& json) {

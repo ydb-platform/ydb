@@ -1,5 +1,5 @@
 
-* Added `ydb tools validate s3` and `ydb tools validate nfs` commands to check byte-level integrity of a full backup or exported schema objects without restoring them. Progress is written to stderr: phase changes by default, each object's metadata and data checks with `-v`, and per-file traces with `-vv` and `-vvv`. Added `ydb tools list-objects` to generate the list of the objects which are expected to be included in the full backup.
+* Added `ydb tools validate s3` and `ydb tools validate nfs` commands to check byte-level integrity of a full backup or exported schema objects without restoring them. Progress is written to stderr: phase changes by default, checked and remaining data files about every 30 seconds, each object's metadata and data checks with `-v`, and per-file traces with `-vv` and `-vvv`. Added `ydb tools list-objects` to generate the list of the objects which are expected to be included in the full backup.
 * Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.
 * Fixed a memory leak when closing producers in `ydb workload topic run write|full`.
 * Sped up local YAML selector validation in `ydb admin cluster config replace` and `ydb admin database config replace` by resolving independent sections separately and merging equivalent states.

@@ -77,7 +77,8 @@ struct TValidateSettings {
     // always: every metadata.json needs a checksum sidecar.
     // auto: follow the backup's checksum declaration. ignore: skip metadata checksums.
     EMetadataChecksumMode MetadataChecksums = EMetadataChecksumMode::Always;
-    // 0: phase changes. 1 (-v): each object's metadata, then its data.
+    // 0: phase changes. Data-file bytes are checked after metadata, with checked/remaining
+    // counts about every 30 seconds. 1 (-v): each object's metadata, then its data.
     // 2 (-vv): reads, listings, and checksum files. 3+ (-vvv): exists probes, sizes, and I/O retries.
     // Lines are delivered to Progress. An empty Progress prints nothing.
     ui32 Verbosity = 0;

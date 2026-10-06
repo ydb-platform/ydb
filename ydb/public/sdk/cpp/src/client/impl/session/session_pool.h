@@ -6,7 +6,6 @@
 
 #include <exception>
 
-
 namespace NYdb::inline Dev {
 
 class TOperation;
@@ -68,6 +67,8 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
         try {
             future.TryRethrow();
         } catch (...) {
+            const auto client = impl->GetSessionClient();
+            NSessionCloseCommands::TransportError.Execute(*impl, client.get());
             impl.reset();
             promise.SetException(std::current_exception());
             return;

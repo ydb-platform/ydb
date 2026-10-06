@@ -10,6 +10,8 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/lwtrace/all.h>
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_writer.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -41,10 +43,10 @@ namespace NKikimr {
                 ui64 Cookie;
                 int SubRequestId;
                 bool DescribeFreeSpace;
-                bool ShowTablets;
+                bool TabletsOnly;
+                ui64 TabletPage;
                 bool AutoRefresh;
                 ui32 RefreshRate;
-                THashMap<TString, ui64> TabletPages;
                 THashSet<TString> SelectedPBs; // empty == show all
                 std::vector<TActorId> AllPBs;
                 // Responses are paired with the *service* id (the well-known PB actor id we
@@ -75,7 +77,11 @@ namespace NKikimr {
                 YDB_LOG_DEBUG("TPersistentBufferMonActor::HandleWakeup",
                     {"marker", "BSDD32"},
                     {"cookie", ev->Get()->Tag});
-                for (auto [cookie, _] : Inflight[ev->Get()->Tag].Requests) {
+                auto it = Inflight.find(ev->Get()->Tag);
+                if (it == Inflight.end()) {
+                    return;
+                }
+                for (auto [cookie, _] : it->second.Requests) {
                     PBuffersInflight.erase(cookie);
                 }
                 Reply(ev->Get()->Tag);
@@ -193,6 +199,45 @@ namespace NKikimr {
                     }
                     return TString(out);
                 };
+                if (inflight.TabletsOnly) {
+                    const bool timeout = !inflight.Requests.empty();
+                    NJson::TJsonValue result(NJson::JSON_MAP);
+                    if (inflight.Responses.empty()) {
+                        result["error"] = timeout ? "Persistent buffer did not respond" : "Persistent buffer not found";
+                    } else {
+                        const auto* info = inflight.Responses.front().second->Get();
+                        result["page"] = info->TabletsOffset / TabletsPageSize;
+                        result["pages"] = info->TabletsTotal ? (info->TabletsTotal - 1) / TabletsPageSize + 1 : 1;
+                        result["total"] = ToString(info->TabletsTotal);
+                        result["pageSize"] = TabletsPageSize;
+                        auto& tablets = result["tablets"];
+                        tablets.SetType(NJson::JSON_ARRAY);
+                        for (const auto& ti : info->TabletInfos) {
+                            NJson::TJsonValue row(NJson::JSON_MAP);
+                            row["tabletId"] = ToString(ti.TabletId);
+                            row["generation"] = ToString(ti.Generation);
+                            const auto barrier = info->EraseBarriers.find({ti.TabletId, ti.DirectBlockGroupIndex});
+                            row["barrier"] = barrier == info->EraseBarriers.end() ? TString("No barrier") : ToString(barrier->second);
+                            row["fastErasesCount"] = ToString(ti.FastErasesCount);
+                            row["lsnsCount"] = ToString(ti.LsnsCount);
+                            row["space"] = TString(beautySize(ti.Size)) + " of " + TString(beautySize(info->PerTabletStorageLimit));
+                            row["firstLsn"] = ToString(ti.FirstLsn);
+                            row["firstLsnUptime"] = TString(beautyDuration(TInstant::Now() - ti.FirstLsnTimestamp));
+                            row["lastLsn"] = ToString(ti.LastLsn);
+                            row["lastLsnUptime"] = TString(beautyDuration(TInstant::Now() - ti.LastLsnTimestamp));
+                            tablets.AppendValue(std::move(row));
+                        }
+                    }
+                    TStringStream response;
+                    response << "HTTP/1.1 " << (timeout ? "504 Gateway Timeout" :
+                        inflight.Responses.empty() ? "404 Not Found" : "200 OK")
+                        << "\r\nContent-Type: application/json\r\nCache-Control: no-store\r\n\r\n"
+                        << NJson::WriteJson(result, false);
+                    Send(inflight.Sender, new NMon::TEvHttpInfoRes(response.Str(), inflight.SubRequestId,
+                        NMon::TEvHttpInfoRes::Custom), 0, inflight.Cookie);
+                    Inflight.erase(it);
+                    return;
+                }
                 TStringStream str;
                 HTML(str) {
                     // Settings panel (lives OUTSIDE #pb-mon-content so user edits are not
@@ -212,9 +257,6 @@ namespace NKikimr {
                     str << "<label style=\"margin-right:1em;\">"
                         << "<input type=\"checkbox\" id=\"pb-mon-describeFreeSpace\""
                         << (inflight.DescribeFreeSpace ? " checked" : "") << "> Show free space</label>";
-                    str << "<label style=\"margin-right:1em;\">"
-                        << "<input type=\"checkbox\" id=\"pb-mon-showTablets\""
-                        << (inflight.ShowTablets ? " checked" : "") << "> Show tablets</label>";
                     if (!inflight.AllPBs.empty()) {
                         str << "<br><br><b>Persistent Buffers to display:</b> ";
                         str << "<a href=\"#\" id=\"pb-mon-selectAll\">[select all]</a> ";
@@ -233,88 +275,190 @@ namespace NKikimr {
                     }
                     str << "</div>";
 
-                    // Single-install controller: builds query string from current control
-                    // state, updates URL, triggers an AJAX refresh, and (re)schedules the
-                    // auto-refresh timer. On every settings change we call applyNow(), so
-                    // params take effect with no submit button and no page reload.
-                    // Guarded by window.__pbMonInstalled so AJAX-fetched HTML doesn't
-                    // re-execute this script.
-                    str << "<script>(function(){"
-                        << "if (window.__pbMonInstalled) { return; }"
-                        << "window.__pbMonInstalled = true;"
-                        << "var timer = null;"
-                        << "var inFlight = false;"
-                        << "var pending = false;"
-                        << "function buildUrl(){"
-                        << "  var p = new URLSearchParams();"
-                        << "  new URLSearchParams(window.location.search).forEach(function(v,k){"
-                        << "    if (k.indexOf('tabletPage.') === 0) p.set(k,v);"
-                        << "  });"
-                        << "  p.set('formPresent','1');"
-                        << "  if (document.getElementById('pb-mon-autoRefresh').checked) p.set('autoRefresh','1');"
-                        << "  if (document.getElementById('pb-mon-describeFreeSpace').checked) p.set('describeFreeSpace','1');"
-                        << "  if (document.getElementById('pb-mon-showTablets').checked) p.set('showTablets','1');"
-                        << "  var rr = document.getElementById('pb-mon-refreshRate').value;"
-                        << "  if (rr) p.set('refreshRate', rr);"
-                        << "  document.querySelectorAll('.pb-mon-pb').forEach(function(c){"
-                        << "    if (c.checked) p.append('pb', c.value);"
-                        << "  });"
-                        << "  return window.location.pathname + '?' + p.toString();"
-                        << "}"
-                        << "function refresh(){"
-                        << "  if (inFlight) { pending = true; return; }"
-                        << "  inFlight = true;"
-                        << "  var requestedUrl = window.location.href;"
-                        << "  fetch(requestedUrl, {headers:{'Accept':'text/html'}, cache:'no-store'})"
-                        << "    .then(function(r){return r.text();})"
-                        << "    .then(function(html){"
-                        << "      var doc = new DOMParser().parseFromString(html, 'text/html');"
-                        << "      var fresh = doc.getElementById('pb-mon-content');"
-                        << "      var cur = document.getElementById('pb-mon-content');"
-                        << "      if (fresh && cur && requestedUrl === window.location.href) { cur.innerHTML = fresh.innerHTML; }"
-                        << "    })"
-                        << "    .catch(function(){})"
-                        << "    .finally(function(){ inFlight = false; if (pending) { pending = false; refresh(); } });"
-                        << "}"
-                        << "function reschedule(){"
-                        << "  if (timer) { clearInterval(timer); timer = null; }"
-                        << "  var on = document.getElementById('pb-mon-autoRefresh').checked;"
-                        << "  var sec = parseInt(document.getElementById('pb-mon-refreshRate').value, 10);"
-                        << "  if (on && sec > 0) { timer = setInterval(refresh, sec * 1000); }"
-                        << "}"
-                        << "function applyNow(){"
-                        << "  var url = buildUrl();"
-                        << "  history.replaceState(null, '', url);"
-                        << "  reschedule();"
-                        << "  refresh();"
-                        << "}"
-                        << "var settings = document.getElementById('pb-mon-settings');"
-                        << "settings.addEventListener('change', applyNow);"
-                        << "settings.addEventListener('input', function(e){"
-                        << "  if (e.target && e.target.id === 'pb-mon-refreshRate') { applyNow(); }"
-                        << "});"
-                        << "var selAll = document.getElementById('pb-mon-selectAll');"
-                        << "if (selAll) selAll.addEventListener('click', function(e){"
-                        << "  e.preventDefault();"
-                        << "  document.querySelectorAll('.pb-mon-pb').forEach(function(c){c.checked=true;});"
-                        << "  applyNow();"
-                        << "});"
-                        << "var clrAll = document.getElementById('pb-mon-clearAll');"
-                        << "if (clrAll) clrAll.addEventListener('click', function(e){"
-                        << "  e.preventDefault();"
-                        << "  document.querySelectorAll('.pb-mon-pb').forEach(function(c){c.checked=false;});"
-                        << "  applyNow();"
-                        << "});"
-                        << "document.addEventListener('click', function(e){"
-                        << "  var button = e.target.closest('.pb-mon-tablet-page');"
-                        << "  if (!button || button.disabled) return;"
-                        << "  var url = new URL(window.location.href);"
-                        << "  url.searchParams.set('tabletPage.' + button.dataset.pb, button.dataset.page);"
-                        << "  history.replaceState(null, '', url);"
-                        << "  refresh();"
-                        << "});"
-                        << "reschedule();"
-                        << "})();</script>";
+                    str << R"JS(<script>(function(){
+if (window.__pbMonInstalled) return;
+window.__pbMonInstalled = true;
+var timer = null;
+var inFlight = false;
+var pending = false;
+function state(pb) {
+    var p = new URLSearchParams(window.location.search);
+    var page = Number(p.get('tabletPage.' + pb) || 0);
+    return {open: p.get('tabletOpen.' + pb) === '1', page: Number.isSafeInteger(page) && page >= 0 ? page : 0};
+}
+function saveState(pb, open, page) {
+    var url = new URL(window.location.href);
+    if (open) url.searchParams.set('tabletOpen.' + pb, '1');
+    else url.searchParams.delete('tabletOpen.' + pb);
+    url.searchParams.set('tabletPage.' + pb, page);
+    history.replaceState(null, '', url);
+}
+function buildUrl() {
+    var p = new URLSearchParams();
+    new URLSearchParams(window.location.search).forEach(function(v, k) {
+        if (k.indexOf('tabletPage.') === 0 || k.indexOf('tabletOpen.') === 0) p.set(k, v);
+    });
+    p.set('formPresent', '1');
+    if (document.getElementById('pb-mon-autoRefresh').checked) p.set('autoRefresh', '1');
+    if (document.getElementById('pb-mon-describeFreeSpace').checked) p.set('describeFreeSpace', '1');
+    var rr = document.getElementById('pb-mon-refreshRate').value;
+    if (rr) p.set('refreshRate', rr);
+    document.querySelectorAll('.pb-mon-pb').forEach(function(c) {
+        if (c.checked) p.append('pb', c.value);
+    });
+    return window.location.pathname + '?' + p.toString();
+}
+function pageButton(pb, label, page, disabled) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'pb-mon-tablet-page';
+    button.dataset.pb = pb;
+    button.dataset.page = page;
+    button.disabled = disabled;
+    button.textContent = label;
+    return button;
+}
+function loadTablets(panel) {
+    var pb = panel.dataset.pb;
+    var selected = state(pb);
+    if (!selected.open || panel.request) return;
+    var controller = new AbortController();
+    panel.request = controller;
+    var body = panel.querySelector('.pb-mon-tablets-body');
+    var status = panel.querySelector('.pb-mon-tablets-status');
+    status.textContent = 'Loading...';
+    var url = new URL(window.location.pathname, window.location.origin);
+    url.searchParams.set('action', 'tablets');
+    url.searchParams.set('pb', pb);
+    url.searchParams.set('page', selected.page);
+    fetch(url, {cache: 'no-store', signal: controller.signal})
+        .then(function(r) { return r.json().then(function(data) {
+            if (!r.ok) throw new Error(data.error || 'Failed to load tablets');
+            return data;
+        }); })
+        .then(function(data) {
+            if (panel.request !== controller || !panel.isConnected || !state(pb).open) return;
+            saveState(pb, true, data.page);
+            body.replaceChildren();
+            body.appendChild(pageButton(pb, 'Previous', Math.max(0, data.page - 1), data.page === 0));
+            body.appendChild(document.createTextNode(' Page ' + (data.page + 1) + ' of ' + data.pages +
+                ' (' + data.total + ' tablets, ' + data.pageSize + ' per page) '));
+            body.appendChild(pageButton(pb, 'Next', data.page + 1, data.page + 1 >= data.pages));
+            var table = document.createElement('table');
+            table.className = 'table';
+            var header = table.createTHead().insertRow();
+            ['TabletId', 'Generation', 'Barrier', 'Fast erases', 'Lsns count', 'Total space',
+                'First lsn', 'Uptime', 'Last lsn', 'Uptime'].forEach(function(label) {
+                var th = document.createElement('th');
+                th.textContent = label;
+                header.appendChild(th);
+            });
+            var rows = table.createTBody();
+            data.tablets.forEach(function(tablet) {
+                var row = rows.insertRow();
+                ['tabletId', 'generation', 'barrier', 'fastErasesCount', 'lsnsCount', 'space',
+                    'firstLsn', 'firstLsnUptime', 'lastLsn', 'lastLsnUptime'].forEach(function(key) {
+                    row.insertCell().textContent = tablet[key];
+                });
+            });
+            body.appendChild(table);
+            status.textContent = '';
+        })
+        .catch(function(error) {
+            if (panel.request === controller && panel.isConnected && error.name !== 'AbortError') {
+                status.textContent = error.message;
+            }
+        })
+        .finally(function() { if (panel.request === controller) panel.request = null; });
+}
+function restorePanel(panel) {
+    var open = state(panel.dataset.pb).open;
+    panel.querySelector('.pb-mon-tablets-content').hidden = !open;
+    var toggle = panel.querySelector('.pb-mon-tablets-toggle');
+    toggle.textContent = open ? 'Hide tablets' : 'Show tablets';
+    toggle.setAttribute('aria-expanded', open);
+    if (open) loadTablets(panel);
+}
+function restoreTablets() {
+    document.querySelectorAll('.pb-mon-tablets').forEach(restorePanel);
+}
+function summaryUrl() {
+    var url = new URL(buildUrl(), window.location.origin);
+    Array.from(url.searchParams.keys()).forEach(function(k) {
+        if (k.indexOf('tabletPage.') === 0 || k.indexOf('tabletOpen.') === 0) url.searchParams.delete(k);
+    });
+    return url.pathname + url.search;
+}
+function refresh() {
+    if (inFlight) { pending = true; return; }
+    inFlight = true;
+    // Tablet state is kept independently of the summary request, so a click during
+    // this request must not discard the new summary or reset a tablet panel.
+    var requestedUrl = summaryUrl();
+    fetch(requestedUrl, {headers: {'Accept': 'text/html'}, cache: 'no-store'})
+        .then(function(r) { if (!r.ok) throw new Error('Failed to refresh'); return r.text(); })
+        .then(function(html) {
+            if (requestedUrl !== summaryUrl()) { pending = true; return; }
+            var doc = new DOMParser().parseFromString(html, 'text/html');
+            var fresh = doc.getElementById('pb-mon-content');
+            var cur = document.getElementById('pb-mon-content');
+            if (!fresh || !cur) return;
+            var panels = new Map();
+            cur.querySelectorAll('.pb-mon-tablets').forEach(function(panel) { panels.set(panel.dataset.pb, panel); });
+            fresh.querySelectorAll('.pb-mon-tablets').forEach(function(panel) {
+                var existing = panels.get(panel.dataset.pb);
+                if (existing) { panel.replaceWith(existing); panels.delete(panel.dataset.pb); }
+            });
+            panels.forEach(function(panel) { if (panel.request) panel.request.abort(); });
+            cur.replaceChildren.apply(cur, Array.from(fresh.childNodes));
+            restoreTablets();
+        })
+        .catch(function() {})
+        .finally(function() { inFlight = false; if (pending) { pending = false; refresh(); } });
+}
+function reschedule() {
+    if (timer) { clearInterval(timer); timer = null; }
+    var on = document.getElementById('pb-mon-autoRefresh').checked;
+    var sec = parseInt(document.getElementById('pb-mon-refreshRate').value, 10);
+    if (on && sec > 0) timer = setInterval(refresh, sec * 1000);
+}
+function applyNow() {
+    history.replaceState(null, '', buildUrl());
+    reschedule();
+    refresh();
+}
+var settings = document.getElementById('pb-mon-settings');
+settings.addEventListener('change', applyNow);
+settings.addEventListener('input', function(e) {
+    if (e.target && e.target.id === 'pb-mon-refreshRate') applyNow();
+});
+var selAll = document.getElementById('pb-mon-selectAll');
+if (selAll) selAll.addEventListener('click', function(e) {
+    e.preventDefault();
+    document.querySelectorAll('.pb-mon-pb').forEach(function(c) { c.checked = true; });
+    applyNow();
+});
+var clrAll = document.getElementById('pb-mon-clearAll');
+if (clrAll) clrAll.addEventListener('click', function(e) {
+    e.preventDefault();
+    document.querySelectorAll('.pb-mon-pb').forEach(function(c) { c.checked = false; });
+    applyNow();
+});
+document.addEventListener('click', function(e) {
+    var button = e.target.closest('.pb-mon-tablets-toggle, .pb-mon-tablet-page');
+    if (!button || button.disabled) return;
+    var panel = button.closest('.pb-mon-tablets');
+    var selected = state(panel.dataset.pb);
+    var open = button.classList.contains('pb-mon-tablets-toggle') ? !selected.open : true;
+    var page = button.classList.contains('pb-mon-tablet-page') ? Number(button.dataset.page) : selected.page;
+    if (panel.request) { panel.request.abort(); panel.request = null; }
+    saveState(panel.dataset.pb, open, page);
+    restorePanel(panel);
+});
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', restoreTablets);
+else restoreTablets();
+reschedule();
+})();</script>)JS";
 
                     str << "<div id=\"pb-mon-content\">";
                     for (auto& [_, id] : inflight.Requests) {
@@ -374,55 +518,11 @@ namespace NKikimr {
                             str << "<br><br><b>Free space map (green = free, red = used):</b><br>";
                             str << GenerateFreeSpaceSvg(b->FreeSpace, sectorsPerChunk);
                         }
-                        if (inflight.ShowTablets) {
-                            const ui64 page = b->TabletsOffset / TabletsPageSize;
-                            const ui64 pages = b->TabletsTotal ? (b->TabletsTotal - 1) / TabletsPageSize + 1 : 1;
-                            str << "<h3>Tablets (" << b->TabletsTotal << ")</h3>";
-                            auto pageButton = [&](const char* label, ui64 targetPage, bool disabled) {
-                                str << "<button type=\"button\" class=\"pb-mon-tablet-page\" data-pb=\""
-                                    << htmlEscape(ToString(serviceId)) << "\" data-page=\"" << targetPage << "\""
-                                    << (disabled ? " disabled" : "") << ">" << label << "</button>";
-                            };
-                            pageButton("Previous", page ? page - 1 : 0, page == 0);
-                            str << " Page " << page + 1 << " of " << pages << " (" << TabletsPageSize << " per page) ";
-                            pageButton("Next", page + 1, page + 1 >= pages);
-                            TABLE_CLASS ("table") {
-                                TABLEHEAD() {
-                                    TABLER() {
-                                        TABLEH() {str << "TabletId";}
-                                        TABLEH() {str << "Generation";}
-                                        TABLEH() {str << "Barrier";}
-                                        TABLEH() {str << "Fast erases";}
-                                        TABLEH() {str << "Lsns count";}
-                                        TABLEH() {str << "Total space";}
-                                        TABLEH() {str << "First lsn";}
-                                        TABLEH() {str << "Uptime";}
-                                        TABLEH() {str << "Last lsn";}
-                                        TABLEH() {str << "Uptime";}
-                                    }
-                                }
-                                TABLEBODY() {
-                                    for (auto& ti : b->TabletInfos) {
-                                        TABLER() {
-                                            TABLED() {str << ti.TabletId;}
-                                            TABLED() {str << ti.Generation;}
-                                            if (auto it = b->EraseBarriers.find({ti.TabletId, ti.DirectBlockGroupIndex}); it != b->EraseBarriers.end()) {
-                                                TABLED() {str << it->second;}
-                                            } else {
-                                                TABLED() {str << "No barrier";}
-                                            }
-                                            TABLED() {str << ti.FastErasesCount;}
-                                            TABLED() {str << ti.LsnsCount;}
-                                            TABLED() {str << beautySize(ti.Size) << " of " << beautySize(b->PerTabletStorageLimit);}
-                                            TABLED() {str << ti.FirstLsn;}
-                                            TABLED() {str << beautyDuration(TInstant::Now() - ti.FirstLsnTimestamp);}
-                                            TABLED() {str << ti.LastLsn;}
-                                            TABLED() {str << beautyDuration(TInstant::Now() - ti.LastLsnTimestamp);}
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        str << "<div class=\"pb-mon-tablets\" data-pb=\"" << htmlEscape(ToString(serviceId)) << "\">"
+                            << "<button type=\"button\" class=\"pb-mon-tablets-toggle\" aria-expanded=\"false\">Show tablets</button>"
+                            << "<div class=\"pb-mon-tablets-content\" hidden>"
+                            << "<div class=\"pb-mon-tablets-status\" role=\"status\"></div>"
+                            << "<div class=\"pb-mon-tablets-body\"></div></div></div>";
                     }
                     str << "</div>";
                 }
@@ -436,8 +536,12 @@ namespace NKikimr {
 
             void Handle(NDDisk::TEvPersistentBufferInfo::TPtr& ev) {
                 auto reqCookie = ev->Cookie;
-                auto cookie = PBuffersInflight[reqCookie];
-                PBuffersInflight.erase(reqCookie);
+                auto request = PBuffersInflight.find(reqCookie);
+                if (request == PBuffersInflight.end()) {
+                    return;
+                }
+                auto cookie = request->second;
+                PBuffersInflight.erase(request);
                 YDB_LOG_DEBUG("TPersistentBufferMonActor::Handle(TEvPersistentBufferInfo)",
                     {"marker", "BSDD33"},
                     {"sender", ev->Sender},
@@ -499,11 +603,9 @@ namespace NKikimr {
                     PBuffersInflight[reqCookie] = cookie;
                     auto infoReq = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>();
                     infoReq->DescribeFreeSpace = inflight.DescribeFreeSpace;
-                    infoReq->DescribeTablets = inflight.ShowTablets;
+                    infoReq->DescribeTablets = inflight.TabletsOnly;
                     infoReq->TabletsLimit = TabletsPageSize;
-                    if (auto it = inflight.TabletPages.find(ToString(r.PersistentBufferId)); it != inflight.TabletPages.end()) {
-                        infoReq->TabletsOffset = it->second * TabletsPageSize;
-                    }
+                    infoReq->TabletsOffset = inflight.TabletPage * TabletsPageSize;
                     Send(r.PersistentBufferId, infoReq.release(), 0, reqCookie);
                     YDB_LOG_DEBUG("TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult) Send",
                         {"marker", "BSDD36"},
@@ -523,11 +625,15 @@ namespace NKikimr {
                 auto generateError = [&](const TString& msg) {
                     TStringStream out;
 
-                    out << "HTTP/1.1 400 Bad Request\r\n"
-                        << "Content-Type: text/plain\r\n"
-                        << "Connection: close\r\n"
-                        << "\r\n"
-                        << msg << "\r\n";
+                    out << "HTTP/1.1 400 Bad Request\r\n";
+                    if (params.Get("action") == "tablets") {
+                        NJson::TJsonValue result(NJson::JSON_MAP);
+                        result["error"] = msg;
+                        out << "Content-Type: application/json\r\nCache-Control: no-store\r\n\r\n"
+                            << NJson::WriteJson(result, false);
+                    } else {
+                        out << "Content-Type: text/plain\r\nConnection: close\r\n\r\n" << msg << "\r\n";
+                    }
 
                     Send(ev->Sender, new NMon::TEvHttpInfoRes(out.Str(), ev->Get()->SubRequestId, NMon::TEvHttpInfoRes::Custom), 0,
                         ev->Cookie);
@@ -555,10 +661,6 @@ namespace NKikimr {
                 if (auto err = parseBoolParam("describeFreeSpace", true, describeFreeSpace)) {
                     return generateError(*err);
                 }
-                bool showTablets = true;
-                if (auto err = parseBoolParam("showTablets", true, showTablets)) {
-                    return generateError(*err);
-                }
                 bool autoRefresh = true;
                 if (auto err = parseBoolParam("autoRefresh", true, autoRefresh)) {
                     return generateError(*err);
@@ -580,15 +682,18 @@ namespace NKikimr {
                     }
                 }
 
-                THashMap<TString, ui64> tabletPages;
-                for (const auto& pb : selectedPBs) {
-                    const TString name = "tabletPage." + pb;
-                    if (params.Has(name)) {
-                        ui64 page;
-                        if (!TryFromString(params.Get(name), page) || page > Max<ui64>() / TabletsPageSize) {
-                            return generateError("Failed to parse tablet page -- must be a non-negative integer");
-                        }
-                        tabletPages[pb] = page;
+                const bool tabletsOnly = params.Get("action") == "tablets";
+                if (params.Has("action") && !tabletsOnly) {
+                    return generateError("Unknown action");
+                }
+                ui64 tabletPage = 0;
+                if (tabletsOnly) {
+                    if (selectedPBs.size() != 1 || params.NumOfValues("pb") != 1) {
+                        return generateError("Tablets API requires exactly one pb parameter");
+                    }
+                    if (params.Has("page") && (!TryFromString(params.Get("page"), tabletPage)
+                            || tabletPage > Max<ui64>() / TabletsPageSize)) {
+                        return generateError("Failed to parse page -- must be a non-negative integer");
                     }
                 }
 
@@ -597,11 +702,11 @@ namespace NKikimr {
                     .Sender = ev->Sender,
                     .Cookie = ev->Cookie,
                     .SubRequestId = ev->Get()->SubRequestId,
-                    .DescribeFreeSpace = describeFreeSpace,
-                    .ShowTablets = showTablets,
+                    .DescribeFreeSpace = tabletsOnly ? false : describeFreeSpace,
+                    .TabletsOnly = tabletsOnly,
+                    .TabletPage = tabletPage,
                     .AutoRefresh = autoRefresh,
                     .RefreshRate = refreshRate,
-                    .TabletPages = std::move(tabletPages),
                     .SelectedPBs = std::move(selectedPBs),
                 };
                 auto nwId = MakeBlobStorageNodeWardenID(SelfId().NodeId());

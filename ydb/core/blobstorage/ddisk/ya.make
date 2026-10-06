@@ -29,6 +29,7 @@ LIBRARY()
     )
 
     PEERDIR(
+        library/cpp/json
         ydb/core/protos
         ydb/core/blobstorage/vdisk/common
         ydb/library/pdisk_io

@@ -626,4 +626,6 @@ message TTableServiceConfig {
 
     // Fallback to legacy optimizer on multiple statements in a query
     optional bool EnableFallbackOnMultipleStatements = 151 [default = false, (InvalidateCompileCache) = true];
+
+    optional uint32 DqHashAggregationDescriptorVersion = 152 [default = 0, (InvalidateCompileCache) = true];
 };

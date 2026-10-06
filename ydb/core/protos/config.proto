@@ -3575,7 +3575,7 @@ message TUdfStoreConfig {
 // Used by the IAM delegation secrets (IAM_DELEGATION secrets of external data sources).
 // TokenServiceEndpoint, ServiceId, MicroserviceId, ResourceType and EnableSsl fall back to
 // ReplicationConfig.IamServiceControl when left empty here, so a cluster that already has that
-// section configured needs only ServiceControlEndpoint (and ResourceManagerEndpoint, optionally).
+// section configured needs ServiceControlEndpoint, SystemTokenName (and ResourceManagerEndpoint, optionally).
 message TIamConfig {
     // IAM Token Service, serves IamTokenService.CreateForService (ts.private-api.<env>:4282).
     optional string TokenServiceEndpoint = 1;
@@ -3590,6 +3590,10 @@ message TIamConfig {
     // ServiceAccountService.Get on the control plane to find the cloud of a service account when a
     // delegation secret is created without RESOURCE; when empty, the cloud of the database is used.
     optional string ResourceManagerEndpoint = 7;
+    // ID of the token-manager provider for YDB's system service account. Configure the provider
+    // in AuthConfig.TokenManager (VM metadata or the node's token-agent factory). This identity
+    // is independent of AuthConfig.AccessServiceTokenName; it must be selected explicitly.
+    optional string SystemTokenName = 9;
 }
 
 // Local path-prefix aliases. Rules are ordered and take effect on node restart.

@@ -1,19 +1,16 @@
 LIBRARY()
 
 SRCS(
-    events.h
     iam_actor_base.cpp
     iam_delegation_service.cpp
-    services.h
     settings.cpp
-    system_token_service.cpp
 )
 
 PEERDIR(
     contrib/libs/googleapis-common-protos
-    library/cpp/threading/future
     ydb/core/base
     ydb/core/protos
+    ydb/core/security/token_manager
     ydb/core/util
     ydb/library/actors/async
     ydb/library/actors/core
@@ -22,8 +19,6 @@ PEERDIR(
     ydb/library/ycloud/api
     ydb/library/ycloud/impl
     ydb/public/api/protos
-    ydb/public/sdk/cpp/src/client/iam
-    ydb/public/sdk/cpp/src/client/types/credentials
     yql/essentials/public/issue
 )
 

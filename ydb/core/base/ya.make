@@ -42,6 +42,7 @@ SRCS(
     hive.h
     http_database_param.cpp
     http_database_param.h
+    iam_delegation.h
     interconnect_channels.h
     kmeans_clusters.cpp
     local_user_token.cpp
@@ -136,6 +137,7 @@ PEERDIR(
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql
+    yql/essentials/public/issue
     library/cpp/deprecated/atomic
     library/cpp/json
 )

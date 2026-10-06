@@ -5,8 +5,6 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 PEERDIR(
-    library/cpp/http/misc
-    library/cpp/http/server
     library/cpp/testing/unittest
     ydb/core/kqp/common
     ydb/core/testlib/default
@@ -16,6 +14,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    iam_delegation_actor_ut.cpp
     iam_delegation_ut.cpp
 )
 

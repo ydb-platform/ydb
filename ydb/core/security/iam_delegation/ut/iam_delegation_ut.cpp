@@ -1,9 +1,7 @@
-#include <ydb/core/security/iam_delegation/events.h>
+#include <ydb/core/base/iam_delegation.h>
 #include <ydb/core/security/iam_delegation/iam_actor_base.h>
 #include <ydb/core/security/iam_delegation/iam_delegation_service.h>
-#include <ydb/core/security/iam_delegation/services.h>
 #include <ydb/core/security/iam_delegation/settings.h>
-#include <ydb/core/security/iam_delegation/system_token_service.h>
 
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -15,13 +13,9 @@
 #include <ydb/library/testlib/service_mocks/operation_service_mock.h>
 #include <ydb/library/testlib/service_mocks/service_control_service_mock.h>
 
-#include <library/cpp/http/misc/parsed_request.h>
-#include <library/cpp/http/server/http.h>
-#include <library/cpp/http/server/response.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
-#include <util/network/sock.h>
 
 #include <grpcpp/server_builder.h>
 
@@ -32,71 +26,27 @@ using namespace Tests;
 
 namespace {
 
-// Hang guard: polls until the condition holds; the condition must be made inevitable by the test itself.
-template <class TCondition>
-void WaitUntil(TCondition condition, TStringBuf what, TDuration timeout = TDuration::Seconds(120)) {
-    const TInstant deadline = TInstant::Now() + timeout;
-    while (!condition()) {
-        UNIT_ASSERT_C(TInstant::Now() < deadline, "timed out waiting for " << what);
-        Sleep(TDuration::MilliSeconds(20));
-    }
-}
-
-// An operation the mock never reports as done.
-constexpr ui32 NEVER_DONE_OPERATION = 1000000;
-
-// A stand-in for the system token service. Answers TEvGetSystemToken at once with the token (or Error when it
-// is set) while Deliver is true; otherwise only records the request so that the test can answer it late.
-// The state is read by the test thread while the actor runs on the runtime's threads, hence the lock.
-struct TSystemTokenFake : TThrRefBase {
-    TMutex Mutex;
-    TActorId Service; // the fake actor
-    TActorId Recipient;
-    ui64 Cookie = 0;
-    ui32 Requests = 0;
-    bool Deliver = true;
-    TString Error;
-
-    ui32 RequestCount() {
-        with_lock (Mutex) {
-            return Requests;
-        }
-    }
-
-    // Delivers the system token for the last request; returns its recipient.
-    TActorId DeliverLast(TTestActorRuntime& runtime) {
-        with_lock (Mutex) {
-            runtime.Send(new IEventHandle(Recipient, Service, new TEvIamDelegation::TEvSystemTokenReady("ssa-token", {}), 0, Cookie));
-            return Recipient;
-        }
-    }
-};
-
-class TFakeSystemTokenService : public TActor<TFakeSystemTokenService> {
+// Subscription stand-in for the gRPC integration tests. Deterministic update, timeout and
+// shutdown coverage lives in iam_delegation_actor_ut.cpp.
+class TFakeTokenManager : public TActor<TFakeTokenManager> {
 public:
-    explicit TFakeSystemTokenService(TIntrusivePtr<TSystemTokenFake> state)
+    explicit TFakeTokenManager(TString error = {})
         : TActor(&TThis::StateWork)
-        , State(std::move(state))
+        , Error(std::move(error))
     {}
 
     STRICT_STFUNC(StateWork,
-        hFunc(TEvIamDelegation::TEvGetSystemToken, Handle);
+        hFunc(TEvTokenManager::TEvSubscribeUpdateToken, Handle);
         cFunc(TEvents::TEvPoison::EventType, PassAway);
     )
 
 private:
-    void Handle(TEvIamDelegation::TEvGetSystemToken::TPtr& ev) {
-        with_lock (State->Mutex) {
-            State->Recipient = ev->Sender;
-            State->Cookie = ev->Cookie;
-            ++State->Requests;
-            if (State->Deliver) {
-                Send(ev->Sender, new TEvIamDelegation::TEvSystemTokenReady(State->Error ? TString() : TString("ssa-token"), State->Error), 0, ev->Cookie);
-            }
-        }
+    void Handle(TEvTokenManager::TEvSubscribeUpdateToken::TPtr& ev) {
+        const TEvTokenManager::TStatus status{Error.empty() ? TEvTokenManager::TStatus::ECode::SUCCESS : TEvTokenManager::TStatus::ECode::ERROR, Error};
+        Send(ev->Sender, new TEvTokenManager::TEvUpdateToken(ev->Get()->Id, "ssa-token", status));
     }
 
-    const TIntrusivePtr<TSystemTokenFake> State;
+    const TString Error;
 };
 
 struct TFixture {
@@ -131,58 +81,27 @@ struct TFixture {
             IamServer = builder.BuildAndStart();
         }
 
-        Settings.TokenServiceEndpoint = "localhost:" + ToString(IamPort);
-        Settings.ServiceControlEndpoint = "localhost:" + ToString(IamPort);
-        Settings.EnableSsl = false;
-        Settings.ServiceId = "ydb";
-        Settings.MicroserviceId = "data-plane";
-        Settings.ResourceType = "resource-manager.cloud";
-        Settings.RequestTimeout = TDuration::Seconds(5);
-        Settings.OperationPollInterval = TDuration::MilliSeconds(100);
-        Settings.OperationPollTimeout = TDuration::Seconds(3);
-        Settings.MaxRetries = 3;
+        Settings.Config.SetTokenServiceEndpoint("localhost:" + ToString(IamPort));
+        Settings.Config.SetServiceControlEndpoint("localhost:" + ToString(IamPort));
+        Settings.Config.SetEnableSsl(false);
+        Settings.Config.SetServiceId("ydb");
+        Settings.Config.SetMicroserviceId("data-plane");
+        Settings.Config.SetResourceType("resource-manager.cloud");
+        Settings.Config.SetSystemTokenName("delegation-system-account");
 
         ServiceControlMock.ExpectedAuthorization = "Bearer ssa-token";
     }
 
     ~TFixture() {
         IamServer->Shutdown();
+        IamServer->Wait();
     }
 
-    // Registers a fake system token service answering every request at once: with the token, or with the error.
-    TIntrusivePtr<TSystemTokenFake> SystemToken(const TString& error = {}) {
-        auto fake = MakeIntrusive<TSystemTokenFake>();
-        fake->Error = error;
-        fake->Service = Runtime->Register(new TFakeSystemTokenService(fake));
-        return fake;
-    }
-
-    // Registers a fake system token service that records the requests and answers none until told to.
-    TIntrusivePtr<TSystemTokenFake> SilentSystemToken() {
-        auto fake = SystemToken();
-        fake->Deliver = false;
-        return fake;
-    }
-
-    TActorId StartDelegationService(TActorId systemTokenService = {}) {
-        if (!systemTokenService) {
-            systemTokenService = SystemToken()->Service;
-        }
-        const TActorId id = Runtime->Register(CreateIamDelegationService(Settings, systemTokenService));
+    TActorId StartDelegationService(const TString& tokenError = {}) {
+        Runtime->RegisterService(MakeTokenManagerID(), Runtime->Register(new TFakeTokenManager(tokenError)));
+        const TActorId id = Runtime->Register(CreateIamDelegationService(Settings));
         Runtime->RegisterService(MakeIamDelegationServiceId(), id);
         return id;
-    }
-
-    // Registers the real system token service over the metadata service at host:port under its service id.
-    TActorId StartSystemTokenService(const TString& host, ui16 port) {
-        const TActorId id = Runtime->Register(CreateIamSystemTokenService(host, port));
-        Runtime->RegisterService(MakeIamSystemTokenServiceId(), id);
-        return id;
-    }
-
-    // Asks the system token service at the id for a token on behalf of the edge actor.
-    void RequestSystemToken(const TActorId& service, ui64 cookie) {
-        Runtime->Send(new IEventHandle(service, Sender, new TEvIamDelegation::TEvGetSystemToken(), 0, cookie));
     }
 
     static TDelegationSpec Spec(const TString& sa = "sa-1", const TString& referrer = "ref-1") {
@@ -198,7 +117,7 @@ struct TFixture {
     TDelegationResult Call(const TActorId& service, IEventBase* request) {
         Runtime->Send(new IEventHandle(service, Sender, request, 0, 42));
         TAutoPtr<IEventHandle> handle;
-        auto* result = Runtime->GrabEdgeEvent<TResultEv>(handle);
+        auto* result = Runtime->GrabEdgeEvent<TResultEv>(handle, TDuration::Seconds(120));
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, 42u);
         return result->Result;
@@ -230,14 +149,7 @@ struct TFixture {
 
     TActorId Service;
 
-    // Sends a tracked event to a (dead) actor and waits for the undelivered notification: the deterministic
-    // proof that the actor is gone and that the actor system still runs.
-    void ExpectUndelivered(const TActorId& actor, IEventBase* event) {
-        Runtime->Send(new IEventHandle(actor, Sender, event, IEventHandle::FlagTrackDelivery));
-        TAutoPtr<IEventHandle> handle;
-        auto* undelivered = Runtime->GrabEdgeEvent<TEvents::TEvUndelivered>(handle);
-        UNIT_ASSERT(undelivered);
-    }
+
 };
 
 void ExpectSuccess(const TDelegationResult& result) {
@@ -307,13 +219,6 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
         UNIT_ASSERT_VALUES_EQUAL(f.OperationMock.GetCalls.load(), 1u);
     }
 
-    Y_UNIT_TEST(OperationPollTimeout) {
-        TFixture f;
-        f.ServiceControlMock.NotDoneCount = 1;
-        f.OperationMock.GetsUntilDone = NEVER_DONE_OPERATION;
-        ExpectError(f.Setup(), Ydb::StatusIds::TIMEOUT);
-    }
-
     // The IAM failure types the user can act on come with a hint, in a direct answer and in an operation.
     Y_UNIT_TEST(IamFailuresAreExplained) {
         TFixture f;
@@ -368,261 +273,34 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
         TFixture f;
         f.ServiceControlMock.FailStatus = grpc::StatusCode::RESOURCE_EXHAUSTED;
         f.ServiceControlMock.FailCount = 100;
-        ExpectError(f.Setup(), Ydb::StatusIds::OVERLOADED, "failed after 3 attempts");
+        ExpectError(f.Setup(), Ydb::StatusIds::OVERLOADED, "failed after 5 attempts");
 
         f.ServiceControlMock.FailStatus = grpc::StatusCode::DEADLINE_EXCEEDED;
         f.ServiceControlMock.FailCount = 100;
-        ExpectError(f.Setup(), Ydb::StatusIds::TIMEOUT, "failed after 3 attempts");
+        ExpectError(f.Setup(), Ydb::StatusIds::TIMEOUT, "failed after 5 attempts");
     }
 
-    // MaxRetries bounds the number of attempts of one call, and MaxRetries = 0 still makes the one attempt.
     Y_UNIT_TEST(RetryCountBounds) {
         TFixture f;
-        f.ServiceControlMock.FailCount = 2;
+        f.ServiceControlMock.FailCount = TIamDelegationSettings::MaxRetries - 1;
         ExpectSuccess(f.Setup());
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 3u);
-
+        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), TIamDelegationSettings::MaxRetries);
         f.ServiceControlMock.FailCount = 100;
-        ui32 expectedCalls = 3;
-        for (const ui32 maxRetries : {1u, 0u}) {
-            f.Settings.MaxRetries = maxRetries;
-            ExpectError(f.Setup(f.StartDelegationService(), f.Spec()), Ydb::StatusIds::UNAVAILABLE, "failed after 1 attempts");
-            UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), ++expectedCalls);
-        }
+        ExpectError(f.Setup(), Ydb::StatusIds::UNAVAILABLE, "failed after 5 attempts");
+        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 2 * TIamDelegationSettings::MaxRetries);
     }
 
     Y_UNIT_TEST(SystemTokenFailure) {
         TFixture f;
-        ExpectError(f.Setup(f.StartDelegationService(f.SystemToken("metadata is down")->Service), f.Spec()),
+        ExpectError(f.Setup(f.StartDelegationService("metadata is down"), f.Spec()),
             Ydb::StatusIds::UNAVAILABLE, "metadata is down");
         UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 0u);
     }
 
-    // A system token that does not come in time is a retryable failure of the call.
-    Y_UNIT_TEST(SystemTokenTimeoutIsRetried) {
-        TFixture f;
-        f.Settings.RequestTimeout = TDuration::Seconds(1);
-        f.Settings.MaxRetries = 2;
-        auto source = f.SilentSystemToken();
-        ExpectError(f.Setup(f.StartDelegationService(source->Service), f.Spec()), Ydb::StatusIds::UNAVAILABLE,
-            "failed after 2 attempts: timeout while obtaining the system service account token");
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(source->RequestCount(), 2u);
-    }
-
-    Y_UNIT_TEST(LateSystemTokenIsIgnored) {
-        TFixture f;
-        f.Settings.RequestTimeout = TDuration::Seconds(1);
-        f.Settings.MaxRetries = 1;
-        auto source = f.SilentSystemToken();
-        const auto service = f.StartDelegationService(source->Service);
-        ExpectError(f.Setup(service, f.Spec()), Ydb::StatusIds::UNAVAILABLE);
-
-        // the token arrives after the timeout: it reaches the state function and is ignored. The mailbox is
-        // FIFO, so the Setup below is handled after the late token; it is the one and only ServiceControl call.
-        UNIT_ASSERT_VALUES_EQUAL(source->DeliverLast(*f.Runtime), service);
-
-        with_lock (source->Mutex) {
-            source->Deliver = true;
-        }
-        ExpectSuccess(f.Setup(service, f.Spec()));
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(source->RequestCount(), 2u);
-    }
-
-    Y_UNIT_TEST(PoisonWhileWaiting) {
-        TFixture f;
-        f.ServiceControlMock.NotDoneCount = 1;
-        f.OperationMock.GetsUntilDone = NEVER_DONE_OPERATION;
-        const auto service = f.StartDelegationService();
-
-        // the request polls the never-done operation; the actor is poisoned in the middle of it
-        f.Runtime->Send(new IEventHandle(service, f.Sender, new TEvIamDelegation::TEvSetupDelegation(f.Spec(), "user-1")));
-        WaitUntil([&]() { return f.OperationMock.GetCalls.load() > 0; }, "the first poll");
-        f.Runtime->Send(new IEventHandle(service, f.Sender, new TEvents::TEvPoison()));
-        // the actor is gone without a crash: a tracked event to it comes back undelivered, and a fresh
-        // service on the same runtime works
-        f.ExpectUndelivered(service, new TEvIamDelegation::TEvSetupDelegation(f.Spec(), "user-1"));
-        f.OperationMock.GetsUntilDone = 1;
-        ExpectSuccess(f.Setup(f.StartDelegationService(), f.Spec("sa-2", "ref-2")));
-    }
 }
 
-Y_UNIT_TEST_SUITE(IamSystemTokenService) {
-    // A TCP listener that accepts connections and never answers: the metadata service is "up" but silent.
-    struct TSilentListener {
-        TPortManager PortManager;
-        ui16 Port = 0;
-        TInetStreamSocket Socket;
-
-        TSilentListener() {
-            Port = PortManager.GetPort();
-            TSockAddrInet addr("127.0.0.1", Port);
-            UNIT_ASSERT_VALUES_EQUAL(Socket.Bind(&addr), 0);
-            UNIT_ASSERT_VALUES_EQUAL(Socket.Listen(16), 0);
-        }
-    };
-
-    // The system token service asks the SDK provider asynchronously: the metadata request runs on the provider's
-    // own thread, so the service keeps handling requests when the endpoint never answers, and an actor waiting
-    // for the token fails with the configured timeout instead of hanging.
-    Y_UNIT_TEST(ServiceKeepsHandlingRequestsWhenMetadataIsUnreachable) {
-        TSilentListener metadata;
-        TFixture f;
-        const auto service = f.StartSystemTokenService("127.0.0.1", metadata.Port);
-
-        f.RequestSystemToken(service, 7);
-        // (the SDK keeps retrying the silent endpoint in the background and no TEvSystemTokenReady is ever
-        // produced; the service handles the requests below meanwhile)
-
-        f.Settings.RequestTimeout = TDuration::Seconds(1); // makes the failure below inevitable
-        f.Settings.MaxRetries = 1;
-        ExpectError(f.Setup(f.StartDelegationService(service), f.Spec()), Ydb::StatusIds::UNAVAILABLE,
-            "timeout while obtaining the system service account token");
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 0u);
-    }
-
-    // While one actor waits for a system token that never comes, the actor system keeps processing other work:
-    // a second delegation service on the same runtime, on a system token answered at once, completes a request,
-    // and when the token is finally delivered to the first one its request completes too.
-    Y_UNIT_TEST(PendingSystemTokenDoesNotBlockOtherWork) {
-        TFixture f;
-        f.Settings.RequestTimeout = TDuration::Minutes(5); // the wait is ended by the test, not by a timeout
-        auto source = f.SilentSystemToken();
-        const auto parked = f.StartDelegationService(source->Service);
-        const auto other = f.StartDelegationService();
-
-        f.Runtime->Send(new IEventHandle(parked, f.Sender, new TEvIamDelegation::TEvSetupDelegation(f.Spec(), "user-1"), 0, 41));
-        WaitUntil([&]() { return source->RequestCount() >= 1; }, "the system token request"); // the first service is parked on it
-
-        ExpectSuccess(f.Setup(other, f.Spec("sa-2", "ref-2")));
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 1u); // the first service is still parked
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.LastCall().Setup.target_service_account_id(), "sa-2");
-
-        UNIT_ASSERT_VALUES_EQUAL(source->DeliverLast(*f.Runtime), parked);
-        TAutoPtr<IEventHandle> handle;
-        auto* setup = f.Runtime->GrabEdgeEvent<TEvIamDelegation::TEvSetupDelegationResult>(handle);
-        UNIT_ASSERT(setup);
-        ExpectSuccess(setup->Result);
-        UNIT_ASSERT_VALUES_EQUAL(handle->Sender, parked);
-        UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, 41u);
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.LastCall().Setup.target_service_account_id(), "sa-1");
-        UNIT_ASSERT_VALUES_EQUAL(source->RequestCount(), 1u);
-    }
-
-    // A VM metadata service answering the token request the way the real one does.
-    class TMetadataServer : public THttpServer::ICallBack {
-        class TRequest : public TRequestReplier {
-        public:
-            explicit TRequest(TMetadataServer* parent) : Parent(parent) {}
-
-            bool DoReply(const TReplyParams& params) override {
-                const TParsedHttpFull parsed(params.Input.FirstLine());
-                with_lock (Parent->Mutex) {
-                    ++Parent->Requests;
-                    Parent->LastPath = TString(parsed.Path);
-                    const auto* flavor = params.Input.Headers().FindHeader("Metadata-Flavor");
-                    Parent->LastFlavor = flavor ? flavor->Value() : TString();
-                }
-                const auto code = static_cast<HttpCodes>(Parent->StatusCode.load());
-                if (code != HTTP_OK) {
-                    THttpResponse(code).SetContent("no token here").OutTo(params.Output);
-                    return true;
-                }
-                THttpResponse(HTTP_OK).SetContentType("application/json")
-                    .SetContent(R"({"access_token":"ssa-token","expires_in":3600})").OutTo(params.Output);
-                return true;
-            }
-
-        private:
-            TMetadataServer* const Parent;
-        };
-
-    public:
-        explicit TMetadataServer(ui16 port)
-            : Port(port)
-            , Server(this, THttpServer::TOptions(port))
-        {
-            UNIT_ASSERT_C(Server.Start(), "cannot start the metadata server on port " << port);
-        }
-
-        ~TMetadataServer() {
-            Server.Stop();
-        }
-
-        TClientRequest* CreateClient() override {
-            return new TRequest(this);
-        }
-
-        const ui16 Port;
-        THttpServer Server;
-        std::atomic<int> StatusCode = HTTP_OK; // what the next requests are answered with
-        TMutex Mutex;
-        ui32 Requests = 0;
-        TString LastPath;
-        TString LastFlavor;
-    };
-
-    // The production path end to end: the token source asks the metadata service through the SDK provider
-    // (GET .../service-accounts/default/token with the Metadata-Flavor header), delivers the token to the
-    // delegation service, and ServiceControl accepts the call authorized with it.
-    // The metadata service answers 404 (no service account is attached to the VM yet): the SDK provider gives
-    // up for good on such an answer, so the source drops it and asks with a fresh one on the next request.
-    Y_UNIT_TEST(ProviderIsRecreatedAfterANonRetryableMetadataError) {
-        TPortManager portManager;
-        TMetadataServer metadata(portManager.GetPort());
-        metadata.StatusCode = HTTP_NOT_FOUND;
-        TFixture f;
-        const auto service = f.StartSystemTokenService("127.0.0.1", metadata.Port);
-
-        const auto request = [&](ui64 cookie) {
-            f.RequestSystemToken(service, cookie);
-            TAutoPtr<IEventHandle> handle;
-            auto* ready = f.Runtime->GrabEdgeEvent<TEvIamDelegation::TEvSystemTokenReady>(handle);
-            UNIT_ASSERT(ready);
-            UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, cookie);
-            return std::make_pair(ready->Token, ready->Error);
-        };
-
-        const auto first = request(1);
-        UNIT_ASSERT_VALUES_EQUAL(first.first, "");
-        UNIT_ASSERT_STRING_CONTAINS(first.second, "404");
-        ui32 requestsAfterFailure = 0;
-        with_lock (metadata.Mutex) {
-            requestsAfterFailure = metadata.Requests;
-        }
-        UNIT_ASSERT(requestsAfterFailure >= 1);
-
-        // the account is attached: the next request goes to the metadata service again and gets the token
-        metadata.StatusCode = HTTP_OK;
-        const auto second = request(2);
-        UNIT_ASSERT_VALUES_EQUAL_C(second.second, "", second.second);
-        UNIT_ASSERT_VALUES_EQUAL(second.first, "ssa-token");
-        with_lock (metadata.Mutex) {
-            UNIT_ASSERT(metadata.Requests > requestsAfterFailure);
-        }
-    }
-
-    Y_UNIT_TEST(TokenFromMetadataServiceAuthorizesTheCall) {
-        TPortManager portManager;
-        TMetadataServer metadata(portManager.GetPort());
-        TFixture f;
-        const auto service = f.StartSystemTokenService("127.0.0.1", metadata.Port);
-
-        ExpectSuccess(f.Setup(f.StartDelegationService(service), f.Spec()));
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 1u); // the mock requires "Bearer ssa-token"
-        with_lock (metadata.Mutex) {
-            UNIT_ASSERT(metadata.Requests >= 1);
-            UNIT_ASSERT_VALUES_EQUAL(metadata.LastPath, "/computeMetadata/v1/instance/service-accounts/default/token");
-            UNIT_ASSERT_VALUES_EQUAL(metadata.LastFlavor, "Google");
-        }
-    }
-}
-
-// The KQP proxy starts the system token service and the delegation service at its bootstrap according to the
-// feature flag and the configuration: both or neither, with a warning when the configuration is incomplete. The
-// flag is followed at runtime in one direction: a config notification turning it on starts the services.
+// The proxy starts the delegation service at bootstrap or on dynamic feature enable, using the
+// independently initialized token manager. Repeated notifications must preserve the same actor.
 Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
     struct TProxyNode {
         TPortManager PortManager;
@@ -634,7 +312,7 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         TProxyNode(const NKikimrConfig::TAppConfig& appConfig, bool flag) {
             NKikimrConfig::TFeatureFlags featureFlags;
             featureFlags.SetEnableIamDelegationSecrets(flag);
-            auto settings = TServerSettings(PortManager.GetPort(2134));
+            auto settings = TServerSettings(PortManager.GetPort(2134), appConfig.GetAuthConfig());
             settings.SetDomainName("Root").SetAppConfig(appConfig).SetFeatureFlags(featureFlags);
             Server = MakeHolder<TServer>(settings);
             Runtime = Server->GetRuntime();
@@ -658,16 +336,12 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
             Ping();
         }
 
-        // The ids of the running system token service and delegation service, both empty or both set.
-        std::pair<TActorId, TActorId> Services() {
-            const auto result = std::pair{Runtime->GetLocalServiceId(MakeIamSystemTokenServiceId(), 0),
-                Runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0)};
-            UNIT_ASSERT_VALUES_EQUAL(bool(result.first), bool(result.second));
-            return result;
+        TActorId Service() {
+            return Runtime->GetLocalServiceId(MakeIamDelegationServiceId(), 0);
         }
 
         bool Started() {
-            return bool(Services().first);
+            return bool(Service());
         }
     };
 
@@ -679,6 +353,8 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         iam.SetServiceId("ydb");
         iam.SetMicroserviceId("data-plane");
         iam.SetResourceType("resource-manager.cloud");
+        iam.SetSystemTokenName("delegation-system-account");
+        appConfig.MutableAuthConfig()->MutableTokenManager()->SetEnable(true);
         return appConfig;
     }
 
@@ -698,13 +374,29 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         UNIT_ASSERT(!TProxyNode(appConfig, true).Started());
     }
 
-    Y_UNIT_TEST(BothWithFullConfig) {
+    Y_UNIT_TEST(NothingWithoutSystemTokenName) {
+        auto appConfig = FullConfig();
+        appConfig.MutableIamConfig()->ClearSystemTokenName();
+        // An AccessService identity is not an implicit delegation identity.
+        appConfig.MutableAuthConfig()->SetAccessServiceTokenName("access-service-account");
+        UNIT_ASSERT(!TProxyNode(appConfig, true).Started());
+    }
+
+    Y_UNIT_TEST(NothingWithDisabledTokenManager) {
+        auto appConfig = FullConfig();
+        appConfig.MutableAuthConfig()->MutableTokenManager()->SetEnable(false);
+        UNIT_ASSERT(!TProxyNode(appConfig, true).Started());
+    }
+
+    Y_UNIT_TEST(StartsWithFullConfig) {
         UNIT_ASSERT(TProxyNode(FullConfig(), true).Started());
     }
 
-    Y_UNIT_TEST(BothWithIdentityFromTheReplicationSection) {
+    Y_UNIT_TEST(StartsWithIdentityFromTheReplicationSection) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableIamConfig()->SetServiceControlEndpoint("localhost:1");
+        appConfig.MutableIamConfig()->SetSystemTokenName("delegation-system-account");
+        appConfig.MutableAuthConfig()->MutableTokenManager()->SetEnable(true);
         auto& replication = *appConfig.MutableReplicationConfig()->MutableIamServiceControl();
         replication.SetEndpoint("localhost:1");
         replication.SetServiceId("ydb");
@@ -720,14 +412,14 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         UNIT_ASSERT(!node.Started());
 
         node.Notify(true);
-        const auto services = node.Services();
+        const auto services = node.Service();
         UNIT_ASSERT(node.Started());
 
         node.Notify(true);
-        UNIT_ASSERT(node.Services() == services);
+        UNIT_ASSERT(node.Service() == services);
 
         node.Notify(false);
-        UNIT_ASSERT(node.Services() == services);
+        UNIT_ASSERT(node.Service() == services);
     }
 }
 

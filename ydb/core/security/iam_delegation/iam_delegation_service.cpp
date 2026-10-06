@@ -23,30 +23,34 @@ public:
         return NKikimrServices::TActivity::IAM_DELEGATION_SERVICE_ACTOR;
     }
 
-    TIamDelegationService(const TIamDelegationSettings& settings, const TActorId& systemTokenService)
-        : TBase(settings, systemTokenService)
+    explicit TIamDelegationService(const TIamDelegationSettings& settings)
+        : TBase(settings)
     {}
 
     void Bootstrap() {
         Become(&TThis::StateWork);
+        // Token manager has no unsubscribe API: this node service is the sole subscriber, regardless
+        // of the number of concurrent requests or retries. The initializer selects its factory.
+        Send(MakeTokenManagerID(), new TEvTokenManager::TEvSubscribeUpdateToken(Settings.Config.GetSystemTokenName()),
+            IEventHandle::FlagTrackDelivery);
 
         {
-            NCloud::TServiceControlServiceSettings clientSettings(Settings.ServiceControlEndpoint, "ydb-iam-delegation");
-            clientSettings.EnableSsl = Settings.EnableSsl;
+            NCloud::TServiceControlServiceSettings clientSettings(Settings.Config.GetServiceControlEndpoint(), "ydb-iam-delegation");
+            clientSettings.EnableSsl = Settings.Config.GetEnableSsl();
             clientSettings.RequestTimeoutMs = Settings.RequestTimeout.MilliSeconds();
             ServiceControlClient = Register(NCloud::CreateServiceControlService(clientSettings));
         }
         {
-            NCloud::TOperationServiceSettings clientSettings(Settings.ServiceControlEndpoint, "ydb-iam-delegation");
-            clientSettings.EnableSsl = Settings.EnableSsl;
+            NCloud::TOperationServiceSettings clientSettings(Settings.Config.GetServiceControlEndpoint(), "ydb-iam-delegation");
+            clientSettings.EnableSsl = Settings.Config.GetEnableSsl();
             clientSettings.RequestTimeoutMs = Settings.RequestTimeout.MilliSeconds();
             OperationClient = Register(NCloud::CreateOperationService(clientSettings));
         }
 
         YDB_LOG_INFO("Delegation service started",
-            {"serviceId", Settings.ServiceId},
-            {"microserviceId", Settings.MicroserviceId},
-            {"serviceControlEndpoint", Settings.ServiceControlEndpoint}
+            {"serviceId", Settings.Config.GetServiceId()},
+            {"microserviceId", Settings.Config.GetMicroserviceId()},
+            {"serviceControlEndpoint", Settings.Config.GetServiceControlEndpoint()}
         );
     }
 
@@ -57,8 +61,8 @@ public:
         IgnoreFunc(NCloud::TEvServiceControlService::TEvSetupDelegationResponse);
         IgnoreFunc(NCloud::TEvServiceControlService::TEvRevokeDelegationResponse);
         IgnoreFunc(NCloud::TEvOperationService::TEvGetOperationResponse);
-        IgnoreFunc(TEvIamDelegation::TEvSystemTokenReady);
-        IgnoreFunc(TEvents::TEvUndelivered);
+        hFunc(TEvTokenManager::TEvUpdateToken, HandleToken);
+        hFunc(TEvents::TEvUndelivered, HandleUndelivered);
         cFunc(TEvents::TEvPoison::EventType, BeginShutdown);
     )
 
@@ -67,6 +71,25 @@ public:
     }
 
 private:
+    void HandleToken(TEvTokenManager::TEvUpdateToken::TPtr& ev) {
+        const auto& update = *ev->Get();
+        if (update.Id != Settings.Config.GetSystemTokenName()) {
+            return;
+        }
+        Credentials.Status = update.Status;
+        Credentials.Token = update.Status.Code == TEvTokenManager::TStatus::ECode::SUCCESS ? update.Token : TString();
+        Credentials.Updated.NotifyAll();
+    }
+
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == TEvTokenManager::TEvSubscribeUpdateToken::EventType) {
+            Credentials.Token.clear();
+            Credentials.Status = {TEvTokenManager::TStatus::ECode::ERROR, "token manager is not available"};
+            Credentials.Updated.NotifyAll();
+        }
+        // Timed-out client waits no longer intercept their undelivered replies.
+    }
+
     void BeginShutdown() {
         Become(&TThis::StateDying);
         Send(ServiceControlClient, new TEvents::TEvPoison());
@@ -139,10 +162,10 @@ private:
         auto response = co_await CallWithRetry<NCloud::TEvServiceControlService::TEvSetupDelegationRequest, NCloud::TEvServiceControlService::TEvSetupDelegationResponse>(
             ServiceControlClient, "ServiceControl.SetupDelegation",
             [&](yandex::cloud::priv::iam::v1::SetupDelegationRequest& request) {
-                request.set_service_id(Settings.ServiceId);
-                request.set_microservice_id(Settings.MicroserviceId);
+                request.set_service_id(Settings.Config.GetServiceId());
+                request.set_microservice_id(Settings.Config.GetMicroserviceId());
                 request.mutable_resource()->set_id(spec.CloudId);
-                request.mutable_resource()->set_type(Settings.ResourceType);
+                request.mutable_resource()->set_type(Settings.Config.GetResourceType());
                 request.set_target_service_account_id(spec.ServiceAccountId);
                 request.mutable_referrer()->set_id(spec.ReferrerId);
                 request.mutable_referrer()->set_type(Settings.ReferrerType);
@@ -157,10 +180,10 @@ private:
         auto response = co_await CallWithRetry<NCloud::TEvServiceControlService::TEvRevokeDelegationRequest, NCloud::TEvServiceControlService::TEvRevokeDelegationResponse>(
             ServiceControlClient, "ServiceControl.RevokeDelegation",
             [&](yandex::cloud::priv::iam::v1::RevokeDelegationRequest& request) {
-                request.set_service_id(Settings.ServiceId);
-                request.set_microservice_id(Settings.MicroserviceId);
+                request.set_service_id(Settings.Config.GetServiceId());
+                request.set_microservice_id(Settings.Config.GetMicroserviceId());
                 request.mutable_resource()->set_id(spec.CloudId);
-                request.mutable_resource()->set_type(Settings.ResourceType);
+                request.mutable_resource()->set_type(Settings.Config.GetResourceType());
                 request.set_target_service_account_id(spec.ServiceAccountId);
                 request.mutable_referrer()->set_id(spec.ReferrerId);
                 request.mutable_referrer()->set_type(Settings.ReferrerType);
@@ -177,17 +200,16 @@ private:
     async<void> WaitOperation(TOperation operation, TStringBuf method) {
         const TMonotonic deadline = TActivationContext::Monotonic() + Settings.OperationPollTimeout;
         while (!operation.done()) {
-            if (TActivationContext::Monotonic() >= deadline) {
-                throw TIamCallError(Ydb::StatusIds::TIMEOUT) << method << ": operation " << operation.id() << " is not done after " << Settings.OperationPollTimeout;
-            }
+            CheckIamCallDeadline(deadline);
             YDB_LOG_DEBUG("Waiting for operation", {"method", method}, {"operationId", operation.id()});
-            co_await AsyncSleepFor(Settings.OperationPollInterval);
+            co_await AsyncSleepUntil(Min(deadline, TActivationContext::Monotonic() + Settings.OperationPollInterval));
+            CheckIamCallDeadline(deadline);
             const TString operationId = operation.id();
             auto response = co_await CallWithRetry<NCloud::TEvOperationService::TEvGetOperationRequest, NCloud::TEvOperationService::TEvGetOperationResponse>(
                 OperationClient, "OperationService.Get",
                 [&](yandex::cloud::priv::iam::v1::GetOperationRequest& request) {
                     request.set_operation_id(operationId);
-                });
+                }, ENotFound::IsError, deadline);
             operation = response->Get()->Response;
         }
         if (operation.has_error()) {
@@ -200,8 +222,8 @@ private:
     TActorId OperationClient;
 };
 
-IActor* CreateIamDelegationService(const TIamDelegationSettings& settings, const TActorId& systemTokenService) {
-    return new TIamDelegationService(settings, systemTokenService);
+IActor* CreateIamDelegationService(const TIamDelegationSettings& settings) {
+    return new TIamDelegationService(settings);
 }
 
 } // namespace NKikimr::NIamDelegation

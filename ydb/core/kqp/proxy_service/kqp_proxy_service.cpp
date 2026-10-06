@@ -7,6 +7,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/iam_delegation.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
@@ -27,9 +28,7 @@
 #include <ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/pq_checkpoint_provider_integration.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/security/iam_delegation/iam_delegation_service.h>
-#include <ydb/core/security/iam_delegation/services.h>
 #include <ydb/core/security/iam_delegation/settings.h>
-#include <ydb/core/security/iam_delegation/system_token_service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
@@ -2170,14 +2169,13 @@ private:
             YDB_LOG_WARN("IAM delegation service is not started", {"reason", error});
             return;
         }
-        if (!running(NIamDelegation::MakeIamSystemTokenServiceId())) {
-            const auto& metadata = AppData()->AuthConfig.GetLocalMetadataService();
-            actorSystem->RegisterLocalService(NIamDelegation::MakeIamSystemTokenServiceId(),
-                TActivationContext::Register(NIamDelegation::CreateIamSystemTokenService(
-                    AppData()->AuthConfig.HasLocalMetadataService() ? metadata.GetHost() : TString(), metadata.GetPort())));
+        // Security initialization owns the token manager, including the node-specific factory.
+        if (!AppData()->AuthConfig.GetTokenManager().GetEnable()) {
+            YDB_LOG_WARN("IAM delegation service is not started", {"reason", "AuthConfig.TokenManager is disabled"});
+            return;
         }
         actorSystem->RegisterLocalService(NIamDelegation::MakeIamDelegationServiceId(),
-            TActivationContext::Register(NIamDelegation::CreateIamDelegationService(settings, NIamDelegation::MakeIamSystemTokenServiceId())));
+            TActivationContext::Register(NIamDelegation::CreateIamDelegationService(settings)));
     }
 
     void InitAccessServiceService() {

@@ -102,27 +102,37 @@ Ydb::StatusIds::StatusCode MapGrpcStatus(int code) {
     }
 }
 
-NActors::async<TEvIamDelegation::TEvSystemTokenReady::TPtr> WaitSystemToken(NActors::TActorId service) {
-    const ui64 cookie = NActors::AllocateWaitCookie();
-    NActors::TActivationContext::AsActorContext().Send(service, new TEvIamDelegation::TEvGetSystemToken(), 0, cookie);
-    co_return co_await NActors::ActorWaitForEvent<TEvIamDelegation::TEvSystemTokenReady>(cookie);
+namespace {
+
+NActors::async<void> WaitSystemToken(TIamCallCredentials& credentials) {
+    while (credentials.Status.Code == TEvTokenManager::TStatus::ECode::NOT_READY) {
+        co_await credentials.Updated.Wait();
+    }
 }
 
-NActors::async<TString> GetIamCallToken(const TIamDelegationSettings& settings, const TIamCallCredentials& credentials) {
-    if (!credentials.SystemTokenService) {
-        throw TIamCallError(Ydb::StatusIds::UNAVAILABLE) << "no system token service to obtain the system service account token from";
+} // namespace
+
+void CheckIamCallDeadline(TMonotonic deadline) {
+    if (NActors::TActivationContext::Monotonic() >= deadline) {
+        throw TIamCallError(Ydb::StatusIds::TIMEOUT) << "IAM operation polling deadline exceeded";
     }
-    auto ev = co_await NActors::WithTimeout(settings.RequestTimeout, &WaitSystemToken, credentials.SystemTokenService);
-    if (!ev) {
+}
+
+NActors::async<TString> GetIamCallToken(TIamCallCredentials& credentials, TMonotonic deadline) {
+    CheckIamCallDeadline(deadline);
+    const auto tokenDeadline = Min(deadline, NActors::TActivationContext::Monotonic() + TIamDelegationSettings::RequestTimeout);
+    const bool ready = co_await NActors::WithDeadline(tokenDeadline, &WaitSystemToken, std::ref(credentials));
+    CheckIamCallDeadline(deadline);
+    if (!ready) {
         throw TIamCallError(Ydb::StatusIds::UNAVAILABLE) << "timeout while obtaining the system service account token";
     }
-    if (!(*ev)->Get()->Error.empty()) {
-        throw TIamCallError(Ydb::StatusIds::UNAVAILABLE) << (*ev)->Get()->Error;
+    if (credentials.Status.Code != TEvTokenManager::TStatus::ECode::SUCCESS) {
+        throw TIamCallError(Ydb::StatusIds::UNAVAILABLE) << "system service account token is unavailable: " << credentials.Status.Message;
     }
-    if ((*ev)->Get()->Token.empty()) {
+    if (credentials.Token.empty()) {
         throw TIamCallError(Ydb::StatusIds::UNAVAILABLE) << "system service account token is empty";
     }
-    co_return (*ev)->Get()->Token;
+    co_return credentials.Token;
 }
 
 NActors::async<NActors::IEventHandle::TPtr> IamClientRequest(NActors::TActorId client, NActors::IEventBase* request) {

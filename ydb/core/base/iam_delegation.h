@@ -1,11 +1,13 @@
 #pragma once
 
 #include <ydb/core/base/events.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/string.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NIamDelegation {
 
@@ -50,10 +52,6 @@ struct TEvIamDelegation {
         EvRevokeDelegation,
         EvRevokeDelegationResult,
 
-        // system token service
-        EvGetSystemToken,
-        EvSystemTokenReady,
-
         EvEnd
     };
 
@@ -93,20 +91,11 @@ struct TEvIamDelegation {
         {}
     };
 
-    // Request of the system token service: answered with TEvSystemTokenReady to the sender, with the cookie.
-    struct TEvGetSystemToken : NActors::TEventLocal<TEvGetSystemToken, EvGetSystemToken> {
-    };
-
-    // Answer of the system token service to TEvGetSystemToken: the token, or the error of obtaining it.
-    struct TEvSystemTokenReady : NActors::TEventLocal<TEvSystemTokenReady, EvSystemTokenReady> {
-        TString Token;
-        TString Error;
-
-        TEvSystemTokenReady(TString token, TString error)
-            : Token(std::move(token))
-            , Error(std::move(error))
-        {}
-    };
 };
+
+// Node-local service for privileged components performing SetupDelegation / RevokeDelegation.
+inline NActors::TActorId MakeIamDelegationServiceId(ui32 nodeId = 0) {
+    return NActors::TActorId(nodeId, "iam_dlg_srv");
+}
 
 } // namespace NKikimr::NIamDelegation

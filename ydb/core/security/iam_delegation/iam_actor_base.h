@@ -1,10 +1,13 @@
 #pragma once
 
-#include "events.h"
 #include "settings.h"
 
+#include <ydb/core/base/iam_delegation.h>
+
+#include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/async/async.h>
+#include <ydb/library/actors/async/event.h>
 #include <ydb/library/actors/async/sleep.h>
 #include <ydb/library/actors/async/timeout.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -21,6 +24,7 @@
 #include <util/generic/yexception.h>
 
 #include <concepts>
+#include <functional>
 
 namespace NKikimr::NIamDelegation {
 
@@ -78,24 +82,20 @@ enum class ENotFound {
     IsAbsent,  // a null response: the object does not exist, which the caller treats as a legitimate outcome
 };
 
-// What authorizes an IAM call: the token of YDB's own (system) service account, asked from the system token
-// service actor before every attempt.
+// Owned by the long-lived subscribing actor and accessed only in its mailbox, including by
+// nested coroutines. Updates do not include expiry; any unsuccessful update invalidates the cache.
 struct TIamCallCredentials {
-    static TIamCallCredentials SystemToken(const NActors::TActorId& service) {
-        return {.SystemTokenService = service};
-    }
-
-    NActors::TActorId SystemTokenService;
+    TString Token;
+    TEvTokenManager::TStatus Status{TEvTokenManager::TStatus::ECode::NOT_READY, {}};
+    NActors::TAsyncEvent Updated;
 };
 
-// The coroutines below are nested ones and must be awaited from a coroutine of the calling actor.
+// The coroutines below are nested ones and must be awaited from a coroutine of the owning actor.
+NActors::async<TString> GetIamCallToken(TIamCallCredentials& credentials, TMonotonic deadline);
 
-// Asks the system token service. The reply is an ordinary mailbox event: it cannot be handled before this
-// turn ends, so the wait below still intercepts it.
-NActors::async<TEvIamDelegation::TEvSystemTokenReady::TPtr> WaitSystemToken(NActors::TActorId service);
-
-// The token of the next call: the system service account's from the service.
-NActors::async<TString> GetIamCallToken(const TIamDelegationSettings& settings, const TIamCallCredentials& credentials);
+// Absolute deadline of the polling phase. Initial setup/revoke calls use Max() and retain their
+// per-attempt credential and client timeouts and bounded retry count.
+void CheckIamCallDeadline(TMonotonic deadline);
 
 // Sends the request to the client actor and waits for its reply of any type: the typed response, or
 // TEvUndelivered when the client actor is gone (a typed wait would never resume in that case).
@@ -108,32 +108,36 @@ TBackoff IamCallBackoff(const TIamDelegationSettings& settings);
 // with exponential backoff up to settings.MaxRetries attempts in total; other errors are thrown as
 // TIamCallError; NOT_FOUND is handled according to notFound.
 template <CIamRequestEvent TRequestEv, CIamResponseEvent TResponseEv, CIamRequestFiller<TRequestEv> TFill>
-NActors::async<typename TResponseEv::TPtr> IamCallWithRetry(const TIamDelegationSettings& settings, const TIamCallCredentials& credentials,
-    NActors::TActorId client, TStringBuf method, TFill fill, ENotFound notFound = ENotFound::IsError)
+NActors::async<typename TResponseEv::TPtr> IamCallWithRetry(const TIamDelegationSettings& settings, TIamCallCredentials& credentials,
+    NActors::TActorId client, TStringBuf method, TFill fill, ENotFound notFound = ENotFound::IsError, TMonotonic deadline = TMonotonic::Max())
 {
     TBackoff backoff = IamCallBackoff(settings);
     // the same request id for every attempt lets IAM deduplicate retries of one call
     const TString requestId = CreateGuidAsString();
     for (;;) {
+        CheckIamCallDeadline(deadline);
         TString retryableError;
         Ydb::StatusIds::StatusCode retryableStatus = Ydb::StatusIds::UNAVAILABLE;
         grpc::StatusCode retryableGrpcCode = grpc::StatusCode::OK;
 
         TString token;
         try {
-            token = co_await GetIamCallToken(settings, credentials);
+            token = co_await GetIamCallToken(credentials, deadline);
         } catch (const TIamCallError& e) {
             retryableError = e.what();
             retryableStatus = e.Status;
         }
 
+        CheckIamCallDeadline(deadline);
         if (retryableError.empty()) {
             auto request = MakeHolder<TRequestEv>();
             fill(request->Request);
             request->Token = token;
             request->RequestId = requestId;
 
-            auto response = co_await NActors::WithTimeout(settings.RequestTimeout + TDuration::Seconds(1), &IamClientRequest, client, request.Release());
+            const auto responseDeadline = Min(deadline, NActors::TActivationContext::Monotonic() + settings.RequestTimeout + TDuration::Seconds(1));
+            auto response = co_await NActors::WithDeadline(responseDeadline, &IamClientRequest, client, request.Release());
+            CheckIamCallDeadline(deadline);
             if (!response) {
                 retryableError = "no response from the client actor";
             } else if ((*response)->GetTypeRewrite() == NActors::TEvents::TEvUndelivered::EventType) {
@@ -169,12 +173,12 @@ NActors::async<typename TResponseEv::TPtr> IamCallWithRetry(const TIamDelegation
             // MaxRetries = 0 still makes the one attempt
             throw TIamCallError(retryableStatus, retryableGrpcCode) << method << " failed after " << Max<ui32>(settings.MaxRetries, 1) << " attempts: " << retryableError;
         }
-        co_await NActors::AsyncSleepFor(backoff.Next());
+        co_await NActors::AsyncSleepUntil(Min(deadline, NActors::TActivationContext::Monotonic() + backoff.Next()));
     }
 }
 
 // Common part of the IAM delegation service actors: their calls are authorized with the system service
-// account token asked from the system token service, and an exception that escapes a handler or a
+// account token cached from token-manager updates, and an exception that escapes a handler or a
 // top-level coroutine is logged and the actor lives on (the request it was serving is lost, its sender
 // times out; the others are not).
 template <class TDerived>
@@ -182,9 +186,8 @@ class TIamActorBase : public NActors::TActorBootstrapped<TDerived>, public NActo
 protected:
     using TBase = NActors::TActorBootstrapped<TDerived>;
 
-    TIamActorBase(TIamDelegationSettings settings, const NActors::TActorId& systemTokenService)
+    explicit TIamActorBase(TIamDelegationSettings settings)
         : Settings(std::move(settings))
-        , Credentials(TIamCallCredentials::SystemToken(systemTokenService))
     {
         static_assert(std::derived_from<TDerived, TIamActorBase>, "TDerived must derive from TIamActorBase<TDerived>");
     }
@@ -198,13 +201,13 @@ protected:
 
     // IamCallWithRetry with the settings and credentials of the actor.
     template <CIamRequestEvent TRequestEv, CIamResponseEvent TResponseEv, CIamRequestFiller<TRequestEv> TFill>
-    NActors::async<typename TResponseEv::TPtr> CallWithRetry(NActors::TActorId client, TStringBuf method, TFill fill, ENotFound notFound = ENotFound::IsError) {
-        co_return co_await IamCallWithRetry<TRequestEv, TResponseEv>(Settings, Credentials, client, method, std::move(fill), notFound);
+    NActors::async<typename TResponseEv::TPtr> CallWithRetry(NActors::TActorId client, TStringBuf method, TFill fill, ENotFound notFound = ENotFound::IsError, TMonotonic deadline = TMonotonic::Max()) {
+        co_return co_await IamCallWithRetry<TRequestEv, TResponseEv>(Settings, Credentials, client, method, std::move(fill), notFound, deadline);
     }
 
 protected:
     const TIamDelegationSettings Settings;
-    const TIamCallCredentials Credentials;
+    TIamCallCredentials Credentials;
 };
 
 } // namespace NKikimr::NIamDelegation

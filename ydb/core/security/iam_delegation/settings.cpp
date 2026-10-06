@@ -9,33 +9,27 @@ namespace NKikimr::NIamDelegation {
 
 TIamDelegationSettings TIamDelegationSettings::FromConfig(const NKikimrConfig::TIamConfig& iamConfig) {
     TIamDelegationSettings settings;
-    settings.TokenServiceEndpoint = iamConfig.GetTokenServiceEndpoint();
-    settings.ServiceControlEndpoint = iamConfig.GetServiceControlEndpoint();
-    settings.ResourceManagerEndpoint = iamConfig.GetResourceManagerEndpoint();
-    settings.EnableSsl = iamConfig.GetEnableSsl();
-    settings.ServiceId = iamConfig.GetServiceId();
-    settings.MicroserviceId = iamConfig.GetMicroserviceId();
-    settings.ResourceType = iamConfig.GetResourceType();
+    settings.Config = iamConfig;
     return settings;
 }
 
 TIamDelegationSettings TIamDelegationSettings::FromConfig(const NKikimrConfig::TIamConfig& iamConfig, const NKikimrReplication::TReplicationDefaults& replicationDefaults) {
     auto settings = FromConfig(iamConfig);
     const auto& shared = replicationDefaults.GetIamServiceControl();
-    if (settings.TokenServiceEndpoint.empty()) {
-        settings.TokenServiceEndpoint = shared.GetEndpoint();
+    if (settings.Config.GetTokenServiceEndpoint().empty()) {
+        settings.Config.SetTokenServiceEndpoint(shared.GetEndpoint());
     }
-    if (settings.ServiceId.empty()) {
-        settings.ServiceId = shared.GetServiceId();
+    if (settings.Config.GetServiceId().empty()) {
+        settings.Config.SetServiceId(shared.GetServiceId());
     }
-    if (settings.MicroserviceId.empty()) {
-        settings.MicroserviceId = shared.GetMicroserviceId();
+    if (settings.Config.GetMicroserviceId().empty()) {
+        settings.Config.SetMicroserviceId(shared.GetMicroserviceId());
     }
-    if (settings.ResourceType.empty()) {
-        settings.ResourceType = shared.GetResourceType();
+    if (settings.Config.GetResourceType().empty()) {
+        settings.Config.SetResourceType(shared.GetResourceType());
     }
     if (!iamConfig.HasEnableSsl()) {
-        settings.EnableSsl = shared.GetEnableSsl();
+        settings.Config.SetEnableSsl(shared.GetEnableSsl());
     }
     return settings;
 }
@@ -46,16 +40,16 @@ namespace {
 // fields are required by IAM: the agent service account a delegation is granted to is named
 // yc.<ServiceId>.<MicroserviceId>.<cloud>.agent, and IAM checks that both exist in its service registry.
 void CollectMissingIdentity(const TIamDelegationSettings& settings, TStringBuilder& missing) {
-    if (settings.TokenServiceEndpoint.empty()) {
+    if (settings.Config.GetTokenServiceEndpoint().empty()) {
         missing << " TokenServiceEndpoint";
     }
-    if (settings.ServiceId.empty()) {
+    if (settings.Config.GetServiceId().empty()) {
         missing << " ServiceId";
     }
-    if (settings.MicroserviceId.empty()) {
+    if (settings.Config.GetMicroserviceId().empty()) {
         missing << " MicroserviceId";
     }
-    if (settings.ResourceType.empty()) {
+    if (settings.Config.GetResourceType().empty()) {
         missing << " ResourceType";
     }
 }
@@ -74,7 +68,10 @@ TString TIamDelegationSettings::Validate() const {
 TString TIamDelegationSettings::ValidateForDelegation() const {
     TStringBuilder missing;
     CollectMissingIdentity(*this, missing);
-    if (ServiceControlEndpoint.empty()) {
+    if (Config.GetSystemTokenName().empty()) {
+        missing << " SystemTokenName";
+    }
+    if (Config.GetServiceControlEndpoint().empty()) {
         missing << " ServiceControlEndpoint";
     }
     if (!missing.empty()) {

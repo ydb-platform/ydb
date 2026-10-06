@@ -5,7 +5,10 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <util/string/cast.h>
 
-#include <cstring>
+#include <yql/essentials/types/uuid/uuid.h>
+#include <util/stream/str.h>
+#include <util/system/byteorder.h>
+#include <util/system/unaligned_mem.h>
 
 namespace NYql {
 
@@ -258,14 +261,8 @@ namespace NYql {
             }
             auto* value = proto->mutable_typed_value();
             value->mutable_type()->set_type_id(Ydb::Type::UUID);
-            // Byte-by-byte copy to avoid endianness issues.
-            // low_128 = bytes 0..7, high_128 = bytes 8..15 (little-endian interpretation).
-            ui64 low = 0;
-            ui64 high = 0;
-            for (int i = 0; i < 8; ++i) {
-                low |= static_cast<ui64>(static_cast<unsigned char>(literal[i])) << (8 * i);
-                high |= static_cast<ui64>(static_cast<unsigned char>(literal[8 + i])) << (8 * i);
-            }
+            const ui64 low = LittleToHost(ReadUnaligned<ui64>(literal.data()));
+            const ui64 high = LittleToHost(ReadUnaligned<ui64>(literal.data() + sizeof(ui64)));
             auto* v = value->mutable_value();
             v->set_low_128(low);
             v->set_high_128(high);
@@ -739,6 +736,8 @@ namespace NYql {
 
     TString FormatPrimitiveType(const Ydb::Type::PrimitiveTypeId& typeId) {
         switch (typeId) {
+            case Ydb::Type::UUID:
+                return "Uuid";
             case Ydb::Type::BOOL:
                 return "Bool";
             case Ydb::Type::INT8:
@@ -795,6 +794,15 @@ namespace NYql {
         case Ydb::Type::kTypeId: {
             const auto& typeId = type.type_id();
             switch (typeId) {
+            case Ydb::Type::UUID: {
+                const auto& value = typedValue.value();
+                if (value.value_case() == Ydb::Value::kLow128) {
+                    TStringStream uuid;
+                    NKikimr::NUuid::UuidHalfsToString(value.low_128(), value.high_128(), uuid);
+                    return TStringBuilder() << "Uuid(\"" << uuid.Str() << "\")";
+                }
+                break;
+            }
             case Ydb::Type::INTERVAL: {
                 const auto& value = typedValue.value();
                 switch (value.value_case()) {

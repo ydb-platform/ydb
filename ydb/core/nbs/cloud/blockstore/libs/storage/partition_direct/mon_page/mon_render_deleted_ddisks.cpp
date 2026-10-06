@@ -36,9 +36,8 @@ void RenderDeletedDDisks(IOutputStream& str, const TMonPageData& data)
     const size_t recordCount = data.DeletedDDiskRecords.size();
     const size_t pageCount =
         recordCount / RecordsPerPage + (recordCount % RecordsPerPage != 0);
-    const size_t page = pageCount
-        ? Min(data.DeletedDDiskPage, pageCount - 1)
-        : 0;
+    const size_t page =
+        pageCount ? Min(data.DeletedDDiskPage, pageCount - 1) : 0;
     const size_t firstRecord = page * RecordsPerPage;
     const size_t endRecord = Min(firstRecord + RecordsPerPage, recordCount);
 
@@ -114,7 +113,8 @@ void RenderDeletedDDisks(IOutputStream& str, const TMonPageData& data)
                             }
                         }
                         TABLED () {
-                            str << TInstant::MicroSeconds(record.GetTimestampUs())
+                            str << TInstant::MicroSeconds(
+                                       record.GetTimestampUs())
                                        .ToStringUpToSeconds();
                         }
                         TABLED () {

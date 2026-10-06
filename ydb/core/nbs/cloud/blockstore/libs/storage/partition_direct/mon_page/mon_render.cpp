@@ -1,8 +1,8 @@
 #include "mon_render.h"
 
 #include "mon_render_chaos.h"
-#include "mon_render_deleted_ddisks.h"
 #include "mon_render_dbg.h"
+#include "mon_render_deleted_ddisks.h"
 #include "mon_render_local_db.h"
 #include "mon_render_memory.h"
 #include "mon_render_overview.h"

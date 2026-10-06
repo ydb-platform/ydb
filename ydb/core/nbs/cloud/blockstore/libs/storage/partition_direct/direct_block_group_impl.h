@@ -161,8 +161,7 @@ public:
     TDuration TakeCopyRangeBudget(ui64 byteCount) override;
 
     ui32 GetNodeId(THostIndex host) const override;
-    NKikimr::NBsController::TDDiskId GetDDiskId(
-        THostIndex host) const override;
+    NKikimr::NBsController::TDDiskId GetDDiskId(THostIndex host) const override;
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 

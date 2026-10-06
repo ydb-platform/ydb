@@ -9,9 +9,8 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
-#include <ydb/core/mind/bscontroller/types.h>
-
 #include <ydb/core/base/events.h>
+#include <ydb/core/mind/bscontroller/types.h>
 
 #include <ydb/library/actors/core/event_local.h>
 

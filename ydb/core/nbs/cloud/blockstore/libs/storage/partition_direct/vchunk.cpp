@@ -1267,8 +1267,7 @@ void TVChunk::PersistNextPendingConfig()
         for (const THostIndex hostIndex:
              VChunkConfig.GetDDisks().Exclude(config.GetDDisks()))
         {
-            deletedDDiskIds.push_back(
-                DirectBlockGroup->GetDDiskId(hostIndex));
+            deletedDDiskIds.push_back(DirectBlockGroup->GetDDiskId(hostIndex));
         }
     }
     auto onPersisted = PartitionDirectService->UpdateVChunkState(

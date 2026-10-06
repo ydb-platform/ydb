@@ -40,9 +40,7 @@ void TPartitionActor::CompleteCleanupDeletedDDisks(
     DeletedDDiskStorage.RemovePersisted(args.RecordIds);
 
     if (!args.RecordIds.empty()) {
-        ExecuteTx(
-            ctx,
-            CreateTx<TCleanupDeletedDDisks>());
+        ExecuteTx(ctx, CreateTx<TCleanupDeletedDDisks>());
     }
 }
 

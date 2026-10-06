@@ -14,8 +14,7 @@ constexpr size_t DeletedDDiskCleanupBatchSize = 1000;
 
 }   // namespace
 
-void TDeletedDDiskStorage::Load(
-    TVector<TDeletedDDiskRecordProto> records)
+void TDeletedDDiskStorage::Load(TVector<TDeletedDDiskRecordProto> records)
 {
     Records = std::move(records);
     NextRecordId = 1;
@@ -40,9 +39,8 @@ TVector<TDeletedDDiskRecordProto> TDeletedDDiskStorage::MakeRecords(
         record.SetTabletGeneration(tabletGeneration);
         record.SetTimestampUs(timestampUs);
         ddiskId.Serialize(record.MutableDDiskId());
-        record.SetStatus(
-            NYdb::NBS::PartitionDirect::NProto::
-                DELETED_DDISK_STATUS_REGISTERED);
+        record.SetStatus(NYdb::NBS::PartitionDirect::NProto::
+                             DELETED_DDISK_STATUS_REGISTERED);
     }
     return records;
 }
@@ -60,9 +58,10 @@ void TDeletedDDiskStorage::RemovePersisted(const TVector<ui64>& recordIds)
 {
     THashSet<ui64> ids;
     ids.insert(recordIds.begin(), recordIds.end());
-    EraseIf(Records, [&ids](const auto& record) {
-        return ids.contains(record.GetRecordId());
-    });
+    EraseIf(
+        Records,
+        [&ids](const auto& record)
+        { return ids.contains(record.GetRecordId()); });
 }
 
 TVector<ui64> TDeletedDDiskStorage::MakeCleanupBatch(TInstant now) const
@@ -73,9 +72,8 @@ TVector<ui64> TDeletedDDiskStorage::MakeCleanupBatch(TInstant now) const
     TVector<ui64> recordIds;
     recordIds.reserve(DeletedDDiskCleanupBatchSize);
     for (const auto& record: Records) {
-        if (record.GetStatus() !=
-                NYdb::NBS::PartitionDirect::NProto::
-                    DELETED_DDISK_STATUS_EXECUTED ||
+        if (record.GetStatus() != NYdb::NBS::PartitionDirect::NProto::
+                                      DELETED_DDISK_STATUS_EXECUTED ||
             record.GetTimestampUs() >= cutoffTimestampUs)
         {
             continue;
@@ -89,7 +87,8 @@ TVector<ui64> TDeletedDDiskStorage::MakeCleanupBatch(TInstant now) const
     return recordIds;
 }
 
-const TVector<TDeletedDDiskRecordProto>& TDeletedDDiskStorage::GetRecords() const
+const TVector<TDeletedDDiskRecordProto>&
+TDeletedDDiskStorage::GetRecords() const
 {
     return Records;
 }

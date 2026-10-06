@@ -20,18 +20,10 @@ Y_UNIT_TEST_SUITE(TDeletedDDiskStorageTest)
             {103, 6, 7},
         };
 
-        const auto firstRecords = storage.MakeRecords(
-            nextRecordId,
-            10,
-            17,
-            123456,
-            firstDDiskIds);
-        const auto secondRecords = storage.MakeRecords(
-            nextRecordId,
-            11,
-            17,
-            123789,
-            secondDDiskIds);
+        const auto firstRecords =
+            storage.MakeRecords(nextRecordId, 10, 17, 123456, firstDDiskIds);
+        const auto secondRecords =
+            storage.MakeRecords(nextRecordId, 11, 17, 123789, secondDDiskIds);
 
         UNIT_ASSERT_VALUES_EQUAL(2u, firstRecords.size());
         UNIT_ASSERT_VALUES_EQUAL(1u, secondRecords.size());
@@ -47,9 +39,8 @@ Y_UNIT_TEST_SUITE(TDeletedDDiskStorageTest)
         UNIT_ASSERT_VALUES_EQUAL(123456u, firstRecords[0].GetTimestampUs());
         UNIT_ASSERT_VALUES_EQUAL(
             true,
-            firstRecords[0].GetStatus() ==
-                NYdb::NBS::PartitionDirect::NProto::
-                    DELETED_DDISK_STATUS_REGISTERED);
+            firstRecords[0].GetStatus() == NYdb::NBS::PartitionDirect::NProto::
+                                               DELETED_DDISK_STATUS_REGISTERED);
         UNIT_ASSERT_VALUES_EQUAL(
             0u,
             firstRecords[0].GetProcessingTabletGeneration());
@@ -100,20 +91,17 @@ Y_UNIT_TEST_SUITE(TDeletedDDiskStorageTest)
             auto& record = records[i];
             record.SetRecordId(i + 1);
             record.SetTimestampUs(10);
-            record.SetStatus(
-                NYdb::NBS::PartitionDirect::NProto::
-                    DELETED_DDISK_STATUS_EXECUTED);
+            record.SetStatus(NYdb::NBS::PartitionDirect::NProto::
+                                 DELETED_DDISK_STATUS_EXECUTED);
         }
         records[1001].SetRecordId(1002);
         records[1001].SetTimestampUs(10);
-        records[1001].SetStatus(
-            NYdb::NBS::PartitionDirect::NProto::
-                DELETED_DDISK_STATUS_REGISTERED);
+        records[1001].SetStatus(NYdb::NBS::PartitionDirect::NProto::
+                                    DELETED_DDISK_STATUS_REGISTERED);
         records[1002].SetRecordId(1003);
         records[1002].SetTimestampUs(100);
         records[1002].SetStatus(
-            NYdb::NBS::PartitionDirect::NProto::
-                DELETED_DDISK_STATUS_EXECUTED);
+            NYdb::NBS::PartitionDirect::NProto::DELETED_DDISK_STATUS_EXECUTED);
         storage.Load(std::move(records));
 
         const auto now =

@@ -261,9 +261,7 @@ void TPartitionActor::CompleteLoadState(
         }
     }
 
-    ExecuteTx(
-        ctx,
-        CreateTx<TCleanupDeletedDDisks>());
+    ExecuteTx(ctx, CreateTx<TCleanupDeletedDDisks>());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

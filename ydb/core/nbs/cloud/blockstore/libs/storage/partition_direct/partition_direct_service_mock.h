@@ -91,8 +91,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TPersistResultFuture UpdateVChunkState(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg,
         TDirtyMapStateProto state,
-        TVector<NKikimr::NBsController::TDDiskId> deletedDDiskIds)
-        override
+        TVector<NKikimr::NBsController::TDDiskId> deletedDDiskIds) override
     {
         UpdateConfigRequests.emplace_back(TUpdateConfigRequest{
             .Config = cfg,

@@ -527,13 +527,11 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
         const auto first = MakeDeletedDDiskRecord(4, 10, 7, 123456, 101);
         auto second = MakeDeletedDDiskRecord(9, 12, 8, 789012, 202);
         second.SetStatus(
-            NYdb::NBS::PartitionDirect::NProto::
-                DELETED_DDISK_STATUS_EXECUTED);
+            NYdb::NBS::PartitionDirect::NProto::DELETED_DDISK_STATUS_EXECUTED);
         second.SetProcessingTabletGeneration(25);
         auto updatedFirst = MakeDeletedDDiskRecord(4, 11, 9, 345678, 303);
-        updatedFirst.SetStatus(
-            NYdb::NBS::PartitionDirect::NProto::
-                DELETED_DDISK_STATUS_IN_PROGRESS);
+        updatedFirst.SetStatus(NYdb::NBS::PartitionDirect::NProto::
+                                   DELETED_DDISK_STATUS_IN_PROGRESS);
         updatedFirst.SetProcessingTabletGeneration(21);
 
         executor.WriteTx(
@@ -565,7 +563,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 UNIT_ASSERT_VALUES_EQUAL(
                     second.SerializeAsString(),
                     loaded[1].SerializeAsString());
-        });
+            });
     }
 
     Y_UNIT_TEST(ShouldDeleteDeletedDDiskRecordsByKeys)
@@ -573,16 +571,13 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
         TTestExecutor executor;
         auto expiredOne = MakeDeletedDDiskRecord(1, 10, 7, 100, 101);
         expiredOne.SetStatus(
-            NYdb::NBS::PartitionDirect::NProto::
-                DELETED_DDISK_STATUS_EXECUTED);
+            NYdb::NBS::PartitionDirect::NProto::DELETED_DDISK_STATUS_EXECUTED);
         auto expiredTwo = MakeDeletedDDiskRecord(2, 11, 7, 100, 102);
         expiredTwo.SetStatus(
-            NYdb::NBS::PartitionDirect::NProto::
-                DELETED_DDISK_STATUS_EXECUTED);
+            NYdb::NBS::PartitionDirect::NProto::DELETED_DDISK_STATUS_EXECUTED);
         auto fresh = MakeDeletedDDiskRecord(3, 12, 7, 1000, 103);
         fresh.SetStatus(
-            NYdb::NBS::PartitionDirect::NProto::
-                DELETED_DDISK_STATUS_EXECUTED);
+            NYdb::NBS::PartitionDirect::NProto::DELETED_DDISK_STATUS_EXECUTED);
         auto pending = MakeDeletedDDiskRecord(4, 13, 7, 100, 104);
 
         executor.WriteTx(

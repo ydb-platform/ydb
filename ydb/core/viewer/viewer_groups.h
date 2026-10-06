@@ -304,6 +304,7 @@ public:
         TString Erasure;
         TErasureType::EErasureSpecies ErasureSpecies = TErasureType::ErasureNone;
         TString State;
+        NKikimrViewer::TStorageGroupStateInfo StateInfo;
         ui32 StateSortKey = 0;
         ui32 EncryptionMode = 0;
         ui32 GroupSizeInUnits = 0;
@@ -393,6 +394,7 @@ public:
         // mirror-3-dc: ok, degraded:1(1), degraded:1(2), degraded:1(3), degraded:2(3,1), dead:3(3,1,1)
 
         void CalcState() {
+            StateInfo.Clear();
             MissingDisks = 0;
             ui32 startingDisks = 0;
             ui32 replicatingDisks = 0;
@@ -422,6 +424,7 @@ public:
             if (MissingDisks == 0) {
                 Overall = NKikimrViewer::EFlag::Green;
                 State = "ok";
+                StateInfo.SetStatus("ok");
                 StateSortKey = 0;
             } else {
                 if (ErasureSpecies == TErasureType::ErasureNone) {
@@ -435,6 +438,8 @@ public:
                         StateSortKey = 100;
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
+                    StateInfo.SetStatus(state);
+                    StateInfo.SetCount(static_cast<ui32>(MissingDisks));
                 } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block) {
                     TString state;
                     if (MissingDisks > 2) {
@@ -462,6 +467,8 @@ public:
                         }
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
+                    StateInfo.SetStatus(state);
+                    StateInfo.SetCount(static_cast<ui32>(MissingDisks));
                 } else if (ErasureSpecies == TErasureType::ErasureMirror3dc) {
                     std::sort(failedDomainsPerRealm.begin(), failedDomainsPerRealm.end(), std::greater<ui8>());
                     while (!failedDomainsPerRealm.empty() && failedDomainsPerRealm.back() == 0) {
@@ -493,6 +500,13 @@ public:
                         }
                     }
                     State = TStringBuilder() << state << ':' << PrintDomains(failedDomainsPerRealm);
+                    if (!state.empty()) {
+                        StateInfo.SetStatus(state);
+                        StateInfo.SetCount(static_cast<ui32>(failedDomainsPerRealm.size()));
+                        for (ui8 failedDomains : failedDomainsPerRealm) {
+                            StateInfo.AddFailedDomainsPerRealm(failedDomains);
+                        }
+                    }
                 }
             }
         }
@@ -798,7 +812,7 @@ public:
             result = EGroupFields::Erasure;
         } else if (field == "Degraded" || field == "MissingDisks") {
             result = EGroupFields::MissingDisks;
-        } else if (field == "State") {
+        } else if (field == "State" || field == "StateInfo") {
             result = EGroupFields::State;
         } else if (field == "Usage") {
             result = EGroupFields::Usage;
@@ -2516,6 +2530,9 @@ public:
                 }
                 if (FieldsAvailable.test(+EGroupFields::State) && FieldsRequested.test(+EGroupFields::State)) {
                     jsonGroup.SetState(group->State);
+                    if (!group->StateInfo.GetStatus().empty()) {
+                        jsonGroup.MutableStateInfo()->CopyFrom(group->StateInfo);
+                    }
                     if (group->GroupGeneration) {
                         jsonGroup.SetGroupGeneration(group->GroupGeneration);
                     }
@@ -2737,7 +2754,8 @@ public:
                           * `MediaType`
                           * `Erasure`
                           * `MissingDisks`
-                          * `State`
+                          * `State` (also returns structured `StateInfo`)
+                          * `StateInfo` (alias for `State`)
                           * `Usage`
                           * `Used`
                           * `Limit`

@@ -1141,7 +1141,11 @@ FROM `{table_name}`"""
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
 
-    @pytest.mark.parametrize("local_topics", [True, False])
+    # SchemeShard counters cover the database, so each case needs a fresh cluster.
+    @pytest.mark.parametrize(
+        "local_topics,kikimr", [(True, {}), (False, {})],
+        indirect=["kikimr"], scope="function", ids=["True", "False"],
+    )
     def test_read_topic_restore_state(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         inp, out, endpoint = self.get_io_names(
             kikimr,

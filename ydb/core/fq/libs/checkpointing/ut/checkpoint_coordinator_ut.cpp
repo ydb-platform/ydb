@@ -129,7 +129,8 @@ struct TTestBootstrap : public TTestActorRuntime {
             Counters,
             NProto::TGraphParams(),
             outputStartTime ? FederatedQuery::StateLoadMode::EMPTY : FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
-            {}
+            {},
+            false
         ).Release());
         
         auto ev = BuildEvReadyState();

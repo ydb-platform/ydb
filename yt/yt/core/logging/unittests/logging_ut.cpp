@@ -564,6 +564,7 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
         .Payload = MakeTaggedPayloadFromMessage("test_message"),
         .FiberId = 31,
         .TraceId = TTraceId(1, 2, 3, 4),
+        .SpanId = 0x1234abcd,
         .SourceFile = "a/b.cpp",
         .SourceLine = 123,
     };
@@ -594,6 +595,7 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
             EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger().GetCategory()->Name);
             EXPECT_EQ(message->GetChildOrThrow("fiber_id")->AsString()->GetValue(), "1f");
             EXPECT_EQ(message->GetChildOrThrow("trace_id")->AsString()->GetValue(), "4-3-2-1");
+            EXPECT_EQ(message->FindChild("span_id"), nullptr);
 
             if (enableSourceLocation) {
                 EXPECT_EQ(message->GetChildOrThrow("source_file")->AsString()->GetValue(), "b.cpp:123");
@@ -601,6 +603,42 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
                 EXPECT_EQ(message->FindChild("source_file"), nullptr);
             }
         }
+    }
+}
+
+TEST_F(TLoggingTest, StructuredFormatterSpanIdField)
+{
+    TLogEvent event{
+        .Category = Logger().GetCategory(),
+        .Level = ELogLevel::Debug,
+        .Family = ELogFamily::PlainText,
+        .Payload = MakeTaggedPayloadFromMessage("test_message"),
+        .TraceId = TTraceId(1, 2, 3, 4),
+        .SpanId = 0x1234abcd,
+    };
+
+    for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
+        TTempFile logFile(GenerateLogFileName());
+
+        auto writerConfig = New<TFileLogWriterConfig>();
+        writerConfig->FileName = logFile.Name();
+
+        auto writer = CreateFileLogWriter(
+            std::make_unique<TStructuredLogFormatter>(TStructuredLogFormatterOptions{.Format = format, .EnableSpanIdField = true}),
+            CreateDefaultSystemLogEventProvider(writerConfig),
+            "test_writer",
+            writerConfig,
+            this);
+
+        WriteEvent(writer, event);
+        TLogManager::Get()->Synchronize();
+
+        auto lines = ReadPlainTextEvents(logFile.Name());
+        EXPECT_EQ(1, std::ssize(lines));
+
+        auto message = DeserializeStructuredEvent(lines[0], format);
+        EXPECT_EQ(message->GetChildOrThrow("trace_id")->AsString()->GetValue(), "4-3-2-1");
+        EXPECT_EQ(message->GetChildOrThrow("span_id")->AsString()->GetValue(), "000000001234abcd");
     }
 }
 
@@ -615,6 +653,7 @@ TEST_F(TLoggingTest, StructuredLogging)
             .Finish()),
         .FiberId = 31,
         .TraceId = TTraceId(1, 2, 3, 4),
+        .SpanId = 0x1234abcd,
     };
 
     for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
@@ -643,6 +682,7 @@ TEST_F(TLoggingTest, StructuredLogging)
 
         EXPECT_EQ(message->FindChild("fiber_id"), nullptr);
         EXPECT_EQ(message->FindChild("trace_id"), nullptr);
+        EXPECT_EQ(message->FindChild("span_id"), nullptr);
     }
 }
 

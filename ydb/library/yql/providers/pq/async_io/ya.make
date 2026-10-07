@@ -12,6 +12,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/providers/common/message_stream/async_io
     library/cpp/containers/disjoint_interval_tree
     library/cpp/protobuf/interop
     library/cpp/retry
@@ -41,3 +42,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

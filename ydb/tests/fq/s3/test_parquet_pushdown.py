@@ -3,15 +3,7 @@
 """
 Integration tests for Parquet min/max predicate pushdown in S3 Federated Query.
 
-Tests cover all supported column types and operators:
-- INT32/INT64 (already partially covered, but extended here)
-- FLOAT/DOUBLE
-- BOOL
-- UUID
-- TIMESTAMP/DATE (already covered, but extended here)
-- BETWEEN operator
-- Multi-column AND predicates
-- Edge cases (all skipped, all kept, non-contiguous groups)
+Tests cover UUID equality, a missing UUID value, and BETWEEN predicates.
 """
 
 import struct
@@ -61,11 +53,7 @@ class TestS3ParquetPushdown(TestYdsBase):
         assert sorted(rows_with) == sorted(expected_rows), f"With pushdown: {rows_with}"
 
     # =========================================================================
-    # FLOAT/DOUBLE pushdown tests (T4)
-    # =========================================================================
-
-    # =========================================================================
-    # UUID pushdown tests (T11)
+    # UUID pushdown tests
     # =========================================================================
 
     @yq_v2
@@ -206,6 +194,30 @@ class TestS3ParquetPushdown(TestYdsBase):
                 ("keep-b", uuid_b),
             ],
         )
+
+    @yq_v2
+    def test_s3_push_down_parquet_uuid_skipped_row_group(self, kikimr, s3, client, unique_prefix):
+        # Seven groups: skip group 3; the all-NULL group is retained by min/max pushdown.
+        # Six selected groups with five readers force another prefetch after the initial batch.
+        uuids = [f"{i:08x}-0000-4000-8000-000000000000" for i in range(1, 7)]
+        ids = [self._yql_uuid_bytes(value) for value in uuids for _ in range(2)] + [None, None]
+        fruits = [f"row-{i}" for i in range(len(ids))]
+        table = pa.table({'id': pa.array(ids, type=pa.binary(16)), 'fruit': fruits})
+        filename = 'uuid_skipped_row_group.parquet'
+        conn = self.setup_s3_and_connection(s3, client, unique_prefix, filename, table)
+        kikimr.control_plane.wait_bootstrap(1)
+
+        sql = f'''
+            PRAGMA s3.ArrowParallelRowGroupCount = "5";
+            PRAGMA s3.ArrowRowGroupReordering = "true";
+            SELECT fruit
+            FROM `{conn}`.`/{filename}`
+            WITH (FORMAT="parquet", SCHEMA=(id Uuid, fruit Utf8 NOT NULL))
+            WHERE id != Uuid("{uuids[3]}")
+            '''
+        # SQL filtering removes both the excluded UUID and NULLs.
+        expected = [(fruits[i],) for i in range(12) if i // 2 != 3]
+        self._assert_pushdown_correctness(client, sql, expected)
 
     # =========================================================================
     # DATE pushdown tests (T10)

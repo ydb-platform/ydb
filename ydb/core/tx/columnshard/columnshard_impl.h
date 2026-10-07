@@ -1,6 +1,7 @@
 #pragma once
 #include "background_controller.h"
 #include "columnshard.h"
+#include "columnshard_find_empty_history_intervals.h"
 #include "columnshard_move_data.h"
 #include "columnshard_private_events.h"
 #include "columnshard_subdomain_path_id.h"
@@ -216,6 +217,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxReadBlobRanges;
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
+    friend class TTxSaveCutHistoryRequests;
+    friend class TFindEmptyHistoryIntervalsResultProcessor;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitOnProposeTxSubscriberBase;
@@ -623,6 +626,15 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
+    std::optional<TEmptyHistoryIntervalsScan> EmptyHistoryIntervalsScan;
+    void InitFindEmptyHistoryIntervals();
+    void StartFindEmptyHistoryIntervals(const TActorContext& ctx);
+    void AbortFindEmptyHistoryIntervals();
+    void FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccessorsResult& result);
+    void TryCutHistory(const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvContinueFindEmptyHistoryIntervals::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady::TPtr& ev, const TActorContext& ctx);
+    void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
     // Re-arms only the move's accessor requests, gated by their own in-flight count so they never queue behind tiering's.
     void SetupMoveDataMetadata();

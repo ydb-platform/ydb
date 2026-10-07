@@ -1,3 +1,4 @@
+#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "kqp_host_impl.h"
 #include "kqp_statement_rewrite.h"
 
@@ -13,6 +14,7 @@
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_message_stream.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_settings.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
@@ -21,6 +23,7 @@
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+#include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider.h>
 
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -1110,7 +1113,8 @@ private:
                 || node.Maybe<TS3DataSink>()
                 || node.Maybe<TYtDSource>()
                 || node.Maybe<TYtDSink>()
-                || node.Maybe<TGenDataSource>();
+                || node.Maybe<TGenDataSource>()
+                || (node.Maybe<TCoDataSource>() && node.Cast<TCoDataSource>().Category().Value() == YdbExternalProviderName);
 
             return !hasFederatedSorcesOrSinks;
         });
@@ -1265,6 +1269,18 @@ public:
         if (FederatedQuerySetup) {
             const auto& hostnamePatterns = QueryServiceConfig.GetHostnamePatterns();
             const auto& availableExternalDataSources = QueryServiceConfig.GetAvailableExternalDataSources();
+            std::set<NYql::EDatabaseType> availableTypes;
+            for (const auto& type : availableExternalDataSources) {
+                // YdbTopics is a legacy configuration alias, not a valid EDS type.
+                if (type == "YdbTopics") {
+                    availableTypes.insert(NYql::EDatabaseType::Ydb);
+                } else if (const auto databaseType = NYql::DatabaseTypeFromString(type)) {
+                    availableTypes.insert(*databaseType);
+                } else {
+                    YDB_LOG_WARN_COMP(NKikimrServices::KQP_GATEWAY, "Unknown external data source type, ignoring it",
+                        {"sourceType", type});
+                }
+            }
             ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
                                                                                  ActorSystem,
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit(),
@@ -1272,7 +1288,7 @@ public:
                                                                                  Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles(),
                                                                                  QueryServiceConfig.GetAllExternalDataSourcesAreAvailable(),
-                                                                                 std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()));
+                                                                                 availableTypes);
         }
     }
 
@@ -2000,6 +2016,20 @@ private:
         TypesCtx->AddDataSink(NYql::S3ProviderName, std::move(dataSink));
     }
 
+    void InitYdbExternalProvider() {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::YdbExternalProviderName))) {
+            return;
+        }
+
+        const auto& resources = FederatedQuerySetup->YdbExternalResources;
+        YQL_ENSURE(resources, "Missing YdbExternal resources");
+        auto provider = NYql::CreateYdbExternalDataProviders(
+            TypesCtx.Get(), [resources] { return resources->GetMetadataClientCache(); },
+            FederatedQuerySetup->CredentialsFactory);
+        TypesCtx->AddDataSource(NYql::YdbExternalProviderName, std::move(provider.Source));
+        TypesCtx->AddDataSink(NYql::YdbExternalProviderName, std::move(provider.Sink));
+    }
+
     void InitGenericProvider() {
         if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::GenericProviderName))) {
             return;
@@ -2045,7 +2075,12 @@ private:
                 .CreateOperationTracker(false)
         );
 
-        TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
+        auto ytSource = CreateYtDataSource(ytState);
+        if (Config->FeatureFlags.GetEnableQYT()) {
+            ytSource = NYql::WrapYtDataSourceWithMessageStreams(std::move(ytSource),
+                NYql::CreateYtMessageStreamIntegration(FederatedQuerySetup->CredentialsFactory));
+        }
+        TypesCtx->AddDataSource(YtProviderName, std::move(ytSource));
         TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
 
         finalizers.emplace_back([ytGateway = FederatedQuerySetup->YtGateway, sessionId]() {
@@ -2179,6 +2214,7 @@ private:
             if (AppData()->FeatureFlags.GetEnableExternalDataSources()) {
                 InitS3Provider(queryType);
                 InitGenericProvider();
+                InitYdbExternalProvider();
                 InitSolomonProvider();
 
                 if (FederatedQuerySetup->YtGateway) {

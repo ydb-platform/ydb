@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 SRCS(
+    expand_replicate.cpp
     inline_join_filters.cpp
     propagate_topsort_through_stage.cpp
     pull_up_map_over_cbo.cpp
@@ -12,6 +13,7 @@ JOIN_SRCS(
     expand_cbo_tree.cpp
     expand_distinct_aggregation.cpp
     expand_grouping_sets.cpp
+    expand_whole_partition_window.cpp
 )
 
 JOIN_SRCS(

@@ -77,6 +77,7 @@ struct TLoggingAnchor
 using TThreadId = size_t;
 using TFiberId = size_t;
 using TTraceId = TGuid;
+using TSpanId = ui64;
 using TRequestId = TGuid;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -100,6 +101,7 @@ struct TLogEvent
     TFiberId FiberId = {};
 
     TTraceId TraceId;
+    TSpanId SpanId = {};
     TRequestId RequestId;
 
     TStringBuf SourceFile;
@@ -139,6 +141,7 @@ struct TLoggingContext
     TThreadName ThreadName;
     TFiberId FiberId;
     TTraceId TraceId;
+    TSpanId SpanId;
     TRequestId RequestId;
     TLoggingTagListPayloadView TraceLoggingTags;
 };

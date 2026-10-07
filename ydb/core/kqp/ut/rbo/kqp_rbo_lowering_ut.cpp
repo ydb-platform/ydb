@@ -552,7 +552,7 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
             std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, f.Pos);
         const TPhysicalNames names(f.Props.InfoUnitRegistry);
         const auto ast = TPhysicalSourceBuilder(read, f.ExprCtx, f.Pos, names,
-            f.Props.InfoUnitRegistry, "stage", "key").BuildPhysicalOp();
+            f.Props.InfoUnitRegistry, "stage", /*isSysView=*/false, "key").BuildPhysicalOp();
         const auto source = FindNode(ast, [](const auto& node) {
             return TKqpBlockReadOlapTableRanges::Match(node.Get());
         });
@@ -652,6 +652,9 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
 
     Y_UNIT_TEST(StageAssignmentAndLivenessDistinguishReplicateEdgesToOneJoin) {
         NTests::TIdTestContext f;
+        f.Config->SetEnableQueryServiceSpilling(true);
+        f.Config->_KqpEnableSpilling = true;
+        f.QueryCtx->Type = EKikimrQueryType::Query;
         const auto a = f.Id("left"), b = f.Id("right");
         auto hub = TReplicate::Create(f.Read({a, b}), f.Pos, f.Props.InfoUnitRegistry);
         auto discarded = hub->AddOutput();

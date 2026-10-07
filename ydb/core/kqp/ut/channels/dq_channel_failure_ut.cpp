@@ -702,6 +702,70 @@ struct TEarlyFinishSubscribeTest : public TSessionTest {
     }
 };
 
+// A retried discovery is answered twice, and the 2nd reply may come after the reconciliation. Here it reports
+// a resent message whose ack is lost, the queue front: a confirmation like any other
+struct TLateDiscoveryReplyTest : public TOutboundTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto details = [&]() {
+            return TStringBuilder() << SessionDetails() << ", SeqNos=" << JoinSeq(",", GetQueueSeqNos(Debug0))
+                << ", ConfirmedSeqNo=" << GetConfirmedSeqNo(Debug1) << ", pending=" << Debug1->PendingDataCount.load();
+        };
+
+        // the messages and the finish wait at the receiver
+        const int messageCount = 4;
+        const ui32 batch = messageCount + 1;
+        ProducerSettings = TWorkerSettings{ .MessageCount = messageCount, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+        Debug1->PauseChannelData();
+        auto channel = StartChannel(1, false);
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug1->PendingDataCount.load() >= batch; }, TDuration::Seconds(10)), details());
+        auto seqNos = GetQueueSeqNos(Debug0);
+        UNIT_ASSERT_VALUES_EQUAL_C(seqNos.size(), batch, details());
+        auto genMajor = GetGenMajor(Debug0);
+        auto genMinor = GetGenMinor(Debug0);
+
+        // a minor reconciliation: its 1st reply waits at the sender, its retry in the channel service of the receiver
+        Debug0->PauseChannelAck();
+        Runtime->Send(Debug0->NodeActorId, Control0, new NActors::TEvInterconnect::TEvNodeDisconnected(Runtime->GetNodeId(1)), NodeIndex0, true);
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug1->OutputNodeGenMinor.load() == genMinor + 1; }, TDuration::Seconds(5)), details());
+        std::unique_lock serviceLock(Service1->Mutex);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetReconciliationCount(Debug0), 1, details());
+        UNIT_ASSERT_C(WaitFor([&]() { return GetReconciliationCount(Debug0) >= 2; }, TDuration::Seconds(5)), details());
+        auto log = GetReconciliationLog(Debug0);
+
+        // the 1st reply ends the reconciliation and the batch is resent, the acks of its 1st two messages are lost
+        Debug0->DropOkAckUpToSeqNo.store(seqNos[1]);
+        Debug0->ResumeChannelAck();
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug0->Reconciliation.load() == 0 && Debug1->PendingDataCount.load() >= 2 * batch; },
+            TDuration::Seconds(10)), details());
+
+        // the stale copies are dropped, the 1st two resent messages are confirmed
+        Debug1->ProcessPending(batch + 2);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetConfirmedSeqNo(Debug1) == seqNos[1] && Debug1->PendingDataCount.load() == batch - 2; },
+            TDuration::Seconds(5)), details());
+
+        // the retry is answered: RESEND, SeqNo seqNos[1]
+        auto activity = Debug1->LastPeerActivity.load();
+        serviceLock.unlock();
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug1->LastPeerActivity.load() > activity; }, TDuration::Seconds(5)), details());
+
+        Debug1->ResumeChannelData();
+        StartConsumer(channel);
+        WaitChannel(details);
+        WaitSettled(Debug0);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetGenMajor(Debug0), genMajor, details());
+        UNIT_ASSERT_VALUES_EQUAL_C(GetGenMinor(Debug0), genMinor + 1, details());
+        UNIT_ASSERT_VALUES_EQUAL_C(GetReconciliationLog(Debug0), log, details());
+        CheckSensors();
+        Destroy();
+        CheckQuota();
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20Failure) {
 
     void LossTest(int count, const TFailureSettings& failures, bool expectResend = true) {
@@ -815,6 +879,12 @@ Y_UNIT_TEST_SUITE(Channels20Failure) {
 
     Y_UNIT_TEST(EarlyFinishBeforeDiscoveryKeepsSubscription2n) {
         TEarlyFinishSubscribeTest test;
+        test.Local = false;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(LateDiscoveryReply2n) {
+        TLateDiscoveryReplyTest test;
         test.Local = false;
         test.Run();
     }

@@ -4,6 +4,7 @@ SRCS(
     background_controller.cpp
     blob.cpp
     blob_cache.cpp
+    columnshard_find_empty_history_intervals.cpp
     columnshard.cpp
     columnshard_move_data.cpp
     columnshard__init.cpp
@@ -35,6 +36,7 @@ GENERATE_ENUM_SERIALIZATION(columnshard.h)
 GENERATE_ENUM_SERIALIZATION(columnshard_impl.h)
 
 PEERDIR(
+    library/cpp/monlib/service/pages
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/cms/console
@@ -107,6 +109,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    ut_cut_history
     ut_rw
     ut_schema
     ut_movedata

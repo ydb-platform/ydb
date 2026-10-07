@@ -7,6 +7,7 @@
 #include <ydb/core/blobstorage/ddisk/ddisk_actor_test_peer.h>
 #include <ydb/core/blobstorage/ddisk/ddisk_checksums.h>
 #include <ydb/core/blobstorage/ddisk/persistent_buffer_header.h>
+#include <ydb/core/blobstorage/ddisk/space_metrics.h>
 #include <ydb/core/blobstorage/ddisk/write_persistent_buffers_request_actor.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
@@ -60,7 +61,20 @@ struct TDiskHandle {
     ui32 SlotId;
     ui32 FirstChunkId;
     bool EnableChecksums = true;
+    TIntrusivePtr<NMonitoring::TDynamicCounters> DiskCounters;
 };
+
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetDiskCounters(
+        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+        const TVDiskConfig::TBaseInfo& baseInfo, const TBlobStorageGroupInfo& groupInfo) {
+    return counters
+            ->GetSubgroup("counters", "ddisks")
+            ->GetSubgroup("ddiskPool", baseInfo.StoragePoolName)
+            ->GetSubgroup("group", Sprintf("%09u", groupInfo.GroupID))
+            ->GetSubgroup("orderNumber", Sprintf("%02u", groupInfo.GetOrderNumber(baseInfo.VDiskIdShort)))
+            ->GetSubgroup("pdisk", Sprintf("%09u", baseInfo.PDiskId))
+            ->GetSubgroup("media", to_lower(NPDisk::DeviceTypeStr(baseInfo.DeviceType, true)));
+}
 
 class TTestContext {
     template<typename TEvent>
@@ -87,15 +101,15 @@ public:
     std::set<TActorId> PDiskServiceIds;
     std::unique_ptr<TEventHandle<NPDisk::TEvChunkReserve>> HeldBootstrapRefill;
 
-    explicit TTestContext(bool memoryMetrics = false)
+    explicit TTestContext(bool memoryMetrics = false, TString metricPrefix = "ddisk.")
         : Runtime(1)
         , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
     {
         if (memoryMetrics) {
-            Runtime.SetupNodeSubSystems = [](ui32, TActorSystemSetup* setup) {
+            Runtime.SetupNodeSubSystems = [metricPrefix](ui32, TActorSystemSetup* setup) {
                 setup->RegisterSubSystem(MakeInMemoryMetricsRegistry({
                     .MemoryBytes = 128ull << 10, .MaxLines = 8,
-                    .AllowedMetricPrefixes = {"ddisk."},
+                    .AllowedMetricPrefixes = {metricPrefix},
                 }));
             };
         }
@@ -143,6 +157,7 @@ public:
             NKikimrBlobStorage::TVDiskKind::Default,
             1,
             "ddisk_pool");
+        const auto diskCounters = GetDiskCounters(Counters, baseInfo, *groupInfo);
         NDDisk::TPersistentBufferFormat pbFormat = customFormat.value_or(
             NDDisk::TPersistentBufferFormat{256, 4, BlockSize * 128, 8, 5000, 512 * 1024});
         const TActorId ddiskActor = Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
@@ -159,7 +174,8 @@ public:
             pdiskId,
             slotId,
             100000 + pdiskId * 1000,
-            enableChecksums};
+            enableChecksums,
+            diskCounters};
     }
 
     std::set<TActorId> ClientWaitEdges(std::initializer_list<TActorId> extra = {}) const {
@@ -1039,15 +1055,12 @@ public:
     }
 };
 
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetDirectIoCounters(TTestContext& ctx, const TDiskHandle& disk) {
-    return ctx.Counters
-        ->GetSubgroup("counters", "ddisks")
-        ->GetSubgroup("ddiskPool", "ddisk_pool")
-        ->GetSubgroup("group", Sprintf("%09u", 0u))
-        ->GetSubgroup("orderNumber", Sprintf("%02u", 0u))
-        ->GetSubgroup("pdisk", Sprintf("%09u", disk.PDiskId))
-        ->GetSubgroup("media", "nvme")
-        ->GetSubgroup("subsystem", "direct_io");
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetDirectIoCounters(TTestContext&, const TDiskHandle& disk) {
+    return disk.DiskCounters->GetSubgroup("subsystem", "direct_io");
+}
+
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetPersistentBufferCounters(TTestContext&, const TDiskHandle& disk) {
+    return disk.DiskCounters->GetSubgroup("subsystem", "persistent_buffer");
 }
 
 bool IsIntegrityUringWrite(NPDisk::TUringOperationBase* op) {
@@ -3455,7 +3468,13 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TTestContext ctx;
         NDDisk::TPersistentBufferFormat format;
         format.RegistrationTimeoutMilliseconds = 100;
+        format.MaxBarriersLimit = 3;
         const auto disk = ctx.CreateDDisk(97, 1, format);
+        const auto counters = GetPersistentBufferCounters(ctx, disk);
+        const auto count = counters->GetCounter("RegisteredTablets", false);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("RegisteredTabletsLimit", false)->Val(),
+            NDDisk::TPersistentBufferBarriersManager::MaxRegistrations(format.MaxBarriersLimit));
         const auto creds = Connect(ctx, disk.PBServiceId, 100, 1, 7, false);
         ctx.Runtime.Schedule(TDuration::Seconds(10), new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
         WaitFromDDisk<TEvents::TEvWakeup>(ctx);
@@ -3486,6 +3505,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT_VALUES_EQUAL(initial->Barriers[0].DirectBlockGroupIndex, 7);
         UNIT_ASSERT_VALUES_EQUAL(initial->Barriers[0].Generation, 0);
         UNIT_ASSERT_VALUES_EQUAL(initial->Barriers[0].Lsn, 0);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 1);
         AssertNoClientReplyBeforeSentinel(ctx, "registration must wait for durable barrier");
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(ctx, disk.PBServiceId,
             new NDDisk::TEvListPersistentBuffer(creds)), TReplyStatus::BUSY);
@@ -3499,6 +3519,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(ctx, disk.PBServiceId,
             new NDDisk::TEvListPersistentBuffer(other)), TReplyStatus::INCORRECT_REQUEST);
 
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 1);
+        Connect(ctx, disk.PBServiceId, 100, 1, 8);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 2);
+        Connect(ctx, disk.PBServiceId, 100, 2, 8);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 2);
         const auto phantomToken = GetRegistrationToken(ctx, disk.PBServiceId, creds);
         SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvUnregisterPersistentBuffer(creds));
         auto close = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
@@ -3506,6 +3531,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const auto* closed = reinterpret_cast<const NDDisk::TPersistentBufferBarriers*>(closedData.data());
         UNIT_ASSERT_VALUES_EQUAL(closed->Barriers[0].Generation, Max<ui32>());
         UNIT_ASSERT_VALUES_EQUAL(closed->Barriers[0].Lsn, Max<ui64>());
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 2);
         const auto closeTime = ctx.Runtime.GetClock();
         ctx.SendPDiskResponse(disk, *close, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(ctx, disk.PBServiceId,
@@ -3517,9 +3543,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const auto removedData = removal->Get()->Data.ConvertToString();
         const auto* removed = reinterpret_cast<const NDDisk::TPersistentBufferBarriers*>(removedData.data());
         UNIT_ASSERT_VALUES_EQUAL(removed->Barriers[0].TabletId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 1);
         AssertNoClientReplyBeforeSentinel(ctx, "removal must wait for durable barrier deletion");
         ctx.SendPDiskResponse(disk, *removal, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         AssertStatus(WaitFromDDisk<NDDisk::TEvUnregisterPersistentBufferResult>(ctx), TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(count->Val(), 1);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
             new NDDisk::TEvRegisterPersistentBuffer(creds, phantomToken)), TReplyStatus::OUTDATED);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(ctx, disk.PBServiceId,
@@ -4310,7 +4338,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(ChecksumCacheMemoryHistory) {
         for (bool checksums : {false, true}) {
-            TTestContext ctx(true);
+            TTestContext ctx(true, "ddisk.memory.checksum_cache_estimated_bytes");
             ctx.Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), ctx.Edge);
             const auto disk = ctx.CreateDDisk(6, 1, std::nullopt, {.EnableChecksums = checksums});
             const auto creds = Connect(ctx, disk.ServiceId, 229, 1);
@@ -4374,7 +4402,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(ChecksumCacheMemoryHistoryDuringInitialization) {
         for (bool checksums : {false, true}) {
-            TTestContext ctx(true);
+            TTestContext ctx(true, "ddisk.memory.checksum_cache_estimated_bytes");
             const auto disk = ctx.RegisterDDisk(6, 1, std::nullopt, {.EnableChecksums = checksums});
             // Hold PDisk initialization: no IntegrityManager exists yet.
             ctx.WaitPDiskRequest<NPDisk::TEvYardInit>(disk);
@@ -6972,6 +7000,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             NKikimrBlobStorage::TVDiskKind::Default,
             1,
             "ddisk_pool");
+        const auto diskCounters = GetDiskCounters(ctx.Counters, baseInfo, *groupInfo);
         const TActorId ddiskActor = ctx.Runtime.Register(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
             std::move(pbFormat), NDDisk::TDDiskConfig{}, ctx.Counters),
             NodeId);
@@ -6986,7 +7015,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             pdiskId,
             slotId,
             100000 + pdiskId * 1000,
-            true};
+            true,
+            diskCounters};
 
         const NPDisk::TOwner Owner = 1;
         const NPDisk::TOwnerRound OwnerRound = 1;
@@ -7389,6 +7419,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         // Write the legacy checksum-formatted record.
         const TDiskHandle disk1 = ctx.CreateDDisk(PDiskId, SlotId);
         const NDDisk::TQueryCredentials creds1 = Connect(ctx, disk1.PBServiceId, TabletId, 1);
+        // This namespace has a durable registration but no records to replay.
+        Connect(ctx, disk1.PBServiceId, TabletId, 1, 7);
+        UNIT_ASSERT_VALUES_EQUAL(GetPersistentBufferCounters(ctx, disk1)->GetCounter("RegisteredTablets", false)->Val(), 2);
         chunkData = ctx.RegistrationImages.at(disk1.PBServiceId);
         write(disk1, creds1, 1, firstPayload);
         for (ui32 i = 0; i < PersistentBufferInitChunks; ++i) {
@@ -7402,6 +7435,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TDiskHandle disk2 = CreateDDiskWithRestoredChunkData(ctx, PDiskId, SlotId,
             persistentBufferChunks, persistentBufferUniqueId, chunkData, indexFormat);
         const NDDisk::TQueryCredentials creds2 = Connect(ctx, disk2.PBServiceId, TabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetPersistentBufferCounters(ctx, disk2)->GetCounter("RegisteredTablets", false)->Val(), 2);
         readRestored(disk2, creds2, 1, firstPayload);
         write(disk2, creds2, 2, secondPayload);
         stopDDisk(disk2);
@@ -7410,6 +7444,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TDiskHandle disk3 = CreateDDiskWithRestoredChunkData(ctx, PDiskId, SlotId,
             persistentBufferChunks, persistentBufferUniqueId, chunkData, indexFormat);
         const NDDisk::TQueryCredentials creds3 = Connect(ctx, disk3.PBServiceId, TabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetPersistentBufferCounters(ctx, disk3)->GetCounter("RegisteredTablets", false)->Val(), 2);
         readRestored(disk3, creds3, 1, firstPayload);
         readRestored(disk3, creds3, 2, secondPayload);
         write(disk3, creds3, 3, thirdPayload);
@@ -7420,6 +7455,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TDiskHandle disk4 = CreateDDiskWithRestoredChunkData(ctx, PDiskId, SlotId,
             persistentBufferChunks, persistentBufferUniqueId, chunkData);
         const NDDisk::TQueryCredentials creds4 = Connect(ctx, disk4.PBServiceId, TabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetPersistentBufferCounters(ctx, disk4)->GetCounter("RegisteredTablets", false)->Val(), 2);
         readRestored(disk4, creds4, 1, firstPayload);
         readRestored(disk4, creds4, 2, secondPayload);
         readRestored(disk4, creds4, 3, thirdPayload);
@@ -10707,6 +10743,100 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT_STRING_CONTAINS(
             readResult->Get()->Record.GetErrorReason(),
             "integrity chunks while EnableChecksums=false");
+    }
+
+    Y_UNIT_TEST(DDiskOperationGroupTracksWritesAndClosesOnStop) {
+        TTestContext ctx(true, "ddisk.operations.");
+        ctx.Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), ctx.Edge);
+        const auto disk = ctx.CreateDDisk(6, 1);
+        const auto creds = Connect(ctx, disk.ServiceId, 229, 1);
+        auto* registry = GetInMemoryMetrics(*ctx.Runtime.GetNode(NodeId)->ActorSystem);
+        auto write = DoWriteWithChunkAllocation(ctx, disk,
+            MakeWrite(creds, 0, 0, MakeData('A', BlockSize)),
+            disk.FirstChunkId + PersistentBufferInitChunks, 0, MakeData('A', BlockSize), true, true);
+        AssertStatus(write.WriteResult, TReplyStatus::OK);
+        const auto tick = [&] {
+            ctx.Runtime.Schedule(TDuration::MilliSeconds(1100),
+                new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
+            WaitFromDDisk<TEvents::TEvWakeup>(ctx);
+        };
+        const auto sample = [&](bool closed) {
+            UNIT_ASSERT(registry->RequestSnapshot(ctx.Edge));
+            auto snapshot = WaitFromDDisk<TEvInMemoryMetricsSnapshot>(ctx);
+            size_t count = 0;
+            snapshot->Get()->Snapshot.Read([&](const TSnapshotView& view) {
+                UNIT_ASSERT_VALUES_EQUAL(view.LinesSize(), 1);
+                const auto& line = view.GetLine(0);
+                UNIT_ASSERT_VALUES_EQUAL(line.Name, "ddisk.operations.counters");
+                for (const auto& field : line.Meta.Frontend->Fields) {
+                    UNIT_ASSERT_C(field.Name.StartsWith("ddisk.operations."), field.Name);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(line.Closed, closed);
+                const auto values = NDDisk::TOperationMetricsFrontend::ReadValues(line);
+                UNIT_ASSERT(!values.empty());
+                const auto last = NDDisk::ReadOperationMetricValues(values.back(), std::make_index_sequence<11>{});
+                UNIT_ASSERT_VALUES_EQUAL(last[2], 1);
+                UNIT_ASSERT_VALUES_EQUAL(last[3], BlockSize);
+                UNIT_ASSERT(last[10]);
+                count = values.size();
+            });
+            return count;
+        };
+        tick();
+        const auto count = sample(false);
+        SendToDDisk(ctx, disk.ServiceId, new TEvents::TEvPoison());
+        WaitFromDDisk<TEvents::TEvGone>(ctx);
+        tick();
+        UNIT_ASSERT_VALUES_EQUAL(sample(true), count);
+    }
+
+    Y_UNIT_TEST(DDiskSpaceHistoryTracksMappingAllocationAndDeletion) {
+        for (bool checksums : {false, true}) {
+            TTestContext ctx(true);
+            const auto disk = ctx.CreateDDisk(6, 1, std::nullopt, {.EnableChecksums = checksums});
+            const auto creds = Connect(ctx, disk.ServiceId, 229, 1);
+            auto* registry = GetInMemoryMetrics(*ctx.Runtime.GetNode(NodeId)->ActorSystem);
+            const auto sampleDataBytes = [&]() {
+                ctx.Runtime.Schedule(TDuration::MilliSeconds(1100),
+                    new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
+                WaitFromDDisk<TEvents::TEvWakeup>(ctx);
+                UNIT_ASSERT(registry->RequestSnapshot(ctx.Edge, 92));
+                auto snapshot = WaitFromDDisk<TEvInMemoryMetricsSnapshot>(ctx);
+                std::optional<ui64> result;
+                snapshot->Get()->Snapshot.Read([&](const TSnapshotView& view) {
+                    view.ForEachLine([&](const TLineSnapshot& line) {
+                        if (line.Name == "ddisk.space.allocated_bytes") {
+                            const auto values = NDDisk::TSpaceMetricsFrontend::ReadValues(line);
+                            UNIT_ASSERT(!values.empty());
+                            result = values.back().Get<NDDisk::TSpaceMetrics::TData>();
+                            UNIT_ASSERT_VALUES_EQUAL(line.Meta.Frontend->Fields.size(), 4);
+                            for (const auto& field : line.Meta.Frontend->Fields) {
+                                UNIT_ASSERT_C(field.Name.StartsWith("ddisk.space."), field.Name);
+                            }
+                            UNIT_ASSERT_VALUES_EQUAL(values.back().Get<NDDisk::TSpaceMetrics::TPersistentBuffer>(),
+                                PersistentBufferInitChunks * TTestContext::ChunkSize);
+                        }
+                    });
+                });
+                UNIT_ASSERT(result);
+                return *result;
+            };
+            UNIT_ASSERT_VALUES_EQUAL(sampleDataBytes(), 0);
+            auto write = DoWriteWithChunkAllocation(ctx, disk,
+                MakeWrite(creds, 0, 0, MakeData('A', BlockSize)),
+                disk.FirstChunkId + PersistentBufferInitChunks, 0, MakeData('A', BlockSize), true, true);
+            AssertStatus(write.WriteResult, TReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(sampleDataBytes(), TTestContext::ChunkSize);
+            SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvDeleteTabletChunks(creds));
+            auto phaseOne = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+            ctx.ReplyLog(disk, *phaseOne);
+            if (checksums) {
+                auto phaseTwo = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+                ctx.ReplyLog(disk, *phaseTwo);
+            }
+            AssertStatus(WaitFromDDisk<NDDisk::TEvDeleteTabletChunksResult>(ctx), TReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(sampleDataBytes(), 0);
+        }
     }
 
 } // Y_UNIT_TEST_SUITE

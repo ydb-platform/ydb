@@ -24,6 +24,7 @@
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/mind/bscontroller/types.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
@@ -234,6 +235,18 @@ private:
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    // Answers NBS1 StatVolume from the stored VolumeConfig. Volume gets
+    // DiskId, BlockSize, BlocksCount (partition 0), StorageMediaKind,
+    // ConfigVersion (VolumeConfig.Version), and ProjectId, FolderId, CloudId
+    // when the config has them. Clients stays empty. Before VolumeConfig is
+    // known (PartitionsSize() == 0): E_REJECTED, "volume config is not
+    // loaded". NoPartition is ignored: the reply never waits for IO
+    // readiness. The reply keeps the request cookie.
+    void HandleStatVolume(
+        const NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleUpdateVChunkConfig(
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -312,6 +325,13 @@ private:
 
     void HandleUpdateVolumeConfigDuringDelete(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // StatVolume during delete: E_REJECTED, "partition is being deleted".
+    // The reply keeps the request cookie and does not wait for IO readiness.
+    void HandleStatVolumeDuringDelete(
+        const NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest::
+            TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleUpdateVChunkConfigDuringDelete(

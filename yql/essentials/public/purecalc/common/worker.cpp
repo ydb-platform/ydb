@@ -49,7 +49,7 @@ TWorkerGraph::TWorkerGraph(
     TLangVersion langver,
     bool insideEvaluation,
     NYql::TRuntimeSettings::TConstPtr runtimeSettings)
-    : ScopedAlloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
+    : ScopedAlloc(__LOCATION__)
     , Env(ScopedAlloc)
     , FuncRegistry(funcRegistry)
     , RandomProvider(CreateDefaultRandomProvider())

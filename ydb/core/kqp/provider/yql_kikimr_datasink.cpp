@@ -1076,7 +1076,13 @@ public:
         }
 
         const auto& externalTable = metadata.ExternalTable();
-        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(metadata.GetExternalSourceType());
+        const auto& databaseType = metadata.GetExternalSourceDatabaseType();
+        if (!databaseType) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+                << "Unknown source type for external table \"" << key.GetTablePath() << "\""));
+            return false;
+        }
+        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(*databaseType);
         TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), externalTable.GetLocation()) });
         auto table = ctx.NewList(node->Pos(), {ctx.NewAtom(node->Pos(), "table"), path});
         auto keyNode = ctx.NewCallable(node->Pos(), "Key", {table});

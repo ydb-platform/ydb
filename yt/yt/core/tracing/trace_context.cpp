@@ -18,7 +18,7 @@
 
 #include <yt/yt/library/tracing/tracer.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
@@ -58,7 +58,7 @@ constinit const auto Logger = TracingLogger;
 
 struct TGlobalTracerStorage
 {
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
     ITracerPtr Tracer;
 };
 

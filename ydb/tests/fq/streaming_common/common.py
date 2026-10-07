@@ -77,8 +77,13 @@ def get_ydb_config(request, enable_fq_connector=None):
         "enable_external_data_source_auth_method_iam",
         "allow_ydb_requests_without_database",
         "enable_updating_partitions_on_streaming_query_restart",
+        "enable_pq_source_rescaling",
     }
     disabled_feature_flags = []
+
+    if param.get("enable_exactly_once_topics_writing", False):
+        extra_feature_flags.update({"enable_exactly_once_topics_writing", "enable_topic_deferred_publish"})
+
     for flag in (
         "enable_streaming_aggregation",
         "enable_streaming_aggregation_advanced",
@@ -717,7 +722,25 @@ class StreamingTestBase(TestYdsBase):
                 kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
             )
         except AssertionError as error:
-            raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(self, path)}") from error
+            diagnostics = "failed to retrieve Status / Issues"
+            try:
+                result_sets = kikimr.ydb_client.query(
+                    f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+                )
+                diagnostics = (
+                    "\n".join(
+                        "Status: {status}\nIssues:\n{issues}".format(
+                            status=row["Status"],
+                            issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
+                        )
+                        for row in result_sets[0].rows
+                    )
+                    if result_sets
+                    else []
+                )
+            except Exception as diagnostics_error:
+                diagnostics = f"failed to retrieve Status / Issues: {diagnostics_error}"
+            raise AssertionError(f"{error}\n{diagnostics}") from error
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(
@@ -734,12 +757,15 @@ class StreamingTestBase(TestYdsBase):
         node.start()
 
     def restart_streaming_node(self, kikimr: Kikimr) -> int:
-        """Find and restart the node hosting the streaming query (DQ_PQ_READ_ACTOR).
+        """Find and restart the node hosting the streaming query reader.
         Returns the restarted node ID."""
 
         def _find_node():
             for node_id in kikimr.cluster.slots:
-                if self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR"):
+                if any(
+                    self.get_actor_count(kikimr, node_id, actor_name)
+                    for actor_name in ("DQ_MESSAGE_STREAM_READ_ACTOR", "DQ_PQ_READ_ACTOR")
+                ):
                     return node_id
             return None
 
@@ -749,7 +775,7 @@ class StreamingTestBase(TestYdsBase):
             step_seconds=1,
         )
         restart_node_id = _find_node()
-        assert restart_node_id is not None, "No node found with DQ_PQ_READ_ACTOR"
+        assert restart_node_id is not None, "No node found with a streaming query reader"
         self.restart_node(kikimr, restart_node_id)
         return restart_node_id
 

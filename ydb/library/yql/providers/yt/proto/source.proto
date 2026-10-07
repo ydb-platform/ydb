@@ -1,0 +1,8 @@
+syntax = "proto3";
+package NYql.NQyt.NProto;
+message TSource {
+    string Endpoint = 1;
+    string Path = 2;
+    string Consumer = 3;
+    string Token = 4;
+}

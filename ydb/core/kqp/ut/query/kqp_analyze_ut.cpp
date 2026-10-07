@@ -190,6 +190,7 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
         settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeCollectPrimaryKeyHistogram(true);
         auto* tableService = settings.AppConfig->MutableTableServiceConfig();
         tableService->SetEnableNewRBO(true);
+        tableService->SetEnableFallbackOnDML(false);
         tableService->SetEnableFallbackToYqlOptimizer(false);
     });
 

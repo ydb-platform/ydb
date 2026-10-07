@@ -7,7 +7,8 @@ TEST_SRCS(
     test_workload.py
 )
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 REQUIREMENTS(ram:32 cpu:4)
 
 DEPENDS(

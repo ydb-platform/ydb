@@ -6,12 +6,12 @@ DATA(
     arcadia/ydb/tests/functional/sqs/with_quotas
 )
 
+SIZE(LARGE)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 IF (SANITIZER_TYPE == "thread")
-    SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:32 cpu:1)
 ELSE()
-    SIZE(MEDIUM)
     REQUIREMENTS(cpu:2)
 ENDIF()
 

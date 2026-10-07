@@ -660,6 +660,7 @@ public:
             .SetWithSampleTables(false)
             .SetUseRealThreads(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
+        ConfigureSettings(settings);
 
         if constexpr (N > 0) {
             using TExecutor = NKikimrConfig::TActorSystemConfig::TExecutor;
@@ -714,6 +715,9 @@ public:
 
         return ev->Get()->Result;
     }
+
+protected:
+    virtual void ConfigureSettings(TKikimrSettings&) {}
 
 private:
     static void DumpExplain(const TPreparedQueryHolder& plan) {
@@ -838,6 +842,14 @@ private:
             Bytes(supplier #   9e9 )
         ';
     )";
+};
+
+class TKqpTasksGraphTpchMultiBroadcastFixture : public TKqpTasksGraphTpchFixture {
+protected:
+    void ConfigureSettings(TKikimrSettings& settings) override {
+        // Preserve the join stages used by the per-stage placement assertions.
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowMultiBroadcasts(true);
+    }
 };
 
 // Verifies the per-stage node histogram against an expected table indexed by stageId, each entry mapping
@@ -1024,7 +1036,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         });
     }
 
-    Y_UNIT_TEST_F(TpchQuery02, TKqpTasksGraphTpchFixture) {
+    Y_UNIT_TEST_F(TpchQuery02, TKqpTasksGraphTpchMultiBroadcastFixture) {
         const TString& queryText = R"(
             $r = (
             select
@@ -1333,7 +1345,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         });
     }
 
-    Y_UNIT_TEST_F(TpchQuery05, TKqpTasksGraphTpchFixture) {
+    Y_UNIT_TEST_F(TpchQuery05, TKqpTasksGraphTpchMultiBroadcastFixture) {
         const TString& queryText = R"(
             $z1_12 = cast(1 as decimal(12,2));
             $border = Date("1994-01-01");
@@ -1480,7 +1492,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         });
     }
 
-    Y_UNIT_TEST_F(TpchQuery07, TKqpTasksGraphTpchFixture) {
+    Y_UNIT_TEST_F(TpchQuery07, TKqpTasksGraphTpchMultiBroadcastFixture) {
         const TString& queryText = R"(
             $z1_12 = cast(1 as decimal(12,2));
             $n = select n_name, n_nationkey from `/Root/nation` as n
@@ -1590,7 +1602,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         });
     }
 
-    Y_UNIT_TEST_F(TpchQuery08, TKqpTasksGraphTpchFixture) {
+    Y_UNIT_TEST_F(TpchQuery08, TKqpTasksGraphTpchMultiBroadcastFixture) {
         const TString& queryText = R"(
             $z0_12 = cast(0 as decimal(12,2));
             $z1_12 = cast(1 as decimal(12,2));
@@ -1829,7 +1841,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         });
     }
 
-    Y_UNIT_TEST_F(TpchQuery10, TKqpTasksGraphTpchFixture) {
+    Y_UNIT_TEST_F(TpchQuery10, TKqpTasksGraphTpchMultiBroadcastFixture) {
         const TString& queryText = R"(
             $z1_12 = cast(1 as decimal(12,2));
             $border = Date("1993-10-01");
@@ -1944,7 +1956,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         });
     }
 
-    Y_UNIT_TEST_F(TpchQuery11, TKqpTasksGraphTpchFixture) {
+    Y_UNIT_TEST_F(TpchQuery11, TKqpTasksGraphTpchMultiBroadcastFixture) {
         const TString& queryText = R"(
             $scale_factor = cast('10000' as decimal(35,2));
             $j1 = (
@@ -2376,7 +2388,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         });
     }
 
-    Y_UNIT_TEST_F(TpchQuery17, TKqpTasksGraphTpchFixture) {
+    Y_UNIT_TEST_F(TpchQuery17, TKqpTasksGraphTpchMultiBroadcastFixture) {
         const TString& queryText = R"(
             $z7_35 = cast("7." as decimal(35,2));
             $z0_2_12 = cast("0.2" as decimal(12,2));
@@ -2587,7 +2599,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         });
     }
 
-    Y_UNIT_TEST_F(TpchQuery20, TKqpTasksGraphTpchFixture) {
+    Y_UNIT_TEST_F(TpchQuery20, TKqpTasksGraphTpchMultiBroadcastFixture) {
         const TString& queryText = R"(
             $z0_5_35 = cast("0.5" as decimal(35,2));
             $border = Date("1994-01-01");
@@ -2698,7 +2710,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         });
     }
 
-    Y_UNIT_TEST_F(TpchQuery21, TKqpTasksGraphTpchFixture) {
+    Y_UNIT_TEST_F(TpchQuery21, TKqpTasksGraphTpchMultiBroadcastFixture) {
         const TString& queryText = R"(
             $n = select n_nationkey from `/Root/nation`
             where n_name = 'SAUDI ARABIA';
@@ -2866,7 +2878,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         });
     }
 
-    Y_UNIT_TEST_F(CustomQuery01, TKqpTasksGraphTpchFixture) {
+    Y_UNIT_TEST_F(CustomQuery01, TKqpTasksGraphTpchMultiBroadcastFixture) {
         const TString& queryText = R"(
             $step1 = (
                 SELECT

@@ -549,7 +549,7 @@ message TInterconnectConfig {
     optional bool SuppressConnectivityCheck = 39 [default = false];
     optional uint32 PreallocatedBufferSize = 40;
     optional uint32 NumPreallocatedBuffers = 41;
-    optional bool EnableExternalDataChannel = 42 [default = true];
+    optional bool EnableExternalDataChannel = 42 [default = false];
     optional bool ValidateIncomingPeerViaDirectLookup = 44;
     optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
     optional ESocketSendOptimization SocketSendOptimization = 51 [default = IC_SO_DISABLED];
@@ -3049,7 +3049,7 @@ message TColumnShardConfig {
 
     optional TReadRetryPolicy ReadRetryPolicy = 70;
     optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
-    optional bool EnableBulkUpsertValidation = 72 [default = true];
+    optional bool EnableBulkUpsertValidation = 72 [default = false];
     optional uint64 NodePortionsCountLimit = 73;
 
     message TFlowControlConfig {

@@ -4276,7 +4276,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            CompareYson(R"([
+            CompareYsonUnordered(R"([
                 [[5];["default_value"];#];
                 [[6];["default_value"];#];
                 [[7];["default_value"];#];

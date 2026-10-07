@@ -78,6 +78,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
     featureFlags.SetEnableStatistics(true);
     featureFlags.SetEnableColumnStatistics(true);
     featureFlags.SetEnableAnalyzeLongRunningOperation(true);
+    // Proto defaults are off. These tests cover the enabled behavior.
+    featureFlags.SetEnableBackgroundAnalyzeChangeRatio(true);
+    featureFlags.SetEnableAnalyzeSampling(true);
     Settings->SetFeatureFlags(featureFlags);
 
     modifySettings(*Settings);

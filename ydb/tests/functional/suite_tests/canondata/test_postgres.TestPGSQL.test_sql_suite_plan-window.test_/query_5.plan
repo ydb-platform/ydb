@@ -29,17 +29,23 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Aggregate-WideSort",
+                                        "Node Type": "TopSort-Aggregate-Sort",
                                         "Operators": [
                                             {
                                                 "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "argument._yql_RowNumber0"
+                                                "TopSortBy": "row.row_number"
                                             },
                                             {
                                                 "Inputs": [
@@ -56,8 +62,8 @@
                                                         "ExternalPlanNodeId": 7
                                                     }
                                                 ],
-                                                "Name": "WideSort",
-                                                "SortBy": "0 asc, depname desc"
+                                                "Name": "Sort",
+                                                "SortBy": "row.depname"
                                             }
                                         ],
                                         "PlanNodeId": 8,
@@ -68,7 +74,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "WideSort",
+                                                        "Node Type": "Sort",
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [
@@ -76,8 +82,8 @@
                                                                         "ExternalPlanNodeId": 5
                                                                     }
                                                                 ],
-                                                                "Name": "WideSort",
-                                                                "SortBy": "0 asc, depname asc"
+                                                                "Name": "Sort",
+                                                                "SortBy": "row.depname"
                                                             }
                                                         ],
                                                         "PlanNodeId": 6,

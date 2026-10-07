@@ -77,7 +77,7 @@ message TTableServiceConfig {
         // memory of the execution units in use. Off: the demand is only counted, the node total is not charged.
         // As with every field of this section, a dynamic config item that carries the section without the field
         // resets it to the default.
-        optional bool EnableMemoryArena = 35 [default = true];
+        optional bool EnableMemoryArena = 35 [default = false];
         // Bytes charged to the arena per execution unit in use: the compute actor footprint outside the MKQL quota,
         // which is prepaid as ExternalMemory. A task the node service starts charges MkqlLightProgramMemoryLimit
         // twice, for its program and its channels, plus this: 3 MiB with the defaults. The kqp queue limit
@@ -377,7 +377,7 @@ message TTableServiceConfig {
 
     optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 
-    optional bool EnableHtapTx = 71 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableHtapTx = 71 [default = false, (InvalidateCompileCache) = true];
 
     message TWriteActorSettings {
         optional uint64 InFlightMemoryLimitPerActorBytes = 1 [ default = 67108864 ];
@@ -438,13 +438,13 @@ message TTableServiceConfig {
     optional bool EnableOlapScalarApply = 86 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableOlapSubstringPushdown = 87 [default = true, (InvalidateCompileCache) = true];
 
-    optional bool EnableIndexStreamWrite = 88 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableIndexStreamWrite = 88 [default = false, (InvalidateCompileCache) = true];
 
     reserved 89;
 
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 
-    optional bool EnableOlapPushdownProjections = 91  [ default = true, (InvalidateCompileCache) = true ];
+    optional bool EnableOlapPushdownProjections = 91  [ default = false, (InvalidateCompileCache) = true ];
 
     optional uint32 DefaultLangVer = 92 [default = 202501, (InvalidateCompileCache) = true];
 
@@ -470,7 +470,7 @@ message TTableServiceConfig {
     reserved 100; //    optional bool EnableTopSortSelectIndex = 100 [ default = true, (InvalidateCompileCache) = true ];
     reserved 101; //    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true , (InvalidateCompileCache) = true];
 
-    optional bool EnableDataShardCreateTableAs = 102 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableDataShardCreateTableAs = 102 [default = false, (InvalidateCompileCache) = true];
 
     optional uint64 ExtractPredicateParameterListSizeLimit = 103 [default = 0, (InvalidateCompileCache) = true];
 
@@ -490,7 +490,7 @@ message TTableServiceConfig {
 
     optional EBackportMode BackportMode = 108 [ default = All, (InvalidateCompileCache) = true];
 
-    optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableFallbackToYqlOptimizer = 109 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableWatermarks = 110 [default = true, (InvalidateCompileCache) = true];
 
@@ -518,7 +518,7 @@ message TTableServiceConfig {
 
     optional bool Antlr4ParserIsAmbiguityError = 119 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool DqHashOperatorsUseBlocks = 120 [default = true, (InvalidateCompileCache) = true];
+    optional bool DqHashOperatorsUseBlocks = 120 [default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableDqSourceStreamLookupJoin = 121 [default = false, (InvalidateCompileCache) = true];
 
@@ -540,7 +540,7 @@ message TTableServiceConfig {
 
     optional bool EnableKqpSysViewSourceRead = 123 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool UseBlockHashJoin = 124 [default = true, (InvalidateCompileCache) = true];
+    optional bool UseBlockHashJoin = 124 [default = false, (InvalidateCompileCache) = true];
 
     optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
 
@@ -556,7 +556,7 @@ message TTableServiceConfig {
 
     optional bool EnableCompileCacheWarmup = 131 [default = true, (InvalidateCompileCache) = false];
 
-    optional bool EnableChannelMemoryTracking = 132 [default = true];
+    optional bool EnableChannelMemoryTracking = 132 [default = false];
 
     message TDqChannelConfig {
         optional uint64 LocalChannelInflightBytes  = 1 [default = 8388608];
@@ -587,7 +587,7 @@ message TTableServiceConfig {
     optional bool EnableStrictSerializableIsolation = 136 [default = false, (InvalidateCompileCache) = true];
 
     // Remove KqpSequencer from query plan for tables with DEFAULT columns during write operations.
-    optional bool EnableCompileTimeDefaults = 137 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableCompileTimeDefaults = 137 [default = false, (InvalidateCompileCache) = true];
 
     // Cluster default for automatic secondary-index selection in index lookup joins.
     // Overridable per session via PRAGMA ydb.EnableAutoIndexSelectionForIndexLookupJoin.
@@ -616,7 +616,7 @@ message TTableServiceConfig {
 
     // Cluster default for window functions v2 (partition + sort via WideSort/Chopper instead of SqueezeToDict).
     // Overridable per query via PRAGMA ydb.WindowFunctionsV2.
-    optional bool EnableWindowFunctionsV2 = 148 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableWindowFunctionsV2 = 148 [default = false, (InvalidateCompileCache) = true];
 
     // When true, block hash join keys use IS NOT DISTINCT FROM (NULL matches NULL).
     optional bool EnableBlockHashJoinEqualNulls = 149 [default = false, (InvalidateCompileCache) = true];

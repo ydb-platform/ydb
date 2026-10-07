@@ -101,7 +101,7 @@ statement error
 SELECT ntile(NULL) OVER w, ten, four FROM tenk1 WINDOW w AS (ORDER BY ten, four) ORDER BY ten, four LIMIT 2;
 
 statement stream query
-SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
+SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten, unique2) ORDER BY ten, four, unique2;
 
 statement error
 SELECT lag(ten, four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
@@ -110,10 +110,10 @@ statement error
 SELECT lag(ten, four, 0) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
 statement stream query
-SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
+SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten, unique2) ORDER BY ten, four, unique2;
 
 statement stream query
-SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
+SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten, unique2) ORDER BY ten, four, unique2;
 
 statement error
 SELECT lead(ten * 2, 1, -1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
@@ -124,7 +124,7 @@ SELECT first_value(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w
 -- last_value returns the last row of the frame, which is CURRENT ROW in ORDER BY window.
 -- XXX: different behavior w.r.t postgres
 statement stream query
-SELECT last_value(four) OVER w, last_value(four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY ten) ORDER BY ten, four;
+SELECT last_value(four) OVER w, last_value(four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY ten, unique2) ORDER BY ten, four, unique2;
 
 statement stream query
 SELECT last_value(ten) OVER w, ten, four FROM

@@ -111,7 +111,7 @@ message TFeatureFlags {
     optional bool EnableDataShardVolatileTransactions = 85 [default = true];
     optional bool EnableTopicServiceTx = 86 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableLLVMCache = 87 [default = false];
-    optional bool EnableExternalDataSources = 88 [default = true];
+    optional bool EnableExternalDataSources = 88 [default = false];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = true, (RequireRestart) = true];
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = true];
     reserved 91; // EnablePQConfigTransactionsAtSchemeShard
@@ -140,7 +140,7 @@ message TFeatureFlags {
     reserved 114; // EnableAccessServiceBulkAuthorization
     reserved "EnableAccessServiceBulkAuthorization";
     optional bool EnableAddColumsWithDefaults = 115 [default = true];
-    optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = true];
+    optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
     optional bool EnableCMSRequestPriorities = 117 [default = true];
     optional bool EnableKeyvalueLogBatching = 118 [default = false];
     optional bool EnableLocalDBFlatIndex = 119 [default = true];
@@ -150,11 +150,11 @@ message TFeatureFlags {
     optional bool EnableBackupService = 123 [default = true];
     optional bool EnableVolatileTransactionArbiters = 124 [default = true];
     optional bool EnableGraphShard = 125 [default = false];
-    optional bool EnableExternalSourceSchemaInference = 126 [default = true];
+    optional bool EnableExternalSourceSchemaInference = 126 [default = false];
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
     optional bool EnableResourcePools = 129 [default = true];
-    optional bool EnableColumnStatistics = 130 [default = true];
+    optional bool EnableColumnStatistics = 130 [default = false];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
     optional bool EnableVectorIndex = 133 [default = true];
@@ -298,7 +298,7 @@ message TFeatureFlags {
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
     reserved 259; // ForbidDiscoveryInnerDbPaths
-    optional bool EnableStreamingQueryDisposition = 260 [default = true];
+    optional bool EnableStreamingQueryDisposition = 260 [default = false];
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
     optional bool EnableLocalMinMaxIndex = 262 [default = true];
@@ -320,7 +320,7 @@ message TFeatureFlags {
     optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false, (RequireRestart) = true];
     optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
     optional bool EnableKqpConstraintsTransformer = 277 [default = true];
-    optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
+    optional bool EnableLocalIndexAsSchemeObject = 278 [default = false];
     optional bool EnableDataShardDetailedMetrics = 279 [default = false];
     optional bool EnableCompactFulltextIndex = 280 [default = true];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
@@ -356,14 +356,14 @@ message TFeatureFlags {
     optional bool DisableFileStoreSSDSystemSpaceAccounting = 302 [default = false, (RequireRestart) = true];
     optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = true];
     optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = true];
-    optional bool EnableMoveWithColumnTableReplace = 305 [default = true];
+    optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
     optional bool DisableOldSecrets = 306 [default = false];
     optional bool EnableKafkaServerlessTransactions = 307 [default = false];
     optional bool EnableGeneratedStored = 308 [default = false];
     optional bool EnableGeneratedVirtual = 309 [default = false];
     optional bool EnableTxIdInStats = 310 [default = false];
     optional bool EnableDqSourceStreamLookupJoinShuffleMode = 311 [default = false];
-    optional bool EnableCsFlowControl = 312 [default = true];
+    optional bool EnableCsFlowControl = 312 [default = false];
     // Keys SourceId→Partition mapping by a unique topic Id (UUID) instead of the topic name,
     // so that deleting and recreating a topic with the same name does not inherit stale mappings.
     optional bool EnableTopicSourceIdMappingById = 313 [default = false];
@@ -378,7 +378,7 @@ message TFeatureFlags {
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
     optional bool EnableInsecureMirrorFactory = 322 [default = false];
-    optional bool EnableDataShardUncommittedWriteSeqNum = 323 [default = true];
+    optional bool EnableDataShardUncommittedWriteSeqNum = 323 [default = false];
     // VDisk: allocate huge blobs (and small SSTs) as variable-size stripes instead of
     // size-class slots. Reads of the stripe format work even when this flag is off.
     optional bool EnableVDiskHeapAllocator = 324 [default = false, (RequireRestart) = true];
@@ -387,7 +387,7 @@ message TFeatureFlags {
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
     optional bool EnableStreamingAggregation = 328 [default = true];
     optional bool EnableTableBackupAsSql = 329 [default = false];
-    optional bool EnableRowDispatcherMemoryLimiting = 330 [default = true];
+    optional bool EnableRowDispatcherMemoryLimiting = 330 [default = false];
     // Judges a VDisk write by the space color the disk will be in once the Fresh
     // it holds has been compacted, rather than by the color it is in while the
     // write is still cheap.
@@ -422,9 +422,9 @@ message TFeatureFlags {
     optional bool EnableStreamingAggregationAdvanced = 344 [default = false];
     optional bool EnableTieringObjectKeyTree = 345 [default = false];
     // Bumps GROUP BY HOP state version to 3
-    optional bool EnableHoppingWindowStartCheck = 346 [default = true];
-    optional bool EnableBackgroundAnalyzeChangeRatio = 347 [default = true];
-    optional bool EnableAnalyzeSampling = 348 [default = true];
+    optional bool EnableHoppingWindowStartCheck = 346 [default = false];
+    optional bool EnableBackgroundAnalyzeChangeRatio = 347 [default = false];
+    optional bool EnableAnalyzeSampling = 348 [default = false];
     // Applies to new processes; existing processes keep their scheduling mode.
     optional bool EnableCompositeConveyorScheduling = 349 [default = false];
     optional bool EnableCsIndexReadMemoryTracking = 350 [default = false];

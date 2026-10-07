@@ -3039,7 +3039,7 @@ public:
         NYql::TLangVersion WriteOffsetWithColonAvailableSince;
         TStringRef WriteOffsetWithColonRuntimeSetting(builder.GetRuntimeSetting(TStringRef::Of("MakeWriteOffsetWithColonAvailableSince")));
         if (WriteOffsetWithColonRuntimeSetting.empty()) {
-            WriteOffsetWithColonAvailableSince = NYql::NFeature::WriteOffsetWithColon.MinLangVer;
+            WriteOffsetWithColonAvailableSince = NYql::MakeLangVersion(2025, 1);
         } else {
             if (!NYql::ParseLangVersion(WriteOffsetWithColonRuntimeSetting, WriteOffsetWithColonAvailableSince)) {
                 UdfTerminate((TStringBuilder() << "Runtime setting 'MakeWriteOffsetWithColonAvailableSince' is misconfigured").c_str());

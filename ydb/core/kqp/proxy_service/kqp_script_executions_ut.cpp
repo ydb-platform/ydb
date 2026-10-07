@@ -74,8 +74,9 @@ const TVector<TString> TEST_TABLE_PATH = { "test", "test_table" };
 const TVector<TString> TEST_KEY_COLUMNS = {"col1"};
 
 struct TScriptExecutionsYdbSetup {
-    explicit TScriptExecutionsYdbSetup(bool enableScriptExecutionBackgroundChecks = false, bool secureScriptExecutions = false) {
-        Init(enableScriptExecutionBackgroundChecks, secureScriptExecutions);
+    explicit TScriptExecutionsYdbSetup(bool enableScriptExecutionBackgroundChecks = false, bool secureScriptExecutions = false,
+        bool enableDataShardCreateTableAs = false) {
+        Init(enableScriptExecutionBackgroundChecks, secureScriptExecutions, enableDataShardCreateTableAs);
     }
 
     static void BackTraceSignalHandler(int signal) {
@@ -88,7 +89,7 @@ struct TScriptExecutionsYdbSetup {
         abort();
     }
 
-    void Init(bool enableScriptExecutionBackgroundChecks, bool secureScriptExecutions) {
+    void Init(bool enableScriptExecutionBackgroundChecks, bool secureScriptExecutions, bool enableDataShardCreateTableAs) {
         EnableYDBBacktraceFormat();
         for (auto sig : {SIGILL, SIGSEGV}) {
             signal(sig, &TScriptExecutionsYdbSetup::BackTraceSignalHandler);
@@ -98,6 +99,7 @@ struct TScriptExecutionsYdbSetup {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(secureScriptExecutions);
+        appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(enableDataShardCreateTableAs);
 
         MsgBusPort = PortManager.GetPort(2134);
         GrpcPort = PortManager.GetPort(2135);
@@ -736,7 +738,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
     Y_UNIT_TEST(RestartQueryWithGetOperation) {
         constexpr TDuration BACKOFF_DURATION = TDuration::Seconds(5);
 
-        TScriptExecutionsYdbSetup ydb;
+        TScriptExecutionsYdbSetup ydb(false, false, /* enableDataShardCreateTableAs */ true);
 
         const auto executionId = ExecuteQueryToRetry(ydb, BACKOFF_DURATION);
 
@@ -749,7 +751,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
     Y_UNIT_TEST(BackgroundOperationRestart) {
         constexpr TDuration BACKOFF_DURATION = TDuration::Seconds(5);
 
-        TScriptExecutionsYdbSetup ydb(/* enableScriptExecutionBackgroundChecks */ true);
+        TScriptExecutionsYdbSetup ydb(/* enableScriptExecutionBackgroundChecks */ true, false, /* enableDataShardCreateTableAs */ true);
 
         const auto executionId = ExecuteQueryToRetry(ydb, BACKOFF_DURATION);
 

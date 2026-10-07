@@ -36,6 +36,7 @@ PEERDIR(
     ydb/core/fq/libs/common
     ydb/core/fq/libs/result_formatter
     yql/essentials/ast
+    yql/essentials/types/uuid
     yql/essentials/core
     yql/essentials/core/type_ann
     ydb/library/yql/dq/expr_nodes

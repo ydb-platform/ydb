@@ -19,7 +19,7 @@
 #include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/ref.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NRpc {
 
@@ -67,7 +67,7 @@ private:
         size_t CompressedSize;
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     TSlidingWindow<TWindowPacket> Window_;
     TRingQueue<TQueueEntry> Queue_;
     TError Error_;
@@ -82,7 +82,7 @@ private:
         const TStreamingPayload& payload,
         const std::vector<TSharedRef>& decompressedAttachments);
     void DoAbort(
-        TGuard<NThreading::TSpinLock>& guard,
+        TGuard<TSpinLock>& guard,
         const TError& error,
         bool fireAborted = true);
     void OnTimeout();
@@ -150,7 +150,7 @@ private:
         NConcurrency::TDelayedExecutorCookie TimeoutCookie;
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     std::atomic<size_t> CompressionSequenceNumber_ = 0;
     TSlidingWindow<TWindowPacket> Window_;
     TError Error_;
@@ -168,11 +168,11 @@ private:
 
     void OnWindowPacketsReady(
         TMutableRange<TWindowPacket> packets,
-        TGuard<NThreading::TSpinLock>& guard);
-    void MaybeInvokePullCallback(TGuard<NThreading::TSpinLock>& guard);
+        TGuard<TSpinLock>& guard);
+    void MaybeInvokePullCallback(TGuard<TSpinLock>& guard);
     bool CanPullMore(bool first) const;
     void DoAbort(
-        TGuard<NThreading::TSpinLock>& guard,
+        TGuard<TSpinLock>& guard,
         const TError& error,
         bool fireAborted = true);
     void OnTimeout();
@@ -250,7 +250,7 @@ private:
     NConcurrency::IAsyncZeroCopyInputStreamPtr FeedbackStream_;
     bool FeedbackEnabled_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TRingQueue<TPromise<void>> ConfirmationQueue_;
     TError Error_;
 

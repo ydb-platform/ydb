@@ -564,6 +564,7 @@ class TPqCheckpointProviderIntegration final : public NFq::ICheckpointProviderIn
 
     struct TRecoveryBatch : TAuthorizationContext {
         TVector<TPreparedSource> Sources;
+        TIssues Issues;
     };
 
 public:
@@ -587,21 +588,28 @@ private:
         auto batch = std::make_shared<TRecoveryBatch>();
 
         for (auto& source : sources) {
-            Y_VALIDATE(source.Source.GetType() == GetSourceName(), "Unexpected source type for PQ recovery");
-            auto& prepared = batch->Sources.emplace_back();
-            Y_ENSURE(source.Source.GetSettings().UnpackTo(&prepared.Settings), "Invalid PQ source settings for recovery");
-            prepared.Tasks = std::move(source.Tasks);
-            prepared.Token = PrepareToken(prepared.Settings.GetToken().GetName(), source.SecureParams, source.RequestContext, *batch);
+            try {
+                Y_VALIDATE(source.Source.GetType() == GetSourceName(), "Unexpected source type for PQ recovery");
+                TPreparedSource prepared;
+                Y_ENSURE(source.Source.GetSettings().UnpackTo(&prepared.Settings), "Invalid PQ source settings for recovery");
+                prepared.Tasks = std::move(source.Tasks);
+                prepared.Token = PrepareToken(prepared.Settings.GetToken().GetName(), source.SecureParams, source.RequestContext, *batch);
+                batch->Sources.emplace_back(std::move(prepared));
+            } catch (const std::exception& e) {
+                batch->Issues.AddIssue(TIssue(TStringBuilder() << "PQ source recovery preparation failed: " << e.what()));
+            }
         }
 
         return ResolveSecrets(*batch).Apply([self = TIntrusivePtr(this), batch](const TFuture<std::map<TString, TString>>& future) {
             return self->PrepareReaders(*batch, future.GetValue());
-        }).Apply([](const TFuture<TIssues>& result) {
+        }).Apply([batch](const TFuture<TIssues>& result) {
+            TIssues issues = batch->Issues;
             try {
-                return result.GetValue();
+                issues.AddIssues(result.GetValue());
             } catch (const std::exception& e) {
-                return TIssues{TIssue(TStringBuilder() << "PQ source recovery preparation failed: " << e.what())};
+                issues.AddIssue(TIssue(TStringBuilder() << "PQ source recovery preparation failed: " << e.what()));
             }
+            return issues;
         });
     } catch (const std::exception& e) {
         return MakeFuture(TIssues{TIssue(TStringBuilder() << "PQ source recovery preparation failed: " << e.what())});
@@ -715,7 +723,7 @@ private:
         const auto nowMs = TInstant::Now().MilliSeconds();
         TVector<TFuture<TIssues>> recoveries;
         recoveries.reserve(batch.Sources.size());
-        for (auto& source : batch.Sources) {
+        const auto prepareSource = [&](TPreparedSource& source) {
             source.Token = CreateStructuredTokenParser(source.Token).ToBuilder().ReplaceReferences(secrets).ToJson();
 
             THashMap<TString, TCluster> clusters;
@@ -817,13 +825,25 @@ private:
                 ActorSystem->Register(new TPqSourceRecoveryActor(std::move(client), cluster.Settings.GetTopicPath(), cluster.Settings.GetConsumerName(), std::move(partitions), promise));
             }
 
+        };
+
+        for (auto& source : batch.Sources) {
+            try {
+                prepareSource(source);
+            } catch (const std::exception& e) {
+                recoveries.emplace_back(MakeFuture(TIssues{TIssue(TStringBuilder() << "Cannot prepare topic source recovery for " << source.Settings.GetTopicPath() << ": " << e.what())}));
+            }
             source.Token.clear();
         }
 
         return WaitAll(recoveries).Apply([recoveries](const TFuture<void>&) {
             TIssues issues;
             for (const auto& recovery : recoveries) {
-                issues.AddIssues(recovery.GetValue());
+                try {
+                    issues.AddIssues(recovery.GetValue());
+                } catch (const std::exception& e) {
+                    issues.AddIssue(TIssue(e.what()));
+                }
             }
             return issues;
         });

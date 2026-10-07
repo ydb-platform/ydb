@@ -4,6 +4,7 @@
 
 #include "restore_request.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_checksums.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -173,24 +174,32 @@ public:
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
+    // Checksums of guardedSglist in the DDisk format, passed to the transport
+    // unchanged; empty means not calculated.
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
         TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) = 0;
 
+    // Checksums of guardedSglist in the DDisk format, passed to the transport
+    // unchanged; empty means not calculated.
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
         TPBufferKey pBufferKey,
         TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) = 0;
 
     using TWriteBlocksToManyPBuffersCallback =
         std::function<void(TDBGWriteBlocksToManyPBuffersResponse)>;
 
+    // Checksums of guardedSglist in the DDisk format, passed to the transport
+    // unchanged; empty means not calculated.
     virtual void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
@@ -199,6 +208,7 @@ public:
         TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId,
         TWriteBlocksToManyPBuffersCallback callback) = 0;
 

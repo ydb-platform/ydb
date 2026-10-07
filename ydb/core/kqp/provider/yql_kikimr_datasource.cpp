@@ -829,6 +829,11 @@ public:
                                         .Add(readArgs[1]->ChildrenList()[1])
                                     .Build()
                                     .Done().Ptr();
+                    if (dataSource.IsMessageStream() && dataSource.GetDatabaseType() == EDatabaseType::YT) {
+                        auto sourceArgs = readArgs[1]->ChildrenList();
+                        sourceArgs.push_back(ctx.NewAtom(node->Pos(), "message_stream"));
+                        readArgs[1] = ctx.ChangeChildren(*readArgs[1], std::move(sourceArgs));
+                    }
                     readArgs[2] = ctx.NewCallable(node->Pos(), "MrTableConcat", { readArgs[2] });
                     auto newRead = ctx.ChangeChildren(*read, std::move(readArgs));
                     auto retChildren = node->ChildrenList();
@@ -836,7 +841,13 @@ public:
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 } else if (tableDesc.Metadata->IsExternalTable()) {
                     YQL_ENSURE(ExternalSourceFactory);
-                    const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->GetExternalSourceType());
+                    const auto& databaseType = tableDesc.Metadata->GetExternalSourceDatabaseType();
+                    if (!databaseType) {
+                        ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder()
+                            << "Unknown source type for external table \"" << tablePath << "\""));
+                        return nullptr;
+                    }
+                    const auto& source = ExternalSourceFactory->GetOrCreate(*databaseType);
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)
                             .Repeat(TExprStep::Epochs)
                             .Repeat(TExprStep::Intents)

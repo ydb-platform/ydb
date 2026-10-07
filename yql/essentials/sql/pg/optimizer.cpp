@@ -454,7 +454,7 @@ struct TPgOptimizerImpl {
         VarIds.emplace_back();
         // rel -> tables
         RelTables.emplace_back();
-        for (const auto& table : leaf->Labels()) {
+        for (const TString& table : leaf->Labels()) {
             RelTables.back().emplace_back(table);
             Table2RelIds[table].emplace_back(relId);
         }
@@ -669,9 +669,10 @@ struct TPgOptimizerImpl {
     TExprContext& Ctx;
     std::function<void(const TString&)> Log;
 
-    THashMap<TStringBuf, std::vector<int>> Table2RelIds;
+    // owned: TRelOptimizerNode::Labels() returns the labels by value
+    THashMap<TString, std::vector<int>> Table2RelIds;
     std::vector<IOptimizer::TRel> Rels;
-    std::vector<std::vector<TStringBuf>> RelTables;
+    std::vector<std::vector<TString>> RelTables;
     std::vector<std::shared_ptr<TRelOptimizerNode>> Leafs;
     std::vector<std::vector<std::tuple<TStringBuf, TStringBuf>>> Var2TableCol;
 

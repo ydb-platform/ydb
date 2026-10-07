@@ -207,6 +207,46 @@ TKqpKeyRanges MakeComputedKeyRanges(const TKqlReadTableRangesBase& readTable, co
     return ranges;
 }
 
+NMiniKQL::EJoinKind ParseHashJoinKind(const TExprNode& joinKindNode) {
+    YQL_ENSURE(joinKindNode.IsAtom(), "Join kind should be atom");
+    const auto joinKindStr = joinKindNode.Content();
+    if (joinKindStr == "Inner") {
+        return NMiniKQL::EJoinKind::Inner;
+    } else if (joinKindStr == "Left") {
+        return NMiniKQL::EJoinKind::Left;
+    } else if (joinKindStr == "LeftSemi") {
+        return NMiniKQL::EJoinKind::LeftSemi;
+    } else if (joinKindStr == "LeftOnly") {
+        return NMiniKQL::EJoinKind::LeftOnly;
+    } else if (joinKindStr == "Cross") {
+        return NMiniKQL::EJoinKind::Cross;
+    }
+    YQL_ENSURE(false, "Unsupported join kind: " << joinKindStr);
+}
+
+TVector<ui32> ExtractJoinColumnIndices(const TExprNode& tupleNode) {
+    YQL_ENSURE(tupleNode.IsList(), "Expected tuple of atoms");
+    TVector<ui32> indices;
+    for (const auto& child : tupleNode.Children()) {
+        YQL_ENSURE(child->IsAtom(), "Expected atom in key columns");
+        indices.push_back(FromString<ui32>(child->Content()));
+    }
+    return indices;
+}
+
+TGraceJoinRenames MakeHashJoinRenames(int leftWidth, int rightWidth, NMiniKQL::EJoinKind joinKind) {
+    TDqUserRenames renames{};
+    for (int index = 0; index < leftWidth; ++index) {
+        renames.emplace_back(index, EJoinSide::kLeft);
+    }
+    if (joinKind != NMiniKQL::EJoinKind::LeftSemi && joinKind != NMiniKQL::EJoinKind::LeftOnly) {
+        for (int index = 0; index < rightWidth; ++index) {
+            renames.emplace_back(index, EJoinSide::kRight);
+        }
+    }
+    return TGraceJoinRenames::FromDq(renames);
+}
+
 } // anonymous namespace
 
 const TKikimrTableMetadata& TKqlCompileContext::GetTableMeta(const TKqpTable& table) const {
@@ -358,59 +398,21 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
             auto rightInput = MkqlBuildExpr(*node.Child(1), buildCtx);
 
-            // Get join kind from atom
-            auto joinKindNode = node.Child(2);
-            YQL_ENSURE(joinKindNode->IsAtom(), "Join kind should be atom");
-            auto joinKindStr = joinKindNode->Content();
-
-            NMiniKQL::EJoinKind joinKind;
-            if (joinKindStr == "Inner") {
-                joinKind = NMiniKQL::EJoinKind::Inner;
-            } else if (joinKindStr == "Left") {
-                joinKind = NMiniKQL::EJoinKind::Left;
-            } else if (joinKindStr == "LeftSemi") {
-                joinKind = NMiniKQL::EJoinKind::LeftSemi;
-            } else if (joinKindStr == "LeftOnly") {
-                joinKind = NMiniKQL::EJoinKind::LeftOnly;
-            } else if (joinKindStr == "Cross") {
-                joinKind = NMiniKQL::EJoinKind::Cross;
-            } else {
-                YQL_ENSURE(false, "Unsupported join kind: " << joinKindStr);
-            }
-
-            // Extract key column indices from tuple literals
-            auto extractColumnIndices = [](const TExprNode* tupleNode) -> TVector<ui32> {
-                YQL_ENSURE(tupleNode->IsList(), "Expected tuple of atoms");
-                TVector<ui32> indices;
-                for (const auto& child : tupleNode->Children()) {
-                    YQL_ENSURE(child->IsAtom(), "Expected atom in key columns");
-                    indices.push_back(FromString<ui32>(child->Content()));
-                }
-                return indices;
-            };
-            auto leftKeyColumns = extractColumnIndices(node.Child(3));
-            auto rightKeyColumns = extractColumnIndices(node.Child(4));
+            const auto joinKind = ParseHashJoinKind(*node.Child(2));
+            auto leftKeyColumns = ExtractJoinColumnIndices(*node.Child(3));
+            auto rightKeyColumns = ExtractJoinColumnIndices(*node.Child(4));
 
             // Get return type from node annotation
             TStringStream errorStream;
             auto returnType = NCommon::BuildType(*node.GetTypeAnn(), ctx.PgmBuilder(), errorStream);
             YQL_ENSURE(returnType, "Failed to build return type: " << errorStream.Str());
 
-            auto graceJoinRenames = [&]{
-                auto wideStreamComponentsSize = [](TRuntimeNode node)->int {
-                    return AS_TYPE(TMultiType, AS_TYPE(TStreamType,node.GetStaticType())->GetItemType())->GetElementsCount();
-                };
-                TDqUserRenames renames{};
-                for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
-                    renames.emplace_back(index, EJoinSide::kLeft);
-                }
-                if (joinKind != NMiniKQL::EJoinKind::LeftSemi && joinKind != NMiniKQL::EJoinKind::LeftOnly) {
-                    for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
-                        renames.emplace_back(index, EJoinSide::kRight);
-                    }
-                }
-                return TGraceJoinRenames::FromDq(renames);
-            }();
+            auto wideStreamComponentsSize = [](TRuntimeNode node)->int {
+                return AS_TYPE(TMultiType, AS_TYPE(TStreamType,node.GetStaticType())->GetItemType())->GetElementsCount();
+            };
+            // Block streams have an extra length column
+            auto graceJoinRenames = MakeHashJoinRenames(
+                wideStreamComponentsSize(leftInput) - 1, wideStreamComponentsSize(rightInput) - 1, joinKind);
 
 
             NMiniKQL::TBlockHashJoinSettings settings;
@@ -458,6 +460,30 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind, leftKeyColumns, rightKeyColumns, graceJoinRenames.Left,
                                                     graceJoinRenames.Right, returnType, settings, leftFilter, rightFilter, commonFilter);
+        });
+
+    compiler->AddCallable(
+        TDqScalarHashJoinCore::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            TDqScalarHashJoinCore join(&node);
+            auto leftInput = MkqlBuildExpr(join.LeftInput().Ref(), buildCtx);
+            auto rightInput = MkqlBuildExpr(join.RightInput().Ref(), buildCtx);
+
+            const auto joinKind = ParseHashJoinKind(join.JoinKind().Ref());
+            const auto leftKeyColumns = ExtractJoinColumnIndices(join.LeftKeyColumns().Ref());
+            const auto rightKeyColumns = ExtractJoinColumnIndices(join.RightKeyColumns().Ref());
+
+            TStringStream errorStream;
+            auto returnType = NCommon::BuildType(*node.GetTypeAnn(), ctx.PgmBuilder(), errorStream);
+            YQL_ENSURE(returnType, "Failed to build return type: " << errorStream.Str());
+
+            auto wideFlowComponentsSize = [](TRuntimeNode node) -> int {
+                return AS_TYPE(TMultiType, AS_TYPE(TFlowType, node.GetStaticType())->GetItemType())->GetElementsCount();
+            };
+            const auto renames = MakeHashJoinRenames(
+                wideFlowComponentsSize(leftInput), wideFlowComponentsSize(rightInput), joinKind);
+
+            return ctx.PgmBuilder().DqScalarHashJoin(leftInput, rightInput, joinKind, leftKeyColumns, rightKeyColumns,
+                                                     renames.Left, renames.Right, returnType);
         });
 
     compiler->AddCallable(TDqPhyHashCombine::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {

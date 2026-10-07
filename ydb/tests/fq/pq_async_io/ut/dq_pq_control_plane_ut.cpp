@@ -300,8 +300,6 @@ private:
     void OnConsumerOffsetsInitialized() override {
         Send(ComputeActorId, new TEvents::TEvWakeup());
     }
-    void SchedulePartitionIdlenessCheck(TInstant) override {}
-    void InitWatermarkTracker() override {}
     void CommitState(const NDqProto::TCheckpoint&) override {}
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch&, TMaybe<TInstant>&, bool&, i64) override {
         return 0;

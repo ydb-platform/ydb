@@ -8,24 +8,6 @@ using namespace NKikimr::NKqp;
 
 namespace {
 
-template <class TTransform>
-TExprNode::TPtr TransformInputStage(TExprNode::TPtr input, TTransform&& transform, const IOperator& producer, TExprContext& ctx) {
-    // Special case for row tables.
-    if (TDqPhyStage::Match(input.Get())) {
-        const auto program = TDqPhyStage(input).Program().Ptr();
-        return ctx.ChangeChild(*input, TDqPhyStage::idx_Program, ctx.ChangeChild(*program, 1,
-            TransformInputStage(program->TailPtr(), transform, producer, ctx)));
-    }
-    if (producer.Kind == EOperator::Replicate && input->IsCallable("Switch")) {
-        Y_ENSURE(producer.Props.StageOutputIndex);
-        // Switch(input, buffer, [input indexes], lambda, ...).
-        const auto index = 3 + 2 * *producer.Props.StageOutputIndex;
-        const auto branch = input->ChildPtr(index);
-        return ctx.ChangeChild(*input, index, ctx.ChangeChild(*branch, 1, transform(branch->TailPtr())));
-    }
-    return transform(input);
-}
-
 TCoNameValueTuple BuildMemberTuple(const TString& name, const TString& sourceName, const TExprBase& row, TExprContext& ctx,
                                    TPositionHandle pos) {
     // clang-format off
@@ -69,9 +51,9 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
             columns.emplace_back(names.Get(id), column);
             types.push_back(ctx.MakeType<TItemExprType>(column, input.GetIUType(id, ctx)));
         }
-        auto stage = TransformInputStage(inputStage, [&](TExprNode::TPtr body) {
+        auto stage = NPhysicalConvertionUtils::TransformStageOutput(inputStage, [&](TExprNode::TPtr body) {
             return NPhysicalConvertionUtils::BuildRenameMap(body, columns, ctx);
-        }, input, ctx);
+        }, GetReplicateOutputIndex(input), ctx);
         auto type = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(types));
         return {std::move(stage), NYql::ExpandType(pos, *type, ctx)};
     }
@@ -221,7 +203,7 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
         // clang-format on
     };
 
-    const auto newInputStage = TransformInputStage(inputStage, buildKeys, input, ctx);
+    const auto newInputStage = NPhysicalConvertionUtils::TransformStageOutput(inputStage, buildKeys, GetReplicateOutputIndex(input), ctx);
 
     // Tuple: (left row, lookup key).
     const TTypeAnnotationNode::TListType tupleItems{

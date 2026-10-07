@@ -32,8 +32,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
-#include <yql/essentials/types/uuid/uuid.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/uuid/uuid.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
@@ -14821,6 +14823,100 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(DescribeTopic(pq, "/Root/table/feed").GetRetentionPeriod(), TDuration::Days(1));
         }
+    }
+
+    Y_UNIT_TEST(ShowCreateChangefeedSettingsAsIndependentQueries) {
+        using namespace NTopic;
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto topicClient = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&querySession](const TString& query) {
+            auto result = querySession.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                result.GetIssues().ToString() << "\nQuery:\n" << query);
+        };
+
+        auto describeTable = [&tableSession]() {
+            auto result = tableSession.DescribeTable("/Root/show_create_changefeed").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto description = NYdb::TProtoAccessor::GetProto(result.GetTableDescription());
+            description.mutable_self()->clear_created_at();
+            return description;
+        };
+
+        executeQuery(R"(
+            CREATE TABLE `/Root/show_create_changefeed` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )");
+        executeQuery(R"(
+            ALTER TABLE `/Root/show_create_changefeed` ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                BARRIERS_INTERVAL = INTERVAL('PT1S'),
+                RETENTION_PERIOD = INTERVAL('PT12H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+        )");
+        executeQuery(R"(
+            ALTER TOPIC `/Root/show_create_changefeed/feed` SET (
+                retention_period = INTERVAL('PT6H'),
+                min_active_partitions = 3,
+                max_active_partitions = 8,
+                auto_partitioning_strategy = 'paused'
+            );
+        )");
+
+        const auto originalTableDescription = describeTable();
+
+        auto showCreateResult = querySession.ExecuteQuery(
+            "SHOW CREATE TABLE `/Root/show_create_changefeed`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(showCreateResult.GetStatus(), EStatus::SUCCESS, showCreateResult.GetIssues().ToString());
+        UNIT_ASSERT(!showCreateResult.GetResultSets().empty());
+
+        TResultSetParser parser(showCreateResult.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        const auto showCreateQuery = parser.ColumnParser("CreateQuery").GetOptionalUtf8();
+        UNIT_ASSERT_C(showCreateQuery.has_value(), "SHOW CREATE TABLE returned an empty CreateQuery");
+
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        TVector<TString> statements;
+        NYql::TIssues issues;
+        UNIT_ASSERT_C(NSQLTranslationV1::SplitQueryToStatements(
+            TString(*showCreateQuery), NSQLTranslationV1::MakeLexer(lexers, false), statements, issues),
+            issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(statements.size(), 3, *showCreateQuery);
+
+        executeQuery("DROP TABLE `/Root/show_create_changefeed`;");
+        for (const auto& statement : statements) {
+            executeQuery(statement);
+        }
+
+        const auto recreatedTableDescription = describeTable();
+        google::protobuf::util::MessageDifferencer differencer;
+        TString descriptionDiff;
+        differencer.ReportDifferencesToString(&descriptionDiff);
+        UNIT_ASSERT_C(differencer.Compare(originalTableDescription, recreatedTableDescription),
+            "Table descriptions differ after SHOW CREATE TABLE replay:\n" << descriptionDiff
+            << "\nDDL:\n" << *showCreateQuery);
+
+        const auto topicDescription = DescribeTopic(topicClient, "/Root/show_create_changefeed/feed");
+        const auto& partitioningSettings = topicDescription.GetPartitioningSettings();
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetRetentionPeriod(), TDuration::Hours(6));
+        UNIT_ASSERT_VALUES_EQUAL(partitioningSettings.GetMinActivePartitions(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(partitioningSettings.GetMaxActivePartitions(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(partitioningSettings.GetAutoPartitioningSettings().GetStrategy(), EAutoPartitioningStrategy::Paused);
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetPartitions().size(), 3);
     }
 
     Y_UNIT_TEST_TWIN(CreateTopicMeteringModeRequestUnits, UseQueryService) {

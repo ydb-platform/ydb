@@ -6,6 +6,10 @@
 #include <ydb/library/testlib/common/test_utils.h>
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/lexer.h>
 
 #include <util/string/cast.h>
 #include <util/string/subst.h>
@@ -17,6 +21,33 @@ using namespace NYdb;
 using namespace NYdb::NDump;
 
 namespace {
+
+struct TChangefeedTopicSettings {
+    TDuration RetentionPeriod;
+    ui64 MinActivePartitions = 0;
+    ui64 MaxActivePartitions = 0;
+    NTopic::EAutoPartitioningStrategy AutoPartitioningStrategy = NTopic::EAutoPartitioningStrategy::Unspecified;
+    std::optional<size_t> InitialPartitionCount;
+
+    bool operator==(const TChangefeedTopicSettings& other) const {
+        return RetentionPeriod == other.RetentionPeriod
+            && MinActivePartitions == other.MinActivePartitions
+            && MaxActivePartitions == other.MaxActivePartitions
+            && AutoPartitioningStrategy == other.AutoPartitioningStrategy
+            && InitialPartitionCount == other.InitialPartitionCount;
+    }
+
+    TString DebugString() const {
+        return TStringBuilder()
+            << "{ retention_us: " << RetentionPeriod.MicroSeconds()
+            << ", min_active_partitions: " << MinActivePartitions
+            << ", max_active_partitions: " << MaxActivePartitions
+            << ", auto_partitioning_strategy: " << static_cast<ui32>(AutoPartitioningStrategy)
+            << ", initial_partition_count: "
+            << (InitialPartitionCount ? ToString(*InitialPartitionCount) : TString("not compared"))
+            << " }";
+    }
+};
 
 class TShowCreateChecker {
 public:
@@ -31,7 +62,7 @@ public:
         CreateTier("tier2");
     }
 
-    void WaitForCdcStreamReady(const std::string& streamPath) {
+    void WaitForCdcStreamReady(const TString& streamPath) {
         for (int i = 0; i < 60; ++i) {
             auto pathDesc = DescribePath(Runtime, TString(streamPath));
             if (pathDesc.HasCdcStreamDescription()
@@ -93,6 +124,40 @@ public:
         CompareDescriptions(describeResultOrig, describeResultNew, showCreateTableQuery);
     }
 
+    void CheckChangefeedRoundTrip(const std::string& query, const std::string& tableName,
+            const std::string& changefeedName, const std::string& alterTopicQuery = {},
+            bool compareInitialPartitionCount = true)
+    {
+        ExecuteQuery(Session, query);
+
+        const TString topicPath = TStringBuilder() << "/Root/" << tableName << "/" << changefeedName;
+        WaitForCdcStreamReady(topicPath);
+
+        if (!alterTopicQuery.empty()) {
+            ExecuteQuery(Session, alterTopicQuery);
+        }
+
+        const auto originalTableDescription = DescribeTable(tableName);
+        const auto originalTopicSettings = DescribeTopicSettings(topicPath, compareInitialPartitionCount);
+        const auto showCreateTableQuery = ShowCreateTable(Session, tableName);
+
+        DropTable(Session, tableName);
+        ExecuteDdlStatements(TString(showCreateTableQuery));
+        WaitForCdcStreamReady(topicPath);
+
+        const auto recreatedTableDescription = DescribeTable(tableName);
+        const auto recreatedTopicSettings = DescribeTopicSettings(topicPath, compareInitialPartitionCount);
+
+        CompareDescriptions(originalTableDescription, recreatedTableDescription, showCreateTableQuery);
+        UNIT_ASSERT_C(originalTopicSettings == recreatedTopicSettings,
+            "Changefeed topic settings differ after SHOW CREATE TABLE round-trip"
+            << "\nOriginal: " << originalTopicSettings.DebugString()
+            << "\nRecreated: " << recreatedTopicSettings.DebugString()
+            << "\nDDL:\n" << showCreateTableQuery);
+
+        DropTable(Session, tableName);
+    }
+
     // Checks that the view created from the description provided by the `SHOW CREATE VIEW` statement
     // can be used to create a view with a description equal to the original.
     void CheckShowCreateView(const std::string& query, const std::string& viewName, const std::string& formatQuery = "") {
@@ -117,6 +182,21 @@ public:
     }
 
 private:
+
+    void ExecuteDdlStatements(const TString& query) {
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+
+        TVector<TString> statements;
+        NYql::TIssues issues;
+        UNIT_ASSERT_C(NSQLTranslationV1::SplitQueryToStatements(
+            query, NSQLTranslationV1::MakeLexer(lexers, false), statements, issues), issues.ToString());
+        UNIT_ASSERT(!statements.empty());
+
+        for (const auto& statement : statements) {
+            ExecuteQuery(Session, statement);
+        }
+    }
 
     void CreateTier(const std::string& tierName) {
         ExecuteQuery(Session, std::format(R"(
@@ -161,6 +241,25 @@ private:
         auto tableDesc = describeTable(std::move(tablePath));
 
         return tableDesc;
+    }
+
+    TChangefeedTopicSettings DescribeTopicSettings(const TString& topicPath, bool includeInitialPartitionCount) {
+        NTopic::TTopicClient topicClient(Env.GetDriver(), NTopic::TTopicClientSettings().Database("/Root"));
+        auto result = topicClient.DescribeTopic(topicPath).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto& description = result.GetTopicDescription();
+        const auto& partitioningSettings = description.GetPartitioningSettings();
+
+        TChangefeedTopicSettings settings;
+        settings.RetentionPeriod = description.GetRetentionPeriod();
+        settings.MinActivePartitions = partitioningSettings.GetMinActivePartitions();
+        settings.MaxActivePartitions = partitioningSettings.GetMaxActivePartitions();
+        settings.AutoPartitioningStrategy = partitioningSettings.GetAutoPartitioningSettings().GetStrategy();
+        if (includeInitialPartitionCount) {
+            settings.InitialPartitionCount = description.GetPartitions().size();
+        }
+        return settings;
     }
 
     NKikimrSchemeOp::TViewDescription DescribeView(const std::string& viewName) {
@@ -2040,6 +2139,141 @@ Y_UNIT_TEST(TableChangefeeds) {
             ;
         )", false, true
     );
+}
+
+Y_UNIT_TEST(TableChangefeedSettingsRoundTrip) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TShowCreateChecker checker(env);
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_settings (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_settings
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                VIRTUAL_TIMESTAMPS = TRUE,
+                BARRIERS_INTERVAL = INTERVAL('PT1S'),
+                RETENTION_PERIOD = INTERVAL('PT12H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+    )", "show_create_settings", "feed");
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_settings_altered (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_settings_altered
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                BARRIERS_INTERVAL = INTERVAL('PT1S'),
+                RETENTION_PERIOD = INTERVAL('PT12H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+    )", "show_create_settings_altered", "feed", R"(
+        ALTER TOPIC `/Root/show_create_settings_altered/feed` SET (
+            retention_period = INTERVAL('PT6H'),
+            min_active_partitions = 3,
+            max_active_partitions = 8,
+            auto_partitioning_strategy = 'scale_up_and_down'
+        );
+    )", false);
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_settings_fixed (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_settings_fixed
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'KEYS_ONLY',
+                FORMAT = 'JSON',
+                RETENTION_PERIOD = INTERVAL('PT3H'),
+                TOPIC_AUTO_PARTITIONING = 'DISABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 3
+            );
+    )", "show_create_settings_fixed", "feed");
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_settings_paused (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_settings_paused
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'KEYS_ONLY',
+                FORMAT = 'JSON',
+                RETENTION_PERIOD = INTERVAL('PT2H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+    )", "show_create_settings_paused", "feed", R"(
+        ALTER TOPIC `/Root/show_create_settings_paused/feed`
+            SET (auto_partitioning_strategy = 'paused');
+    )");
+}
+
+Y_UNIT_TEST(TableChangefeedSettingsWithAdditionalDdlRoundTrip) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TShowCreateChecker checker(env);
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_settings_with_ddl (
+            Key Uint64,
+            Seq BigSerial,
+            IndexedValue Uint64,
+            Value String,
+            ObsoleteValue String,
+            INDEX ValueIndex GLOBAL ASYNC ON (IndexedValue) COVER (Value),
+            PRIMARY KEY (Key)
+        ) WITH (
+            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+            AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+        );
+        ALTER TABLE show_create_settings_with_ddl
+            ADD COLUMN AddedValue Utf8;
+        ALTER TABLE show_create_settings_with_ddl
+            DROP COLUMN ObsoleteValue;
+        ALTER TABLE show_create_settings_with_ddl
+            SET (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
+        ALTER TABLE show_create_settings_with_ddl ALTER INDEX ValueIndex SET (
+            AUTO_PARTITIONING_BY_LOAD = ENABLED,
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+            AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 10
+        );
+        ALTER SEQUENCE IF EXISTS `/Root/show_create_settings_with_ddl/_serial_column_Seq`
+            START WITH 50
+            INCREMENT BY 11;
+        ALTER SEQUENCE IF EXISTS `/Root/show_create_settings_with_ddl/_serial_column_Seq`
+            RESTART WITH 72;
+        ALTER TABLE show_create_settings_with_ddl
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                BARRIERS_INTERVAL = INTERVAL('PT1S'),
+                RETENTION_PERIOD = INTERVAL('PT12H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+    )", "show_create_settings_with_ddl", "feed", R"(
+        ALTER TOPIC `/Root/show_create_settings_with_ddl/feed`
+            SET (auto_partitioning_strategy = 'paused');
+    )");
 }
 
 Y_UNIT_TEST(TableChangefeedAfterInitialScan) {

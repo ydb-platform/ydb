@@ -38,7 +38,7 @@ PEERDIR(
     library/cpp/monlib/service/pages
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/control/lib
     ydb/core/formats
     ydb/core/kqp

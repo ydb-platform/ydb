@@ -9,8 +9,8 @@
 #include "resource_subscriber/actor.h"
 #include "transactions/locks/read_finished.h"
 
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>

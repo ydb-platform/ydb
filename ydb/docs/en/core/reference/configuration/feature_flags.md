@@ -90,4 +90,4 @@ feature_flags:
 | `switch_to_config_v2` | Switching from configuration V1 to [configuration V2](../../devops/configuration-management/migration/migration-to-v2.md) |
 | `enable_streaming_queries` | Enabling [streaming queries](../../concepts/streaming-query/streaming-query.md) |
 | `enable_stable_node_names` | Enabling [stable names for dynamic nodes](node_broker_config.md) |
-| `alter_database_create_hive_first` | Creating a dedicated Hive for a database's system tablets when the database is created |
+| `enable_alter_database_create_hive_first` | Creating a dedicated Hive for a database's system tablets when the database is created |

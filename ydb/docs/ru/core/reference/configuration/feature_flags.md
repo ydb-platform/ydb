@@ -90,4 +90,4 @@ feature_flags:
 | `switch_to_config_v2`                                    | Переход с конфигурации V1 на [конфигурацию V2](../../devops/configuration-management/migration/migration-to-v2.md) |
 | `enable_streaming_queries`                               | Включение [потоковых запросов](../../concepts/streaming-query/streaming-query.md) |
 | `enable_stable_node_names`                               | Включение [стабильных имен динамических узлов](node_broker_config.md) |
-| `alter_database_create_hive_first`                       | Создание отдельного Hive для системных таблеток базы при создании базы данных |
+| `enable_alter_database_create_hive_first`                | Создание отдельного Hive для системных таблеток базы при создании базы данных |

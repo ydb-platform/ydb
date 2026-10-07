@@ -12,6 +12,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
 
+#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
 #include <util/datetime/base.h>
 #include <util/generic/refcount.h>
 #include <util/generic/singleton.h>
@@ -459,21 +460,16 @@ public:
 
 class TControllers {
 private:
-    std::atomic<ICSController::TPtr*> CSControllerPtr{ new ICSController::TPtr(std::make_shared<ICSController>()) };
+    // Tablets read the controller from actor threads while tests replace it. A reader keeps the
+    // holder alive while it copies the pointer out.
+    TTrueAtomicSharedPtr<ICSController::TPtr> CSController = MakeTrueAtomicShared<ICSController::TPtr>(std::make_shared<ICSController>());
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
 
     void ReplaceCSController(const ICSController::TPtr& newController) {
-        auto* newPtr = new ICSController::TPtr(newController);
-        auto* oldPtr = CSControllerPtr.exchange(newPtr);
-        delete oldPtr;
+        CSController.atomic_store(MakeTrueAtomicShared<ICSController::TPtr>(newController));
     }
 
 public:
-    ~TControllers() {
-        auto* ptr = CSControllerPtr.load();
-        delete ptr;
-    }
-
     template <class TController>
     class TGuard: TMoveOnly {
     private:
@@ -494,6 +490,7 @@ public:
 
         TGuard& operator=(TGuard&& other) {
             std::swap(Controller, other.Controller);
+            return *this;
         }
 
         TController* operator->() {
@@ -518,7 +515,7 @@ public:
 
     static ICSController::TPtr GetColumnShardController() {
         auto* controllers = Singleton<TControllers>();
-        return *controllers->CSControllerPtr.load();
+        return *controllers->CSController.atomic_load();
     }
 
     template <class T>

@@ -4690,6 +4690,49 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL_C(json["resource_pool"].GetString(), "explicit_pool", "response: " << NJson::WriteJson(json, false));
     }
 
+    Y_UNIT_TEST(WmStateStreamReportsImmediateExecution) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetEnableResourcePools(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+
+        GrantRead(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericFull);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort, TDuration::Seconds(10), TDuration::Seconds(5));
+        WaitForHttpReady(httpClient);
+
+        // The default pool admits this query immediately without a QUEUED transition.
+        const auto body = PostStreamingQuery(httpClient, "SELECT 1;");
+        TVector<TString> states;
+        bool success = false;
+        for (const auto& chunk : ParseStreamingChunks(body)) {
+            if (chunk["meta"]["event"].GetString() == "QueryStarted" && chunk.Has("wm_state")) {
+                states.push_back(chunk["wm_state"].GetString());
+            }
+            if (chunk["meta"]["event"].GetString() == "QueryResponse") {
+                success = chunk["status"].GetString() == "SUCCESS";
+            }
+        }
+        UNIT_ASSERT_C(success, body);
+        UNIT_ASSERT_VALUES_EQUAL(states.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(states[0], "EXECUTING");
+    }
+
     Y_UNIT_TEST(WmInfoClassicResponseCompatibility) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);

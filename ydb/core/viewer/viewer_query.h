@@ -953,7 +953,7 @@ private:
             }
             WmQueueReported = true;
         } else if (state == "EXECUTING") {
-            if (!WmQueueReported || WmExecutionReported) {
+            if (WmExecutionReported) {
                 return;
             }
             WmExecutionReported = true;

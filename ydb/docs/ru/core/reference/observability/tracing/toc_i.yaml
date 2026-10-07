@@ -4,4 +4,4 @@ items:
 - name: Передача внешнего trace-id
   href: external-traces.md
 - name: Трассировка выполнения запросов
-  href: query-spans.md
+  href: query-tracing.md

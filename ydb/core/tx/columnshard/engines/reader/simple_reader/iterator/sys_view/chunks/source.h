@@ -89,7 +89,8 @@ private:
     virtual TConclusionStatus DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
 
-    // ChunkDetails fetchers are collected into OriginalData, not the scan output collection.
+    // ChunkDetails blobs land in OriginalData. The finished column is also published into the processor
+    // resources, otherwise the next data fetch does not see it and reads the same blobs again.
     virtual TConclusionStatus DoApplyPendingFetcher(const NArrow::NSSA::TProcessorContext& context, const ui32 entityId) override;
 
     virtual TConclusion<NReader::NCommon::TExecutionResult> DoStartFetchImpl(

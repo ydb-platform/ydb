@@ -146,13 +146,9 @@ Y_UNIT_TEST_SUITE(TTxStatusPageSavepoints) {
         UNIT_ASSERT_VALUES_EQUAL(TString(items), "123:[5, 6] 123:[9, 10] 345:[1, 1] ");
     }
 
-    Y_UNIT_TEST(UnsortedRemovedOpsRejected) {
+    // Builds a version 1 page by hand, since the builder always sorts and validates items
+    TSharedData MakeRemovedOpsPage(const TVector<NPage::TTxStatusPage::TRemovedOpsItem>& items) {
         using TPage = NPage::TTxStatusPage;
-
-        // Build a version 1 page by hand, since the builder always sorts items
-        TVector<TPage::TRemovedOpsItem> items(2);
-        items[0] = { 345, 1, 1 };
-        items[1] = { 123, 5, 6 };
 
         const size_t size = sizeof(NPage::TLabel) + sizeof(TPage::THeader)
             + sizeof(TPage::TRemovedOpsHeader) + sizeof(TPage::TRemovedOpsItem) * items.size();
@@ -167,13 +163,41 @@ Y_UNIT_TEST_SUITE(TTxStatusPageSavepoints) {
         ptr += sizeof(TPage::TRemovedOpsHeader);
         memcpy(ptr, items.data(), sizeof(TPage::TRemovedOpsItem) * items.size());
 
-        UNIT_ASSERT_EXCEPTION(TPage(TSharedData::Copy(raw.data(), raw.size())), yexception);
+        return TSharedData::Copy(raw.data(), raw.size());
+    }
+
+    Y_UNIT_TEST(UnsortedRemovedOpsRejected) {
+        using TPage = NPage::TTxStatusPage;
+
+        UNIT_ASSERT_EXCEPTION(TPage(MakeRemovedOpsPage({ { 345, 1, 1 }, { 123, 5, 6 } })), yexception);
 
         // The same items in the right order are accepted
-        std::swap(items[0], items[1]);
-        memcpy(ptr, items.data(), sizeof(TPage::TRemovedOpsItem) * items.size());
-        TPage page(TSharedData::Copy(raw.data(), raw.size()));
+        TPage page(MakeRemovedOpsPage({ { 123, 5, 6 }, { 345, 1, 1 } }));
         UNIT_ASSERT_VALUES_EQUAL(page.GetRemovedOpsItems().size(), 2u);
+    }
+
+    Y_UNIT_TEST(InvalidRemovedOpsRangeRejected) {
+        using TPage = NPage::TTxStatusPage;
+
+        // From > To, including the first item
+        UNIT_ASSERT_EXCEPTION(TPage(MakeRemovedOpsPage({ { 123, 6, 5 } })), yexception);
+        UNIT_ASSERT_EXCEPTION(TPage(MakeRemovedOpsPage({ { 123, 1, 1 }, { 123, 6, 5 } })), yexception);
+        // Seq num 0 cannot be removed
+        UNIT_ASSERT_EXCEPTION(TPage(MakeRemovedOpsPage({ { 123, 0, 5 } })), yexception);
+        // Ranges of a transaction must not overlap or touch, ranges of different ones may
+        UNIT_ASSERT_EXCEPTION(TPage(MakeRemovedOpsPage({ { 123, 1, 5 }, { 123, 3, 7 } })), yexception);
+        UNIT_ASSERT_EXCEPTION(TPage(MakeRemovedOpsPage({ { 123, 1, 5 }, { 123, 6, 7 } })), yexception);
+        TPage page(MakeRemovedOpsPage({ { 123, 1, 5 }, { 123, 7, 7 }, { 345, 1, 5 } }));
+        UNIT_ASSERT_VALUES_EQUAL(page.GetRemovedOpsItems().size(), 3u);
+    }
+
+    Y_UNIT_TEST(DuplicateRemovedOpsTxRejected) {
+        TSavepointSeqNumRanges ranges;
+        ranges.Add(3, 4);
+
+        NPage::TTxStatusBuilder builder;
+        builder.AddRemovedOps(123, ranges);
+        UNIT_ASSERT_EXCEPTION(builder.AddRemovedOps(123, ranges), yexception);
     }
 
     Y_UNIT_TEST(OnlyRemovedOps) {

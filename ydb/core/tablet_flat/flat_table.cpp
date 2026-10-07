@@ -1158,8 +1158,11 @@ TTransactionSet TTable::GetGarbageRemovedTxOps() const
 {
     TTransactionSet garbage;
     for (const auto& pr : RemovedTxOpsRefs) {
-        if (!TxDataRefs.contains(pr.first)) {
-            // Removed operations are only needed while the transaction has rows
+        if (GarbageTransactions.Contains(pr.first)) {
+            // Removed operations are only needed while the transaction has rows,
+            // but an open transaction may still write rows in removed ranges
+            // (e.g. a late write), so they are dropped together with the status
+            // of a committed or removed transaction
             garbage.Add(pr.first);
         }
     }

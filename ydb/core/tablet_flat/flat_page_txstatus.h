@@ -6,6 +6,8 @@
 
 #include <ydb/core/base/row_version.h>
 
+#include <util/generic/hash_set.h>
+
 #include <vector>
 #include <unordered_map>
 
@@ -47,9 +49,10 @@ namespace NPage {
             ui64 RemovedOpsCount;
         } Y_PACKED;
 
-        // A removed closed range [From, To] of savepoint seq nums of a transaction.
-        // Items are stored sorted by (TxId, From), so ranges of a transaction are
-        // contiguous; this is validated on load and relied upon by readers.
+        // A removed closed range [From, To] of savepoint seq nums of a transaction,
+        // 0 < From <= To. Items are stored sorted by (TxId, From), so ranges of a
+        // transaction are contiguous, and ranges of a transaction neither overlap
+        // nor touch each other; this is validated on load and relied upon by readers.
         struct TRemovedOpsItem {
             ui64 TxId_;
             ui32 From_;
@@ -119,11 +122,20 @@ namespace NPage {
 
                 RemovedOpsItems = { ptrRemovedOps, ptrRemovedOps + removedOpsHeader->RemovedOpsCount };
 
-                for (size_t index = 1; index < RemovedOpsItems.size(); ++index) {
-                    const auto& prev = RemovedOpsItems[index - 1];
+                for (size_t index = 0; index < RemovedOpsItems.size(); ++index) {
                     const auto& item = RemovedOpsItems[index];
-                    Y_ENSURE(std::make_pair(prev.GetTxId(), prev.GetFrom()) < std::make_pair(item.GetTxId(), item.GetFrom()),
-                            "NPage::TTxStatusPage removed ops items are not sorted by (TxId, From)");
+                    Y_ENSURE(0 < item.GetFrom() && item.GetFrom() <= item.GetTo(),
+                            "NPage::TTxStatusPage removed ops item of tx " << item.GetTxId()
+                            << " has invalid range [" << item.GetFrom() << ", " << item.GetTo() << "]");
+                    if (index > 0) {
+                        const auto& prev = RemovedOpsItems[index - 1];
+                        Y_ENSURE(std::make_pair(prev.GetTxId(), prev.GetFrom()) < std::make_pair(item.GetTxId(), item.GetFrom()),
+                                "NPage::TTxStatusPage removed ops items are not sorted by (TxId, From)");
+                        Y_ENSURE(prev.GetTxId() != item.GetTxId() || ui64(prev.GetTo()) + 1 < item.GetFrom(),
+                                "NPage::TTxStatusPage removed ops items of tx " << item.GetTxId()
+                                << " overlap or are adjacent: [" << prev.GetFrom() << ", " << prev.GetTo()
+                                << "] and [" << item.GetFrom() << ", " << item.GetTo() << "]");
+                    }
                 }
             }
         }
@@ -193,7 +205,9 @@ namespace NPage {
             }
         }
 
+        // Ranges are already merged, so each transaction must be added at most once
         void AddRemovedOps(ui64 txId, const TSavepointSeqNumRanges& ranges) {
+            Y_ENSURE(RemovedOpsTxIds.insert(txId).second, "Duplicate removed ops of tx " << txId);
             for (const auto& range : ranges.GetRanges()) {
                 auto& item = RemovedOpsItems.emplace_back();
                 item.TxId_ = txId;
@@ -260,6 +274,7 @@ namespace NPage {
             CommittedItems.clear();
             RemovedItems.clear();
             RemovedOpsItems.clear();
+            RemovedOpsTxIds.clear();
             CommittedMap.clear();
             RemovedMap.clear();
             return buf;
@@ -271,6 +286,7 @@ namespace NPage {
         TVector<TRemovedOpsItem> RemovedOpsItems;
         THashMap<ui64, size_t> CommittedMap;
         THashMap<ui64, size_t> RemovedMap;
+        THashSet<ui64> RemovedOpsTxIds;
     };
 
 }   // namespace NPage

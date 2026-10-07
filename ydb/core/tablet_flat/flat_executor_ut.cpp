@@ -5320,6 +5320,24 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         }
     };
 
+    struct TTxRemoveLongTx : public ITransaction {
+        const ui64 TxId;
+
+        explicit TTxRemoveLongTx(ui64 txId)
+            : TxId(txId)
+        { }
+
+        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+            txc.DB.RemoveTx(TableId, TxId);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            // nothing
+        }
+    };
+
     struct TTxCheckRemovedTxOps : public ITransaction {
         TString& Data;
         const TVector<ui64> TxIds;
@@ -5367,7 +5385,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
 
         auto checkRemovedTxOps = [&](const TString& expected) {
             TString data;
-            env.SendSync(new NFake::TEvExecute{ new TTxCheckRemovedTxOps(data, { 123, 234 }) }, /* retry */ true);
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRemovedTxOps(data, { 123, 234, 345 }) }, /* retry */ true);
             UNIT_ASSERT_VALUES_EQUAL(data, expected);
         };
 
@@ -5382,22 +5400,24 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(3, "ccc", 234, 3) });
         env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 7, 8) });
         env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(234, 3, 3) });
+        // Transaction 345 is open but has no rows (e.g. its write is still in flight)
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(345, 1, 2) });
 
-        checkRemovedTxOps("count 2, 123 = { [7, 8] }, 234 = { [3, 3] }");
+        checkRemovedTxOps("count 3, 123 = { [7, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
 
         // Removed operations are moved from the mem table to tx status
         Cerr << "...compacting mem table" << Endl;
         env.SendSync(new NFake::TEvCompact(TableId, true));
         env.WaitFor<NFake::TEvCompacted>();
 
-        checkRemovedTxOps("count 2, 123 = { [7, 8] }, 234 = { [3, 3] }");
+        checkRemovedTxOps("count 3, 123 = { [7, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
 
         restartTablet();
-        checkRemovedTxOps("count 2, 123 = { [7, 8] }, 234 = { [3, 3] }");
+        checkRemovedTxOps("count 3, 123 = { [7, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
 
         // Ranges in the mem table are merged with ranges in tx status
         env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 10, 10) });
-        checkRemovedTxOps("count 2, 123 = { [7, 8], [10, 10] }, 234 = { [3, 3] }");
+        checkRemovedTxOps("count 3, 123 = { [7, 8], [10, 10] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
 
         // After commit and compaction transaction 234 has no rows left,
         // so its removed operations become garbage and are dropped
@@ -5411,10 +5431,25 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         env.SendSync(new NFake::TEvCompact(TableId));
         env.WaitFor<NFake::TEvCompacted>();
 
-        checkRemovedTxOps("count 1, 123 = { [7, 8], [10, 10] }, 234 = none");
+        // Transaction 345 is still open, so its removed operations are kept
+        // even though it has no rows
+        checkRemovedTxOps("count 2, 123 = { [7, 8], [10, 10] }, 234 = none, 345 = { [1, 2] }");
 
         restartTablet();
-        checkRemovedTxOps("count 1, 123 = { [7, 8], [10, 10] }, 234 = none");
+        checkRemovedTxOps("count 2, 123 = { [7, 8], [10, 10] }, 234 = none, 345 = { [1, 2] }");
+
+        // After remove transaction 345 is decided and has no rows,
+        // so its removed operations are dropped together with its status
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveLongTx(345) });
+
+        Cerr << "...compacting table to drop removed transaction" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        checkRemovedTxOps("count 1, 123 = { [7, 8], [10, 10] }, 234 = none, 345 = none");
+
+        restartTablet();
+        checkRemovedTxOps("count 1, 123 = { [7, 8], [10, 10] }, 234 = none, 345 = none");
 
         // Removed operations don't affect visibility yet
         env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
@@ -5427,6 +5462,96 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
                 "Key 2 = Upsert value = Set bbb value2 = Empty NULL\n"
                 "Key 3 = Upsert value = Set ccc value2 = Empty NULL\n");
         }
+    }
+
+    Y_UNIT_TEST(RemoveTxOpsBorrow) {
+        TMyEnvBase env;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_DEBUG);
+
+        auto restartTablet = [&]() {
+            Cerr << "...restarting tablet" << Endl;
+            env.SendSync(new TEvents::TEvPoison, false, true);
+            env.WaitForGone();
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+
+        auto checkRemovedTxOps = [&](const TString& expected) {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRemovedTxOps(data, { 123, 234, 345 }) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data, expected);
+        };
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "aaa", 123, 5) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "bbb", 234, 3) });
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 5, 6) });
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(234, 3, 3) });
+        // Transaction 345 is open but has no rows
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(345, 1, 2) });
+
+        // Some ranges are in tx status and some are in the mem table when the snapshot is made
+        Cerr << "...compacting mem table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env.WaitFor<NFake::TEvCompacted>();
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 8, 8) });
+
+        checkRemovedTxOps("count 3, 123 = { [5, 6], [8, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        Cerr << "...making snapshot" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxMakeSnapshot });
+        Cerr << "...waiting for snapshot to complete" << Endl;
+        auto evSnapshot = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+        Cerr << "...borrowing snapshot" << Endl;
+        TString snapBody;
+        env.SendSync(new NFake::TEvExecute{ new TTxBorrowSnapshot(snapBody, evSnapshot->Get()->SnapContext, env.Tablet + 1) });
+
+        // Stop the source tablet
+        Cerr << "...stopping the source tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        // Start the destination tablet
+        Cerr << "...starting the destination tablet" << Endl;
+        ++env.Tablet;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        Cerr << "...initializing destination schema" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        checkRemovedTxOps("count 0, 123 = none, 234 = none, 345 = none");
+
+        // Removed operations come with the borrowed tx status
+        Cerr << "...loaning snapshot" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxLoanSnapshot(snapBody) });
+        checkRemovedTxOps("count 3, 123 = { [5, 6], [8, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        // New ranges are merged with borrowed ones
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 7, 7) });
+        checkRemovedTxOps("count 3, 123 = { [5, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        restartTablet();
+        checkRemovedTxOps("count 3, 123 = { [5, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        // Compaction replaces the borrowed tx status with an owned one
+        Cerr << "...compacting destination table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        checkRemovedTxOps("count 3, 123 = { [5, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        restartTablet();
+        checkRemovedTxOps("count 3, 123 = { [5, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
     }
 
     Y_UNIT_TEST(LongTxBorrow) {

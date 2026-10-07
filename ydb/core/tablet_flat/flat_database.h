@@ -167,7 +167,8 @@ public:
      * counterpart of RemoveTx used for ROLLBACK TO SAVEPOINT. Like with RemoveTx
      * the data stays in place and is dropped later, the transaction stays open.
      * Unknown transactions or transactions without data are allowed, committed
-     * transactions are not.
+     * or removed transactions are not. Removed operations are kept until the
+     * transaction is committed or removed and has no data left.
      */
     void RemoveTxOps(ui32 table, ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum);
 
@@ -180,7 +181,9 @@ public:
     bool HasRemovedTx(ui32 table, ui64 txId) const;
 
     /**
-     * Returns removed operations (savepoint seq nums) of txId, nullptr when there are none
+     * Returns removed operations (savepoint seq nums) of txId, nullptr when there are none.
+     * The pointer is only valid until the next change of the table: RemoveTxOps for any
+     * txId, transaction rollback, compaction, borrowing or garbage collection.
      */
     const TSavepointSeqNumRanges* FindRemovedTxOps(ui32 table, ui64 txId) const;
 

@@ -5,6 +5,7 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -19,6 +20,7 @@
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -246,6 +248,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     TMultiType* WideRowTransformedType = nullptr;
     TString LogPrefix;
     TMockSinkState::TPtr SinkState = MakeIntrusive<TMockSinkState>();
+    IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     TSyncComputeActorTestFixture(
             NDqProto::EDataTransportVersion transportVersion = NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0,
@@ -599,7 +602,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 EdgeActor,
                 LogPrefix,
                 &task,
-                CreateAsyncIoFactory(SinkState),
+                AsyncIoFactory ? AsyncIoFactory : CreateAsyncIoFactory(SinkState),
                 FunctionRegistry.Get(),
                 runtimeSettings,
                 memoryLimits,

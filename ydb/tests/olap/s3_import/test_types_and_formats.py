@@ -1,8 +1,10 @@
 import io
 import logging
+from decimal import Decimal
 import pytest
 import ydb
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from ydb.tests.library.test_meta import link_test_case
@@ -36,6 +38,107 @@ YQL_TO_ARROW_TYPE_MAPPING = {
 
 
 class TestTypesAndFormats(S3ImportTestBase):
+    def _decimal_external_table(self, name, precision, scale):
+        bucket = f"decimal-{name.replace('_', '-')}"
+        self.s3_client.create_bucket(bucket)
+        self.ydb_client.query(f"""
+            CREATE SECRET {name}_key_id WITH (value='{self.s3_client.key_id}');
+            CREATE SECRET {name}_key_secret WITH (value='{self.s3_client.key_secret}');
+            CREATE EXTERNAL DATA SOURCE {name}_source WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{self.s3_mock.endpoint}/{bucket}",
+                AUTH_METHOD="AWS",
+                AWS_ACCESS_KEY_ID_SECRET_PATH="{name}_key_id",
+                AWS_SECRET_ACCESS_KEY_SECRET_PATH="{name}_key_secret",
+                AWS_REGION="{self.s3_client.region}"
+            );
+            CREATE EXTERNAL TABLE {name} (
+                id Int32 NOT NULL,
+                amount Decimal({precision}, {scale})
+            ) WITH (
+                DATA_SOURCE="{name}_source",
+                LOCATION="data/",
+                FORMAT="parquet"
+            );
+        """)
+        return bucket
+
+    def _upload_decimal_parquet(self, bucket, key, precision, scale, values, first_id=0, decimal256=False):
+        arrow_type = pa.decimal256(precision, scale) if decimal256 else pa.decimal128(precision, scale)
+        table = pa.table({
+            "id": pa.array(range(first_id, first_id + len(values)), type=pa.int32()),
+            "amount": pa.array([None if value is None else Decimal(value) for value in values], type=arrow_type),
+        })
+        stream = io.BytesIO()
+        pq.write_table(table, stream, row_group_size=2)
+        self.s3_client.client.put_object(Bucket=bucket, Key=f"data/{key}.parquet", Body=stream.getvalue())
+
+    def _read_decimal_values(self, table):
+        rows = self.ydb_client.query(f"SELECT CAST(amount AS String) AS amount FROM {table} ORDER BY id")[0].rows
+        return [None if row.amount is None else Decimal(row.amount.decode() if isinstance(row.amount, bytes) else row.amount)
+                for row in rows]
+
+    def test_decimal_parquet_schema_conversion(self):
+        cases = [
+            ("scale_increase", (12, 2), (22, 9), ["123.45", "-0.01", "0", None]),
+            ("scale_decrease", (12, 4), (5, 2), ["123.4500", "-0.0100", "0", None]),
+            ("narrower", (12, 2), (5, 2), ["999.99", "-999.99", "0", None]),
+            ("wider", (5, 2), (22, 2), ["999.99", "-999.99", "0", None]),
+            ("matching", (10, 2), (10, 2), ["123.45", "-99999999.99", "0", None]),
+        ]
+        for name, (source_precision, source_scale), (target_precision, target_scale), values in cases:
+            table = f"decimal_{name}"
+            bucket = self._decimal_external_table(table, target_precision, target_scale)
+            self._upload_decimal_parquet(bucket, "values", source_precision, source_scale, values)
+            assert self._read_decimal_values(table) == [None if value is None else Decimal(value) for value in values]
+
+        errors = [
+            ("lossy", (12, 4), (22, 2), "-123.4501", "lose data"),
+            ("precision_overflow", (12, 2), (5, 2), "-1000", "precision"),
+            ("scale_overflow", (16, 2), (22, 9), "10000000000000", "precision"),
+            ("int128_overflow", (29, 0), (35, 34), "19807040628566084398385987585", "precision"),
+            ("unsupported256", (40, 2), (22, 9), "123.45", "Unsupported"),
+        ]
+        for name, (source_precision, source_scale), (target_precision, target_scale), value, reason in errors:
+            table = f"decimal_{name}"
+            bucket = self._decimal_external_table(table, target_precision, target_scale)
+            self._upload_decimal_parquet(bucket, "values", source_precision, source_scale, [value], decimal256=source_precision > 38)
+            with pytest.raises(ydb.Error) as error:
+                self._read_decimal_values(table)
+            message = str(error.value)
+            assert "amount" in message
+            source_name = "Decimal256" if source_precision > 38 else "Decimal"
+            assert f"{source_name}({source_precision}, {source_scale})" in message
+            assert f"Decimal({target_precision}, {target_scale})" in message
+            assert reason in message
+
+    def test_decimal_parquet_different_file_schemas(self):
+        table = "decimal_multiple_files"
+        bucket = self._decimal_external_table(table, 22, 9)
+        values = ["123.45", "-0.01", "0", None]
+        for index, (precision, scale) in enumerate([(12, 2), (14, 4), (22, 9)]):
+            self._upload_decimal_parquet(bucket, str(index), precision, scale, values, first_id=index * len(values))
+        assert self._read_decimal_values(table) == [None if value is None else Decimal(value) for value in values] * 3
+
+    def test_decimal_parquet_non_default_write_read(self):
+        table = "decimal_non_default_roundtrip"
+        bucket = self._decimal_external_table(table, 10, 2)
+        self.ydb_client.query(f"""
+            PRAGMA s3.UseBlocksSink = "true";
+            INSERT INTO {table} (id, amount) VALUES
+                (0, CAST("123.45" AS Decimal(10, 2))),
+                (1, CAST("-99999999.99" AS Decimal(10, 2))),
+                (2, CAST("0" AS Decimal(10, 2))),
+                (3, NULL);
+        """)
+        objects = list(self.s3_client.s3.Bucket(bucket).objects.all())
+        assert objects
+        for obj in objects:
+            body = self.s3_client.client.get_object(Bucket=bucket, Key=obj.key)["Body"].read()
+            schema = pq.ParquetFile(io.BytesIO(body)).schema_arrow
+            assert schema.field("amount").type == pa.decimal128(10, 2)
+        assert self._read_decimal_values(table) == [Decimal("123.45"), Decimal("-99999999.99"), Decimal("0"), None]
+
     def _check_tables_hash(self, original_table_name, exported_table_name):
         result_sets = self.ydb_client.query(f"""
             SELECT

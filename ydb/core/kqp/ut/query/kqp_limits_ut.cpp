@@ -298,6 +298,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(KqpQueryExecutionTestLimit);
         // the tasks start within the limit, their first growth step doesn't fit
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetExecutionUnitMemory(0);
+        // the planner runs the query locally only if its estimation (mostly the channel buffers) fits into the free memory
+        // of the queries on the node - the same small limit
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(10_KB);
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheMaxSizeBytes(1000);
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheIncreaseBatchSizeBytes(1000);
         auto cfg = MakeResourceBrokerTestConfig();

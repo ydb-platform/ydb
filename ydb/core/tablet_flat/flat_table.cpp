@@ -20,7 +20,8 @@ namespace NTable {
 
 namespace {
 
-    // Calls callback once per TxId with all removed operation ranges of that TxId in the page
+    // Calls callback once per TxId with all removed operation ranges of that TxId in the page.
+    // Relies on items being sorted by TxId, which TTxStatusPage validates on load.
     template<class TCallback>
     void EnumerateRemovedTxOps(TArrayRef<const NPage::TTxStatusPage::TRemovedOpsItem> items, TCallback&& callback)
     {

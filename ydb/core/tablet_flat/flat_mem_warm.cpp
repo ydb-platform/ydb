@@ -91,11 +91,16 @@ void TMemTable::RollbackChanges() {
         void operator()(const TUndoOpAddRemovedOps& op) const {
             auto it = Self->RemovedOps.find(op.TxId);
             Y_ENSURE(it != Self->RemovedOps.end());
+            const size_t bytesBefore = RemovedOpsEntryBytes(it->second);
             it->second.Undo(op.Undo);
+            Self->RemovedOpsBytes = Self->RemovedOpsBytes - bytesBefore + RemovedOpsEntryBytes(it->second);
         }
 
         void operator()(const TUndoOpEraseRemovedOps& op) const {
-            Self->RemovedOps.erase(op.TxId);
+            auto it = Self->RemovedOps.find(op.TxId);
+            Y_ENSURE(it != Self->RemovedOps.end());
+            Self->RemovedOpsBytes -= RemovedOpsEntryBytes(it->second);
+            Self->RemovedOps.erase(it);
         }
     };
 

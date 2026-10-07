@@ -146,6 +146,36 @@ Y_UNIT_TEST_SUITE(TTxStatusPageSavepoints) {
         UNIT_ASSERT_VALUES_EQUAL(TString(items), "123:[5, 6] 123:[9, 10] 345:[1, 1] ");
     }
 
+    Y_UNIT_TEST(UnsortedRemovedOpsRejected) {
+        using TPage = NPage::TTxStatusPage;
+
+        // Build a version 1 page by hand, since the builder always sorts items
+        TVector<TPage::TRemovedOpsItem> items(2);
+        items[0] = { 345, 1, 1 };
+        items[1] = { 123, 5, 6 };
+
+        const size_t size = sizeof(NPage::TLabel) + sizeof(TPage::THeader)
+            + sizeof(TPage::TRemovedOpsHeader) + sizeof(TPage::TRemovedOpsItem) * items.size();
+        TVector<char> raw(size);
+        char* ptr = raw.data();
+
+        WriteUnaligned<NPage::TLabel>(ptr, NPage::TLabel::Encode(NPage::EPage::TxStatus, 1, size));
+        ptr += sizeof(NPage::TLabel);
+        WriteUnaligned<TPage::THeader>(ptr, TPage::THeader{ 0, 0 });
+        ptr += sizeof(TPage::THeader);
+        WriteUnaligned<TPage::TRemovedOpsHeader>(ptr, TPage::TRemovedOpsHeader{ ui64(items.size()) });
+        ptr += sizeof(TPage::TRemovedOpsHeader);
+        memcpy(ptr, items.data(), sizeof(TPage::TRemovedOpsItem) * items.size());
+
+        UNIT_ASSERT_EXCEPTION(TPage(TSharedData::Copy(raw.data(), raw.size())), yexception);
+
+        // The same items in the right order are accepted
+        std::swap(items[0], items[1]);
+        memcpy(ptr, items.data(), sizeof(TPage::TRemovedOpsItem) * items.size());
+        TPage page(TSharedData::Copy(raw.data(), raw.size()));
+        UNIT_ASSERT_VALUES_EQUAL(page.GetRemovedOpsItems().size(), 2u);
+    }
+
     Y_UNIT_TEST(OnlyRemovedOps) {
         TSavepointSeqNumRanges ranges;
         ranges.Add(3, 4);

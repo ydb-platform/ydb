@@ -122,8 +122,8 @@ namespace NTabletFlatExecutor {
 
             // Deltas
             struct TDelta { TCompactDeltaKey Key; TSavedRow Row; };
+            // Deltas in the order they must be written
             TVector<TDelta> SavedDeltas;
-            TVector<TCompactDeltaKey> SavedDeltaOrder;
 
             // Committed versions (descending order)
             struct TVersion {
@@ -247,7 +247,6 @@ namespace NTabletFlatExecutor {
                     d.Key = key;
                     d.Row.Save(it->second);
                 }
-                FtCurKey.SavedDeltaOrder = TVector<TCompactDeltaKey>(DeltasOrder.begin(), DeltasOrder.end());
                 Deltas.clear();
                 DeltasOrder.clear();
             }
@@ -339,15 +338,10 @@ namespace NTabletFlatExecutor {
                 Writer->AddKeyLock(key.LockMode, key.LockTxId);
             }
 
-            for (const auto& deltaKey : key.SavedDeltaOrder) {
-                for (const auto& d : key.SavedDeltas) {
-                    if (d.Key == deltaKey) {
-                        NTable::TRowState rs;
-                        d.Row.Restore(rs);
-                        Writer->AddKeyDelta(rs, deltaKey.first, deltaKey.second);
-                        break;
-                    }
-                }
+            for (const auto& d : key.SavedDeltas) {
+                NTable::TRowState rs;
+                d.Row.Restore(rs);
+                Writer->AddKeyDelta(rs, d.Key.first, d.Key.second);
             }
 
             for (const auto& v : key.Versions) {

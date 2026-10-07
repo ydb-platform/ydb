@@ -496,7 +496,8 @@ namespace NMem {
             return
                 Pool.Used()
                 + (Tree.AllocatedPages() - Tree.DroppedPages()) * TTree::PageSize
-                + Blobs.GetBytes();
+                + Blobs.GetBytes()
+                + RemovedOpsBytes;
         }
 
         size_t GetWastedMem() const noexcept
@@ -591,6 +592,7 @@ namespace NMem {
         bool RemoveTxOps(ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum) {
             auto it = RemovedOps.find(txId);
             const bool newRef = (it == RemovedOps.end());
+            const size_t bytesBefore = newRef ? 0 : RemovedOpsEntryBytes(it->second);
             if (newRef) {
                 if (RollbackState) {
                     UndoBuffer.push_back(TUndoOpEraseRemovedOps{ txId });
@@ -605,6 +607,7 @@ namespace NMem {
             } else {
                 it->second.Add(fromSavepointSeqNum, toSavepointSeqNum);
             }
+            RemovedOpsBytes = RemovedOpsBytes - bytesBefore + RemovedOpsEntryBytes(RemovedOps.at(txId));
             return newRef;
         }
 
@@ -662,6 +665,13 @@ namespace NMem {
         absl::flat_hash_map<ui64, TRowVersion> Committed;
         absl::flat_hash_set<ui64> Removed;
         TRemovedTxOps RemovedOps;
+        // Estimated memory of RemovedOps, accounted in GetUsedMem()
+        size_t RemovedOpsBytes = 0;
+
+        static size_t RemovedOpsEntryBytes(const TSavepointSeqNumRanges& ranges) noexcept {
+            return sizeof(ui64) + sizeof(TSavepointSeqNumRanges)
+                + ranges.GetRanges().size() * sizeof(TSavepointSeqNumRanges::TRange);
+        }
 
     private:
         struct TRollbackState {

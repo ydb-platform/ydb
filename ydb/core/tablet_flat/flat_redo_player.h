@@ -240,6 +240,10 @@ namespace NRedo {
 
             auto *ev = reinterpret_cast<const TEvRemoveTxOps*>(chunk.data());
 
+            Y_ENSURE(0 < ev->FromSavepointSeqNum && ev->FromSavepointSeqNum <= ev->ToSavepointSeqNum,
+                    "Invalid savepoint seq num range [" << ev->FromSavepointSeqNum << ", " << ev->ToSavepointSeqNum
+                    << "] in EvRemoveTxOps record");
+
             if (Base.NeedIn(ev->Table)) {
                 Base.DoRemoveTxOps(ev->Table, ev->TxId, ev->FromSavepointSeqNum, ev->ToSavepointSeqNum);
             }

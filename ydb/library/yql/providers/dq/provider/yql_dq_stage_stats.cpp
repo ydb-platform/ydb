@@ -30,7 +30,8 @@ std::unordered_map<ui64, IDqGateway::TStageStats> ExtractDqStagesStats(const TOp
             continue;
         }
 
-        if (labels.size() != (labels.contains("Task") ? 2u : 1u)) {
+        // Only accept statistics aggregated by stage, with no labels other than Stage.
+        if (labels.size() != 1) {
             continue;
         }
 

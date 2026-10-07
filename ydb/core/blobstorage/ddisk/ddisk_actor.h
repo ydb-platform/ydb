@@ -1151,7 +1151,6 @@ namespace NKikimr::NDDisk {
         ui64 PersistentBufferInMemoryCacheSize = 0;
         TInstant StartedAt;
 
-        ui64 CalcPersistentBufferInMemoryCacheSize();
         TString PersistentBufferToString();
 
         void SanitizePersistentBufferInMemoryCache();

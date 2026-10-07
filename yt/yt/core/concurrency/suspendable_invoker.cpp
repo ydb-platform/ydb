@@ -4,7 +4,7 @@
 #include <yt/yt/core/actions/invoker_detail.h>
 #include <yt/yt/core/actions/callback.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <util/thread/lfqueue.h>
 
@@ -71,7 +71,7 @@ private:
     std::atomic<bool> SchedulingMore_ = false;
     std::atomic<int> ActiveInvocationCount_ = 0;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
 
     TLockFreeQueue<TClosure> Queue_;
 

@@ -100,6 +100,7 @@ struct TFreshProjectionOosEnv {
             .PDiskChunkSize = Oos.PDiskChunkSize,
             .TrackSharedQuotaInPDiskMock = true,
             .SetupResourceBroker = true,
+            .VDiskHeapAllocatorNumLeadingDisks = Max<ui32>(),
         })
     {
         NKikimrBlobStorage::TGroupGeometry geometry;

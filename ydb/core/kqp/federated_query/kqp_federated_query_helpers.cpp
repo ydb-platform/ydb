@@ -1,5 +1,7 @@
 #include "kqp_federated_query_helpers.h"
 
+#include <ydb/library/yql/providers/yt/gateway/clients/message_stream/yql_yt_client.h>
+
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
@@ -211,8 +213,7 @@ namespace {
     }
 
     bool IsValidExternalDataSourceType(const TString& type) {
-        static auto allTypes = NYql::GetAllExternalDataSourceTypes();
-        return allTypes.contains(type);
+        return NYql::IsValidAvailableExternalDataSourceType(type);
     }
 
     void IKqpFederatedQuerySetupFactory::Cleanup() {
@@ -423,16 +424,48 @@ namespace {
                 {"endpoint", endpoint});
             return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table});
         }
-        return GetSchemeEntryTypeImpl(
-                NActors::TActivationContext::ActorSystem(),
-                federatedQuerySetup,
-                endpoint,
-                NKikimr::CanonizePath(database),
-                useTls,
-                federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson),
-                path,
-                false);
+        try {
+            return GetSchemeEntryTypeImpl(
+                    NActors::TActivationContext::ActorSystem(),
+                    federatedQuerySetup,
+                    endpoint,
+                    NKikimr::CanonizePath(database),
+                    useTls,
+                    federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson),
+                    path,
+                    false);
+        } catch (const std::exception& e) {
+            TGetSchemeEntryResult result;
+            result.Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Failed to get scheme entry type: " << e.what()));
+            return NThreading::MakeFuture<TGetSchemeEntryResult>(result);
+        }
     };
+
+    NThreading::TFuture<TYtEntityTypeResult> GetYtEntityType(
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const TString& endpoint,
+        const TString& structuredTokenJson,
+        const TString& path) {
+        try {
+            Y_ENSURE(federatedQuerySetup && federatedQuerySetup->CredentialsFactory,
+                "YT external data source credentials factory is unavailable");
+            auto credentials = federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson)->CreateProvider();
+            auto client = NYql::CreateYtClient(endpoint, TString(credentials->GetAuthInfo()));
+            return NYql::IsYtQueue(client, path).Apply([](const NThreading::TFuture<bool>& future) {
+                TYtEntityTypeResult result;
+                try {
+                    result.IsQueue = future.GetValue();
+                } catch (const std::exception& error) {
+                    result.Issues.AddIssue(NYql::TIssue(error.what()));
+                }
+                return result;
+            });
+        } catch (const std::exception& error) {
+            TYtEntityTypeResult result;
+            result.Issues.AddIssue(NYql::TIssue(error.what()));
+            return NThreading::MakeFuture(result);
+        }
+    }
 
     std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {
         std::vector<NKqpProto::TKqpExternalSink> filteredSinks;

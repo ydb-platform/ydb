@@ -3,6 +3,8 @@
 #include "mkql_type_ops.h"
 #include "mkql_alloc.h"
 
+#include <yql/essentials/minikql/datetime/datetime.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <library/cpp/type_info/tz/tz.h>
@@ -16,6 +18,7 @@ extern "C" {
 }
 
 using namespace NYql;
+using namespace NYql::NDateTime;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 

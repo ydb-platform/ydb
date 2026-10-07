@@ -20,11 +20,15 @@ YQL_LAST_ABI_VERSION()
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/kqp/common
+    ydb/core/kqp/node_service
     ydb/core/kqp/ut/common
     ydb/core/testlib/basics/pg
     ydb/services/workload_manager/ut/common
+    yql/essentials/ast
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
     yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/dq/llvm16
     yt/yql/providers/yt/comp_nodes/llvm16

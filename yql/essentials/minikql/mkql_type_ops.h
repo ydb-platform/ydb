@@ -16,10 +16,6 @@ TStringBuf AdaptLegacyYqlType(const TStringBuf& type);
 
 bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value);
 
-bool IsLeapYear(i32 year);
-
-ui32 GetMonthLength(ui32 month, bool isLeap);
-
 bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf);
 
 enum class ERegexFlavor {

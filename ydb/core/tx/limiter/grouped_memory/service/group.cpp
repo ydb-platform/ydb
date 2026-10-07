@@ -58,7 +58,7 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
         for (auto it = Groups.begin(); it != Groups.end();) {
             const ui64 externalGroupId = it->first;
             TGrouppedAllocations& groupedAllocations = it->second;
-            const bool forced = isPriorityProcess && externalGroupId == scope.GroupIds.GetMinExternalIdVerified();
+            const bool forced = !scope.IsUnrestrictedEnabled() && isPriorityProcess && externalGroupId == scope.GroupIds.GetMinExternalIdVerified();
             std::vector<std::shared_ptr<TAllocationInfo>> allocated;
             if (forced) {
                 allocated = groupedAllocations.ExtractAllocationsToVector();
@@ -81,8 +81,11 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
                 LWPROBE(Allocated, "delayed", i->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), i->GetAllocationTime(), forced, success);
                 if (!success) {
                     toRemove.emplace_back(i->GetIdentifier());
-                } else if (!forced) {
-                    AFL_VERIFY(++allocationsCount <= allocationsLimit)("count", allocationsCount)("limit", allocationsLimit);
+                } else {
+                    scope.ReaccountAdmittedGroup(externalGroupId);
+                    if (!forced) {
+                        AFL_VERIFY(++allocationsCount <= allocationsLimit)("count", allocationsCount)("limit", allocationsLimit);
+                    }
                 }
                 if (!forced) {
                     AFL_VERIFY(groupedAllocations.Remove(i));

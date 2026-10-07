@@ -74,6 +74,10 @@ Ordinary storage groups that are not [static](#static-group) are called **dynami
 
 **Virtual storage group** is an entity that is not actually a [storage group](#storage-group), but looks like one from the outside (provides a similar external interface). It can store its data in other storage groups or in S3.
 
+#### BlobDepot {#blob-depot}
+
+**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other storage groups and is also used when decommissioning physical groups.
+
 ### Storage pool {#storage-pool}
 
 **Storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the cluster {{ ydb-short-name }}. Technically, each storage pool consists of many physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group by selecting appropriate storage devices. Typically, separate storage pools are created for devices of different types (for example, NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.
@@ -952,3 +956,7 @@ MiniKQL is a low-level language. End users of the system only see queries in [YQ
 ### KiKiMR {#kikimr}
 
 **KiKiMR** is the legacy name of {{ ydb-short-name }}, used before it became an [open-source product](https://github.com/ydb-platform/ydb) (open source). It may still be found in source code, old articles, videos, and so on.
+
+### Tablet Recovery Mode {#tablet-recovery-mode}
+
+**Recovery mode** is a mode in which a tablet is started and accessible via the [{{ ydb-ui-name }}](../reference/ydb-ui/index.md), but **does not respond to requests**, **does not perform any background activities**, and **does not read data from the distributed storage**, allowing recovery operations to be performed. Other tablets continue to operate normally, allowing the cluster to keep functioning, but operations and UI related to the tablet placed in Recovery mode will be unavailable.

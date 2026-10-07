@@ -53,6 +53,10 @@ public:
 private:
     using Schema = TControllerSchema;
 
+    // TODO(ilnaz): configurable
+    static constexpr ui64 MaxOpenTxIds = 5;
+    static constexpr ui64 MinAllocatedTxIds = 3;
+
     enum class ESchemaBarrierPhase: ui8 {
         Collecting = 1,
         Altering = 2,
@@ -67,6 +71,7 @@ private:
         NKikimrReplication::TSchemaChange Schema;
         THashSet<TWorkerId> ExpectedWorkers;
         THashSet<TWorkerId> ReportedWorkers;
+        THashSet<TWorkerId> IndexMetadataWorkers;
         THashSet<TWorkerId> AppliedWorkers;
         THashSet<TWorkerId> CompletedWorkers;
         THashMap<TWorkerId, ui64> WorkerOffsets;
@@ -133,6 +138,7 @@ private:
     void Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvPrepareAttachDst::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
@@ -157,6 +163,7 @@ private:
     void Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvIndexBuildProgress::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
@@ -169,6 +176,7 @@ private:
     void ProcessBootQueue(const TActorContext& ctx);
     void ProcessStopQueue(const TActorContext& ctx);
     bool IsValidWorker(const TWorkerId& id) const;
+    bool HasWorkerSession(const TWorkerId& id, ui32 nodeId) const;
     TWorkerInfo* GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
     void ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id);
@@ -178,6 +186,11 @@ private:
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     TReplication::ITarget* FindTarget(const TWorkerId& id) const;
+    bool IsHeartbeatParticipant(const TWorkerId& id) const;
+    size_t CountHeartbeatParticipants() const;
+    void AllocateTxIds(const TActorContext& ctx);
+    TVector<TString> GetCommitTablePaths(const TRowVersion& version) const;
+    bool CanCommitIndexBuilds(const TRowVersion& version) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
     void UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats);
     void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status);
@@ -196,6 +209,7 @@ private:
     class TTxCreateStreamResult;
     class TTxDropStreamResult;
     class TTxCreateDstResult;
+    class TTxPrepareAttachDst;
     class TTxAlterDstResult;
     class TTxDropDstResult;
     class TTxResolveDatabaseResult;
@@ -204,6 +218,8 @@ private:
     class TTxWorkerError;
     class TTxAssignTxId;
     class TTxHeartbeat;
+    class TTxIndexBuild;
+    class TTxIndexReady;
     class TTxCommitChanges;
     class TTxRunWorker;
     class TTxRemoveWorker;
@@ -227,6 +243,7 @@ private:
     void RunTxCreateStreamResult(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDropStreamResult(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
     void RunTxCreateDstResult(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxPrepareAttachDst(TEvPrivate::TEvPrepareAttachDst::TPtr& ev, const TActorContext& ctx);
     void RunTxAlterDstResult(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveDatabaseResult(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
@@ -235,6 +252,9 @@ private:
     void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx);
     void RunTxAssignTxId(const TActorContext& ctx);
     void RunTxHeartbeat(const TActorContext& ctx);
+    void RunTxIndexBuild(const TActorContext& ctx);
+    void RunTxIndexReadyTxId(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx);
+    void RunTxIndexReadyResult(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx);
     void RunTxRunWorker(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
     void RunTxRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     void RunTxCompleteWorkerSet(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
@@ -248,10 +268,17 @@ private:
     void StartSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
     void StopSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key);
     bool HasActiveSchemaBarrier(ui64 replicationId) const;
+    bool HasPendingAlter(ui64 replicationId) const;
     bool HasFreshHeartbeatQuorum(const TSchemaBarrier& barrier) const;
     bool HasPendingTargetFlushTxId(const TSchemaBarrier& barrier) const;
     bool BlocksGlobalCommit(const TSchemaBarrier& barrier) const;
     void AdvanceVerifyingSchemaBarriers(NIceDb::TNiceDb& db);
+
+    void StartIndexReady(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
+    static bool IsCancelledIndexBuild(const NKikimrReplication::TIndexBuildState& build);
+    static bool IsJoinedIndexBuild(const NKikimrReplication::TIndexBuildState& build, const TRowVersion& version);
+    static void SaveIndexBuild(NIceDb::TNiceDb& db, const std::pair<ui64, ui64>& key,
+        const NKikimrReplication::TIndexBuildState& build);
 
     // other
     template <typename T>
@@ -310,6 +337,15 @@ private:
     TActorId TxAllocatorClient;
     TDeque<ui64> AllocatedTxIds; // got from tx allocator
     bool AllocateTxIdInFlight = false;
+    TMap<std::pair<ui64, ui64>, NKikimrReplication::TIndexBuildState> IndexBuilds;
+    THashMap<TWorkerId, NKikimrReplication::TIndexBuildProgress> IndexBuildProgress;
+    TDeque<TEvService::TEvIndexBuildProgress::TPtr> PendingIndexBuildProgress;
+    TDeque<TEvService::TEvGetTxId::TPtr> PendingIndexTxIds;
+    THashMap<ui64, std::pair<ui64, ui64>> IndexCommits;
+    THashSet<ui64> CompletedIndexCommits;
+    THashMap<std::pair<ui64, ui64>, TActorId> IndexReadyActors;
+    bool IndexBuildTxInFlight = false;
+    TMap<ui64, TRowVersion> CommittedVersions; // Completed global frontier per replication.
     TMap<TRowVersion, ui64> AssignedTxIds; // tx ids assigned to version
     TMap<TRowVersion, THashSet<ui32>> PendingTxId;
     bool AssignTxIdInFlight = false;

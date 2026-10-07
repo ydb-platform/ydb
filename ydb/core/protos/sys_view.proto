@@ -195,6 +195,8 @@ message TPDiskInfo {
     reserved 21;
     optional string MaintenanceStatus = 22;
     optional uint64 ExpectedSlotSize = 23; // either inferred or user-defined, 0 if not set
+    optional uint64 UserChunkPoolSize = 24; // physical upper bound for one owner's quota, in bytes
+    optional uint32 StaticSlotUsage = 25; // reserved static slots; static groups are single-unit
     // metrics ?
     // physical location ?
     // config ?
@@ -469,6 +471,8 @@ message TEvIntervalQuerySummary {
     optional TQuerySet TopByReadBytes = 6;
     optional TQuerySet TopByCpuTime = 7;
     optional TQuerySet TopByRequestUnits = 8;
+    optional uint64 QueryMetricsTotalCpuTimeUs = 9;
+    optional uint64 QueryMetricsRetainedCpuTimeUs = 10;
 }
 
 // sysview processor tablet -> node
@@ -551,12 +555,23 @@ message TEvGetQueryStatsResponse {
 
 // generic set of counters with stable enumeration order in each category
 // simple values are absolute
-// cumulative and histogram values may be absolute or diffs depending on the context
+// cumulative and histogram values may be absolute or diffs depending on the context,
+// except a histogram marked NonDerivative, which always holds full values
 // only index-value pairs with non-zero values are stored in diff mode
+// On the detailed metrics channel (TDetailedTableCounters) slot i is the enum value i of the public
+// metrics of the tablet type (counters_detailed_<type>.proto): Simple is dense, Cumulative holds
+// (slot, delta) pairs, every histogram metric is present, a non-derivative one marked NonDerivative
 message TDbCounters {
     message THistogram {
         repeated uint64 Buckets = 1;
         optional uint64 BucketsCount = 2; // total number of buckets in diff mode
+        // Set for a non-derivative histogram (an Integral percentile counter or a HIST(x)
+        // aggregate, published as monlib HIST): bucket counts go up and down, so Buckets hold
+        // the full current value of every non-empty bucket rather than a delta, and the receiver
+        // replaces its copy instead of adding. Set by the detailed metrics channel only.
+        // Unset: Buckets are a delta to add (derivative histograms, monlib HIST_RATE, and every
+        // histogram of the regular tablet counters channel)
+        optional bool NonDerivative = 3;
     }
 
     repeated uint64 Simple = 1;
@@ -575,19 +590,28 @@ message TDbTabletCounters {
 
 message TDetailedTableCounters {
     message TLeaf {
+        reserved 3;
+        reserved "Counters";
+
         optional uint64 TabletId = 1;
         optional uint32 FollowerId = 2;
-        optional TDbTabletCounters Counters = 3;
+        optional TDbCounters Metrics = 4;
     }
+
+    reserved 5;
+    reserved "TableCounters";
 
     optional string TablePath = 3;
     optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel Level = 4;
 
-    // Set iff Level == MetricsLevelTable
-    optional TDbTabletCounters TableCounters = 5;
-
     // Set iff Level == MetricsLevelPartition
     repeated TLeaf Leaves = 6;
+
+    // Set iff Level == MetricsLevelTable
+    optional TDbCounters TableMetrics = 7;
+
+    // Defines the slots of TableMetrics and TLeaf.Metrics, an entry without it is ignored
+    optional NKikimrTabletBase.TTabletTypes.EType TabletType = 8;
 }
 
 message TDbGRpcCounters {

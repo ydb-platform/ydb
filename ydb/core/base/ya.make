@@ -138,14 +138,13 @@ PEERDIR(
     ydb/library/vector_distance
     ydb/library/ydb_issue
     ydb/public/api/protos/out
-    yql/essentials/minikql
+    contrib/libs/apache/arrow
+    yql/essentials/minikql/aligned_page_pool
 )
 
 PEERDIR(
     ydb/library/superlemmer_stub
 )
-
-YQL_LAST_ABI_VERSION()
 
 IF (NOT OS_WINDOWS)
 PEERDIR(
@@ -171,5 +170,6 @@ RECURSE_FOR_TESTS(
     ut_backtrace
     ut_board_subscriber
     ut_http_database_param
+    ut_statestorage_proxy
 )
 ENDIF()

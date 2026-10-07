@@ -25,6 +25,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <util/string/cast.h>
 #include <util/system/env.h>
 
 namespace NKikimr::NKqp {
@@ -68,6 +69,7 @@ struct TContinuationTest {
     static std::shared_ptr<TKikimrRunner> CreateRunner(const TIntrusivePtr<NTestUtils::IMockPqGateway>& gateway, ui32 nodeCount) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
+        config.MutableFeatureFlags()->SetEnableStreamingQuerySchemeOperations(true);
         config.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         return NFederatedQueryTest::MakeKikimrRunner(false, nullptr, nullptr, config, NYql::NDq::CreateS3ActorsFactory(), {
             .NodeCount = nodeCount,
@@ -95,6 +97,7 @@ struct TContinuationTest {
         });
         for (ui32 node = 0; node < nodeCount; ++node) {
             Runtime.GetAppData(node).FeatureFlags.SetEnableStreamingQueries(true);
+            Runtime.GetAppData(node).FeatureFlags.SetEnableStreamingQuerySchemeOperations(true);
             Runtime.EnableScheduleForActor(Runtime.GetActorSystem(node)->LookupLocalService(
                 NMetadata::NProvider::MakeServiceId(Runtime.GetNodeId(node))));
         }
@@ -1039,6 +1042,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         auto expectedProperties = f.Describe()->ResultSet.at(0).StreamingQueryInfo->Description.GetProperties().GetProperties();
         expectedProperties.erase(TStreamingQueryMeta::TProperties::InflightOperation);
         expectedProperties.erase(TStreamingQueryMeta::TProperties::OperationOwnerUserToken);
+        // Finalization by the metadata service must preserve the original user attribution.
+        UNIT_ASSERT_VALUES_EQUAL(expectedProperties.at(TStreamingQueryMeta::TProperties::ModifiedBy), BUILTIN_ACL_ROOT);
         bool failDescribe = !RepeatDescribe;
         ui64 describeFailures = 0;
         auto descriptions = f.Runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {
@@ -1084,7 +1089,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         UNIT_ASSERT_VALUES_EQUAL(actualProperties.size(), expectedProperties.size());
         for (const auto& [name, value] : expectedProperties) {
             UNIT_ASSERT(actualProperties.contains(name));
-            UNIT_ASSERT_VALUES_EQUAL(actualProperties.at(name), value);
+            if (name == TStreamingQueryMeta::TProperties::ModifiedAt) {
+                UNIT_ASSERT_GE(FromString<ui64>(actualProperties.at(name)), FromString<ui64>(value));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(actualProperties.at(name), value);
+            }
         }
     }
 

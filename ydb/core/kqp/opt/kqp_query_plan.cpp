@@ -1510,6 +1510,8 @@ private:
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
         } else if (auto maybeBlockHashJoin = TMaybeNode<TDqBlockHashJoinCore>(node)) {
             operatorId = Visit(maybeBlockHashJoin.Cast(), planNode);
+        } else if (auto maybeScalarHashJoin = TMaybeNode<TDqScalarHashJoinCore>(node)) {
+            operatorId = Visit(maybeScalarHashJoin.Cast(), planNode);
         } else if (auto lookupJoin = TMaybeNode<TKqpIndexLookupJoin>(node)) {
             operatorId = Visit(lookupJoin.Cast(), planNode);
         } else if (auto maybeCombineByKey = TMaybeNode<TCoCombineByKey>(node)) {
@@ -1759,13 +1761,18 @@ private:
             const auto index = FromString<ui32>(key.Index().Value());
             YQL_ENSURE(index + 1 < expandLambda.ChildrenSize());
 
-            const auto member = TExprBase(expandLambda.ChildPtr(index + 1)).Cast<TCoMember>();
+            const TExprBase item(expandLambda.ChildPtr(index + 1));
             const auto ascending = FromString<bool>(key.Direction().Cast<TCoBool>().Literal().Value());
 
             if (sortBy.size()) {
                 sortBy << ", ";
             }
-            sortBy << member.Name().Value() << (ascending ? " asc" : " desc");
+            if (const auto member = item.Maybe<TCoMember>()) {
+                sortBy << member.Cast().Name().Value();
+            } else {
+                sortBy << NPlanUtils::PrettyExprStr(item);
+            }
+            sortBy << (ascending ? " asc" : " desc");
         }
 
         TOperator op;
@@ -1993,6 +2000,18 @@ private:
 
     std::variant<ui32, TArgContext> Visit(const TDqBlockHashJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (BlockHash)";
+
+        TOperator op;
+        op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
+
+        AddOptimizerEstimates(op, join);
+
+        return AddOperator(planNode, name, std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TDqScalarHashJoinCore& join, TQueryPlanNode& planNode) {
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (ScalarHash)";
 
         TOperator op;
         op.Properties["Name"] = name;

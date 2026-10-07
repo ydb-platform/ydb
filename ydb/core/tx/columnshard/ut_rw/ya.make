@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
+    ydb/core/tx/long_tx_service/public
     ydb/core/tx/tx_proxy
     ydb/library/testlib/s3_recipe_helper
     ydb/public/lib/yson_value
@@ -33,8 +34,10 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 SRCS(
     ut_columnshard_read_write.cpp
+    ut_not_proposed_transactions.cpp
     ut_scan_snapshot_guard_integration.cpp
     ut_normalizer.cpp
+    ut_leaked_operations_normalizer.cpp
     ut_backup.cpp
     ut_flow_control_manager.cpp
     ut_blob_cache.cpp

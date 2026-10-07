@@ -54,14 +54,18 @@ public:
     }
 
 public:
-    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseRecords(const std::vector<TMessageStreamRecord>& records) override {
         YDB_LOG_TRACE("Add messages to parse",
             {"logPrefix", LogPrefix},
-            {"messages", messages.size()});
+            {"messages", records.size()});
 
-        for (const auto& message : messages) {
-            CurrentMessage = message.GetData();
-            Offsets.emplace_back(message.GetOffset());
+        for (const auto& record : records) {
+            if (!record.Data) {
+                ythrow TMessageStreamException(EMessageStreamStatus::Unsupported)
+                    << "PQ parser does not support null message payloads";
+            }
+            CurrentMessage = *record.Data;
+            Offsets.emplace_back(record.Id.Offset);
             ParseBuffer();
         }
     }

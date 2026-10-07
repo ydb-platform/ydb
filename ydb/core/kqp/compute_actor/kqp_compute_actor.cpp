@@ -1,3 +1,4 @@
+#include <ydb/library/yql/providers/yt/async_io/yql_yt_message_stream_source.h>
 #include "kqp_compute_actor.h"
 #include "kqp_compute_actor_impl.h"
 
@@ -20,6 +21,7 @@
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_scalar_hash_join.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_control_plane_actor.h>
@@ -76,6 +78,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
 
             if (name == "DqBlockHashJoin"sv) {
                 return WrapDqBlockHashJoin(callable, ctx);
+            }
+
+            if (name == "DqScalarHashJoin"sv) {
+                return WrapDqScalarHashJoin(callable, ctx);
             }
 
             if (name == "DqHashCombine"sv) {
@@ -212,7 +218,16 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
         const auto& driver = federatedQuerySetup->Driver;
         Y_VALIDATE(driver, "Missing YDB driver in federated query setup");
 
-        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"), {}, enableStreamingQueriesCounters);
+        NYql::NDq::RegisterDqPqReadActorFactory(
+            *factory,
+            *driver,
+            federatedQuerySetup->CredentialsFactory,
+            pqGateway,
+            counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"),
+            {},
+            enableStreamingQueriesCounters,
+            NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueryTopicAutopartitioning());
+        NYql::NDq::RegisterYtMessageStreamReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
         NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters, NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesPqSinkDeduplication());
         NYql::NDq::RegisterDqPqInfoAggregationActorFactory(*factory);
         NYql::NDq::RegisterDqPqControlPlaneActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway);
@@ -288,12 +303,13 @@ IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,
     const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,
-    const TString& database, const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
+    const TString& databasePath, const std::optional<NScheduler::NHdrf::TFullPoolId>& schedulerPool,
+    const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
     TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits,
     bool useBatchPool) {
     return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, lockTxId, lockNodeId, lockMode,
-        database, meta, shardsScanningPolicy, counters, std::move(traceId), cpuLimits, useBatchPool);
+        databasePath, schedulerPool, meta, shardsScanningPolicy, counters, std::move(traceId), cpuLimits, useBatchPool);
 }
 
 } // namespace NKikimr::NKqp

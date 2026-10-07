@@ -37,7 +37,7 @@
 #include <library/cpp/yt/string/stream.h>
 #include <library/cpp/yt/string/string.h>
 
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/coding/varint.h>
 #include <library/cpp/yt/coding/zig_zag.h>

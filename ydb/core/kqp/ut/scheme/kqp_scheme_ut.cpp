@@ -14,6 +14,7 @@
 #include <ydb/services/workload_manager/actors/actors.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
@@ -7387,10 +7388,46 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_FAIL("The database " << path << " is not running: " << status.DebugString());
     }
 
+    using TDetailedCountersRegistrations = THashMap<std::pair<ui32, TString>, TIntrusivePtr<NSysView::IDbDetailedCounters>>;
+
+    // The aggregator actor registers on creation and every 60 seconds afterwards, so the observer
+    // must be in place before the database is created.
+    auto ObserveDetailedCountersRegistrations(TTestActorRuntime& runtime, TDetailedCountersRegistrations& registrations) {
+        return runtime.AddObserver<NSysView::TEvSysView::TEvRegisterDbDetailedCounters>(
+            [&registrations](NSysView::TEvSysView::TEvRegisterDbDetailedCounters::TPtr& ev) {
+                const auto* msg = ev->Get();
+                if (msg->Service == NKikimrSysView::TABLETS) {
+                    registrations[std::make_pair(ev->Recipient.NodeId(), msg->Database)] = msg->Counters;
+                }
+            });
+    }
+
+    bool HasPublishedPartitionLeaf(NSysView::IDbDetailedCounters& counters, const TString& tablePath, ui64 tabletId) {
+        // Pack twice, as TPackedReceiver::Settle() does
+        NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> report;
+        counters.Pack(report);
+        report.Clear();
+        counters.Pack(report);
+
+        for (const auto& entry : report) {
+            if (entry.GetTablePath() != tablePath
+                || entry.GetLevel() != NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition)
+            {
+                continue;
+            }
+            for (const auto& leaf : entry.GetLeaves()) {
+                if (leaf.GetTabletId() == tabletId && leaf.GetFollowerId() == 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     // The detailed metrics a node publishes for a table: "none" (DATABASE level), "table"
     // (one bucket for the whole table) or "partition" (a leaf per partition).
-    TString GetPublishedDetailedMetrics(TTestActorRuntime& runtime, const TString& database,
-        const TString& table, ui64 tabletId)
+    TString GetPublishedDetailedMetrics(TTestActorRuntime& runtime, const TDetailedCountersRegistrations& registrations,
+        const TString& database, const TString& table, ui64 tabletId)
     {
         auto findExecutorGroup = [](::NMonitoring::TDynamicCounterPtr group) -> ::NMonitoring::TDynamicCounterPtr {
             auto typeGroup = group ? group->FindSubgroup("type", "DataShard") : nullptr;
@@ -7401,16 +7438,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto rawGroup = runtime.GetAppData(nodeIndex).Counters->FindSubgroup("counters", "ydb_detailed_raw");
             auto databaseGroup = rawGroup ? rawGroup->FindSubgroup("database", database) : nullptr;
             auto tableGroup = databaseGroup ? databaseGroup->FindSubgroup("table", table) : nullptr;
-            if (!tableGroup) {
-                continue;
-            }
-
             const bool hasTableBucket = bool(findExecutorGroup(tableGroup));
 
-            auto perPartitionGroup = tableGroup->FindSubgroup("detailed_metrics", "per_partition");
-            auto tabletGroup = perPartitionGroup ? perPartitionGroup->FindSubgroup("tablet_id", ToString(tabletId)) : nullptr;
-            auto leaderGroup = tabletGroup ? tabletGroup->FindSubgroup("follower_id", "0") : nullptr;
-            const bool hasPartitionLeaf = bool(findExecutorGroup(leaderGroup));
+            auto it = registrations.find(std::make_pair(runtime.GetNodeId(nodeIndex), database));
+            const bool hasPartitionLeaf = it != registrations.end()
+                && HasPublishedPartitionLeaf(*it->second, database + "/" + table, tabletId);
 
             if (hasTableBucket && !hasPartitionLeaf) {
                 return "table";
@@ -7440,6 +7472,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             .SetDynamicNodeCount(1)
             .SetStoragePoolTypes({"hdd1"}));
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        TDetailedCountersRegistrations detailedCounters;
+        auto detailedCountersObserver = ObserveDetailedCountersRegistrations(runtime, detailedCounters);
 
         const TString database = "/Root/Test";
         Tests::TTenants tenants(&kikimr.GetTestServer());
@@ -7499,7 +7534,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     const auto it = reported.find(database + "/" + table.Table);
                     const ui32 level = it != reported.end() ? it->second.MetricsLevel : 0;
                     const ui64 tabletId = it != reported.end() ? it->second.TabletId : 0;
-                    const auto published = GetPublishedDetailedMetrics(runtime, database, table.Table, tabletId);
+                    const auto published = GetPublishedDetailedMetrics(runtime, detailedCounters, database, table.Table, tabletId);
                     state << " " << table.Table << ": level " << level << ", published " << published << ";";
                     matches = matches && level == ui32(table.MetricsLevel) && published == table.Published;
                 }
@@ -10819,6 +10854,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unknown AUTH_METHOD = UNKNOWN", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CreateExternalDataSourceValidationSourceType) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="UnknownSourceType",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unknown source type: UnknownSourceType", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceValidationLocation) {
@@ -15104,7 +15156,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_FAIL("Temp dir '" << firstDir << "' still exists, last result: " << deleteResult);
     }
 
-    std::unique_ptr<TKikimrRunner> SetupStreamingSource(bool enableStreamingQueries = true) {
+    std::unique_ptr<TKikimrRunner> SetupStreamingSource(bool enableStreamingQueries = true, bool enableStateRecompute = false) {
         NKikimrConfig::TAppConfig config;
         auto& featureFlags = *config.MutableFeatureFlags();
         featureFlags.SetEnableStreamingQueries(enableStreamingQueries);
@@ -15112,6 +15164,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         featureFlags.SetEnableResourcePools(true);
         featureFlags.SetEnableStreamingQueryDisposition(true);
         featureFlags.SetEnableStreamingQueryReadFrom(true);
+        featureFlags.SetEnableStreamingQueryStateRecompute(enableStateRecompute);
         config.MutableTableServiceConfig()->SetDqChannelVersion(1u);
 
         auto kikimr = std::make_unique<TKikimrRunner>(NKqp::TKikimrSettings(config)
@@ -15199,17 +15252,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "RUN property must be 'true' or 'false'");
         }
 
-        {
-            const auto result = db.ExecuteQuery(R"(
-                CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (
-                    FORCE = TRUE
-                ) AS DO BEGIN
-                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
-                END DO)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid properties for creation new streaming query");
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Got unexpected properties: FORCE");
+        for (const TString& ifNotExists : {"", "IF NOT EXISTS"}) {
+            for (const TString& force : {"TRUE", "FALSE"}) {
+                const auto query = fmt::format(R"(
+                    CREATE STREAMING QUERY {if_not_exists} `MyFolder/MyQuery` WITH (
+                        RUN = FALSE,
+                        FORCE = {force}
+                    ) AS DO BEGIN
+                        INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                    END DO)",
+                    "if_not_exists"_a = ifNotExists, "force"_a = force);
+                const auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, query << "\n" << result.GetIssues().ToOneLineString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid properties for creation new streaming query");
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Got unexpected properties: FORCE");
+            }
         }
 
         // Test alter
@@ -15252,7 +15309,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Changing the query text will result in the loss of the checkpoint. Please use FORCE=true to change the request text");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Changing the query text will result in the loss of the checkpoint.");
         }
     }
 
@@ -15336,6 +15393,108 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_LE(actual, after);
     }
 
+    Y_UNIT_TEST_TWIN(StreamingQueryRecoveryForce, Replace) {
+        auto kikimr = SetupStreamingSource(/* enableStreamingQueries */ true, /* enableStateRecompute */ true);
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
+        const TString body = " AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO;";
+        const auto create = db.ExecuteQuery("CREATE STREAMING QUERY MyQuery WITH (RUN = FALSE)" + body,
+            NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        for (const TString& force : {"", ", FORCE = FALSE", ", FORCE = TRUE"}) {
+            for (const TString& disposition : {"", ", STREAMING_DISPOSITION = from_checkpoint", ", STREAMING_DISPOSITION = from_checkpoint_force"}) {
+                const TString query = TString(Replace
+                    ? "CREATE OR REPLACE STREAMING QUERY MyQuery WITH (RUN = FALSE"
+                    : "ALTER STREAMING QUERY MyQuery SET (RUN = FALSE") + force + disposition + ")" + body;
+                const auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+                NYql::NPq::NProto::StreamingDisposition expected;
+                expected.mutable_from_last_checkpoint()->set_force(disposition.empty()
+                    ? force == ", FORCE = TRUE"
+                    : disposition == ", STREAMING_DISPOSITION = from_checkpoint_force");
+                CheckObjectProperties(runtime, "/Root/MyQuery", {{"streaming_disposition", expected.SerializeAsString()}});
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(StreamingQueryOutputFromFeatureFlag, Enabled) {
+        auto kikimr = SetupStreamingSource(/* enableStreamingQueries */ true, /* enableStateRecompute */ Enabled);
+        auto db = kikimr->GetQueryClient();
+        const TString body = " AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO;";
+        const auto create = db.ExecuteQuery("CREATE STREAMING QUERY MyQuery WITH (RUN = FALSE)" + body,
+            NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        for (const TString& prefix : {
+            "CREATE STREAMING QUERY NewQuery WITH (",
+            "CREATE OR REPLACE STREAMING QUERY MyQuery WITH (",
+            "ALTER STREAMING QUERY MyQuery SET (",
+        }) {
+            const TString query = prefix + "RUN = FALSE, OUTPUT_FROM = Timestamp(\"2025-05-04T11:30:34Z\"))" + body;
+            const auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), Enabled ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
+                query << "\n" << result.GetIssues().ToString());
+            if constexpr (!Enabled) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "OUTPUT_FROM is disabled");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StreamingQueryOutputFromWithReadFrom) {
+        auto kikimr = SetupStreamingSource(/* enableStreamingQueries */ true, /* enableStateRecompute */ true);
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
+        const auto timestamp = TInstant::ParseIso8601("2025-05-04T11:30:34.336938Z");
+        const std::vector<std::pair<TString, TInstant>> outputTimes = {
+            {"Timestamp(\"1970-01-01T00:00:00Z\")", TInstant::Zero()},
+            {"$timestamp", timestamp},
+            {"Just($timestamp)", timestamp},
+            {"$timestamp + Interval(\"PT1S\")", timestamp + TDuration::Seconds(1)},
+        };
+        for (const bool alter : {false, true}) {
+            for (const TString& readFrom : {"", "EARLIEST", "LATEST", "$timestamp - Interval(\"PT2S\")"}) {
+                NYql::NPq::NProto::StreamingDisposition expected;
+                if (readFrom == "EARLIEST") {
+                    expected.mutable_oldest();
+                } else if (readFrom == "LATEST") {
+                    expected.mutable_fresh();
+                } else if (readFrom) {
+                    *expected.mutable_from_time()->mutable_timestamp() = NProtoInterop::CastToProto(timestamp - TDuration::Seconds(2));
+                }
+                for (const auto& [output, outputTime] : outputTimes) {
+                    *expected.mutable_output_start_time() = NProtoInterop::CastToProto(outputTime);
+                    const TString query = TStringBuilder()
+                        << "$timestamp = Timestamp(\"2025-05-04T11:30:34.336938Z\"); "
+                        << (alter ? "ALTER STREAMING QUERY MyQuery SET (" : "CREATE OR REPLACE STREAMING QUERY MyQuery WITH (")
+                        << "RUN = FALSE, OUTPUT_FROM = " << output
+                        << (readFrom ? TString(", READ_FROM = ") + readFrom : TString()) << ")"
+                        << (alter ? ";" : " AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO;");
+                    const auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, query << "\n" << result.GetIssues().ToString());
+                    CheckObjectProperties(runtime, "/Root/MyQuery", {
+                        {"streaming_disposition", expected.SerializeAsString()},
+                        {"run", "false"},
+                    });
+                }
+            }
+        }
+
+        const auto before = TInstant::Now() - TDuration::Seconds(1);
+        const auto result = db.ExecuteQuery("ALTER STREAMING QUERY MyQuery SET (OUTPUT_FROM = CurrentUtcTimestamp() - Interval(\"PT1S\"));",
+            NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        const auto after = TInstant::Now() - TDuration::Seconds(1);
+        const auto entry = Navigate(runtime, runtime.AllocateEdgeActor(), "/Root/MyQuery", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto& properties = entry->ResultSet.at(0).StreamingQueryInfo->Description.GetProperties().GetProperties();
+        NYql::NPq::NProto::StreamingDisposition disposition;
+        UNIT_ASSERT(disposition.ParseFromString(properties.at("streaming_disposition")));
+        UNIT_ASSERT(disposition.has_output_start_time());
+        const auto actual = NProtoInterop::CastFromProto(disposition.output_start_time());
+        UNIT_ASSERT_GE(actual, before);
+        UNIT_ASSERT_LE(actual, after);
+    }
+
     void CheckStreamingQuerySettingError(const TStatus& result, const TString& query, const TString& expectedError,
         EStatus expectedStatus = EStatus::GENERIC_ERROR)
     {
@@ -15386,6 +15545,25 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             << (alter ? "ALTER STREAMING QUERY MyQuery SET (" : "CREATE STREAMING QUERY MyQuery WITH (")
             << setting << ")"
             << (alter ? ";" : " AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO;");
+    }
+
+    Y_UNIT_TEST_TWIN(StreamingQueryOutputFromValidation, Alter) {
+        auto kikimr = SetupStreamingSource();
+        auto db = kikimr->GetQueryClient();
+        for (const TString& value : {
+            "EARLIEST", "LATEST", "\"2025-05-04T11:30:34.336938Z\"", "\"1746358234000000\"",
+            "1234567", "TRUE", "NULL", "Date(\"2025-05-04\")", "Datetime(\"2025-05-04T11:30:34Z\")",
+            "Interval(\"PT1S\")", "Nothing(Timestamp?)", "Just(Just(Timestamp(\"2025-05-04T11:30:34Z\")))",
+            "CAST(\"not a timestamp\" AS Timestamp)", "Timestamp(\"1970-01-01T00:00:00Z\") - Interval(\"PT1S\")",
+            "Just(1234567)", "[Timestamp(\"2025-05-04T11:30:34Z\")]",
+        }) {
+            const auto query = StreamingQueryWithSetting(Alter, "OUTPUT_FROM = " + value);
+            for (const auto mode : {NQuery::EExecMode::Explain, NQuery::EExecMode::Execute}) {
+                const auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx(),
+                    NQuery::TExecuteQuerySettings().ExecMode(mode)).ExtractValueSync();
+                CheckStreamingQuerySettingError(result, query, "Timestamp");
+            }
+        }
     }
 
     Y_UNIT_TEST(StreamingQuerySettingFilledOptionalLiterals) {
@@ -15477,6 +15655,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         for (const TString& setting : {
             "READ_FROM = $timestamp",
             "READ_FROM = $timestamp + Interval(\"PT1S\")",
+            "OUTPUT_FROM = $timestamp",
+            "OUTPUT_FROM = $timestamp + Interval(\"PT1S\")",
             "RESOURCE_POOL = \"prefix_\" || $pool",
         }) {
             const TString query = TStringBuilder()
@@ -15517,6 +15697,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         for (const TString& setting : {
             "READ_FROM = Unwrap($rows)",
             "READ_FROM = Unwrap($rows + Interval(\"PT1S\"))",
+            "OUTPUT_FROM = Unwrap($rows)",
+            "OUTPUT_FROM = Unwrap($rows + Interval(\"PT1S\"))",
             "RESOURCE_POOL = Unwrap(CAST($rows AS String))",
         }) {
             const TString query = prefix + StreamingQueryWithSetting(Alter, setting);
@@ -15539,7 +15721,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             {"Just(TypeHandle(Timestamp))", "Expected persistable data, but got: Optional<Resource"},
         };
         for (const auto& [value, expectedError] : cases) {
-            for (const TString& setting : {"READ_FROM", "RESOURCE_POOL"}) {
+            for (const TString& setting : {"READ_FROM", "OUTPUT_FROM", "RESOURCE_POOL"}) {
                 const auto query = StreamingQueryWithSetting(Alter, setting + " = " + value);
                 for (const auto mode : {NQuery::EExecMode::Explain, NQuery::EExecMode::Execute}) {
                     const auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx(),
@@ -15553,7 +15735,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST_TWIN(StreamingQuerySettingEvaluationFailure, Alter) {
         auto kikimr = SetupStreamingSource();
         auto db = kikimr->GetQueryClient();
-        for (const TString& setting : {"READ_FROM", "RESOURCE_POOL"}) {
+        for (const TString& setting : {"READ_FROM", "OUTPUT_FROM", "RESOURCE_POOL"}) {
             const auto query = StreamingQueryWithSetting(Alter, setting + R"( =
                 Unwrap(CAST("not a timestamp" AS Timestamp), "invalid read-from timestamp"))");
             for (const auto mode : {NQuery::EExecMode::Explain, NQuery::EExecMode::Execute}) {
@@ -16417,7 +16599,7 @@ END DO)",
             NYdb::TResultSetParser resultParser(result.ResultSets[0]);
 
             UNIT_ASSERT_VALUES_EQUAL(resultParser.RowsCount(), expectExistance);
-            UNIT_ASSERT_VALUES_EQUAL(resultParser.ColumnsCount(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(resultParser.ColumnsCount(), 22);
 
             if (expectExistance) {
                 UNIT_ASSERT(resultParser.TryNextRow());

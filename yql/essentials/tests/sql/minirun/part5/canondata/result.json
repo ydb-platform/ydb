@@ -209,6 +209,20 @@
             "uri": "https://{canondata_backend}/1847551/58f37c8e1b8c74f66657e94c231b8acc11b82bf5/resource.tar.gz#test.test_agg_phases_agg_apply-sum-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[aggregate-distinct_spark_functions--Debug]": [
+        {
+            "checksum": "92c0f196626b0b2e35b4c1f3d15238a7",
+            "size": 7490,
+            "uri": "https://{canondata_backend}/1871182/06fb6c807eaf0cf0bcc8fd320fd123a0405c24fd/resource.tar.gz#test.test_aggregate-distinct_spark_functions--Debug_/opt.yql"
+        }
+    ],
+    "test.test[aggregate-distinct_spark_functions--Results]": [
+        {
+            "checksum": "c196a696bb57f1ae5a841831a98c881f",
+            "size": 10586,
+            "uri": "https://{canondata_backend}/1871182/06fb6c807eaf0cf0bcc8fd320fd123a0405c24fd/resource.tar.gz#test.test_aggregate-distinct_spark_functions--Results_/results.txt"
+        }
+    ],
     "test.test[aggregate-group_by_expr_after_where_ver--Debug]": [
         {
             "checksum": "d0da2a1dc674dc86930994f910eb1c2b",
@@ -1175,6 +1189,20 @@
             "checksum": "655670637acb5b29c2bbeca1abb0f7b7",
             "size": 3088,
             "uri": "https://{canondata_backend}/1847551/58f37c8e1b8c74f66657e94c231b8acc11b82bf5/resource.tar.gz#test.test_select_yql-grouping_sets_apb_c-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-order_by_aggregate_input-default.txt-Debug]": [
+        {
+            "checksum": "ed79854e9fb7989e15c09c82230126b5",
+            "size": 1540,
+            "uri": "https://{canondata_backend}/1942278/153ef21995bee33214b2267e0536b2af2e12066e/resource.tar.gz#test.test_select_yql-order_by_aggregate_input-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-order_by_aggregate_input-default.txt-Results]": [
+        {
+            "checksum": "21ec8578986b60e631f6f3e1ee3572ec",
+            "size": 3149,
+            "uri": "https://{canondata_backend}/1931696/e55b8f34e286534c7ab899039e8971ff790a234d/resource.tar.gz#test.test_select_yql-order_by_aggregate_input-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql-select_op_union_named_node_projection-default.txt-Debug]": [

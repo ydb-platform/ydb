@@ -112,7 +112,7 @@ public:
 private:
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const;
-    TString ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize);
+    std::unique_ptr<IEventHandle> ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize);
     void PrepareToProcess();
     TString GetEstimationsInfo() const;
 

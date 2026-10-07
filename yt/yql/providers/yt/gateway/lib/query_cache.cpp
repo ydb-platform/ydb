@@ -173,7 +173,7 @@ TYtQueryCacheItem::TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCac
     const TMaybe<TString>& singleOutputHash,
     const TVector<TString>& dstTables, const TVector<NYT::TNode>& dstSpecs,
     const TString& userName, const TString& tmpFolder, const NYT::TNode& mergeSpec,
-    const NYT::TNode& tableAttrs, ui64 chunkLimit, bool useExpirationTimeout, bool useMultiSet,
+    const NYT::TNode& tableAttrs, ui64 chunkLimit, bool useExpirationTimeout,
     const std::pair<TString, TString>& logCtx)
     : TQueryCacheItemBase<TYtQueryCacheItem>(InitCacheMode(mode, hash, singleOutputHash.Defined()))
     , Entry(entry)
@@ -182,7 +182,6 @@ TYtQueryCacheItem::TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCac
     , CachePath(GetCachePath(userName, tmpFolder))
     , ChunkLimit(chunkLimit)
     , UseExpirationTimeout(useExpirationTimeout)
-    , UseMultiSet(useMultiSet)
     , LogCtx(logCtx)
     , MergeSpec(mergeSpec)
     , TableAttrs(tableAttrs)
@@ -448,30 +447,11 @@ void TYtQueryCacheItem::StoreImpl() {
 void TYtQueryCacheItem::SetTableAttrs(const NYT::TNode& spec, const TString& cachedPath) {
     NYT::TNode attrs = spec;
     NYT::MergeNodes(attrs, TableAttrs);
-    if (UseMultiSet) {
-        try {
-            Entry->CacheTx->MultisetAttributes(cachedPath + "/@", attrs.AsMap(), NYT::TMultisetAttributesOptions());
-        } catch (const TErrorResponse& e) {
-            if (!IsRace(e.GetError())) {
-                throw;
-            }
-        }
-    } else {
-        auto batchSet = Entry->CacheTx->CreateBatchRequest();
-        TVector<NThreading::TFuture<void>> batchSetRes;
-        for (auto& attr : attrs.AsMap()) {
-            batchSetRes.push_back(batchSet->Set(TStringBuilder() << cachedPath << "/@" << attr.first, attr.second));
-        }
-
-        batchSet->ExecuteBatch();
-        for (auto& x : batchSetRes) {
-            try {
-                x.GetValueSync();
-            } catch (const TErrorResponse& e) {
-                if (!IsRace(e.GetError())) {
-                    throw;
-                }
-            }
+    try {
+        Entry->CacheTx->MultisetAttributes(cachedPath + "/@", attrs.AsMap(), NYT::TMultisetAttributesOptions());
+    } catch (const TErrorResponse& e) {
+        if (!IsRace(e.GetError())) {
+            throw;
         }
     }
 }

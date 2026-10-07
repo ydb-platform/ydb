@@ -8,7 +8,7 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mind/events/tenant_pool.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

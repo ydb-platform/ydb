@@ -12,6 +12,10 @@ PEERDIR(
     library/cpp/svnversion
     ydb/library/actors/helpers
     ydb/core/base
+    ydb/core/blobstorage/crypto
+    ydb/core/blobstorage/nodewarden
+    ydb/core/blobstorage/pdisk
+    ydb/core/cms
     ydb/core/mind
     ydb/core/mind/hive
     ydb/core/testlib/default

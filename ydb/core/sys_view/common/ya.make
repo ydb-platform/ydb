@@ -16,6 +16,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/core/base
+    ydb/core/mind/tenant_node_enumeration
     ydb/core/protos
     ydb/core/tablet_flat
     library/cpp/deprecated/atomic

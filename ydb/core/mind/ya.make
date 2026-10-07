@@ -1,13 +1,6 @@
 YQL_LIBRARY()
 
 SRCS(
-    configured_tablet_bootstrapper.cpp
-    configured_tablet_bootstrapper.h
-    defs.h
-    dynamic_nameserver.cpp
-    dynamic_nameserver.h
-    dynamic_nameserver_impl.h
-    dynamic_nameserver_mon.cpp
     labels_maintainer.cpp
     labels_maintainer.h
     lease_holder.cpp
@@ -16,7 +9,6 @@ SRCS(
     local.h
     node_broker__graceful_shutdown.cpp
     node_broker.cpp
-    node_broker.h
     node_broker_impl.h
     node_broker__extend_lease.cpp
     node_broker__init_scheme.cpp
@@ -30,12 +22,10 @@ SRCS(
     slot_indexes_pool.cpp
     slot_indexes_pool.h
     table_adapter.h
-    tenant_node_enumeration.cpp
     tenant_node_enumeration.h
     tenant_pool.h
     tenant_pool.cpp
     tenant_slot_broker.cpp
-    tenant_slot_broker.h
     tenant_slot_broker_impl.h
     tenant_slot_broker__alter_tenant.cpp
     tenant_slot_broker__assign_free_slots.cpp
@@ -53,48 +43,33 @@ PEERDIR(
     ydb/library/actors/core
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/core/blobstorage
+    ydb/core/blobstorage/base
+    ydb/core/cms/console
+    ydb/core/mind/dynamic_nameserver
+    ydb/core/mind/events
+    ydb/core/mind/tenant_node_enumeration
     ydb/core/control
     ydb/core/mon
-    ydb/core/blobstorage/crypto
-    ydb/core/blobstorage/dsproxy/mock
-    ydb/core/blobstorage/groupinfo
-    ydb/core/blobstorage/incrhuge
-    ydb/core/blobstorage/pdisk
     ydb/core/engine/minikql
-    ydb/core/kesus/tablet
-    ydb/core/keyvalue
-    ydb/core/mind/bscontroller
     ydb/core/node_whiteboard
     ydb/core/protos
-    ydb/core/sys_view/processor
     ydb/core/tablet
     ydb/core/tablet_flat
-    ydb/core/test_tablet
-    ydb/core/tx/replication/controller
     ydb/core/tx/scheme_board
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
 )
-
-DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes)
-
-IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
-    CFLAGS(
-        -DYDB_EMBEDDED_NBS_ENABLED
-    )
-
-    PEERDIR(
-        ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller
-    )
-ENDIF()
 
 END()
 
 RECURSE(
     address_classification
     bscontroller
+    configured_tablet_bootstrapper
+    dynamic_nameserver
+    events
     hive
+    tenant_node_enumeration
 )
 
 RECURSE_FOR_TESTS(

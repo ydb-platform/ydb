@@ -7,7 +7,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/util/config_index.h>
-#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mind/events/tenant_pool.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/yaml_config/yaml_config.h>

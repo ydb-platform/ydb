@@ -27,6 +27,46 @@ size_t CountOperators(TOpRoot& root, EOperator kind) {
     return count;
 }
 
+enum class EMapUse { None, JoinKey, JoinFilter };
+
+void CheckMapPullup(const TString& kind, bool fromLeft, EMapUse use, bool expectedPullup) {
+    NTests::TIdTestContext f;
+    const auto a = f.Id(), b = f.Id(), c = f.Id(), computed = f.Id();
+    auto inner = MakeIntrusive<TOpJoin>(f.Read({a}), f.Read({b}), f.Pos, "Inner", TJoinIUs{{a, b}});
+    auto cbo = MakeIntrusive<TOpCBOTree>(std::move(inner), f.Pos);
+    TMapIUs definitions;
+    definitions.Add(computed, f.Constant());
+    auto map = MakeIntrusive<TOpMap>(std::move(cbo), f.Pos, std::move(definitions));
+    TIntrusivePtr<IOperator> left = fromLeft ? TIntrusivePtr<IOperator>(map) : f.Read({c});
+    TIntrusivePtr<IOperator> right = fromLeft ? TIntrusivePtr<IOperator>(f.Read({c})) : map;
+    const auto key = use == EMapUse::JoinKey ? computed : a;
+    TJoinIUs keys;
+    if (kind != "Cross") {
+        keys.Add(fromLeft ? key : c, fromLeft ? c : key);
+    }
+    TVector<TExpression> filters;
+    if (use == EMapUse::JoinFilter) {
+        auto row = f.ExprCtx.NewArgument(f.Pos, "row");
+        auto member = f.ExprCtx.NewCallable(f.Pos, "Member", {row, f.ExprCtx.NewAtom(f.Pos, computed)});
+        auto value = f.ExprCtx.NewCallable(f.Pos, "Uint64", {f.ExprCtx.NewAtom(f.Pos, "1")});
+        filters.emplace_back(f.ExprCtx.NewLambda(f.Pos, f.ExprCtx.NewArguments(f.Pos, {row}),
+            f.ExprCtx.NewCallable(f.Pos, "==", {member, value})), &f.ExprCtx, &f.Props);
+    }
+    auto join = MakeIntrusive<TOpJoin>(left, right, f.Pos, kind, std::move(keys), std::move(filters));
+    const auto outputs = join->GetOutputIUs();
+    TPullUpMapOverCBORule rule;
+    const auto result = rule.SimpleMatchAndApply(join, f.RboCtx, f.Props);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Kind == EOperator::Map, expectedPullup,
+        kind << ", fromLeft=" << fromLeft << ", use=" << static_cast<int>(use));
+    // The rule pipeline rebuilds output caches after replacing the subtree.
+    auto root = f.Root(result, {});
+    UNIT_ASSERT(result->GetOutputIUs() == outputs);
+    TUnorderedIUs available;
+    available.UnionWith(join->GetLeftInput()->GetOutputIUs());
+    available.UnionWith(join->GetRightInput()->GetOutputIUs());
+    UNIT_ASSERT(join->GetUsedIUs(root->PlanProps).IsSubsetOf(available));
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpRboGlobalIUs) {
@@ -703,6 +743,32 @@ Y_UNIT_TEST_SUITE(KqpRboGlobalIUs) {
         auto& merged = CastOperator<TOpMap>(*kept.GetInput());
         UNIT_ASSERT(merged.GetMapElements().Keys() == (TUnorderedIUs{lower, independent}));
         UNIT_ASSERT(result->GetOutputIUs() == (TUnorderedIUs{a, lower, independent, dependent}));
+    }
+
+    Y_UNIT_TEST(MapPullupKeepsComputationsOfNullExtendedSides) {
+        CheckMapPullup("Full", true, EMapUse::None, false);
+        CheckMapPullup("Full", false, EMapUse::None, false);
+        CheckMapPullup("Left", false, EMapUse::None, false);
+        CheckMapPullup("Right", true, EMapUse::None, false);
+    }
+
+    Y_UNIT_TEST(MapPullupFromPreservedSides) {
+        for (const TString kind : {"Inner", "Cross", "Left", "LeftSemi", "LeftOnly"}) {
+            CheckMapPullup(kind, true, EMapUse::None, true);
+        }
+        CheckMapPullup("Inner", false, EMapUse::None, true);
+    }
+
+    Y_UNIT_TEST(MapPullupKeepsComputedJoinKeysBelowJoin) {
+        for (const bool fromLeft : {false, true}) {
+            CheckMapPullup("Inner", fromLeft, EMapUse::JoinKey, false);
+        }
+    }
+
+    Y_UNIT_TEST(MapPullupKeepsComputedJoinFiltersBelowJoin) {
+        for (const bool fromLeft : {false, true}) {
+            CheckMapPullup("Inner", fromLeft, EMapUse::JoinFilter, false);
+        }
     }
 
     Y_UNIT_TEST(AggregateSplitKeepsResultsAndAllocatesFreshIntermediates) {

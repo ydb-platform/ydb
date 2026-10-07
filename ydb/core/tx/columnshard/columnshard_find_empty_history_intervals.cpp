@@ -12,39 +12,35 @@
 #include <util/generic/algorithm.h>
 #include <util/random/random.h>
 
-#include <iterator>
+#include <optional>
 #include <utility>
 
 namespace NKikimr::NColumnShard {
 namespace {
+
+bool IsCutHistoryEnabled() {
+    return AppData()->FeatureFlags.GetEnableCutHistory() && AppData()->FeatureFlags.GetEnableColumnshardCutHistory();
+}
+
+std::optional<ui32> ExcludeHistoryInterval(TEmptyHistoryIntervalsScan& scan, const TLogoBlobID& id) {
+    auto it = scan.Intervals.upper_bound({ id.Channel(), id.Generation() });
+    if (it == scan.Intervals.begin()) {
+        return {};
+    }
+    --it;
+    if (it->first.Channel != id.Channel() || id.Generation() >= it->second.To) {
+        return {};
+    }
+    const ui32 group = it->second.Group;
+    scan.Intervals.erase(it);
+    return group;
+}
 
 void ScheduleFindEmptyHistoryIntervalsContinuation(const NKikimrConfig::TColumnShardConfig& shardConfig, const TActorContext& ctx) {
     const auto& config = shardConfig.GetCutHistory();
     const ui64 jitter = config.GetContinuationJitterMs();
     const ui64 delay = Max<ui32>(1, config.GetContinuationDelayMs()) + (jitter ? RandomNumber<ui64>(jitter + 1) : 0);
     ctx.Schedule(TDuration::MilliSeconds(delay), new TEvPrivate::TEvContinueFindEmptyHistoryIntervals());
-}
-
-bool CanCutHistoryInterval(const TColumnShard& owner, const THistoryIntervalKey& key, const THistoryInterval& interval,
-    const NOlap::TPendingGCBlobGenerations& pendingGenerations) {
-    if (key.Channel >= owner.Info()->Channels.size() || !owner.LauncherID()) {
-        return false;
-    }
-    const auto& history = owner.Info()->Channels[key.Channel].History;
-    const auto entry = FindIf(history, [&](const auto& item) {
-        return item.FromGeneration == key.From;
-    });
-    if (entry == history.end() || entry->GroupID != interval.Group) {
-        return false;
-    }
-    const auto next = std::next(entry);
-    if (next == history.end() || next->FromGeneration != interval.To) {
-        return false;
-    }
-    const auto storage =
-        std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(owner.GetStoragesManager()->GetDefaultOperator());
-    AFL_VERIFY(storage);
-    return storage->CanCutHistory(pendingGenerations, key.Channel, key.From, interval.To);
 }
 
 class TFindEmptyHistoryIntervalsPreparationActor: public NActors::TActorBootstrapped<TFindEmptyHistoryIntervalsPreparationActor> {
@@ -70,11 +66,13 @@ public:
 
 class TTxSaveCutHistoryRequests: public TTransactionBase<TColumnShard> {
     const std::vector<NKikimrTxColumnShard::TCutHistoryRequest> ReadyToSendRequests;
+    const TInstant ScanFinished;
 
 public:
-    TTxSaveCutHistoryRequests(TColumnShard* self, std::vector<NKikimrTxColumnShard::TCutHistoryRequest>&& requests)
+    TTxSaveCutHistoryRequests(TColumnShard* self, std::vector<NKikimrTxColumnShard::TCutHistoryRequest>&& requests, const TInstant scanFinished)
         : TBase(self)
         , ReadyToSendRequests(std::move(requests))
+        , ScanFinished(scanFinished)
     {
     }
 
@@ -97,16 +95,16 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         // GC cannot invalidate the empty-interval proof; sharing admission can.
-        if (Self->SharingSessionsManager->CanCutHistory()) {
+        if (IsCutHistoryEnabled() && Self->SharingSessionsManager->CanCutHistory()) {
             for (const auto& request : ReadyToSendRequests) {
                 auto event = std::make_unique<TEvTablet::TEvCutTabletHistory>();
                 event->Record.SetTabletID(Self->TabletID());
                 event->Record.SetChannel(request.GetChannel());
                 event->Record.SetFromGeneration(request.GetFromGeneration());
                 event->Record.SetGroupID(request.GetGroupID());
-                Self->Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *Self->EmptyHistoryIntervalsScan->Finished);
                 ctx.Send(Self->LauncherID(), event.release());
             }
+            Self->Counters.GetCSCounters().OnCutHistoryRequestsSent(ReadyToSendRequests.size(), ctx.Now() - ScanFinished);
         }
         Self->EmptyHistoryIntervalsScan.reset();
     }
@@ -128,7 +126,7 @@ public:
 };
 
 void TColumnShard::InitFindEmptyHistoryIntervals() {
-    if (!AppData()->FeatureFlags.GetEnableCutHistory() || !AppData()->FeatureFlags.GetEnableColumnshardCutHistory()) {
+    if (!IsCutHistoryEnabled()) {
         return;
     }
     TEmptyHistoryIntervalsScan scan;
@@ -153,22 +151,11 @@ void TColumnShard::StartFindEmptyHistoryIntervals(const TActorContext& ctx) {
     if (!EmptyHistoryIntervalsScan) {
         return;
     }
-    if (!AppData()->FeatureFlags.GetEnableCutHistory() || !AppData()->FeatureFlags.GetEnableColumnshardCutHistory() ||
-        !SharingSessionsManager->CanCutHistory()) {
+    if (!IsCutHistoryEnabled() || !SharingSessionsManager->CanCutHistory()) {
         EmptyHistoryIntervalsScan.reset();
         return;
     }
-    const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
-    AFL_VERIFY(storage);
     auto& scan = *EmptyHistoryIntervalsScan;
-    std::erase_if(scan.Intervals, [&](const auto& entry) {
-        const auto& [key, interval] = entry;
-        return storage->GetSharedBlobs()->HasBlobsInRange(key.Channel, key.From, interval.To);
-    });
-    if (scan.Intervals.empty()) {
-        EmptyHistoryIntervalsScan.reset();
-        return;
-    }
     scan.Started = ctx.Now();
     if (HasIndex()) {
         const auto& tables = GetIndexAs<NOlap::TColumnEngineForLogs>().GetTables();
@@ -207,7 +194,7 @@ void TColumnShard::Handle(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady:
         ev->Sender != EmptyHistoryIntervalsScan->PreparationActor) {
         return;
     }
-    if (!SharingSessionsManager->CanCutHistory()) {
+    if (!IsCutHistoryEnabled() || !SharingSessionsManager->CanCutHistory()) {
         AbortFindEmptyHistoryIntervals();
         return;
     }
@@ -220,7 +207,7 @@ void TColumnShard::Handle(TEvPrivate::TEvContinueFindEmptyHistoryIntervals::TPtr
     if (!EmptyHistoryIntervalsScan || EmptyHistoryIntervalsScan->Pending || EmptyHistoryIntervalsScan->Finished) {
         return;
     }
-    if (!SharingSessionsManager->CanCutHistory()) {
+    if (!IsCutHistoryEnabled() || !SharingSessionsManager->CanCutHistory()) {
         AbortFindEmptyHistoryIntervals();
         return;
     }
@@ -263,7 +250,7 @@ void TColumnShard::FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccess
         return;
     }
     auto& scan = *EmptyHistoryIntervalsScan;
-    if (!SharingSessionsManager->CanCutHistory() || result.HasErrors() || result.HasRemovedData() ||
+    if (!IsCutHistoryEnabled() || !SharingSessionsManager->CanCutHistory() || result.HasErrors() || result.HasRemovedData() ||
         result.GetPortions().size() != scan.Pending) {
         AbortFindEmptyHistoryIntervals();
         return;
@@ -275,21 +262,13 @@ void TColumnShard::FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccess
             if (id.TabletID() != TabletID()) {
                 continue;
             }
-            auto it = scan.Intervals.upper_bound({ id.Channel(), id.Generation() });
-            if (it != scan.Intervals.begin()) {
-                --it;
-                const auto [key, interval] = *it;
-                if (key.Channel == id.Channel() && id.Generation() < interval.To) {
-                    if (blob.GetDsGroup() != interval.Group) {
-                        Counters.GetCSCounters().OnCutHistoryBlobGroupMismatch();
-                    }
-                    scan.Intervals.erase(it);
-                    if (scan.Intervals.empty()) {
-                        Counters.GetCSCounters().OnCutHistoryScanFinished(ctx.Now() - scan.Started);
-                        EmptyHistoryIntervalsScan.reset();
-                        return;
-                    }
-                }
+            if (const auto group = ExcludeHistoryInterval(scan, id); group && blob.GetDsGroup() != *group) {
+                Counters.GetCSCounters().OnCutHistoryBlobGroupMismatch();
+            }
+            if (scan.Intervals.empty()) {
+                Counters.GetCSCounters().OnCutHistoryScanFinished(ctx.Now() - scan.Started);
+                EmptyHistoryIntervalsScan.reset();
+                return;
             }
         }
     }
@@ -307,22 +286,31 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
     if (!EmptyHistoryIntervalsScan || !EmptyHistoryIntervalsScan->Finished) {
         return;
     }
-    if (!SharingSessionsManager->CanCutHistory()) {
+    if (!IsCutHistoryEnabled() || !SharingSessionsManager->CanCutHistory() || !LauncherID()) {
         EmptyHistoryIntervalsScan.reset();
         return;
     }
     const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
     AFL_VERIFY(storage);
+    // GC owns blobs removed from the queues until cleanup commits; abort does not complete cleanup.
     EmptyHistoryIntervalsScan->WaitingForGC = storage->HasUnfinishedGC();
     if (EmptyHistoryIntervalsScan->WaitingForGC) {
         return;
     }
-    const auto pendingGenerations = storage->GetPendingGCBlobGenerations();
+    auto& scan = *EmptyHistoryIntervalsScan;
+    const auto exclude = [&](const TLogoBlobID& id) {
+        ExcludeHistoryInterval(scan, id);
+        return !scan.Intervals.empty();
+    };
+    storage->VisitPendingGCBlobs(Generation(), exclude);
+    if (!scan.Intervals.empty()) {
+        // Sharing admission stays latched until reboot; check the existing shared links here.
+        storage->GetSharedBlobs()->VisitOwnBlobs(exclude);
+    }
     std::vector<NKikimrTxColumnShard::TCutHistoryRequest> requests;
-    for (const auto& [key, interval] : EmptyHistoryIntervalsScan->Intervals) {
-        if (!CanCutHistoryInterval(*this, key, interval, pendingGenerations)) {
-            continue;
-        }
+    requests.reserve(scan.Intervals.size());
+    // Channel history is fixed for this boot; filtering only removes intervals captured at initialization.
+    for (const auto& [key, interval] : scan.Intervals) {
         auto& request = requests.emplace_back();
         request.SetTabletID(TabletID());
         request.SetChannel(key.Channel);
@@ -336,7 +324,7 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
     EmptyHistoryIntervalsScan->Intervals.clear();
     if (!requests.empty()) {
         Counters.GetCSCounters().OnCuttableHistoryIntervalsFound(requests.size());
-        Execute(new TTxSaveCutHistoryRequests(this, std::move(requests)), ctx);
+        Execute(new TTxSaveCutHistoryRequests(this, std::move(requests), *scan.Finished), ctx);
     } else {
         EmptyHistoryIntervalsScan.reset();
     }

@@ -25,8 +25,6 @@ namespace NKikimr::NOlap {
 
 using NKikimrTxColumnShard::TEvictMetadata;
 
-bool HasPendingGCBlobsInRange(const TPendingGCBlobGenerations& generations, ui32 channel, ui32 from, ui32 to);
-
 // A batch of blobs that are written by a single task.
 // The batch is later saved or discarded as a whole.
 class TBlobBatch: public TMoveOnly {
@@ -193,7 +191,33 @@ public:
         return WeightedDataChannelSelection;
     }
 
-    TPendingGCBlobGenerations GetPendingGCBlobGenerations() const;
+    // Visits this tablet's queued blobs below toGeneration, excluding GC-owned blobs; false stops traversal.
+    template <class TVisitor>
+    void VisitPendingGCBlobs(const ui32 toGeneration, TVisitor&& visitor) const {
+        for (const auto& id : BlobsToKeep) {
+            // Only the keep queue is ordered by generation and step.
+            if (id.Generation() >= toGeneration) {
+                break;
+            }
+            if (!visitor(id)) {
+                return;
+            }
+        }
+        const auto visit = [&](const TUnifiedBlobId& blob) {
+            const auto& id = blob.GetLogoBlobId();
+            return id.TabletID() != static_cast<ui64>(SelfTabletId) || id.Generation() >= toGeneration || visitor(id);
+        };
+        for (const auto& [blob, _] : BlobsToDelete) {
+            if (!visit(blob)) {
+                return;
+            }
+        }
+        for (const auto& [blob, _] : BlobsToDeleteDelayed) {
+            if (!visit(blob)) {
+                return;
+            }
+        }
+    }
 
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
         return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteDelayed.Contains(tabletId, blobId);

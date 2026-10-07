@@ -12,6 +12,8 @@
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
+#include <set>
+
 namespace NKikimrColumnShardBlobOperationsProto {
 class TTabletByBlob;
 class TTabletsByBlob;

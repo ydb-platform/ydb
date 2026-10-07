@@ -14818,6 +14818,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             const auto result = executeQuery(R"(
                 --!syntax_v1
+                ALTER TOPIC `/Root/table/feed` SET (max_active_partitions = 0)
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(DescribeTopic(pq, "/Root/table/feed").GetPartitioningSettings().GetMaxActivePartitions(), 0);
+        }
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
                 ALTER TOPIC `/Root/table/feed` RESET (retention_period)
             )");
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -14833,6 +14841,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ui64 MinActivePartitions;
             ui64 MaxActivePartitions;
             EAutoPartitioningStrategy AutoPartitioningStrategy;
+            TDuration AutoPartitioningStabilizationWindow;
+            ui32 AutoPartitioningUpUtilizationPercent;
+            ui32 AutoPartitioningDownUtilizationPercent;
             size_t PartitionCount;
         };
 
@@ -14859,12 +14870,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto describeTopic = [&topicClient]() {
             const auto description = DescribeTopic(topicClient, "/Root/show_create_changefeed/feed");
             const auto& partitioningSettings = description.GetPartitioningSettings();
+            const auto& autoPartitioningSettings = partitioningSettings.GetAutoPartitioningSettings();
 
             return TTopicSnapshot{
                 .RetentionPeriod = description.GetRetentionPeriod(),
                 .MinActivePartitions = partitioningSettings.GetMinActivePartitions(),
                 .MaxActivePartitions = partitioningSettings.GetMaxActivePartitions(),
-                .AutoPartitioningStrategy = partitioningSettings.GetAutoPartitioningSettings().GetStrategy(),
+                .AutoPartitioningStrategy = autoPartitioningSettings.GetStrategy(),
+                .AutoPartitioningStabilizationWindow = autoPartitioningSettings.GetStabilizationWindow(),
+                .AutoPartitioningUpUtilizationPercent = autoPartitioningSettings.GetUpUtilizationPercent(),
+                .AutoPartitioningDownUtilizationPercent = autoPartitioningSettings.GetDownUtilizationPercent(),
                 .PartitionCount = description.GetPartitions().size(),
             };
         };
@@ -14892,7 +14907,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 retention_period = INTERVAL('PT6H'),
                 min_active_partitions = 3,
                 max_active_partitions = 8,
-                auto_partitioning_strategy = 'paused'
+                auto_partitioning_strategy = 'paused',
+                auto_partitioning_stabilization_window = INTERVAL('PT15M'),
+                auto_partitioning_up_utilization_percent = 70,
+                auto_partitioning_down_utilization_percent = 25
             );
         )");
 
@@ -14903,6 +14921,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MinActivePartitions, 3);
         UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MaxActivePartitions, 8);
         UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStrategy, EAutoPartitioningStrategy::Paused);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStabilizationWindow, TDuration::Minutes(15));
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningUpUtilizationPercent, 70);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningDownUtilizationPercent, 25);
 
         auto showCreateResult = querySession.ExecuteQuery(
             "SHOW CREATE TABLE `/Root/show_create_changefeed`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -14941,6 +14962,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MinActivePartitions, recreatedTopicDescription.MinActivePartitions);
         UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MaxActivePartitions, recreatedTopicDescription.MaxActivePartitions);
         UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStrategy, recreatedTopicDescription.AutoPartitioningStrategy);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStabilizationWindow, recreatedTopicDescription.AutoPartitioningStabilizationWindow);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningUpUtilizationPercent, recreatedTopicDescription.AutoPartitioningUpUtilizationPercent);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningDownUtilizationPercent, recreatedTopicDescription.AutoPartitioningDownUtilizationPercent);
 
         // Altering the minimum partition count may repartition asynchronously, so compare only the stable settings.
         UNIT_ASSERT_VALUES_EQUAL(recreatedTopicDescription.PartitionCount, 3);

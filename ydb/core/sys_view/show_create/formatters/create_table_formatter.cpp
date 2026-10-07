@@ -25,6 +25,7 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <algorithm>
 #include <limits>
 
 namespace NKikimr {
@@ -1381,20 +1382,21 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
 
     const auto& partitionStrategy = pqConfig.GetPartitionStrategy();
     bool autoPartitioning = false;
-    const char* alterAutoPartitioningStrategy = nullptr;
+    const char* autoPartitioningStrategy = nullptr;
     switch (partitionStrategy.GetPartitionStrategyType()) {
         case NKikimrPQ::TPQTabletConfig::DISABLED:
             break;
         case NKikimrPQ::TPQTabletConfig::CAN_SPLIT:
             autoPartitioning = true;
+            autoPartitioningStrategy = "scale_up";
             break;
         case NKikimrPQ::TPQTabletConfig::CAN_SPLIT_AND_MERGE:
             autoPartitioning = true;
-            alterAutoPartitioningStrategy = "scale_up_and_down";
+            autoPartitioningStrategy = "scale_up_and_down";
             break;
         case NKikimrPQ::TPQTabletConfig::PAUSED:
             autoPartitioning = true;
-            alterAutoPartitioningStrategy = "paused";
+            autoPartitioningStrategy = "paused";
             break;
     }
 
@@ -1420,9 +1422,13 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         del = ", ";
     }
 
-    if (canFormatExplicitPartitionCount && autoPartitioning) {
+    if (autoPartitioning) {
+        const ui32 effectiveMaxPartitionCount = partitionStrategy.GetMaxPartitionCount();
+        const ui32 creationMaxPartitionCount = effectiveMaxPartitionCount
+            ? effectiveMaxPartitionCount
+            : std::max<ui32>(1, partitionStrategy.GetMinPartitionCount());
         Stream << del << "TOPIC_MAX_ACTIVE_PARTITIONS = ";
-        Stream << partitionStrategy.GetMaxPartitionCount();
+        Stream << creationMaxPartitionCount;
         del = ", ";
     }
 
@@ -1432,11 +1438,31 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
 
     Stream << ");";
 
-    if (alterAutoPartitioningStrategy) {
+    if (autoPartitioning) {
+        Y_ENSURE(autoPartitioningStrategy, "Unexpected auto partitioning strategy");
+
         Stream << "ALTER TOPIC ";
         EscapeName(JoinPath({tablePath, cdcStream.GetName()}), Stream);
-        Stream << " SET (auto_partitioning_strategy = ";
-        EscapeString(alterAutoPartitioningStrategy, Stream);
+        Stream << " SET (min_active_partitions = " << partitionStrategy.GetMinPartitionCount();
+        Stream << ", max_active_partitions = " << partitionStrategy.GetMaxPartitionCount();
+        Stream << ", auto_partitioning_strategy = ";
+        EscapeString(autoPartitioningStrategy, Stream);
+        Stream << ", auto_partitioning_stabilization_window = INTERVAL(";
+
+        {
+            TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
+            const i64 stabilizationWindowUs = static_cast<i64>(partitionStrategy.GetScaleThresholdSeconds()) * 1000000;
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(
+                NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(stabilizationWindowUs));
+            Y_ENSURE(str.HasValue(), "Failed to convert auto partitioning stabilization window to string");
+            EscapeString(TString(str.AsStringRef()), Stream);
+        }
+
+        Stream << ")";
+        Stream << ", auto_partitioning_up_utilization_percent = "
+            << partitionStrategy.GetScaleUpPartitionWriteSpeedThresholdPercent();
+        Stream << ", auto_partitioning_down_utilization_percent = "
+            << partitionStrategy.GetScaleDownPartitionWriteSpeedThresholdPercent();
         Stream << ");";
     }
 }

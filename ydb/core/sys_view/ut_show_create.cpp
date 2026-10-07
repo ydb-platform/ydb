@@ -27,6 +27,9 @@ struct TChangefeedTopicSettings {
     ui64 MinActivePartitions = 0;
     ui64 MaxActivePartitions = 0;
     NTopic::EAutoPartitioningStrategy AutoPartitioningStrategy = NTopic::EAutoPartitioningStrategy::Unspecified;
+    TDuration AutoPartitioningStabilizationWindow;
+    ui32 AutoPartitioningUpUtilizationPercent = 0;
+    ui32 AutoPartitioningDownUtilizationPercent = 0;
     std::optional<size_t> InitialPartitionCount;
 
     bool operator==(const TChangefeedTopicSettings& other) const {
@@ -34,6 +37,9 @@ struct TChangefeedTopicSettings {
             && MinActivePartitions == other.MinActivePartitions
             && MaxActivePartitions == other.MaxActivePartitions
             && AutoPartitioningStrategy == other.AutoPartitioningStrategy
+            && AutoPartitioningStabilizationWindow == other.AutoPartitioningStabilizationWindow
+            && AutoPartitioningUpUtilizationPercent == other.AutoPartitioningUpUtilizationPercent
+            && AutoPartitioningDownUtilizationPercent == other.AutoPartitioningDownUtilizationPercent
             && InitialPartitionCount == other.InitialPartitionCount;
     }
 
@@ -43,6 +49,9 @@ struct TChangefeedTopicSettings {
             << ", min_active_partitions: " << MinActivePartitions
             << ", max_active_partitions: " << MaxActivePartitions
             << ", auto_partitioning_strategy: " << static_cast<ui32>(AutoPartitioningStrategy)
+            << ", auto_partitioning_stabilization_window_us: " << AutoPartitioningStabilizationWindow.MicroSeconds()
+            << ", auto_partitioning_up_utilization_percent: " << AutoPartitioningUpUtilizationPercent
+            << ", auto_partitioning_down_utilization_percent: " << AutoPartitioningDownUtilizationPercent
             << ", initial_partition_count: "
             << (InitialPartitionCount ? ToString(*InitialPartitionCount) : TString("not compared"))
             << " }";
@@ -255,7 +264,11 @@ private:
         settings.RetentionPeriod = description.GetRetentionPeriod();
         settings.MinActivePartitions = partitioningSettings.GetMinActivePartitions();
         settings.MaxActivePartitions = partitioningSettings.GetMaxActivePartitions();
-        settings.AutoPartitioningStrategy = partitioningSettings.GetAutoPartitioningSettings().GetStrategy();
+        const auto& autoPartitioningSettings = partitioningSettings.GetAutoPartitioningSettings();
+        settings.AutoPartitioningStrategy = autoPartitioningSettings.GetStrategy();
+        settings.AutoPartitioningStabilizationWindow = autoPartitioningSettings.GetStabilizationWindow();
+        settings.AutoPartitioningUpUtilizationPercent = autoPartitioningSettings.GetUpUtilizationPercent();
+        settings.AutoPartitioningDownUtilizationPercent = autoPartitioningSettings.GetDownUtilizationPercent();
         if (includeInitialPartitionCount) {
             settings.InitialPartitionCount = description.GetPartitions().size();
         }
@@ -2185,7 +2198,10 @@ Y_UNIT_TEST(TableChangefeedSettingsRoundTrip) {
             retention_period = INTERVAL('PT6H'),
             min_active_partitions = 3,
             max_active_partitions = 8,
-            auto_partitioning_strategy = 'scale_up_and_down'
+            auto_partitioning_strategy = 'scale_up_and_down',
+            auto_partitioning_stabilization_window = INTERVAL('PT15M'),
+            auto_partitioning_up_utilization_percent = 70,
+            auto_partitioning_down_utilization_percent = 25
         );
     )", false);
 
@@ -2223,6 +2239,56 @@ Y_UNIT_TEST(TableChangefeedSettingsRoundTrip) {
     )", "show_create_settings_paused", "feed", R"(
         ALTER TOPIC `/Root/show_create_settings_paused/feed`
             SET (auto_partitioning_strategy = 'paused');
+    )");
+}
+
+Y_UNIT_TEST(TableChangefeedStringKeyPartitionSettingsRoundTrip) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TShowCreateChecker checker(env);
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_string_key_settings (
+            Key Utf8,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_string_key_settings
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+    )", "show_create_string_key_settings", "feed", R"(
+        ALTER TOPIC `/Root/show_create_string_key_settings/feed` SET (
+            min_active_partitions = 3,
+            max_active_partitions = 4
+        );
+    )", false);
+}
+
+Y_UNIT_TEST(TableChangefeedUnlimitedMaxPartitionsRoundTrip) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TShowCreateChecker checker(env);
+
+    checker.CheckChangefeedRoundTrip(R"(
+        CREATE TABLE show_create_unlimited_max_settings (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_unlimited_max_settings
+            ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+    )", "show_create_unlimited_max_settings", "feed", R"(
+        ALTER TOPIC `/Root/show_create_unlimited_max_settings/feed` SET (
+            max_active_partitions = 0
+        );
     )");
 }
 

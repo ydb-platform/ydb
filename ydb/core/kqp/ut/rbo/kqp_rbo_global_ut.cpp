@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(KqpRboGlobalIUs) {
             if (allowed) {
                 TAssignStagesStage().RunStage(*root, f.RboCtx);
                 UNIT_ASSERT(left->Props.StageId == right->Props.StageId);
-                UNIT_ASSERT(left->Props.StageOutputIndex != right->Props.StageOutputIndex);
+                UNIT_ASSERT(GetReplicateOutputIndex(*left) != GetReplicateOutputIndex(*right));
             } else {
                 UNIT_ASSERT_EXCEPTION_CONTAINS(TAssignStagesStage().RunStage(*root, f.RboCtx),
                     yexception, "with channel spilling disabled");

@@ -281,9 +281,10 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
 
                 // The full physical-stage peephole performs this pruning later.
                 const bool pruneUnusedOutputs = !rboCtx.KqpCtx.Config->GetEnableNewRBOPhysicalStagePeephole();
-                currentStageBody = TPhysicalAggregationBuilder(aggregate, ctx, op->Pos, names, pruneUnusedOutputs,
-                    rboCtx.KqpCtx.Config->GetDqHashOperatorsUseBlocks())
-                    .BuildPhysicalOp(currentStageBody, memLimit);
+                currentStageBody = NPhysicalConvertionUtils::TransformStageOutput(currentStageBody, [&](TExprNode::TPtr body) {
+                    return TPhysicalAggregationBuilder(aggregate, ctx, op->Pos, names, pruneUnusedOutputs,
+                        rboCtx.KqpCtx.Config->GetDqHashOperatorsUseBlocks()).BuildPhysicalOp(body, memLimit);
+                }, GetReplicateOutputIndex(aggregate), ctx);
 
                 stages[opStageId] = currentStageBody;
                 stagePos[opStageId] = op->Pos;

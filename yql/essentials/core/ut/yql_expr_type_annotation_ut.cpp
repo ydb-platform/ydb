@@ -3,6 +3,7 @@
 #include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/ast/yql_ast_annotation.h>
 #include <yql/essentials/ast/yql_expr.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -200,27 +201,30 @@ Y_UNIT_TEST(AfterCutoffAlwaysUsesFixup) {
 
 } // Y_UNIT_TEST_SUITE(TDecimalConversionMode)
 
-Y_UNIT_TEST_SUITE(TMatchRecognizeParamsTypeAnnotation) {
+Y_UNIT_TEST_SUITE(TMatchRecognizeTypeAnnotation) {
 
-Y_UNIT_TEST(StructWithFuzzingAndColumnOrder) {
+Y_UNIT_TEST(PropagatesUniversalDefinePredicate) {
+    const TStringBuf program = R"((
+        (let result (MatchRecognizeDefines
+            (StructType '('"a" (DataType 'Bool)))
+            '('"P")
+            '('"P")
+            (lambda '(rows matched index) (InstanceOf (UniversalType)))))
+        (return result)
+    ))";
+
+    auto ast = ParseAst(program);
+    UNIT_ASSERT_C(ast.IsOk(), ast.Issues.ToString());
+
     TExprContext ctx;
-    TTypeAnnotationContext typesCtx;
-    typesCtx.DeriveColumnOrder = true;
-    typesCtx.FuzzUntypedLambda = true;
-    typesCtx.FuzzUniversal = true;
-    const TPositionHandle pos;
-    auto expr = ctx.NewCallable(pos, "MatchRecognizeParams", {
-                                                                 ctx.NewCallable(pos, "AsStruct", {}),
-                                                                 ctx.NewAtom(pos, "RowsPerMatch_OneRow"),
-                                                                 ctx.NewList(pos, {}),
-                                                                 ctx.NewList(pos, {}),
-                                                                 ctx.NewList(pos, {}),
-                                                             });
+    TExprNode::TPtr expr;
+    UNIT_ASSERT_C(CompileExpr(*ast.Root, expr, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
 
-    UNIT_ASSERT_C(InstantAnnotateTypes(expr, ctx, false, typesCtx), ctx.IssueManager.GetIssues().ToString());
-    UNIT_ASSERT(expr->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct);
+    TTypeAnnotationContext typesCtx;
+    UNIT_ASSERT_C(InstantAnnotateTypes(expr, ctx, /*wholeProgram=*/false, typesCtx), ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(expr->GetTypeAnn()->GetKind(), ETypeAnnotationKind::Universal);
 }
 
-} // Y_UNIT_TEST_SUITE(TMatchRecognizeParamsTypeAnnotation)
+} // Y_UNIT_TEST_SUITE(TMatchRecognizeTypeAnnotation)
 
 } // namespace NYql

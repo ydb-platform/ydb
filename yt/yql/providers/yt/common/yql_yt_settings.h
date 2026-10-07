@@ -169,8 +169,8 @@ public:
     NCommon::TConfSetting<TString, Static> DefaultCluster;
     NCommon::TConfSetting<TDuration, Static> BinaryExpirationInterval;
     NCommon::TConfSetting<bool, Static> IgnoreTypeV3;
-    NCommon::TConfSetting<bool, Static> _UseMultisetAttributes;
     NCommon::TConfSetting<TDuration, Static> FileCacheTtl;
+    NCommon::TConfSetting<bool, Static> _EnableFileCacheLock;
     NCommon::TConfSetting<TString, Static> _ImpersonationUser;
     NCommon::TConfSetting<EInferSchemaMode, Static> InferSchemaMode;
     NCommon::TConfSetting<ui32, Static> BatchListFolderConcurrency;

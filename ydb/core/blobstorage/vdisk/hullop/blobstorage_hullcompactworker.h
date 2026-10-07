@@ -971,7 +971,7 @@ namespace NKikimr {
         }
 
         bool UseStripeAllocator() const {
-            return TlsActivationContext && AppData()->FeatureFlags.GetEnableVDiskHeapAllocator();
+            return HullCtx->VCfg->UseHeapAllocator;
         }
 
         bool UseStripeSst() const {

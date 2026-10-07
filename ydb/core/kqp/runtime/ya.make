@@ -72,8 +72,10 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/helpers
     ydb/library/json_index
+    ydb/library/mkql_proto
     ydb/library/query_actor
     ydb/library/yql/dq/actors
+    ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common

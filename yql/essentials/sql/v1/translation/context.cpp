@@ -443,6 +443,15 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     return true;
 }
 
+void TContext::SetRelativePathPrefix(const TString& value) {
+    PathPrefix_ = BuildTablePath(Settings.PathPrefix, value);
+    for (auto& [cluster, prefix] : ClusterPathPrefixes_) {
+        if (prefix) {
+            prefix = BuildTablePath(prefix, value);
+        }
+    }
+}
+
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
     TStringBuf prefixPath = GetPrefixPath(service, cluster);
     if (prefixPath) {

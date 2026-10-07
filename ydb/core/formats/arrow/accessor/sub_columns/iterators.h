@@ -1,6 +1,6 @@
 #pragma once
 #include "columns_storage.h"
-#include "types.h"
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 #include "others_storage.h"
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
@@ -13,29 +13,30 @@ private:
     ui32 RecordIndex = 0;
     ui32 KeyIndex = 0;
     bool IsValidFlag = false;
-    bool HasValueFlag = false;
     bool IsColumnKeyFlag = false;
     EValueType ValueType = EValueType::BinaryJson;
-    // Current physical position as (array, local index)
-    const arrow::Array* CurrentArray = nullptr;
-    ui32 LocalIndex = 0;
+    std::optional<TJsonValueView> CurrentValue;
 
     void InitFromIterator(const TColumnsData::TIterator& iterator) {
         RecordIndex = iterator.GetCurrentRecordIndex();
         KeyIndex = RemappedKey.value_or(iterator.GetKeyIndex());
         IsValidFlag = true;
-        HasValueFlag = iterator.HasValue();
-        CurrentArray = &iterator.GetArray();
-        LocalIndex = iterator.GetLocalIndex();
+        if (iterator.HasValue()) {
+            CurrentValue.emplace(iterator.GetValue());
+        } else {
+            CurrentValue.reset();
+        }
     }
 
     void InitFromIterator(const TOthersData::TIterator& iterator) {
         RecordIndex = iterator.GetRecordIndex();
         KeyIndex = RemapKeys.size() ? RemapKeys[iterator.GetKeyIndex()] : iterator.GetKeyIndex();
         IsValidFlag = true;
-        HasValueFlag = iterator.HasValue();
-        CurrentArray = &iterator.GetArray();
-        LocalIndex = iterator.GetLocalIndex();
+        if (iterator.HasValue()) {
+            CurrentValue.emplace(iterator.GetValue());
+        } else {
+            CurrentValue.reset();
+        }
     }
 
     bool Initialize() {
@@ -161,30 +162,29 @@ public:
     // Re-encode the current value to BinaryJson.
     NBinaryJson::TBinaryJson GetValueAsBinaryJson() const {
         AFL_VERIFY(IsValidFlag);
-        return ArrayElementToBinaryJson(*CurrentArray, LocalIndex, ValueType);
+        AFL_VERIFY(CurrentValue);
+        return CurrentValue->ToBinaryJson();
     }
 
     EValueType GetValueType() const {
         return ValueType;
     }
-    const arrow::Array& GetArray() const {
+    const TJsonValueView& GetValueView() const {
         AFL_VERIFY(IsValidFlag);
-        return *CurrentArray;
-    }
-    ui32 GetLocalIndex() const {
-        AFL_VERIFY(IsValidFlag);
-        return LocalIndex;
+        AFL_VERIFY(CurrentValue);
+        return *CurrentValue;
     }
     ui32 GetValueSize() const {
         AFL_VERIFY(IsValidFlag);
-        return ArrayElementSize(*CurrentArray, LocalIndex, ValueType);
+        AFL_VERIFY(CurrentValue);
+        return CurrentValue->GetValueSize();
     }
 
     NJson::TJsonValue GetValue() const;
 
     bool HasValue() const {
         AFL_VERIFY(IsValidFlag);
-        return HasValueFlag;
+        return CurrentValue.has_value();
     }
     bool operator<(const TGeneralIterator& item) const {
         return std::tie(item.RecordIndex, item.KeyIndex) < std::tie(RecordIndex, KeyIndex);

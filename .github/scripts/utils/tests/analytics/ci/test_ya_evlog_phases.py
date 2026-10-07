@@ -64,7 +64,7 @@ class EvlogPhasesTest(unittest.TestCase):
             ],
         )
 
-    def test_tests_break_where_build_overlaps(self):
+    def test_tests_stay_beside_overlapping_build(self):
         events = [
             _node("Run(test_one)", 0, 80),
             _node("Run(hash$(BUILD_ROOT)/ydb/core/hive/tx.cpp.o)", 0, 4),
@@ -74,9 +74,8 @@ class EvlogPhasesTest(unittest.TestCase):
             phases_from_events(events, gap=15),
             [
                 ("ya_build", 0, 4),
-                ("ya_tests", 4, 29),
+                ("ya_tests", 0, 80),
                 ("ya_build", 29, 30),
-                ("ya_tests", 30, 80),
             ],
         )
 

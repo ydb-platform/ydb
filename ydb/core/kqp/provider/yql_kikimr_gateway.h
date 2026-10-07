@@ -900,8 +900,16 @@ public:
 };
 
 class TExternalDataSource {
+public:
+    enum class EKind {
+        Unknown,
+        Table,
+        Topic,
+    };
+
 private:
-    TString Type;
+    std::optional<EDatabaseType> DatabaseType;
+    EKind Kind = EKind::Unknown;
     TString Location;
     TString Installation;
     TString DataSourcePath;
@@ -915,7 +923,8 @@ private:
 public:
     static TExternalDataSource CreateFromDescription(
         const NKikimrSchemeOp::TExternalDataSourceDescription& description,
-        const TString& dataSourcePath);
+        const TString& dataSourcePath,
+        EKind kind = EKind::Unknown);
 
     static TExternalDataSource CreateForLocalTopic(const TString& cluster,
         const TString& database, const TString& transientToken);
@@ -925,18 +934,21 @@ public:
     }
 
     void ApplyInferredMetadata(const TString& type, const TString& dataSourcePath);
-    void SetYdbTopicType();
+    void InitObjectKind(EKind kind);
 
     bool IsYdb() const;
     bool IsYdbTopics() const;
     bool IsYdbBased() const { return IsYdb() || IsYdbTopics(); }
 
-    const TString& GetType() const { return Type; }
+    const std::optional<EDatabaseType>& GetDatabaseType() const { return DatabaseType; }
     const TString& GetLocation() const { return Location; }
     const TString& GetDataSourcePath() const { return DataSourcePath; }
     TString ComposeStructuredTokenJson() const {
         return Auth.ComposeStructuredTokenJson();
     }
+
+    // Resolve the provider name using the connection type and the resolved object kind.
+    TString GetProviderName(const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory) const;
 
     TString GetDatabaseName() const;
     bool IsTlsEnabled() const;
@@ -949,7 +961,7 @@ public:
 class TExternalTable {
 private:
     struct TUnresolved {
-        TString Type;
+        std::optional<EDatabaseType> DatabaseType;
         TString DataSourcePath;
     };
 
@@ -969,11 +981,11 @@ public:
     // Allowed only once for an underlying source of the same type.
     void InitExternalDataSource(const TKikimrTableMetadataPtr& metadata);
 
-    const TString& GetType() const {
+    const std::optional<EDatabaseType>& GetDatabaseType() const {
         if (const auto* unresolved = std::get_if<TUnresolved>(&State)) {
-            return unresolved->Type;
+            return unresolved->DatabaseType;
         }
-        return GetUnderlyingDataSource().GetType();
+        return GetUnderlyingDataSource().GetDatabaseType();
     }
 
     const TString& GetLocation() const { return Location; }
@@ -1065,12 +1077,12 @@ struct TKikimrTableMetadata : public TThrRefBase {
         return std::get<TExternalDataSource>(ExternalSource);
     }
 
-    const TString& GetExternalSourceType() const {
+    const std::optional<EDatabaseType>& GetExternalSourceDatabaseType() const {
         if (const auto* dataSource = std::get_if<TExternalDataSource>(&ExternalSource)) {
-            return dataSource->GetType();
+            return dataSource->GetDatabaseType();
         }
         YQL_ENSURE(IsExternalTable(), "Metadata does not hold an external source");
-        return std::get<TExternalTable>(ExternalSource).GetType();
+        return std::get<TExternalTable>(ExternalSource).GetDatabaseType();
     }
 
     const TExternalDataSource& GetResolvedExternalDataSource() const {

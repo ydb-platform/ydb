@@ -516,7 +516,8 @@ void TColumnShard::RunAlterStore(
 }
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID()));
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", TabletID()});
     YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, periodic",
         {"event", "EnqueueBackgroundActivities"},
         {"periodic", periodic});
@@ -646,8 +647,9 @@ private:
     }
 
     virtual void DoOnFinished(NOlap::NDataFetcher::TCurrentContext&& context) override {
-        NActors::TLogContextGuard g(
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"tabletId", TabletId},
+            {"parentId", ParentActorId});
         if (NeedBlobs) {
             AFL_VERIFY(context.GetResourceGuards().size() == 3);
         } else {
@@ -902,15 +904,18 @@ void TColumnShard::SetupMetadata() {
         return;
     }
     std::vector<NOlap::TCSMetadataRequest> requests = TablesManager.MutablePrimaryIndex().CollectMetadataRequests();
-    for (auto&& i : requests) {
-        const ui64 accessorsMemory =
-            i.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
-        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-            ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i.GetRequest()->GetTaskId(),
-                                        TTLTaskSubscription, std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()),
-                                        std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()),
-                                        DataAccessorsManager.GetObjectPtrVerified(), nullptr));
+    for (const auto& request : requests) {
+        SubmitMetadataRequest(request);
     }
+}
+
+void TColumnShard::SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request) {
+    const ui64 memory = request.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
+    auto task = std::make_shared<TAccessorsMemorySubscriber>(memory, request.GetRequest()->GetTaskId(), TTLTaskSubscription,
+        std::shared_ptr<NOlap::TDataAccessorsRequest>(request.GetRequest()),
+        std::make_shared<TCSMetadataSubscriber>(SelfId(), request.GetProcessor(), Generation()), DataAccessorsManager.GetObjectPtrVerified(),
+        nullptr);
+    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor, task);
 }
 
 bool TColumnShard::SetupTtl() {
@@ -1010,8 +1015,14 @@ void TColumnShard::SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHol
     for (const auto& [dropSnapshot, pathIds] : TablesManager.GetPathsToDrop()) {
         for (const TInternalPathId pathId : pathIds) {
             if (snapshotHolders.CouldUseTable(pathId, dropSnapshot)) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
-                ("event", "CleanupTableMetadataDeferredByActiveScan")("path_id", pathId)("drop_snapshot", dropSnapshot.DebugString());
+                YDB_LOG_DEBUG("",
+                    {"event", "CleanupTableMetadataDeferredByActiveScan"},
+                    {"pathId", pathId},
+                    {"dropSnapshot", dropSnapshot.DebugString()});
+                continue;
+            }
+            if (OperationsManager->HasWriteOperations(pathId)) {
+                YDB_LOG_DEBUG("", {"event", "CleanupTableMetadataDeferredByWriteOperations"}, {"path_id", pathId});
                 continue;
             }
             pathIdsToCleanup.insert(pathId);
@@ -1669,7 +1680,9 @@ public:
         for (auto&& i : PortionsByPath) {
             const auto& granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(i.first);
             for (auto&& c : i.second.GetConsumers()) {
-                NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
+                YDB_LOG_CREATE_CONTEXT(
+                    {"consumer", c.first},
+                    {"pathId", i.first});
                 YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump size",
                     {"size", c.second.GetPortionsCount()});
                 for (auto&& portion : c.second.GetPortions(granule)) {
@@ -1857,6 +1870,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiato
 };
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx) {
+    SharingSessionsManager->OnSharingAdmission();
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"process", "BlobsSharing"},
         {"event", "TEvApplyLinksModification"},
@@ -1951,8 +1965,10 @@ void TColumnShard::ActivateTiering(const TInternalPathId pathId, const THashSet<
 }
 
 STFUNC(TColumnShard::StateWork) {
-    const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
-        "self_id", SelfId())("ev", ev->GetTypeName());
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", TabletID()},
+        {"selfId", SelfId()},
+        {"ev", ev->GetTypeName()});
     TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvTxProcessing::TEvReadSet, Handle);
@@ -1973,6 +1989,8 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvUpdateChannelApproximateFreeSpace, Handle);
         HFunc(TEvPrivate::TEvStartCompaction, Handle);
         HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
+        HFunc(TEvPrivate::TEvContinueFindEmptyHistoryIntervals, Handle);
+        HFunc(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady, Handle);
         HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
 
         HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
@@ -2032,8 +2050,11 @@ STFUNC(TColumnShard::StateWork) {
 }
 
 void TColumnShard::Enqueue(STFUNC_SIG) {
-    const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
-        "self_id", SelfId())("process", "Enqueue")("ev", ev->GetTypeName());
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", TabletID()},
+        {"selfId", SelfId()},
+        {"process", "Enqueue"},
+        {"ev", ev->GetTypeName()});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvTieringModified, HandleInit);
         HFunc(TEvPrivate::TEvNormalizerResult, Handle);

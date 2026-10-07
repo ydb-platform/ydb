@@ -15,6 +15,7 @@ SET(ORIG_SRC_DIR ${ARCADIA_ROOT}/ydb/library/yql/dq/comp_nodes)
 SET(ORIG_SOURCES
     yql_common_dq_factory.cpp
     dq_hash_combine.cpp
+    dq_hash_combine_layout.cpp
     dq_hash_operator_common.cpp
     dq_hash_operator_serdes.cpp
     dq_program_builder.cpp

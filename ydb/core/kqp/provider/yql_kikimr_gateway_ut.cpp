@@ -411,7 +411,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto response = responseFuture.GetValue();
         response.Issues().PrintTo(Cerr);
         UNIT_ASSERT(response.Success());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalTable().GetType(), "ObjectStorage");
+        UNIT_ASSERT_VALUES_EQUAL(ToStringDatabaseType(response.Metadata->ExternalTable().GetDatabaseType()), "ObjectStorage");
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalTable().GetLocation(), "/");
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalTable().GetDataSourcePath(), externalDataSourceName);
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalTable().GetUnderlyingDataSource().GetLocation(), "my-bucket");

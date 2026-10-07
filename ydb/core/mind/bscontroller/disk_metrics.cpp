@@ -182,12 +182,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
                 pdiskIds.push_back(pdiskId);
             }
 
-            // NumActiveDynamicSlots is maintained incrementally with owner weights that depend on
-            // whether the effective expected slot size is set; when a metrics update flips it
-            // (e.g. the PDisk started reporting ExpectedSlotSize inferred from global settings),
-            // the counter must be recomputed with the new weights
-            const bool hadFixedSlotSize = pdisk->GetEffectiveExpectedSlotSize() != 0;
-
+            const ui32 oldSlotSizeInUnits = pdisk->GetEffectiveSlotSizeInUnits();
             if (pdisk->UpdatePDiskMetrics(m, now)) {
                 // this PDisk just did obtain full metrics set, we can unblock any pending SelectGroups operations
                 for (auto& [id, slot] : pdisk->VSlotsOnPDisk) {
@@ -196,7 +191,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
                     }
                 }
             }
-            if ((pdisk->GetEffectiveExpectedSlotSize() != 0) != hadFixedSlotSize) {
+            if (pdisk->GetEffectiveSlotSizeInUnits() != oldSlotSizeInUnits) {
                 RecomputePDiskNumActiveDynamicSlots(pdisk);
             }
             pdisk->UpdateOperational(true);

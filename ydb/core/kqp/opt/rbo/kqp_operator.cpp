@@ -477,9 +477,11 @@ TInfoUnitId TMapElement::GetColumnAccess() const {
 /**
  * OpMap operator methods
  */
-TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, TMapIUs elements)
+TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, TMapIUs elements, bool needToPush)
     : TOpMap(std::move(input), pos, TPhysicalOpProps{}, std::move(elements))
-{}
+{
+    NeedToPush = needToPush;
+}
 
 TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props,
     TMapIUs elements)

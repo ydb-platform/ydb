@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <ranges>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_CONVEYOR
+
 namespace NKikimr::NConveyorComposite {
 
 TProcessCategory::TProcessCategory(const NConfig::TCategory& config, TCounters& counters)
@@ -28,8 +30,11 @@ TSchedulerQueryIdentity TProcessCategory::UnregisterProcess(const ui64 processId
     auto it = Processes.find(processId);
     AFL_VERIFY(it != Processes.end());
     if (const auto tasksCount = it->second->GetTasksCount()) {
-        AFL_WARN(NKikimrServices::TX_CONVEYOR)
-        ("event", "unregister_process_with_queued_tasks")("process_id", processId)("category", ::ToString(Category))("tasks_count", tasksCount);
+        YDB_LOG_WARN("",
+            {"event", "unregister_process_with_queued_tasks"},
+            {"processId", processId},
+            {"category", ::ToString(Category)},
+            {"tasksCount", tasksCount});
     }
     const auto identity = it->second->GetSchedulerQueryIdentity();
     auto identityIt = ProcessesByIdentity.find(identity);

@@ -26,7 +26,7 @@
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 namespace NYT::NYTree {
 
@@ -527,7 +527,7 @@ private:
     const IInvokerPtr WorkerInvoker_;
     const TDuration UpdatePeriod_;
 
-    NThreading::TAtomicObject<TYsonString> CachedString_ = {BuildYsonStringFluently().Entity()};
+    TAtomicObject<TYsonString> CachedString_ = {BuildYsonStringFluently().Entity()};
 
     void Produce(IYsonConsumer* consumer)
     {
@@ -686,7 +686,7 @@ public:
 private:
     const TErrorOr<INodePtr> TreeOrError_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, Lock_);
     THashMap<TCacheKey, TSharedRefArray> KeyToResponseMessage_;
     TCacheProfilingCountersPtr ProfilingCounters_;
 };

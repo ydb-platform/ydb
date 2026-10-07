@@ -133,17 +133,12 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
         LogTitle.GetWithTime().c_str(),
         SelfId().ToString().data());
 
-    if (!Executor()->GetStats().IsFollower()) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Executing InitSchema transaction",
-            LogTitle.GetWithTime().c_str());
-        ExecuteTx(ctx, CreateTx<TInitSchema>());
-    }
-
-    // allow pipes to connect
-    SignalTabletActive(ctx);
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Executing InitSchema transaction",
+        LogTitle.GetWithTime().c_str());
+    ExecuteTx(ctx, CreateTx<TInitSchema>());
 }
 
 void TPartitionActor::DefaultSignalTabletActive(const TActorContext& ctx)
@@ -240,15 +235,15 @@ void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
     Die(ctx);
 }
 
-void TPartitionActor::ReportTabletState(const TActorContext& ctx)
+void TPartitionActor::ReportDiskId(const TActorContext& ctx)
 {
     auto service =
         NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
 
     auto request = std::make_unique<
-        NNodeWhiteboard::TEvWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>(
-        TabletID(),
-        STATE_WORK);
+        NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>();
+    request->Record.SetTabletId(TabletID());
+    request->Record.SetNbsDiskId(VolumeConfig.GetDiskId());
 
     NYdb::NBS::Send(ctx, service, std::move(request));
 }

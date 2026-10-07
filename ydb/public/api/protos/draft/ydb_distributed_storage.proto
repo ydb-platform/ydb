@@ -245,6 +245,10 @@ message PDisk {
     uint64 max_read_throughput_bytes_per_second = 22;
     uint64 max_write_throughput_bytes_per_second = 23;
     uint32 max_iops = 24;
+    // Fixed quota per allocation unit in bytes; zero selects slot-weight-based quotas.
+    uint64 expected_slot_size = 25;
+    // Physical upper bound for one VDisk's quota, in bytes; unset on older servers.
+    optional uint64 user_chunk_pool_size = 26;
 }
 
 // A former replica of a VDisk that keeps serving reads until the new replica

@@ -162,6 +162,7 @@ class FieldDescriptor(DescriptorBase):
     number: int
     type: int
     cpp_type: int
+    label: int
     @property
     def is_required(self) -> bool: ...
     @property

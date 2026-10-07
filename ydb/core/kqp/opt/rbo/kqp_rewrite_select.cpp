@@ -1,5 +1,7 @@
 #include "kqp_rbo_transformer.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -1843,6 +1845,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
                 if (TKqlReadTableRanges::Match(childExpr.Get())) {
                     auto readExpr = TKqlReadTableRanges(childExpr);
+                    YQL_ENSURE(!TKqpReadTableSettings::Parse(readExpr).Sampling,
+                        "Sampling is not supported by the relational optimizer");
                     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readExpr.Table().Path());
 
                     // clang-format off

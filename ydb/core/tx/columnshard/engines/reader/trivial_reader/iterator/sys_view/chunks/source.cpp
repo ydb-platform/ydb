@@ -44,7 +44,8 @@ class TChunkDetailsFetchLogic: public NCommon::IKernelFetchLogic {
 
 public:
     TChunkDetailsFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(entityId, storagesManager) {
+        : TBase(entityId, storagesManager)
+    {
     }
 
     void Add(std::shared_ptr<NCommon::IKernelFetchLogic> fetcher) {

@@ -452,7 +452,8 @@ private:
 
 public:
     explicit TDataSourceLease(std::shared_ptr<IDataSource>&& source)
-        : Source(std::move(source)) {
+        : Source(std::move(source))
+    {
         AFL_VERIFY(Source);
     }
 

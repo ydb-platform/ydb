@@ -105,7 +105,8 @@ public:
         : TBase(sourceIdx, pathId, tabletId, std::move(start), std::move(finish), std::nullopt, portion->RecordSnapshotMin(),
               portion->RecordSnapshotMin(), context)
         , Portion(std::move(portion))
-        , PortionSchema(std::move(schema)) {
+        , PortionSchema(std::move(schema))
+    {
     }
 };
 

@@ -104,6 +104,11 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+<<<<<<< HEAD
+=======
+    hooks/abstract
+    ut_cut_history
+>>>>>>> 0911c4ac33a (fixed race (#55336))
     ut_rw
     ut_schema
     backup

@@ -9,8 +9,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/feature_flags_service.h>
-#include <ydb/core/driver_lib/run/auto_config_initializer.h>
-#include <ydb/core/driver_lib/run/config_helpers.h>
+#include <ydb/core/driver_lib/actor_system_config/auto_config_initializer.h>
+#include <ydb/core/driver_lib/actor_system_config/config_helpers.h>
+#include <ydb/core/driver_lib/run_config/resource_broker_config.h>
 #include <ydb/core/viewer/viewer.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/grpc_services/db_metadata_cache.h>
@@ -40,7 +41,6 @@
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
-#include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/persqueue_v1/topic_deferred_publish.h>

@@ -1,5 +1,5 @@
 #pragma once
-#include "config.h"
+#include <ydb/core/driver_lib/run_config/config.h>
 #include "factories.h"
 #include "service_initializer.h"
 

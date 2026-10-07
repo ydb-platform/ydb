@@ -11,7 +11,6 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    auto_config_initializer_ut.cpp
     run_ut.cpp
 )
 

@@ -78,6 +78,7 @@ PEERDIR(
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/testlib/actors
+    ydb/core/testlib/tablet_helpers
     ydb/core/testlib/basics
     ydb/core/tx/columnshard
     ydb/core/tx/coordinator
@@ -151,5 +152,6 @@ RECURSE(
     basics
     default
     grpc_request
+    tablet_helpers
     pg
 )

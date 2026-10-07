@@ -1,10 +1,32 @@
 #include "test_runtime.h"
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NActors;
 
 namespace {
+    class TTimerService : public TActorBootstrapped<TTimerService> {
+        TActorId Edge;
+    public:
+        void Bootstrap() {
+            Become(&TThis::StateRequest);
+        }
+        STFUNC(StateRequest) {
+            if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+                Edge = ev->Sender;
+                Become(&TThis::StateWork);
+                Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup);
+            }
+        }
+        STFUNC(StateWork) {
+            if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+                Send(Edge, new TEvents::TEvWakeup);
+                PassAway();
+            }
+        }
+    };
+
     class ITestSubsystem : public ISubSystem {
     public:
         virtual ui32 GetNodeIndex() const = 0;
@@ -58,4 +80,24 @@ Y_UNIT_TEST_SUITE(TestRuntimeSubsystems) {
     Y_UNIT_TEST(RealThreadsRuntime) {
         CheckNodeSubsystems(true);
     }
+    Y_UNIT_TEST(SetupServicesSupportLookupAndTimers) {
+        TTestActorRuntimeBase runtime;
+        const TActorId service(0, "testtimer");
+        auto* actor = new TTimerService;
+        runtime.SetupNodeSubSystems = [service, actor](ui32, TActorSystemSetup* setup) {
+            setup->LocalServices.emplace_back(service,
+                TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0));
+        };
+        runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime,
+                TAutoPtr<IEventHandle>& event, TDuration, TInstant&) {
+            return !runtime.IsScheduleForActorEnabled(event->GetRecipientRewrite());
+        });
+        runtime.EnableScheduleForActor(service);
+        runtime.Initialize();
+        UNIT_ASSERT(runtime.FindActor(service, ui32{0}) == actor);
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Send(service, edge, new TEvents::TEvWakeup, 0, true);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(edge, TDuration::Seconds(1)));
+    }
+
 }

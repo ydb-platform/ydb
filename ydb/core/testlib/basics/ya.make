@@ -8,6 +8,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/testlib/basics/core
+    ydb/core/blobstorage/subsystem/real
     library/cpp/regex/pcre
     library/cpp/testing/unittest
     ydb/core/base
@@ -51,6 +53,7 @@ ENDIF()
 END()
 
 RECURSE(
+    core
     default
     pg
 )

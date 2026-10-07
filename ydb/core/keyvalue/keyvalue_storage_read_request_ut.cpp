@@ -2,7 +2,8 @@
 #include "keyvalue_storage_request.h"
 #include "keyvalue_state.h"
 
-#include <ydb/core/util/actorsys_test/testactorsys.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -125,24 +126,24 @@ struct TTestEnv {
     {
     }
 
-    void AddStorageGroup(TTestActorSystem &runtime, ui64 groupId) {
+    void AddStorageGroup(TTestActorRuntime &runtime, ui64 groupId) {
         if (GroupActors.count(groupId)) {
             return;
         }
 
-        TActorId groupActor = runtime.Register(new TBlobStorageMock(groupId, &BlobStorageState), 1);
+        TActorId groupActor = runtime.Register(new TBlobStorageMock(groupId, &BlobStorageState), 0);
         TActorId proxyId = MakeBlobStorageProxyID(groupId);
-        runtime.RegisterService(proxyId, groupActor);
+        runtime.RegisterService(proxyId, groupActor, 0);
         GroupActors[groupId] = groupActor;
     }
 
-    void AddStorageGroups(TTestActorSystem &runtime, const std::vector<ui32> &groupIds) {
+    void AddStorageGroups(TTestActorRuntime &runtime, const std::vector<ui32> &groupIds) {
         for (ui32 groupId : groupIds) {
             AddStorageGroup(runtime, groupId);
         }
     }
 
-    void BindGroupsToChannel(TTestActorSystem &runtime, const std::vector<ui32> &groupIds)
+    void BindGroupsToChannel(TTestActorRuntime &runtime, const std::vector<ui32> &groupIds)
     {
         AddStorageGroups(runtime, groupIds);
         for (ui32 channelIdx = 0; channelIdx < groupIds.size(); ++channelIdx) {
@@ -269,19 +270,19 @@ Y_UNIT_TEST_SUITE(KeyValueReadStorage) {
 void RunTest(TTestEnv &env, TReadRequestBuilder &builder,
         const std::vector<ui32> &groupIds, NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_OK,
         const TString &expectedError = {}) {
-    TTestActorSystem runtime(1);
-    runtime.Start();
+    TTestActorRuntime runtime(1, false);
+    runtime.Initialize(TAppPrepare(TAppPrepare::TLightweightTag{}).Unwrap());
     runtime.SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
     env.BindGroupsToChannel(runtime, groupIds);
 
-    TActorId edgeActor = runtime.AllocateEdgeActor(1);
+    TActorId edgeActor = runtime.AllocateEdgeActor(0);
     auto [intermediate, expectedValues] = builder.Build(edgeActor, edgeActor, 1, 1);
 
-    runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.release(), 1, &env.State, env.State.GetLifetimeToken()), 1);
+    runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.release(), 1, &env.State, env.State.GetLifetimeToken()), 0);
 
-    std::unique_ptr<IEventHandle> ev = runtime.WaitForEdgeActorEvent({edgeActor});
+    auto ev = runtime.GrabEdgeEvent<TEvKeyValue::TEvReadResponse>(edgeActor);
     UNIT_ASSERT_C(ev->Type == static_cast<ui64>(TEvKeyValue::EvReadResponse), "Type# " << ev->GetTypeName());
-    TEvKeyValue::TEvReadResponse *response = ev->Get<TEvKeyValue::TEvReadResponse>();
+    TEvKeyValue::TEvReadResponse *response = ev->Get();
     NKikimrKeyValue::ReadResult &record = response->Record;
     UNIT_ASSERT_VALUES_EQUAL(record.msg(), expectedError);
 
@@ -296,7 +297,6 @@ void RunTest(TTestEnv &env, TReadRequestBuilder &builder,
                 << " Message# " << record.msg());
     }
 
-    runtime.Stop();
 }
 
 Y_UNIT_TEST(ReadOk) {
@@ -427,12 +427,12 @@ Y_UNIT_TEST(ReadNoDataWithoutRefCount) {
 void RunStorageRequestNoDataTest(TTestEnv &env, TReadRequestBuilder &builder,
         const std::vector<ui32> &groupIds)
 {
-    TTestActorSystem runtime(1);
-    runtime.Start();
+    TTestActorRuntime runtime(1, false);
+    runtime.Initialize(TAppPrepare(TAppPrepare::TLightweightTag{}).Unwrap());
     runtime.SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
     env.BindGroupsToChannel(runtime, groupIds);
 
-    TActorId edgeActor = runtime.AllocateEdgeActor(1);
+    TActorId edgeActor = runtime.AllocateEdgeActor(0);
     auto [intermediate, expectedValues] = builder.Build(edgeActor, edgeActor, 1, 1);
     Y_UNUSED(expectedValues);
 
@@ -441,11 +441,11 @@ void RunStorageRequestNoDataTest(TTestEnv &env, TReadRequestBuilder &builder,
     intermediate->ReadCommand.reset();
     intermediate->EvType = TEvKeyValue::TEvRequest::EventType;
 
-    runtime.Register(CreateKeyValueStorageRequest(std::move(intermediate), env.TabletInfo.release(), 1, &env.State, env.State.GetLifetimeToken()), 1);
+    runtime.Register(CreateKeyValueStorageRequest(std::move(intermediate), env.TabletInfo.release(), 1, &env.State, env.State.GetLifetimeToken()), 0);
 
-    std::unique_ptr<IEventHandle> ev = runtime.WaitForEdgeActorEvent({edgeActor});
+    auto ev = runtime.GrabEdgeEvent<TEvKeyValue::TEvIntermediate>(edgeActor);
     UNIT_ASSERT_C(ev->Type == static_cast<ui64>(TEvKeyValue::EvIntermediate), "Type# " << ev->GetTypeName());
-    TEvKeyValue::TEvIntermediate *response = ev->Get<TEvKeyValue::TEvIntermediate>();
+    TEvKeyValue::TEvIntermediate *response = ev->Get();
 
     const auto &read = response->Intermediate->Reads.front();
     UNIT_ASSERT_VALUES_EQUAL(read.Status, NKikimrProto::NODATA);
@@ -453,7 +453,6 @@ void RunStorageRequestNoDataTest(TTestEnv &env, TReadRequestBuilder &builder,
     UNIT_ASSERT_VALUES_EQUAL(read.Message, "");
     UNIT_ASSERT_VALUES_EQUAL(read.ReadItems.front().Status, NKikimrProto::NODATA);
 
-    runtime.Stop();
 }
 
 Y_UNIT_TEST(StorageRequestReadNoDataWithoutRefCount) {
@@ -471,19 +470,19 @@ void RunTest(TTestEnv &env, TRangeReadRequestBuilder &builder, const std::vector
         NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_OK,
         const TString &expectedError = {})
 {
-    TTestActorSystem runtime(1);
-    runtime.Start();
+    TTestActorRuntime runtime(1, false);
+    runtime.Initialize(TAppPrepare(TAppPrepare::TLightweightTag{}).Unwrap());
     runtime.SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
     env.BindGroupsToChannel(runtime, groupIds);
 
-    TActorId edgeActor = runtime.AllocateEdgeActor(1);
+    TActorId edgeActor = runtime.AllocateEdgeActor(0);
     auto [intermediate, expectedValues] = builder.Build(edgeActor, edgeActor, 1, 1);
 
-    runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.release(), 1, &env.State, env.State.GetLifetimeToken()), 1);
+    runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.release(), 1, &env.State, env.State.GetLifetimeToken()), 0);
 
-    std::unique_ptr<IEventHandle> ev = runtime.WaitForEdgeActorEvent({edgeActor});
+    auto ev = runtime.GrabEdgeEvent<TEvKeyValue::TEvReadRangeResponse>(edgeActor);
     UNIT_ASSERT(ev->Type == TEvKeyValue::EvReadRangeResponse);
-    TEvKeyValue::TEvReadRangeResponse *response = ev->Get<TEvKeyValue::TEvReadRangeResponse>();
+    TEvKeyValue::TEvReadRangeResponse *response = ev->Get();
     NKikimrKeyValue::ReadRangeResult &record = response->Record;
     UNIT_ASSERT_VALUES_EQUAL(record.msg(), expectedError);
 
@@ -502,7 +501,6 @@ void RunTest(TTestEnv &env, TRangeReadRequestBuilder &builder, const std::vector
                 << " Message# " << record.msg());
     }
 
-    runtime.Stop();
 }
 
 Y_UNIT_TEST(ReadRangeStorageErrorReason) {

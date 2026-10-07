@@ -14,8 +14,8 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
-    ydb/core/testlib/default
-    ydb/core/util/actorsys_test
+    ydb/core/testlib/tablet_helpers
+    ydb/core/blobstorage/subsystem/mock
 )
 
 YQL_LAST_ABI_VERSION()

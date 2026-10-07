@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/library/yaml_config)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(4)
+SPLIT_FACTOR(24)
 
 PEERDIR(
     ydb/core/path_aliasing

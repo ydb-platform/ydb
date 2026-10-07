@@ -10877,6 +10877,110 @@ FROM (
                           expectedResult, NQuery::EExecMode::Execute);
     }
 
+    Y_UNIT_TEST_TWIN(SysViewNodes, NewRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false).SetNodeCount(3));
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        const auto firstNode = kikimr.GetTestServer().GetRuntime()->GetNodeId(0);
+        const auto countersBefore = GetNewRBOCompileCounters(kikimr);
+
+        const TVector<std::pair<TString, TString>> queries = {
+            // The test runtime reports zero CPU threads; the sum must still be non-NULL.
+            {"SELECT SUM(CpuThreads) FROM `/Root/.sys/nodes`;", "[[[0u]]]"},
+            {"SELECT COUNT(*) FROM `/Root/.sys/nodes`;", "[[3u]]"},
+            {"SELECT NodeId, Host FROM `/Root/.sys/nodes` ORDER BY NodeId;",
+                Sprintf(R"([[[%du];["::1"]];[[%du];["::1"]];[[%du];["::1"]]])",
+                    firstNode, firstNode + 1, firstNode + 2)},
+            {Sprintf("SELECT NodeId FROM `/Root/.sys/nodes` WHERE NodeId = %du;", firstNode + 1),
+                Sprintf("[[[%du]]]", firstNode + 1)},
+            {Sprintf("SELECT NodeId FROM `/Root/.sys/nodes` WHERE NodeId > %du ORDER BY NodeId DESC;", firstNode),
+                Sprintf("[[[%du]];[[%du]]]", firstNode + 2, firstNode + 1)},
+            {Sprintf("SELECT SUM(CpuThreads), COUNT(*) FROM `/Root/.sys/nodes` WHERE NodeId > %du;", firstNode + 2),
+                "[[#;0u]]"},
+        };
+        for (const auto& [query, expected] : queries) {
+            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx(),
+                NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, query);
+        }
+
+        auto scan = kikimr.GetTableClient().StreamExecuteScanQuery(queries.front().first).GetValueSync();
+        UNIT_ASSERT_C(scan.IsSuccess(), scan.GetIssues().ToString());
+        CompareYson(queries.front().second, StreamResultToYson(scan));
+
+        const auto countersAfter = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(countersAfter.second, countersBefore.second);
+        UNIT_ASSERT_VALUES_EQUAL(countersAfter.first - countersBefore.first, NewRbo ? queries.size() + 1 : 0);
+    }
+
+    void TestLegacyOptimizerWithStats(const TString& query, bool fallbackEnabled, bool profile) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(fallbackEnabled);
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        CreateSimpleTable(kikimr);
+
+        TValueBuilder rows;
+        rows.BeginList();
+        for (i64 key : {1, 2}) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("a").Int64(key)
+                .AddMember("b").Int64(key + 1)
+                .AddMember("c").Int64(key + 2)
+                .EndStruct();
+        }
+        rows.EndList();
+        auto upsert = kikimr.GetTableClient().BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        const auto countersBefore = GetNewRBOCompileCounters(kikimr);
+        for (bool fromCache : {false, true}) {
+            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx(),
+                NQuery::TExecuteQuerySettings().StatsMode(profile ? NQuery::EStatsMode::Profile : NQuery::EStatsMode::Full))
+                .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[1]]");
+            UNIT_ASSERT(result.GetStats().has_value());
+            UNIT_ASSERT(result.GetStats()->GetPlan().has_value());
+
+            const TString plan = *result.GetStats()->GetPlan();
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &json, true), plan);
+            UNIT_ASSERT_C(json.Has("SimplifiedPlan"), plan);
+            UNIT_ASSERT_VALUES_EQUAL(json["Plan"]["Node Type"].GetStringSafe(), "Query");
+            UNIT_ASSERT_VALUES_EQUAL(json["Plan"]["Stats"]["Compilation"]["FromCache"].GetBooleanSafe(), fromCache);
+        }
+
+        const auto countersAfter = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(countersAfter.first, countersBefore.first);
+        UNIT_ASSERT_VALUES_EQUAL(countersAfter.second, countersBefore.second + (fallbackEnabled ? 1 : 0));
+    }
+
+    Y_UNIT_TEST_TWIN(SemiJoinFallbackWithStats, Profile) {
+        TestLegacyOptimizerWithStats(R"(
+            SELECT l.a FROM `/Root/t1` AS l
+            LEFT SEMI JOIN `/Root/t1` AS r ON l.b = r.a;
+        )", /*fallbackEnabled=*/true, Profile);
+    }
+
+    Y_UNIT_TEST_TWIN(SamplingWithStatsUsesLegacyOptimizer, Profile) {
+        // Sampling selects the legacy pipeline inside the host, without an
+        // unsuccessful RBO compilation or an error-fallback retry.
+        TestLegacyOptimizerWithStats(R"(
+            SELECT a FROM `/Root/t1`
+            WITH (sampling_rate="1", sampling_seed="42", sampling_memtable_stride="1")
+            ORDER BY a LIMIT 1;
+        )", /*fallbackEnabled=*/false, Profile);
+    }
+
     Y_UNIT_TEST(FallbackToYqlDisabledExecute) {
         // First 2 queries should fail because fallback to yql is disabled.
         const std::vector<bool> expectedResult{false, true, false};

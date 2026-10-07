@@ -1,5 +1,6 @@
 #include "kqp_rbo_physical_source_builder.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
@@ -49,12 +50,20 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 }
             }
 
-            // clang-format off
-            source = Build<TDqSource>(Ctx, Pos)
-                .DataSource<TCoDataSource>()
-                    .Category<TCoAtom>().Build("KqpReadRangesSource")
-                .Build()
-                .Settings<TKqpReadRangesSourceSettings>()
+            TExprNode::TPtr sourceSettings;
+            // System views have no datashard partitions and need their own reader.
+            if (IsSysView) {
+                // clang-format off
+                sourceSettings = Build<TKqpReadSysViewSourceSettings>(Ctx, Pos)
+                    .Table(Read.TableCallable)
+                    .Columns().Add(columns).Build()
+                    .Settings(settings.BuildNode(Ctx, Pos))
+                    .RangesExpr(ranges)
+                .Done().Ptr();
+                // clang-format on
+            } else {
+                // clang-format off
+                sourceSettings = Build<TKqpReadRangesSourceSettings>(Ctx, Pos)
                     .Table(Read.TableCallable)
                     .Columns()
                         .Add(columns)
@@ -62,7 +71,16 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                     .Settings(settings.BuildNode(Ctx, Pos))
                     .RangesExpr(ranges)
                     .ExplainPrompt<TCoNameValueTupleList>().Build()
+                .Done().Ptr();
+                // clang-format on
+            }
+
+            // clang-format off
+            source = Build<TDqSource>(Ctx, Pos)
+                .DataSource<TCoDataSource>()
+                    .Category<TCoAtom>().Build(IsSysView ? NYql::KqpSysViewSourceName : NYql::KqpReadRangesSourceName)
                 .Build()
+                .Settings(sourceSettings)
             .Done().Ptr();
             // clang-format on
 

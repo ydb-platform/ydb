@@ -552,7 +552,7 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
             std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, f.Pos);
         const TPhysicalNames names(f.Props.InfoUnitRegistry);
         const auto ast = TPhysicalSourceBuilder(read, f.ExprCtx, f.Pos, names,
-            f.Props.InfoUnitRegistry, "stage", "key").BuildPhysicalOp();
+            f.Props.InfoUnitRegistry, "stage", /*isSysView=*/false, "key").BuildPhysicalOp();
         const auto source = FindNode(ast, [](const auto& node) {
             return TKqpBlockReadOlapTableRanges::Match(node.Get());
         });

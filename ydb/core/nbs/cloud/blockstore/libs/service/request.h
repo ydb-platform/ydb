@@ -2,6 +2,7 @@
 
 #include "volume_config.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_checksums.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
@@ -43,6 +44,11 @@ struct TWriteBlocksLocalRequest: public TDisableCopyMove
 {
     TRequestHeaders Headers;
     TGuardedSgList Sglist;
+
+    // Either empty (not calculated) or exactly the DDisk-format checksums of
+    // Sglist over Headers.Range. A layer that re-slices the request must
+    // produce matching checksums for each piece.
+    TBlockChecksums Checksums;
 
     explicit TWriteBlocksLocalRequest(TRequestHeaders headers)
         : Headers(std::move(headers))

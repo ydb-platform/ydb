@@ -12,6 +12,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
 
+#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
 #include <util/datetime/base.h>
 #include <util/generic/refcount.h>
 #include <util/generic/singleton.h>
@@ -458,11 +459,11 @@ public:
 
 class TControllers {
 private:
-    ICSController::TPtr CSController = std::make_shared<ICSController>();
+    TTrueAtomicSharedPtr<ICSController::TPtr> CSController = MakeTrueAtomicShared<ICSController::TPtr>(std::make_shared<ICSController>());
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
 
     void ReplaceCSController(const ICSController::TPtr& newController) {
-        std::atomic_store(&CSController, newController);
+        CSController.atomic_store(MakeTrueAtomicShared<ICSController::TPtr>(newController));
     }
 
 public:
@@ -510,7 +511,8 @@ public:
 
     static ICSController::TPtr GetColumnShardController() {
         auto* controllers = Singleton<TControllers>();
-        return std::atomic_load(&controllers->CSController);
+        auto controller = controllers->CSController.atomic_load();
+        return *controller;
     }
 
     template <class T>

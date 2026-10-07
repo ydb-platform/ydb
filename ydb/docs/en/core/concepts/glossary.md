@@ -104,13 +104,7 @@ The implementation of distributed transactions is covered in a separate article 
 
 ### Interactive transactions {#interactive-transaction}
 
-The term **interactive transactions** refers to transactions that are split into multiple queries and involve data processing by an application between these queries. For example:
-
-1. Select some data.
-1. Process the selected data in the application.
-1. Update some data in the database.
-1. Commit the transaction in a separate query.
-
+An **interactive transaction** is a transaction in which multiple queries are executed, with application logic potentially running between them. It allows the program to send multiple queries and make decisions about the further course of the transaction based on the data received. Such a transaction can explicitly begin with a separate step (or open together with the first query) and complete separately. Unlike a single query that is executed and committed atomically, an interactive transaction enables building complex workflows in which multiple related operations are treated as a single atomic unit. At the same time, it incurs overhead on the system, as it requires holding [optimistic locks](#optimistic-locking) and uncommitted changes for longer, and also increases the complexity of the application-side code.
 
 ### Multi-version concurrency control {#mvcc}
 

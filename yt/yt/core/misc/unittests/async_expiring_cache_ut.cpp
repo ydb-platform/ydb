@@ -671,7 +671,7 @@ protected:
     }
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     std::optional<std::pair<EUpdateReason, TPromise<int>>> ExpectedFetch_;
 };
 

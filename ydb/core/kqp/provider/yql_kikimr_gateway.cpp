@@ -256,7 +256,7 @@ TExternalDataSource::TExternalDataSource(
     , Properties(description.GetProperties())
 {
     Y_ENSURE(!description.GetSourceType().empty(), "TExternalDataSource: Type is required");
-    Y_ENSURE(!IsYdbBased() || !Auth.IsAws(), "TExternalDataSource: YDB sources do not support AWS auth");
+    Y_ENSURE(!IsYdb() || !Auth.IsAws(), "TExternalDataSource: YDB sources do not support AWS auth");
 }
 
 TExternalDataSource TExternalDataSource::CreateFromDescription(
@@ -281,7 +281,7 @@ TExternalDataSource TExternalDataSource::CreateForLocalTopic(const TString& clus
     if (!transientToken.empty()) {
         (*description.MutableProperties()->mutable_properties())["transient_token"] = transientToken;
     }
-    return CreateFromDescription(description, cluster, EKind::Topic);
+    return CreateFromDescription(description, cluster, EKind::MessageStream);
 }
 
 void TExternalDataSource::ApplyInferredMetadata(const TString& type, const TString& dataSourcePath) {
@@ -292,21 +292,25 @@ void TExternalDataSource::ApplyInferredMetadata(const TString& type, const TStri
     }
     updated.DataSourcePath = dataSourcePath;
     Y_ENSURE(updated.DatabaseType, "TExternalDataSource: unknown source type: " << type);
-    Y_ENSURE(!updated.IsYdbBased() || !updated.Auth.IsAws(), "TExternalDataSource: YDB sources do not support AWS auth");
+    Y_ENSURE(!updated.IsYdb() || !updated.Auth.IsAws(), "TExternalDataSource: YDB sources do not support AWS auth");
     *this = std::move(updated);
 }
 
 void TExternalDataSource::InitObjectKind(EKind kind) {
-    Y_ENSURE(IsYdb() && Kind == EKind::Unknown, "TExternalDataSource: only an unresolved Ydb source can initialize object kind");
-    Y_ENSURE(kind == EKind::Table || kind == EKind::Topic, "TExternalDataSource: expected a table or topic object kind");
+    const bool isYt = DatabaseType == EDatabaseType::YT;
+    Y_ENSURE((IsYdb() || isYt) && Kind == EKind::Unknown,
+        "TExternalDataSource: only an unresolved Ydb or YT source can initialize object kind");
+    Y_ENSURE(kind == EKind::Table || kind == EKind::MessageStream,
+        "TExternalDataSource: object kind does not match the connection type");
     Kind = kind;
 }
 
 TString TExternalDataSource::GetProviderName(const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory) const {
     YQL_ENSURE(externalSourceFactory, "External source factory is null");
-    if (IsYdbTopics()) {
-        YQL_ENSURE(IsYdb(), "A topic must use a Ydb connection");
-        return TString{NYql::PqProviderName};
+    if (IsMessageStream()) {
+        YQL_ENSURE(IsYdb() || DatabaseType == EDatabaseType::YT,
+            "A message stream must use a Ydb or YT connection");
+        return IsYdb() ? TString{NYql::PqProviderName} : TString{NYql::YtProviderName};
     }
     YQL_ENSURE(DatabaseType, "Unknown source type for external data source \"" << DataSourcePath << "\"");
     return externalSourceFactory->GetOrCreate(*DatabaseType)->GetName();
@@ -316,8 +320,8 @@ bool TExternalDataSource::IsYdb() const {
     return DatabaseType == EDatabaseType::Ydb;
 }
 
-bool TExternalDataSource::IsYdbTopics() const {
-    return Kind == EKind::Topic;
+bool TExternalDataSource::IsMessageStream() const {
+    return Kind == EKind::MessageStream;
 }
 
 TString TExternalDataSource::GetDatabaseName() const {

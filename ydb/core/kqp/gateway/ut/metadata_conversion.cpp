@@ -1,5 +1,7 @@
 #include <library/cpp/testing/gtest/gtest.h>
 
+#include <ydb/core/external_sources/external_source_factory.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 
@@ -160,20 +162,53 @@ TEST(MetadataConversion, ObjectKindCanOnlyBeInitializedOnceForYdbSource) {
     auth.MutableNone();
     auto source = MakeDataSource("Ydb", auth, "source-path", "grpc://example.com");
     EXPECT_ANY_THROW(source.InitObjectKind(EKind::Unknown));
-    source.InitObjectKind(EKind::Topic);
+    source.InitObjectKind(EKind::MessageStream);
     EXPECT_EQ(source.GetDatabaseType(), NYql::EDatabaseType::Ydb);
-    EXPECT_TRUE(source.IsYdbTopics());
+    EXPECT_TRUE(source.IsMessageStream());
     EXPECT_EQ(source.GetDataSourcePath(), "source-path");
-    EXPECT_ANY_THROW(source.InitObjectKind(EKind::Topic));
+    EXPECT_ANY_THROW(source.InitObjectKind(EKind::MessageStream));
 
     auto tableSource = MakeDataSource("Ydb", auth, "table-path", "grpc://example.com");
     tableSource.InitObjectKind(EKind::Table);
     EXPECT_ANY_THROW(tableSource.InitObjectKind(EKind::Table));
-    EXPECT_ANY_THROW(tableSource.InitObjectKind(EKind::Topic));
+    EXPECT_ANY_THROW(tableSource.InitObjectKind(EKind::MessageStream));
 
     auto objectStorageSource = MakeDataSource("ObjectStorage", auth);
     EXPECT_ANY_THROW(objectStorageSource.InitObjectKind(EKind::Table));
-    EXPECT_ANY_THROW(objectStorageSource.InitObjectKind(EKind::Topic));
+    EXPECT_ANY_THROW(objectStorageSource.InitObjectKind(EKind::MessageStream));
+}
+
+TEST(MetadataConversion, MessageStreamKeepsConnectionType) {
+    using EKind = NYql::TExternalDataSource::EKind;
+    NKikimrSchemeOp::TAuth auth;
+    auth.MutableNone();
+    const auto factory = NExternalSource::CreateExternalSourceFactory({});
+    auto source = MakeDataSource("YT", auth, "source-path", "yt.example.com");
+    EXPECT_EQ(source.GetProviderName(factory), NYql::YtProviderName);
+    EXPECT_FALSE(source.IsMessageStream());
+    EXPECT_ANY_THROW(source.InitObjectKind(EKind::Unknown));
+    source.InitObjectKind(EKind::MessageStream);
+    EXPECT_TRUE(source.IsMessageStream());
+    EXPECT_EQ(source.GetDatabaseType(), NYql::EDatabaseType::YT);
+    EXPECT_EQ(source.BuildConnectorProperties().at("source_type"), "YT");
+    EXPECT_EQ(source.MakeExternalSourceMetadata().Type, "YT");
+    EXPECT_EQ(source.GetDataSourcePath(), "source-path");
+    EXPECT_EQ(source.GetProviderName(factory), TString(NYql::YtProviderName));
+    EXPECT_FALSE(source.IsYdb());
+    EXPECT_ANY_THROW(source.InitObjectKind(EKind::MessageStream));
+
+    auto table = MakeDataSource("YT", auth);
+    table.InitObjectKind(EKind::Table);
+    EXPECT_FALSE(table.IsMessageStream());
+    EXPECT_EQ(table.GetProviderName(factory), NYql::YtProviderName);
+    EXPECT_ANY_THROW(table.InitObjectKind(EKind::MessageStream));
+    auto ydb = MakeDataSource("Ydb", auth);
+    ydb.InitObjectKind(EKind::MessageStream);
+    EXPECT_TRUE(ydb.IsMessageStream());
+    EXPECT_TRUE(ydb.IsYdb());
+    EXPECT_EQ(ydb.GetDatabaseType(), NYql::EDatabaseType::Ydb);
+    EXPECT_EQ(ydb.BuildConnectorProperties().at("source_type"), "Ydb");
+    EXPECT_EQ(ydb.GetProviderName(factory), NYql::PqProviderName);
 }
 
 TEST(MetadataConversion, SecretsCanOnlyBeSetOnce) {

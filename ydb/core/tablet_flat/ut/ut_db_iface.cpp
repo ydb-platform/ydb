@@ -1233,6 +1233,16 @@ Y_UNIT_TEST_SUITE(DBase) {
         // Rolled back seq nums don't affect transaction status or visibility yet
         UNIT_ASSERT(me->HasOpenTx(table1, 123));
         me.To(70).ReadTx(123).Select(table1).HasN(1_u64, 21_u64).HasN(2_u64, 22_u64);
+
+        // Operations of unknown transactions may be removed, of committed ones may not
+        me.To(80).Begin();
+        me.To(81).RemoveTxOps(table1, 456, 1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 456), "{ [1, 1] }");
+        me.To(82).WriteTx(234, 3).PutN(table1, 3_u64, 23_u64);
+        me.To(83).CommitTx(table1, 234);
+        UNIT_ASSERT_EXCEPTION(me->RemoveTxOps(table1, 234, 3, 3), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 234), "none");
+        me.To(84).Commit();
     }
 
     Y_UNIT_TEST(ReplayNewTable) {

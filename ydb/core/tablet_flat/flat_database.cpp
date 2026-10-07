@@ -398,6 +398,8 @@ void TDatabase::RemoveTxOps(ui32 table, ui64 txId, ui32 fromSavepointSeqNum, ui3
 {
     // Seq num 0 means an operation without a savepoint seq num, it cannot be rolled back
     Y_ENSURE(0 < fromSavepointSeqNum && fromSavepointSeqNum <= toSavepointSeqNum, "Invalid savepoint seq num range [" << fromSavepointSeqNum << ", " << toSavepointSeqNum << "]");
+    // Removing operations of a committed transaction would change committed data
+    Y_ENSURE(!Require(table)->HasCommittedTx(txId), "Cannot remove operations of committed tx " << txId);
 
     Redo->EvRemoveTxOps(table, txId, fromSavepointSeqNum, toSavepointSeqNum);
     RequireForUpdate(table)->RemoveTxOps(txId, fromSavepointSeqNum, toSavepointSeqNum);

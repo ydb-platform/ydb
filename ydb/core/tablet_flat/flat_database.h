@@ -166,6 +166,8 @@ public:
      * Removes operations of txId with savepoint seq nums in [fromSavepointSeqNum, toSavepointSeqNum], a partial
      * counterpart of RemoveTx used for ROLLBACK TO SAVEPOINT. Like with RemoveTx
      * the data stays in place and is dropped later, the transaction stays open.
+     * Unknown transactions or transactions without data are allowed, committed
+     * transactions are not.
      */
     void RemoveTxOps(ui32 table, ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum);
 

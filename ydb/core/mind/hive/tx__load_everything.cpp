@@ -34,6 +34,7 @@ public:
         Self->Keeper.Clear();
         Self->Domains.clear();
         Self->BlockedOwners.clear();
+        Self->RecentNodeEvents.Clear();
 
         Self->Domains[Self->RootDomainKey].Path = Self->RootDomainName;
         Self->Domains[Self->RootDomainKey].HiveId = rootHiveId;
@@ -313,19 +314,7 @@ public:
                 TNodeId nodeId = nodeRowset.GetValue<Schema::Node::ID>();
                 TNodeInfo& node = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first->second;
                 node.Local = nodeRowset.GetValue<Schema::Node::Local>();
-                node.SetDown(nodeRowset.GetValue<Schema::Node::Down>());
-                node.SetFreeze(nodeRowset.GetValue<Schema::Node::Freeze>());
-                node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
-                node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
-                node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
-                node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
                 node.Name = nodeRowset.GetValueOrDefault<Schema::Node::Name>();
-                node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
-                if (node.BecomeUpOnRestart) {
-                    // If a node must become up on restart, it must have been down
-                    // That was not persisted to avoid issues with downgrades
-                    node.SetDown(true);
-                }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {
@@ -333,11 +322,23 @@ public:
                         node.LocationAcquired = true;
                     }
                 }
-                node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
+                node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
                 if (!node.ServicedDomains) {
                     node.ServicedDomains = { Self->RootDomainKey };
                 }
                 node.LastSeenServicedDomains = node.ServicedDomains; // to keep Down and Freeze flags on restarts
+                node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
+                node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
+                node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
+                node.SetDown(nodeRowset.GetValue<Schema::Node::Down>(), EHiveEventReason::LoadedFromDatabase);
+                node.SetFreeze(nodeRowset.GetValue<Schema::Node::Freeze>(), EHiveEventReason::LoadedFromDatabase);
+                node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
+                if (node.BecomeUpOnRestart) {
+                    // If a node must become up on restart, it must have been down
+                    // That was not persisted to avoid issues with downgrades
+                    node.SetDown(true, EHiveEventReason::LoadedFromDatabase);
+                }
+                node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
                 if (!(bool)node.Local) {
                     // it's safe to call here, because there is no any tablets in the node yet
                     node.BecomeDisconnected();

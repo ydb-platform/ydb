@@ -52,7 +52,7 @@ protected:
         TNodeInfo* nodeInfo = Hive->FindNode(NodeId);
         if (nodeInfo != nullptr) {
             if (!DownBefore) {
-                nodeInfo->SetDown(false);
+                nodeInfo->SetDown(false, EHiveEventReason::DrainFinished);
             }
         }
         Hive->Execute(Hive->CreateSwitchDrainOff(NodeId, std::move(Settings), status, Movements + DomainMovements));
@@ -187,7 +187,7 @@ public:
             NextKick = Tablets.begin();
             DownBefore = nodeInfo->Down;
             if (!DownBefore) {
-                nodeInfo->SetDown(true);
+                nodeInfo->SetDown(true, EHiveEventReason::DrainStarted);
             }
             SeqNo = nodeInfo->DrainSeqNo;
 

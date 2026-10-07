@@ -51,13 +51,13 @@ void TDDiskActor::RecordOperationMetrics(TMonotonic sampledAt) {
         const std::array<const TOpCountersBase*, 5> counters = {
             &Counters.Interface.Read, &Counters.Interface.Write, &Counters.Interface.Sync,
             &Counters.DirectIO.Read, &Counters.DirectIO.Write};
-        std::array<ui64, 11> values;
+        std::array<ui64, 2 * counters.size() + 1> values;
         for (size_t i = 0; i < counters.size(); ++i) {
             values[2 * i] = counters[i]->Requests ? counters[i]->Requests->Val() : 0;
             values[2 * i + 1] = counters[i]->Bytes ? counters[i]->Bytes->Val() : 0;
         }
-        values[10] = sampledAt.MicroSeconds();
-        OperationMetric.Append(OperationMetricValues(values, std::make_index_sequence<11>{}));
+        values.back() = sampledAt.MicroSeconds();
+        OperationMetric.Append(OperationMetricValues(values, std::make_index_sequence<values.size()>{}));
     }
 }
 

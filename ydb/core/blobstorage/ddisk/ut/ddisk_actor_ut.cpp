@@ -1,4 +1,3 @@
-#include <ydb/core/blobstorage/ddisk/space_metrics.h>
 #include "ddisk_actor_test_helpers.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -8,6 +7,7 @@
 #include <ydb/core/blobstorage/ddisk/ddisk_actor_test_peer.h>
 #include <ydb/core/blobstorage/ddisk/ddisk_checksums.h>
 #include <ydb/core/blobstorage/ddisk/persistent_buffer_header.h>
+#include <ydb/core/blobstorage/ddisk/space_metrics.h>
 #include <ydb/core/blobstorage/ddisk/write_persistent_buffers_request_actor.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>

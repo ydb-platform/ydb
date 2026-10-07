@@ -316,6 +316,15 @@ inline std::tuple<ResourceTypes...> GetStDev(const TVector<std::tuple<ResourceTy
     return tuple_cast<ResourceTypes...>::cast(st_dev);
 }
 
+// calls callback for the items of a TSimpleRingBuffer starting from the newest one, at most maxCount of them
+template <typename TBuffer, typename TCallback>
+static void ForEachNewestFirst(const TBuffer& buffer, size_t maxCount, TCallback&& callback) {
+    size_t count = 0;
+    for (size_t i = buffer.TotalSize(); i > buffer.FirstIndex() && count < maxCount; --i, ++count) {
+        callback(buffer[i - 1]);
+    }
+}
+
 extern const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES;
 
 extern const std::unordered_map<TString, TTabletTypes::EType> TABLET_TYPE_BY_SHORT_NAME;

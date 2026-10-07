@@ -42,6 +42,8 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
+#include <util/string/split.h>
+
 #include <algorithm>
 #include <array>
 #include <ctime>
@@ -75,6 +77,36 @@ std::pair<ui32, ui32> GetNewRBOCompileCounters(TKikimrRunner& kikimr) {
     auto counters = TKqpCounters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
     return {counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Success")->Val(),
             counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed")->Val()};
+}
+
+// Keeps every log record on its own line.
+class TLineLogStream : public TStringStream {
+    void DoWrite(const void* data, size_t size) override {
+        TStringStream::DoWrite(data, size);
+        TStringStream::DoWrite("\n", 1);
+    }
+};
+
+// Returns the `request` object of the [REQ_JSON] completed record whose query text contains `marker`.
+std::optional<NJson::TJsonValue> FindReqJsonCompleted(TStringBuf logs, TStringBuf marker) {
+    constexpr TStringBuf fieldPrefix = "requestJson=";
+    for (TStringBuf line : StringSplitter(logs).Split('\n')) {
+        const auto pos = line.find(fieldPrefix);
+        if (!line.Contains("[REQ_JSON]") || pos == TStringBuf::npos) {
+            continue;
+        }
+        std::string::size_type valuePos = pos + fieldPrefix.size();
+        const auto value = NActors::NStructuredLog::TTextWriter::UnescapeFieldValue(TString(line), valuePos);
+        NJson::TJsonValue json;
+        if (!value || !NJson::ReadJsonTree(*value, &json, /*throwOnError=*/false)) {
+            continue;
+        }
+        const auto& request = json["request"];
+        if (request["event"].GetStringSafe("") == "completed" && request["data"].GetStringSafe("").Contains(marker)) {
+            return request;
+        }
+    }
+    return std::nullopt;
 }
 
 double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nIterations) {
@@ -2143,6 +2175,93 @@ FROM (
         const auto compileCountersAfter = GetNewRBOCompileCounters(kikimr);
         UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.first, compileCountersBefore.first);
         UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.second, compileCountersBefore.second + 1);
+    }
+
+    Y_UNIT_TEST(ReqJsonLogsActualOptimizer) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TLineLogStream logs;
+        auto logsMutex = std::make_shared<TMutex>();
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false).SetLogStream(&logs);
+        settings.LogStreamMutex = logsMutex;
+        // Successful queries are logged to [REQ_JSON] at DEBUG.
+        settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_REQUEST, NActors::NLog::PRI_DEBUG);
+        settings.LogSettings->DefaultLogPriority = NActors::NLog::PRI_CRIT;
+
+        TKikimrRunner kikimr(settings);
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `doc` (
+                `id` String,
+                `flag` Bool,
+                PRIMARY KEY (`id`)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        // Log records are written asynchronously, so wait for the one of the query marked with `marker`.
+        const auto getCompletedRequest = [&](TStringBuf marker) -> NJson::TJsonValue {
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
+            while (true) {
+                TString text;
+                {
+                    TGuard<TMutex> guard(*logsMutex);
+                    text = logs.Str();
+                }
+
+                if (auto request = FindReqJsonCompleted(text, marker)) {
+                    UNIT_ASSERT_C(request->Has("used_new_rbo"), request->GetStringRobust());
+                    return std::move(*request);
+                }
+
+                UNIT_ASSERT_C(TInstant::Now() < deadline, "No [REQ_JSON] record for " << marker << " in logs:\n" << text);
+                Sleep(TDuration::MilliSeconds(100));
+            }
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        auto newRboResult = querySession.ExecuteQuery(R"(
+            /* req-json-new-rbo */
+            SELECT `id` FROM `doc` WHERE `flag`;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(newRboResult.IsSuccess(), newRboResult.GetIssues().ToString());
+        const auto newRboRequest = getCompletedRequest("req-json-new-rbo");
+        UNIT_ASSERT_C(newRboRequest["used_new_rbo"].GetBooleanSafe(), newRboRequest.GetStringRobust());
+
+        // New RBO does not support this query, so it is compiled again with the old one.
+        auto fallbackResult = querySession.ExecuteQuery(R"(
+            /* req-json-fallback */
+            SELECT `d`.`id` FROM (SELECT `d_src`.* FROM `doc` AS `d_src` WHERE `d_src`.`flag`) AS `d`;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(fallbackResult.IsSuccess(), fallbackResult.GetIssues().ToString());
+        const auto fallbackRequest = getCompletedRequest("req-json-fallback");
+        UNIT_ASSERT_C(!fallbackRequest["used_new_rbo"].GetBooleanSafe(), fallbackRequest.GetStringRobust());
+
+        auto allNewRboResult = querySession.ExecuteQuery(R"(
+            /* req-json-all-new-rbo */
+            SELECT `id` FROM `doc` WHERE `flag`;
+            SELECT `id` FROM `doc` WHERE NOT `flag`;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(allNewRboResult.IsSuccess(), allNewRboResult.GetIssues().ToString());
+        const auto allNewRboRequest = getCompletedRequest("req-json-all-new-rbo");
+        UNIT_ASSERT_C(allNewRboRequest["used_new_rbo"].GetBooleanSafe(), allNewRboRequest.GetStringRobust());
+
+        // Statements are compiled together, so one unsupported statement sends the whole query to the old RBO.
+        auto mixedResult = querySession.ExecuteQuery(R"(
+            /* req-json-mixed */
+            SELECT `id` FROM `doc` WHERE `flag`;
+            SELECT `d`.`id` FROM (SELECT `d_src`.* FROM `doc` AS `d_src` WHERE `d_src`.`flag`) AS `d`;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(mixedResult.IsSuccess(), mixedResult.GetIssues().ToString());
+        const auto mixedRequest = getCompletedRequest("req-json-mixed");
+        UNIT_ASSERT_C(!mixedRequest["used_new_rbo"].GetBooleanSafe(), mixedRequest.GetStringRobust());
     }
 
     Y_UNIT_TEST(CorrelatedScalarAggregateReuseDoesNotDuplicateVisibleColumns) {

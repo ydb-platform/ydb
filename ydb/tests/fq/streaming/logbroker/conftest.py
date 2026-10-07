@@ -7,7 +7,6 @@ from ydb.tests.library.logbroker_federation import LogbrokerFederation
 @pytest.fixture(scope="module")
 def logbroker_federation():
     federation = LogbrokerFederation(
-        accounts=["admin"],
         ydb_cluster_names=("cluster_a", "cluster_b", "cluster_c"),
         MockFederationDiscovery=True,
     )

@@ -2,6 +2,8 @@
 
 #include "columnshard_private_events.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/move/queue_sizes.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 

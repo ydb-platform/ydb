@@ -542,10 +542,6 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupCleanupTables(*snapshotHolders);
     SetupMetadata();
     SetupTtl();
-    // The move is the driver's: a tablet wakeup only nudges it, and the gate must stay asynchronous since a removal is visible only after Complete publishes it.
-    if (!!MoveDataDriverId) {
-        Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
-    }
     SetupGC();
 
     RecheckForcedCompactions(NActors::TActivationContext::AsActorContext());
@@ -1330,11 +1326,12 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
 
 void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx) {
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
+    const bool moveDataResult = ev->Get()->GetProcessor()->IsMoveData();
     ev->Get()->GetProcessor()->ApplyResult(
         ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
     SetupMetadata();
-    // The move keeps its own queue, so it re-arms on the driver's turn rather than on this one.
-    if (!!MoveDataDriverId) {
+    // Only this result changed move state, so only it earns a driver turn; anything else waits for the cadence.
+    if (moveDataResult && !!MoveDataDriverId) {
         ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
     }
 }

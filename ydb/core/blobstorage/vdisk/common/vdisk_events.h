@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_syncstate.h>
+#include <ydb/core/blobstorage/contracts/blobstorage_proxy_config.h>
 #include <ydb/core/blobstorage/base/blobstorage_oos_defs.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
@@ -3106,57 +3107,6 @@ namespace NKikimr {
         TString ToString() const override {
             return TStringBuilder() << "{TEvVGenerationChange NewVDiskId# " << NewVDiskId << " NewInfo# "
                 << NewInfo->ToString() << "}" ;
-        }
-    };
-
-    struct TNodeLayoutInfo : TThrRefBase {
-        // indexed by NodeId
-        TNodeLocation SelfLocation;
-        TVector<TNodeLocation> LocationPerOrderNumber;
-
-        TNodeLayoutInfo(const TNodeLocation& selfLocation, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-                THashMap<ui32, TNodeLocation>& map)
-            : SelfLocation(selfLocation)
-            , LocationPerOrderNumber(info->GetTotalVDisksNum())
-        {
-            for (ui32 i = 0; i < LocationPerOrderNumber.size(); ++i) {
-                LocationPerOrderNumber[i] = map[info->GetActorId(i).NodeId()];
-            }
-        }
-    };
-
-    using TNodeLayoutInfoPtr = TIntrusivePtr<TNodeLayoutInfo>;
-
-    struct TEvBlobStorage::TEvConfigureProxy
-        : public TEventLocal<TEvBlobStorage::TEvConfigureProxy, TEvBlobStorage::EvConfigureProxy>
-    {
-        TIntrusivePtr<TBlobStorageGroupInfo> Info;
-        TNodeLayoutInfoPtr NodeLayoutInfo;
-        TIntrusivePtr<TStoragePoolCounters> StoragePoolCounters;
-
-        TEvConfigureProxy(TIntrusivePtr<TBlobStorageGroupInfo> info, TNodeLayoutInfoPtr nodeLayoutInfo,
-                TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = nullptr)
-            : Info(std::move(info))
-            , NodeLayoutInfo(std::move(nodeLayoutInfo))
-            , StoragePoolCounters(std::move(storagePoolCounters))
-        {}
-
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvConfigureProxy Info# ";
-            if (Info) {
-                str << Info->ToString();
-            } else {
-                str << "nullptr";
-            }
-            str << " StoragePoolCounters# ";
-            if (StoragePoolCounters) {
-                str << "specified";
-            } else {
-                str << "nullptr";
-            }
-            str << "}";
-            return str.Str();
         }
     };
 

@@ -16,6 +16,8 @@ SRCS(
     blobstorage_checksum.h
     blobstorage_events.cpp
     blobstorage_events.h
+    blobstorage_dsproxy_events.h
+    blobstorage_space_color.h
     blobstorage_host_record.h
     infer_pdisk_slot_count_settings.h
     blobstorage_oos_defs.h

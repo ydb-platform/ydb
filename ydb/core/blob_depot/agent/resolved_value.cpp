@@ -1,5 +1,7 @@
 #include "resolved_value.h"
 
+#include <ydb/core/blobstorage/base/utility.h>
+
 namespace NKikimr::NBlobDepot {
 
     TResolvedValue::TLink::TLink(const NKikimrBlobDepot::TResolvedValueChain& link)

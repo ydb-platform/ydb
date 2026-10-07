@@ -474,8 +474,8 @@
   includes:
   - fftw3.h: contrib/restricted/fftw3/api/fftw3.h
 
-# allow openssl3-specific includes to be resolved into nothing
-- includes:
-  - openssl/core_names.h
+# Resolve openssl3-specific to contrib/libs/openssl3
+# even if the target does not depend it
+# in order to ease the migration.
 - includes:
   - openssl/core_names.h: contrib/libs/openssl-3/include/openssl/core_names.h

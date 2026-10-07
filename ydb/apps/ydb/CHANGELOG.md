@@ -1,4 +1,5 @@
 
+* Fixed incorrect progress, speed, ETA, and final read statistics in `ydb import file parquet`.
 * Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.
 * Fixed a memory leak when closing producers in `ydb workload topic run write|full`.
 * Sped up local YAML selector validation in `ydb admin cluster config replace` and `ydb admin database config replace` by resolving independent sections separately and merging equivalent states.

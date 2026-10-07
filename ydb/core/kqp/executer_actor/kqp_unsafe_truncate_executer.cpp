@@ -17,7 +17,7 @@ namespace NKikimr::NKqp {
 namespace {
 
 // Bounds retries of the resolve->prepare loop when shards remain unavailable.
-constexpr ui32 MaxResolveAttempts = 10;
+constexpr ui32 MaxResolveAttempts = 8;
 
 /*
  * Drives TRUNCATE TABLE ... WITH (unsafe = true).

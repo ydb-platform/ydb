@@ -1089,7 +1089,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 
         UNIT_ASSERT_C(refused.load() > 1, "the loop must have retried, not given up at once");
-        UNIT_ASSERT_VALUES_EQUAL(attemptTimes.size(), 10u);
+        UNIT_ASSERT_VALUES_EQUAL(attemptTimes.size(), 8u);
         UNIT_ASSERT_C(attemptTimes.back() - attemptTimes.front() >= TDuration::Seconds(1),
             "persistent overload must back off instead of exhausting every attempt immediately");
         UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);

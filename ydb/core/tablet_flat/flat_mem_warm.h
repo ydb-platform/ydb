@@ -619,6 +619,9 @@ namespace NMem {
         const TEpoch Epoch;
         const TIntrusiveConstPtr<TRowScheme> Scheme;
 
+        // Redo cutoff for this frozen memtable, assigned once its flush is committed.
+        mutable std::optional<ui64> SnapshotStamp;
+
     private:
         NMem::TBlobs Blobs;
         const NMem::TKeyCmp Comparator;

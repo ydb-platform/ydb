@@ -247,6 +247,12 @@ namespace NTabletFlatExecutor {
         {
             Y_ENSURE(!DropSnap, "only one snapshot per transaction");
 
+            // Register all moves before dropping the snapshot. A retained snapshot
+            // does not reserve destinations across transactions; recheck them here.
+            for (const auto& [src, dst] : snap->Impl->GetMoves()) {
+                Y_UNUSED(src);
+                PreparePartImport(dst);
+            }
             DropSnap.Reset(new TBorrowSnap{ snap });
         }
 
@@ -264,6 +270,7 @@ namespace NTabletFlatExecutor {
         void LoanTable(ui32 tableId, const TString &raw) override
         {
             TProtoBox<NKikimrExecutorFlat::TDatabaseBorrowPart> proto(raw);
+            PreparePartImport(tableId);
 
             const ui64 lender = proto.GetLenderTablet();
             const ui32 source = proto.GetSourceTable();
@@ -287,6 +294,7 @@ namespace NTabletFlatExecutor {
         void AttachPart(ui32 tableId, THolder<TDirectPartResult> result) override
         {
             Y_ENSURE(result, "AttachPart called with an empty result");
+            PreparePartImport(tableId);
             AttachedParts.emplace_back(TAttachedPart{ tableId, std::move(result) });
         }
 
@@ -316,6 +324,8 @@ namespace NTabletFlatExecutor {
             return TPageCollectionReadEnv::MissingReferencesSize();
         }
     protected:
+        void PreparePartImport(ui32 tableId);
+
         NTable::TDatabase& DB;
 
     public:

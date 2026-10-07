@@ -4,6 +4,11 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+    void TPageCollectionTxEnv::PreparePartImport(ui32 tableId)
+    {
+        DB.PreparePartImport(tableId);
+    }
+
     void TPageCollectionTxEnv::MakeSnapshot(TIntrusivePtr<TTableSnapshotContext> snap)
     {
         auto tables = snap->TablesToSnapshot();

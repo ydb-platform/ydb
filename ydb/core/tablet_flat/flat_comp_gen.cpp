@@ -301,9 +301,11 @@ void TGenCompactionStrategy::Stop() {
     FinalCompactionId = 0;
     FinalCompactionLevel = 0;
     FinalCompactionTaken = 0;
+    ContinueBorrowedCompaction = false;
     ForcedState = EForcedState::None;
     ForcedMemCompactionId = 0;
     ForcedGeneration = 0;
+    ForcedCompactionEpoch.reset();
 
     CurrentForcedGenCompactionId = 0;
     NextForcedGenCompactionId = 0;
@@ -419,6 +421,9 @@ bool TGenCompactionStrategy::ScheduleBorrowedCompaction() {
         }
     }
 
+    if (!hasBorrowed) {
+        ContinueBorrowedCompaction = false;
+    }
     if (!hasBorrowed || ForcedState != EForcedState::None || FinalState.State != EState::Free || FinalCompactionId != 0) {
         if (auto logl = Logger->Log(NUtil::ELnLev::Debug)) {
             logl << "TGenCompactionStrategy ScheduleBorrowedCompaction for " << ownerTabletId
@@ -429,6 +434,9 @@ bool TGenCompactionStrategy::ScheduleBorrowedCompaction() {
         return false;
     }
 
+    if (Backend->TableHasEraseAll(Table)) {
+        ContinueBorrowedCompaction = true;
+    }
     SubmitTask(FinalState.Task, "compaction_borrowed", /* priority */ 5, /* generation */ 255);
     FinalState.State = EState::Pending;
     return true;
@@ -536,7 +544,7 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         Y_ENSURE(sourceParts.empty());
 
         // Check if we just finished the last forced mem compaction
-        if (ForcedMemCompactionId && compactionId == ForcedMemCompactionId) {
+        if (ForcedMemCompactionId && compactionId == ForcedMemCompactionId && !params->PartialMem) {
             ForcedMemCompactionId = 0;
 
             // Continue compaction when we don't have some other compaction running
@@ -589,9 +597,22 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
 
     // This will be an index where we place results
     ui32 target = generation != 255 ? generation : Generations.size();
+    ui32 forcedRestart = 0;
+    bool rotateFinal = false;
 
     // After forced compaction we may want to place results as low as possible
     if (forcedCompactionContinue) {
+        const bool eraseAll = Backend->TableHasEraseAll(Table);
+        if (eraseAll && !ForcedCompactionEpoch) {
+            // Bound group retries so later memtable flushes cannot extend this
+            // forced pass forever. Include its results before they are inserted.
+            ForcedCompactionEpoch = newParts.empty() ? TEpoch::Min() : result->Epoch;
+            for (const auto& gen : Generations) {
+                if (!gen.Parts.empty()) {
+                    *ForcedCompactionEpoch = Max(*ForcedCompactionEpoch, gen.Parts.front().Epoch);
+                }
+            }
+        }
         while (target < Generations.size()) {
             auto& candidate = Generations[target];
             if (!candidate.Parts.empty()) {
@@ -603,12 +624,27 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         }
         if (target == Generations.size()) {
             if (generation >= target || (FinalParts.empty() && ColdParts.empty())) {
-                // The forced compaction has finished, uplift logic will kick in below
-                forcedCompactionContinue = false;
-                if (target > generation) {
-                    target = generation;
+                if (eraseAll) {
+                    // Let later forced passes reach the other visibility groups.
+                    rotateFinal = !FinalParts.empty() || !ColdParts.empty();
+                    // A compaction consumes only one visibility group. Finish
+                    // the remaining groups before reporting the forced pass done.
+                    for (ui32 index : xrange(ui32(Generations.size()))) {
+                        const auto& parts = Generations[index].Parts;
+                        if (!parts.empty() && parts.back().Epoch <= *ForcedCompactionEpoch) {
+                            forcedRestart = index + 1;
+                            break;
+                        }
+                    }
                 }
-                OnForcedGenCompactionDone();
+                forcedCompactionContinue = false;
+                if (!forcedRestart) {
+                    // The forced compaction has finished, uplift logic will kick in below
+                    if (target > generation) {
+                        target = generation;
+                    }
+                    OnForcedGenCompactionDone();
+                }
             } else {
                 // We need to compact final parts, so we need to place results at the last generation
                 --target;
@@ -616,7 +652,7 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         }
     }
 
-    while (newParts && target > 0 && !forcedCompactionContinue) {
+    while (newParts && target > 0 && !forcedCompactionContinue && !forcedRestart && !rotateFinal) {
         auto& candidate = Generations[target - 1];
         if (candidate.CompactingTailParts > 0) {
             // Cannot uplift to busy generations
@@ -655,9 +691,15 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         }
 
         if (target == Generations.size()) {
-            for (auto it = newParts.rbegin(); it != newParts.rend(); ++it) {
-                auto& partView = *it;
-                FinalParts.emplace_front(std::move(partView));
+            if (rotateFinal) {
+                for (auto& partView : newParts) {
+                    FinalParts.emplace_back(std::move(partView));
+                }
+            } else {
+                for (auto it = newParts.rbegin(); it != newParts.rend(); ++it) {
+                    auto& partView = *it;
+                    FinalParts.emplace_front(std::move(partView));
+                }
             }
         } else {
             auto& newGen = Generations[target];
@@ -687,6 +729,10 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
         ForcedState = EForcedState::Pending;
         ForcedGeneration = target + 1;
         checkNeeded[target] = true;
+    } else if (forcedRestart) {
+        ForcedState = EForcedState::Pending;
+        ForcedGeneration = forcedRestart;
+        checkNeeded[forcedRestart - 1] = true;
     }
 
     if (Generations) {
@@ -721,10 +767,14 @@ TCompactionChanges TGenCompactionStrategy::CompactionFinished(
 
     UpdateOverload();
 
+    if (ContinueBorrowedCompaction) {
+        ScheduleBorrowedCompaction();
+    }
     return changes;
 }
 
 void TGenCompactionStrategy::OnForcedGenCompactionDone() {
+    ForcedCompactionEpoch.reset();
     if (CurrentForcedGenCompactionId != 0) {
         FinishedForcedGenCompactionId = std::exchange(CurrentForcedGenCompactionId, 0);
     }
@@ -793,10 +843,15 @@ TCompactionChanges TGenCompactionStrategy::PartsRemoved(TArrayRef<const TLogoBlo
 
     // For simplicity just stop and start again
     auto state = SnapshotState();
+    const bool continueBorrowed = ContinueBorrowedCompaction;
 
     Stop();
 
     Start(std::move(state));
+    if (continueBorrowed) {
+        ContinueBorrowedCompaction = true;
+        ScheduleBorrowedCompaction();
+    }
 
     // We don't have per-part state, so no changes
     return { };
@@ -1200,6 +1255,52 @@ TGenCompactionStrategy::EDesiredMode TGenCompactionStrategy::DesiredMode(ui32 ge
     ui32 totalParts = genParts + (generation == Generations.size() ? FinalParts.size() + ColdParts.size() : 0);
 
     if (totalParts > 1 || NeedToCompactAfterSplit(generation)) {
+        if (Backend->TableHasEraseAll(Table)) {
+            // Different visibility groups cannot be merged. Rewriting a single
+            // input may uplift it back here and schedule the same work forever.
+            std::optional<TRowVersion> groupHidden;
+            bool haveGroup = false;
+            size_t groupParts = 0;
+            auto take = [&](TEpoch epoch, const std::optional<TRowVersion>& stamp) {
+                const auto hidden = Backend->TableSourceHiddenSince(Table, epoch, stamp);
+                if (!haveGroup) {
+                    groupHidden = hidden;
+                    haveGroup = true;
+                }
+                if (groupHidden != hidden) {
+                    return false;
+                }
+                ++groupParts;
+                return true;
+            };
+            size_t available = gen.Parts.size() - gen.TakenHeadParts;
+            for (auto it = gen.Parts.rbegin(); available && groupParts < 2; ++it, --available) {
+                if (!take(it->Epoch, it->PartView.HiddenSince)) {
+                    break;
+                }
+            }
+            if (generation == Generations.size() && groupParts < 2) {
+                if (!haveGroup && !ColdParts.empty()) {
+                    groupHidden = Backend->TableSourceHiddenSince(
+                        Table, ColdParts.front()->Epoch, ColdParts.front()->HiddenSince);
+                    haveGroup = true;
+                }
+                for (const auto& part : FinalParts) {
+                    take(part.Epoch, part.PartView.HiddenSince);
+                    if (groupParts >= 2) {
+                        break;
+                    }
+                }
+                for (const auto& part : ColdParts) {
+                    if (groupParts >= 2 || !take(part->Epoch, part->HiddenSince)) {
+                        break;
+                    }
+                }
+            }
+            if (groupParts < 2) {
+                return EDesiredMode::None;
+            }
+        }
         return EDesiredMode::Background;
     }
 
@@ -1255,6 +1356,51 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
         extra.Add(Backend->TableMemSize(Table, edge.Head));
     }
 
+    size_t includedFinal = Max<size_t>();
+    const bool eraseAll = Backend->TableHasEraseAll(Table);
+    std::optional<TRowVersion> groupHidden;
+    bool haveGroup = false;
+    auto hiddenOf = [&](TEpoch epoch, const std::optional<TRowVersion>& stamp) {
+        return Backend->TableSourceHiddenSince(Table, epoch, stamp);
+    };
+    if (eraseAll && Generations.empty() && edge.Head > TEpoch::Zero()) {
+        // The executor flushes the oldest memtable visibility group first.
+        // Without generations, its matching final parts must be compacted here.
+        if (const auto epoch = Backend->TableOldestMemEpoch(Table, edge.Head)) {
+            groupHidden = hiddenOf(*epoch, std::nullopt);
+            haveGroup = true;
+        }
+    }
+    if (eraseAll && generation == 255) {
+        ContinueBorrowedCompaction = true;
+        // Start with borrowed data: an owned prefix in another visibility
+        // group would otherwise be rewritten on every borrowed compaction.
+        const auto owner = Backend->OwnerTabletId();
+        auto borrowed = std::find_if(FinalParts.begin(), FinalParts.end(),
+            [owner](const auto& part) { return part.Label.TabletID() != owner; });
+        if (borrowed != FinalParts.end()) {
+            // Final parts need no epoch ordering; completion removes a prefix.
+            FinalParts.splice(FinalParts.begin(), FinalParts, borrowed);
+        } else {
+            auto cold = std::find_if(ColdParts.begin(), ColdParts.end(),
+                [owner](const auto& part) { return part->Label.TabletID() != owner; });
+            if (cold != ColdParts.end()) {
+                groupHidden = hiddenOf((*cold)->Epoch, (*cold)->HiddenSince);
+                haveGroup = true;
+                ColdParts.splice(ColdParts.begin(), ColdParts, cold);
+            }
+        }
+    }
+    auto sameGroup = [&](TEpoch epoch, const std::optional<TRowVersion>& stamp) {
+        auto hidden = hiddenOf(epoch, stamp);
+        if (!haveGroup) {
+            groupHidden = hidden;
+            haveGroup = true;
+            return true;
+        }
+        return groupHidden == hidden;
+    };
+
     if (generation > 0 && generation != 255) {
         bool first = true;
         for (ui32 index : xrange(generation - 1, generation)) {
@@ -1262,6 +1408,16 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
             size_t skip = first ? gen.TakenHeadParts : 0;
             Y_ENSURE(gen.TakenHeadParts == skip);
             Y_ENSURE(gen.CompactingTailParts == 0);
+            if (eraseAll) {
+                // Take only the oldest visibility group after the reserved head.
+                size_t remaining = gen.Parts.size() - skip;
+                for (auto it = gen.Parts.rbegin(); remaining; ++it, --remaining) {
+                    if (!sameGroup(it->Epoch, it->PartView.HiddenSince)) {
+                        break;
+                    }
+                }
+                skip += remaining;
+            }
             for (auto& part : gen.Parts) {
                 if (skip > 0) {
                     --skip;
@@ -1281,13 +1437,20 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
         Y_ENSURE(nextGen.TakenHeadParts == 0);
         Y_ENSURE(nextGen.TakenHeadBackingSize == 0);
         Y_ENSURE(nextGen.TakenHeadPartEpochCount == 0);
-        if (extra.ExtrasAllowed() && !NeedToForceCompact(generation + 1)) {
+        // Mem compaction with an erase flushes memtables only. Taking parts
+        // here would desync the strategy if the executor keeps just one group.
+        if (extra.ExtrasAllowed() && !NeedToForceCompact(generation + 1)
+            && !(eraseAll && edge.Head > TEpoch::Zero())) {
             Y_ENSURE(nextGen.Parts.size() >= nextGen.CompactingTailParts);
             size_t available = nextGen.Parts.size() - nextGen.CompactingTailParts;
             TEpoch lastEpoch = TEpoch::Max();
             for (auto& part : nextGen.Parts) {
                 Y_ENSURE(part.Epoch != TEpoch::Max(),
                     "Unexpected part with an infinite epoch found");
+
+                if (eraseAll && !sameGroup(part.Epoch, part.PartView.HiddenSince)) {
+                    break;
+                }
 
                 if (std::exchange(lastEpoch, part.Epoch) == part.Epoch) {
                     // The last part we grabbed wasn't an epoch edge
@@ -1312,12 +1475,44 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
         }
     } else {
         Y_ENSURE(generation == Generations.size() || generation == 255);
-        for (auto& part : FinalParts) {
-            params->Parts.emplace_back(part.PartView);
-            extra.Add(part.Stats.BackingSize);
-        }
-        for (const auto& part : ColdParts) {
-            params->ColdParts.emplace_back(part);
+        if (eraseAll) {
+            includedFinal = 0;
+            if (generation != 255 && !haveGroup && !ColdParts.empty()) {
+                // Warm output must not permanently block another cold group.
+                sameGroup(ColdParts.front()->Epoch, ColdParts.front()->HiddenSince);
+            }
+            auto takenEnd = FinalParts.begin();
+            for (auto it = FinalParts.begin(); it != FinalParts.end();) {
+                auto current = it++;
+                auto& part = *current;
+                if (!sameGroup(part.Epoch, part.PartView.HiddenSince)) {
+                    continue;
+                }
+                // Gather the whole group, keeping completion's prefix removal.
+                if (current == takenEnd) {
+                    ++takenEnd;
+                } else {
+                    FinalParts.splice(takenEnd, FinalParts, current);
+                }
+                params->Parts.emplace_back(part.PartView);
+                extra.Add(part.Stats.BackingSize);
+                ++includedFinal;
+            }
+            for (const auto& part : ColdParts) {
+                if (!sameGroup(part->Epoch, part->HiddenSince)) {
+                    break;
+                }
+                params->ColdParts.emplace_back(part);
+                ++includedFinal;
+            }
+        } else {
+            for (auto& part : FinalParts) {
+                params->Parts.emplace_back(part.PartView);
+                extra.Add(part.Stats.BackingSize);
+            }
+            for (const auto& part : ColdParts) {
+                params->ColdParts.emplace_back(part);
+            }
         }
     }
 
@@ -1339,6 +1534,12 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
                 break;
             }
         }
+    }
+    if (eraseAll && includedFinal != FinalParts.size() + ColdParts.size()
+        && (generation == Generations.size() || generation == 255)) {
+        // Other visibility groups may still contain rows masked by these
+        // erase markers at historical snapshots.
+        params->IsFinal = false;
     }
 
     ui64 compactionId = Backend->BeginCompaction(std::move(params));
@@ -1383,7 +1584,9 @@ ui64 TGenCompactionStrategy::PrepareCompaction(
             }
         }
         FinalCompactionLevel = generation;
-        FinalCompactionTaken = FinalParts.size() + ColdParts.size();
+        FinalCompactionTaken = includedFinal == Max<size_t>()
+            ? FinalParts.size() + ColdParts.size()
+            : includedFinal;
     }
 
     return compactionId;

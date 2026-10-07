@@ -63,6 +63,11 @@ namespace NTabletFlatExecutor {
             Holds.Moved[src] = dst;
         }
 
+        const TMap<ui32, ui32>& GetMoves() const
+        {
+            return Holds.Moved;
+        }
+
         void Clear()
         {
             Holds.Step = Max<ui32>();

@@ -29,6 +29,9 @@
 
 namespace NKikimr::NKqp {
 
+constexpr ui32 SkewedBigValueBytes = 4 << 20;
+constexpr ui32 SkewedRows = 2000000;
+
 Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
 
     TKikimrSettings GetDictionarySettings() {
@@ -2036,6 +2039,50 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         for (const auto& c : cases) {
             RunDictionaryUtf8BeatsCompressionOnSize(c.Rows, c.Distinct, c.StringLen, c.BlobFactor);
         }
+    }
+
+    void ExecuteDictionaryQuery(NYdb::NQuery::TSession& session, const TString& query) {
+        const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), query << result.GetIssues().ToString());
+    }
+
+    // Arrow Take reserves (mean dictionary value length) x (rows) bytes when a dictionary chunk is decoded.
+    Y_UNIT_TEST(SkewedDictionaryDecodeReservesByMeanValueLength) {
+        TKikimrRunner kikimr(GetDictionarySettings());
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        ExecuteDictionaryQuery(session, R"(
+            CREATE TABLE `/Root/Skewed` (
+                pk Uint64 NOT NULL,
+                data Utf8 ENCODING(DICT),
+                PRIMARY KEY (pk)
+            )
+            PARTITION BY HASH(pk)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )");
+        ExecuteDictionaryQuery(session, Sprintf(R"(
+            $big = CAST(ListConcat(ListReplicate("xxxxxxxx", %u)) AS Utf8);
+            UPSERT INTO `/Root/Skewed`
+            SELECT pk, IF(pk = 0u, $big, "a"u) AS data
+            FROM AS_TABLE(ListMap(ListFromRange(0u, %uu), ($i) -> (<|pk: $i|>)));
+        )", SkewedBigValueBytes / 8, SkewedRows));
+        const auto chunks = session.ExecuteQuery(
+            "SELECT Rows FROM `/Root/Skewed/.sys/primary_index_stats` WHERE Activity == 1 AND EntityName = 'data';",
+            NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(chunks.IsSuccess(), chunks.GetIssues().ToString());
+        CompareYson(Sprintf("[[[%uu]]]", SkewedRows), FormatResultSetYson(chunks.GetResultSet(0)));
+
+        const auto result = session.ExecuteQuery("SELECT pk, data FROM `/Root/Skewed` ORDER BY pk LIMIT 2;",
+            NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        NYdb::TResultSetParser parser(result.GetResultSet(0));
+        std::vector<std::pair<ui64, size_t>> rows;
+        while (parser.TryNextRow()) {
+            const auto data = parser.ColumnParser("data").GetOptionalUtf8();
+            UNIT_ASSERT(data);
+            rows.emplace_back(parser.ColumnParser("pk").GetUint64(), data->size());
+        }
+        const std::vector<std::pair<ui64, size_t>> expected = {{0, SkewedBigValueBytes}, {1, 1}};
+        UNIT_ASSERT(rows == expected);
     }
 }
 

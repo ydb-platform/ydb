@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/schemeshard)
+UNITTEST()
 
 SIZE(SMALL)
 
@@ -8,10 +8,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/unittest
-    ydb/core/testlib/pg
-    yql/essentials/public/udf/service/exception_policy
+    ydb/core/tx/schemeshard/common
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -180,13 +180,21 @@ class PresetTests(unittest.TestCase):
         self.assertEqual(gen.inject_presets(updated, variables), updated)
 
     def test_flow_style_default_stays_valid_and_idempotent(self):
-        text = 'default: {existing: true}\n'
         variables = {'feature_flags': {'enabled': False}, 'proto_flags': {}, 'compile_time_flags': {}}
-        updated = gen.inject_presets(text, variables)
-        loaded = yaml.safe_load(updated)
-        self.assertEqual(loaded['default']['existing'], True)
-        self.assertEqual(loaded['default']['feature_flags'], {'enabled': False})
-        self.assertEqual(gen.inject_presets(updated, variables), updated)
+        for text, expected in [
+            ('default: {existing: true}\n', {'existing': True}),
+            ('default: {}\n', {}),
+            ('default: {existing: true} # keep\n', {'existing': True}),
+        ]:
+            with self.subTest(text=text):
+                updated = gen.inject_presets(text, variables)
+                loaded = yaml.safe_load(updated)
+                self.assertEqual({key: value for key, value in loaded['default'].items()
+                                  if key not in variables}, expected)
+                self.assertEqual(loaded['default']['feature_flags'], {'enabled': False})
+                if '# keep' in text:
+                    self.assertIn('# keep', updated)
+                self.assertEqual(gen.inject_presets(updated, variables), updated)
 
 
 class ReferenceTests(unittest.TestCase):

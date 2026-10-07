@@ -16,6 +16,8 @@ import yaml
 
 BEGIN = '  # BEGIN GENERATED FEATURE FLAG DEFAULTS\n'
 END = '  # END GENERATED FEATURE FLAG DEFAULTS\n'
+BEGIN_MARKER = BEGIN.strip()
+END_MARKER = END.strip()
 CANONICAL = 'NKikimrConfig.TFeatureFlags'
 TRIBOOL = '.NKikimrConfig.TFeatureFlags.Tribool'
 API_STATUS = '.Ydb.FeatureFlag.Status'
@@ -253,6 +255,8 @@ def validate_references(docs: Path, variables: dict) -> int:
                 mapping = variables[match[1]]
                 parts = match[2].lstrip('.').split('.')
                 checked += 1
+                if re.match(r'\s*\[', expression[match.end():]):
+                    errors.append(f'{path.relative_to(docs)}: use a static, qualified flag reference: {expression}')
                 for key in parts:
                     if not isinstance(mapping, dict) or key not in mapping:
                         errors.append(f'{path.relative_to(docs)}: unknown flag {match[0]}')
@@ -272,28 +276,78 @@ def validate_references(docs: Path, variables: dict) -> int:
 
 
 def inject_presets(text: str, variables: dict) -> str:
-    if text.count(BEGIN) != text.count(END) or text.count(BEGIN) > 1:
+    lines = text.splitlines(keepends=True)
+    begins = [index for index, line in enumerate(lines) if line.strip() == BEGIN_MARKER]
+    ends = [index for index, line in enumerate(lines) if line.strip() == END_MARKER]
+    if len(begins) != len(ends) or len(begins) > 1 or (begins and ends[0] <= begins[0]):
         raise Error('Malformed generated presets block')
-    if BEGIN in text:
-        start, stop = text.index(BEGIN), text.index(END) + len(END)
-        if stop < start:
-            raise Error('Malformed generated presets block')
-        text = text[:start] + text[stop:]
+    had_generated = bool(begins)
+    if had_generated:
+        text = ''.join(lines[:begins[0]] + lines[ends[0] + 1:])
     loaded = yaml.load(text, Loader=UniqueLoader)
-    if not isinstance(loaded, dict) or not isinstance(loaded.get('default'), dict):
+    if not isinstance(loaded, dict):
         raise Error('presets.yaml must contain a default mapping')
-    overlap = set(variables) & set(loaded['default'])
+    if 'default' not in loaded:
+        raise Error('presets.yaml must contain a default mapping')
+    default_mapping = loaded['default']
+    if default_mapping is None and had_generated:
+        default_mapping = {}
+    if not isinstance(default_mapping, dict):
+        raise Error('presets.yaml must contain a default mapping')
+    overlap = set(variables) & set(default_mapping)
     if overlap:
         raise Error(f'Manually defined generated namespaces: {sorted(overlap)}')
     document = yaml.compose(text)
-    default = next(value for key, value in document.value if key.value == 'default')
-    offset = default.end_mark.index
+    default_key, default = next((key, value) for key, value in document.value if key.value == 'default')
     generated = yaml.safe_dump(variables, sort_keys=True, allow_unicode=True, width=120)
-    block = BEGIN + ''.join('  ' + line + '\n' for line in generated.splitlines()) + END
+    if not isinstance(default, yaml.MappingNode):
+        indent = ' ' * (default_key.start_mark.column + 2)
+        offset = default.end_mark.index
+        block = (indent + BEGIN_MARKER + '\n'
+                 + ''.join(indent + line + '\n' for line in generated.splitlines())
+                 + indent + END_MARKER + '\n')
+        prefix = text[:offset].rstrip(' \t')
+        suffix = text[offset:]
+        if prefix and not prefix.endswith('\n'):
+            prefix += '\n'
+        if suffix.startswith('\n'):
+            suffix = suffix[1:]
+        text = prefix + block + suffix
+        yaml.load(text, Loader=UniqueLoader)
+        return text
+    if default.flow_style:
+        indent = ' ' * (default_key.start_mark.column + 2)
+        manual = yaml.safe_dump(default_mapping, sort_keys=False, allow_unicode=True, width=120)
+        manual_block = ''.join(indent + line + '\n' for line in manual.splitlines()) if default_mapping else ''
+        block = (indent + BEGIN_MARKER + '\n'
+                 + ''.join(indent + line + '\n' for line in generated.splitlines())
+                 + indent + END_MARKER + '\n')
+        suffix = text[default.end_mark.index:]
+        if suffix.startswith(' #'):
+            comment, separator, rest = suffix.partition('\n')
+            text = text[:default.start_mark.index].rstrip(' \t') + comment + '\n' + manual_block + block + (rest if separator else '')
+        else:
+            if suffix.startswith('\n'):
+                suffix = suffix[1:]
+            text = text[:default.start_mark.index].rstrip(' \t') + '\n' + manual_block + block + suffix
+        yaml.load(text, Loader=UniqueLoader)
+        return text
+    indent_width = (default.value[0][0].start_mark.column if default.value
+                    else default_key.start_mark.column + 2)
+    indent = ' ' * indent_width
+    offset = default.end_mark.index
+    block = (indent + BEGIN_MARKER + '\n'
+             + ''.join(indent + line + '\n' for line in generated.splitlines())
+             + indent + END_MARKER + '\n')
     prefix = text[:offset]
+    suffix = text[offset:]
     if prefix and not prefix.endswith('\n'):
         prefix += '\n'
-    return prefix + block + text[offset:]
+    if suffix.startswith('\n'):
+        suffix = suffix[1:]
+    text = prefix + block + suffix
+    yaml.load(text, Loader=UniqueLoader)
+    return text
 
 
 def main():

@@ -91,7 +91,7 @@ void CheckDatabaseCreation(bool disableSlsCreating, bool hasRecord, bool databas
     const auto service = runtime.Register(CreateComputeDatabaseControlPlaneServiceActor(
         config, NKikimr::CreateYdbCredentialsProviderFactory, {}, {}, {},
         MakeIntrusive<NMonitoring::TDynamicCounters>()).release());
-    runtime.Send(new IEventHandle(service, sender, new TEvYdbCompute::TEvCreateDatabaseRequest("cloud", scope)));
+    runtime.Send(new IEventHandle(service, sender, new TEvYdbCompute::TEvCreateDatabaseRequest("cloud", scope)), 0, true);
 
     const auto describe = runtime.GrabEdgeEventRethrow<TEvControlPlaneStorage::TEvDescribeDatabaseRequest>(storage);
     requestActor = describe->Sender;

@@ -52,6 +52,11 @@ on:
         required: false
         type: boolean
         default: true
+      runner_suffix:
+        description: 'Optional runner label suffix, e.g. -large (label is build-preset-{preset}{suffix})'
+        required: false
+        type: string
+        default: ''
 
   workflow_dispatch:
     inputs:
@@ -100,6 +105,14 @@ on:
         description: 'Test threads count (default: 52; build presets use a fraction of this value)'
         required: false
         default: '52'
+      runner_suffix:
+        description: 'Optional runner label suffix, e.g. -large (label is build-preset-{preset}{suffix})'
+        required: false
+        default: ''
+      branches:
+        description: 'Branch or SHA to test (JSON array or single name). Empty = current ref or PR merge.'
+        required: false
+        default: ''
 
 jobs:
   prepare:
@@ -276,7 +289,7 @@ jobs:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
-    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
+    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}{1}', inputs.build_preset, inputs.runner_suffix) }}" ]
     strategy:
       fail-fast: false
       matrix:

@@ -1,3 +1,5 @@
 items:
 - name: Первоначальное развёртывание
   href: initial-deployment.md
+- name: Добавление диска
+  href: disk-add.md

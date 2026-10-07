@@ -1,4 +1,7 @@
 items:
+- name: Добавление диска в кластер
+  href: disk-add/index.md
+  include: { mode: link, path: disk-add/toc_p.yaml }
 - name: Добавление групп хранения
   href: adding_storage_groups.md
 - name: Безопасный рестарт и выключение узлов

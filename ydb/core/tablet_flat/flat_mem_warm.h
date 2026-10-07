@@ -591,14 +591,20 @@ namespace NMem {
         bool RemoveTxOps(ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum) {
             auto it = RemovedOps.find(txId);
             const bool newRef = (it == RemovedOps.end());
-            if (RollbackState) {
-                if (newRef) {
+            if (newRef) {
+                if (RollbackState) {
                     UndoBuffer.push_back(TUndoOpEraseRemovedOps{ txId });
-                } else {
-                    UndoBuffer.push_back(TUndoOpUpdateRemovedOps{ txId, it->second });
                 }
+                RemovedOps[txId].Add(fromSavepointSeqNum, toSavepointSeqNum);
+            } else if (RollbackState) {
+                // Keep only what this Add changed, not a copy of all ranges
+                TSavepointSeqNumRanges::TAddUndo undo;
+                if (it->second.Add(fromSavepointSeqNum, toSavepointSeqNum, &undo)) {
+                    UndoBuffer.push_back(TUndoOpAddRemovedOps{ txId, std::move(undo) });
+                }
+            } else {
+                it->second.Add(fromSavepointSeqNum, toSavepointSeqNum);
             }
-            RemovedOps[txId].Add(fromSavepointSeqNum, toSavepointSeqNum);
             return newRef;
         }
 
@@ -690,9 +696,9 @@ namespace NMem {
         struct TUndoOpEraseTxIdStats {
             ui64 TxId;
         };
-        struct TUndoOpUpdateRemovedOps {
+        struct TUndoOpAddRemovedOps {
             ui64 TxId;
-            TSavepointSeqNumRanges Value;
+            TSavepointSeqNumRanges::TAddUndo Undo;
         };
         struct TUndoOpEraseRemovedOps {
             ui64 TxId;
@@ -705,7 +711,7 @@ namespace NMem {
             TUndoOpEraseRemoved,
             TUndoOpUpdateTxIdStats,
             TUndoOpEraseTxIdStats,
-            TUndoOpUpdateRemovedOps,
+            TUndoOpAddRemovedOps,
             TUndoOpEraseRemovedOps>;
 
         // This buffer is applied in reverse on rollback

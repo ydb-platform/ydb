@@ -1225,12 +1225,23 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
         UNIT_ASSERT_VALUES_EQUAL(me->GetRemovedTxOpsCount(table1), 1u);
 
+        // A rejected transaction undoes several additions on top of existing ranges
+        me.To(53).Begin();
+        me.To(54).RemoveTxOps(table1, 123, 12, 12);
+        me.To(55).RemoveTxOps(table1, 123, 11, 11);
+        me.To(56).RemoveTxOps(table1, 123, 20, 21);
+        me.To(57).RemoveTxOps(table1, 123, 3, 4);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [3, 12], [20, 21] }");
+        me.To(58).Reject();
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
+        UNIT_ASSERT_VALUES_EQUAL(me->GetRemovedTxOpsCount(table1), 1u);
+
         me.To(60).Replay(EPlay::Boot);
         UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
         me.To(61).Replay(EPlay::Redo);
         UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
 
-        // Rolled back seq nums don't affect transaction status or visibility yet
+        // Removed operations don't affect transaction status or visibility yet
         UNIT_ASSERT(me->HasOpenTx(table1, 123));
         me.To(70).ReadTx(123).Select(table1).HasN(1_u64, 21_u64).HasN(2_u64, 22_u64);
 

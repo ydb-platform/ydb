@@ -29,7 +29,7 @@ namespace NTable {
     };
 
     /* The least evolution required to read savepoint seq nums of deltas
-        and rolled back savepoint seq nums. Redo log chunks and parts with
+        and removed operations (savepoint seq nums). Redo log chunks and parts with
         them are labeled with it, so older binaries fail on them with an
         explicit ABI incompatibility.
      */
@@ -105,7 +105,7 @@ namespace NTable {
             (ERedo::UpdateTxSavepointSeqNum) and in parts (EPage::DataPage
             version 2). Only written when used, such redo chunks and parts
             require at least this evolution to read.
-            Rolled back savepoint seq nums in redo log (ERedo::RemoveTxOps,
+            Removed operations (savepoint seq nums) in redo log (ERedo::RemoveTxOps,
             labeled the same way) and in tx status (EPage::TxStatus version 1,
             which has no ABI label and is rejected by its page version on load).
      */

@@ -104,12 +104,14 @@ void TTable::RollbackChanges()
                 Self->RemoveRemovedTxOpsRef(op.TxId);
             }
 
-            void operator()(const TRollbackRestoreRemovedTxOps& op) const {
-                if (op.Value) {
-                    Self->RemovedTxOps[op.TxId] = *op.Value;
-                } else {
-                    Self->RemovedTxOps.erase(op.TxId);
-                }
+            void operator()(const TRollbackEraseRemovedTxOps& op) const {
+                Self->RemovedTxOps.erase(op.TxId);
+            }
+
+            void operator()(const TRollbackAddRemovedTxOps& op) const {
+                auto it = Self->RemovedTxOps.find(op.TxId);
+                Y_ENSURE(it != Self->RemovedTxOps.end());
+                it->second.Undo(op.Undo);
             }
         };
 
@@ -1156,7 +1158,7 @@ TTransactionSet TTable::GetGarbageRemovedTxOps() const
     TTransactionSet garbage;
     for (const auto& pr : RemovedTxOpsRefs) {
         if (!TxDataRefs.contains(pr.first)) {
-            // Rolled back seq nums are only needed while transaction has rows
+            // Removed operations are only needed while the transaction has rows
             garbage.Add(pr.first);
         }
     }
@@ -1281,14 +1283,20 @@ void TTable::RemoveTxOps(ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSe
     }
 
     auto it = RemovedTxOps.find(txId);
-    if (RollbackState) {
-        if (it != RemovedTxOps.end()) {
-            RollbackOps.emplace_back(TRollbackRestoreRemovedTxOps{ txId, it->second });
-        } else {
-            RollbackOps.emplace_back(TRollbackRestoreRemovedTxOps{ txId, std::nullopt });
+    if (it == RemovedTxOps.end()) {
+        if (RollbackState) {
+            RollbackOps.emplace_back(TRollbackEraseRemovedTxOps{ txId });
         }
+        RemovedTxOps[txId].Add(fromSavepointSeqNum, toSavepointSeqNum);
+    } else if (RollbackState) {
+        // Keep only what this Add changed, not a copy of all ranges
+        TSavepointSeqNumRanges::TAddUndo undo;
+        if (it->second.Add(fromSavepointSeqNum, toSavepointSeqNum, &undo)) {
+            RollbackOps.emplace_back(TRollbackAddRemovedTxOps{ txId, std::move(undo) });
+        }
+    } else {
+        it->second.Add(fromSavepointSeqNum, toSavepointSeqNum);
     }
-    RemovedTxOps[txId].Add(fromSavepointSeqNum, toSavepointSeqNum);
 
     // Note: removed operations don't affect reads yet, no need to invalidate erase cache
 }

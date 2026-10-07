@@ -5385,7 +5385,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
 
         checkRemovedTxOps("count 2, 123 = { [7, 8] }, 234 = { [3, 3] }");
 
-        // Rolled back seq nums are moved from the mem table to tx status
+        // Removed operations are moved from the mem table to tx status
         Cerr << "...compacting mem table" << Endl;
         env.SendSync(new NFake::TEvCompact(TableId, true));
         env.WaitFor<NFake::TEvCompacted>();
@@ -5416,7 +5416,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         restartTablet();
         checkRemovedTxOps("count 1, 123 = { [7, 8], [10, 10] }, 234 = none");
 
-        // Rolled back seq nums don't affect visibility yet
+        // Removed operations don't affect visibility yet
         env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
 
         {

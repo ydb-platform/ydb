@@ -450,9 +450,13 @@ private:
         ui64 TxId;
     };
 
-    struct TRollbackRestoreRemovedTxOps {
+    struct TRollbackEraseRemovedTxOps {
         ui64 TxId;
-        std::optional<TSavepointSeqNumRanges> Value;
+    };
+
+    struct TRollbackAddRemovedTxOps {
+        ui64 TxId;
+        TSavepointSeqNumRanges::TAddUndo Undo;
     };
 
     using TRollbackOp = std::variant<
@@ -463,7 +467,8 @@ private:
         TRollbackAddRemovedTx,
         TRollbackRemoveRemovedTx,
         TRollbackRemoveRemovedTxOpsRef,
-        TRollbackRestoreRemovedTxOps>;
+        TRollbackEraseRemovedTxOps,
+        TRollbackAddRemovedTxOps>;
 
     struct TCommitAddDecidedTx {
         ui64 TxId;

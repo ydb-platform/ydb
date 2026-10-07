@@ -25,11 +25,23 @@ namespace NTable {
             bool operator==(const TRange&) const = default;
         };
 
+        /**
+         * What a single Add changed: the merged range was inserted at Index in
+         * place of the Replaced ranges. Usually holds just a few ranges, so it's
+         * much cheaper to keep for rollback than a copy of the whole set.
+         */
+        struct TAddUndo {
+            bool Changed = false;
+            size_t Index = 0;
+            TVector<TRange> Replaced;
+        };
+
     public:
         /**
-         * Adds [from, to], returns true when the set has changed
+         * Adds [from, to], returns true when the set has changed.
+         * Fills undo, if provided, with what is needed to revert this Add.
          */
-        bool Add(ui32 from, ui32 to) {
+        bool Add(ui32 from, ui32 to, TAddUndo* undo = nullptr) {
             Y_ENSURE(from <= to, "Invalid savepoint seq num range [" << from << ", " << to << "]");
 
             // The first range that ends at or after from - 1, i.e. may overlap or touch the new one
@@ -40,6 +52,9 @@ namespace NTable {
 
             if (it != Ranges.end() && it->From <= from && to <= it->To) {
                 // Already covered
+                if (undo) {
+                    undo->Changed = false;
+                }
                 return false;
             }
 
@@ -51,9 +66,28 @@ namespace NTable {
                 ++last;
             }
 
+            if (undo) {
+                undo->Changed = true;
+                undo->Index = it - Ranges.begin();
+                undo->Replaced.assign(it, last);
+            }
+
             it = Ranges.erase(it, last);
             Ranges.insert(it, TRange{ from, to });
             return true;
+        }
+
+        /**
+         * Reverts an Add, undos must be applied in the reverse order of their Adds
+         */
+        void Undo(const TAddUndo& undo) {
+            if (!undo.Changed) {
+                return;
+            }
+
+            Y_ENSURE(undo.Index < Ranges.size(), "Savepoint seq num ranges undo is out of bounds");
+            auto it = Ranges.erase(Ranges.begin() + undo.Index);
+            Ranges.insert(it, undo.Replaced.begin(), undo.Replaced.end());
         }
 
         /**

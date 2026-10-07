@@ -57,6 +57,40 @@ Y_UNIT_TEST_SUITE(TSavepointSeqNumRanges) {
         UNIT_ASSERT(!ranges.Add(other));
     }
 
+    Y_UNIT_TEST(Undo) {
+        TSavepointSeqNumRanges ranges;
+        ranges.Add(5, 7);
+        ranges.Add(10, 12);
+        ranges.Add(20, 20);
+
+        TVector<TString> states;
+        TVector<TSavepointSeqNumRanges::TAddUndo> undos;
+        auto add = [&](ui32 from, ui32 to) {
+            states.push_back(ToString(ranges));
+            ranges.Add(from, to, &undos.emplace_back());
+        };
+
+        add(30, 31);  // appended at the end
+        add(1, 2);    // inserted at the beginning
+        add(8, 9);    // merges two ranges through adjacency
+        add(6, 11);   // already covered, nothing changes
+        add(13, 25);  // merges several ranges
+        UNIT_ASSERT_VALUES_EQUAL(ToString(ranges), "{ [1, 2], [5, 25], [30, 31] }");
+
+        // Only the replaced ranges are kept for undo, not a copy of the whole set
+        UNIT_ASSERT(!undos[3].Changed);
+        UNIT_ASSERT_VALUES_EQUAL(undos[4].Replaced.size(), 2u);
+
+        // Undos applied in reverse order restore every intermediate state
+        while (!undos.empty()) {
+            ranges.Undo(undos.back());
+            undos.pop_back();
+            UNIT_ASSERT_VALUES_EQUAL(ToString(ranges), states.back());
+            states.pop_back();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ToString(ranges), "{ [5, 7], [10, 12], [20, 20] }");
+    }
+
     Y_UNIT_TEST(InvalidRange) {
         TSavepointSeqNumRanges ranges;
         UNIT_ASSERT_EXCEPTION(ranges.Add(7, 5), yexception);

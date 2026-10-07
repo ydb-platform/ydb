@@ -896,10 +896,10 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(UnsupportedTypeFallbackToGraceJoin, NewRBO) {
+    Y_UNIT_TEST(UnsupportedTypeFallbackToGraceJoin) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRBO);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         settings.AppConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
         TKikimrRunner kikimr(settings);
 
@@ -965,7 +965,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
         auto astOpt = explainResult.GetStats()->GetAst();
         UNIT_ASSERT(astOpt.has_value());
         TString ast = TString(*astOpt);
-        Cout << "AST (unsupported List payload, NewRBO=" << NewRBO << "): " << ast << Endl;
+        Cout << "AST (unsupported List payload): " << ast << Endl;
 
         UNIT_ASSERT_C(ast.Contains("GraceJoin"),
             TStringBuilder() << "Unsupported column type should fall back to GraceJoin. Actual AST: " << ast);

@@ -84,6 +84,7 @@ ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsR
 ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationRecoversAfterDataShardReboot
 ydb/core/kqp/ut/scheme unittest.[*/*] chunk
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
+ydb/core/kqp/ut/service KqpQueryService.TableSink_ReplaceFromSelectLargeOlap
 ydb/core/kqp/ut/sysview KqpSystemView.CompileCacheUserIsolation
 ydb/core/kqp/ut/tx KqpSinkTx.UncommittedWriteSeqNumInsertSplitDuringFlushSurvives
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.ConflictWrite+IsOlap+FillTables
@@ -149,6 +150,7 @@ ydb/core/tx/datashard/ut_import_s3_engine TImportS3EngineTest.ParquetRoundTripsA
 ydb/core/tx/datashard/ut_import_s3_engine unittest.sole chunk
 ydb/core/tx/replication/controller/ut_schema_change IndexBuild.DoneCancelsSyncIndexAfterLateWorkerError
 ydb/core/tx/replication/controller/ut_schema_change IndexBuild.DoneCancelsSyncIndexAfterLateWorkerErrorAndRestart
+ydb/core/tx/replication/controller/ut_schema_change IndexBuild.DoneRetriesInterruptedSyncIndexCancellationAfterRestart
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithSchemaChangesEnabledAfterCreationReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithoutSchemaChangesReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropSyncIndexWithGlobalConsistency

@@ -136,16 +136,17 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
                 YQL_CLOG(TRACE, CoreDq) << "Converted Empty Source " << opStageId;
             } else if (op->Kind == EOperator::Source) {
                 auto& opRead = CastOperator<TOpRead>(*op);
+                const auto& table = rboCtx.KqpCtx.Tables->ExistingTable(
+                    rboCtx.KqpCtx.Cluster, TKqpTable(opRead.TableCallable).Path().Value());
 
                 TString carrierColumn;
                 if (opRead.GetColumns().Empty() && opRead.GetTableStorageType() == NYql::EStorageType::ColumnStorage) {
-                    const auto& table = rboCtx.KqpCtx.Tables->ExistingTable(
-                        rboCtx.KqpCtx.Cluster, TKqpTable(opRead.TableCallable).Path().Value());
                     Y_ENSURE(!table.Metadata->KeyColumnNames.empty(), "An OLAP table needs a primary key");
                     carrierColumn = table.Metadata->KeyColumnNames.front();
                 }
                 currentStageBody = TPhysicalSourceBuilder(opRead, ctx, op->Pos, names, root->PlanProps.InfoUnitRegistry,
-                    graph.StageGUIDs.at(opStageId), std::move(carrierColumn)).BuildPhysicalOp();
+                    graph.StageGUIDs.at(opStageId), table.Metadata->Kind == NYql::EKikimrTableKind::SysView,
+                    std::move(carrierColumn)).BuildPhysicalOp();
 
                 stages[opStageId] = currentStageBody;
                 stagePos[opStageId] = op->Pos;

@@ -70,5 +70,6 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_collector
     ut_trace
 )

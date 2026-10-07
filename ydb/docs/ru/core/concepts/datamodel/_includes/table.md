@@ -245,11 +245,6 @@ CREATE TABLE article (
 
 * В качестве первичного ключа можно использовать только `NOT NULL` колонки.
 * Данные партицируются не по первичному ключу, а по Hash от колонок партицирования.
-* В колоночных таблицах поддерживается ограниченный набор типов данных:
-
-  + Доступно и в первичном ключе, и в остальных колонках: `Bool`, `Int8`, `Int16`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Decimal`, `Date`, `Datetime`, `Timestamp`, `Interval`, `Date32`, `Datetime64`, `Timestamp64`, `Interval64`, `DyNumber`, `Uuid`, `Utf8`, `String`;
-  + Доступно только в колонках, не входящих в первичный ключ: `Double`, `Float`, `Json`, `JsonDocument`, `Yson`.
-
 * Поддерживается возможность задавать сжатие индивидуально для каждой колонки при [создании](../../../yql/reference/syntax/create_table/index.md#compression) колоночной таблицы или [изменить](../../../yql/reference/syntax/alter_table/columns.md#compression) её позднее.
 * Поддерживается возможность задавать кодирование данных индивидуально для каждой колонки при [создании](../../../yql/reference/syntax/create_table/index.md#encoding) колоночной таблицы или [изменить](../../../yql/reference/syntax/alter_table/columns.md#encoding) её позднее.
 

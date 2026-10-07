@@ -452,13 +452,6 @@ ui64 TPartition::GetUsedStorage(const TInstant& now) {
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 
-static TDuration GetAvailabilityPeriod(const TUserInfo& consumer)  {
-    if (consumer.Important) {
-        return TDuration::Max();
-    }
-    return consumer.AvailabilityPeriod;
-}
-
 bool TPartition::ImportantConsumersNeedToKeepCurrentKey(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) const {
     for (const auto& [name, userInfo] : UsersInfoStorage->ViewImportant()) {
         const TDuration availabilityPeriod = GetAvailabilityPeriod(userInfo);

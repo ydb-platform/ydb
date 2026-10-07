@@ -155,6 +155,7 @@ void PartitionLevelMetrics(TPartitionLevelMetricsTestParameters p) {
     tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(p.EnableMetricsLevel);
 
     TTabletPreparationParameters parameters{
+        .deleteTime = TDuration::Hours(20).Seconds(),
         .metricsLevel = METRICS_LEVEL_OBJECT,
         .monitoringProjectId = p.MonitoringProjectId,
     };
@@ -385,6 +386,7 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
     tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(p.EnableMetricsLevel);
 
     TTabletPreparationParameters parameters{
+        .deleteTime = TDuration::Hours(20).Seconds(),
         .metricsLevel = p.PartitionMetricsLevel,
         .monitoringProjectId = p.PartitionMonitoringProjectId,
     };

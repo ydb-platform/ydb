@@ -31,12 +31,22 @@
 
 namespace NKikimr::NPQ {
 
-TMaybe<TInstant> GetReadFrom(ui32 maxTimeLagMs, ui64 readTimestampMs, TInstant consumerReadFromTimestamp, const TActorContext& ctx) {
-    if (!(maxTimeLagMs > 0 || readTimestampMs > 0 || consumerReadFromTimestamp > TInstant::MilliSeconds(1))) {
+static TDuration ReadMaxLag(ui32 requestMaxTimeLagMs, TDuration availabilityPeriod, const NKikimrPQ::TPartitionConfig& partConfig, bool limitReadToRetention) {
+    const TDuration userMaxLag = requestMaxTimeLagMs > 0 ? TDuration::MilliSeconds(requestMaxTimeLagMs) : TDuration::Max();
+    if (!limitReadToRetention || (partConfig.HasStorageLimitBytes() && partConfig.GetStorageLimitBytes() > 0)) {
+        return userMaxLag;
+    }
+    const TDuration retentionPeriod = TDuration::Seconds(partConfig.GetLifetimeSeconds());
+    return Min(Max(retentionPeriod, availabilityPeriod), userMaxLag);
+}
+
+static TMaybe<TInstant> GetReadFrom(TDuration maxLag, ui64 readTimestampMs, TInstant consumerReadFromTimestamp, const TActorContext& ctx) {
+    const TInstant now = ctx.Now();
+    const bool hasMaxLagLimit = maxLag < TDuration::Max() && now.MicroSeconds() >= maxLag.MicroSeconds();
+    if (!hasMaxLagLimit && readTimestampMs == 0 && consumerReadFromTimestamp <= TInstant::MilliSeconds(1)) {
         return {};
     }
-
-    TInstant timestamp = maxTimeLagMs > 0 ? ctx.Now() - TDuration::MilliSeconds(maxTimeLagMs) : TInstant::Zero();
+    TInstant timestamp = now - maxLag;
     timestamp = Max(timestamp, TInstant::MilliSeconds(readTimestampMs));
     timestamp = Max(timestamp, consumerReadFromTimestamp);
     return timestamp;
@@ -143,7 +153,7 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
     return res;
 }
 
-bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx) {
+TPartition::EProcessHasDataRequestResult TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx) {
     auto sendResponse = [&](ui64 lagSize, bool readingFinished) {
         auto response = MakeHasDataInfoResponse(lagSize, request.Cookie, readingFinished);
         ctx.Send(request.Sender, response.Release());
@@ -159,13 +169,19 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
             auto& userInfo = UsersInfoStorage->GetOrCreate(request.ClientId, ctx);
             userInfo.UpdateReadOffset((i64)GetEndOffset() - 1, now, now, now, true);
         }
-    } else if (request.Offset < GetEndOffset()) {
-        sendResponse(GetSizeLag(request.Offset), false);
+        return EProcessHasDataRequestResult::HasResult;
     } else {
-        return false;
+        if (request.Offset < GetEndOffset()) {
+            if (request.ReadTimestamp.GetOrElse(TInstant::Zero()) <= EndWriteTimestamp) {
+                sendResponse(GetSizeLag(request.Offset), false);
+                return EProcessHasDataRequestResult::HasResult;
+            } else {
+                return EProcessHasDataRequestResult::PostponeUntilEndWriteTimestampChange;
+            }
+        } else {
+            return EProcessHasDataRequestResult::PostponeUntilEndOffsetChange;
+        }
     }
-
-    return true;
 }
 
 
@@ -183,10 +199,15 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     };
 
     for (auto request = HasDataRequests.begin(); request != HasDataRequests.end();) {
-        if (!ProcessHasDataRequest(*request, ctx)) {
-            break;
+        const auto result = ProcessHasDataRequest(*request, ctx);
+        if (result == EProcessHasDataRequestResult::PostponeUntilEndOffsetChange) {
+            break; // all following requests would also be postponed until new message appears
+        } else if (result == EProcessHasDataRequestResult::PostponeUntilEndWriteTimestampChange) {
+            // there are no data for this request and for all following requests with the same offset
+            // but some of the following requests might be readable now because they have lower read timestamp, even if they have bigger offset
+            ++request;
+            continue;
         }
-
         forgetSubscription(request->ClientId);
         request = HasDataRequests.erase(request);
     }
@@ -246,7 +267,15 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto now = ctx.Now();
 
     auto cookie = record.HasCookie() ? TMaybe<ui64>(record.GetCookie()) : TMaybe<ui64>();
-    auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero(), ctx);
+    const TString& clientId = record.GetClientId();
+    const TUserInfo* reader = InitDone
+        ? UsersInfoStorage->GetIfExists(clientId.empty() ? CLIENTID_WITHOUT_CONSUMER : clientId)
+        : nullptr;
+    const TDuration availabilityPeriod = reader ? GetAvailabilityPeriod(*reader) : TDuration::Zero();
+    const TInstant consumerReadFrom = reader ? reader->ReadFromTimestamp : TInstant::Zero();
+    const bool limitReadToRetention = !AppData(ctx)->FeatureFlags.GetEnableTopicReadPriorRetention();
+    const TDuration maxLag = ReadMaxLag(record.GetMaxTimeLagMs(), availabilityPeriod, Config.GetPartitionConfig(), limitReadToRetention);
+    auto readTimestamp = GetReadFrom(maxLag, record.GetReadTimestampMs(), consumerReadFrom, ctx);
     TActorId sender = ActorIdFromProto(record.GetSender());
 
     if (InitDone && !record.GetSessionId().empty()) {
@@ -267,7 +296,7 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
         record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
 
-    if (!InitDone || !ProcessHasDataRequest(req, ctx)) {
+    if (!InitDone || ProcessHasDataRequest(req, ctx) != EProcessHasDataRequestResult::HasResult) {
         THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
         auto res = HasDataRequests.insert(std::move(req));
         HasDataDeadlines.insert(dl);
@@ -959,14 +988,19 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     userInfo->ReadsInQuotaQueue--;
     ui64 offset = read->Offset;
 
-    auto readTimestamp = GetReadFrom(read->MaxTimeLagMs, read->ReadTimestampMs, userInfo->ReadFromTimestamp, ctx);
+    ui64 readTimestampMs = read->ReadTimestampMs;
+    const TDuration maxLag = ReadMaxLag(read->MaxTimeLagMs, GetAvailabilityPeriod(*userInfo), Config.GetPartitionConfig(), read->LimitReadToRetention);
+    auto readTimestamp = GetReadFrom(maxLag, read->ReadTimestampMs, userInfo->ReadFromTimestamp, ctx);
+    if (read->LimitReadToRetention && readTimestamp) {
+        readTimestampMs = readTimestamp->MilliSeconds();
+    }
     if (read->PartNo == 0 && readTimestamp) {
         offset = GetReadOffset(offset, readTimestamp);
         userInfo->ReadOffsetRewindSum += offset - read->Offset;
     }
 
     TReadInfo info(
-            user, read->ClientDC, offset, read->LastOffset, read->PartNo, read->Count, read->Size, read->ReadToBlobEnd, read->Cookie, read->ReadTimestampMs,
+            user, read->ClientDC, offset, read->LastOffset, read->PartNo, read->Count, read->Size, read->ReadToBlobEnd, read->Cookie, readTimestampMs,
             waitQuotaTime, read->ExternalOperation, userInfo->PipeClient, read->IsInternal(), read->ReplyTo
     );
 
@@ -1107,8 +1141,9 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     );
 
     THolder<TEvPQ::TEvRead> event = MakeHolder<TEvPQ::TEvRead>(0, userInfo.Offset, 0, 0, 1, "",
-                                                               user, 0, MAX_BLOB_PART_SIZE * 2, false, 0, 0, "",
-                                                               false, TActorId{});
+                                                               user, 0, MAX_BLOB_PART_SIZE * 2, false,
+                                                               false,
+                                                               0, 0, "", false, TActorId{});
 
     ctx.Send(ctx.SelfID, event.Release());
     TabletCounters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_CACHE_MISS].Increment(1);

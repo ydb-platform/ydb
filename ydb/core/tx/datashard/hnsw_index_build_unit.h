@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include "hnsw_index.h"
+#include "hnsw_index_build_actor.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
@@ -23,6 +23,9 @@ struct THnswIndexBuildProduct : public IDestructable {
     std::shared_ptr<void> MemoryReservation;
     std::shared_ptr<THnswIndex> Index;
     TString Error;
+    ui64 RowCount = 0;
+    bool BelowMinRows = false;
+    bool Retryable = false;
 
     THnswIndexBuildProduct(std::shared_ptr<THnswIndex> index,
             std::shared_ptr<void> memoryReservation, TString error)
@@ -32,15 +35,16 @@ struct THnswIndexBuildProduct : public IDestructable {
     {}
 };
 
-// Builds the HNSW graph off the tablet's transaction executor thread and
-// reports completion to `replyTo` as TEvAsyncJobComplete with cookie = txId,
-// which resumes the suspended scheme transaction.
+struct THnswSnapshotScanProduct : public IDestructable {
+    THnswSnapshotScanResult Result;
+    explicit THnswSnapshotScanProduct(THnswSnapshotScanResult&& result)
+        : Result(std::move(result)) {}
+};
+
+// Waits for an executor scan, constructs the graph on the batch pool, and
+// resumes the scheme transaction with TEvAsyncJobComplete, cookie = txId.
 NActors::IActor* CreateHnswIndexBuildJob(
-    const NActors::TActorId& replyTo,
-    ui64 txId,
-    const Ydb::Table::VectorIndexSettings& settings,
-    std::vector<std::pair<TString, TString>> keysAndVectors,
-    std::shared_ptr<void> memoryReservation,
-    ui64 maxMemoryBytes);
+    const NActors::TActorId& replyTo, ui64 txId,
+    const Ydb::Table::VectorIndexSettings& settings);
 
 } // namespace NKikimr::NDataShard

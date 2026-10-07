@@ -479,9 +479,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
     buildInfo.SerializeToProto(ss, indexBuildProto.MutableInitiateIndexBuild());
     const auto& indexDesc = indexBuildProto.GetInitiateIndexBuild().GetIndex();
     THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-    const auto indexColumns = NTableIndex::ExtractInfo(indexDesc);
-    Y_ENSURE(!indexColumns.KeyColumns.empty());
-    indexDataColumns.insert(indexColumns.KeyColumns.back());
+    if (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+        const auto indexColumns = NTableIndex::ExtractInfo(indexDesc);
+        Y_ENSURE(!indexColumns.KeyColumns.empty());
+        indexDataColumns.insert(indexColumns.KeyColumns.back());
+    }
 
     auto addCreateTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
         InheritDetailedMetricsSettings(tableInfo, implTableDesc);
@@ -603,6 +605,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     if (buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1 && buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
         // When OverlapClusters is active, first build table for each level contains 2 additional columns: __ydb_distance and __ydb_foreign,
         // and its primary key has different order - original table's primary key comes first and the cluster ID comes next
+        if (buildInfo.KMeans.Level >= buildInfo.KMeans.Levels
+                && buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            indexDataColumns = THashSet<TString>(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
+        }
         op = NTableIndex::CalcVectorKmeansTreeBuildOverlapTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}, suffix);
         // Prevent merging partitions
         auto& policy = *resetPartitionsSettings();
@@ -1153,7 +1159,7 @@ private:
     bool ScheduleHnswProgress = false;
     bool CloseHnswPipes = false;
 
-    bool WaitForHnswBuilds(TIndexBuildInfo& buildInfo, const TActorContext& ctx) {
+    bool WaitForHnswBuilds(TIndexBuildInfo& buildInfo, TTransactionContext& txc, const TActorContext& ctx) {
         if (!Self->EnableHnswIndex || buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
             return false;
         }
@@ -1162,7 +1168,25 @@ private:
         // the current posting partitions have finished their graph work.
         const auto posting = TPath::Init(buildInfo.TablePathId, Self)
             .Child(buildInfo.IndexName).Child(NTableIndex::NKMeans::PostingTable);
-        Y_ENSURE(posting.IsResolved() && !posting.IsDeleted());
+        if (!posting.IsResolved() || posting.IsDeleted() || !Self->Tables.contains(posting->PathId)) {
+            // Schema locks normally prevent this, but recovery must not crash
+            // on a path that has disappeared. The published index is optional
+            // cache work's only owner, so there is nothing left to wait for.
+            CloseHnswPipes = true;
+            return false;
+        }
+        if (!buildInfo.HnswWaitStartedAt) {
+            buildInfo.HnswWaitStartedAt = ctx.Now();
+            NIceDb::TNiceDb db(txc.DB);
+            db.Table<Schema::IndexBuild>().Key(buildInfo.Id).Update(
+                NIceDb::TUpdate<Schema::IndexBuild::HnswWaitStartedAt>(buildInfo.HnswWaitStartedAt.MicroSeconds()));
+        }
+        const auto timeout = Self->HnswIndexBuildWaitTimeout;
+        if (ctx.Now() >= buildInfo.HnswWaitStartedAt + timeout) {
+            YDB_LOG_NOTICE("HNSW readiness wait expired; completing with scan fallback", {"buildId", buildInfo.Id});
+            CloseHnswPipes = true;
+            return false;
+        }
         const auto table = Self->Tables.at(posting->PathId);
         THashSet<ui64> tablets;
         for (const auto* partition : table->GetPartitions()) {
@@ -1341,6 +1365,24 @@ private:
         ToTabletSend.emplace(shardId, std::move(ev));
     }
 
+    template <typename TRecord>
+    void FillKMeansDataColumns(TRecord& record, const TIndexBuildInfo& buildInfo) {
+        *record.MutableDataColumns() = {buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()};
+        const auto& embedding = buildInfo.IndexColumns.back();
+        if (buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                || std::find(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end(), embedding) != buildInfo.DataColumns.end()) {
+            return;
+        }
+        const auto& table = *Self->Tables.at(buildInfo.TablePathId);
+        // Primary-key embeddings already travel in the output key cells.
+        for (ui32 tag : table.KeyColumnIds) {
+            if (table.Columns.at(tag).Name == embedding) {
+                return;
+            }
+        }
+        record.AddDataColumns(embedding);
+    }
+
     void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvReshuffleKMeansRequest>();
@@ -1371,9 +1413,7 @@ private:
         ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        *ev->Record.MutableDataColumns() = {
-            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
-        };
+        FillKMeansDataColumns(ev->Record, buildInfo);
 
         ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
         ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
@@ -1475,9 +1515,7 @@ private:
         ev->Record.SetLevelName(path.PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        *ev->Record.MutableDataColumns() = {
-            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
-        };
+        FillKMeansDataColumns(ev->Record, buildInfo);
 
         ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
         ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
@@ -1551,9 +1589,7 @@ private:
 
         ev->Record.SetPrefixColumns(buildInfo.IndexColumns.size() - 1);
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
-        *ev->Record.MutableDataColumns() = {
-            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
-        };
+        FillKMeansDataColumns(ev->Record, buildInfo);
         const auto& tableInfo = *Self->Tables.at(buildInfo.TablePathId);
         for (ui32 keyPos: tableInfo.KeyColumnIds) {
             ev->Record.AddSourcePrimaryKeyColumns(tableInfo.Columns.at(keyPos).Name);
@@ -3751,7 +3787,7 @@ public:
                     Self->PersistBuildIndexState(db, buildInfo);
                     Self->PersistBuildIndexApplyTx(db, buildInfo);
                 } else {
-                    if (WaitForHnswBuilds(buildInfo, ctx)) {
+                    if (WaitForHnswBuilds(buildInfo, txc, ctx)) {
                         break;
                     }
                     ChangeState(BuildId, TIndexBuildInfo::EState::Unlocking);

@@ -28,4 +28,11 @@ message TMemoryControllerConfig {
 
     optional float CompactionLimitPercent = 130 [default = 10];
     optional uint64 CompactionLimitBytes = 131;
+
+    // In-memory HNSW graphs, build buffers and MVCC journals. This budget is
+    // independent of SharedCache, and elastic under process memory pressure.
+    optional float HnswCacheMinPercent = 140 [default = 0];
+    optional uint64 HnswCacheMinBytes = 141;
+    optional float HnswCacheMaxPercent = 142 [default = 20];
+    optional uint64 HnswCacheMaxBytes = 143;
 }

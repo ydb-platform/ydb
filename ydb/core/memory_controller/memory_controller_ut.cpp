@@ -838,6 +838,32 @@ Y_UNIT_TEST(ConsumerReportDegradedCoefficient) {
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/MemTable/Limit"), 10_MB);
 }
 
+Y_UNIT_TEST(HnswCacheBudgetIsIndependent) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    config.SetSharedCacheMinBytes(40_MB);
+    config.SetSharedCacheMaxBytes(40_MB);
+    config.SetHnswCacheMinBytes(20_MB);
+    config.SetHnswCacheMaxBytes(20_MB);
+    TControllerFixture fixture(config);
+    const auto pageActor = fixture.Runtime.AllocateEdgeActor();
+    auto pages = fixture.Register(pageActor, EMemoryConsumerKind::SharedCache);
+    pages->SetConsumption(5_MB);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 40_MB);
+
+    const auto graphActor = fixture.Runtime.AllocateEdgeActor();
+    auto graph = fixture.Register(graphActor, EMemoryConsumerKind::HnswCache);
+    graph->SetReport({.Used = 10_MB, .Demand = 30_MB});
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 40_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 5_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/HnswCache/Limit"), 20_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/HnswCache/Consumption"), 10_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/HnswCache/Demand"), 30_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(graphActor)->Get()->LimitBytes, 20_MB);
+}
+
 Y_UNIT_TEST(ConsumerReportClamp) {
     NKikimrConfig::TMemoryControllerConfig config;
     config.SetHardLimitBytes(200_MB);

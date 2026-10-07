@@ -141,6 +141,58 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/HnswApiTable"), {NLs::IndexesCount(0)});
     }
 
+    Y_UNIT_TEST_TWIN(HnswRebuildCannotChangeIndexType, ExistingHnsw) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHnswIndex(true);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        ui64 txId = 100;
+        const auto type = ExistingHnsw ? "EIndexTypeGlobalHnsw" : "EIndexTypeGlobalVectorKmeansTree";
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
+            TableDescription {
+                Name: "VectorType"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "embedding" Type: "String" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx" KeyColumnNames: ["embedding"] Type: )" << type << R"(
+                VectorIndexKmeansTreeDescription { Settings {
+                    settings { metric: DISTANCE_COSINE vector_type: VECTOR_TYPE_FLOAT vector_dimension: 2 }
+                    clusters: 2 levels: 1
+                } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto posting = DescribePath(runtime, "/MyRoot/VectorType/idx/indexImplPostingTable", true, true, true);
+        bool hasEmbedding = false;
+        for (const auto& column : posting.GetPathDescription().GetTable().GetColumns()) {
+            hasEmbedding |= column.GetName() == "embedding";
+        }
+        UNIT_ASSERT_VALUES_EQUAL(hasEmbedding, ExistingHnsw);
+        Ydb::Table::TableIndex index;
+        index.set_name("idx");
+        index.add_index_columns("embedding");
+        if (ExistingHnsw) {
+            index.mutable_global_vector_kmeans_tree_index();
+        } else {
+            index.mutable_global_hnsw_index();
+        }
+        NKikimrIndexBuilder::TIndexBuildSettings settings;
+        settings.set_source_path("/MyRoot/VectorType");
+        settings.set_is_rebuild(true);
+        *settings.mutable_index() = index;
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender,
+            new TEvIndexBuilder::TEvCreateRequest(++txId, "/MyRoot", std::move(settings)));
+        const auto response = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCreateResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(), "cannot change index type");
+        const auto desc = DescribePath(runtime, "/MyRoot/VectorType/idx", true, true, true);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTableIndex().GetType(), ExistingHnsw
+            ? NKikimrSchemeOp::EIndexTypeGlobalHnsw : NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
+    }
+
     Y_UNIT_TEST(CreateAndDrop) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1257,7 +1309,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             ui32 rowCount = tableRows; // alias
             ui64 formulaRequestUnitsApproximation = levels * Max<ui64>(dataSizeMB * 1152, dataSizeMB * 640 + rowCount * 0.5);
 
-            ui64 actualRequestUnits = smallRows ? 3415 : 22215; // TODO: cut from html
+            ui64 actualRequestUnits = smallRows ? 3415 : 18552; // TODO: cut from html
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: " << actualRequestUnits << " ");
@@ -1281,7 +1333,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             } else {
                 // here `formulaRequestUnitsApproximation` much less than `actualRequestUnits`
                 // because we do less than 5 kmeans iterations or buffer some rows
-                UNIT_ASSERT_VALUES_EQUAL(actualRequestUnits, 22215);
+                UNIT_ASSERT_VALUES_EQUAL(actualRequestUnits, 18552);
                 UNIT_ASSERT_VALUES_EQUAL(formulaRequestUnitsApproximation, 27648);
             }
         }
@@ -1427,7 +1479,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         const ui64 tableBytes = tableRows * tableRowBytes;
         const ui64 buildRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
         const ui64 buildBytes = tableRows * buildRowBytes;
-        const ui64 postingRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
+        const ui64 postingRowBytes = 12; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes)
         const ui64 postingBytes = tableRows * postingRowBytes;
         const ui64 levelRowBytes = 21; // parent:Uint64 (8 bytes), id:Uint64 (8 bytes), embedding:String (5 bytes)
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
@@ -1644,7 +1696,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         const ui64 buildRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
         const ui64 buildBytes = tableRows * buildRowBytes;
         const ui64 buildShardBytes = shardRows * buildRowBytes;
-        const ui64 postingRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
+        const ui64 postingRowBytes = 12; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes)
         const ui64 postingBytes = tableRows * postingRowBytes;
         const ui64 levelRowBytes = 21; // parent:Uint64 (8 bytes), id:Uint64 (8 bytes), embedding:String (5 bytes)
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);

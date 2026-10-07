@@ -83,6 +83,9 @@ GET_MAX_LIMIT(MemTable)
 GET_MIN_LIMIT(SharedCache)
 GET_MAX_LIMIT(SharedCache)
 
+GET_MIN_LIMIT(HnswCache)
+GET_MAX_LIMIT(HnswCache)
+
 GET_LIMIT(QueryExecutionLimit)
 GET_LIMIT(CompactionLimit)
 

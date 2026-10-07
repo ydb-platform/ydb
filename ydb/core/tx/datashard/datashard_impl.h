@@ -22,6 +22,7 @@
 #include "datashard_user_table.h"
 #include "datashard_write.h"
 #include "hnsw_index.h"
+#include "hnsw_index_build_actor.h"
 #include "incr_restore_scan.h"
 #include "datashard_tli.h"
 #include "multi_txids.h"
@@ -389,6 +390,7 @@ class TDataShard
             EvBlockFailPointUnblock,
             EvHnswIndexBuildResult,
             EvRebuildHnswIndex,
+            EvStartHnswSnapshotScan,
             EvEnd
         };
 
@@ -432,6 +434,15 @@ class TDataShard
             bool InitialBuild;
         };
 
+        struct TEvStartHnswSnapshotScan : public TEventLocal<TEvStartHnswSnapshotScan, EvStartHnswSnapshotScan> {
+            ui32 LocalTid = 0;
+            TUserTable::TCPtr Table;
+            TRowVersion BaseVersion;
+            ui64 BuildToken = 0;
+            THnswSnapshotScanCallback Finish;
+            ui64* ScanId = nullptr;
+        };
+
         struct TEvHnswIndexBuildResult : public TEventLocal<TEvHnswIndexBuildResult, EvHnswIndexBuildResult> {
             ui32 LocalTid = 0;
             ui32 VectorColumnTag = 0;
@@ -442,6 +453,7 @@ class TDataShard
             std::shared_ptr<void> MemoryReservation;
             std::shared_ptr<NDataShard::THnswIndex> Index;
             TString Error;
+            bool BelowMinRows = false;
         };
 
         struct TEvBuildTableStatsError : public TEventLocal<TEvBuildTableStatsError, EvTableStatsError> {
@@ -1915,8 +1927,10 @@ public:
     void ScheduleHnswInitialBuilds();
     void TrackHnswOpenTransactions(ui32 localTid, const NTable::TDatabase& db);
     TRowVersion GetHnswBuildVersion() const;
-    void StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table, TRowVersion base, TTransactionContext& txc);
+    void StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table, TRowVersion base,
+        TTransactionContext& txc, THnswSnapshotScanCallback finish = {}, ui64* scanId = nullptr);
     void Handle(TEvPrivate::TEvRebuildHnswIndex::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvStartHnswSnapshotScan::TPtr& ev, const TActorContext& ctx);
     void OnLeaderUserAuxUpdate(TString update) override;
     class TTxRebuildHnswIndex;
 
@@ -1938,7 +1952,7 @@ public:
         if (!HnswCacheMemoryTracker) {
             HnswCacheMemoryTracker = std::make_shared<THnswCacheMemoryTracker>();
             Send(NMemory::MakeMemoryControllerId(),
-                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache),
+                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::HnswCache),
                 NActors::IEventHandle::FlagTrackDelivery);
         }
         return HnswCacheMemoryTracker->GetLimit();
@@ -3644,6 +3658,7 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
+            HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
             HFunc(NMemory::TEvConsumerRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
@@ -3720,6 +3735,7 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
+            HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
             HFunc(NMemory::TEvConsumerRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
@@ -3837,6 +3853,7 @@ protected:
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
+            HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
             HFunc(NMemory::TEvConsumerRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);

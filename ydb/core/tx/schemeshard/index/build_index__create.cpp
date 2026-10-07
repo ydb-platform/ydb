@@ -444,6 +444,10 @@ private:
                     explain = "REBUILD INDEX is only supported for vector indexes";
                     return false;
                 }
+                if (existingIndex->Type != buildInfo.IndexType) {
+                    explain = "REBUILD INDEX cannot change index type";
+                    return false;
+                }
                 vectorIndexKmeansTreeDescription = *existingDesc;
                 // Merge user-provided settings over existing ones
                 const auto& userSettings = requestedSettings;

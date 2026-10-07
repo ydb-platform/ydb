@@ -354,6 +354,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 private:
     TString Issue;
 public:
+    TInstant HnswWaitStartedAt; // Persisted readiness deadline origin.
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
     bool IsBroken = false;
@@ -640,6 +641,7 @@ public:
         }
         indexInfo->StartTime = TInstant::Seconds(row.template GetValueOrDefault<Schema::IndexBuild::StartTime>());
         indexInfo->EndTime = TInstant::Seconds(row.template GetValueOrDefault<Schema::IndexBuild::EndTime>());
+        indexInfo->HnswWaitStartedAt = TInstant::MicroSeconds(row.template GetValueOrDefault<Schema::IndexBuild::HnswWaitStartedAt>());
 
         indexInfo->LockTxId =
             row.template GetValueOrDefault<Schema::IndexBuild::LockTxId>(

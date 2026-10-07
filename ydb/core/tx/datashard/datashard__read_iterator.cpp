@@ -42,6 +42,13 @@ bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state) {
     if (!shard.IsUserTable(state.PathId) || state.LockId || shard.GetVolatileTxManager().GetTxInFlight()) {
         return false;
     }
+    const auto& table = shard.GetUserTables().at(state.PathId.LocalPathId);
+    const auto& record = state.Request->Record;
+    if (!table->HnswSettings || !table->HnswVectorColumnTag || !record.HasVectorTopK()
+            || record.GetVectorTopK().GetColumn() >= record.ColumnsSize()
+            || table->HnswVectorColumnTag != record.GetColumns(record.GetVectorTopK().GetColumn())) {
+        return false;
+    }
     if (!shard.IsFollower()) {
         return !state.ReadVersion.IsMax();
     }
@@ -3143,7 +3150,7 @@ public:
                 hnswSettings = *TableInfo.HnswSettings;
             }
             const bool canUseHnsw = CanUseHnsw(*Self, state);
-            if (!canUseHnsw && AppData()->FeatureFlags.GetEnableHnswIndex()) {
+            if (!canUseHnsw && TableInfo.HnswSettings && AppData()->FeatureFlags.GetEnableHnswIndex()) {
                 Self->RegisterHnswFallback(localTid, TDataShard::EHnswFallback::UnsupportedRead);
             }
             if (canUseHnsw && Self->IsFollower()) {

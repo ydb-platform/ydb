@@ -14,8 +14,7 @@ constexpr ui64 ScanMetadataBytes = 256;
 // making the triggering read/write wait for either scanning or construction.
 class THnswSnapshotScan : public NTable::IScan {
 public:
-    using TFinish = std::function<void(std::vector<std::pair<TString, TString>>,
-        std::shared_ptr<void>, ui64, bool)>;
+    using TFinish = THnswSnapshotScanCallback;
 
     THnswSnapshotScan(const TUserTable& table, ui32 vectorTag,
             Ydb::Table::VectorIndexSettings settings,
@@ -77,12 +76,20 @@ public:
     EScan Exhausted() override { return EScan::Final; }
 
     TAutoPtr<IDestructable> Finish(EStatus status) override {
-        const bool success = !Failed && status == EStatus::Done
-            && (Rebuilding || Rows.size() >= GetHnswMinRows(Settings));
-        if (!success) {
-            Rows.clear();
+        THnswSnapshotScanResult result;
+        result.Success = !Failed && status == EStatus::Done;
+        result.BelowMinRows = result.Success && !Rebuilding
+            && (Rows.empty() || Rows.size() < GetHnswMinRows(Settings));
+        result.Success &= !result.BelowMinRows;
+        if (result.Success) {
+            result.Rows = std::move(Rows);
+            result.MemoryReservation = Reservation;
+            result.ReservedBytes = Reservation->Bytes;
+            result.AllowEmpty = Rebuilding;
         }
-        OnFinish(std::move(Rows), Reservation, Reservation->Bytes, success && Rebuilding);
+        Rows.clear();
+        Reservation.reset();
+        OnFinish(std::move(result));
         return this; // The executor owns and destroys the scan product.
     }
 
@@ -132,39 +139,71 @@ TRowVersion TDataShard::GetHnswBuildVersion() const {
 }
 
 void TDataShard::StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table,
-        TRowVersion base, TTransactionContext& txc) {
+        TRowVersion base, TTransactionContext& txc, THnswSnapshotScanCallback finish, ui64* scanId) {
     const ui64 token = GetHnswBuildToken(localTid);
+    if (!finish) {
+        const auto& entry = HnswIndexCache.at(localTid);
+        finish = [replyTo = SelfId(), localTid, tag = entry.VectorColumnTag, settings = entry.Settings,
+                base, token](THnswSnapshotScanResult&& result) {
+            if (!result.Success) {
+                auto event = MakeHolder<TEvPrivate::TEvHnswIndexBuildResult>();
+                event->LocalTid = localTid;
+                event->BuildToken = token;
+                event->BelowMinRows = result.BelowMinRows;
+                event->Error = "Snapshot scan aborted or exceeded its memory budget";
+                TActivationContext::Send(new IEventHandle(replyTo, TActorId(), event.Release()));
+                return;
+            }
+            const auto count = result.Rows.size();
+            auto* actor = CreateHnswIndexBuildActor(replyTo, localTid, tag, count, settings,
+                std::move(result.Rows), std::move(result.MemoryReservation), result.ReservedBytes,
+                base, token, result.AllowEmpty);
+            TActivationContext::Register(actor, TActorId(), TMailboxType::HTSwap, AppData()->BatchPoolId);
+        };
+    }
     PromoteImmediatePostExecuteEdges(base, EPromotePostExecuteEdges::RepeatableRead, txc);
-    txc.DB.OnRollback([this, localTid, token] {
+    // Exactly one transaction outcome owns completion. Rollback must also
+    // wake an eager job that is waiting for its scan to be queued.
+    auto completion = std::make_shared<THnswSnapshotScanCallback>(std::move(finish));
+    txc.DB.OnRollback([this, localTid, token, completion] {
         if (IsHnswBuildCurrent(localTid, token)) {
             DeferHnswIndexBuild(localTid, TDuration::Zero());
         }
+        (*completion)(THnswSnapshotScanResult{});
     });
-    txc.DB.OnCommit([this, localTid, table = std::move(table), base, token] {
-        if (!IsHnswBuildCurrent(localTid, token)) {
-            return;
-        }
-        if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
-            InvalidateHnswIndex(localTid);
-            DeferHnswIndexBuild(localTid, TDuration::Zero());
-            return;
-        }
-        const auto& entry = HnswIndexCache.at(localTid);
-        auto* scan = new THnswSnapshotScan(*table, entry.VectorColumnTag, entry.Settings,
-            HnswCacheMemoryTracker, bool(entry.Index),
-            [replyTo = SelfId(), localTid, tag = entry.VectorColumnTag, settings = entry.Settings,
-                    base, token](auto rows, auto reservation, ui64 bytes, bool allowEmpty) mutable {
-                const auto count = rows.size();
-                auto* actor = CreateHnswIndexBuildActor(replyTo, localTid, tag, count, settings,
-                    std::move(rows), std::move(reservation), bytes, base, token, allowEmpty);
-                TActivationContext::Register(actor, TActorId(), TMailboxType::HTSwap, AppData()->BatchPoolId);
-            });
-        Executor()->QueueScan(localTid, scan, 0, NTabletFlatExecutor::TScanOptions()
-            .DisableResourceBroker()
-            .SetReadPrio(NTabletFlatExecutor::TScanOptions::EReadPrio::Low)
-            .SetReadAhead(0, 512_KB)
-            .SetSnapshotRowVersion(base));
+    txc.DB.OnCommit([this, localTid, table = std::move(table), base, token,
+            completion, scanId]() mutable {
+        // QueueScan may flush memtables and emit redo. Starting it inside
+        // DB.Commit would nest those records in the unfinished transaction.
+        auto event = MakeHolder<TEvPrivate::TEvStartHnswSnapshotScan>();
+        event->LocalTid = localTid;
+        event->Table = std::move(table);
+        event->BaseVersion = base;
+        event->BuildToken = token;
+        event->Finish = std::move(*completion);
+        event->ScanId = scanId;
+        Send(SelfId(), event.Release());
     });
+}
+
+void TDataShard::Handle(TEvPrivate::TEvStartHnswSnapshotScan::TPtr& ev, const TActorContext&) {
+    auto& request = *ev->Get();
+    if (!IsHnswBuildCurrent(request.LocalTid, request.BuildToken)
+            || !AppData()->FeatureFlags.GetEnableHnswIndex() || IsStopping() || State != TShardState::Ready) {
+        request.Finish(THnswSnapshotScanResult{});
+        return;
+    }
+    const auto& entry = HnswIndexCache.at(request.LocalTid);
+    auto* scan = new THnswSnapshotScan(*request.Table, entry.VectorColumnTag, entry.Settings,
+        HnswCacheMemoryTracker, bool(entry.Index), std::move(request.Finish));
+    const auto id = Executor()->QueueScan(request.LocalTid, scan, 0, NTabletFlatExecutor::TScanOptions()
+        .DisableResourceBroker()
+        .SetReadPrio(NTabletFlatExecutor::TScanOptions::EReadPrio::Low)
+        .SetReadAhead(0, 512_KB)
+        .SetSnapshotRowVersion(request.BaseVersion));
+    if (request.ScanId) {
+        *request.ScanId = id;
+    }
 }
 
 class TDataShard::TTxRebuildHnswIndex : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -174,11 +213,13 @@ public:
     TTxType GetTxType() const override { return TXTYPE_READ; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        if (Self->IsFollower() || Self->IsStopping() || Self->State != TShardState::Ready) {
-            return true;
-        }
+        // This event has been consumed, even if the shard can no longer build.
+        // Leaving it marked scheduled prevents every subsequent retry.
         if (auto it = Self->HnswIndexCache.find(LocalTid); it != Self->HnswIndexCache.end()) {
             it->second.RebuildScheduled = false;
+        }
+        if (Self->IsFollower() || Self->IsStopping() || Self->State != TShardState::Ready) {
+            return true;
         }
         if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
             return true;
@@ -307,8 +348,17 @@ bool TDataShard::TryStartHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
         entry.Changes = std::make_shared<THnswIndexChanges>();
         entry.VectorColumnTag = vectorColumnTag;
         entry.Settings = settings;
-    } else if (AppData()->TimeProvider->Now() < entry.NextScanAttemptAt) {
-        return false;
+    } else {
+        if (entry.NextScanAttemptAt == TInstant::Max()
+                && GetHnswMinRows(entry.Settings) != GetHnswMinRows(settings)) {
+            // min_rows does not change graph compatibility, but changing it
+            // must re-evaluate a partition previously below the threshold.
+            entry.NextScanAttemptAt = TInstant::Zero();
+        }
+        if (AppData()->TimeProvider->Now() < entry.NextScanAttemptAt) {
+            return false;
+        }
+        entry.Settings = settings;
     }
     entry.Rebuilds += bool(entry.Index);
     entry.Building = true;
@@ -635,7 +685,7 @@ void TDataShard::ScheduleHnswRebuild(ui32 localTid) {
     }
     auto& entry = HnswIndexCache.at(localTid);
     const bool initialBuild = !entry.Index && entry.InitialBuildAttemptsLeft;
-    if (!entry.Building && !entry.RebuildScheduled
+    if (!entry.Building && !entry.RebuildScheduled && entry.NextScanAttemptAt != TInstant::Max()
             && (initialBuild || (entry.Index && entry.Changes->Valid
                 && entry.Index->NeedsRebuild(GetHnswDeltaRows(entry.Settings))))) {
         entry.RebuildScheduled = true;

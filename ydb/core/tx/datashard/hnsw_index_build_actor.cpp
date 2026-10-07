@@ -109,6 +109,19 @@ void TDataShard::Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TAc
         }
         return;
     }
+    if (result->BelowMinRows) {
+        // A successful scan of a small partition is not a failed build. Writes
+        // and settings changes re-enable it; reads alone must not scan again.
+        const auto& entry = HnswIndexCache.at(result->LocalTid);
+        if (entry.Changes->CountAfter(entry.BuildVersion)) {
+            // The table may have grown while the snapshot scan was running.
+            DeferHnswIndexBuild(result->LocalTid, TDuration::Zero());
+            ScheduleHnswRebuild(result->LocalTid);
+        } else {
+            DisableHnswIndexBuild(result->LocalTid);
+        }
+        return;
+    }
     if (result->Index) {
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
             TabletID() << " HNSW: lazy build completed for localTid=" << result->LocalTid

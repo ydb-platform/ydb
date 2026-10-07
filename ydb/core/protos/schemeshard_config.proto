@@ -47,4 +47,8 @@ message TSchemeShardConfig {
 
     // maximum recent index build operations to maintain (older ones are removed)
     optional uint32 MaxStoredIndexBuilds = 11 [default = 1000];
+
+    // Maximum wait for optional HNSW graph work after publishing the index.
+    // On expiry the operation completes with scan fallback; zero skips waiting.
+    optional uint32 HnswIndexBuildWaitTimeoutSeconds = 12 [default = 7200];
 }

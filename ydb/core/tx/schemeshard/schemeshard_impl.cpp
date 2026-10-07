@@ -5924,6 +5924,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
     MaxBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxBuildIndexShardsInFlight();
     MaxStoredIndexBuilds = appData->SchemeShardConfig.GetMaxStoredIndexBuilds();
+    HnswIndexBuildWaitTimeout = TDuration::Seconds(appData->SchemeShardConfig.GetHnswIndexBuildWaitTimeoutSeconds());
     ConfigureCondErase(appData->SchemeShardConfig, ctx);
 
     SendStatsIntervalSecondsDedicated = appData->StatisticsConfig.GetBaseStatsSendIntervalSecondsDedicated();
@@ -9008,6 +9009,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         MaxRestoreBuildIndexShardsInFlight = schemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
         MaxBuildIndexShardsInFlight = schemeShardConfig.GetMaxBuildIndexShardsInFlight();
         MaxStoredIndexBuilds = schemeShardConfig.GetMaxStoredIndexBuilds();
+        HnswIndexBuildWaitTimeout = TDuration::Seconds(schemeShardConfig.GetHnswIndexBuildWaitTimeoutSeconds());
         ConfigureCondErase(schemeShardConfig, ctx);
     }
 

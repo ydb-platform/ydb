@@ -8,6 +8,17 @@
 
 namespace NKikimr::NDataShard {
 
+struct THnswSnapshotScanResult {
+    std::vector<std::pair<TString, TString>> Rows;
+    std::shared_ptr<void> MemoryReservation;
+    ui64 ReservedBytes = 0;
+    bool Success = false;
+    bool BelowMinRows = false;
+    bool AllowEmpty = false;
+};
+
+using THnswSnapshotScanCallback = std::function<void(THnswSnapshotScanResult&&)>;
+
 struct THnswIndexBuildResult {
     std::shared_ptr<void> MemoryReservation;
     std::shared_ptr<THnswIndex> Index;

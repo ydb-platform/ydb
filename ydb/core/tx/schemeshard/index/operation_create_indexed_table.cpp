@@ -473,11 +473,12 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     }
                 }
                 THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-                // Vector search ranks posting rows by the embedding even when
-                // the index is otherwise non-covering.
-                const auto indexColumns = NTableIndex::ExtractInfo(indexDescription);
-                Y_ENSURE(!indexColumns.KeyColumns.empty());
-                indexDataColumns.insert(indexColumns.KeyColumns.back());
+                // HNSW ranks candidates using the posting-table embedding.
+                if (GetIndexType(indexDescription) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                    const auto indexColumns = NTableIndex::ExtractInfo(indexDescription);
+                    Y_ENSURE(!indexColumns.KeyColumns.empty());
+                    indexDataColumns.insert(indexColumns.KeyColumns.back());
+                }
                 result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
                 result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
                 if (prefixVectorIndex) {

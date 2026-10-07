@@ -467,6 +467,7 @@ public:
     ui32 MaxRestoreBuildIndexShardsInFlight = 0;
     ui32 MaxBuildIndexShardsInFlight = 0;
     ui32 MaxStoredIndexBuilds = 0;
+    TDuration HnswIndexBuildWaitTimeout = TDuration::Hours(2);
 
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;

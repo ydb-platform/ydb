@@ -303,7 +303,7 @@ void TDataShard::Die(const TActorContext& ctx) {
     InvalidateHnswIndexes();
     if (HnswCacheMemoryTracker) {
         Send(NMemory::MakeMemoryControllerId(),
-            new NMemory::TEvConsumerUnregister(NMemory::EMemoryConsumerKind::SharedCache));
+            new NMemory::TEvConsumerUnregister(NMemory::EMemoryConsumerKind::HnswCache));
     }
     if (InMemoryRestoreActor) {
         InMemoryRestoreActor->OnTabletDead();

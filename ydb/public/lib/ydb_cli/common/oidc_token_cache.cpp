@@ -265,6 +265,11 @@ void ValidateExtendedAcl(const TFile& file, const std::string& path);
 void ValidateExtendedAcl(const TFile& file, const std::string& path) {
     const TAcl acl(acl_get_fd_np(file.GetHandle(), ACL_TYPE_EXTENDED), &acl_free);
     if (acl == nullptr) {
+        // Darwin reports a missing extended ACL as ENOENT. Owner and mode
+        // permissions have already been checked by ValidateCachePermissions.
+        if (errno == ENOENT) {
+            return;
+        }
         ThrowCacheError(path, "failed to inspect extended ACL");
     }
     acl_entry_t entry = nullptr;

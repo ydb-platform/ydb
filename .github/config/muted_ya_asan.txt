@@ -19,6 +19,7 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.ShuffleEliminationHashMapping
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery07
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery10
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery11
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery13
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery14
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery15
@@ -51,8 +52,10 @@ ydb/core/kqp/ut/query KqpLimits.CancelAfterRoTxWithFollowerStreamLookup
 ydb/core/kqp/ut/query KqpLimits.CancelAfterRoTxWithFollowerStreamLookupDepededRead
 ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit
 ydb/core/kqp/ut/query KqpLimits.DataShardReplySizeExceeded
+ydb/core/kqp/ut/query KqpLimits.ManyPartitionsSortingLimit
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
+ydb/core/kqp/ut/query KqpLimits.QSReplySize
 ydb/core/kqp/ut/query KqpLimits.QueryExecTimeout
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelScalar

@@ -60,8 +60,8 @@ public:
 
     ~TDispatcher()
     {
-        // Tasks queued behind the stop signal, or after it, are never run. The queue holds raw
-        // pointers, so they are released here.
+        // Tasks queued behind the stop signal, or after it, are never run. The
+        // queue holds raw pointers, so they are released here.
         ITask* task;
         while (Queue.TryDequeue(&task)) {
             delete task;

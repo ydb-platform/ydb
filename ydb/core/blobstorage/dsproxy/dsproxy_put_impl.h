@@ -323,7 +323,7 @@ public:
         ++VPutResponses;
         ProcessResponseCommonPart(msg.Record);
         ui32 orderNumber = GetOrderNumber(VDiskIDFromVDiskID(msg.Record.GetVDiskID()));
-        ProcessResponseBlob(orderNumber, msg.Record);
+        ProcessResponseBlob(orderNumber, msg.Record, msg.Record.GetStatus());
         History.AddVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
     }
 
@@ -333,7 +333,10 @@ public:
         ui32 orderNumber = GetOrderNumber(VDiskIDFromVDiskID(msg.Record.GetVDiskID()));
         auto vputResult = History.CreateVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
         for (const auto& item : msg.Record.GetItems()) {
-            ProcessResponseBlob(orderNumber, item);
+            // BS_QUEUE reports NOTREADY for the whole request, with ERROR in its individual items.
+            const auto status = msg.Record.GetStatus() == NKikimrProto::NOTREADY
+                ? NKikimrProto::NOTREADY : item.GetStatus();
+            ProcessResponseBlob(orderNumber, item, status);
             vputResult.AddSubrequestResult(LogoBlobIDFromLogoBlobID(item.GetBlobID()), item.GetStatus());
         }
         History.AddVPutResult(std::move(vputResult));
@@ -368,11 +371,10 @@ protected:
         const TBlobStorageGroupInfo::TGroupVDisks& expired);
 
     template<typename TProtobuf>
-    void ProcessResponseBlob(ui32 orderNumber, TProtobuf& record) {
+    void ProcessResponseBlob(ui32 orderNumber, TProtobuf& record, NKikimrProto::EReplyStatus status) {
         Y_ABORT_UNLESS(record.HasStatus());
         Y_ABORT_UNLESS(record.HasBlobID());
 
-        const NKikimrProto::EReplyStatus status = record.GetStatus();
         const TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(record.GetBlobID());
 
         const size_t blobIdx = GetBlobIdx(blobId);
@@ -383,9 +385,10 @@ protected:
 
         switch (status) {
             case NKikimrProto::ERROR:
+            case NKikimrProto::NOTREADY:
             case NKikimrProto::VDISK_ERROR_STATE:
             case NKikimrProto::OUT_OF_SPACE:
-                Blackboard.AddErrorResponse(blobId, orderNumber, record.GetErrorReason());
+                Blackboard.AddErrorResponse(blobId, orderNumber, record.GetErrorReason(), status);
                 break;
             case NKikimrProto::OK:
             case NKikimrProto::ALREADY:

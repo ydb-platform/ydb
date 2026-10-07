@@ -8,6 +8,7 @@
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -465,6 +466,213 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
         auto it = vDiskIds.find(vDiskId.ConvertToTuple());
         UNIT_ASSERT(it != vDiskIds.end());
     }
+}
+
+template <bool MultiPut>
+void TestMirror3dcMinLatencyNotReady(ui32 failedRealm, bool splitFailures = false,
+        NKikimrProto::EReplyStatus firstStatus = NKikimrProto::NOTREADY,
+        NKikimrProto::EReplyStatus secondStatus = NKikimrProto::NOTREADY) {
+    TTestBasicRuntime runtime;
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, TErasureType::ErasureMirror3dc, 1, 0);
+    TTestState testState(runtime, env.Info);
+
+    constexpr ui32 blobCount = MultiPut ? 2 : 1;
+    const TLogoBlobID blobId(72075186224047637, 1, 863, 1, 786, 24576);
+    const TString data = AlphaData(blobId.BlobSize());
+    TVector<TBlobTestSet::TBlob> blobs{{blobId, data}};
+    if constexpr (MultiPut) {
+        TBlobStorageGroupInfo::TOrderNums subgroup;
+        env.Info->GetTopology().PickSubgroup(blobId.Hash(), subgroup);
+        // Keep the same disk placement so that each request batches both blobs.
+        for (ui32 cookie = blobId.Cookie() + 1; cookie < blobId.Cookie() + 1000; ++cookie) {
+            TLogoBlobID candidate(blobId.TabletID(), blobId.Generation(), blobId.Step(), blobId.Channel(),
+                blobId.BlobSize(), cookie);
+            TBlobStorageGroupInfo::TOrderNums candidateSubgroup;
+            env.Info->GetTopology().PickSubgroup(candidate.Hash(), candidateSubgroup);
+            if (candidateSubgroup == subgroup) {
+                blobs.emplace_back(candidate, data);
+                break;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(blobs.size(), blobCount);
+    }
+
+    using TRequest = std::conditional_t<MultiPut, TEvBlobStorage::TEvVMultiPut, TEvBlobStorage::TEvVPut>;
+    using TResult = std::conditional_t<MultiPut, TEvBlobStorage::TEvVMultiPutResult,
+        TEvBlobStorage::TEvVPutResult>;
+    TBlockEvents<TRequest> requests(runtime);
+    TBatchedVec<TEvBlobStorage::TEvPut::TPtr> events;
+    testState.CreatePutRequests(blobs, std::back_inserter(events), TEvBlobStorage::TEvPut::TacticMinLatency,
+        NKikimrBlobStorage::TabletLog);
+    auto putActor = [&] {
+        if constexpr (MultiPut) {
+            return env.CreatePutRequestActor(events, TEvBlobStorage::TEvPut::TacticMinLatency,
+                NKikimrBlobStorage::TabletLog);
+        } else {
+            return env.CreatePutRequestActor(events.front());
+        }
+    }();
+    runtime.Register(putActor.release());
+    // Scheduling is disabled for this actor: only the responses can issue extra requests.
+    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(requests.size(), 6);
+
+    TVector<TVector<typename TRequest::TPtr>> initialRequests(3);
+    THashSet<TVDiskID> requestedDisks;
+    while (!requests.empty()) {
+        auto request = std::move(requests.front());
+        requests.pop_front();
+        const TVDiskID vdiskId = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
+        UNIT_ASSERT(requestedDisks.insert(vdiskId).second);
+        if constexpr (MultiPut) {
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.ItemsSize(), blobCount);
+        }
+        initialRequests[vdiskId.FailRealm].push_back(std::move(request));
+    }
+    for (const auto& realmRequests : initialRequests) {
+        UNIT_ASSERT_VALUES_EQUAL(realmRequests.size(), 2);
+    }
+
+    auto reply = [&](typename TRequest::TPtr& request, NKikimrProto::EReplyStatus status) {
+        auto result = std::make_unique<TResult>();
+        // Use the same NOTREADY result as BS_QUEUE, including multi-put item normalization.
+        result->MakeError(status, TString(), request->Get()->Record);
+        result->Record.MutableMsgQoS()->MutableMsgId()->CopyFrom(request->Get()->Record.GetMsgQoS().GetMsgId());
+        runtime.Send(new IEventHandle(request->Sender, request->Recipient, result.release(), 0, request->Cookie));
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    };
+
+    reply(initialRequests[failedRealm][0], firstStatus);
+    UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+    const TVDiskID retryDisk = VDiskIDFromVDiskID(requests.front()->Get()->Record.GetVDiskID());
+    UNIT_ASSERT_VALUES_EQUAL(retryDisk.FailRealm, failedRealm);
+    UNIT_ASSERT(requestedDisks.insert(retryDisk).second);
+    initialRequests[failedRealm].push_back(std::move(requests.front()));
+    requests.pop_front();
+    UNIT_ASSERT(runtime.CaptureMailboxEvents(testState.EdgeActor.Hint(), testState.EdgeActor.NodeId()).empty());
+
+    const ui32 secondFailedRealm = splitFailures ? (failedRealm + 1) % 3 : failedRealm;
+    reply(initialRequests[secondFailedRealm][splitFailures ? 0 : 1], secondStatus);
+    UNIT_ASSERT(runtime.CaptureMailboxEvents(testState.EdgeActor.Hint(), testState.EdgeActor.NodeId()).empty());
+    if (splitFailures) {
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(requests.front()->Get()->Record.GetVDiskID()).FailRealm,
+            secondFailedRealm);
+        return;
+    }
+    if (firstStatus != NKikimrProto::NOTREADY || secondStatus != NKikimrProto::NOTREADY) {
+        // Ordinary errors still retry within the failed DC without hedging the other DCs.
+        UNIT_ASSERT(requests.empty());
+        return;
+    }
+
+    // Both NOTREADY responses are known before any surviving DC has replied.
+    UNIT_ASSERT_VALUES_EQUAL(requests.size(), 2);
+    TVector<typename TRequest::TPtr> hedges(3);
+    while (!requests.empty()) {
+        auto request = std::move(requests.front());
+        requests.pop_front();
+        const TVDiskID vdiskId = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
+        UNIT_ASSERT(vdiskId.FailRealm != failedRealm);
+        UNIT_ASSERT(!hedges[vdiskId.FailRealm]);
+        UNIT_ASSERT(requestedDisks.insert(vdiskId).second);
+        hedges[vdiskId.FailRealm] = std::move(request);
+    }
+    for (ui32 realm = 0; realm < 3; ++realm) {
+        if (realm != failedRealm) {
+            UNIT_ASSERT(hedges[realm]);
+            reply(initialRequests[realm][0], NKikimrProto::OK);
+        }
+    }
+    UNIT_ASSERT(runtime.CaptureMailboxEvents(testState.EdgeActor.Hint(), testState.EdgeActor.NodeId()).empty());
+    for (ui32 realm = 0; realm < 3; ++realm) {
+        if (realm != failedRealm) {
+            reply(hedges[realm], NKikimrProto::OK);
+        }
+    }
+    // One initial request in each surviving DC and the failed DC retry are still pending.
+    auto results = runtime.CaptureMailboxEvents(testState.EdgeActor.Hint(), testState.EdgeActor.NodeId());
+    UNIT_ASSERT_VALUES_EQUAL(results.size(), blobCount);
+    THashSet<TLogoBlobID> completed;
+    for (const auto& event : results) {
+        UNIT_ASSERT_VALUES_EQUAL(event->GetTypeRewrite(), TEvBlobStorage::TEvPutResult::EventType);
+        const auto* result = event->Get<TEvBlobStorage::TEvPutResult>();
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, NKikimrProto::OK);
+        UNIT_ASSERT(completed.insert(result->Id).second);
+    }
+    for (const auto& blob : blobs) {
+        UNIT_ASSERT(completed.contains(blob.Id));
+    }
+    UNIT_ASSERT(requests.empty());
+}
+
+Y_UNIT_TEST(TestMirror3dcMinLatencyNotReady) {
+    for (ui32 failedRealm = 0; failedRealm < 3; ++failedRealm) {
+        TestMirror3dcMinLatencyNotReady<false>(failedRealm);
+    }
+    TestMirror3dcMinLatencyNotReady<false>(0, true);
+    TestMirror3dcMinLatencyNotReady<false>(0, false, NKikimrProto::ERROR, NKikimrProto::ERROR);
+    TestMirror3dcMinLatencyNotReady<false>(0, false, NKikimrProto::ERROR, NKikimrProto::NOTREADY);
+    TestMirror3dcMinLatencyNotReady<false>(0, false, NKikimrProto::NOTREADY, NKikimrProto::ERROR);
+}
+
+Y_UNIT_TEST(TestMirror3dcMultiPutMinLatencyNotReady) {
+    for (ui32 failedRealm = 0; failedRealm < 3; ++failedRealm) {
+        TestMirror3dcMinLatencyNotReady<true>(failedRealm);
+    }
+    TestMirror3dcMinLatencyNotReady<true>(0, true);
+    TestMirror3dcMinLatencyNotReady<true>(0, false, NKikimrProto::ERROR, NKikimrProto::ERROR);
+    TestMirror3dcMinLatencyNotReady<true>(0, false, NKikimrProto::ERROR, NKikimrProto::NOTREADY);
+    TestMirror3dcMinLatencyNotReady<true>(0, false, NKikimrProto::NOTREADY, NKikimrProto::ERROR);
+}
+
+Y_UNIT_TEST(TestMirror3dcNotReadyStateIsDistinctFromError) {
+    TTestBasicRuntime runtime;
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, TErasureType::ErasureMirror3dc, 1, 0);
+    TBlackboard blackboard(env.Info, env.GroupQueues, NKikimrBlobStorage::TabletLog,
+        NKikimrBlobStorage::AsyncRead);
+    const TLogoBlobID blobId(72075186224047637, 1, 863, 1, 786, 24576);
+    blackboard.RegisterBlobForPut(blobId, 0);
+    const auto& state = blackboard[blobId];
+    const TLogoBlobID replicaId(blobId, 1);
+
+    blackboard.AddErrorResponse(replicaId, state.Disks[0].OrderNumber, "Queue is not ready", NKikimrProto::NOTREADY);
+    blackboard.AddErrorResponse(replicaId, state.Disks[3].OrderNumber, "VDisk error");
+    const auto& notReady = state.Disks[0].DiskParts[0];
+    const auto& error = state.Disks[3].DiskParts[0];
+    UNIT_ASSERT(notReady.Situation == TBlobState::ESituation::NotReady);
+    UNIT_ASSERT(error.Situation == TBlobState::ESituation::Error);
+    UNIT_ASSERT_VALUES_EQUAL(notReady.ErrorReason, "Queue is not ready");
+    UNIT_ASSERT_VALUES_EQUAL(error.ErrorReason, "VDisk error");
+}
+
+Y_UNIT_TEST(TestMirror3dcDefaultTacticPostponesNotReady) {
+    TTestBasicRuntime runtime;
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, TErasureType::ErasureMirror3dc, 1, 0);
+    TTestState testState(runtime, env.Info);
+    TBlockEvents<TEvBlobStorage::TEvVPut> requests(runtime);
+    const TLogoBlobID blobId(72075186224047637, 1, 863, 1, 786, 24576);
+    auto event = testState.CreatePutRequest({blobId, AlphaData(blobId.BlobSize())},
+        TEvBlobStorage::TEvPut::TacticDefault, NKikimrBlobStorage::TabletLog);
+    auto putActor = env.CreatePutRequestActor(event);
+    runtime.Register(putActor.release());
+    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(requests.size(), 3);
+
+    auto request = std::move(requests.front());
+    requests.pop_front();
+    const TVDiskID vdiskId = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
+    auto response = testState.CreateEventResultPtr(request, NKikimrProto::NOTREADY, vdiskId);
+    runtime.Send(response.Release());
+    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(requests.size(), 2);
+    UNIT_ASSERT(runtime.CaptureMailboxEvents(testState.EdgeActor.Hint(), testState.EdgeActor.NodeId()).empty());
 }
 
 void TestPutResultWithVDiskResults(TBlobStorageGroupType type, TMap<TVDiskID, NKikimrProto::EReplyStatus> vdiskStatuses, uint expectedVdiskRequests, NKikimrProto::EReplyStatus resultStatus) {

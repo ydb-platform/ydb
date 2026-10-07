@@ -160,7 +160,7 @@ void TBlobState::AddPutOkResponse(const TBlobStorageGroupInfo &info, const TLogo
 }
 
 void TBlobState::AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber,
-        const TString& errorReason) {
+        const TString& errorReason, NKikimrProto::EReplyStatus status) {
     Y_ABORT_UNLESS(id.PartId() != 0);
     ui32 partIdx = id.PartId() - 1;
     IsChanged = true;
@@ -179,7 +179,7 @@ void TBlobState::AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogo
 
     Y_ABORT_UNLESS(partIdx < disk.DiskParts.size());
     TDiskPart &diskPart = disk.DiskParts[partIdx];
-    diskPart.Situation = ESituation::Error;
+    diskPart.Situation = status == NKikimrProto::NOTREADY ? ESituation::NotReady : ESituation::Error;
     diskPart.Requested.Clear();
     diskPart.ErrorReason = errorReason;
 }
@@ -264,6 +264,8 @@ TString TBlobState::SituationToString(ESituation situation) {
             return "ESituation::Unknown";
         case ESituation::Error:
             return "ESituation::Error";
+        case ESituation::NotReady:
+            return "ESituation::NotReady";
         case ESituation::Absent:
             return "ESituation::Absent";
         case ESituation::Lost:
@@ -283,6 +285,8 @@ TString TBlobState::SituationToShortString(ESituation situation) {
             return "U";
         case ESituation::Error:
             return "E";
+        case ESituation::NotReady:
+            return "N";
         case ESituation::Absent:
             return "A";
         case ESituation::Lost:
@@ -458,11 +462,12 @@ void TBlackboard::AddNotYetResponse(const TLogoBlobID &id, ui32 orderNumber) {
     state.AddNotYetResponse(*Info, id, orderNumber);
 }
 
-void TBlackboard::AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber, const TString& errorReason) {
+void TBlackboard::AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber, const TString& errorReason,
+        NKikimrProto::EReplyStatus status) {
     Y_ABORT_UNLESS(bool(id));
     Y_ABORT_UNLESS(id.PartId() != 0);
     TBlobState &state = GetState(id, orderNumber, "AddErrorResponse");
-    state.AddErrorResponse(*Info, id, orderNumber, errorReason);
+    state.AddErrorResponse(*Info, id, orderNumber, errorReason, status);
 }
 
 EStrategyOutcome TBlackboard::RunStrategies(TLogContext &logCtx, const TStackVec<IStrategy*, 1>& s,

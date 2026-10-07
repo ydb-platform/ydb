@@ -21,12 +21,12 @@ public:
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
     {}
 
-    ui8 PreferredReplicasPerRealm(bool isDegraded) const {
+    ui8 PreferredReplicasPerRealm(const T3dcSituation& situation) const {
         // calculate the least number of replicas we have to provide per each realm
         if (Tactic == TEvBlobStorage::TEvPut::TacticMinLatency) {
-            return EnableRequestMod3x3ForMinLatecy ? 3 : 2;
+            return EnableRequestMod3x3ForMinLatecy || situation.MaxNotReadyInRealm >= 2 ? 3 : 2;
         }
-        return isDegraded ? 2 : 1;
+        return situation.MaxErrorsInRealm == NumFailDomainsPerFailRealm ? 2 : 1;
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
@@ -50,13 +50,12 @@ public:
             for (bool considerSlowAsError : {true, false}) {
                 // Prepare part placement if possible
                 TBlobStorageGroupType::TPartPlacement partPlacement;
-                bool degraded = false;
 
-                // check if we are in degraded mode -- that means that we have one fully failed realm
+                // Count failed disks per realm to choose how many replicas to request.
                 TBlobStorageGroupInfo::TSubgroupVDisks success(&info.GetTopology());
                 TBlobStorageGroupInfo::TSubgroupVDisks error(&info.GetTopology());
-                Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, considerSlowAsError,
-                        success, error, degraded);
+                const auto situation = Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info,
+                        considerSlowAsError, success, error);
                 // check for failure tolerance; we issue ERROR in case when it is not possible to achieve success condition in
                 // any way; also check if we have already finished writing replicas
                 const auto& checker = info.GetQuorumChecker();
@@ -69,7 +68,7 @@ public:
                     // now check every realm and check if we have to issue some write requests to it
                     bool fullPlacement;
                     Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
-                        PreferredReplicasPerRealm(degraded), considerSlowAsError, true, partPlacement, fullPlacement);
+                        PreferredReplicasPerRealm(situation), considerSlowAsError, true, partPlacement, fullPlacement);
 
                     if (considerSlowAsError && !fullPlacement) {
                         // unable to place all parts to fast disks, retry

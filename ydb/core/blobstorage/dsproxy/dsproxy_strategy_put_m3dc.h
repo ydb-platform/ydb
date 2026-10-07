@@ -21,20 +21,20 @@ public:
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
     {}
 
-    ui8 PreferredReplicasPerRealm(bool isDegraded) const {
+    ui8 PreferredReplicasPerRealm(const T3dcSituation& situation) const {
         // calculate the least number of replicas we have to provide per each realm
-        ui8 preferredReplicasPerRealm = (isDegraded ? 2 : 1);
         if (Tactic == TEvBlobStorage::TEvPut::TacticMinLatency) {
-            preferredReplicasPerRealm = (EnableRequestMod3x3ForMinLatecy ? 3 : 2);
+            // Two NOTREADY replies can leave the other realms needing two successful replicas each.
+            // Hedge those writes immediately by sending to their third disks.
+            return EnableRequestMod3x3ForMinLatecy || situation.MaxNotReadyInRealm >= 2 ? 3 : 2;
         }
-        return preferredReplicasPerRealm;
+        return situation.MaxErrorsInRealm == NumFailDomainsPerFailRealm ? 2 : 1;
     }
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
             TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests,
             const TAccelerationParams& accelerationParams) override {
         TBlobStorageGroupType::TPartPlacement partPlacement;
-        bool degraded = false;
         bool isDone = false;
         ui32 slowDiskSubgroupMask = MakeSlowSubgroupDiskMask(state, blackboard, true, accelerationParams);
         do {
@@ -43,7 +43,8 @@ public:
             }
             TBlobStorageGroupInfo::TSubgroupVDisks success(&info.GetTopology());
             TBlobStorageGroupInfo::TSubgroupVDisks error(&info.GetTopology());
-            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, false, success, error, degraded);
+            const auto situation = Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, false,
+                    success, error);
             TBlobStorageGroupInfo::TSubgroupVDisks slow = TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(
                     &info.GetTopology(), slowDiskSubgroupMask);
             if ((success | error) & slow) {
@@ -61,13 +62,14 @@ public:
 
                 // now check every realm and check if we have to issue some write requests to it
                 Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
-                        PreferredReplicasPerRealm(degraded), true, false, partPlacement, isDone);
+                        PreferredReplicasPerRealm(situation), true, false, partPlacement, isDone);
             }
         } while (false);
         if (!isDone) {
             TBlobStorageGroupInfo::TSubgroupVDisks success(&info.GetTopology());
             TBlobStorageGroupInfo::TSubgroupVDisks error(&info.GetTopology());
-            Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, false, success, error, degraded);
+            const auto situation = Evaluate3dcSituation(state, NumFailRealms, NumFailDomainsPerFailRealm, info, false,
+                    success, error);
 
             // check for failure tolerance; we issue ERROR in case when it is not possible to achieve success condition in
             // any way; also check if we have already finished writing replicas
@@ -82,7 +84,7 @@ public:
             partPlacement.Records.clear();
             bool fullPlacement;
             Prepare3dcPartPlacement(state, NumFailRealms, NumFailDomainsPerFailRealm,
-                    PreferredReplicasPerRealm(degraded), false, false, partPlacement, fullPlacement);
+                    PreferredReplicasPerRealm(situation), false, false, partPlacement, fullPlacement);
         }
         if (IsPutNeeded(state, partPlacement)) {
             PreparePutsForPartPlacement(logCtx, state, info, groupDiskRequests, partPlacement);

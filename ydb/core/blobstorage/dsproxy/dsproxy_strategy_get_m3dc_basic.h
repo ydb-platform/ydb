@@ -42,6 +42,7 @@ namespace NKikimr {
                 case TBlobState::ESituation::Present:
                     break;
                 case TBlobState::ESituation::Error:
+                case TBlobState::ESituation::NotReady:
                     break;
                 case TBlobState::ESituation::Absent:
                     break;
@@ -135,6 +136,7 @@ namespace NKikimr {
                 const TBlobState::TDiskPart& diskPart = disk.DiskParts[partIdx];
                 switch (diskPart.Situation) {
                     case TBlobState::ESituation::Error:
+                    case TBlobState::ESituation::NotReady:
                         failed += TBlobStorageGroupInfo::TSubgroupVDisks(&info.GetTopology(), diskIdx);
                         [[fallthrough]];
                     case TBlobState::ESituation::Lost:
@@ -176,6 +178,7 @@ namespace NKikimr {
                                 Y_DEBUG_ABORT_UNLESS(false);
                                 [[fallthrough]];
                             case TBlobState::ESituation::Error:
+                            case TBlobState::ESituation::NotReady:
                                 state.WholeSituation = TBlobState::ESituation::Error;
                                 break;
                         }

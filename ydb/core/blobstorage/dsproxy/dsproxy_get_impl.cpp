@@ -107,6 +107,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                                         << " State# " << blobState.ToString());
                                     [[fallthrough]];
                                 case TBlobState::ESituation::Error:
+                                case TBlobState::ESituation::NotReady:
                                 case TBlobState::ESituation::Present:
                                 case TBlobState::ESituation::Sent:
                                     possiblyPresent.AddItem(idxInSubgroup, partIdx, Info->Type);

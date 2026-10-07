@@ -44,13 +44,16 @@ protected:
             const TBlobStorageGroupInfo &info, TGroupDiskRequests &groupDiskRequests,
             TBlobStorageGroupType::TPartPlacement &partPlacement);
     size_t RealmDomain2SubgroupIdx3dc(size_t realm, size_t domain, size_t numFailRealms);
-    void Evaluate3dcSituation(const TBlobState &state,
+    struct T3dcSituation {
+        ui8 MaxErrorsInRealm = 0;
+        ui8 MaxNotReadyInRealm = 0;
+    };
+    T3dcSituation Evaluate3dcSituation(const TBlobState &state,
         size_t numFailRealms, size_t numFailDomainsPerFailRealm,
         const TBlobStorageGroupInfo &info,
         bool considerSlowAsError,
         TBlobStorageGroupInfo::TSubgroupVDisks &inOutSuccess,
-        TBlobStorageGroupInfo::TSubgroupVDisks &inOutError,
-        bool &outIsDegraded);
+        TBlobStorageGroupInfo::TSubgroupVDisks &inOutError);
     void Prepare3dcPartPlacement(const TBlobState& state, size_t numFailRealms, size_t numFailDomainsPerFailRealm,
             ui8 preferredReplicasPerRealm, bool considerSlowAsError, bool replaceUnresponsive,
             TBlobStorageGroupType::TPartPlacement& outPartPlacement, bool& fullPlacement);

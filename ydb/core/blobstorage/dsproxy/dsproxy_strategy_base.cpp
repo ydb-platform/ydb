@@ -46,6 +46,7 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
                     break;
 
                 case TBlobState::ESituation::Error:
+                case TBlobState::ESituation::NotReady:
                     s << 'E';
                     diskEvaluation = EDE_ERROR;
                     break;
@@ -97,6 +98,7 @@ void TStrategyBase::EvaluateCurrentLayout(TLogContext &logCtx, TBlobState &state
                         break;
 
                     case TBlobState::ESituation::Error:
+                    case TBlobState::ESituation::NotReady:
                     case TBlobState::ESituation::Lost:
                         Y_ABORT("impossible case");
                 }
@@ -280,7 +282,7 @@ void TStrategyBase::PreparePartLayout(const TBlobState &state, const TBlobStorag
         bool isErrorDisk = false;
         for (ui32 partIdx = beginPartIdx; partIdx < endPartIdx; ++partIdx) {
             TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
-            if (partSituation == TBlobState::ESituation::Error) {
+            if (partSituation == TBlobState::ESituation::Error || partSituation == TBlobState::ESituation::NotReady) {
                 isErrorDisk = true;
                 break;
             }
@@ -312,6 +314,7 @@ bool TStrategyBase::IsPutNeeded(const TBlobState &state, const TBlobStorageGroup
                 isNeeded = true;
                 break;
             case TBlobState::ESituation::Error:
+            case TBlobState::ESituation::NotReady:
                 Y_ABORT("unexpected Situation");
             case TBlobState::ESituation::Present:
             case TBlobState::ESituation::Sent:
@@ -376,6 +379,7 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
                 isNeeded = true;
                 break;
             case TBlobState::ESituation::Error:
+            case TBlobState::ESituation::NotReady:
                 Y_ABORT_UNLESS(false);
                 break;
             case TBlobState::ESituation::Present:
@@ -401,16 +405,16 @@ size_t TStrategyBase::RealmDomain2SubgroupIdx3dc(size_t realm, size_t domain, si
     return realm + domain * numFailRealms;
 }
 
-void TStrategyBase::Evaluate3dcSituation(const TBlobState &state,
+TStrategyBase::T3dcSituation TStrategyBase::Evaluate3dcSituation(const TBlobState &state,
         size_t numFailRealms, size_t numFailDomainsPerFailRealm,
         const TBlobStorageGroupInfo &info,
         bool considerSlowAsError,
         TBlobStorageGroupInfo::TSubgroupVDisks &inOutSuccess,
-        TBlobStorageGroupInfo::TSubgroupVDisks &inOutError,
-        bool &outIsDegraded) {
-    outIsDegraded = false;
+        TBlobStorageGroupInfo::TSubgroupVDisks &inOutError) {
+    T3dcSituation result;
     for (size_t realm = 0; realm < numFailRealms; ++realm) {
         ui8 numErrorsInRealm = 0;
+        ui8 numNotReadyInRealm = 0;
         for (size_t domain = 0; domain < numFailDomainsPerFailRealm; ++domain) {
             size_t subgroupIdx = RealmDomain2SubgroupIdx3dc(realm, domain, numFailRealms);
             const TBlobState::TDisk &disk = state.Disks[subgroupIdx];
@@ -418,18 +422,22 @@ void TStrategyBase::Evaluate3dcSituation(const TBlobState &state,
             TBlobStorageGroupInfo::TSubgroupVDisks *subgroup = nullptr;
             if (situation == TBlobState::ESituation::Present) {
                 subgroup = &inOutSuccess;
-            } else if (situation == TBlobState::ESituation::Error || (considerSlowAsError && disk.IsSlow)) {
+            } else if (situation == TBlobState::ESituation::Error || situation == TBlobState::ESituation::NotReady
+                    || (considerSlowAsError && disk.IsSlow)) {
                 subgroup = &inOutError;
                 numErrorsInRealm++;
+                if (situation == TBlobState::ESituation::NotReady) {
+                    numNotReadyInRealm++;
+                }
             }
             if (subgroup) {
                 *subgroup += TBlobStorageGroupInfo::TSubgroupVDisks(&info.GetTopology(), subgroupIdx);
             }
         }
-        if (numErrorsInRealm == numFailDomainsPerFailRealm) {
-            outIsDegraded = true;
-        }
+        result.MaxErrorsInRealm = Max(result.MaxErrorsInRealm, numErrorsInRealm);
+        result.MaxNotReadyInRealm = Max(result.MaxNotReadyInRealm, numNotReadyInRealm);
     }
+    return result;
 }
 
 void TStrategyBase::Prepare3dcPartPlacement(const TBlobState& state, size_t numFailRealms, size_t numFailDomainsPerFailRealm,
@@ -443,7 +451,7 @@ void TStrategyBase::Prepare3dcPartPlacement(const TBlobState& state, size_t numF
             size_t subgroupIdx = RealmDomain2SubgroupIdx3dc(realm, domain, numFailRealms);
             const TBlobState::TDisk &disk = state.Disks[subgroupIdx];
             const TBlobState::ESituation situation = disk.DiskParts[realm].Situation;
-            if (situation != TBlobState::ESituation::Error) {
+            if (situation != TBlobState::ESituation::Error && situation != TBlobState::ESituation::NotReady) {
                 if (situation == TBlobState::ESituation::Present) {
                     placed++;
                 } else if (situation == TBlobState::ESituation::Sent) {

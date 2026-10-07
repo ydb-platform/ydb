@@ -795,10 +795,14 @@ namespace NKikimr {
         return Info->GetActorId(shortId);
     }
 
+    bool TBlobStorageGroupRequestActor::ShouldPostponeNotReady(ui32) const {
+        return true;
+    }
+
     bool TBlobStorageGroupRequestActor::CheckForTermErrors(bool suppressCommonErrors, const NProtoBuf::Message& record,
             ui32 type, NKikimrProto::EReplyStatus status, TVDiskID vdiskId, const NKikimrBlobStorage::TGroupInfo *group,
             bool& setErrorAndPostpone, bool& setRaceToError) {
-        if (status == NKikimrProto::NOTREADY) { // special case from BS_QUEUE -- when connection is not yet established
+        if (status == NKikimrProto::NOTREADY && ShouldPostponeNotReady(type)) { // connection is not yet established
             setErrorAndPostpone = true;
             return true; // event has been processed early
         }

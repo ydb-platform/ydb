@@ -115,8 +115,8 @@ struct TPhysicalOpProps {
     }
 
     std::optional<int> StageId;
-    // Dense physical output index of a Replicate port; independent of its stable
-    // logical ordinal, since pruning may remove arbitrary ports.
+    // Dense output branch of a Replicate port and operators fused above it in
+    // the same stage. Independent of the port's stable logical ordinal.
     std::optional<ui32> StageOutputIndex;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;

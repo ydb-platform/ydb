@@ -650,6 +650,174 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         UNIT_ASSERT_VALUES_EQUAL(keys.InputStage->Child(5)->Tail().Tail().Tail().Head().Head().Content(), "storage_key");
     }
 
+    Y_UNIT_TEST(ReplicatePushesPartialAggregationIntoOnlyItsOwnBranch) {
+        struct TCase {
+            bool Scalar;
+            bool Distinct;
+            bool EliminateShuffle;
+            bool SinglePort = false;
+        };
+        for (const auto& testCase : TVector<TCase>{{true, false, false}, {false, false, false},
+                {false, true, false}, {false, false, true}, {false, false, false, true}}) {
+            for (const auto storage : {NYql::EStorageType::RowStorage, NYql::EStorageType::ColumnStorage}) {
+                NTests::TIdTestContext f;
+                f.Config->OptShuffleElimination = testCase.EliminateShuffle;
+                const auto key = f.Id("key"), value = f.Id("value"), result = f.Id("result");
+                auto read = f.Read({key, value});
+                read->StorageType = storage;
+                f.SetType(*read);
+                auto hub = TReplicate::Create(read, f.Pos, f.Props.InfoUnitRegistry);
+                auto discarded = hub->AddOutput();
+                auto raw = hub->AddOutput(), aggregated = hub->AddOutput();
+                discarded.Reset();
+                const auto aggregateKey = *aggregated->GetRebindings().Find(key);
+                const auto aggregateValue = *aggregated->GetRebindings().Find(value);
+                const auto rawValue = *raw->GetRebindings().Find(value);
+                f.SetType(*aggregated);
+                aggregated->Props.Metadata.emplace();
+                if (testCase.EliminateShuffle) {
+                    aggregated->Props.Metadata->ShuffledByColumns = TOrderedIUs<>{aggregateKey};
+                }
+                TAggregationIUs traits;
+                traits.Add(result, TOpAggregationTraits{
+                    testCase.Distinct ? aggregateKey : aggregateValue, testCase.Distinct ? "distinct" : "sum"});
+                auto aggregate = MakeIntrusive<TOpAggregate>(aggregated, std::move(traits),
+                    testCase.Scalar ? TOrderedIUs<>{} : TOrderedIUs<>{aggregateKey},
+                    EOpPhase::Undefined, testCase.Distinct, f.Pos);
+                // Traverse physical output one before output zero, with both
+                // logical ordinals shifted by the discarded primary port.
+                auto root = testCase.SinglePort ? f.Root(aggregate, {{result, "result"}})
+                    : f.Root(MakeIntrusive<TOpJoin>(aggregate, raw, f.Pos, "Cross", TJoinIUs{}),
+                        {{result, "result"}, {rawValue, "raw"}});
+                TAssignStagesStage().RunStage(*root, f.RboCtx);
+                const auto producerStage = *read->Props.StageId;
+                const auto finalStage = *aggregate->Props.StageId;
+                const ui32 outputIndex = testCase.SinglePort ? 0 : 1;
+                auto& aggregateSlot = testCase.SinglePort ? root->GetInput()
+                    : CastOperator<TOpJoin>(*root->GetInput()).GetLeftInput();
+                TPropagateAggregateThroughStageRule rule;
+                UNIT_ASSERT(rule.MatchAndApply(aggregateSlot, f.RboCtx, root->PlanProps));
+                auto& final = CastOperator<TOpAggregate>(*aggregateSlot);
+                UNIT_ASSERT(rule.MatchAndApply(final.GetInput(), f.RboCtx, root->PlanProps));
+                auto& partial = CastOperator<TOpAggregate>(*final.GetInput());
+                UNIT_ASSERT(partial.GetInput() == aggregated);
+                UNIT_ASSERT(partial.GetAggregationPhase() == EOpPhase::Intermediate);
+                UNIT_ASSERT_VALUES_EQUAL(*partial.Props.StageId, producerStage);
+                UNIT_ASSERT_VALUES_EQUAL(*partial.Props.StageOutputIndex, outputIndex);
+                UNIT_ASSERT_VALUES_EQUAL(*aggregated->Props.StageOutputIndex, outputIndex);
+                UNIT_ASSERT_VALUES_EQUAL(*final.Props.StageId, finalStage);
+                UNIT_ASSERT(!final.Props.StageOutputIndex);
+                UNIT_ASSERT(hub->GetInput() == read);
+                UNIT_ASSERT(aggregated->GetOutputIUs() == (TUnorderedIUs{aggregateKey, aggregateValue}));
+                UNIT_ASSERT(raw->GetInput() == read);
+                const auto& connection = root->PlanProps.StageGraph.GetConnections(producerStage, finalStage).front();
+                UNIT_ASSERT_VALUES_EQUAL(connection->GetOutputIndex(), outputIndex);
+                if (testCase.Scalar) {
+                    UNIT_ASSERT(IsConnection<TUnionAllConnection>(connection));
+                } else if (testCase.EliminateShuffle) {
+                    UNIT_ASSERT(IsConnection<TMapConnection>(connection));
+                } else {
+                    UNIT_ASSERT(IsConnection<TShuffleConnection>(connection));
+                    UNIT_ASSERT(connection->GetUsedIUs() == (testCase.Distinct
+                        ? partial.GetAggregationTraits().Keys() : TUnorderedIUs{aggregateKey}));
+                }
+                // The partial is an ordinary node, visible to both liveness
+                // modes and the normal SSA checks.
+                ComputePlanLiveness(*root, ELivenessMode::Global);
+                NTests::AssertIdInvariants(*root, root->PlanProps);
+                ComputePlanLiveness(*root);
+                UNIT_ASSERT(GetLiveOut(aggregated.Get()) == GetLiveIn(&partial, 0));
+                f.SetType(*partial.GetInput());
+                f.SetType(partial);
+                const TPhysicalNames names(root->PlanProps.InfoUnitRegistry);
+                auto stage = TPhysicalSourceBuilder(*read, f.ExprCtx, f.Pos, names,
+                    root->PlanProps.InfoUnitRegistry, "stage").BuildPhysicalOp();
+                stage = NPhysicalConvertionUtils::BuildSwitch(stage, *hub, names, f.ExprCtx);
+                // A sibling consumer may have adapted its branch before this
+                // aggregate is visited in the normal postorder traversal.
+                if (!testCase.SinglePort) {
+                    f.SetType(*raw);
+                    TOpTableLookup rawLookup(raw, f.Pos, nullptr, {}, {{rawValue, "raw_storage_key"}});
+                    stage = NLookupJoinBuilder::BuildLookupKeys(rawLookup, stage, f.ExprCtx, names).InputStage;
+                }
+                const auto before = storage == NYql::EStorageType::RowStorage
+                    ? TDqPhyStage(stage).Program().Body().Ptr() : stage;
+                stage = NPhysicalConvertionUtils::TransformStageOutput(stage, [&](TExprNode::TPtr body) {
+                    return TPhysicalAggregationBuilder(partial, f.ExprCtx, f.Pos, names)
+                        .BuildPhysicalOp(body, std::nullopt);
+                }, partial.Props.StageOutputIndex, f.ExprCtx);
+                const auto body = storage == NYql::EStorageType::RowStorage
+                    ? TDqPhyStage(stage).Program().Body().Ptr() : stage;
+                UNIT_ASSERT_VALUES_EQUAL(body->IsCallable("Switch"), !testCase.SinglePort);
+                if (!testCase.SinglePort) {
+                    UNIT_ASSERT(body->HeadPtr() == before->HeadPtr());
+                    UNIT_ASSERT(body->ChildPtr(3) == before->ChildPtr(3));
+                    UNIT_ASSERT(!FindNode(body->ChildPtr(3), [](const auto& node) {
+                        return node->IsCallable("DqPhyHashCombine");
+                    }));
+                }
+                UNIT_ASSERT(FindNode(testCase.SinglePort ? body : body->ChildPtr(5), [](const auto& node) {
+                    return node->IsCallable("DqPhyHashCombine");
+                }));
+                if (storage == NYql::EStorageType::RowStorage) {
+                    UNIT_ASSERT(TDqPhyStage::Match(stage.Get()));
+                }
+
+                // Lookup key adaptation follows the aggregate's output index.
+                const auto lookupKey = *partial.GetAggregationTraits().Keys().begin();
+                TOpTableLookup lookup(final.GetInput(), f.Pos, nullptr, {}, {{lookupKey, "storage_key"}});
+                const auto keys = NLookupJoinBuilder::BuildLookupKeys(lookup, stage, f.ExprCtx, names);
+                const auto lookupBody = storage == NYql::EStorageType::RowStorage
+                    ? TDqPhyStage(keys.InputStage).Program().Body().Ptr() : keys.InputStage;
+                if (!testCase.SinglePort) {
+                    UNIT_ASSERT(lookupBody->HeadPtr() == body->HeadPtr());
+                    UNIT_ASSERT(lookupBody->ChildPtr(3) == body->ChildPtr(3));
+                }
+                const auto lookupBranch = testCase.SinglePort ? lookupBody : lookupBody->Child(5)->TailPtr();
+                UNIT_ASSERT(lookupBranch->IsCallable("Map"));
+                UNIT_ASSERT(lookupBranch->HeadPtr() == (testCase.SinglePort ? body : body->Child(5)->TailPtr()));
+                UNIT_ASSERT_VALUES_EQUAL(lookupBranch->Tail().Tail().Head().Head().Content(), "storage_key");
+
+                for (const auto& item : *root) {
+                    item.Current->Props.Statistics.emplace();
+                    item.Current->Props.Cost = 0;
+                }
+                for (const auto& [stages, connections] : root->PlanProps.StageGraph.Connections) {
+                    for (const auto& connection : connections) {
+                        if (IsConnection<TShuffleConnection>(connection)) {
+                            static_cast<TShuffleConnection&>(*connection).HashFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
+                        }
+                    }
+                }
+                ui64 nodeId = 0;
+                ui32 operatorIndex = 0;
+                THashMap<IOperator*, ui32> operatorIds;
+                root->GetExecutionJson(nodeId, operatorIndex, operatorIds);
+                UNIT_ASSERT(operatorIds.contains(&partial));
+                const auto explain = root->GetExplainJson(nodeId, operatorIds);
+                const auto hasPartial = [&](auto&& self, const NJson::TJsonValue& node) -> bool {
+                    if (node["Operators"].IsArray()) {
+                        for (const auto& op : node["Operators"].GetArraySafe()) {
+                            if (op["OperatorId"].GetIntegerSafe() == operatorIds.at(&partial)
+                                && op["Phase"].GetStringSafe() == "Intermediate") {
+                                return true;
+                            }
+                        }
+                    }
+                    if (node["Plans"].IsArray()) {
+                        for (const auto& child : node["Plans"].GetArraySafe()) {
+                            if (self(self, child)) {
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                };
+                UNIT_ASSERT(hasPartial(hasPartial, explain));
+            }
+        }
+    }
+
     Y_UNIT_TEST(StageAssignmentAndLivenessDistinguishReplicateEdgesToOneJoin) {
         NTests::TIdTestContext f;
         f.Config->SetEnableQueryServiceSpilling(true);

@@ -176,7 +176,7 @@ private:
                 const auto& connections = Props.StageGraph.GetConnections(producerStageId, consumerStageId);
 
                 for (const auto& connection : connections) {
-                    // A Replicate port produces only its own stage output.
+                    // A port and operators fused above it produce only their own stage output.
                     if (child->Props.StageOutputIndex && connection->GetOutputIndex() != *child->Props.StageOutputIndex) {
                         continue;
                     }

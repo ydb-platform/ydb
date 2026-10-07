@@ -31,7 +31,7 @@ enum class EJwkKeyOps : ui8 {
     DERIVE_BITS /* "deriveBits" */,
 };
 
-// Asymmetric JWS and JWE algorithms (RFC 7518, Sections 3 and 4).
+// Asymmetric JWS and JWE algorithms https://datatracker.ietf.org/doc/html/rfc7518 (Sections 3 and 4).
 enum class EJwkAlg : ui8 {
     RS256,
     RS384,
@@ -54,9 +54,6 @@ enum class EJwkAlg : ui8 {
 // {kty, kid} - Unique identifier
 // https://datatracker.ietf.org/doc/html/rfc7517#section-4
 struct TJwk {
-    // Bound certificate parsing and verification work for each key.
-    static constexpr size_t MAX_CERTIFICATE_CHAIN_LENGTH = 100;
-
     struct TRsaParameters {
         std::string Modulus; // decoded `n` (unsigned, big endian)
         std::string Exponent; // decoded `e` (unsigned, big endian)

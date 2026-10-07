@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/blobstorage/subsystem/subsystem.h>
+#include <ydb/core/blobstorage/subsystem/interface/subsystem.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <util/generic/vector.h>
 

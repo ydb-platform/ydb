@@ -2,10 +2,14 @@ LIBRARY()
 
 SRCS(subsystem.cpp)
 
-PEERDIR(ydb/library/actors/core)
+PEERDIR(
+    ydb/core/base
+    ydb/core/blobstorage/nodewarden
+    ydb/core/blobstorage/subsystem/interface
+)
 
 END()
 
-RECURSE(real mock)
+RECURSE(interface mock)
 
 RECURSE_FOR_TESTS(ut)

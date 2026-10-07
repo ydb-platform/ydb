@@ -1,25 +1,17 @@
 #pragma once
 
-#include <ydb/library/actors/core/subsystem.h>
+#include <ydb/core/blobstorage/subsystem/interface/subsystem.h>
+#include <ydb/library/actors/core/mailbox.h>
 
-namespace NActors {
-    struct TActorSystemSetup;
-}
+#include <util/generic/ptr.h>
+#include <util/system/types.h>
 
 namespace NKikimr {
 
-// Selects the node's BlobStorage implementation. Registered actors belong to
-// the actor system; externally supplied storage models may outlive that system.
-class IBlobStorageSubsystem : public NActors::ISubSystem {
-public:
-    // Populate LocalServices before the actor system is constructed, so storage
-    // services are available when tablet actors start.
-    virtual void Prepare(NActors::TActorSystemSetup& setup) = 0;
-};
+struct TNodeWardenConfig;
 
-// Installs exactly one implementation under its interface type. Replacing an
-// already prepared implementation would leave its actors in LocalServices.
-void InstallBlobStorageSubsystem(NActors::TActorSystemSetup& setup,
-    std::unique_ptr<IBlobStorageSubsystem> subsystem);
+std::unique_ptr<IBlobStorageSubsystem> CreateBlobStorageSubsystem(
+    TIntrusivePtr<TNodeWardenConfig> config, ui32 poolId = 0,
+    NActors::TMailboxType::EType mailboxType = NActors::TMailboxType::ReadAsFilled);
 
 } // namespace NKikimr

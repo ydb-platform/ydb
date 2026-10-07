@@ -2726,3 +2726,6 @@ FROM `{table_name}`"""
         finally:
             kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
             kikimr.cluster.unregister_and_stop_slots(added_slots)
+            # The next parameter case shares this cluster and must not plan
+            # its query on a stopped slot from a stale resource snapshot.
+            kikimr.wait_kqp_node_count(len(kikimr.cluster.slots))

@@ -115,7 +115,7 @@ public:
                 } else {
                     BLOG_GRPC_DC(*actorSystem, prefix << "Status " << status);
                 }
-                auto respEv = MakeHolder<typename TCallType::TResponseEventType>();
+                auto respEv = std::make_unique<typename TCallType::TResponseEventType>();
                 const auto sender = request->Sender;
                 const auto cookie = request->Cookie;
                 respEv->Request = request;

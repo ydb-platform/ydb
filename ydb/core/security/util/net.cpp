@@ -79,7 +79,7 @@ bool IsGoodPeernameFormat(TStringBuf peername) {
 NAddr::IRemoteAddrPtr ParsePeername(TStringBuf peername) {
     const auto addrWithPort = TryParsePeername(peername);
     if (addrWithPort.Defined()) {
-        return THolder{ToIRemoteAddr(addrWithPort->Ip, addrWithPort->Port)};
+        return NAddr::IRemoteAddrPtr{ToIRemoteAddr(addrWithPort->Ip, addrWithPort->Port)};
     }
     return nullptr;
 }

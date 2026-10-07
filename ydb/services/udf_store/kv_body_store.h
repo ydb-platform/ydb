@@ -47,7 +47,7 @@ private:
     static constexpr ui64 ReadChunkSize = 16ull << 20; // 16 MiB
     ui64 CurrentOffset = 0;
     TString TmpFilePath;
-    THolder<TFile> TmpFile;
+    std::unique_ptr<TFile> TmpFile;
     MD5 Md5Ctx;
 
     void SendNavigateRequest();

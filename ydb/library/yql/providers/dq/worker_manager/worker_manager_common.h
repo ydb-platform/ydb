@@ -16,14 +16,14 @@ public:
     { }
 
     void OnRoutesRequest(TEvRoutesRequest::TPtr& ev, const NActors::TActorContext& ctx) {
-        auto localRequest = MakeHolder<NActors::TEvInterconnect::TEvListNodes>();
+        auto localRequest = std::make_unique<NActors::TEvInterconnect::TEvListNodes>();
 
         auto replyTo = ev->Sender;
         auto* actorSystem = ctx.ActorSystem();
 
-        auto callback = MakeHolder<NActors::TActorFutureCallback<NActors::TEvInterconnect::TEvNodesInfo>>(
+        auto callback = std::make_unique<NActors::TActorFutureCallback<NActors::TEvInterconnect::TEvNodesInfo>>(
             [replyTo, actorSystem] (TAutoPtr<NActors::TEventHandle<NActors::TEvInterconnect::TEvNodesInfo>>& event) {
-                auto response = MakeHolder<TEvRoutesResponse>();
+                auto response = std::make_unique<TEvRoutesResponse>();
                 for (const auto& node: event->Get()->Nodes) {
                     auto* n = response->Record.MutableResponse()->AddNodes();
                     n->SetPort(node.Port);

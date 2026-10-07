@@ -51,7 +51,7 @@ public:
     }
 
     NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion* MakeReq(const TActorContext&) {
-        THolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion> request(new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion());
+        std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion> request(new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion());
         request->Record.SetTxId(TxId);
         return request.Release();
     }

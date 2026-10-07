@@ -28,7 +28,7 @@ TKesusQuoterTestSetup::TKesusQuoterTestSetup(bool runServer)
 
 void TKesusQuoterTestSetup::RunServer() {
     Server = MakeIntrusive<Tests::TServer>(ServerSettings, true);
-    Client = MakeHolder<Tests::TClient>(*ServerSettings);
+    Client = std::make_unique<Tests::TClient>(*ServerSettings);
 
     SetupLogging();
 
@@ -148,7 +148,7 @@ void TKesusQuoterTestSetup::SendGetQuotaRequest(const TString& kesusPath, const 
     SendGetQuotaRequest({{kesusPath, resourcePath, amount}}, TEvQuota::EResourceOperator::And, deadline);
 }
 
-THolder<TEvQuota::TEvClearance> TKesusQuoterTestSetup::WaitGetQuotaAnswer() {
+std::unique_ptr<TEvQuota::TEvClearance> TKesusQuoterTestSetup::WaitGetQuotaAnswer() {
     return GetServer().GetRuntime()->GrabEdgeEvent<TEvQuota::TEvClearance>();
 }
 
@@ -190,7 +190,7 @@ TTestActorRuntime::TEgg MakeEgg() {
 }
 
 void TKesusProxyTestSetup::Start() {
-    Runtime = MakeHolder<TTestActorRuntime>();
+    Runtime = std::make_unique<TTestActorRuntime>();
     Runtime->Initialize(MakeEgg());
     SetupLogging();
 
@@ -209,7 +209,7 @@ void TKesusProxyTestSetup::StartKesusProxy() {
     kesusInfo->Description.SetName("KesusName");
     kesusInfo->Description.SetKesusTabletId(KESUS_TABLET_ID);
 
-    auto pipeFactory = MakeHolder<TTestTabletPipeFactory>(this);
+    auto pipeFactory = std::make_unique<TTestTabletPipeFactory>(this);
     PipeFactory = pipeFactory.Get();
     KesusProxyId = Runtime->Register(CreateKesusQuoterProxy(QUOTER_ID, entry, GetEdgeActor(), std::move(pipeFactory)));
     Runtime->EnableScheduleForActor(KesusProxyId);
@@ -319,13 +319,13 @@ void TKesusProxyTestSetup::SendProxyRequest(const TString& resourceName) {
     Runtime->Send(new IEventHandle(KesusProxyId, GetEdgeActor(), new TEvQuota::TEvProxyRequest(resourceName)), 0, true);
 }
 
-THolder<TEventHandle<TEvQuota::TEvProxySession>> TKesusProxyTestSetup::ProxyRequest(const TString& resourceName, TEvQuota::TEvProxySession::EResult expectedResult) {
+std::unique_ptr<TEventHandle<TEvQuota::TEvProxySession>> TKesusProxyTestSetup::ProxyRequest(const TString& resourceName, TEvQuota::TEvProxySession::EResult expectedResult) {
     SendProxyRequest(resourceName);
 
     TAutoPtr<IEventHandle> handle;
     TEvQuota::TEvProxySession* ret = Runtime->GrabEdgeEvent<TEvQuota::TEvProxySession>(handle);
     UNIT_ASSERT_EQUAL_C(ret->Result, expectedResult, "Actual result: " << static_cast<int>(ret->Result) << ", but expected: " << static_cast<int>(expectedResult));
-    return THolder<TEventHandle<TEvQuota::TEvProxySession>>{static_cast<TEventHandle<TEvQuota::TEvProxySession>*>(handle.Release())};
+    return std::unique_ptr<TEventHandle<TEvQuota::TEvProxySession>>{static_cast<TEventHandle<TEvQuota::TEvProxySession>*>(handle.Release())};
 }
 
 void TKesusProxyTestSetup::SendProxyStats(TDeque<TEvQuota::TProxyStat> stats) {
@@ -333,10 +333,10 @@ void TKesusProxyTestSetup::SendProxyStats(TDeque<TEvQuota::TProxyStat> stats) {
     Runtime->Send(new IEventHandle(KesusProxyId, GetEdgeActor(), new TEvQuota::TEvProxyStats(std::move(stats))), 0, true);
 }
 
-THolder<TEventHandle<TEvQuota::TEvProxyUpdate>> TKesusProxyTestSetup::GetProxyUpdate() {
+std::unique_ptr<TEventHandle<TEvQuota::TEvProxyUpdate>> TKesusProxyTestSetup::GetProxyUpdate() {
     TAutoPtr<IEventHandle> handle;
     Runtime->GrabEdgeEvent<TEvQuota::TEvProxyUpdate>(handle);
-    return THolder<TEventHandle<TEvQuota::TEvProxyUpdate>>{static_cast<TEventHandle<TEvQuota::TEvProxyUpdate>*>(handle.Release())};
+    return std::unique_ptr<TEventHandle<TEvQuota::TEvProxyUpdate>>{static_cast<TEventHandle<TEvQuota::TEvProxyUpdate>*>(handle.Release())};
 }
 
 void TKesusProxyTestSetup::SendCloseSession(const TString& resource, ui64 resourceId) {
@@ -433,7 +433,7 @@ IActor* TKesusProxyTestSetup::TTestTabletPipeFactory::CreateTabletPipe(const NAc
 }
 
 TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe* TKesusProxyTestSetup::TTestTabletPipeFactory::ExpectTabletPipeCreation(bool wait) {
-    THolder<TTestTabletPipe> pipe = MakeHolder<TTestTabletPipe>(this);
+    std::unique_ptr<TTestTabletPipe> pipe = std::make_unique<TTestTabletPipe>(this);
     TTestTabletPipe* ret = pipe.Get();
     PipesExpectedToCreate.push_back(pipe.Release());
     if (wait) {
@@ -530,8 +530,8 @@ void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::SendUpdateCo
     Send(Parent->Parent->KesusProxyId, ev.release());
 }
 
-THolder<IEventHandle> TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::GetDestroyedEventHandle() {
-    return MakeHolder<IEventHandle>(Parent->Parent->KesusProxyId, SelfID, new TEvTabletPipe::TEvClientDestroyed(KESUS_TABLET_ID, SelfID, SelfID));
+std::unique_ptr<IEventHandle> TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::GetDestroyedEventHandle() {
+    return std::make_unique<IEventHandle>(Parent->Parent->KesusProxyId, SelfID, new TEvTabletPipe::TEvClientDestroyed(KESUS_TABLET_ID, SelfID, SelfID));
 }
 
 } // namespace NKikimr

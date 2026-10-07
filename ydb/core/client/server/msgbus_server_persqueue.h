@@ -84,7 +84,7 @@ protected:
 public:
     class TNodesInfo {
     public:
-        THolder<TEvInterconnect::TEvNodesInfo> NodesInfoReply;
+        std::unique_ptr<TEvInterconnect::TEvNodesInfo> NodesInfoReply;
         THashMap<ui32, TString> HostNames;
         THashMap<TString, ui32> MinNodeIdByHost;
         std::shared_ptr<THashMap<ui32, ui32>> DynToStaticNode;
@@ -92,7 +92,7 @@ public:
         bool Ready = false;
         void ProcessNodesMapping(NPqMetaCacheV2::TEvPqNewMetaCache::TEvGetNodesMappingResponse::TPtr& ev,
                                  const TActorContext& ctx);
-        explicit TNodesInfo(THolder<TEvInterconnect::TEvNodesInfo> nodesInfoReply, const TActorContext& ctx);
+        explicit TNodesInfo(std::unique_ptr<TEvInterconnect::TEvNodesInfo> nodesInfoReply, const TActorContext& ctx);
     private:
         void FinalizeWhenReady(const TActorContext& ctx);
         void Finalize(const TActorContext& ctx);
@@ -107,7 +107,7 @@ public:
     ui32 ChildrenCreated = 0;
     bool ChildrenCreationDone = false;
 
-    std::deque<THolder<TPerTopicInfo>> ChildrenToCreate;
+    std::deque<std::unique_ptr<TPerTopicInfo>> ChildrenToCreate;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PQ_BASE_REQUEST_PROCESSOR;
@@ -127,7 +127,7 @@ public:
 protected:
     bool CreateChildrenIfNeeded(const TActorContext& ctx);
 
-    virtual THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) = 0; // Creates actor for processing one concrete topic.
+    virtual std::unique_ptr<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) = 0; // Creates actor for processing one concrete topic.
     virtual NKikimrClient::TResponse MergeSubactorReplies();
 
     virtual void SendReplyAndDie(NKikimrClient::TResponse&& record, const TActorContext& ctx) = 0;
@@ -158,7 +158,7 @@ protected:
     THashSet<TString> TopicsToRequest; // Topics that we need to request. If this set id empty, we are interested in all existing topics.
 
     const TActorId PqMetaCache;
-    THashMap<TActorId, THolder<TPerTopicInfo>> Children;
+    THashMap<TActorId, std::unique_ptr<TPerTopicInfo>> Children;
     size_t ChildrenAnswered = 0;
     std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> TopicsDescription;
     TVector<NPersQueue::TTopicConverterPtr> TopicsConverters;
@@ -215,7 +215,7 @@ public:
 
 protected:
     void SendReplyAndDie(NKikimrClient::TResponse&& record, const TActorContext& ctx) override {
-        THolder<TEvPersQueue::TEvResponse> result(new TEvPersQueue::TEvResponse());
+        std::unique_ptr<TEvPersQueue::TEvResponse> result(new TEvPersQueue::TEvResponse());
         result->Record.Swap(&record);
 
         ctx.Send(Parent, result.Release());

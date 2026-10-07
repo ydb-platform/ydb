@@ -168,7 +168,7 @@ namespace NKikimr {
              * Table level, created on demand: all same-node leaders of the table collapsed
              * into a single bucket, which lives directly in the table group.
              */
-            THolder<TCountersBucket> TableBucket;
+            std::unique_ptr<TCountersBucket> TableBucket;
 
             // Partition level, created on demand
             THashMap<TTabletKey, TDetailedValuesAccumulator> Leaves;
@@ -475,7 +475,7 @@ namespace NKikimr {
                 entry.TableGroup = TargetCounterGroup
                     ->GetSubgroup(DATABASE_LABEL, DatabasePath)
                     ->GetSubgroup(TABLE_LABEL, TString(relativePath));
-                entry.TableBucket = MakeHolder<TCountersBucket>(entry.TableGroup, tabletType, CounterVisibility, binding);
+                entry.TableBucket = std::make_unique<TCountersBucket>(entry.TableGroup, tabletType, CounterVisibility, binding);
             }
 
             /**
@@ -621,7 +621,7 @@ namespace NKikimr {
             THashMap<TContributionKey, TRetiredBucket> PendingCounters;
 
             // The buckets and the leaves point to the bindings, so none is destroyed while the instance lives
-            THashMap<TTabletTypes::EType, THolder<TDetailedMetricsBinding>> Bindings;
+            THashMap<TTabletTypes::EType, std::unique_ptr<TDetailedMetricsBinding>> Bindings;
             bool WarnedLayoutMismatch = false;
         };
 

@@ -11,7 +11,7 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
     const NKikimrKesus::TEvUpdateSemaphore Record;
 
     TVector<TDelayedEvent> Events;
-    THolder<TEvKesus::TEvUpdateSemaphoreResult> Reply;
+    std::unique_ptr<TEvKesus::TEvUpdateSemaphoreResult> Reply;
 
     TTxSemaphoreUpdate(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvUpdateSemaphore& record)
         : TTxBase(self)

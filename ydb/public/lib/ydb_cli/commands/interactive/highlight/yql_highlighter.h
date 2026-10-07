@@ -14,7 +14,7 @@ namespace NYdb::NConsoleClient {
 
     class IYQLHighlighter {
     public:
-        using TPtr = THolder<IYQLHighlighter>;
+        using TPtr = std::unique_ptr<IYQLHighlighter>;
 
         virtual void Apply(TStringBuf queryUtf8, TColors& colors) const = 0;
         virtual ~IYQLHighlighter() = default;

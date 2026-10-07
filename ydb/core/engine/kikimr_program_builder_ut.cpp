@@ -61,8 +61,8 @@ namespace NMiniKQL {
         TIntrusivePtr<ITimeProvider> TimeProvider;
 
         TScopedAlloc Alloc;
-        THolder<TTypeEnvironment> Env;
-        THolder<TKikimrProgramBuilder> PgmBuilder;
+        std::unique_ptr<TTypeEnvironment> Env;
+        std::unique_ptr<TKikimrProgramBuilder> PgmBuilder;
 
         TExploringNodeVisitor Explorer;
         IComputationPattern::TPtr Pattern;
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm, env);
-        TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
+        TVector<std::unique_ptr<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase);
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm, env);
-        TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
+        TVector<std::unique_ptr<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase);
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm, env);
-        TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
+        TVector<std::unique_ptr<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Erase);
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm, env);
-        TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
+        TVector<std::unique_ptr<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm, env);
-        TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
+        TVector<std::unique_ptr<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Update);
@@ -370,7 +370,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm, env);
-        TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
+        TVector<std::unique_ptr<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Update);
@@ -428,7 +428,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm, env);
-        TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
+        TVector<std::unique_ptr<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm, env);
-        TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
+        TVector<std::unique_ptr<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
@@ -536,7 +536,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm, env);
-        TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
+        TVector<std::unique_ptr<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm, env);
-        TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
+        TVector<std::unique_ptr<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
@@ -647,7 +647,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm, env);
-        TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
+        TVector<std::unique_ptr<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);
@@ -699,7 +699,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProgramBuilderTest) {
 
         TExploringNodeVisitor explorer;
         explorer.Walk(pgm, env);
-        TVector<THolder<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
+        TVector<std::unique_ptr<TKeyDesc>> tableKeys = ExtractTableKeys(explorer, env);
         UNIT_ASSERT_VALUES_EQUAL(tableKeys.size(), 1);
         UNIT_ASSERT(tableKeys[0]->TableId.HasSamePath(TTableId(1, 2)));
         UNIT_ASSERT(tableKeys[0]->RowOperation == TKeyDesc::ERowOperation::Read);

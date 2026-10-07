@@ -31,11 +31,11 @@ public:
     }
 };
 
-THolder<NActors::IActor> CreateStorageStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateStorageStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TStorageStatsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
+    return std::make_unique<TStorageStatsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

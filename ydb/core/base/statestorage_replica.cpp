@@ -92,7 +92,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     }
 
     void NotifyWithTabletInfo(const TActorId &recp, ui64 tabletId, ui64 cookie, const TEntry *entry) {
-        THolder<TEvStateStorage::TEvReplicaInfo> msg;
+        std::unique_ptr<TEvStateStorage::TEvReplicaInfo> msg;
         if (entry && entry->CurrentLeader) {
             const bool locked = (entry->TabletState == TTabletState::Locked);
             auto now = TActivationContext::Now();
@@ -159,7 +159,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     }
 
     void ReplyWithStatus(const TActorId &recp, ui64 tabletId, ui64 cookie, NKikimrProto::EReplyStatus status) {
-        THolder<TEvStateStorage::TEvReplicaInfo> msg(new TEvStateStorage::TEvReplicaInfo(tabletId, status, Info ? Info->ClusterStateGeneration : 0, Info ? Info->ClusterStateGuid : 0));
+        std::unique_ptr<TEvStateStorage::TEvReplicaInfo> msg(new TEvStateStorage::TEvReplicaInfo(tabletId, status, Info ? Info->ClusterStateGeneration : 0, Info ? Info->ClusterStateGuid : 0));
         msg->Record.SetCookie(cookie);
         msg->Record.SetSignature(Signature());
         msg->Record.SetConfigContentHash(Info->ContentHash());

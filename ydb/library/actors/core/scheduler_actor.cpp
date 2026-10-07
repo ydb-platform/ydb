@@ -51,7 +51,7 @@ namespace NActors {
 
         TScheduleMap ScheduleMap;
 
-        THolder<NThreading::TLegacyFuture<void, false>> MainCycle;
+        std::unique_ptr<NThreading::TLegacyFuture<void, false>> MainCycle;
 
         static const ui64 IntrasecondThreshold = 1048576; // ~second
         TAutoPtr<TMomentMap> ActiveSec;

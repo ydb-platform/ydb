@@ -158,7 +158,7 @@ struct TReadTableRequest : public TThrRefBase {
     THashMap<ui64, TActorId> StreamingShards;
     TSerializedCellVec FromValues;
     TSerializedCellVec ToValues;
-    THolder<TKeyDesc> KeyDesc;
+    std::unique_ptr<TKeyDesc> KeyDesc;
     bool RowsLimited;
     ui64 RowsRemain;
     THashMap<ui64, TQuotaRequest> QuotaRequests;
@@ -275,7 +275,7 @@ public:
         bool Restarting = false;
         size_t RestartCount = 0;
         TTableId TableId;
-        THolder<NKikimrQueryStats::TTxStats> Stats;
+        std::unique_ptr<NKikimrQueryStats::TTxStats> Stats;
         TReattachState ReattachState;
     };
 private:
@@ -2500,7 +2500,7 @@ void TDataReq::Handle(TEvTxProcessing::TEvStreamClearanceRequest::TPtr &ev, cons
                 {"txId", TxId});
 
             // We must send response to current request too
-            auto response = MakeHolder<TEvTxProcessing::TEvStreamClearanceResponse>();
+            auto response = std::make_unique<TEvTxProcessing::TEvStreamClearanceResponse>();
             response->Record.SetTxId(TxId);
             response->Record.SetCleared(false);
             ctx.Send(ev->Sender, response.Release());

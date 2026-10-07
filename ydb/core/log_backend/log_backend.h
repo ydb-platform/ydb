@@ -14,7 +14,7 @@ TAutoPtr<TLogBackend> CreateMeteringLogBackendWithUnifiedAgent(
     const TKikimrRunConfig& runConfig,
     NMonitoring::TDynamicCounterPtr counters);
 
-TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> CreateAuditLogBackends(
+TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<std::unique_ptr<TLogBackend>>> CreateAuditLogBackends(
     const TKikimrRunConfig& runConfig,
     NMonitoring::TDynamicCounterPtr counters);
 

@@ -225,7 +225,7 @@ private:
         if (!NodeBrokerPipe)
             Connect(ctx);
 
-        auto request = MakeHolder<TEvNodeBroker::TEvExtendLeaseRequest>();
+        auto request = std::make_unique<TEvNodeBroker::TEvExtendLeaseRequest>();
         request->Record.SetNodeId(ctx.SelfID.NodeId());
         NTabletPipe::SendData(ctx, NodeBrokerPipe, request.Release());
     }

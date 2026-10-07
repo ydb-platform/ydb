@@ -32,7 +32,7 @@ struct TStatisticsAggregator::TTxAnalyzeOpList : public TTxBase {
             {"tabletId", Self->TabletID()},
             {"dbName", record.GetDatabaseName()});
 
-        auto response = MakeHolder<TEvStatistics::TEvAnalyzeOpListResponse>();
+        auto response = std::make_unique<TEvStatistics::TEvAnalyzeOpListResponse>();
         auto& rec = response->Record;
 
         const TString& dbName = record.GetDatabaseName();

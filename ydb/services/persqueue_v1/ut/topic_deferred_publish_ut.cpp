@@ -216,7 +216,7 @@ TMaybe<TString> TryReadFirstTopicMessage(
     const TString topic = "rt3.dc1--" + topicShortName;
     const TInstant deadline = TInstant::Now() + timeout;
     while (TInstant::Now() < deadline) {
-        THolder<NMsgBusProxy::TBusPersQueue> request = TRequestReadPQ{
+        std::unique_ptr<NMsgBusProxy::TBusPersQueue> request = TRequestReadPQ{
             topic, partitionId, 0, 100, "user", 0}.GetRequest();
         request.Get()->Record.SetTicket("root@builtin");
 

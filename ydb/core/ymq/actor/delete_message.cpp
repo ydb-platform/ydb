@@ -22,7 +22,7 @@ class TDeleteMessageActor
     : public TActionActor<TDeleteMessageActor>
 {
 public:
-    TDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb)
+    TDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, isBatch ? EAction::DeleteMessageBatch : EAction::DeleteMessage, std::move(cb))
         , IsBatch_(isBatch)
     {
@@ -73,7 +73,7 @@ private:
                 // Create request
                 if (!shardInfo.Request_) {
                     ++RequestsToLeader_;
-                    shardInfo.Request_ = MakeHolder<TSqsEvents::TEvDeleteMessageBatch>();
+                    shardInfo.Request_ = std::make_unique<TSqsEvents::TEvDeleteMessageBatch>();
                     shardInfo.Request_->Shard = receipt.GetShard();
                     shardInfo.Request_->RequestId = RequestId_;
                 }
@@ -294,7 +294,7 @@ private:
 
     struct TShardInfo {
         std::vector<size_t> RequestToReplyIndexMapping_;
-        THolder<TSqsEvents::TEvDeleteMessageBatch> Request_; // actual when processing initial request, then nullptr
+        std::unique_ptr<TSqsEvents::TEvDeleteMessageBatch> Request_; // actual when processing initial request, then nullptr
     };
     size_t RequestsToLeader_ = 0;
     std::vector<TShardInfo> ShardInfo_;
@@ -302,11 +302,11 @@ private:
     std::vector<size_t> MLPRequestToReplyIndexMapping_;
 };
 
-IActor* CreateDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TDeleteMessageActor(sourceSqsRequest, false, std::move(cb));
 }
 
-IActor* CreateDeleteMessageBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateDeleteMessageBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TDeleteMessageActor(sourceSqsRequest, true, std::move(cb));
 }
 

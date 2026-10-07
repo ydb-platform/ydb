@@ -43,7 +43,7 @@ TIntrusiveConstPtr<NACLib::TUserToken> MakeUserToken(const TString& userSid) {
     return token;
 }
 
-THolder<TEvCheckDlqTopicsResponse> CheckDlq(
+std::unique_ptr<TEvCheckDlqTopicsResponse> CheckDlq(
     NActors::TTestActorRuntime& runtime,
     const NKikimrPQ::TPQTabletConfig& newConfig,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr,
@@ -59,7 +59,7 @@ THolder<TEvCheckDlqTopicsResponse> CheckDlq(
         TCheckDlqTopicsSettings{.UserToken = std::move(userToken)}
     );
     if (!actor) {
-        return MakeHolder<TEvCheckDlqTopicsResponse>(Ydb::StatusIds::SUCCESS);
+        return std::make_unique<TEvCheckDlqTopicsResponse>(Ydb::StatusIds::SUCCESS);
     }
     auto actorId = runtime.Register(actor);
     runtime.EnableScheduleForActor(actorId);
@@ -67,7 +67,7 @@ THolder<TEvCheckDlqTopicsResponse> CheckDlq(
 }
 
 void AssertStatus(
-    const THolder<TEvCheckDlqTopicsResponse>& result,
+    const std::unique_ptr<TEvCheckDlqTopicsResponse>& result,
     Ydb::StatusIds::StatusCode expected,
     const TString& substring = {})
 {

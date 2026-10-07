@@ -538,7 +538,7 @@ namespace NActors {
 
         // send update to main session actor if something valuable has changed
         if (!UpdateFromInputSession) {
-            UpdateFromInputSession = MakeHolder<TEvUpdateFromInputSession>(ConfirmedByInput, numDataBytes, ping);
+            UpdateFromInputSession = std::make_unique<TEvUpdateFromInputSession>(ConfirmedByInput, numDataBytes, ping);
         } else {
             Y_ABORT_UNLESS(ConfirmedByInput >= UpdateFromInputSession->ConfirmedByInput);
             UpdateFromInputSession->ConfirmedByInput = ConfirmedByInput;

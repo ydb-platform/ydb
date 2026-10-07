@@ -709,7 +709,7 @@ struct TEvTablet {
 
         // must be present one of: or loaded graph or snapshot follower update
         TIntrusivePtr<TDependencyGraph> DependencyGraph;
-        THolder<TFUpdateBody> Update;
+        std::unique_ptr<TFUpdateBody> Update;
 
         TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
 
@@ -751,7 +751,7 @@ struct TEvTablet {
     };
 
     struct TEvFUpdate : public TEventLocal<TEvFUpdate, EvFUpdate> {
-        THolder<TFUpdateBody> Update;
+        std::unique_ptr<TFUpdateBody> Update;
 
         TEvFUpdate(const TEvFollowerUpdate &upd)
             : Update(new TFUpdateBody(upd))

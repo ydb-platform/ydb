@@ -239,7 +239,7 @@ private:
     ui64 SkippedDueToInFlightLimitCounter = 0;
 };
 
-THolder<NActors::IActor> MakeCheckpointCoordinator(
+std::unique_ptr<NActors::IActor> MakeCheckpointCoordinator(
     TCoordinatorId coordinatorId,
     const TActorId& storageProxy,
     const TActorId& runActorId,

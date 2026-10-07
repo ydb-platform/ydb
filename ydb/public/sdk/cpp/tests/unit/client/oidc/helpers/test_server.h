@@ -61,7 +61,7 @@ public:
 
         bool DoReply(const TReplyParams& params) override;
 
-        THolder<THttpServerConn> CreateHttpConnection(const TSocket& socket, size_t outputBuffer) override;
+        std::unique_ptr<THttpServerConn> CreateHttpConnection(const TSocket& socket, size_t outputBuffer) override;
 
     private:
         TOidcTestServer& Server;

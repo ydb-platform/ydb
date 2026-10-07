@@ -46,7 +46,7 @@ class TGetQueueAttributesActor
     : public TActionActor<TGetQueueAttributesActor>
 {
 public:
-    TGetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TGetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, EAction::GetQueueAttributes, std::move(cb))
     {
     }
@@ -152,7 +152,7 @@ private:
 
         if (NeedRuntimeAttributes_) {
             if (!FeatureFlags_.EnableSQSMigrationFinished_) {
-                Send(QueueLeader_, MakeHolder<TSqsEvents::TEvGetRuntimeQueueAttributes>(RequestId_));
+                Send(QueueLeader_, std::make_unique<TSqsEvents::TEvGetRuntimeQueueAttributes>(RequestId_));
                 ++WaitCount_;
             }
             if (FeatureFlags_.EnableSQSMigrationCompatibility_ && IsTopicCreated()) {
@@ -348,7 +348,7 @@ class TGetQueueAttributesBatchActor
     : public TCommonBatchActor<TGetQueueAttributesBatchActor>
 {
 public:
-    TGetQueueAttributesBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+    TGetQueueAttributesBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb)
         : TCommonBatchActor(sourceSqsRequest, EAction::GetQueueAttributesBatch, std::move(cb))
     {
     }
@@ -408,11 +408,11 @@ private:
     }
 };
 
-IActor* CreateGetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateGetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TGetQueueAttributesActor(sourceSqsRequest, std::move(cb));
 }
 
-IActor* CreateGetQueueAttributesBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateGetQueueAttributesBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TGetQueueAttributesBatchActor(sourceSqsRequest, std::move(cb));
 }
 

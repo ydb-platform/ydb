@@ -114,31 +114,31 @@ public:
     }
 
     void Handle(NCloud::TEvAccessService::TEvAuthenticateRequest::TPtr& ev) {
-        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateResponse>();
+        auto result = std::make_unique<NCloud::TEvAccessService::TEvAuthenticateResponse>();
         HandleAuthenticateRequest(ev->Get()->Request, result->Status, result->Response);
         Send(ev->Sender, result.Release());
     }
 
     void Handle(NCloud::TEvAccessService::TEvAuthorizeRequest::TPtr& ev) {
-        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeResponse>();
+        auto result = std::make_unique<NCloud::TEvAccessService::TEvAuthorizeResponse>();
         HandleAuthorizeRequest(ev->Get()->Request, result->Status, result->Response);
         Send(ev->Sender, result.Release());
     }
 
     void Handle(NCloud::TEvAccessService::TEvAuthenticateRequestV2::TPtr& ev) {
-        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateResponseV2>();
+        auto result = std::make_unique<NCloud::TEvAccessService::TEvAuthenticateResponseV2>();
         HandleAuthenticateRequest(ev->Get()->Request, result->Status, result->Response);
         Send(ev->Sender, result.Release());
     }
 
     void Handle(NCloud::TEvAccessService::TEvAuthorizeRequestV2::TPtr& ev) {
-        auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeResponseV2>();
+        auto result = std::make_unique<NCloud::TEvAccessService::TEvAuthorizeResponseV2>();
         HandleAuthorizeRequest(ev->Get()->Request, result->Status, result->Response);
         Send(ev->Sender, result.Release());
     }
 
     void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeRequestV2::TPtr& ev) {
-        auto result = MakeHolder<NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2>();
+        auto result = std::make_unique<NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2>();
 
         if (++RequestNumber % 3 == 0) {
             result->Status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::DEADLINE_EXCEEDED, false);
@@ -219,7 +219,7 @@ public:
 
     void Handle(TEvGetCloudByFolderRequest::TPtr& ev) {
         const auto folder = ev->Get()->FolderId;
-        THolder<TEvGetCloudByFolderResponse> result = MakeHolder<TEvGetCloudByFolderResponse>();
+        std::unique_ptr<TEvGetCloudByFolderResponse> result = std::make_unique<TEvGetCloudByFolderResponse>();
 
         if (++RequestNumber % 3 == 0) {
             result->Status = NYdbGrpc::TGrpcStatus("Oops", grpc::StatusCode::INTERNAL, false);

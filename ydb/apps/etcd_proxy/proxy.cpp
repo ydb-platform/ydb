@@ -352,7 +352,7 @@ TProxy::TProxy(int argc, char** argv)
         Stuff->TablePrefix = prefix.str();
     }
 
-    THolder<NActors::TActorSystemSetup> actorSystemSetup = BuildActorSystemSetup();
+    std::unique_ptr<NActors::TActorSystemSetup> actorSystemSetup = BuildActorSystemSetup();
 
     TIntrusivePtr<NActors::NLog::TSettings> loggerSettings = BuildLoggerSettings();
     NActors::TLoggerActor* loggerActor = new NActors::TLoggerActor(
@@ -380,8 +380,8 @@ TIntrusivePtr<NActors::NLog::TSettings> TProxy::BuildLoggerSettings() {
     return loggerSettings;
 }
 
-THolder<NActors::TActorSystemSetup> TProxy::BuildActorSystemSetup() {
-    THolder<NActors::TActorSystemSetup> setup = MakeHolder<NActors::TActorSystemSetup>();
+std::unique_ptr<NActors::TActorSystemSetup> TProxy::BuildActorSystemSetup() {
+    std::unique_ptr<NActors::TActorSystemSetup> setup = std::make_unique<NActors::TActorSystemSetup>();
     setup->NodeId = 1;
     setup->Executors.Reset(new TAutoPtr<NActors::IExecutorPool>[1]);
     setup->ExecutorsCount = 1;

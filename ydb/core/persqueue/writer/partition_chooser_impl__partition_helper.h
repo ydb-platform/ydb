@@ -53,7 +53,7 @@ public:
     }
 
     void SendCheckPartitionStatusRequest(ui32 partitionId, const TString& sourceId, const TActorContext& ctx) {
-        auto ev = MakeHolder<NKikimr::TEvPQ::TEvCheckPartitionStatusRequest>(partitionId);
+        auto ev = std::make_unique<NKikimr::TEvPQ::TEvCheckPartitionStatusRequest>(partitionId);
         if (sourceId) {
             ev->Record.SetSourceId(sourceId);
         }
@@ -77,8 +77,8 @@ public:
     }
 
 private:
-    THolder<TEvPersQueue::TEvRequest> MakeRequest(ui32 partitionId, TActorId pipe) {
-        auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
+    std::unique_ptr<TEvPersQueue::TEvRequest> MakeRequest(ui32 partitionId, TActorId pipe) {
+        auto ev = std::make_unique<TEvPersQueue::TEvRequest>();
 
         ev->Record.MutablePartitionRequest()->SetPartition(partitionId);
         ActorIdToProto(pipe, ev->Record.MutablePartitionRequest()->MutablePipeClient());

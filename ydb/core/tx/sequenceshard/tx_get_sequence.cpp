@@ -81,7 +81,7 @@ namespace NSequenceShard {
         }
 
         TEvSequenceShard::TEvGetSequence::TPtr Ev;
-        THolder<TEvSequenceShard::TEvGetSequenceResult> Result;
+        std::unique_ptr<TEvSequenceShard::TEvGetSequenceResult> Result;
     };
 
 

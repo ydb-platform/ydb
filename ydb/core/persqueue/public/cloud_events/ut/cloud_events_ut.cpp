@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         );
 
         auto events = std::make_shared<TVector<TString>>();
-        auto writer = MakeHolder<TInMemoryEventsWriter>(events);
+        auto writer = std::make_unique<TInMemoryEventsWriter>(events);
 
         auto& runtime = setup->GetRuntime();
         auto edgeId = runtime.AllocateEdgeActor();
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
             auto info = MakeCreateTopicEventInfo("/root/my/topic");
             info.UserSID = subjectId;
 
-            auto writer = MakeHolder<TInMemoryEventsWriter>(events);
+            auto writer = std::make_unique<TInMemoryEventsWriter>(events);
             auto actorId = runtime.Register(new TCloudEventsActor(std::move(writer)));
             runtime.EnableScheduleForActor(actorId);
             runtime.Send(new NActors::IEventHandle(actorId, edgeId, new TCloudEvent(std::move(info))), 0, true);
@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         );
 
         auto events = std::make_shared<TVector<TString>>();
-        auto writer = MakeHolder<TInMemoryEventsWriter>(events);
+        auto writer = std::make_unique<TInMemoryEventsWriter>(events);
 
         auto& runtime = setup->GetRuntime();
         auto edgeId = runtime.AllocateEdgeActor();
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         );
 
         auto events = std::make_shared<TVector<TString>>();
-        auto writer = MakeHolder<TInMemoryEventsWriter>(events);
+        auto writer = std::make_unique<TInMemoryEventsWriter>(events);
 
         auto& runtime = setup->GetRuntime();
         auto edgeId = runtime.AllocateEdgeActor();
@@ -356,7 +356,7 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
         );
 
         auto events = std::make_shared<TVector<TString>>();
-        auto writer = MakeHolder<TInMemoryEventsWriter>(events);
+        auto writer = std::make_unique<TInMemoryEventsWriter>(events);
 
         auto& runtime = setup->GetRuntime();
         auto edgeId = runtime.AllocateEdgeActor();
@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
             NKikimrPQ::TPQConfig_TCloudEventsConfig_EFormat_PROTOBUF);
 
         auto events = std::make_shared<TVector<TString>>();
-        auto writer = MakeHolder<TInMemoryEventsWriter>(events);
+        auto writer = std::make_unique<TInMemoryEventsWriter>(events);
 
         auto& runtime = setup->GetRuntime();
         auto edgeId = runtime.AllocateEdgeActor();
@@ -409,7 +409,7 @@ Y_UNIT_TEST_SUITE(CloudEventsAuditTest) {
 Y_UNIT_TEST_SUITE(CloudEventsUaWriterTest) {
     Y_UNIT_TEST(WriteDelegatesToSession) {
         auto state = std::make_shared<TFakeUaEventsSession::TState>();
-        TUaEventsWriter writer{MakeHolder<TFakeUaEventsSession>(state)};
+        TUaEventsWriter writer{std::make_unique<TFakeUaEventsSession>(state)};
 
         writer.Write("payload");
 
@@ -420,7 +420,7 @@ Y_UNIT_TEST_SUITE(CloudEventsUaWriterTest) {
 
     Y_UNIT_TEST(CloseIsIdempotent) {
         auto state = std::make_shared<TFakeUaEventsSession::TState>();
-        TUaEventsWriter writer{MakeHolder<TFakeUaEventsSession>(state)};
+        TUaEventsWriter writer{std::make_unique<TFakeUaEventsSession>(state)};
 
         writer.Close();
         writer.Close();
@@ -431,7 +431,7 @@ Y_UNIT_TEST_SUITE(CloudEventsUaWriterTest) {
     Y_UNIT_TEST(DestructorClosesSessionOnce) {
         auto state = std::make_shared<TFakeUaEventsSession::TState>();
         {
-            TUaEventsWriter writer{MakeHolder<TFakeUaEventsSession>(state)};
+            TUaEventsWriter writer{std::make_unique<TFakeUaEventsSession>(state)};
             writer.Write("payload");
         }
 

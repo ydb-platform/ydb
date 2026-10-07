@@ -1278,7 +1278,7 @@ private:
     struct TProgramParsed {
         IStatsRegistryPtr StatsRegistry;
         std::shared_ptr<TPatternCacheEntry> PatternCacheEntry;
-        THolder<IComputationGraph> CompGraph;
+        std::unique_ptr<IComputationGraph> CompGraph;
 
         IComputationPattern* GetPattern() {
             return PatternCacheEntry->Pattern.Get();

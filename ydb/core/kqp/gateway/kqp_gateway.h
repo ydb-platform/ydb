@@ -67,7 +67,7 @@ struct TKqpSettings {
 struct TModuleResolverState : public TThrRefBase {
     NYql::TExprContext ExprCtx;
     NYql::IModuleResolver::TPtr ModuleResolver;
-    THolder<NYql::TExprContext::TFreezeGuard> FreezeGuardHolder;
+    std::unique_ptr<NYql::TExprContext::TFreezeGuard> FreezeGuardHolder;
 };
 
 enum class ELocksOp {

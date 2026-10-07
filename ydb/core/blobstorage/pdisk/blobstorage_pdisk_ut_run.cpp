@@ -25,9 +25,9 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
     auto ioContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
     appData.IoContextFactory = ioContext.get();
 
-    THolder<TActorSystem> actorSystem1;
+    std::unique_ptr<TActorSystem> actorSystem1;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> mainCounters;
-    THolder<NActors::TMon> monitoring;
+    std::unique_ptr<NActors::TMon> monitoring;
 
     TAtomic doneCounter = 0;
     TSystemEvent doneEvent(TSystemEvent::rAuto);
@@ -48,7 +48,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001));
         nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002));
 
-        THolder<TActorSystemSetup> setup1(new TActorSystemSetup());
+        std::unique_ptr<TActorSystemSetup> setup1(new TActorSystemSetup());
         setup1->NodeId = 1;
         setup1->ExecutorsCount = 3;
         setup1->Executors.Reset(new TAutoPtr<IExecutorPool>[3]);

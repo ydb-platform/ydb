@@ -25,7 +25,7 @@ namespace NTabletFlatExecutor {
     struct TCompactCfg final : public IDestructable {
         using TConf = NTable::NPage::TConf;
 
-        explicit TCompactCfg(THolder<NTable::TCompactionParams> params)
+        explicit TCompactCfg(std::unique_ptr<NTable::TCompactionParams> params)
             : Params(std::move(params))
         {
         }
@@ -34,7 +34,7 @@ namespace NTabletFlatExecutor {
         NTable::NPage::TConf Layout;
         NWriter::TConf Writer;
         NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
-        THolder<NTable::TCompactionParams> Params;
+        std::unique_ptr<NTable::TCompactionParams> Params;
         NTable::TRowVersionRanges::TSnapshot RemovedRowVersions;
 
         // Fulltext compact compaction support

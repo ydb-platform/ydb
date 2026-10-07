@@ -144,9 +144,9 @@ public:
         opts.RetryOperationMaxRetries =  settings.MaxRetries_;
 
         if (!UseBulkUpsert && isColumnTable) {
-            Uploader = MakeHolder<TUploader>(opts, queryClient, dataAccumulator->GetQueryString());
+            Uploader = std::make_unique<TUploader>(opts, queryClient, dataAccumulator->GetQueryString());
         } else {
-            Uploader = MakeHolder<TUploader>(opts, TableClient, dataAccumulator->GetQueryString());
+            Uploader = std::make_unique<TUploader>(opts, TableClient, dataAccumulator->GetQueryString());
         }
     }
 
@@ -176,7 +176,7 @@ private:
     const TString Path;
     TTableClient& TableClient;
     const bool UseBulkUpsert;
-    THolder<TUploader> Uploader;
+    std::unique_ptr<TUploader> Uploader;
 
 }; // TDataWriter
 

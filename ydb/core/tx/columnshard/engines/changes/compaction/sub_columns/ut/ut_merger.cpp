@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
         const ui32 columnId = 2;
         auto schema = MakeSchema(settings);
         TColumnMergeContext mergeCtx(columnId, schema, 8u * 1024 * 1024, std::nullopt);
-        THolder<IColumnMerger> merger = IColumnMerger::TFactory::MakeHolder(TConstructor::GetClassNameStatic(), mergeCtx);
+        std::unique_ptr<IColumnMerger> merger = IColumnMerger::TFactory::MakeHolder(TConstructor::GetClassNameStatic(), mergeCtx);
         UNIT_ASSERT(merger);
 
         TMergingContext mergingCtx({});

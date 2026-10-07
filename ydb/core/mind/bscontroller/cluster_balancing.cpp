@@ -389,8 +389,8 @@ namespace NKikimr::NBsController {
             }
         }
 
-        THolder<TEvBlobStorage::TEvControllerConfigRequest> CreateQueryConfigRequest() {
-            auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> CreateQueryConfigRequest() {
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
             auto& record = ev->Record;
             auto *request = record.MutableRequest();
             request->AddCommand()->MutableQueryBaseConfig();
@@ -400,8 +400,8 @@ namespace NKikimr::NBsController {
             return ev;
         }
 
-        THolder<TEvBlobStorage::TEvControllerConfigRequest> CreateReassignRequest(const TVSlot* vslot) {
-            auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> CreateReassignRequest(const TVSlot* vslot) {
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
             auto& record = ev->Record;
             auto *request = record.MutableRequest();
 
@@ -497,7 +497,7 @@ namespace NKikimr::NBsController {
         }
 
         template <typename TEventType>
-        THolder<typename TEventType::THandle> WaitForResponse() {
+        std::unique_ptr<typename TEventType::THandle> WaitForResponse() {
             // TODO: Wait with deadline when CoroActor's deadline is fixed
             // For now this doesn't return nullptr, hence this function doesn't return an empty holder.
             return WaitForSpecificEvent<TEventType>(&ProcessUnexpectedEvent/*, NActors::TMonotonic::Now() + TIMEOUT*/);
@@ -686,7 +686,7 @@ namespace NKikimr::NBsController {
 
     IActor* CreateClusterBalancingActor(const TActorId& controllerId, const TClusterBalancingSettings& settings) {
         return new TActorCoro(
-            MakeHolder<TClusterBalancingActor>(controllerId, settings)
+            std::make_unique<TClusterBalancingActor>(controllerId, settings)
         );
     }
 

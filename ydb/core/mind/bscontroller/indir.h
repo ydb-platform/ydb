@@ -58,7 +58,7 @@ public:
     TIndirectReferable& operator =(TIndirectReferable&&) = delete;
 
     // TOverlayMap machinery
-    void OnClone(const THolder<TValue>& clone) {
+    void OnClone(const std::unique_ptr<TValue>& clone) {
         Y_DEBUG_ABORT_UNLESS(Current == this);
         Current = clone.Get();
     }

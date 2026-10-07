@@ -213,7 +213,7 @@ namespace NKikimr {
 
         template<typename TKey, typename TValue>
         class TOverlayMap {
-            using TBaseMap = TMap<TKey, THolder<TValue>>;
+            using TBaseMap = TMap<TKey, std::unique_ptr<TValue>>;
             using TIterator = typename TBaseMap::iterator;
             using TConstIterator = typename TBaseMap::const_iterator;
 
@@ -361,10 +361,10 @@ namespace NKikimr {
                 TIterator it = Overlay.lower_bound(key);
                 if (it != Overlay.end() && it->first == key) {
                     Y_ABORT_UNLESS(!it->second);
-                    it->second = MakeHolder<TValue>(std::forward<TArgs>(args)...);
+                    it->second = std::make_unique<TValue>(std::forward<TArgs>(args)...);
                 } else {
                     Y_ABORT_UNLESS(!Base.count(key));
-                    it = Overlay.emplace_hint(it, std::move(key), MakeHolder<TValue>(std::forward<TArgs>(args)...));
+                    it = Overlay.emplace_hint(it, std::move(key), std::make_unique<TValue>(std::forward<TArgs>(args)...));
                 }
                 return it->second.Get();
             }
@@ -463,7 +463,7 @@ namespace NKikimr {
 
         private:
             TIterator Clone(TIterator it, TConstIterator baseIt) {
-                TIterator res = Overlay.emplace_hint(it, baseIt->first, MakeHolder<TValue>(*baseIt->second));
+                TIterator res = Overlay.emplace_hint(it, baseIt->first, std::make_unique<TValue>(*baseIt->second));
                 baseIt->second->OnClone(res->second);
                 return res;
             }

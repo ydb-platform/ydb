@@ -7,7 +7,7 @@ namespace NKikimr {
 
 class TMerger {
 public:
-    TMerger(THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>& response,
+    TMerger(std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse>& response,
             TTabletLabeledCountersResponseContext& record);
 
     static void MergeOne(const NKikimrLabeledCounters::TTabletLabeledCounter& source,
@@ -56,7 +56,7 @@ public:
     NKikimrLabeledCounters::TTabletLabeledCounter* GetCounter(NKikimrLabeledCounters::TTabletLabeledCounters* counters, ui32 nameId);
 
 private:
-    THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>& Response;
+    std::unique_ptr<TEvTabletCounters::TEvTabletLabeledCountersResponse>& Response;
     TTabletLabeledCountersResponseContext& ResponseContext;
     THashMap<TString, NKikimrLabeledCounters::TTabletLabeledCounters*> IndexTabletLabeledCounters;
     THashMap<std::pair<NKikimrLabeledCounters::TTabletLabeledCounters*, ui32>, NKikimrLabeledCounters::TTabletLabeledCounter*> IndexTabletLabeledCounter;

@@ -268,7 +268,7 @@ namespace NKikimr {
 
         class TEvMessage : public TEventLocal<TEvMessage, EvMessage> {
         public:
-            TEvMessage(const TActorId& sender, THolder<IEventBase> event)
+            TEvMessage(const TActorId& sender, std::unique_ptr<IEventBase> event)
                 : Type(event->Type())
                 , Sender(sender)
                 , Event(std::move(event))
@@ -294,7 +294,7 @@ namespace NKikimr {
                 return bool(Event);
             }
 
-            const THolder<IEventBase>& GetEvent() const {
+            const std::unique_ptr<IEventBase>& GetEvent() const {
                 return Event;
             }
 
@@ -302,7 +302,7 @@ namespace NKikimr {
                 return Buffer;
             }
 
-            THolder<IEventBase> ReleaseEvent() {
+            std::unique_ptr<IEventBase> ReleaseEvent() {
                 return std::move(Event);
             }
 
@@ -315,7 +315,7 @@ namespace NKikimr {
             const TActorId Sender;
 
         private:
-            THolder<IEventBase> Event;
+            std::unique_ptr<IEventBase> Event;
             TIntrusivePtr<TEventSerializedData> Buffer;
             ui64 SeqNo = 0;
         };
@@ -446,7 +446,7 @@ namespace NKikimr {
         void SendData(const TActorContext& ctx, const TActorId& clientId, IEventBase* payload, ui64 cookie = 0, NWilson::TTraceId traceId = {});
         void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0, NWilson::TTraceId traceId = {});
         void SendData(TActorId self, TActorId clientId, IEventBase* payload, ui64 cookie = 0, NWilson::TTraceId traceId = {});
-        void SendData(TActorId self, TActorId clientId, THolder<IEventBase>&& payload, ui64 cookie = 0, NWilson::TTraceId traceId = {});
+        void SendData(TActorId self, TActorId clientId, std::unique_ptr<IEventBase>&& payload, ui64 cookie = 0, NWilson::TTraceId traceId = {});
         void SendDataWithSeqNo(TActorId self, TActorId clientId, IEventBase* payload, ui64 seqNo, ui64 cookie = 0, NWilson::TTraceId traceId = {});
         void SendData(TActorId self, TActorId clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0, NWilson::TTraceId traceId = {});
 

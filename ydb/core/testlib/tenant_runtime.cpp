@@ -921,7 +921,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
             // Init scheme root.
             {
-                auto evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(1, domain.SchemeShardId);
+                auto evTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(1, domain.SchemeShardId);
                 auto transaction = evTx->Record.AddTransaction();
                 transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
                 transaction->SetWorkingDir("/");
@@ -943,7 +943,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
                 }
 
-                auto evSubscribe = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(1);
+                auto evSubscribe = std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(1);
                 SendToPipe(domain.SchemeShardId, Sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries());
 
                 {
@@ -1015,7 +1015,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
             host.MutableKey()->SetFqdn(node.Host);
             host.MutableKey()->SetIcPort(node.Port);
         }
-        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         request->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig()->CopyFrom(hostConfig);
         request->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
 

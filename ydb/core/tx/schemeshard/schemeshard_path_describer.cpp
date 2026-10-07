@@ -1310,7 +1310,7 @@ static bool ConsiderAsDropped(const TPath& path) {
     return true;
 }
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) {
+std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) {
     TPathId pathId = Params.HasPathId() ? TPathId(Params.GetSchemeshardId(), Params.GetPathId()) : InvalidPathId;
     TString pathStr = Params.GetPath();
 
@@ -1367,7 +1367,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         }
     }
 
-    Result = MakeHolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>(pathStr, pathId);
+    Result = std::make_unique<TEvSchemeShard::TEvDescribeSchemeResultBuilder>(pathStr, pathId);
 
     auto descr = Result->Record.MutablePathDescription()->MutableSelf();
     FillPathDescr(descr, path);
@@ -1478,7 +1478,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
     return std::move(Result);
 }
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     TPathId pathId,
@@ -1492,7 +1492,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     return TPathDescriber(self, std::move(params)).Describe(ctx);
 }
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     TPathId pathId
@@ -1502,7 +1502,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     return DescribePath(self, ctx, pathId, options);
 }
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     const TString& path,
@@ -1515,7 +1515,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     return TPathDescriber(self, std::move(params)).Describe(ctx);
 }
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TSchemeShard* self,
     const TActorContext& ctx,
     const TString& path

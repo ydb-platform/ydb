@@ -34,8 +34,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateStoreDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TStoreDistributedEraseTxUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateStoreDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TStoreDistributedEraseTxUnit>(new TStoreDistributedEraseTxUnit(self, pipeline));
 }
 
 } // namespace NDataShard

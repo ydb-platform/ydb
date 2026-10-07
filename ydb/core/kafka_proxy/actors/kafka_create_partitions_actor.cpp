@@ -281,7 +281,7 @@ void TKafkaCreatePartitionsActor::Bootstrap(const NActors::TActorContext& ctx) {
         }
 
         if (topicName == "") {
-            auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+            auto result = std::make_unique<TEvKafka::TEvTopicModificationResponse>();
             result->Status = INVALID_REQUEST;
             result->Message = "Empty topic name";
             this->TopicNamesToResponses[topicName] = TAutoPtr<TEvKafka::TEvTopicModificationResponse>(result.Release());

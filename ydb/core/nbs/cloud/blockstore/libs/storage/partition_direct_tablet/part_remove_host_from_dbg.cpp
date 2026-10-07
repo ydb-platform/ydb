@@ -197,7 +197,7 @@ void TPartitionActor::SendRemoveHostRequest(const TActorContext& ctx)
     op->AddDeletePersistentBuffers()->MutablePersistentBufferId()->CopyFrom(
         RemoveHostInFlight->PBufferId);
 
-    SendToBsc(ctx, THolder<IEventBase>(request.release()), dbgId);
+    SendToBsc(ctx, std::unique_ptr<IEventBase>(request.release()), dbgId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -66,7 +66,7 @@ public:
         params.SetSession(sessionId);
 
         auto result = NThreading::NewPromise<NYql::IDqGateway::TResult>();
-        auto event = MakeHolder<TEvents::TEvGraphParams>(params);
+        auto event = std::make_unique<TEvents::TEvGraphParams>(params);
         event->IsEvaluation = FromString<bool>(queryParams.Value("Evaluation", "false")) || FromString<bool>(queryParams.Value("Precompute", "false"));
 
         // result promise should be resolved here

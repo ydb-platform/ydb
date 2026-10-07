@@ -14,10 +14,10 @@ TPath GetBuildPath(TSchemeShard* ss, const TIndexBuildInfo& buildInfo, const TSt
 
 TPath GetShardsPath(TSchemeShard* ss, const TIndexBuildInfo& buildInfo);
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose
     (TSchemeShard* ss, const TIndexBuildInfo& buildInfo, TTxId txId, const TPath& path);
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose
     (TSchemeShard* ss, const TIndexBuildInfo& buildInfo);
 
 template<typename TOperationInfo>

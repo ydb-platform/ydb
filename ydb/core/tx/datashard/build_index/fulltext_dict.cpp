@@ -591,7 +591,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
-        auto response = MakeHolder<TEvDataShard::TEvBuildFulltextDictResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvBuildFulltextDictResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
         YDB_LOG_NOTICE("Starting fulltext dictionary build scan",

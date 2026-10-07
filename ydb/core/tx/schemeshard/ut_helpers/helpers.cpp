@@ -49,7 +49,7 @@ namespace NSchemeShardUT_Private {
     void SetConfig(
     TTestActorRuntime &runtime,
     ui64 schemeShard,
-    THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> request)
+    std::unique_ptr<NConsole::TEvConsole::TEvConfigNotificationRequest> request)
     {
         auto sender = runtime.AllocateEdgeActor();
 
@@ -426,7 +426,7 @@ namespace NSchemeShardUT_Private {
         return record.DebugString();
     }
 
-    THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TString& path,
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TString& path,
             NSchemeCache::TSchemeCacheNavigate::EOp op)
     {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
@@ -434,7 +434,7 @@ namespace NSchemeShardUT_Private {
         using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
 
         const auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         auto& entry = request->ResultSet.emplace_back();
         entry.Path = SplitPath(path);
         entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
@@ -450,7 +450,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
 
-        return THolder(response);
+        return std::unique_ptr<NSchemeCache::TSchemeCacheNavigate>(response);
     }
 
     TEvSchemeShard::TEvModifySchemeTransaction* CopyTableRequest(ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TApplyIf applyIf) {
@@ -535,7 +535,7 @@ namespace NSchemeShardUT_Private {
     }
 
     TEvSchemeShard::TEvModifySchemeTransaction* MoveTableRequest(ui64 txId, const TString& srcPath, const TString& dstPath, ui64 schemeShard, const TApplyIf& applyIf) {
-        THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
+        std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> evTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable);
         SetApplyIf(*transaction, applyIf);
@@ -563,7 +563,7 @@ namespace NSchemeShardUT_Private {
     }
 
     TEvSchemeShard::TEvModifySchemeTransaction* MoveIndexRequest(ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, bool allowOverwrite, ui64 schemeShard, const TApplyIf& applyIf) {
-        THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
+        std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> evTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
         SetApplyIf(*transaction, applyIf);
@@ -592,7 +592,7 @@ namespace NSchemeShardUT_Private {
     }
 
     TEvSchemeShard::TEvModifySchemeTransaction* TruncateTableRequest(ui64 txId, const TString& workingDir, const TString& tableName, ui64 schemeShard, const TApplyIf& applyIf) {
-        THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
+        std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> evTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable);
         transaction->SetWorkingDir(workingDir);
@@ -620,7 +620,7 @@ namespace NSchemeShardUT_Private {
     // copy and rename *MoveTable* family
     //TODO: generalize all Move* stuff
     TEvSchemeShard::TEvModifySchemeTransaction* MoveSequenceRequest(ui64 txId, const TString& src, const TString& dst, ui64 schemeShard, const TApplyIf& applyIf) {
-        auto tx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
+        auto tx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
         auto transaction = tx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence);
         SetApplyIf(*transaction, applyIf);
@@ -646,7 +646,7 @@ namespace NSchemeShardUT_Private {
     }
 
     TEvSchemeShard::TEvModifySchemeTransaction* LockRequest(ui64 txId, const TString &parentPath, const TString& name) {
-        THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> evTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
         transaction->SetWorkingDir(parentPath);
@@ -676,7 +676,7 @@ namespace NSchemeShardUT_Private {
     }
 
     TEvSchemeShard::TEvModifySchemeTransaction* UnlockRequest(ui64 txId, ui64 lockId, const TString &parentPath, const TString& name) {
-        THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> evTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
         transaction->SetWorkingDir(parentPath);
@@ -1338,7 +1338,7 @@ namespace NSchemeShardUT_Private {
             settings.set_port(port.GetOrElse(80));
         }
 
-        auto ev = MakeHolder<TEvExport::TEvCreateExportRequest>(id, dbName, request);
+        auto ev = std::make_unique<TEvExport::TEvCreateExportRequest>(id, dbName, request);
         if (userSID) {
             ev->Record.SetUserSID(userSID);
         }
@@ -1451,7 +1451,7 @@ namespace NSchemeShardUT_Private {
         NKikimrImport::TCreateImportRequest request;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
 
-        auto ev = MakeHolder<TEvImport::TEvCreateImportRequest>(id, dbName, request);
+        auto ev = std::make_unique<TEvImport::TEvCreateImportRequest>(id, dbName, request);
         if (userSID) {
             ev->Record.SetUserSID(userSID);
         }
@@ -2083,7 +2083,7 @@ namespace NSchemeShardUT_Private {
         TActorId sender = runtime.AllocateEdgeActor();
 
         {
-            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
             auto* tx = request->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
             for (const auto& path : tables) {
                 tx->AddTables()->SetTablePath(path);
@@ -2472,7 +2472,7 @@ namespace NSchemeShardUT_Private {
         settings.set_source_path(tablePath);
         settings.set_cascade(cascade);
         settings.set_max_shards_in_flight(maxShardsInFlight);
-        auto ev = MakeHolder<TEvForcedCompaction::TEvCreateRequest>(id, dbName, settings);
+        auto ev = std::make_unique<TEvForcedCompaction::TEvCreateRequest>(id, dbName, settings);
         AsyncSend(runtime, schemeshardId, ev.Release());
     }
 
@@ -2938,7 +2938,7 @@ namespace NSchemeShardUT_Private {
         ui64 maxStep = Max<ui64>(); // unlimited
         ui8 execLevel = 0;
 
-        THolder<TEvTxProxy::TEvProposeTransaction> ex(
+        std::unique_ptr<TEvTxProxy::TEvProposeTransaction> ex(
                     new TEvTxProxy::TEvProposeTransaction(coordinatorId, TxId, execLevel, minStep, maxStep));
 
         auto *reqAffectedSet = ex->Record.MutableTransaction()->MutableAffectedSet();
@@ -3106,7 +3106,7 @@ namespace NSchemeShardUT_Private {
         return tx;
     }
 
-    TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime &runtime, TVector<THolder<IEventHandle> > &suppressed, ui32 type) {
+    TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime &runtime, TVector<std::unique_ptr<IEventHandle> > &suppressed, ui32 type) {
         return runtime.SetObserverFunc([&suppressed, type](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == type) {
                 suppressed.push_back(std::move(ev));
@@ -3116,7 +3116,7 @@ namespace NSchemeShardUT_Private {
         });
     }
 
-    void WaitForSuppressed(TTestActorRuntime &runtime, TVector<THolder<IEventHandle> > &suppressed, ui32 count, TTestActorRuntimeBase::TEventObserver prevObserver) {
+    void WaitForSuppressed(TTestActorRuntime &runtime, TVector<std::unique_ptr<IEventHandle> > &suppressed, ui32 count, TTestActorRuntimeBase::TEventObserver prevObserver) {
         Y_VERIFY_S(suppressed.size() <= count, "suppressed.size(): " << suppressed.size() << " expected " << count);
 
         if (suppressed.size() < count) {
@@ -3134,7 +3134,7 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed, bool compactSinglePartedShards)
     {
         auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+        auto request = std::make_unique<TEvDataShard::TEvCompactTable>(tableId.PathId);
         request->Record.SetCompactBorrowed(compactBorrowed);
         request->Record.SetCompactSinglePartedShards(compactSinglePartedShards);
         runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
@@ -3207,7 +3207,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(partitionIdx < tablePartitions.size());
         const ui64 datashardTabletId = tablePartitions[partitionIdx].GetDatashardId();
 
-        auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+        auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(tableDesc.GetPathId());
 
         auto& scheme = *ev->Record.MutableRowScheme();
@@ -3288,7 +3288,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
-        auto request = MakeHolder<NSequenceProxy::TEvSequenceProxy::TEvNextVal>(path);
+        auto request = std::make_unique<NSequenceProxy::TEvSequenceProxy::TEvNextVal>(path);
         runtime.Send(new IEventHandle(NSequenceProxy::MakeSequenceProxyServiceID(), sender, request.Release()));
     }
 
@@ -3660,7 +3660,7 @@ namespace NSchemeShardUT_Private {
         bool skipSettings)
     {
         // We can't do `GetRequest`, because it is not implemented at the time of writing the test
-        auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>();
+        auto request = std::make_unique<TEvSetColumnConstraint::TEvCreateRequest>();
         request->Record.SetTxId(txId);
         request->Record.SetDatabaseName(dbName);
 
@@ -3736,7 +3736,7 @@ namespace NSchemeShardUT_Private {
         }
 
         auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>(txId, dbName, std::move(settings));
+        auto request = std::make_unique<TEvSetColumnConstraint::TEvCreateRequest>(txId, dbName, std::move(settings));
         ForwardToTablet(runtime, schemeShard, sender, request.Release());
     }
 
@@ -3801,7 +3801,7 @@ namespace NSchemeShardUT_Private {
         const TString& dbName,
         ui64 operationId)
     {
-        auto request = MakeHolder<TEvSetColumnConstraint::TEvCancelRequest>(txId, dbName, operationId);
+        auto request = std::make_unique<TEvSetColumnConstraint::TEvCancelRequest>(txId, dbName, operationId);
 
         auto sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, schemeShard, sender, request.Release());

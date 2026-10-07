@@ -25,7 +25,7 @@ TKqpProtoBuilder::TSelfHosted::TSelfHosted(const IFunctionRegistry& funcRegistry
 }
 
 TKqpProtoBuilder::TKqpProtoBuilder(const IFunctionRegistry& funcRegistry)
-    : SelfHosted(MakeHolder<TSelfHosted>(funcRegistry))
+    : SelfHosted(std::make_unique<TSelfHosted>(funcRegistry))
 {
     Alloc = &SelfHosted->Alloc;
     TypeEnv = &SelfHosted->TypeEnv;
@@ -56,9 +56,9 @@ void TKqpProtoBuilder::BuildYdbResultSet(
     const TVector<ui32>* columnOrder,
     const TVector<TString>* columnHints)
 {
-    THolder<TGuard<TScopedAlloc>> guard;
+    std::unique_ptr<TGuard<TScopedAlloc>> guard;
     if (SelfHosted) {
-        guard = MakeHolder<TGuard<TScopedAlloc>>(*Alloc);
+        guard = std::make_unique<TGuard<TScopedAlloc>>(*Alloc);
     }
 
     auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;

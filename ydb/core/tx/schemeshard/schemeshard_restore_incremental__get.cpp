@@ -52,7 +52,7 @@ public:
             {"record", record.ShortDebugString()},
         );
 
-        Response = MakeHolder<TEvBackup::TEvGetBackupCollectionRestoreResponse>();
+        Response = std::make_unique<TEvBackup::TEvGetBackupCollectionRestoreResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(
@@ -109,7 +109,7 @@ public:
 private:
     TSideEffects SideEffects;
     TEvBackup::TEvGetBackupCollectionRestoreRequest::TPtr Request;
-    THolder<TEvBackup::TEvGetBackupCollectionRestoreResponse> Response;
+    std::unique_ptr<TEvBackup::TEvGetBackupCollectionRestoreResponse> Response;
 };
 
 ITransaction* TSchemeShard::CreateTxGetRestore(TEvBackup::TEvGetBackupCollectionRestoreRequest::TPtr& ev) {

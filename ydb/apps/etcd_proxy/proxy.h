@@ -36,7 +36,7 @@ private:
     int ExportDatabase();
     int StartServer();
 
-    static THolder<NActors::TActorSystemSetup> BuildActorSystemSetup();
+    static std::unique_ptr<NActors::TActorSystemSetup> BuildActorSystemSetup();
     static TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
 
     const std::shared_ptr<NMonitoring::TMetricRegistry> MetricRegistry;

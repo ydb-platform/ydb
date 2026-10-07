@@ -139,7 +139,7 @@ public:
             splitDescForShard.AddDestinationRanges()->CopyFrom(rangeDescr);
 
             Y_ABORT_UNLESS(txState->SplitDescription);
-            auto event = MakeHolder<TEvDataShard::TEvInitSplitMergeDestination>(
+            auto event = std::make_unique<TEvDataShard::TEvInitSplitMergeDestination>(
                 ui64(OperationId.GetTxId()),
                 context.SS->TabletID(),
                 subDomainPathId,
@@ -366,7 +366,7 @@ public:
                 {"datashard", datashardId},
             );
 
-            auto event = MakeHolder<TEvDataShard::TEvSplit>(ui64(OperationId.GetTxId()));
+            auto event = std::make_unique<TEvDataShard::TEvSplit>(ui64(OperationId.GetTxId()));
 
             Y_ABORT_UNLESS(txState->SplitDescription);
             event->Record.MutableSplitDescription()->CopyFrom(*txState->SplitDescription);
@@ -476,7 +476,7 @@ public:
                 {"txId", OperationId.GetTxId()},
             );
 
-            THolder<TEvDataShard::TEvSplitPartitioningChanged> event = MakeHolder<TEvDataShard::TEvSplitPartitioningChanged>(ui64(OperationId.GetTxId()));
+            std::unique_ptr<TEvDataShard::TEvSplitPartitioningChanged> event = std::make_unique<TEvDataShard::TEvSplitPartitioningChanged>(ui64(OperationId.GetTxId()));
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shard.Idx, event.Release());
 
@@ -522,13 +522,13 @@ public:
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
+            return std::make_unique<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureDestination>(OperationId);
+            return std::make_unique<TConfigureDestination>(OperationId);
         case TTxState::TransferData:
-            return MakeHolder<TTransferData>(OperationId);
+            return std::make_unique<TTransferData>(OperationId);
         case TTxState::NotifyPartitioningChanged:
-            return MakeHolder<TNotifySrc>(OperationId);
+            return std::make_unique<TNotifySrc>(OperationId);
         default:
             return nullptr;
         }
@@ -792,7 +792,7 @@ public:
         return true;
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+    std::unique_ptr<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& info = Transaction.GetSplitMergeTablePartitions();
@@ -813,7 +813,7 @@ public:
             {"request", info.ShortDebugString()},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = std::make_unique<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         auto setResultError = [&](NKikimrScheme::EStatus status, const TString& error) {
             result->SetError(status, error);

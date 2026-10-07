@@ -65,7 +65,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
     std::optional<TDataShardUserDb> userDb;
     std::optional<TDataShardChangeGroupProvider> groupProvider;
 
-    THolder<IEraseRowsCondition> condition;
+    std::unique_ptr<IEraseRowsCondition> condition;
     if (params) {
         condition.Reset(CreateEraseRowsCondition(request));
         if (condition) {
@@ -242,7 +242,7 @@ bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
 {
     const auto& record = Ev->Get()->Record;
 
-    Result = MakeHolder<TEvDataShard::TEvEraseRowsResponse>();
+    Result = std::make_unique<TEvDataShard::TEvEraseRowsResponse>();
     Result->Record.SetTabletID(self->TabletID());
 
     const auto params = TExecuteParams::ForExecute(this, &txc, mvccVersion, globalTxId, &volatileReadDependencies);

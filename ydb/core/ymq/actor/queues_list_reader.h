@@ -40,7 +40,7 @@ private:
     TIntrusivePtr<TTransactionCounters> TransactionCounters;
     TString CurrentUser;
     TString CurrentQueue;
-    THolder<TSqsEvents::TEvQueuesList> Result;
+    std::unique_ptr<TSqsEvents::TEvQueuesList> Result;
     bool ListingQueues = false;
     THashSet<TActorId> Recipients;
 };

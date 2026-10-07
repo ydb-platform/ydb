@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         auto tableId = ResolveTableId(server, sender, "/Root/test");
 
-        auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
+        auto request = std::make_unique<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(100);
         request->Record.SetTabletId(shards[0]);
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         auto tableId = ResolveTableId(server, sender, "/Root/test_nulls");
 
-        auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
+        auto request = std::make_unique<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(101);
         request->Record.SetTabletId(shards[0]);
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         auto tableId = ResolveTableId(server, sender, "/Root/test_cols");
 
-        auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
+        auto request = std::make_unique<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(102);
         request->Record.SetTabletId(shards[0]);
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         auto tableId = ResolveTableId(server, sender, "/Root/test_cols_null");
 
-        auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
+        auto request = std::make_unique<TEvDataShard::TEvValidateRowConditionRequest>();
         request->Record.SetId(103);
         request->Record.SetTabletId(shards[0]);
         request->Record.SetOwnerId(tableId.PathId.OwnerId);

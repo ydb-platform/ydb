@@ -51,10 +51,10 @@ public:
         Y_ABORT_UNLESS(!Port.Defined());
         Port = PortManager.GetPort();
 
-        S3Mock = MakeHolder<TS3Mock>(TS3Mock::TSettings(*Port));
+        S3Mock = std::make_unique<TS3Mock>(TS3Mock::TSettings(*Port));
         Y_ABORT_UNLESS(S3Mock->Start());
 
-        Runtime = MakeHolder<TTestBasicRuntime>();
+        Runtime = std::make_unique<TTestBasicRuntime>();
         Runtime->Initialize(TAppPrepare().Unwrap());
         Runtime->SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
         NWrappers::IExternalStorageConfig::TPtr config = std::make_shared<NExternalStorage::TS3ExternalStorageConfig>(Aws::Auth::AWSCredentials(), MakeClientConfig(*Port), "TEST", nullptr);
@@ -86,8 +86,8 @@ public:
 private:
     TPortManager PortManager;
     TMaybe<ui16> Port;
-    THolder<TS3Mock> S3Mock;
-    THolder<TTestBasicRuntime> Runtime;
+    std::unique_ptr<TS3Mock> S3Mock;
+    std::unique_ptr<TTestBasicRuntime> Runtime;
     TActorId Wrapper;
     TMaybe<TActorId> Edge;
 

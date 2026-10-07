@@ -107,7 +107,7 @@ struct TDescribeEnv {
         return describerId;
     }
 
-    THolder<NDescriber::TEvDescribeTopicsResponse> WaitResponse() {
+    std::unique_ptr<NDescriber::TEvDescribeTopicsResponse> WaitResponse() {
         return Runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>();
     }
 };

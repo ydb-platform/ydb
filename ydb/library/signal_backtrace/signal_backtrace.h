@@ -30,7 +30,7 @@ private:
 private:
     IOutputStream& Out;
     const THashSet<int> HandledSignals;
-    THolder<TPipeConnection> Connection;
+    std::unique_ptr<TPipeConnection> Connection;
     pid_t CollectorPid;
     std::array<struct sigaction, NSIG> OldActions;
 };

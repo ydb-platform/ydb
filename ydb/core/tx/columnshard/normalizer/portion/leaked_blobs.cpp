@@ -429,7 +429,7 @@ public:
             for (auto&& i : it->History) {
                 TLogoBlobID from(CSTabletId, 0, 0, it->Channel, 0, 0);
                 TLogoBlobID to(CSTabletId, Max<ui32>(), Max<ui32>(), it->Channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
-                auto request = MakeHolder<TEvBlobStorage::TEvRange>(CSTabletId, from, to, false, TInstant::Max(), true);
+                auto request = std::make_unique<TEvBlobStorage::TEvRange>(CSTabletId, from, to, false, TInstant::Max(), true);
                 SendToBSProxy(SelfId(), i.GroupID, request.Release(), ++WaitingCount);
                 WaitingRequests.emplace(WaitingCount);
             }

@@ -75,9 +75,9 @@ private:
     }
 };
 
-THolder<TActorSystemSetup> GetActorSystemSetup(TBasicExecutorPool* pool)
+std::unique_ptr<TActorSystemSetup> GetActorSystemSetup(TBasicExecutorPool* pool)
 {
-    auto setup = MakeHolder<NActors::TActorSystemSetup>();
+    auto setup = std::make_unique<NActors::TActorSystemSetup>();
     setup->NodeId = 1;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<NActors::IExecutorPool>[1]);
@@ -374,7 +374,7 @@ Y_UNIT_TEST_SUITE(ChangingThreadsCountInBasicExecutorPool) {
             config.DefaultThreadCount = 1;
             config.EventsPerMailbox = 50;
             ExecutorPool.reset(new TBasicExecutorPool(config, nullptr, nullptr));
-            THolder<TActorSystemSetup> setup = GetActorSystemSetup(ExecutorPool.get());
+            std::unique_ptr<TActorSystemSetup> setup = GetActorSystemSetup(ExecutorPool.get());
             ActorSystem.reset(new TActorSystem(setup));
         }
 

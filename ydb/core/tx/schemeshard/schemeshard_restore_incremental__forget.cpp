@@ -46,7 +46,7 @@ public:
             {"record", record.ShortDebugString()},
         );
 
-        Response = MakeHolder<TEvBackup::TEvForgetBackupCollectionRestoreResponse>();
+        Response = std::make_unique<TEvBackup::TEvForgetBackupCollectionRestoreResponse>();
         Response->Record.SetTxId(record.GetTxId());
 
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
@@ -162,7 +162,7 @@ public:
 private:
     TSideEffects SideEffects;
     TEvBackup::TEvForgetBackupCollectionRestoreRequest::TPtr Request;
-    THolder<TEvBackup::TEvForgetBackupCollectionRestoreResponse> Response;
+    std::unique_ptr<TEvBackup::TEvForgetBackupCollectionRestoreResponse> Response;
 };
 
 ITransaction* TSchemeShard::CreateTxForgetRestore(TEvBackup::TEvForgetBackupCollectionRestoreRequest::TPtr& ev) {

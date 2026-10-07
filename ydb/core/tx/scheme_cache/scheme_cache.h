@@ -459,7 +459,7 @@ struct TSchemeCacheRequest {
 
     struct TEntry {
         // in
-        THolder<TKeyDesc> KeyDescription;
+        std::unique_ptr<TKeyDesc> KeyDescription;
         ui32 Access = 0;
         uintptr_t UserData = 0;
         bool SyncVersion = false;
@@ -470,7 +470,7 @@ struct TSchemeCacheRequest {
         TIntrusivePtr<TDomainInfo> DomainInfo;
         ui64 GeneralVersion = 0;
 
-        explicit TEntry(THolder<TKeyDesc> keyDesc)
+        explicit TEntry(std::unique_ptr<TKeyDesc> keyDesc)
             : KeyDescription(std::move(keyDesc))
         {
             Y_DEBUG_ABORT_UNLESS(KeyDescription);

@@ -724,7 +724,7 @@ public:
             const TKeyColumnTypes &keyColumnTypes, const TColumns &columns,
             ui64 itemsLimit = 0, ui64 bytesLimit = 0, bool reverse = false);
 
-    static THolder<TKeyDesc> CreateMiniKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes);
+    static std::unique_ptr<TKeyDesc> CreateMiniKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes);
 private:
     TKeyDesc(const TVector<NScheme::TTypeInfo>& keyColumnTypes);
 };

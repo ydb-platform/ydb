@@ -40,7 +40,7 @@ public:
         if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Dirty.Config))
             Modify = true;
 
-        auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+        auto resp = std::make_unique<TEvConsole::TEvConfigNotificationResponse>(rec);
         Response = new IEventHandle(Notification->Sender, Self->SelfId(), resp.Release(),
                                     0, Notification->Cookie);
 
@@ -57,7 +57,7 @@ public:
         if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Dirty.Config))
             Modify = true;
 
-        auto resp = MakeHolder<TEvNodeBroker::TEvSetConfigResponse>();
+        auto resp = std::make_unique<TEvNodeBroker::TEvSetConfigResponse>();
         resp->Record.MutableStatus()->SetCode(NKikimrNodeBroker::TStatus::OK);
         Response = new IEventHandle(Request->Sender, Self->SelfId(), resp.Release(),
                                     0, Request->Cookie);

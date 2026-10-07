@@ -501,7 +501,7 @@ TCreateDeduplicationWriteQueueActorResult CreateDeduplicationWriteQueueActor(
     ui32 partitionId,
     const TPartitionGraph& partitionGraph) {
 
-    THolder h = MakeHolder<TDeduplicationQueueActor>(
+    std::unique_ptr h = std::make_unique<TDeduplicationQueueActor>(
         tabletId,
         tabletActorId,
         partitionActorId,

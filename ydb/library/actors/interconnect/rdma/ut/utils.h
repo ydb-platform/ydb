@@ -22,7 +22,7 @@ inline void GTestSkip() {
 
 struct TLocalRdmaStuff {
     std::shared_ptr<NInterconnect::NRdma::IMemPool> MemPool;
-    THolder<NActors::TTestActorRuntimeBase> ActorSystem;
+    std::unique_ptr<NActors::TTestActorRuntimeBase> ActorSystem;
     NActors::TActorId CqActorId;
     NInterconnect::NRdma::ICq::TPtr CqPtr;
     NInterconnect::NRdma::TRdmaCtx* Ctx;
@@ -36,7 +36,7 @@ enum class EReadResult {
     READ_ERR
 };
 
-std::tuple<THolder<NActors::TTestActorRuntimeBase>, NInterconnect::NRdma::TRdmaCtx*> PrepareTestRuntime(TString defIp);
+std::tuple<std::unique_ptr<NActors::TTestActorRuntimeBase>, NInterconnect::NRdma::TRdmaCtx*> PrepareTestRuntime(TString defIp);
 
 std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo, NInterconnect::NRdma::ECqMode cqMode);
 

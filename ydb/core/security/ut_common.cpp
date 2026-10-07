@@ -59,12 +59,12 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);
 
-    Client = MakeHolder<Tests::TClient>(*Settings);
+    Client = std::make_unique<Tests::TClient>(*Settings);
     Client->InitRootScheme("Root");
 
     Endpoint = "localhost:" + ToString(grpcPort);
     DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint).SetDatabase("/Root");
-    Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
+    Driver = std::make_unique<NYdb::TDriver>(DriverConfig);
 
     WebLoginService = Server->GetRuntime()->Register(CreateWebLoginService());
 

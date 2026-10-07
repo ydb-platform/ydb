@@ -559,11 +559,11 @@ namespace NFwd {
         TVector<TLevel> Levels;
     };
 
-    inline THolder<IPageLoadingLogic> CreateCache(const TPart* part, TIndexPageLocator& indexPageLocator, NPage::TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices, TIntrusiveConstPtr<IPageCollection> groupPageCollection, TIntrusiveConstPtr<IPageCollection> indexPageCollection) {
+    inline std::unique_ptr<IPageLoadingLogic> CreateCache(const TPart* part, TIndexPageLocator& indexPageLocator, NPage::TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices, TIntrusiveConstPtr<IPageCollection> groupPageCollection, TIntrusiveConstPtr<IPageCollection> indexPageCollection) {
         if (groupId.Index < (groupId.IsHistoric() ? part->IndexPages.BTreeHistoric : part->IndexPages.BTreeGroups).size()) {
-            return MakeHolder<TBTreeIndexCache>(part, indexPageLocator, groupId, slices, std::move(groupPageCollection), std::move(indexPageCollection));
+            return std::make_unique<TBTreeIndexCache>(part, indexPageLocator, groupId, slices, std::move(groupPageCollection), std::move(indexPageCollection));
         } else {
-            return MakeHolder<TFlatIndexCache>(part, indexPageLocator, groupId, slices, std::move(groupPageCollection), std::move(indexPageCollection));
+            return std::make_unique<TFlatIndexCache>(part, indexPageLocator, groupId, slices, std::move(groupPageCollection), std::move(indexPageCollection));
         }
     }
 }

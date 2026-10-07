@@ -114,7 +114,7 @@ namespace {
         }
 
         void Bootstrap(const TActorContext& ctx) {
-            auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             request->DatabaseName = DatabaseName;
 
             for (auto& table : Tables) {
@@ -174,7 +174,7 @@ namespace {
                 return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, ctx);
             }
 
-            auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+            auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
             request->DatabaseName = DatabaseName;
 
             for (size_t index = 0; index < Tables.size(); ++index) {
@@ -237,7 +237,7 @@ namespace {
                     return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::QUERY_ERROR, ctx);
                 }
 
-                table.KeyDescription = MakeHolder<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columns);
+                table.KeyDescription = std::make_unique<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columns);
 
                 request->ResultSet.emplace_back(std::move(table.KeyDescription));
             }
@@ -328,7 +328,7 @@ namespace {
         }
 
         void ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, NKikimrIssues::TStatusIds::EStatusCode code, const TActorContext& ctx) {
-            auto reply = MakeHolder<TEvResolveTablesResponse>(status, code);
+            auto reply = std::make_unique<TEvResolveTablesResponse>(status, code);
 
             reply->WallClockResolveStarted = WallClockResolveStarted;
             reply->WallClockResolved = WallClockResolved;

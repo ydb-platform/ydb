@@ -110,8 +110,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateMoveTableUnit(TDataShard& dataShard, TPipeline& pipeline) {
-    return THolder(new TMoveTableUnit(dataShard, pipeline));
+std::unique_ptr<TExecutionUnit> CreateMoveTableUnit(TDataShard& dataShard, TPipeline& pipeline) {
+    return std::unique_ptr<TMoveTableUnit>(new TMoveTableUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

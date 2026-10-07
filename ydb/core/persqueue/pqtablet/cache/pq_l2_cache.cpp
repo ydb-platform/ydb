@@ -25,7 +25,7 @@ void TPersQueueCacheL2::Bootstrap(const TActorContext& ctx)
 
 void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TActorContext& ctx)
 {
-    THolder<TCacheL2Request> request(ev->Get()->Data.Release());
+    std::unique_ptr<TCacheL2Request> request(ev->Get()->Data.Release());
     ui64 tabletId = request->TabletId;
 
     AFL_ENSURE(tabletId != 0)("d", "PQ L2. Empty tabletID in L2");
@@ -45,15 +45,15 @@ void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TA
 void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<TKey, TCacheValue::TPtr>& evictedBlobs)
 {
     TInstant now = TAppData::TimeProvider->Now();
-    THashMap<TActorId, THolder<TCacheL2Response>> responses;
+    THashMap<TActorId, std::unique_ptr<TCacheL2Response>> responses;
 
     for (const auto& rm : evictedBlobs) {
         const TKey& key = rm.first;
         TCacheValue::TPtr evicted = rm.second;
 
-        THolder<TCacheL2Response>& resp = responses[evicted->GetOwner()];
+        std::unique_ptr<TCacheL2Response>& resp = responses[evicted->GetOwner()];
         if (!resp) {
-            resp = MakeHolder<TCacheL2Response>();
+            resp = std::make_unique<TCacheL2Response>();
             resp->TabletId = key.TabletId;
         }
 
@@ -75,7 +75,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
 
 void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheKeysRequest::TPtr& ev, const TActorContext& ctx)
 {
-    auto response = MakeHolder<TEvPqCache::TEvCacheKeysResponse>();
+    auto response = std::make_unique<TEvPqCache::TEvCacheKeysResponse>();
     response->RenamedKeys = RenamedKeys;
     ctx.Send(ev->Sender, response.Release());
 }

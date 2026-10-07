@@ -25,14 +25,14 @@ public:
         MsgBusPort = PortManager.GetPort(2134);
         GrpcPort = PortManager.GetPort(2135);
         NKikimrProto::TAuthConfig authConfig;
-        ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
+        ServerSettings = std::make_unique<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->NodeCount = 1;
         auto* rule = ServerSettings->AppConfig->MutableResourcePathPrefixMapping()->AddRules();
         rule->SetSrc(TStringBuilder() << "/" << ServerSettings->DomainName
             << "/.metadata/streaming/coordination_node");
         rule->SetDst("/Root/missing-coordination-node");
-        Server = MakeHolder<Tests::TServer>(*ServerSettings);
-        Client = MakeHolder<Tests::TClient>(*ServerSettings);
+        Server = std::make_unique<Tests::TServer>(*ServerSettings);
+        Client = std::make_unique<Tests::TClient>(*ServerSettings);
         Server->GetRuntime()->SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NActors::NLog::PRI_DEBUG);
         Server->EnableGRpc(GrpcPort);
         Client->InitRootScheme();
@@ -87,9 +87,9 @@ public:
     TPortManager PortManager;
     ui16 MsgBusPort = 0;
     ui16 GrpcPort = 0;
-    THolder<Tests::TServerSettings> ServerSettings;
-    THolder<Tests::TServer> Server;
-    THolder<Tests::TClient> Client;
+    std::unique_ptr<Tests::TServerSettings> ServerSettings;
+    std::unique_ptr<Tests::TServer> Server;
+    std::unique_ptr<Tests::TClient> Client;
 };
 
 Y_UNIT_TEST_SUITE(LocalLeaderElectionTests) {

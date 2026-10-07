@@ -18,8 +18,8 @@ class TJsonTabletCounters : public TActorBootstrapped<TJsonTabletCounters> {
     NMon::TEvHttpInfo::TPtr Event;
     TVector<TActorId> PipeClients;
     TVector<ui64> Tablets;
-    TMap<TTabletId, THolder<TEvTablet::TEvGetCountersResponse>> Results;
-    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    TMap<TTabletId, std::unique_ptr<TEvTablet::TEvGetCountersResponse>> Results;
+    std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     bool Aggregate = false;
@@ -54,7 +54,7 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Aggregate = FromStringWithDefault<bool>(params.Get("aggregate"), true);
         if (params.Has("path")) {
-            THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
+            std::unique_ptr<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
             if (!Event->Get()->UserToken.empty()) {
                 request->Record.SetUserToken(Event->Get()->UserToken);
             }
@@ -146,7 +146,7 @@ public:
         TStringStream json;
         if (!Results.empty()) {
             if (Aggregate) {
-                THolder<TEvTablet::TEvGetCountersResponse> response = AggregateWhiteboardResponses(Results);
+                std::unique_ptr<TEvTablet::TEvGetCountersResponse> response = AggregateWhiteboardResponses(Results);
                 TProtoToJson::ProtoToJson(json, response->Record, JsonSettings);
             } else {
                 json << '{';

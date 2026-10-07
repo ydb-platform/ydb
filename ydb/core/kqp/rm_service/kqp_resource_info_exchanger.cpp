@@ -347,7 +347,7 @@ private:
 
                 auto owner = ActorIdFromProto(nodesStateIt->second.NodeData.GetResourceExchangeBoardData().GetOwner());
                 if (owner != SelfId()) {
-                    auto msg = MakeHolder<TEvKqpResourceInfoExchanger::TEvSendResources>();
+                    auto msg = std::make_unique<TEvKqpResourceInfoExchanger::TEvSendResources>();
                     msg->Record = snapshotMsg;
                     Send(owner, msg.Release(), IEventHandle::FlagSubscribeOnSession);
                 }
@@ -398,7 +398,7 @@ private:
             ExchangerSettings.MaxDelayMs = TDuration::MilliSeconds(exchangerSettings.GetMaxDelayMs());
         }
 
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        auto responseEv = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
@@ -715,7 +715,7 @@ private:
             auto& nodeState = nodesStateIt->second;
             auto owner = ActorIdFromProto(nodeState.NodeData.GetResourceExchangeBoardData().GetOwner());
             if (owner != SelfId()) {
-                auto msg = MakeHolder<TEvKqpResourceInfoExchanger::TEvSendResources>();
+                auto msg = std::make_unique<TEvKqpResourceInfoExchanger::TEvSendResources>();
                 msg->Record = snapshotMsg;
                 Send(owner, msg.Release(), IEventHandle::FlagSubscribeOnSession);
             }

@@ -7,7 +7,7 @@ namespace NYdbWorkload {
 
 class TTpchWorkloadParams final: public TTpcBaseWorkloadParams {
 public:
-    THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
+    std::unique_ptr<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
 };

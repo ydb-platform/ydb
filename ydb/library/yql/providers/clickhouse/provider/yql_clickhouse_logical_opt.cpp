@@ -95,8 +95,8 @@ private:
 
 }
 
-THolder<IGraphTransformer> CreateClickHouseLogicalOptProposalTransformer(TClickHouseState::TPtr state) {
-    return MakeHolder<TClickHouseLogicalOptProposalTransformer>(state);
+std::unique_ptr<IGraphTransformer> CreateClickHouseLogicalOptProposalTransformer(TClickHouseState::TPtr state) {
+    return std::make_unique<TClickHouseLogicalOptProposalTransformer>(state);
 }
 
 } // namespace NYql

@@ -51,7 +51,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         // create some subworkers
         for (int i = 0; i < 3; ++i) {
-            TActorId actorId = RegisterSubactor(MakeHolder<TSubworkerActor>(), ctx);
+            TActorId actorId = RegisterSubactor(std::make_unique<TSubworkerActor>(), ctx);
             if (!actorId) {
                 Die(ctx);
             }
@@ -79,7 +79,7 @@ public:
 
         // create some workers
         for (int i = 0; i < 2; ++i) {
-            TActorId actorId = Tracker.RegisterSubactor(MakeHolder<TWorkerActor>(), ctx);
+            TActorId actorId = Tracker.RegisterSubactor(std::make_unique<TWorkerActor>(), ctx);
             if (!actorId) {
                 // a race has occured
                 Die(ctx);

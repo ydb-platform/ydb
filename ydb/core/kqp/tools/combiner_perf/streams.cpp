@@ -63,7 +63,7 @@ TString64Samples MakeKeyedString64Samples(const ui64 seed, const size_t numSampl
 }
 
 
-THolder<IDataSampler> CreateWideSamplerFromParams(const TRunParams& params)
+std::unique_ptr<IDataSampler> CreateWideSamplerFromParams(const TRunParams& params)
 {
     Y_ENSURE(params.RandomSeed.has_value());
 
@@ -72,7 +72,7 @@ THolder<IDataSampler> CreateWideSamplerFromParams(const TRunParams& params)
         auto next = [&](auto&& impl) {
             using MapImpl = std::decay_t<decltype(impl)>;
             using SamplerType = TString64DataSampler<MapImpl, MapImpl::TValueType::ArrayWidth>;
-            return MakeHolder<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns, params.LongStringKeys);
+            return std::make_unique<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns, params.LongStringKeys);
         };
         if (params.NumAggregations == 1) {
             return DispatchByMap<std::string, TValueWrapper<ui64, 1>, IDataSampler>(params.ReferenceHashType, next);
@@ -85,7 +85,7 @@ THolder<IDataSampler> CreateWideSamplerFromParams(const TRunParams& params)
         auto next = [&](auto&& impl) {
             using MapImpl = std::decay_t<decltype(impl)>;
             using SamplerType = T6464DataSampler<MapImpl, MapImpl::TValueType::ArrayWidth>;
-            return MakeHolder<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns);
+            return std::make_unique<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns);
         };
         if (params.NumAggregations == 1) {
             return DispatchByMap<ui64, TValueWrapper<ui64, 1>, IDataSampler>(params.ReferenceHashType, next);
@@ -177,10 +177,10 @@ public:
     {
     }
 
-    THolder<IWideStream> MakeStream(const TComputationContext& ctx) const override
+    std::unique_ptr<IWideStream> MakeStream(const TComputationContext& ctx) const override
     {
         std::vector<TType*> types {BuildKeyType(ctx.TypeEnv), BuildValueType(ctx.TypeEnv)};
-        return MakeHolder<TBlockKVStream<K, V>>(
+        return std::make_unique<TBlockKVStream<K, V>>(
             ctx,
             Samples,
             NumIters,
@@ -212,7 +212,7 @@ public:
     {
         Y_ENSURE(MapEmpty<TMapImpl>(RefResult));
 
-        const THolder<IWideStream> refStreamPtr = MakeStream(ctx);
+        const std::unique_ptr<IWideStream> refStreamPtr = MakeStream(ctx);
         IWideStream& refStream = *refStreamPtr;
 
         NUdf::TUnboxedValue columns[3];
@@ -275,7 +275,7 @@ private:
     TMapImpl::TMapType RefResult;
 };
 
-THolder<IBlockSampler> CreateBlockSamplerFromParams(const TRunParams& params)
+std::unique_ptr<IBlockSampler> CreateBlockSamplerFromParams(const TRunParams& params)
 {
     Y_ENSURE(params.RandomSeed.has_value());
 
@@ -284,7 +284,7 @@ THolder<IBlockSampler> CreateBlockSamplerFromParams(const TRunParams& params)
         return DispatchByMap<std::string, ui64, IBlockSampler>(params.ReferenceHashType, [&](auto&& impl) {
             using MapImpl = std::decay_t<decltype(impl)>;
             using SamplerType = TBlockSampler<std::string, ui64, MapImpl>;
-            return MakeHolder<SamplerType>(
+            return std::make_unique<SamplerType>(
                 params,
                 MakeKeyedString64Samples(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.LongStringKeys));
         });
@@ -292,7 +292,7 @@ THolder<IBlockSampler> CreateBlockSamplerFromParams(const TRunParams& params)
         return DispatchByMap<ui64, ui64, IBlockSampler>(params.ReferenceHashType, [&](auto&& impl) {
             using MapImpl = std::decay_t<decltype(impl)>;
             using SamplerType = TBlockSampler<ui64, ui64, MapImpl>;
-            return MakeHolder<SamplerType>(
+            return std::make_unique<SamplerType>(
                 params,
                 MakeKeyed6464Samples(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1));
         });

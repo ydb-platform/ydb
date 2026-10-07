@@ -204,7 +204,7 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
     // is a runtime value that is no longer valid after reboot.
     if (!Self->BuildIndexScanManager.GetScans().empty()) {
         for (const auto& [buildId, scanInfo] : Self->BuildIndexScanManager.GetScans()) {
-            auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+            auto response = std::make_unique<TEvDataShard::TEvBuildIndexProgressResponse>();
 
             if (scanInfo.ResponseType == static_cast<ui32>(EBuildIndexEventType::SecondaryIndexResponseFinal)) {
                 response->Record.ParseFromStringOrThrow(scanInfo.FinalProgressRecordSerialized);

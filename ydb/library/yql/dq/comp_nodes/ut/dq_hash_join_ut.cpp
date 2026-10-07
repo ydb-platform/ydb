@@ -2338,7 +2338,7 @@ i64 ArrayDataBytes(const arrow::ArrayData& data) {
 TOutputBlockStats MeasureOutputBlocks(TJoinTestData& td) {
     auto descr = MakeJoinDescription(td);
     descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(td.JoinMemoryConstraint.has_value());
-    THolder<IComputationGraph> graph =
+    std::unique_ptr<IComputationGraph> graph =
         ConstructJoinGraphStream(td.Kind, ETestedJoinAlgo::kBlockHash, descr, true, td.JoinSettings);
     if (td.JoinMemoryConstraint) {
         td.SetHardLimitIncreaseMemCallback(*td.JoinMemoryConstraint + 3000_MB + td.Setup->Alloc.GetUsed());
@@ -2422,7 +2422,7 @@ void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     } else {
         descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
     }
-    THolder<IComputationGraph> got = ConstructJoinGraphStream(
+    std::unique_ptr<IComputationGraph> got = ConstructJoinGraphStream(
         testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, withSpiller,
         testData.JoinSettings);
     if (testData.JoinMemoryConstraint) {
@@ -2444,7 +2444,7 @@ void RunFinalDumpSpillingIsBatchedTest() {
     auto testData = FinalDumpSpillingTestData();
     auto descr = MakeJoinDescription(testData);
     descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(true);
-    THolder<IComputationGraph> graph = ConstructJoinGraphStream(
+    std::unique_ptr<IComputationGraph> graph = ConstructJoinGraphStream(
         testData.Kind, ETestedJoinAlgo::kBlockHash, descr, true, testData.JoinSettings);
     auto spillerFactory = std::make_shared<TControlledWriteSpillerFactory>(
         std::make_shared<TPreallocatedSpillerFactory>(32_MB));
@@ -2494,7 +2494,7 @@ void RunFinalDumpSpillingIsBatchedTest() {
 void TestWithSlowSpiller(TJoinTestData testData, bool blockJoin) {
     auto descr = MakeJoinDescription(testData);
     descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(testData.JoinMemoryConstraint.has_value());
-    THolder<IComputationGraph> got = ConstructJoinGraphStream(
+    std::unique_ptr<IComputationGraph> got = ConstructJoinGraphStream(
         testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr, true,
         testData.JoinSettings);
     got->GetContext().SpillerFactory =
@@ -2550,7 +2550,7 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         descr.LeftSource.ValuesList = leftBlocks;
         descr.RightSource.ValuesList = rightBlocks;
 
-        THolder<IComputationGraph> got = ConstructJoinGraphStream(
+        std::unique_ptr<IComputationGraph> got = ConstructJoinGraphStream(
             td.Kind, ETestedJoinAlgo::kBlockHash, descr, true, td.JoinSettings);
         CompareListAndBlockStreamIgnoringOrder(td.Result, *got);
     }

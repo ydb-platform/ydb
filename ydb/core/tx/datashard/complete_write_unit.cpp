@@ -136,9 +136,9 @@ void TCompleteWriteUnit::Complete(TOperation::TPtr op, const TActorContext &ctx)
     }
 }
 
-THolder<TExecutionUnit> CreateCompleteWriteUnit(TDataShard &dataShard, TPipeline &pipeline)
+std::unique_ptr<TExecutionUnit> CreateCompleteWriteUnit(TDataShard &dataShard, TPipeline &pipeline)
 {
-    return THolder(new TCompleteWriteUnit(dataShard, pipeline));
+    return std::unique_ptr<TCompleteWriteUnit>(new TCompleteWriteUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

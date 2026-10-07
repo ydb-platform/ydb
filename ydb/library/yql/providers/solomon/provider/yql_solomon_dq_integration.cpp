@@ -521,8 +521,8 @@ private:
 
 }
 
-THolder<IDqIntegration> CreateSolomonDqIntegration(const TSolomonState::TPtr& state) {
-    return MakeHolder<TSolomonDqIntegration>(state);
+std::unique_ptr<IDqIntegration> CreateSolomonDqIntegration(const TSolomonState::TPtr& state) {
+    return std::make_unique<TSolomonDqIntegration>(state);
 }
 
 }

@@ -23,7 +23,7 @@ TDomainsInfo::TDomain::TDomain(const TString &name, ui32 domainUid, ui64 schemeR
     , TxAllocators(std::move(allocators))
     , DomainPlanResolution(domainPlanResolution)
     , TimecastBucketsPerMediator(timecastBucketsPerMediator)
-    , Impl(MakeHolder<TImpl>(poolTypes))
+    , Impl(std::make_unique<TImpl>(poolTypes))
     , StoragePoolTypes(Impl->StoragePoolTypes)
 {}
 

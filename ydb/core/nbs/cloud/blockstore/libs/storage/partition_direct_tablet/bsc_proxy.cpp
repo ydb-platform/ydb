@@ -30,7 +30,7 @@ IEventBase* MakePipeFailureResult(const TString& reason)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TBscProxy::TEvSend::TEvSend(THolder<IEventBase> request)
+TBscProxy::TEvSend::TEvSend(std::unique_ptr<IEventBase> request)
     : Request(std::move(request))
 {}
 
@@ -64,7 +64,7 @@ STFUNC(TBscProxy::StateWork)
 
 void TBscProxy::HandleSend(TEvSend::TPtr& ev, const TActorContext& ctx)
 {
-    THolder<IEventBase> request = std::move(ev->Get()->Request);
+    std::unique_ptr<IEventBase> request = std::move(ev->Get()->Request);
     Y_ABORT_UNLESS(request);
     Y_ABORT_UNLESS(
         request->Type() ==

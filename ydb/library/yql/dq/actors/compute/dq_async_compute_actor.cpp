@@ -83,7 +83,7 @@ public:
         InitExtraMonCounters(taskCounters);
         if (ownCounters) {
             CA_LOG_D("TDqAsyncComputeActor, make stat");
-            Stat = MakeHolder<NYql::TCounters>();
+            Stat = std::make_unique<NYql::TCounters>();
         }
     }
 
@@ -258,7 +258,7 @@ private:
         IssuesToMessage(issues, ComputeActorState.MutableIssues());
         FillStats(ComputeActorState.MutableStats(), /* last */ false);
         for (const auto& [actorId, cookie] : WaitingForStateResponse) {
-            auto state = MakeHolder<TEvDqCompute::TEvState>();
+            auto state = std::make_unique<TEvDqCompute::TEvState>();
             state->Record = ComputeActorState;
             Send(actorId, std::move(state), NActors::IEventHandle::FlagTrackDelivery, cookie);
         }
@@ -357,7 +357,7 @@ private:
 
         outputChannel->PopStarted = true;
         ProcessOutputsState.Inflight++;
-        Send(TaskRunnerActorId, MakeHolder<NTaskRunnerActor::TEvOutputChannelDataRequest>(channelId, /* wasFinished = */ true, 0));  // finish channel
+        Send(TaskRunnerActorId, std::make_unique<NTaskRunnerActor::TEvOutputChannelDataRequest>(channelId, /* wasFinished = */ true, 0));  // finish channel
         DoExecute();
     }
 
@@ -373,7 +373,7 @@ private:
         batch.Proto = std::move(*channelData.MutableData());
         batch.Payload = std::move(channelDataOOB.Payload);
 
-        auto ev = MakeHolder<NTaskRunnerActor::TEvInputChannelData>(
+        auto ev = std::make_unique<NTaskRunnerActor::TEvInputChannelData>(
             channelData.GetChannelId(),
             batch.RowCount() ? std::optional{std::move(batch)} : std::nullopt,
             finished,
@@ -473,7 +473,7 @@ private:
 
         {
             // say "Hello" to executer
-            auto ev = MakeHolder<TEvDqCompute::TEvState>();
+            auto ev = std::make_unique<TEvDqCompute::TEvState>();
             ev->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
             ev->Record.SetTaskId(Task.GetId());
 
@@ -919,7 +919,7 @@ private:
     bool ReadyToCheckpointFlag;
     TVector<std::pair<NActors::TActorId, ui64>> WaitingForStateResponse;
     bool SentStatsRequest;
-    mutable THolder<TMiniKqlProgramState> ProgramState;
+    mutable std::unique_ptr<TMiniKqlProgramState> ProgramState;
     ui64 MkqlMemoryLimit = 0;
     TDqMemoryQuota::TProfileStats ProfileStats;
     bool CheckpointRequestedFromTaskRunner = false;

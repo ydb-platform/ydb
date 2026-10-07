@@ -11,15 +11,15 @@ namespace NKikimr::NPersQueueTests {
 
 class TPQv1CompatTestBase {
 public:
-    THolder<::NPersQueue::TTestServer> Server;
-    THolder<TDriver> Driver;
-    THolder<TPersQueueClient> PQClient;
+    std::unique_ptr<::NPersQueue::TTestServer> Server;
+    std::unique_ptr<TDriver> Driver;
+    std::unique_ptr<TPersQueueClient> PQClient;
     TString DbRoot;
     TString DbPath;
 
     TPQv1CompatTestBase()
     {
-        Server = MakeHolder<::NPersQueue::TTestServer>(false);
+        Server = std::make_unique<::NPersQueue::TTestServer>(false);
         DbRoot = "/Root/LbCommunal";
         DbPath = "/Root/LbCommunal/account";
         Server->ServerSettings.PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(DbRoot);

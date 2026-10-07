@@ -39,7 +39,7 @@ public:
         const auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request_);
         SetDatabase(ev, *Request_);
         ev->Record.MutableRequest()->SetClientAddress(Request_->GetPeerName());

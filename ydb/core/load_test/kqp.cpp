@@ -49,7 +49,7 @@ public:
 
 void SendQueryRequest(const TActorContext& ctx, NYdbWorkload::TQueryInfo& q, const NKikimrKqp::EQueryType queryType, const TString& session, const TString& workingDir) {
     TString query_text = TString(q.Query);
-    auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
 
     request->Record.MutableRequest()->SetSessionId(session);
     request->Record.MutableRequest()->SetKeepSession(true);
@@ -133,7 +133,7 @@ private:
     void CloseSession(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " creating event for session close");
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(WorkerSession);
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
@@ -145,7 +145,7 @@ private:
 
     void CreateWorkingSession(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " creating event for session creation");
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
 
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
 
@@ -396,7 +396,7 @@ private:
     }
 
     void DropTables(const TActorContext& ctx) {
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
         ev->Record.MutableRequest()->SetSessionId(TableSession);
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
@@ -481,7 +481,7 @@ private:
 
     void CreateSessionForTablesDDL(const TActorContext& ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for session creation");
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
 
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
 
@@ -506,7 +506,7 @@ private:
     void CreateTables(const TActorContext& ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for tables creation");
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
         ev->Record.MutableRequest()->SetSessionId(TableSession);
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
@@ -658,7 +658,7 @@ private:
     void CloseSession(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for session close");
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(TableSession);
 
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());

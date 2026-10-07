@@ -48,10 +48,10 @@ namespace NTable {
         bool IsFinal = false;
 
         // Underlay mask with possible keys under compacted data
-        THolder<NPage::IKeySpace> UnderlayMask;
+        std::unique_ptr<NPage::IKeySpace> UnderlayMask;
 
         // Compacted slices will not cross these split keys
-        THolder<NPage::ISplitKeys> SplitKeys;
+        std::unique_ptr<NPage::ISplitKeys> SplitKeys;
     };
 
     /**
@@ -180,7 +180,7 @@ namespace NTable {
         /**
          * Begins compaction with the specified params
          */
-        virtual ui64 BeginCompaction(THolder<TCompactionParams> params) = 0;
+        virtual ui64 BeginCompaction(std::unique_ptr<TCompactionParams> params) = 0;
 
         /**
          * Cancels compaction previously started with BeginCompaction
@@ -299,8 +299,8 @@ namespace NTable {
          */
         virtual TCompactionChanges CompactionFinished(
             ui64 compactionId,
-            THolder<TCompactionParams> params,
-            THolder<TCompactionResult> result) = 0;
+            std::unique_ptr<TCompactionParams> params,
+            std::unique_ptr<TCompactionResult> result) = 0;
 
         /**
          * Called after an external (borrowed) part is merged into the table

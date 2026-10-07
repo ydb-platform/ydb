@@ -14,10 +14,10 @@ inline TActorId MakeSysViewServiceID(ui32 node) {
     return TActorId(node, TStringBuf(x, 12));
 }
 
-THolder<NActors::IActor> CreateSysViewService(
+std::unique_ptr<NActors::IActor> CreateSysViewService(
     TExtCountersConfig&& config, bool hasExternalCounters);
 
-THolder<NActors::IActor> CreateSysViewServiceForTests();
+std::unique_ptr<NActors::IActor> CreateSysViewServiceForTests();
 
 } // NSysView
 } // NKikimr

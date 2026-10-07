@@ -14,7 +14,7 @@ public:
     };
 
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
-    THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
+    std::unique_ptr<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
     ui64 MinPartitions = 40;
     ui64 MaxPartitions = 1000;

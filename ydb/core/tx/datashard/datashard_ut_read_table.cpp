@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         auto shard2actor = ResolveTablet(runtime, shards[1]);
 
-        TVector<THolder<IEventHandle>> capturedPropose;
+        TVector<std::unique_ptr<IEventHandle>> capturedPropose;
         auto capturePropose = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvProposeTransaction::EventType: {
@@ -490,9 +490,9 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         UNIT_ASSERT_VALUES_EQUAL(table1state.LastResult, "key = 1, value = 11\n");
 
         bool captureTxIds = true;
-        TVector<THolder<IEventHandle>> capturedTxIds;
+        TVector<std::unique_ptr<IEventHandle>> capturedTxIds;
         size_t captureResolveKeySetResultPartitions = 3;
-        TVector<THolder<IEventHandle>> capturedResolveKeySetResults;
+        TVector<std::unique_ptr<IEventHandle>> capturedResolveKeySetResults;
         auto capturePropose = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxUserProxy::TEvAllocateTxIdResult::EventType: {

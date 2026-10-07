@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         SimulateSleep(runtime, TDuration::Seconds(2));
 
         auto cleanupAndCheck = [&runtime, &sender, &tableShards](ui64 expectedVacuumGeneration) {
-            auto request = MakeHolder<TEvDataShard::TEvVacuum>(expectedVacuumGeneration);
+            auto request = std::make_unique<TEvDataShard::TEvVacuum>(expectedVacuumGeneration);
 
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         SimulateSleep(runtime, TDuration::Seconds(2));
 
         auto cleanupAndCheck = [&runtime, &sender, &tableShards](ui64 expectedVacuumGeneration) {
-            auto request = MakeHolder<TEvDataShard::TEvVacuum>(expectedVacuumGeneration);
+            auto request = std::make_unique<TEvDataShard::TEvVacuum>(expectedVacuumGeneration);
 
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -163,8 +163,8 @@ Y_UNIT_TEST_SUITE(Vacuum) {
 
         ui64 expectedGenFirst = 42;
         ui64 expectedGenLast = 43;
-        auto request1 = MakeHolder<TEvDataShard::TEvVacuum>(expectedGenFirst);
-        auto request2 = MakeHolder<TEvDataShard::TEvVacuum>(expectedGenLast);
+        auto request1 = std::make_unique<TEvDataShard::TEvVacuum>(expectedGenFirst);
+        auto request2 = std::make_unique<TEvDataShard::TEvVacuum>(expectedGenLast);
 
         runtime.SendToPipe(tableShards.at(0), sender, request1.Release(), 0, GetPipeConfigWithRetries());
         runtime.SendToPipe(tableShards.at(0), sender, request2.Release(), 0, GetPipeConfigWithRetries());
@@ -191,8 +191,8 @@ Y_UNIT_TEST_SUITE(Vacuum) {
 
         ui64 expectedGenFirst = 42;
         ui64 expectedGenOld = 10;
-        auto request1 = MakeHolder<TEvDataShard::TEvVacuum>(expectedGenFirst);
-        auto request2 = MakeHolder<TEvDataShard::TEvVacuum>(expectedGenOld);
+        auto request1 = std::make_unique<TEvDataShard::TEvVacuum>(expectedGenFirst);
+        auto request2 = std::make_unique<TEvDataShard::TEvVacuum>(expectedGenOld);
 
         runtime.SendToPipe(tableShards.at(0), sender, request1.Release(), 0, GetPipeConfigWithRetries());
         runtime.SendToPipe(tableShards.at(0), sender, request2.Release(), 0, GetPipeConfigWithRetries());
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         ui64 olderGeneration = 5;
 
         {
-            auto request = MakeHolder<TEvDataShard::TEvVacuum>(cleanupGeneration);
+            auto request = std::make_unique<TEvDataShard::TEvVacuum>(cleanupGeneration);
 
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         }
 
         {
-            auto request = MakeHolder<TEvDataShard::TEvVacuum>(oldGeneration);
+            auto request = std::make_unique<TEvDataShard::TEvVacuum>(oldGeneration);
 
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         {
-            auto request = MakeHolder<TEvDataShard::TEvVacuum>(olderGeneration);
+            auto request = std::make_unique<TEvDataShard::TEvVacuum>(olderGeneration);
 
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -293,7 +293,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_VALUES_EQUAL(CountBlobsWithSubstring(table2Shards.at(0), proxyDSs, DeletedSubkey1), 2); // + deletion in log
 
         auto cleanupAndCheck = [&runtime, &sender](ui64 tabletId, ui64 expectedVacuumGeneration) {
-            auto request = MakeHolder<TEvDataShard::TEvVacuum>(expectedVacuumGeneration);
+            auto request = std::make_unique<TEvDataShard::TEvVacuum>(expectedVacuumGeneration);
 
             runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         ui64 vacuumGeneration = 24;
         {
             // cleanup for the first table should be failed due to borrowed parts
-            auto request = MakeHolder<TEvDataShard::TEvVacuum>(vacuumGeneration);
+            auto request = std::make_unique<TEvDataShard::TEvVacuum>(vacuumGeneration);
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         }
         {
             // cleanup for the second table
-            auto request = MakeHolder<TEvDataShard::TEvVacuum>(vacuumGeneration);
+            auto request = std::make_unique<TEvDataShard::TEvVacuum>(vacuumGeneration);
             runtime.SendToPipe(table2Shards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
@@ -343,7 +343,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         {
             // next cleanup for the first table should succeed after compaction of the second table
             ++vacuumGeneration;
-            auto request = MakeHolder<TEvDataShard::TEvVacuum>(vacuumGeneration);
+            auto request = std::make_unique<TEvDataShard::TEvVacuum>(vacuumGeneration);
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);

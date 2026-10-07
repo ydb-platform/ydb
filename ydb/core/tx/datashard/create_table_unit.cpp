@@ -21,7 +21,7 @@ public:
                   const TActorContext &ctx) override;
 
 private:
-    TVector<THolder<TEvChangeExchange::TEvAddSender>> AddSenders;
+    TVector<std::unique_ptr<TEvChangeExchange::TEvAddSender>> AddSenders;
 };
 
 TCreateTableUnit::TCreateTableUnit(TDataShard &dataShard,
@@ -97,10 +97,10 @@ void TCreateTableUnit::Complete(TOperation::TPtr, const TActorContext &ctx)
     DataShard.MaybeActivateChangeSender(ctx);
 }
 
-THolder<TExecutionUnit> CreateCreateTableUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateCreateTableUnit(TDataShard &dataShard,
                                               TPipeline &pipeline)
 {
-    return THolder(new TCreateTableUnit(dataShard, pipeline));
+    return std::unique_ptr<TCreateTableUnit>(new TCreateTableUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

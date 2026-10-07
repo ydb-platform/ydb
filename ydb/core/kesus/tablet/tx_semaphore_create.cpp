@@ -10,7 +10,7 @@ struct TKesusTablet::TTxSemaphoreCreate : public TTxBase {
     const ui64 Cookie;
     const NKikimrKesus::TEvCreateSemaphore Record;
 
-    THolder<TEvKesus::TEvCreateSemaphoreResult> Reply;
+    std::unique_ptr<TEvKesus::TEvCreateSemaphoreResult> Reply;
 
     TTxSemaphoreCreate(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvCreateSemaphore& record)
         : TTxBase(self)

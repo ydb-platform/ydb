@@ -24,7 +24,7 @@ public:
     TS3DataSourceProvider(TS3State::TPtr state)
         : State_(std::move(state))
         , IODiscoveryTransformer_(CreateS3IODiscoveryTransformer(State_))
-        , ConfigurationTransformer_(MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{S3ProviderName}))
+        , ConfigurationTransformer_(std::make_unique<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{S3ProviderName}))
         , CallableExecutionTransformer_(CreateS3SourceCallableExecutionTransformer(State_))
         , TypeAnnotationTransformer_(CreateS3DataSourceTypeAnnotationTransformer(State_))
         , DqIntegration_(CreateS3DqIntegration(State_))
@@ -157,11 +157,11 @@ public:
     }
 private:
     const TS3State::TPtr State_;
-    const THolder<IGraphTransformer> IODiscoveryTransformer_;
-    const THolder<IGraphTransformer> ConfigurationTransformer_;
-    const THolder<IGraphTransformer> CallableExecutionTransformer_;
-    const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
-    const THolder<IDqIntegration> DqIntegration_;
+    const std::unique_ptr<IGraphTransformer> IODiscoveryTransformer_;
+    const std::unique_ptr<IGraphTransformer> ConfigurationTransformer_;
+    const std::unique_ptr<IGraphTransformer> CallableExecutionTransformer_;
+    const std::unique_ptr<TVisitorTransformerBase> TypeAnnotationTransformer_;
+    const std::unique_ptr<IDqIntegration> DqIntegration_;
 };
 
 }

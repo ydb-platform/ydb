@@ -7,7 +7,7 @@
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxAssignTxId: public TTxBase {
-    THashMap<ui32, THolder<TEvService::TEvTxIdResult>> Result;
+    THashMap<ui32, std::unique_ptr<TEvService::TEvTxIdResult>> Result;
     bool TxIdsExhausted = false;
 
     struct TTxId {

@@ -79,7 +79,7 @@ void TReplicationSourceOffsetsServer::ProcessRead(const TReadId& readId, TReadSt
         }
     }
 
-    auto res = MakeHolder<TEvDataShard::TEvReplicationSourceOffsets>(readId.ReadId, ++state.LastSeqNo);
+    auto res = std::make_unique<TEvDataShard::TEvReplicationSourceOffsets>(readId.ReadId, ++state.LastSeqNo);
     ui64 resSize = 0;
 
     auto itTable = Self->ReplicatedTables.find(state.PathId);
@@ -114,7 +114,7 @@ void TReplicationSourceOffsetsServer::ProcessRead(const TReadId& readId, TReadSt
                         return;
                     }
                     // Start a new chunk immediately
-                    res = MakeHolder<TEvDataShard::TEvReplicationSourceOffsets>(readId.ReadId, ++state.LastSeqNo);
+                    res = std::make_unique<TEvDataShard::TEvReplicationSourceOffsets>(readId.ReadId, ++state.LastSeqNo);
                     resSize = 0;
                 }
 

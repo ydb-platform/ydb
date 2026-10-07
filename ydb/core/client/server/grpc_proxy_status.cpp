@@ -37,7 +37,7 @@ class TChooseProxyActorImpl : public TActorBootstrapped<TChooseProxyActorImpl> {
     TActorId Sender;
     ui32 NodesRequested;
     ui32 NodesReceived;
-    THolder<NMsgBusProxy::TBusChooseProxy> Request;
+    std::unique_ptr<NMsgBusProxy::TBusChooseProxy> Request;
     TVector<ui32> Nodes;
     THashMap<ui32, TString> NodeNames;
     THashMap<ui32, TString> NodeDataCenter;
@@ -149,7 +149,7 @@ public:
 
 
     void ReplyAndDie(const TActorContext& ctx) {
-        THolder<TEvGRpcProxyStatus::TEvResponse> response = MakeHolder<TEvGRpcProxyStatus::TEvResponse>();
+        std::unique_ptr<TEvGRpcProxyStatus::TEvResponse> response = std::make_unique<TEvGRpcProxyStatus::TEvResponse>();
 
         response->PerNodeResponse = PerNodeResponse;
         response->NodeNames = NodeNames;
@@ -239,7 +239,7 @@ void
 TGRpcProxyStatusActor::Handle(TEvGRpcProxyStatus::TEvResponse::TPtr &ev, const TActorContext& ctx) {
 
     for (auto & sender : Requests) {
-        THolder<TEvGRpcProxyStatus::TEvResponse> response = MakeHolder<TEvGRpcProxyStatus::TEvResponse>();
+        std::unique_ptr<TEvGRpcProxyStatus::TEvResponse> response = std::make_unique<TEvGRpcProxyStatus::TEvResponse>();
         response->PerNodeResponse = ev->Get()->PerNodeResponse;
         response->NodeNames = ev->Get()->NodeNames;
         response->NodeDataCenter = ev->Get()->NodeDataCenter;
@@ -273,7 +273,7 @@ TGRpcProxyStatusActor::Handle(TEvGRpcProxyStatus::TEvUpdateStatus::TPtr &ev, con
 void
 TGRpcProxyStatusActor::Handle(TEvGRpcProxyStatus::TEvGetStatusRequest::TPtr &ev, const TActorContext &ctx) {
 
-    THolder<TEvGRpcProxyStatus::TEvGetStatusResponse> resp(new TEvGRpcProxyStatus::TEvGetStatusResponse);
+    std::unique_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse> resp(new TEvGRpcProxyStatus::TEvGetStatusResponse);
     ui64 weight = Allowed * 1000000;
 
     if (MaxWriteSessions <= WriteSessions)
@@ -322,7 +322,7 @@ STFUNC(TGRpcProxyStatusActor::StateFunc) {
 class TChooseProxyActor : public NMsgBusProxy::TMessageBusCancellableRequest<TChooseProxyActor> {
 
     using TBase = NMsgBusProxy::TMessageBusCancellableRequest<TChooseProxyActor>;
-    THolder<NMsgBusProxy::TBusChooseProxy> Request;
+    std::unique_ptr<NMsgBusProxy::TBusChooseProxy> Request;
     THashMap<ui32, TString> NodeNames;
     THashMap<ui32, TString> NodeDataCenter;
     THashMap<ui32, std::shared_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse>> PerNodeResponse;
@@ -370,7 +370,7 @@ public:
 
 
     void ReplyAndDie(const TActorContext& ctx) {
-        auto response = MakeHolder<NMsgBusProxy::TBusResponse>();
+        auto response = std::make_unique<NMsgBusProxy::TBusResponse>();
         TString name;
         ui64 totalWeight = 0;
         ui64 cookie = 0;

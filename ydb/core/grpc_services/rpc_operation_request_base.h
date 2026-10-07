@@ -54,7 +54,7 @@ protected:
             {"txId", this->TxId},
             {"databaseName", this->GetDatabaseName()});
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = this->GetDatabaseName();
 
         auto& entry = request->ResultSet.emplace_back();

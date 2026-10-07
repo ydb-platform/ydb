@@ -256,7 +256,7 @@ private:
         std::atexit(&Finalize);
         TerminateHandler_ = std::set_terminate(&FlushStorageFileHolderOnTerminate);
 
-        SignalHandlerPool_ = MakeHolder<TThreadPool>();
+        SignalHandlerPool_ = std::make_unique<TThreadPool>();
         SignalHandlerPool_->Start(1);
         Y_ENSURE(SignalHandlerPool_->AddFunc([finished = Finished_]() {
             while (!finished->load()) {
@@ -509,10 +509,10 @@ private:
             Server_->EnableGRpc(GetGrpcSettings(domainGrpcPort, 0));
         }
 
-        Client_ = MakeHolder<NKikimr::Tests::TClient>(serverSettings);
+        Client_ = std::make_unique<NKikimr::Tests::TClient>(serverSettings);
         Client_->InitRootScheme();
 
-        Tenants_ = MakeHolder<NKikimr::Tests::TTenants>(Server_);
+        Tenants_ = std::make_unique<NKikimr::Tests::TTenants>(Server_);
         CreateTenants();
     }
 
@@ -655,7 +655,7 @@ public:
 
     NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr SchemeQueryRequest(const TRequestOptions& query) {
         ui32 nodeIndex = GetNodeIndexForDatabase(query.Database);
-        auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
+        auto event = std::make_unique<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
         FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_DDL, nodeIndex, event->Record);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event), nodeIndex);
@@ -663,7 +663,7 @@ public:
 
     NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr ScriptRequest(const TScriptRequest& script) {
         ui32 nodeIndex = GetNodeIndexForDatabase(script.Options.Database);
-        auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvScriptRequest>();
+        auto event = std::make_unique<NKikimr::NKqp::TEvKqp::TEvScriptRequest>();
         event->RetryMapping = script.RetryMapping;
         FillQueryRequest(script.Options, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, nodeIndex, event->Record);
 
@@ -680,7 +680,7 @@ public:
 
     NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr YqlScriptRequest(const TRequestOptions& query) {
         ui32 nodeIndex = GetNodeIndexForDatabase(query.Database);
-        auto event = MakeHolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
+        auto event = std::make_unique<NKikimr::NKqp::TEvKqp::TEvQueryRequest>();
         FillQueryRequest(query, NKikimrKqp::QUERY_TYPE_SQL_SCRIPT, nodeIndex, event->Record);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event), nodeIndex);
@@ -688,7 +688,7 @@ public:
 
     NKikimr::NKqp::TEvGetScriptExecutionOperationResponse::TPtr GetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const {
         NKikimr::NOperationId::TOperationId operationId(operation);
-        auto event = MakeHolder<NKikimr::NKqp::TEvGetScriptExecutionOperation>(GetDatabasePath(database), operationId, userSID);
+        auto event = std::make_unique<NKikimr::NKqp::TEvGetScriptExecutionOperation>(GetDatabasePath(database), operationId, userSID);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvGetScriptExecutionOperation, NKikimr::NKqp::TEvGetScriptExecutionOperationResponse>(std::move(event), database);
     }
@@ -711,14 +711,14 @@ public:
 
     NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse::TPtr ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const {
         NKikimr::NOperationId::TOperationId operationId(operation);
-        auto event = MakeHolder<NKikimr::NKqp::TEvForgetScriptExecutionOperation>(GetDatabasePath(database), operationId, userSID);
+        auto event = std::make_unique<NKikimr::NKqp::TEvForgetScriptExecutionOperation>(GetDatabasePath(database), operationId, userSID);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvForgetScriptExecutionOperation, NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse>(std::move(event), database);
     }
 
     NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse::TPtr CancelScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const {
         NKikimr::NOperationId::TOperationId operationId(operation);
-        auto event = MakeHolder<NKikimr::NKqp::TEvCancelScriptExecutionOperation>(GetDatabasePath(database), operationId, userSID);
+        auto event = std::make_unique<NKikimr::NKqp::TEvCancelScriptExecutionOperation>(GetDatabasePath(database), operationId, userSID);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvCancelScriptExecutionOperation, NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse>(std::move(event), database);
     }
@@ -759,7 +759,7 @@ public:
             ythrow yexception() << "Trace opt was disabled";
         }
 
-        NYql::NLog::YqlLogger().ResetBackend(MakeHolder<NYql::NLog::TTlsLogBackend>(CreateLogBackend(Settings_)));
+        NYql::NLog::YqlLogger().ResetBackend(std::make_unique<NYql::NLog::TTlsLogBackend>(CreateLogBackend(Settings_)));
     }
 
     static void StopTraceOpt() {
@@ -793,12 +793,12 @@ private:
     }
 
     template <typename TRequest, typename TResponse>
-    typename TResponse::TPtr RunKqpProxyRequest(THolder<TRequest> event, const TString& database) const {
+    typename TResponse::TPtr RunKqpProxyRequest(std::unique_ptr<TRequest> event, const TString& database) const {
         return RunKqpProxyRequest<TRequest, TResponse>(std::move(event), GetNodeIndexForDatabase(database));
     }
 
     template <typename TRequest, typename TResponse>
-    typename TResponse::TPtr RunKqpProxyRequest(THolder<TRequest> event, ui32 nodeIndex) const {
+    typename TResponse::TPtr RunKqpProxyRequest(std::unique_ptr<TRequest> event, ui32 nodeIndex) const {
         NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
         NActors::TActorId kqpProxy = NKikimr::NKqp::MakeKqpProxyID(GetRuntime()->GetNodeId(nodeIndex));
 
@@ -901,15 +901,15 @@ private:
     TAwsApiGuard AwsApiGuard_;
 
     TKqprunServer::TPtr Server_;
-    THolder<NKikimr::Tests::TClient> Client_;
-    THolder<NKikimr::Tests::TTenants> Tenants_;
+    std::unique_ptr<NKikimr::Tests::TClient> Client_;
+    std::unique_ptr<NKikimr::Tests::TTenants> Tenants_;
 
     std::unordered_map<TString, TString> ServerlessToShared_;
     std::optional<NActors::TActorId> AsyncQueryRunnerActorId_;
     std::optional<TSessionState> SessionState_;
     TFsPath StorageMetaPath_;
     NKqpRun::TStorageMeta StorageMeta_;
-    THolder<TThreadPool> SignalHandlerPool_;
+    std::unique_ptr<TThreadPool> SignalHandlerPool_;
     std::shared_ptr<std::atomic_bool> Finished_;
 };
 

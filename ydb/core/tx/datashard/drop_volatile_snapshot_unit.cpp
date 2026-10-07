@@ -50,11 +50,11 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateDropVolatileSnapshotUnit(
+std::unique_ptr<TExecutionUnit> CreateDropVolatileSnapshotUnit(
         TDataShard& dataShard,
         TPipeline& pipeline)
 {
-    return THolder(new TDropVolatileSnapshotUnit(dataShard, pipeline));
+    return std::unique_ptr<TDropVolatileSnapshotUnit>(new TDropVolatileSnapshotUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

@@ -184,9 +184,9 @@ private:
     TSolomonState* State_;
 };
 
-THolder<IYtflowIntegration> CreateSolomonYtflowIntegration(const TSolomonState::TPtr& state) {
+std::unique_ptr<IYtflowIntegration> CreateSolomonYtflowIntegration(const TSolomonState::TPtr& state) {
     YQL_ENSURE(state);
-    return MakeHolder<TSolomonYtflowIntegration>(state);
+    return std::make_unique<TSolomonYtflowIntegration>(state);
 }
 
 } // namespace NYql

@@ -20,8 +20,8 @@ void TWorkloadCommandIndexBase::Config(TConfig& config) {
 int TWorkloadCommandIndexBase::Run(TConfig& config) {
     Params.DbPath = config.Database;
 
-    Driver = MakeHolder<NYdb::NConsoleClient::TScopedDriver>(CreateDriver(config));
-    QueryClient = MakeHolder<NYdb::NQuery::TQueryClient>(*Driver);
+    Driver = std::make_unique<NYdb::NConsoleClient::TScopedDriver>(CreateDriver(config));
+    QueryClient = std::make_unique<NYdb::NQuery::TQueryClient>(*Driver);
     Params.SetClients(QueryClient.get(), nullptr, nullptr, nullptr);
 
     return DoRun();

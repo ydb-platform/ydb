@@ -76,7 +76,7 @@ void TImmediateControlsConfigurator::Handle(TEvConsole::TEvConfigNotificationReq
 
     ApplyConfig(rec.GetConfig().GetImmediateControlsConfig(), AppData(ctx)->Icb);
 
-    auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+    auto resp = std::make_unique<TEvConsole::TEvConfigNotificationResponse>(rec);
 
     YDB_LOG_TRACE_CTX(ctx, "TImmediateControlsConfigurator: Send TEvConfigNotificationResponse",
         {"ev", resp->Record.ShortDebugString()});

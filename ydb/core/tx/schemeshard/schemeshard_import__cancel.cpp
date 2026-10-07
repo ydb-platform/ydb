@@ -32,7 +32,7 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         const auto& request = Request->Get()->Record;
 
         auto respond = [this, &request](Ydb::StatusIds::StatusCode status) -> bool {
-            auto response = MakeHolder<TEvImport::TEvCancelImportResponse>(request.GetTxId());
+            auto response = std::make_unique<TEvImport::TEvCancelImportResponse>(request.GetTxId());
             auto& proto = *response->Record.MutableResponse();
 
             proto.SetStatus(status);

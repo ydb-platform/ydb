@@ -41,7 +41,7 @@ void TPartition::ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TS
     LOG_D(
         "TPartition::ReplyOwnerOk");
 
-    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
+    std::unique_ptr<TEvPQ::TEvProxyResponse> response = std::make_unique<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -68,7 +68,7 @@ void TPartition::ReplyWrite(
     PQ_ENSURE(offset <= (ui64)Max<i64>())("Offset is too big", offset);
     PQ_ENSURE(seqNo <= (ui64)Max<i64>())("SeqNo is too big", seqNo);
 
-    THolder<TEvPQ::TEvProxyResponse> response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
+    std::unique_ptr<TEvPQ::TEvProxyResponse> response = std::make_unique<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -137,7 +137,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
         UpdateWriteBufferIsFullState(ctx.Now());
         ProcessReserveRequests(ctx);
     } else {
-        it->second.WaitToChangeOwner.push_back(THolder<TEvPQ::TEvChangeOwner>(ev.Release()));
+        it->second.WaitToChangeOwner.push_back(std::unique_ptr<TEvPQ::TEvChangeOwner>(ev.Release()));
     }
 }
 
@@ -150,7 +150,7 @@ THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THas
     UpdateWriteBufferIsFullState(ctx.Now());
     TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
     for (auto& ev : it->second.WaitToChangeOwner) { //this request maybe could be done right now
-        WaitToChangeOwner.push_back(THolder<TEvPQ::TEvChangeOwner>(ev.Release()));
+        WaitToChangeOwner.push_back(std::unique_ptr<TEvPQ::TEvChangeOwner>(ev.Release()));
     }
     auto jt = it;
     ++jt;
@@ -731,7 +731,7 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
     SplitBoundary.Clear();
     LastScaleRequestTime = now;
 
-    auto ev = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>(Partition.OriginalPartitionId, ScaleStatus);
+    auto ev = std::make_unique<TEvPQ::TEvPartitionScaleStatusChanged>(Partition.OriginalPartitionId, ScaleStatus);
     if (ScaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
         auto splitBoundary = AutopartitioningManager->SplitBoundary();
         if (splitBoundary) {

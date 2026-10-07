@@ -356,8 +356,8 @@ void TMixedWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
     }
 }
 
-THolder<IWorkloadQueryGenerator> TMixedWorkloadParams::CreateGenerator() const {
-    return MakeHolder<TLogGenerator>(this);
+std::unique_ptr<IWorkloadQueryGenerator> TMixedWorkloadParams::CreateGenerator() const {
+    return std::make_unique<TLogGenerator>(this);
 }
 
 TString TMixedWorkloadParams::GetWorkloadName() const {

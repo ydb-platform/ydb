@@ -225,7 +225,7 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
 
         for (const auto& [path, pathSubscribeData] : PathToSubscribers) {
             for (const auto& [subscriber, cookie] : pathSubscribeData.Subscribers) {
-                auto reply = MakeHolder<TEvStateStorage::TEvReplicaShutdown>();
+                auto reply = std::make_unique<TEvStateStorage::TEvReplicaShutdown>();
                 Send(subscriber, std::move(reply), 0, cookie);
             }
         }
@@ -366,7 +366,7 @@ class TBoardReplicaActor : public TActorBootstrapped<TBoardReplicaActor> {
         Y_ABORT_UNLESS(Info);
 
         for (const auto& subscriber : pathSubscribeData.Subscribers) {
-            auto reply = MakeHolder<TEvStateStorage::TEvReplicaBoardInfoUpdate>(path, Info->ClusterStateGeneration, Info->ClusterStateGuid);
+            auto reply = std::make_unique<TEvStateStorage::TEvReplicaBoardInfoUpdate>(path, Info->ClusterStateGeneration, Info->ClusterStateGuid);
             auto *info = reply->Record.MutableInfo();
             ActorIdToProto(entry.Owner, info->MutableOwner());
             if (dropped) {

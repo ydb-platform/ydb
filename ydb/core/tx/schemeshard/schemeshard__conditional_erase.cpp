@@ -253,7 +253,7 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
                 continue;
             }
 
-            auto ev = MakeHolder<TEvDataShard::TEvConditionalEraseRowsRequest>();
+            auto ev = std::make_unique<TEvDataShard::TEvConditionalEraseRowsRequest>();
             ev->Record = std::move(request);
             YDB_LOG_DEBUG_CTX(ctx, "Run conditional erase",
                 {"tabletId", tabletId},
@@ -376,7 +376,7 @@ private:
 struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSchemeShard> {
     TVector<TEvDataShard::TEvConditionalEraseRowsResponse::TPtr> Responses;
     TInstant BatchStartTime;
-    TVector<THolder<NSysView::TEvSysView::TEvUpdateTtlStats>> StatsCollectorEvents;
+    TVector<std::unique_ptr<NSysView::TEvSysView::TEvUpdateTtlStats>> StatsCollectorEvents;
 
     THashMap<TPathId, TCondEraseAffectedTable> AffectedTables;
 
@@ -444,7 +444,7 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
             );
         }
 
-        auto statsEv = MakeHolder<NSysView::TEvSysView::TEvUpdateTtlStats>(
+        auto statsEv = std::make_unique<NSysView::TEvSysView::TEvUpdateTtlStats>(
             Self->GetDomainKey(tablePathId), tablePathId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()))
         );
 

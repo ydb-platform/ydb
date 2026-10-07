@@ -60,7 +60,7 @@ public:
     virtual ~TPageHashTable() {};
 
     // Creates hash table for given layout with given capacity
-    static THolder<TPageHashTable> Create(const TTupleLayout* layout, ui32 capacity);
+    static std::unique_ptr<TPageHashTable> Create(const TTupleLayout* layout, ui32 capacity);
 
     // Build new hash table on passed data.
     // Data must be presented as a TupleLayout.

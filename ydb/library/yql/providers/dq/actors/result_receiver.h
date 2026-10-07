@@ -7,7 +7,7 @@
 
 namespace NYql {
 
-THolder<NActors::IActor> MakeResultReceiver(
+std::unique_ptr<NActors::IActor> MakeResultReceiver(
     const TVector<TString>& columns,
     const NActors::TActorId& executerId,
     const TString& traceId,

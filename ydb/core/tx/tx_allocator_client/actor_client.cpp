@@ -115,7 +115,7 @@ public:
     }
 
 private:
-    THolder<NTabletPipe::IClientCache> PipeClientCache;
+    std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     TTxAllocatorClient TxAllocatorClient;
 
     TDeque<TDelayedRequest> DelayedRequests;

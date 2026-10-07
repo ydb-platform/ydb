@@ -29,7 +29,7 @@ class TKesusProxyActor : public TActorBootstrapped<TKesusProxyActor> {
     struct TDirectRequest {
         TActorId Sender;
         ui64 Cookie;
-        THolder<IEventBase> Event;
+        std::unique_ptr<IEventBase> Event;
     };
 
     enum class ESessionState {
@@ -45,7 +45,7 @@ class TKesusProxyActor : public TActorBootstrapped<TKesusProxyActor> {
         TActorId Owner;
         ui64 OwnerCookie;
         ESessionState State = ESessionState::ATTACHING;
-        THolder<TEvKesus::TEvAttachSession> AttachEvent;
+        std::unique_ptr<TEvKesus::TEvAttachSession> AttachEvent;
         bool Destroy = false;
 
         // Request SeqNo -> Cookie
@@ -447,7 +447,7 @@ private:
         }
     }
 
-    void HandleDirectRequest(const TActorId& sender, ui64 cookie, THolder<IEventBase> event) {
+    void HandleDirectRequest(const TActorId& sender, ui64 cookie, std::unique_ptr<IEventBase> event) {
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Received",
             {"selfId", SelfId()},
             {"path", KesusPath},
@@ -469,7 +469,7 @@ private:
         }
     }
 
-    void HandleDirectResponse(ui64 seqNo, THolder<IEventBase> event) {
+    void HandleDirectResponse(ui64 seqNo, std::unique_ptr<IEventBase> event) {
         if (const auto* req = DirectRequests.FindPtr(seqNo)) {
             YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Relaying",
                 {"selfId", SelfId()},

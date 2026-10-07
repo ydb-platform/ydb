@@ -299,8 +299,8 @@ private:
     NThreading::TFuture<void> AsyncFuture_;
 };
 
-THolder<IGraphTransformer> CreateClickHouseLoadTableMetadataTransformer(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway) {
-    return MakeHolder<TClickHouseLoadTableMetadataTransformer>(std::move(state), std::move(gateway));
+std::unique_ptr<IGraphTransformer> CreateClickHouseLoadTableMetadataTransformer(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway) {
+    return std::make_unique<TClickHouseLoadTableMetadataTransformer>(std::move(state), std::move(gateway));
 }
 
 } // namespace NYql

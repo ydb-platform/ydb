@@ -69,7 +69,7 @@ private:
 
         AuditContextAppend(Request.get(), *req);
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request);
         SetDatabase(ev, *Request);
         ev->Record.MutableRequest()->SetClientAddress(Request->GetPeerName());
@@ -201,7 +201,7 @@ private:
     void FinishTransactionImpl() {
         const auto traceId = Request->GetTraceId();
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request);
         SetDatabase(ev, *Request);
         ev->Record.MutableRequest()->SetClientAddress(Request->GetPeerName());

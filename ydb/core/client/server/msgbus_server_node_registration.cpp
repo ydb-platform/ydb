@@ -149,7 +149,7 @@ public:
 
     void SendReplyAndDie(const TActorContext &ctx)
     {
-        auto response = MakeHolder<TBusNodeRegistrationResponse>();
+        auto response = std::make_unique<TBusNodeRegistrationResponse>();
         response->Record = std::move(Response);
         SendReplyMove(response.Release());
         Die(ctx);

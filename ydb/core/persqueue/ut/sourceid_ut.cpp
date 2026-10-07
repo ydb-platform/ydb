@@ -56,8 +56,8 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
 
     Y_UNIT_TEST(SourceIdWriterFormCommand) {
         TSourceIdWriter writer(ESourceIdFormat::Raw);
-        auto actualRequest = MakeHolder<TEvKeyValue::TEvRequest>();
-        auto expectedRequest = MakeHolder<TEvKeyValue::TEvRequest>();
+        auto actualRequest = std::make_unique<TEvKeyValue::TEvRequest>();
+        auto expectedRequest = std::make_unique<TEvKeyValue::TEvRequest>();
 
         const auto sourceId = TestSourceId(1);
         const auto sourceIdInfo = TSourceIdInfo(1, 10, TInstant::Seconds(100));
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
 
         // sources are dropped before startOffset = 20
         {
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 20, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 19); // first 19 sources are dropped
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
 
         // expired sources are dropped
         {
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 341); // another 341 (360 - 19) sources are dropped
@@ -209,14 +209,14 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
 
         // move to the past
         {
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, false); // nothing to drop (everything is dropped)
         }
 
         // move to the future
         {
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(3), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 360); // more 360 sources are dropped
@@ -233,14 +233,14 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
 
         config.SetSourceIdMaxCounts(10000);
         {
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, false);
         }
 
         config.SetSourceIdMaxCounts(9900); // decrease by 100
         {
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(1), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 100); // 100 sources are dropped
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         config.SetSourceIdLifetimeSeconds(TDuration::Hours(1).Seconds());
         config.SetSourceIdMaxCounts(10000); // limit to 10000
         {
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 360); // first 360 sources are dropped
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         config.SetSourceIdLifetimeSeconds((TDuration::Hours(1) - TDuration::Minutes(1)).Seconds());
         config.SetSourceIdMaxCounts(10000 - 360);
         {
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 6); // another 6 sources are dropped by retention
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
 
         config.SetSourceIdMaxCounts(10000 - 370);
         {
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 10000, TPartitionId(TestPartition), config);
             UNIT_ASSERT_EQUAL(dropped, true);
             UNIT_ASSERT_VALUES_EQUAL(request.Get()->Record.CmdDeleteRangeSize(), 2 * 5); // more 5 sources are dropped
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
             owners[owner];
         }
 
-        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        auto request = std::make_unique<TEvKeyValue::TEvRequest>();
         NKikimrPQ::TPartitionConfig config;
         config.SetSourceIdMaxCounts(1); // limit to one
 
@@ -538,7 +538,7 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
         NKikimrPQ::TPartitionConfig config;
         config.SetSourceIdLifetimeSeconds(TDuration::Hours(1).Seconds());
 
-        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        auto request = std::make_unique<TEvKeyValue::TEvRequest>();
         for (ui32 i = 0; i < 1000; ++i) {
             Cerr << "Iteration " << i << "\n";
             const auto dropped = storage.DropOldSourceIds(request.Get(), TInstant::Hours(2), 1'000'000, TPartitionId(TestPartition), config);

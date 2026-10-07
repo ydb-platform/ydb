@@ -6,8 +6,8 @@ namespace NKikimr::NViewer {
 template <>
 class TWhiteboardMerger<TEvWhiteboard::TEvSystemStateResponse> {
 public:
-    static THolder<TEvWhiteboard::TEvSystemStateResponse> MergeResponses(TMap<ui32, THolder<TEvWhiteboard::TEvSystemStateResponse>>& responses, const TString&) {
-        THolder<TEvWhiteboard::TEvSystemStateResponse> result = MakeHolder<TEvWhiteboard::TEvSystemStateResponse>();
+    static std::unique_ptr<TEvWhiteboard::TEvSystemStateResponse> MergeResponses(TMap<ui32, std::unique_ptr<TEvWhiteboard::TEvSystemStateResponse>>& responses, const TString&) {
+        std::unique_ptr<TEvWhiteboard::TEvSystemStateResponse> result = std::make_unique<TEvWhiteboard::TEvSystemStateResponse>();
         ui64 minResponseTime = 0;
         auto* field = result->Record.MutableSystemStateInfo();
         field->Reserve(responses.size());

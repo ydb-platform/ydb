@@ -159,8 +159,8 @@ private:
 
 } // namespace
 
-THolder<IGraphTransformer> CreateDqFunctionPhysicalOptTransformer(TDqFunctionState::TPtr state) {
-    return MakeHolder<TDqFunctionPhysicalOptTransformer>(state);
+std::unique_ptr<IGraphTransformer> CreateDqFunctionPhysicalOptTransformer(TDqFunctionState::TPtr state) {
+    return std::make_unique<TDqFunctionPhysicalOptTransformer>(state);
 }
 
 }

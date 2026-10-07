@@ -120,7 +120,7 @@ void TProxyActor::HandleConfiguration(TSqsEvents::TEvConfiguration::TPtr& ev) {
         return;
     }
 
-    Send(MakeSqsProxyServiceID(SelfId().NodeId()), MakeHolder<TSqsEvents::TEvProxySqsRequest>(Request_, UserName_, QueueName_));
+    Send(MakeSqsProxyServiceID(SelfId().NodeId()), std::make_unique<TSqsEvents::TEvProxySqsRequest>(Request_, UserName_, QueueName_));
 }
 
 STATEFN(TProxyActor::StateFunc) {
@@ -133,7 +133,7 @@ STATEFN(TProxyActor::StateFunc) {
 
 void TProxyActor::RequestConfiguration() {
     Send(MakeSqsServiceID(SelfId().NodeId()),
-        MakeHolder<TSqsEvents::TEvGetConfiguration>(
+        std::make_unique<TSqsEvents::TEvGetConfiguration>(
             RequestId_,
             UserName_,
             QueueName_)

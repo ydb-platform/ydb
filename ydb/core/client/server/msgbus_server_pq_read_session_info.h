@@ -87,7 +87,7 @@ private:
 class IPersQueueGetReadSessionsInfoWorkerFactory {
 public:
     virtual ~IPersQueueGetReadSessionsInfoWorkerFactory() = default;
-    virtual THolder<IPersQueueGetReadSessionsInfoWorker> Create(
+    virtual std::unique_ptr<IPersQueueGetReadSessionsInfoWorker> Create(
         const TActorId& parentId,
         const THashMap<TString, TActorId>& readSessions,
         std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo
@@ -96,12 +96,12 @@ public:
 
 class TPersQueueGetReadSessionsInfoWorkerFactory : public IPersQueueGetReadSessionsInfoWorkerFactory {
 public:
-    THolder<IPersQueueGetReadSessionsInfoWorker> Create(
+    std::unique_ptr<IPersQueueGetReadSessionsInfoWorker> Create(
         const TActorId& parentId,
         const THashMap<TString, TActorId>& readSessions,
         std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo
     ) const override {
-        return MakeHolder<TPersQueueGetReadSessionsInfoWorker>(parentId, readSessions, nodesInfo);
+        return std::make_unique<TPersQueueGetReadSessionsInfoWorker>(parentId, readSessions, nodesInfo);
     }
 };
 

@@ -8,6 +8,6 @@
 
 namespace NYql {
 
-THolder<IDqIntegration> CreateS3DqIntegration(TS3State::TPtr state);
+std::unique_ptr<IDqIntegration> CreateS3DqIntegration(TS3State::TPtr state);
 
 }

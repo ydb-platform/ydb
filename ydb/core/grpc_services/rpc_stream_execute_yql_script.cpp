@@ -176,7 +176,7 @@ private:
             .SetUseCancelAfter(false)
             .SetSyntax(req->syntax());
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>(
             NKikimrKqp::QUERY_ACTION_EXECUTE,
             NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING,
             SelfId(),
@@ -249,7 +249,7 @@ private:
             return ReplyFinishStream("Received TEvDataQueryStreamPart event while previous data query is in progress");
         }
 
-        DataQueryStreamContext = MakeHolder<TDataQueryStreamContext>(ev);
+        DataQueryStreamContext = std::make_unique<TDataQueryStreamContext>(ev);
 
         SendDataQueryResultPart(ctx);
     }
@@ -284,7 +284,7 @@ private:
             {"actorId", ev->Sender},
             {"queue", FlowControl_.QueueSize()});
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetFreeSpace(freeSpaceBytes);
 
         ctx.Send(ev->Sender, resp.Release());
@@ -306,7 +306,7 @@ private:
                 return SendDataQueryResultPart(ctx);
             } else {
                 // Send ack to gateway request handler actor
-                auto resp = MakeHolder<NKqp::TEvKqp::TEvDataQueryStreamPartAck>();
+                auto resp = std::make_unique<NKqp::TEvKqp::TEvDataQueryStreamPartAck>();
                 ctx.Send(GatewayRequestHandlerActorId_, resp.Release());
                 DataQueryStreamContext.Reset();
                 return;
@@ -326,7 +326,7 @@ private:
                     {"freeSpaceBytes", freeSpaceBytes},
                     {"actorId", GatewayRequestHandlerActorId_});
 
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo_, 0);
+                auto resp = std::make_unique<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo_, 0);
                 resp->Record.SetFreeSpace(freeSpaceBytes);
 
                 ctx.Send(GatewayRequestHandlerActorId_, resp.Release());
@@ -486,7 +486,7 @@ private:
     TActorId GatewayRequestHandlerActorId_;
     ui64 ResultsReceived_ = 0;
     // DataQuery
-    THolder<TDataQueryStreamContext> DataQueryStreamContext;
+    std::unique_ptr<TDataQueryStreamContext> DataQueryStreamContext;
     std::shared_ptr<std::atomic_bool> CancelationFlag;
 };
 

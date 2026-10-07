@@ -33,21 +33,21 @@
 namespace NYql {
 namespace NSpilling {
 
-THolder<ISession>  TTempStorageProxyImp::CreateSession() {
+std::unique_ptr<ISession>  TTempStorageProxyImp::CreateSession() {
     if (CurrSessId_ == std::numeric_limits<ui32>::max() ) {
         CurrSessId_ = 1;
     }
     ui32 sessId = CurrSessId_.fetch_add(1);
-    return MakeHolder<TSessionImp>(sessId, NsList_, StorageI_);
+    return std::make_unique<TSessionImp>(sessId, NsList_, StorageI_);
 
 }
 
-THolder<IObjectsIterator> TTempStorageProxyImp::CreateIterator( 
+std::unique_ptr<IObjectsIterator> TTempStorageProxyImp::CreateIterator( 
                                                                 const TMaybe<TString>& objNamespace,
                                                                 const TMaybe<TString>& objName, 
                                                                 bool onlyValid) {
 
-    return MakeHolder<TStorageIteratorImp>(objNamespace, objName, onlyValid);
+    return std::make_unique<TStorageIteratorImp>(objNamespace, objName, onlyValid);
 }
 
 TTempStorageExecutionPolicy TTempStorageProxyImp::ExecutionPolicy() {
@@ -118,7 +118,7 @@ void ProcessThreadPoolTasks(TAtomicSharedPtr<TNamespacesList> nsl, TAtomicShared
 }
 
 
-TTempStorageProxyImp::TTempStorageProxyImp(const TFileStorageConfig & config, const TTempStorageExecutionPolicy & policy, THolder<ISpillStorage>&& storage) :
+TTempStorageProxyImp::TTempStorageProxyImp(const TFileStorageConfig & config, const TTempStorageExecutionPolicy & policy, std::unique_ptr<ISpillStorage>&& storage) :
     StorageConfig_(config),
     Policy_(policy),
     StorageI_(std::move(storage))
@@ -170,10 +170,10 @@ TOperationResults TSessionImp::SetExecutionPolicy(const TSessionExecutionPolicy&
     return res;
 }
 
-std::pair<THolder<IStream>, TOperationResults> TSessionImp::OpenStream(const TString& objNamespace, const TString& streamName ) {
-    THolder<TStreamImp> sti = MakeHolder<TStreamImp>(objNamespace, streamName, NsList_, SessionId_);
+std::pair<std::unique_ptr<IStream>, TOperationResults> TSessionImp::OpenStream(const TString& objNamespace, const TString& streamName ) {
+    std::unique_ptr<TStreamImp> sti = std::make_unique<TStreamImp>(objNamespace, streamName, NsList_, SessionId_);
     TOperationResults res;
-    return std::make_pair<THolder<IStream>, TOperationResults> (std::move(sti), std::move(res)); 
+    return std::make_pair<std::unique_ptr<IStream>, TOperationResults> (std::move(sti), std::move(res)); 
 }
 
 
@@ -232,12 +232,12 @@ NThreading::TFuture<TOperationResults> TStreamImp::Close() {
 
 
 
-std::pair< THolder<ITempStorageProxy>, TOperationResults >  CreateFileStorageProxy(const TFileStorageConfig & config, const TTempStorageExecutionPolicy & policy ) {
+std::pair< std::unique_ptr<ITempStorageProxy>, TOperationResults >  CreateFileStorageProxy(const TFileStorageConfig & config, const TTempStorageExecutionPolicy & policy ) {
 
-    std::pair< THolder<ISpillStorage>, TOperationResults > sps = OpenFileStorageForSpilling(config);
-    THolder<TTempStorageProxyImp> sp = MakeHolder<TTempStorageProxyImp>(config, policy, std::move(sps.first));
+    std::pair< std::unique_ptr<ISpillStorage>, TOperationResults > sps = OpenFileStorageForSpilling(config);
+    std::unique_ptr<TTempStorageProxyImp> sp = std::make_unique<TTempStorageProxyImp>(config, policy, std::move(sps.first));
     TOperationResults res = sps.second;
-    return std::make_pair< THolder<ITempStorageProxy>, TOperationResults >( std::move(sp), std::move(res) );    
+    return std::make_pair< std::unique_ptr<ITempStorageProxy>, TOperationResults >( std::move(sp), std::move(res) );    
 }
 
 

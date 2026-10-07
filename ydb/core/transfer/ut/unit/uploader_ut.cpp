@@ -109,7 +109,7 @@ struct TUploaderEnv {
         Pump();
     }
 
-    THolder<NTransferPrivate::TEvWriteCompleeted> WaitCompleted() {
+    std::unique_ptr<NTransferPrivate::TEvWriteCompleeted> WaitCompleted() {
         Pump();
         auto ev = Runtime.GrabEdgeEvent<NTransferPrivate::TEvWriteCompleeted>(TDuration::Zero());
         UNIT_ASSERT(ev);

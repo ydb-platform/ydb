@@ -70,9 +70,9 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             return TSerializedTableRange(fromValues, true, toValues, false);
         }
 
-        static THolder<TKeyDesc> MakeKeyDesc(const TNavigate::TEntry& entry) {
+        static std::unique_ptr<TKeyDesc> MakeKeyDesc(const TNavigate::TEntry& entry) {
             const TVector<NScheme::TTypeInfo> keyColumnTypes = MakeKeyColumnTypes(entry);
-            return MakeHolder<TKeyDesc>(
+            return std::make_unique<TKeyDesc>(
                 entry.TableId,
                 GetFullRange(keyColumnTypes.size()).ToTableRange(),
                 TKeyDesc::ERowOperation::Erase,
@@ -92,11 +92,11 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             return KeyMap;
         }
 
-        THolder<TKeyDesc> TakeKeyDesc() {
+        std::unique_ptr<TKeyDesc> TakeKeyDesc() {
             return std::move(KeyDesc);
         }
 
-        void SetKeyDesc(THolder<TKeyDesc> keyDesc) {
+        void SetKeyDesc(std::unique_ptr<TKeyDesc> keyDesc) {
             KeyDesc = std::move(keyDesc);
         }
 
@@ -115,7 +115,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
     private:
         const TKeyMap KeyMap;
-        THolder<TKeyDesc> KeyDesc;
+        std::unique_ptr<TKeyDesc> KeyDesc;
 
     }; // TTableInfo
 
@@ -154,7 +154,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 {"error", error});
         }
 
-        auto response = MakeHolder<TEvDataShard::TEvEraseRowsResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvEraseRowsResponse>();
         auto& record = response->Record;
         record.SetStatus(status);
         record.SetErrorDescription(error);
@@ -288,7 +288,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 {"txId", TxId},
                 {"shard", shardId});
 
-            auto cancel = MakeHolder<TEvDataShard::TEvCancelTransactionProposal>(TxId);
+            auto cancel = std::make_unique<TEvDataShard::TEvCancelTransactionProposal>(TxId);
             Send(LeaderPipeCache, new TEvPipeCache::TEvForward(cancel.Release(), shardId, false));
         }
     }
@@ -329,7 +329,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             {"selfId", SelfId()},
             {"txId", TxId});
 
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->DatabaseName = DatabaseName;
         request->ResultSet.emplace_back(MakeNavigateEntry(MainTableId));
         for (const auto& [tableId, _] : Indexes) {
@@ -487,7 +487,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
         Y_ENSURE(!TableInfos.empty());
 
-        auto request = MakeHolder<TResolve>();
+        auto request = std::make_unique<TResolve>();
         request->DatabaseName = DatabaseName;
 
         for (auto& [_, info] : TableInfos) {
@@ -741,7 +741,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                     {"dependents", tx.DependentsSize()},
                     {"dependencies", tx.DependenciesSize()});
 
-                auto propose = MakeHolder<TEvDataShard::TEvProposeTransaction>(
+                auto propose = std::make_unique<TEvDataShard::TEvProposeTransaction>(
                     NKikimrTxDataShard::TX_KIND_DISTRIBUTED_ERASE, SelfId(), TxId, tx.SerializeAsString()
                 );
 
@@ -902,7 +902,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             {"minStep", AggrMinStep},
             {"maxStep", AggrMaxStep});
 
-        auto propose = MakeHolder<TEvTxProxy::TEvProposeTransaction>(
+        auto propose = std::make_unique<TEvTxProxy::TEvProposeTransaction>(
             SelectedCoordinator, TxId, 0, AggrMinStep, AggrMaxStep);
 
         auto& affectedSet = *propose->Record.MutableTransaction()->MutableAffectedSet();

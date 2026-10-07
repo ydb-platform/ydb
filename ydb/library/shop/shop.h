@@ -108,7 +108,7 @@ class TMachine {
 private:
     TShop* Shop;
     TString Name;
-    THolder<IMonCounters> Counters;
+    std::unique_ptr<IMonCounters> Counters;
 public:
     explicit TMachine(TShop* shop);
     virtual ~TMachine() {}

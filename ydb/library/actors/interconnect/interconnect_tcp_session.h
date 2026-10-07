@@ -340,7 +340,7 @@ namespace NActors {
         };
         TXdcCatchStream XdcCatchStream;
 
-        THolder<TEvUpdateFromInputSession> UpdateFromInputSession;
+        std::unique_ptr<TEvUpdateFromInputSession> UpdateFromInputSession;
 
         ui64 ConfirmedByInput;
 
@@ -590,7 +590,7 @@ namespace NActors {
 
         void OnDisconnect(TEvSocketDisconnect::TPtr& ev);
 
-        THolder<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) override;
+        std::unique_ptr<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) override;
         void SetNewConnection(TEvHandshakeDone::TPtr& ev) override;
 
         TEvRam* RamInQueue = nullptr;

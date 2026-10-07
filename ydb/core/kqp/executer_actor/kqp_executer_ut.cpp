@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
             }
             if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvStreamData::EventType && ev->Recipient == streamSender) {
                 auto& record = ev->Get<TEvKqpExecuter::TEvStreamData>()->Record;
-                auto resp = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                auto resp = std::make_unique<TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
 
                 executerId = ev->Sender;
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
         resuming = true;
         // StreamExecuteScanQuery historically resumes with ChannelId=0 while result channel ids start from 1.
-        auto resumeAck = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(0, 0);
+        auto resumeAck = std::make_unique<TEvKqpExecuter::TEvStreamDataAck>(0, 0);
         resumeAck->Record.SetEnough(false);
         resumeAck->Record.SetFreeSpace(100_MB);
         runtime.Send(new IEventHandle(executerId, sender, resumeAck.Release()));

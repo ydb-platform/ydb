@@ -95,7 +95,7 @@ void TIamAuthFactory::Initialize(
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData.UserPoolId)));
 }
 
-NActors::IActor* TIamAuthFactory::CreateAuthActor(const NActors::TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const
+NActors::IActor* TIamAuthFactory::CreateAuthActor(const NActors::TActorId sender, THttpRequestContext& context, std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4>&& signature) const
 {
     return CreateIamAuthActor(sender, context, std::move(signature));
 }

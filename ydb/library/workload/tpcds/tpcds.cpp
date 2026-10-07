@@ -38,8 +38,8 @@ TWorkloadGeneratorBase::TSpecialDataTypes TTpcdsWorkloadGenerator::GetSpecialDat
     };
 }
 
-THolder<IWorkloadQueryGenerator> TTpcdsWorkloadParams::CreateGenerator() const {
-    return MakeHolder<TTpcdsWorkloadGenerator>(*this);
+std::unique_ptr<IWorkloadQueryGenerator> TTpcdsWorkloadParams::CreateGenerator() const {
+    return std::make_unique<TTpcdsWorkloadGenerator>(*this);
 }
 
 TString TTpcdsWorkloadParams::GetWorkloadName() const {

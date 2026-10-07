@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TTopicWorkloadKeyedWriterProducerTests) {
         NUnifiedAgent::TClock Clock;
 
         TTopicWorkloadKeyedWriterParams CreateParams() {
-            auto log = std::make_shared<TLog>(THolder(new TStreamLogBackend(&LoggedData)));
+            auto log = std::make_shared<TLog>(std::unique_ptr<TStreamLogBackend>(new TStreamLogBackend(&LoggedData)));
             TTopicWorkloadWriterParams base{
                 .TotalSec = 60,
                 .WarmupSec = 0,

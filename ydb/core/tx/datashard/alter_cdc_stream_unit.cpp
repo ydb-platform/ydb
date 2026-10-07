@@ -95,8 +95,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateAlterCdcStreamUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TAlterCdcStreamUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateAlterCdcStreamUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TAlterCdcStreamUnit>(new TAlterCdcStreamUnit(self, pipeline));
 }
 
 } // namespace NDataShard

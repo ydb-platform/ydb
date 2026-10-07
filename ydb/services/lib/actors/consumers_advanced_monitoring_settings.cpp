@@ -52,7 +52,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (!json.IsMap()) {
             return std::unexpected("Attribute advanced_monitoring is not a map");
         }
-        THolder<TImpl> result = MakeHolder<TImpl>();
+        std::unique_ptr<TImpl> result = std::make_unique<TImpl>();
         for (const auto& [consumerName, consumerSettings] : json.GetMap()) {
             TCustomMonitoringSettings customMonitoringSettings;
             if (const auto& v = consumerSettings["metrics_level"]; v != NJson::TJsonValue::UNDEFINED) {

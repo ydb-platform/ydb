@@ -382,7 +382,7 @@ void TKafkaSaslAuthActor::SendDescribeRequest() {
     entry.SyncVersion = false;
     schemeCacheRequest->ResultSet.emplace_back(entry);
     schemeCacheRequest->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
-    Send(NKikimr::MakeSchemeCacheID(), MakeHolder<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
+    Send(NKikimr::MakeSchemeCacheID(), std::make_unique<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
 }
 
 void TKafkaSaslAuthActor::GetPathByPathId(const TPathId& pathId) {
@@ -395,7 +395,7 @@ void TKafkaSaslAuthActor::GetPathByPathId(const TPathId& pathId) {
     entry.RedirectRequired = false;
     schemeCacheRequest->ResultSet.emplace_back(entry);
     schemeCacheRequest->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
-    Send(NKikimr::MakeSchemeCacheID(), MakeHolder<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
+    Send(NKikimr::MakeSchemeCacheID(), std::make_unique<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
 }
 
 void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {

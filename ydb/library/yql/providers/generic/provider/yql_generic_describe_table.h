@@ -5,6 +5,6 @@
 
 namespace NYql {
 
-THolder<IGraphTransformer> CreateGenericDescribeTableTransformer(TGenericState::TPtr state);
+std::unique_ptr<IGraphTransformer> CreateGenericDescribeTableTransformer(TGenericState::TPtr state);
 
 } // namespace NYql

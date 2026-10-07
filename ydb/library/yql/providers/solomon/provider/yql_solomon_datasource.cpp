@@ -192,12 +192,12 @@ public:
 private:
     TSolomonState::TPtr State_;
 
-    THolder<IGraphTransformer> ConfigurationTransformer_;
-    THolder<IGraphTransformer> IODiscoveryTransformer_;
-    THolder<IGraphTransformer> LoadMetaDataTransformer_;
-    THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
-    THolder<TExecTransformerBase> ExecutionTransformer_;
-    const THolder<IDqIntegration> DqIntegration_;
+    std::unique_ptr<IGraphTransformer> ConfigurationTransformer_;
+    std::unique_ptr<IGraphTransformer> IODiscoveryTransformer_;
+    std::unique_ptr<IGraphTransformer> LoadMetaDataTransformer_;
+    std::unique_ptr<TVisitorTransformerBase> TypeAnnotationTransformer_;
+    std::unique_ptr<TExecTransformerBase> ExecutionTransformer_;
+    const std::unique_ptr<IDqIntegration> DqIntegration_;
 };
 
 TIntrusivePtr<IDataProvider> CreateSolomonDataSource(TSolomonState::TPtr state) {

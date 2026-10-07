@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TComputeActorTest) {
     Y_UNIT_TEST_F(Empty, TChannelsTestFixture) { }
 
     Y_UNIT_TEST_F(ReceiveData, TChannelsTestFixture) {
-        auto ev = MakeHolder<TEvDqCompute::TEvChannelData>();
+        auto ev = std::make_unique<TEvDqCompute::TEvChannelData>();
         ActorSystem.Send(
             ChannelsId,
             EdgeActor,
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TComputeActorTest) {
 
         UNIT_ASSERT(!InputChannel->Peer.has_value());
 
-        ev = MakeHolder<TEvDqCompute::TEvChannelData>();
+        ev = std::make_unique<TEvDqCompute::TEvChannelData>();
         ev->Record.SetSeqNo(1);
 
         ActorSystem.Send(
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TComputeActorTest) {
 
     Y_UNIT_TEST_F(PollAckPoll, TChannelsTestFixture) {
         {
-            auto ev = MakeHolder<TEvDqCompute::TEvChannelData>();
+            auto ev = std::make_unique<TEvDqCompute::TEvChannelData>();
             ActorSystem.Send(
                 ChannelsId,
                 EdgeActor,
@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(TComputeActorTest) {
         UNIT_ASSERT(!InputChannel->Peer.has_value());
 
         {
-            auto ev = MakeHolder<TEvDqCompute::TEvChannelData>();
+            auto ev = std::make_unique<TEvDqCompute::TEvChannelData>();
             ev->Record.SetSeqNo(1);
 
             ActorSystem.Send(

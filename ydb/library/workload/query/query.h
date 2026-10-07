@@ -9,7 +9,7 @@ namespace NQuery {
 class TQueryWorkloadParams final : public TWorkloadBaseParams {
 public:
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
-    THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
+    std::unique_ptr<IWorkloadQueryGenerator> CreateGenerator() const override;
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
     TString GetWorkloadName() const override;
     TString GetDescription(ECommandType commandType, int workloadType) const override;

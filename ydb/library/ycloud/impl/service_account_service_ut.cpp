@@ -25,8 +25,8 @@ public:
         NKikimrProto::TAuthConfig authConfig;
         auto settings = TServerSettings(GrpcPort, authConfig);
         settings.SetDomainName("Root");
-        Server = MakeHolder<TServer>(settings);
-        Client = MakeHolder<TClient>(settings);
+        Server = std::make_unique<TServer>(settings);
+        Client = std::make_unique<TClient>(settings);
         Client->InitRootScheme();
 
         Runtime = Server->GetRuntime();
@@ -49,8 +49,8 @@ public:
 public:
     ui16 GrpcPort;
     TPortManager PortManager;
-    THolder<TServer> Server;
-    THolder<TClient> Client;
+    std::unique_ptr<TServer> Server;
+    std::unique_ptr<TClient> Client;
     TTestActorRuntime* Runtime;
     TServiceAccountServiceMock ServiceAccountServiceMock;
     IActor* ServiceAccountService;

@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(ActorSystemPerformance) {
         std::unique_ptr<TActorSystem> ActorSystem;
     public:
         TQueueTestRuntime() {
-            auto setup = MakeHolder<TActorSystemSetup>();
+            auto setup = std::make_unique<TActorSystemSetup>();
             setup->NodeId = 1;
             setup->ExecutorsCount = 2;
             setup->Executors.Reset(new TAutoPtr<IExecutorPool>[2]);
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(ActorSystemPerformance) {
     };
 
     Y_UNIT_TEST(PerfTest) {
-        THolder<TQueueTestRuntime> runtime(new TQueueTestRuntime);
+        std::unique_ptr<TQueueTestRuntime> runtime(new TQueueTestRuntime);
         runtime->Start();
         TDolbilkaOld* dOld = new TDolbilkaOld;
         runtime->Register(dOld);

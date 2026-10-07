@@ -479,7 +479,7 @@ public:
         }
     }
 
-    THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) const override {
+    std::unique_ptr<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown) const override {
         return NKqp::Navigate(*GetRuntime(), GetRuntime()->AllocateEdgeActor(), CanonizePath({Settings_.DomainName_, path}), operation);
     }
 

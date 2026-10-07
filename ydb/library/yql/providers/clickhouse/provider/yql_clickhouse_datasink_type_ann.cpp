@@ -34,8 +34,8 @@ private:
     TClickHouseState::TPtr State_;
 };
 
-THolder<TVisitorTransformerBase> CreateClickHouseDataSinkTypeAnnotationTransformer(TClickHouseState::TPtr state) {
-    return MakeHolder<TClickHouseDataSinkTypeAnnotationTransformer>(state);
+std::unique_ptr<TVisitorTransformerBase> CreateClickHouseDataSinkTypeAnnotationTransformer(TClickHouseState::TPtr state) {
+    return std::make_unique<TClickHouseDataSinkTypeAnnotationTransformer>(state);
 }
 
 } // namespace NYql

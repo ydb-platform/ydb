@@ -65,7 +65,7 @@ void TSqsProxyService::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
 }
 
 void TSqsProxyService::HandleSqsRequest(TSqsEvents::TEvSqsRequest::TPtr& ev) {
-    auto replier = MakeHolder<TReplierToSenderActorCallback>(ev);
+    auto replier = std::make_unique<TReplierToSenderActorCallback>(ev);
     const auto& request = replier->Request->Get()->Record;
     RLOG_SQS_REQ_DEBUG(request.GetRequestId(), "Received Sqs Request: " << SecureShortUtf8DebugString(request));
     Register(CreateActionActor(request, std::move(replier)));
@@ -320,7 +320,7 @@ TSqsProxyService::TNodeInfoRef TSqsProxyService::GetNodeInfo(ui32 nodeId) {
 
 void TSqsProxyService::SendProxyError(TProxyRequestInfoRef request, TSqsEvents::TEvProxySqsResponse::EProxyStatus proxyStatus) {
     RLOG_SQS_REQ_TRACE(request->RequestId, "Sending proxy status " << proxyStatus << " to proxy actor");
-    THolder<TSqsEvents::TEvProxySqsResponse> answer = MakeHolder<TSqsEvents::TEvProxySqsResponse>();
+    std::unique_ptr<TSqsEvents::TEvProxySqsResponse> answer = std::make_unique<TSqsEvents::TEvProxySqsResponse>();
     answer->ProxyStatus = proxyStatus;
     Send(request->ProxyActorId, std::move(answer));
 }

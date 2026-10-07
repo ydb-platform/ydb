@@ -40,16 +40,16 @@ TString Compress(const TString& sourceData, Ydb::PersQueue::V1::Codec codec = Yd
 
     TString compressed;
     TStringOutput out(compressed);
-    THolder<IOutputStream> coder;
+    std::unique_ptr<IOutputStream> coder;
     switch (codec) {
     case Ydb::PersQueue::V1::CODEC_GZIP:
-        coder = MakeHolder<TZLibCompress>(&out, ZLib::GZip);
+        coder = std::make_unique<TZLibCompress>(&out, ZLib::GZip);
         break;
     case Ydb::PersQueue::V1::CODEC_LZOP:
         throw yexception() << "LZO codec is disabled";
         break;
     case Ydb::PersQueue::V1::CODEC_ZSTD:
-        coder = MakeHolder<TZstdCompress>(&out);
+        coder = std::make_unique<TZstdCompress>(&out);
         break;
     default:
         UNIT_ASSERT(false);

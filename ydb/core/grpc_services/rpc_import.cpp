@@ -88,7 +88,7 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     IEventBase* MakeRequest() override {
         const auto& request = *(this->GetProtoRequest());
 
-        auto ev = MakeHolder<TEvImport::TEvCreateImportRequest>();
+        auto ev = std::make_unique<TEvImport::TEvCreateImportRequest>();
         ev->Record.SetTxId(this->TxId);
         ev->Record.SetDatabaseName(this->GetDatabaseName());
         if (this->UserToken) {

@@ -125,7 +125,7 @@ private:
         LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
             << " sends event for session creation to proxy: " << kqpProxy.ToString());
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
         ev->Record.MutableRequest()->SetDatabase(Database);
         Send(kqpProxy, ev.Release());
     }
@@ -138,7 +138,7 @@ private:
         LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
             << " sends session close query to proxy: " << kqpProxy);
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(Session);
         ctx.Send(kqpProxy, ev.Release());
     }

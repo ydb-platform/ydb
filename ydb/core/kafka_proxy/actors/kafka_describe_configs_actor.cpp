@@ -52,7 +52,7 @@ TKafkaDescribeTopicActor::TKafkaDescribeTopicActor(
 };
 
 void TKafkaDescribeTopicActor::SendResult(const EKafkaErrors status, const TString& message, const google::protobuf::Message& result) {
-    THolder<TEvKafka::TEvTopicDescribeResponse> response(new TEvKafka::TEvTopicDescribeResponse());
+    std::unique_ptr<TEvKafka::TEvTopicDescribeResponse> response(new TEvKafka::TEvTopicDescribeResponse());
     response->Status = status;
     response->TopicPath = TopicPath;
     response->Message = message;
@@ -121,7 +121,7 @@ void TKafkaDescribeConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
         }
         requestedTopics.insert(topicName);
         if (resource.ResourceType != TOPIC_RESOURCE_TYPE) {
-            auto result = MakeHolder<TEvKafka::TEvTopicDescribeResponse>();
+            auto result = std::make_unique<TEvKafka::TEvTopicDescribeResponse>();
             result->TopicPath = topicName;
             result->Status = EKafkaErrors::INVALID_REQUEST;
             result->Message = "Only TOPIC resource type is supported.";

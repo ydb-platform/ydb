@@ -75,10 +75,10 @@ void TReceiveSnapshotCleanupUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateReceiveSnapshotCleanupUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateReceiveSnapshotCleanupUnit(TDataShard &dataShard,
                                                          TPipeline &pipeline)
 {
-    return MakeHolder<TReceiveSnapshotCleanupUnit>(dataShard, pipeline);
+    return std::make_unique<TReceiveSnapshotCleanupUnit>(dataShard, pipeline);
 }
 
 } // namespace NDataShard

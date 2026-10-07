@@ -136,9 +136,9 @@ public:
 };
 
 struct TInterconnectTest : public TPerfTest {
-    THolder<TActorSystemSetup> Setup;
+    std::unique_ptr<TActorSystemSetup> Setup;
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
-    THolder<TActorSystem> ActorSystem;
+    std::unique_ptr<TActorSystem> ActorSystem;
     TAppData AppData;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     yexception LastException;
@@ -297,9 +297,9 @@ struct TInterconnectTest : public TPerfTest {
 // listens for an incoming connection from the client. Does not run any load
 // itself; it only replies to messages forwarded through TLoadResponderActor.
 struct TInterconnectServer : public TPerfTest {
-    THolder<TActorSystemSetup> Setup;
+    std::unique_ptr<TActorSystemSetup> Setup;
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
-    THolder<TActorSystem> ActorSystem;
+    std::unique_ptr<TActorSystem> ActorSystem;
     TAppData AppData;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     volatile bool IsLastExceptionSet = false;
@@ -410,9 +410,9 @@ struct TInterconnectServer : public TPerfTest {
 // server's NodeId (see ServerPeers) so that traffic is routed over the real
 // network connection rather than looped back locally.
 struct TInterconnectClient : public TPerfTest {
-    THolder<TActorSystemSetup> Setup;
+    std::unique_ptr<TActorSystemSetup> Setup;
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
-    THolder<TActorSystem> ActorSystem;
+    std::unique_ptr<TActorSystem> ActorSystem;
     TAppData AppData;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     yexception LastException;

@@ -48,7 +48,7 @@ private:
     bool Finished;
 
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
-    THolder<NKikimr::TKeyDesc> KeyRange;
+    std::unique_ptr<NKikimr::TKeyDesc> KeyRange;
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
 
 public:

@@ -14,8 +14,8 @@ void TTestTopicDescription::SerializeTo(NKikimrSchemeOp::TPersQueueGroupDescript
     p.SetLifetimeSeconds(3600);
 }
 
-THolder<NKikimrSchemeOp::TPersQueueGroupDescription> MakeTopicDescription(const TTestTopicDescription& desc) {
-    auto result = MakeHolder<NKikimrSchemeOp::TPersQueueGroupDescription>();
+std::unique_ptr<NKikimrSchemeOp::TPersQueueGroupDescription> MakeTopicDescription(const TTestTopicDescription& desc) {
+    auto result = std::make_unique<NKikimrSchemeOp::TPersQueueGroupDescription>();
     desc.SerializeTo(*result);
     return result;
 }

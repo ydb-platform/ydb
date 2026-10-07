@@ -121,7 +121,7 @@ private:
 template<class TDriver>
 void BM_PingActor(benchmark::State& state, size_t budget = TAsyncFrameCache::DefaultSizeBytes) {
 
-    THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->RegisterSubSystem(std::make_unique<TAsyncFrameCache>(budget));
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
@@ -232,7 +232,7 @@ private:
 template<class TDriver>
 void BM_YieldActor(benchmark::State& state, size_t budget = TAsyncFrameCache::DefaultSizeBytes) {
 
-    THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->RegisterSubSystem(std::make_unique<TAsyncFrameCache>(budget));
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
@@ -308,7 +308,7 @@ private:
 };
 
 void BM_CallAsync(benchmark::State& state) {
-    THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->RegisterSubSystem(std::make_unique<TAsyncFrameCache>());
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
@@ -491,7 +491,7 @@ private:
 };
 
 void BM_RescheduleRunnableAsync(benchmark::State& state) {
-    THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->RegisterSubSystem(std::make_unique<TAsyncFrameCache>());
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;

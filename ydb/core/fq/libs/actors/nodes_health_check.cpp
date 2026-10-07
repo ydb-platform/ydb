@@ -42,7 +42,7 @@ public:
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         YDB_LOG_ERROR("TNodesHealthCheckActor::OnUndelivered");
-        auto res = MakeHolder<TEvents::TEvNodesHealthCheckResponse>();
+        auto res = std::make_unique<TEvents::TEvNodesHealthCheckResponse>();
         res->Status = Ydb::StatusIds::GENERIC_ERROR;
         res->Issues.AddIssue("UNDELIVERED");
         Send(ev->Sender, res.Release());
@@ -60,7 +60,7 @@ public:
         YDB_LOG_ERROR("Failed with",
             {"code", codeStr},
             {"details", Issues});
-        auto res = MakeHolder<TEvents::TEvNodesHealthCheckResponse>();
+        auto res = std::make_unique<TEvents::TEvNodesHealthCheckResponse>();
         res->Status = reqStatus;
         res->Issues.AddIssues(Issues);
         Send(Sender, res.Release());
@@ -85,7 +85,7 @@ private:
     )
 
     void HandleResponse(NFq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse::TPtr& ev) {
-        auto res = MakeHolder<TEvents::TEvNodesHealthCheckResponse>();
+        auto res = std::make_unique<TEvents::TEvNodesHealthCheckResponse>();
         try {
             const auto& issues = ev->Get()->Issues;
             if (issues) {

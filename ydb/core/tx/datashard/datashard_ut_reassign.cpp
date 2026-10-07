@@ -39,8 +39,8 @@ Y_UNIT_TEST_SUITE(DataShardReassign) {
         bool addYellowFlag = false;
         bool captureReassign = true;
         bool captureCheckResult = true;
-        TVector<THolder<IEventHandle>> capturedReassign;
-        TVector<THolder<IEventHandle>> capturedCheckResult;
+        TVector<std::unique_ptr<IEventHandle>> capturedReassign;
+        TVector<std::unique_ptr<IEventHandle>> capturedCheckResult;
         auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::TEvPutResult::EventType: {

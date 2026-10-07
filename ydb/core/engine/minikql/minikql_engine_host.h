@@ -56,7 +56,7 @@ public:
     bool IsValidKey(TKeyDesc& key) const override;
     ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const override;
     ui64 CalculateResultSize(const TKeyDesc& key) const override;
-    void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) override;
+    void PinPages(const TVector<std::unique_ptr<TKeyDesc>>& keys, ui64 pageFaultCount) override;
 
     NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
         TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,

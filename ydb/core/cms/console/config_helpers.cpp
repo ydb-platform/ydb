@@ -196,7 +196,7 @@ public:
             OpenPipe(ctx);
 
         if (Action == EAction::REPLACE_SUBSCRIPTION) {
-            auto request = MakeHolder<TEvConsole::TEvReplaceConfigSubscriptionsRequest>();
+            auto request = std::make_unique<TEvConsole::TEvReplaceConfigSubscriptionsRequest>();
             BuildSubscription(*request->Record.MutableSubscription());
 
             YDB_LOG_TRACE_CTX(ctx, "Send",
@@ -204,7 +204,7 @@ public:
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
         } else if (Action == EAction::ADD_SUBSCRIPTION) {
-            auto request = MakeHolder<TEvConsole::TEvAddConfigSubscriptionRequest>();
+            auto request = std::make_unique<TEvConsole::TEvAddConfigSubscriptionRequest>();
             BuildSubscription(*request->Record.MutableSubscription());
 
             YDB_LOG_TRACE_CTX(ctx, "Send",
@@ -212,7 +212,7 @@ public:
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
         } else if (Action == EAction::REMOVE_SUBSCRIPTION) {
-            auto request = MakeHolder<TEvConsole::TEvRemoveConfigSubscriptionRequest>();
+            auto request = std::make_unique<TEvConsole::TEvRemoveConfigSubscriptionRequest>();
             request->Record.SetSubscriptionId(SubscriptionId);
 
             YDB_LOG_TRACE_CTX(ctx, "Send",
@@ -220,7 +220,7 @@ public:
 
             NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
         } else if (Action == EAction::GET_NODE_CONFIG) {
-            auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
+            auto request = std::make_unique<TEvConsole::TEvGetNodeConfigRequest>();
             request->Record.MutableNode()->SetNodeId(SelfId().NodeId());
             request->Record.MutableNode()->SetHost(FQDNHostName());
             request->Record.MutableNode()->SetTenant(Tenant);

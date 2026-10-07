@@ -411,7 +411,7 @@ public:
     static constexpr ui64 Blocked = 22;
     static constexpr ui64 Release = 23;
 
-    TWorkerRemovalGate(THolder<IActor> actor, TWorkerId worker, TActorId notify)
+    TWorkerRemovalGate(std::unique_ptr<IActor> actor, TWorkerId worker, TActorId notify)
         : TDecorator(std::move(actor))
         , Worker(worker)
         , Notify(notify)
@@ -460,7 +460,7 @@ TActorId InstallWorkerRemovalGate(TTestEnv& env, ui64 controllerId, const TWorke
     // controller-to-controller events with TTestEnv's real actor threads.
     runtime.Register(new TFunctorActor([=, notify = env.GetSender()] {
         const auto& ctx = TActivationContext::AsActorContext();
-        THolder<IActor> actor(mailbox->DetachActor(controller.LocalId()));
+        std::unique_ptr<IActor> actor(mailbox->DetachActor(controller.LocalId()));
         UNIT_ASSERT(actor);
         auto* gate = new TWorkerRemovalGate(std::move(actor), worker, notify);
         DoActorInit(ctx.ActorSystem(), gate, controller, {});
@@ -554,7 +554,7 @@ TReplicationTestInfo StartReplication(
 }
 
 void SendHeartbeat(TTestEnv& env, ui64 controllerId, const TWorkerId& worker, const TRowVersion& version) {
-    auto heartbeat = MakeHolder<TEvService::TEvHeartbeat>();
+    auto heartbeat = std::make_unique<TEvService::TEvHeartbeat>();
     worker.Serialize(*heartbeat->Record.MutableWorker());
     version.ToProto(heartbeat->Record.MutableVersion());
     env.SendAsync(controllerId, heartbeat.Release());
@@ -566,7 +566,7 @@ void SendWorkerStopped(TTestEnv& env, ui64 controllerId, const TWorkerId& worker
 }
 
 void AttachWorkers(TTestEnv& env, ui64 controllerId, std::initializer_list<TWorkerId> workers) {
-    auto status = MakeHolder<TEvService::TEvStatus>();
+    auto status = std::make_unique<TEvService::TEvStatus>();
     for (const auto& id : workers) {
         id.Serialize(*status->Record.AddWorkers());
     }
@@ -672,7 +672,7 @@ struct TIndexBuildTestEnv: public TTestEnv {
             .GetTable().GetTableIndexes(0).GetState(), NKikimrSchemeOp::EIndexStateWriteOnly);
     }
 
-    void AlterReplication(THolder<TEvController::TEvAlterReplication> request) {
+    void AlterReplication(std::unique_ptr<TEvController::TEvAlterReplication> request) {
         const auto result = Send<TEvController::TEvAlterReplicationResult>(Info.ControllerId, std::move(request));
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
     }
@@ -684,7 +684,7 @@ struct TIndexBuildTestEnv: public TTestEnv {
     }
 
     void ReportProgress(const TWorkerId& worker, ui64 offset, const TRowVersion& heartbeat) {
-        auto event = MakeHolder<TEvService::TEvIndexBuildProgress>();
+        auto event = std::make_unique<TEvService::TEvIndexBuildProgress>();
         worker.Serialize(*event->Record.MutableWorker());
         auto& progress = *event->Record.MutableProgress();
         progress.SetOffset(offset);
@@ -697,7 +697,7 @@ struct TIndexBuildTestEnv: public TTestEnv {
 
 TWorkerId RegisterSecondWorkerAndCompleteSet(TTestEnv& env, ui64 controllerId, const TWorkerId& first) {
     const TWorkerId second(first.ReplicationId(), first.TargetId(), first.WorkerId() + 1);
-    auto run = MakeHolder<TEvService::TEvRunWorker>();
+    auto run = std::make_unique<TEvService::TEvRunWorker>();
     second.Serialize(*run->Record.MutableWorker());
     env.SendAsync(controllerId, run.Release());
     env.SendAsync(controllerId, new TEvPrivate::TEvCompleteWorkerSet(first.ReplicationId(), first.TargetId()));
@@ -706,15 +706,15 @@ TWorkerId RegisterSecondWorkerAndCompleteSet(TTestEnv& env, ui64 controllerId, c
 }
 
 TEvController::TEvDescribeReplicationResult::TPtr DescribeReplication(TTestEnv& env, const TReplicationTestInfo& info) {
-    auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+    auto request = std::make_unique<TEvController::TEvDescribeReplication>();
     info.PathId.ToProto(request->Record.MutablePathId());
     return env.Send<TEvController::TEvDescribeReplicationResult>(info.ControllerId, std::move(request));
 }
 
-THolder<TEvController::TEvAlterReplication> MakeAlterReplicationRequest(
+std::unique_ptr<TEvController::TEvAlterReplication> MakeAlterReplicationRequest(
         const TReplicationTestInfo& info, ui64 txId, bool sourceUnavailable = false)
 {
-    auto request = MakeHolder<TEvController::TEvAlterReplication>();
+    auto request = std::make_unique<TEvController::TEvAlterReplication>();
     info.PathId.ToProto(request->Record.MutablePathId());
     request->Record.MutableConfig()->CopyFrom(info.Config);
     auto& connection = *request->Record.MutableConfig()->MutableSrcConnectionParams();
@@ -727,7 +727,7 @@ THolder<TEvController::TEvAlterReplication> MakeAlterReplicationRequest(
     return request;
 }
 
-THolder<TEvController::TEvAlterReplication> MakeDoneRequest(const TReplicationTestInfo& info, ui64 txId) {
+std::unique_ptr<TEvController::TEvAlterReplication> MakeDoneRequest(const TReplicationTestInfo& info, ui64 txId) {
     auto request = MakeAlterReplicationRequest(info, txId, true);
     request->Record.MutableSwitchState()->MutableDone()->SetFailoverMode(
         NKikimrReplication::TReplicationState::TDone::FAILOVER_MODE_FORCE);
@@ -833,7 +833,7 @@ struct TSchemaAltererTestEnv {
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->Ev->Type(),
             NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType);
 
-        auto description = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+        auto description = std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
         description->Record.SetStatus(NKikimrScheme::StatusSuccess);
         description->Record.SetPath("/Root/replica1");
         auto* table = description->Record.MutablePathDescription()->MutableTable();
@@ -972,7 +972,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         const auto targetId = pending.TargetId;
         const auto dstPathId = pending.DstPathId;
 
-        auto request = MakeHolder<TEvController::TEvAlterReplication>();
+        auto request = std::make_unique<TEvController::TEvAlterReplication>();
         info.PathId.ToProto(request->Record.MutablePathId());
         request->Record.MutableConfig()->CopyFrom(info.Config);
         request->Record.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("root@builtin");
@@ -997,7 +997,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         const auto pending = StartPendingAttachment(env);
         const auto& info = pending.Info;
 
-        auto request = MakeHolder<TEvController::TEvAlterReplication>();
+        auto request = std::make_unique<TEvController::TEvAlterReplication>();
         info.PathId.ToProto(request->Record.MutablePathId());
         request->Record.MutableConfig()->CopyFrom(info.Config);
         auto* connection = request->Record.MutableConfig()->MutableSrcConnectionParams();
@@ -1023,7 +1023,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         const auto pending = StartPendingAttachment(env);
         const auto& info = pending.Info;
 
-        auto request = MakeHolder<TEvController::TEvDropReplication>();
+        auto request = std::make_unique<TEvController::TEvDropReplication>();
         info.PathId.ToProto(request->Record.MutablePathId());
         request->Record.MutableOperationId()->SetTxId(102);
         request->Record.SetCascade(true);
@@ -1071,7 +1071,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())
             ->Get()->Tag, TAttachAllocationGate::ReadyTag());
 
-        auto resume = MakeHolder<TEvController::TEvAlterReplication>();
+        auto resume = std::make_unique<TEvController::TEvAlterReplication>();
         info.PathId.ToProto(resume->Record.MutablePathId());
         resume->Record.MutableConfig()->CopyFrom(info.Config);
         resume->Record.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("root@builtin");
@@ -1085,7 +1085,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
 
         runtime.RegisterService(MakeTxProxyID(), txProxy);
 
-        auto drop = MakeHolder<TEvController::TEvDropReplication>();
+        auto drop = std::make_unique<TEvController::TEvDropReplication>();
         info.PathId.ToProto(drop->Record.MutablePathId());
         drop->Record.MutableOperationId()->SetTxId(104);
         drop->Record.SetCascade(true);
@@ -2019,7 +2019,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(release->Get()->Record.GetWorker()), base);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), 0);
 
-        auto failure = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>();
+        auto failure = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>();
         failure->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
 
         runtime.Send(new IEventHandle(commit->Sender, env.GetSender(), failure.Release(), 0, writeTxId));
@@ -2029,7 +2029,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         UNIT_ASSERT_VALUES_EQUAL(retried.TablesSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(retried.GetTables(0).GetTablePath(), "/Root/replica1");
 
-        auto success = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>();
+        auto success = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>();
         success->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
 
         runtime.Send(new IEventHandle(retry->Sender, env.GetSender(), success.Release(), 0, writeTxId));
@@ -2419,7 +2419,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
             TSchemaDescribeGate::Blocked);
 
-        auto success = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>();
+        auto success = std::make_unique<TEvTxUserProxy::TEvProposeTransactionStatus>();
         success->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
 
         runtime.Send(new IEventHandle(commit->Sender, env.GetSender(), success.Release(), 0, writeTxId));
@@ -3060,7 +3060,7 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         // worker and acknowledges STATUS_RUNNING. That acknowledgement must
         // receive the durable recovery release, not only the initial status
         // worker list.
-        auto running = MakeHolder<TEvService::TEvWorkerStatus>(
+        auto running = std::make_unique<TEvService::TEvWorkerStatus>(
             first, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
 
         env.SendAsync(controllerId, running.Release());
@@ -3158,7 +3158,7 @@ Y_UNIT_TEST_SUITE(IndexBuild) {
 
         const auto worker = env.StartIndexBuild();
         const auto request = [&](TRowVersion version) {
-            auto event = MakeHolder<TEvService::TEvGetTxId>(TVector<TRowVersion>{version});
+            auto event = std::make_unique<TEvService::TEvGetTxId>(TVector<TRowVersion>{version});
             worker.Serialize(*event->Record.MutableWorker());
             return env.Send<TEvService::TEvTxIdResult>(info.ControllerId, std::move(event));
         };
@@ -3465,7 +3465,7 @@ Y_UNIT_TEST_SUITE(IndexBuild) {
         execute("DELETE FROM `/Root/table1` WHERE key = 2;");
 
         const auto assertCompactionPolicy = [&] {
-            auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(
+            auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(
                 "/Root/replica1/by_value/indexImplTable");
             request->Record.MutableOptions()->SetShowPrivateTable(true);
             const auto response = env.Send<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(

@@ -66,7 +66,7 @@ NKikimrSchemeOp::TModifyScheme MoveTableTask(NKikimr::NSchemeShard::TPath& src, 
 NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst);
 NKikimrSchemeOp::TModifyScheme MoveLocalIndexTask(const TString& tablePath, const TString& srcIndexPath, const TString& dstIndexName);
 
-THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss);
+std::unique_ptr<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss);
 
 void AbortUnsafeDropOperation(const TOperationId& operationId, const TTxId& txId, TOperationContext& context);
 
@@ -112,7 +112,7 @@ class TCreateParts: public TSubOperationState {
 
     virtual const char* Name() const override final { return "TCreateParts"; }
 
-    THolder<TEvHive::TEvAdoptTablet> AdoptRequest(TShardIdx shardIdx, TOperationContext& context);
+    std::unique_ptr<TEvHive::TEvAdoptTablet> AdoptRequest(TShardIdx shardIdx, TOperationContext& context);
 
 public:
     explicit TCreateParts(const TOperationId& id);

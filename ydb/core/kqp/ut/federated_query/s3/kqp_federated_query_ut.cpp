@@ -3215,7 +3215,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             req.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             req.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
 
-            auto ev = MakeHolder<TEvKqp::TEvScriptRequest>();
+            auto ev = std::make_unique<TEvKqp::TEvScriptRequest>();
             ev->Record = queryProto;
             ev->ForgetAfter = TEST_TIMEOUT;
             ev->ResultsTtl = TEST_TIMEOUT;

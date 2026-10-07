@@ -1162,7 +1162,7 @@ public:
                 if (DeferredQueueSize) {
                     DeferredQueueSize->Sub(DeferredDataParts.size());
                 }
-                std::queue<THolder<TEvS3Provider::TEvDownloadData>> tmp;
+                std::queue<std::unique_ptr<TEvS3Provider::TEvDownloadData>> tmp;
                 DeferredDataParts.swap(tmp);
             }
         } else {
@@ -1456,8 +1456,8 @@ private:
     std::optional<ui64> RowsRemained;
     bool DownstreamPaused = false;   // CA input queue full — stop producing
     bool UpstreamPaused = false;     // waiting on HTTP data / HDRF admission — stop consuming
-    std::queue<THolder<TEvS3Provider::TEvDownloadData>> DeferredDataParts;
-    std::queue<THolder<TEvS3Provider::TEvDecompressDataResult>> DeferredDecompressedDataParts;
+    std::queue<std::unique_ptr<TEvS3Provider::TEvDownloadData>> DeferredDataParts;
+    std::queue<std::unique_ptr<TEvS3Provider::TEvDecompressDataResult>> DeferredDecompressedDataParts;
     TSourceContext::TPtr SourceContext;
     const ::NMonitoring::TDynamicCounters::TCounterPtr DeferredQueueSize;
     const ::NMonitoring::TDynamicCounters::TCounterPtr HttpInflightSize;
@@ -1473,7 +1473,7 @@ class TS3ReadCoroActor : public TActorCoro {
     static constexpr char ActorName[] = "S3_READ";
 
 public:
-    explicit TS3ReadCoroActor(THolder<TS3ReadCoroImpl> impl)
+    explicit TS3ReadCoroActor(std::unique_ptr<TS3ReadCoroImpl> impl)
         : TActorCoro(std::move(impl), TStringBuf(ActorName))
     {}
 
@@ -1694,7 +1694,7 @@ public:
             TxId,
             requestId,
             RetryPolicy);
-        auto impl = MakeHolder<TS3ReadCoroImpl>(
+        auto impl = std::make_unique<TS3ReadCoroImpl>(
             InputIndex,
             TxId,
             ComputeActorId,

@@ -12,7 +12,7 @@ using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
     THashMap<TTxId, TDeque<TPathId>> Paths;
-    THashMap<TTxId, TVector<THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>>> Descriptions;
+    THashMap<TTxId, TVector<std::unique_ptr<TEvSchemeShard::TEvDescribeSchemeResultBuilder>>> Descriptions;
 
     TTxPublishToSchemeBoard(TSelf *self, THashMap<TTxId, TDeque<TPathId>>&& paths)
         : TRwTxBase(self)
@@ -129,7 +129,7 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
                     {"txId", txId},
                 );
 
-                THolder<TEvPrivate::TEvCompletePublication> msg = MakeHolder<TEvPrivate::TEvCompletePublication>(opId, pathId, version);
+                std::unique_ptr<TEvPrivate::TEvCompletePublication> msg = std::make_unique<TEvPrivate::TEvCompletePublication>(opId, pathId, version);
                 TEvPrivate::TEvCompletePublication::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCompletePublication>*) new IEventHandle(
                     Self->SelfId(), Self->SelfId(), msg.Release());
 

@@ -582,7 +582,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             quoter->ResolveStartTime = TActivationContext::Now();
             Counters.ActiveQuoterProxies->Inc();
 
-            THolder<NSchemeCache::TSchemeCacheNavigate> req(new NSchemeCache::TSchemeCacheNavigate());
+            std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> req(new NSchemeCache::TSchemeCacheNavigate());
             req->DatabaseName = leaf.Database;
 
             req->ResultSet.emplace_back();
@@ -622,7 +622,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
     }
 
     ui64 resourceId = leaf.ResourceId;
-    THolder<TResource> *resHolder = resourceId ? quoter->Resources.FindPtr(resourceId) : nullptr;
+    std::unique_ptr<TResource> *resHolder = resourceId ? quoter->Resources.FindPtr(resourceId) : nullptr;
     if (resHolder == nullptr) {
         if (!leaf.Resource)
             return EInitLeafStatus::GenericError;
@@ -1377,7 +1377,7 @@ void TQuoterService::Handle(TEvents::TEvWakeup::TPtr &ev) {
 }
 
 void TQuoterService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
-    THolder<NSchemeCache::TSchemeCacheNavigate> navigate(ev->Get()->Request.Release());
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> navigate(ev->Get()->Request.Release());
     Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
 
     auto &navEntry = navigate->ResultSet.front();

@@ -125,10 +125,10 @@ void TBuildDataTxOutRSUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateBuildDataTxOutRSUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateBuildDataTxOutRSUnit(TDataShard &dataShard,
                                                    TPipeline &pipeline)
 {
-    return THolder(new TBuildDataTxOutRSUnit(dataShard, pipeline));
+    return std::unique_ptr<TBuildDataTxOutRSUnit>(new TBuildDataTxOutRSUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

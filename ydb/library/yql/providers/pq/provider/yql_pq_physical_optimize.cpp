@@ -623,8 +623,8 @@ private:
 
 } // anonymous namespace
 
-THolder<IGraphTransformer> CreatePqPhysicalOptProposalTransformer(TPqState::TPtr state) {
-    return MakeHolder<TPqPhysicalOptProposalTransformer>(std::move(state));
+std::unique_ptr<IGraphTransformer> CreatePqPhysicalOptProposalTransformer(TPqState::TPtr state) {
+    return std::make_unique<TPqPhysicalOptProposalTransformer>(std::move(state));
 }
 
 } // namespace NYql

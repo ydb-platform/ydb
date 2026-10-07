@@ -584,8 +584,8 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
     }
 }
 
-THolder<IWorkloadQueryGenerator> TLogWorkloadParams::CreateGenerator() const {
-    return MakeHolder<TLogGenerator>(this);
+std::unique_ptr<IWorkloadQueryGenerator> TLogWorkloadParams::CreateGenerator() const {
+    return std::make_unique<TLogGenerator>(this);
 }
 
 TString TLogWorkloadParams::GetWorkloadName() const {

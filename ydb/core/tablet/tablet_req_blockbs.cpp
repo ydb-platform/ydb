@@ -23,7 +23,7 @@ public:
 
     void SendRequest() {
         const TActorId proxy = MakeBlobStorageProxyID(GroupId);
-        auto event = MakeHolder<TEvBlobStorage::TEvBlock>(TabletId, Generation, TInstant::Max(), IssuerGuid,
+        auto event = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, Generation, TInstant::Max(), IssuerGuid,
             TWriteSource::BlockBlobStorage, Version);
         event->IsMonitored = false;
         SendToBSProxy(TlsActivationContext->AsActorContext(), proxy, event.Release());
@@ -85,7 +85,7 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
     ui32 Generation;
     ui32 Version;
     ui32 Replied = 0;
-    TVector<THolder<TTabletReqBlockBlobStorageGroup>> Requests;
+    TVector<std::unique_ptr<TTabletReqBlockBlobStorageGroup>> Requests;
     TVector<TActorId> ReqActors;
     ui64 IssuerGuid = RandomNumber<ui64>() | 1;
 

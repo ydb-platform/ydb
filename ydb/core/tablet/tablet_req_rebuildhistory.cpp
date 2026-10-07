@@ -207,7 +207,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
     NMetrics::TTabletThroughputRawValue GroupReadBytes;
     NMetrics::TTabletIopsRawValue GroupReadOps;
 
-    THolder<NTracing::ITrace> IntrospectionTrace;
+    std::unique_ptr<NTracing::ITrace> IntrospectionTrace;
     const ui64 FollowerCookie;
 
     TGenerationEntry& GenerationInfo(ui32 gen) {
@@ -230,7 +230,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             {"generation", gen},
             {"marker", "TRRH01"});
         if (IntrospectionTrace) {
-            IntrospectionTrace->Attach(MakeHolder<NTracing::TOnProcessZeroEntry>(gen, Snapshot, Confirmed));
+            IntrospectionTrace->Attach(std::make_unique<NTracing::TOnProcessZeroEntry>(gen, Snapshot, Confirmed));
         }
 
         Y_ABORT_UNLESS(logEntry.HasZeroConfirmed() && logEntry.HasZeroTailSz());
@@ -272,7 +272,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                     {"marker", "TRRH02"});
 
                 if (IntrospectionTrace)
-                    IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorRebuildGraph>(gen, 0));
+                    IntrospectionTrace->Attach(std::make_unique<NTracing::TErrorRebuildGraph>(gen, 0));
 
                 return false;
             }
@@ -346,7 +346,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
     void ProcessLogEntry(const TLogoBlobID &id, NKikimrTabletBase::TTabletLogEntry &logEntry) {
         if (IntrospectionTrace) {
-            IntrospectionTrace->Attach(MakeHolder<NTracing::TOnProcessLogEntry>(id, Snapshot, Confirmed, logEntry));
+            IntrospectionTrace->Attach(std::make_unique<NTracing::TOnProcessLogEntry>(id, Snapshot, Confirmed, logEntry));
         }
         Y_ABORT_UNLESS(logEntry.HasSnapshot() && logEntry.HasConfirmed());
 
@@ -406,7 +406,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             SendToBSProxy(SelfId(), group, request.release());
             RangesToDiscover.insert(toId);
             if (IntrospectionTrace) {
-                IntrospectionTrace->Attach(MakeHolder<NTracing::TOnDiscoverRangeRequest>(group, fromId, toId));
+                IntrospectionTrace->Attach(std::make_unique<NTracing::TOnDiscoverRangeRequest>(group, fromId, toId));
             }
 
             if (lastGen)
@@ -425,7 +425,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 {"blobId", id},
                 {"marker", "TRRH03"});
             if (IntrospectionTrace) {
-                IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorParsingFromString>(id));
+                IntrospectionTrace->Attach(std::make_unique<NTracing::TErrorParsingFromString>(id));
             }
             return ReplyAndDie(NKikimrProto::ERROR, "Log entry parse failed");
         }
@@ -480,7 +480,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
     void ApplyDiscoveryRange(TEvBlobStorage::TEvRangeResult *msg) {
         if (IntrospectionTrace) {
-            IntrospectionTrace->Attach(MakeHolder<NTracing::TOnApplyDiscoveryRange>(msg->GroupId, msg->From, msg->To));
+            IntrospectionTrace->Attach(std::make_unique<NTracing::TOnApplyDiscoveryRange>(msg->GroupId, msg->From, msg->To));
         }
         Y_ABORT_UNLESS(RangesToDiscover.erase(msg->To));
         for (TVector<TEvBlobStorage::TEvRangeResult::TResponse>::iterator it = msg->Responses.begin(), end = msg->Responses.end(); it != end; ++it) {
@@ -515,7 +515,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
         ScanRefsToCheck();
         if (IntrospectionTrace) {
-            IntrospectionTrace->Attach(MakeHolder<NTracing::TOnMakeHistory>(RefsToCheck));
+            IntrospectionTrace->Attach(std::make_unique<NTracing::TOnMakeHistory>(RefsToCheck));
         }
         if (RefsToCheckByGroup.empty())
             return BuildHistory();
@@ -528,7 +528,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                     {"isFollower", static_cast<bool>(FollowerCookie)},
                     {"marker", "TRRH06"});
                 if (IntrospectionTrace) {
-                    IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorSendRefsCheck>());
+                    IntrospectionTrace->Attach(std::make_unique<NTracing::TErrorSendRefsCheck>());
                 }
                 return ReplyAndDie(NKikimrProto::ERROR, "SendRefsCheck failed");
             }
@@ -617,7 +617,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
     void CheckReferences(TEvBlobStorage::TEvGetResult *msg) {
         if (IntrospectionTrace) {
-            IntrospectionTrace->Attach(MakeHolder<NTracing::TOnCheckRefsGetResult>(msg->ResponseSz));
+            IntrospectionTrace->Attach(std::make_unique<NTracing::TOnCheckRefsGetResult>(msg->ResponseSz));
         }
         Y_DEBUG_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
@@ -644,7 +644,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                     {"status", NKikimrProto::EReplyStatus_Name(response.Status)},
                     {"marker", "TRRH08"});
                 if (IntrospectionTrace) {
-                    IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(response.Status, msg->ErrorReason));
+                    IntrospectionTrace->Attach(std::make_unique<NTracing::TErrorUnknownStatus>(response.Status, msg->ErrorReason));
                 }
                 return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason);
             }
@@ -837,13 +837,13 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 return (TString)sb;
             }());
             if (IntrospectionTrace) {
-                IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorRebuildGraph>(invalidLogEntry.first, invalidLogEntry.second));
+                IntrospectionTrace->Attach(std::make_unique<NTracing::TErrorRebuildGraph>(invalidLogEntry.first, invalidLogEntry.second));
             }
 
             return ReplyAndDie(NKikimrProto::ERROR, "Graph has missing log entries");
         }
         if (IntrospectionTrace) {
-            IntrospectionTrace->Attach(MakeHolder<NTracing::TOnBuildHistoryGraph>(graph.Get()));
+            IntrospectionTrace->Attach(std::make_unique<NTracing::TOnBuildHistoryGraph>(graph.Get()));
         }
 
         Send(Owner, new TEvTabletBase::TEvRebuildGraphResult(
@@ -873,13 +873,13 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                     {"blockedGeneration", BlockedGen},
                     {"marker", "TRRH11"});
                 if (IntrospectionTrace) {
-                    IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorEntryBeyondBlocked>(msg->Latest, BlockedGen));
+                    IntrospectionTrace->Attach(std::make_unique<NTracing::TErrorEntryBeyondBlocked>(msg->Latest, BlockedGen));
                 }
                 return ReplyAndDie(NKikimrProto::ERROR, "Found entry beyond blocked generation");
             }
 
             if (IntrospectionTrace) {
-                IntrospectionTrace->Attach(MakeHolder<NTracing::TOnProcessKeyEntry>(msg->Latest));
+                IntrospectionTrace->Attach(std::make_unique<NTracing::TOnProcessKeyEntry>(msg->Latest));
             }
 
             return ProcessKeyEntry(msg->Latest, msg->Buffer);
@@ -893,7 +893,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 {"status", NKikimrProto::EReplyStatus_Name(msg->Status)},
                 {"marker", "TRRH12"});
             if (IntrospectionTrace) {
-                IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
+                IntrospectionTrace->Attach(std::make_unique<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
             }
             return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason);
         }
@@ -916,7 +916,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 {"result", msg->Print(false)},
                 {"marker", "TRRH13"});
             if (IntrospectionTrace) {
-                IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
+                IntrospectionTrace->Attach(std::make_unique<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
             }
             return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason);
         }
@@ -943,7 +943,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 {"result", msg->Print(false)},
                 {"marker", "TRRH14"});
             if (IntrospectionTrace) {
-                IntrospectionTrace->Attach(MakeHolder<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
+                IntrospectionTrace->Attach(std::make_unique<NTracing::TErrorUnknownStatus>(msg->Status, msg->ErrorReason));
             }
             return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason);
         }
@@ -966,7 +966,7 @@ public:
 
     void Bootstrap() {
         if (IntrospectionTrace) {
-            IntrospectionTrace->Attach(MakeHolder<NTracing::TRebuildGraphBootstrap>(BlockedGen));
+            IntrospectionTrace->Attach(std::make_unique<NTracing::TRebuildGraphBootstrap>(BlockedGen));
         }
 
         if (FollowerCookie == 0)

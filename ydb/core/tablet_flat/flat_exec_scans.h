@@ -51,7 +51,7 @@ namespace NTabletFlatExecutor {
 
         struct TOne : public TIntrusiveListItem<TOne> {
 
-            TOne(ui64 serial, ui32 table, const TScanOptions& options, THolder<TScanSnapshot> snapshot)
+            TOne(ui64 serial, ui32 table, const TScanOptions& options, std::unique_ptr<TScanSnapshot> snapshot)
                 : Serial(serial)
                 , Table(table)
                 , Options(options)
@@ -80,7 +80,7 @@ namespace NTabletFlatExecutor {
             const ui64 Serial;
             const ui32 Table;
             TScanOptions Options;
-            THolder<TScanSnapshot> Snapshot;
+            std::unique_ptr<TScanSnapshot> Snapshot;
             EState State = EState::None;
             TActorId Actor;     /* Valid just after EState::Scan*/
             TAutoPtr<IScan> Scan;   /* Valid before EState::Scan    */
@@ -109,7 +109,7 @@ namespace NTabletFlatExecutor {
             ui64 Serial = 0;
             ui32 Table = Max<ui32>();
             TScanOptions Options;
-            THolder<TScanSnapshot> Snapshot;
+            std::unique_ptr<TScanSnapshot> Snapshot;
 
             explicit operator bool() const {
                 return Serial != 0;
@@ -154,7 +154,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        ui64 Queue(ui32 table, TAutoPtr<IScan> scan, ui64 cookie, const TScanOptions& options, THolder<TScanSnapshot> snapshot)
+        ui64 Queue(ui32 table, TAutoPtr<IScan> scan, ui64 cookie, const TScanOptions& options, std::unique_ptr<TScanSnapshot> snapshot)
         {
             auto &one = Make(table, scan, EType::Client, options, std::move(snapshot));
 
@@ -207,7 +207,7 @@ namespace NTabletFlatExecutor {
             Start(one, { });
         }
 
-        ui64 StartSystem(ui32 table, TAutoPtr<IScan> scan, NOps::TConf conf, THolder<TScanSnapshot> snapshot)
+        ui64 StartSystem(ui32 table, TAutoPtr<IScan> scan, NOps::TConf conf, std::unique_ptr<TScanSnapshot> snapshot)
         {
             auto &one = Make(table, scan, EType::System, { }, std::move(snapshot));
 
@@ -221,9 +221,9 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        TVector<THolder<TScanSnapshot>> Drop(ui32 table)
+        TVector<std::unique_ptr<TScanSnapshot>> Drop(ui32 table)
         {
-            TVector<THolder<TScanSnapshot>> snapshots;
+            TVector<std::unique_ptr<TScanSnapshot>> snapshots;
 
             if (auto *entry = Tables.FindPtr(table)) {
                 while (entry->Scans) {
@@ -294,7 +294,7 @@ namespace NTabletFlatExecutor {
         }
 
     private:
-        TOne& Make(ui32 table, TAutoPtr<IScan> scan, EType type, const TScanOptions& options, THolder<TScanSnapshot> snapshot)
+        TOne& Make(ui32 table, TAutoPtr<IScan> scan, EType type, const TScanOptions& options, std::unique_ptr<TScanSnapshot> snapshot)
         {
             /* odd NOps used to mark compactions (system scans) */
 

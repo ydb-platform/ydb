@@ -149,7 +149,7 @@ private:
             return;
         }
 
-        auto ev = MakeHolder<TEvKqp::TEvCloseSessionRequest>();
+        auto ev = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
         Send(MakeKqpProxyID(SelfId().NodeId()), ev.Release());
         KqpSessionId.clear();
@@ -162,7 +162,7 @@ private:
     }
 
     void StartKqpSession() {
-        auto ev = MakeHolder<TEvKqp::TEvCreateSessionRequest>();
+        auto ev = std::make_unique<TEvKqp::TEvCreateSessionRequest>();
         ev->Record.MutableRequest()->SetDatabase(Database);
         // Registry and topic finalize ops run as metadata@system, like Begin/List query actors.
         ev->Record.SetUserSID(BUILTIN_ACL_METADATA);
@@ -172,7 +172,7 @@ private:
     }
 
     void SendKqpBeginTx() {
-        auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
         ev->Record.SetUserToken(MetadataUserToken());
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
         ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
@@ -189,7 +189,7 @@ private:
                 .Uint64(IntPublicationId)
                 .Build();
 
-        auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
         ev->Record.SetUserToken(MetadataUserToken());
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
@@ -208,7 +208,7 @@ private:
     }
 
     void SendKqpDeferredPublication() {
-        auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
         ev->Record.SetUserToken(MetadataUserToken());
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_UNDEFINED);
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_TOPIC);
@@ -223,7 +223,7 @@ private:
     }
 
     void SendKqpCommit() {
-        auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
         ev->Record.SetUserToken(MetadataUserToken());
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX);
         ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);

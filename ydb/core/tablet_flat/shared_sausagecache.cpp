@@ -1067,7 +1067,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
     }
 
     void SendDroppedPages(TActorId owner, THashMap<TLogoBlobID, THashSet<TPageOffset>>&& droppedPages_) {
-        auto msg = MakeHolder<NSharedCache::TEvUpdated>();
+        auto msg = std::make_unique<NSharedCache::TEvUpdated>();
         msg->DroppedPages = std::move(droppedPages_);
         for (auto& [pageCollectionId, droppedPages] : msg->DroppedPages) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop page collection " << pageCollectionId

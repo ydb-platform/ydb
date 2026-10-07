@@ -379,10 +379,10 @@ protected:
     void SendEvent(IEventBase* event);
     void SendEvent(IEventBase* event, const TActorId& from, const TActorId& to);
 
-    THolder<TEvPQ::TEvApproveWriteQuota> WaitForRequestQuotaAndHoldApproveWriteQuota();
+    std::unique_ptr<TEvPQ::TEvApproveWriteQuota> WaitForRequestQuotaAndHoldApproveWriteQuota();
     void SendDeletePartition();
     void WaitForDeletePartitionDoneTimeout();
-    void SendApproveWriteQuota(THolder<TEvPQ::TEvApproveWriteQuota>&& event);
+    void SendApproveWriteQuota(std::unique_ptr<TEvPQ::TEvApproveWriteQuota>&& event);
     void WaitForQuotaConsumed();
     void WaitForWriteError(ui64 cookie, NPersQueue::NErrorCode::EErrorCode errorCode);
     void WaitForDeletePartitionDone();
@@ -409,7 +409,7 @@ protected:
 
     void AssertNoUnexpectedStaleMetaTxDone(const TString& reason) const;
 
-    THolder<TEvKeyValue::TEvRequest> GrabStaleMetaKvRequest(const TString& failReason) const;
+    std::unique_ptr<TEvKeyValue::TEvRequest> GrabStaleMetaKvRequest(const TString& failReason) const;
 
     void AssertStaleMetaKvHasTxKey(
         const TEvKeyValue::TEvRequest& kv,
@@ -602,7 +602,7 @@ void TPartitionFixture::SendCreateSession(ui64 cookie,
                                           ui32 generation,
                                           ui32 step)
 {
-    auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(cookie,
+    auto event = std::make_unique<TEvPQ::TEvSetClientInfo>(cookie,
                                                      clientId,
                                                      0,
                                                      sessionId,
@@ -620,7 +620,7 @@ void TPartitionFixture::SendSetOffset(ui64 cookie,
                                       const TString& sessionId,
                                       bool strict)
 {
-    auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(cookie,
+    auto event = std::make_unique<TEvPQ::TEvSetClientInfo>(cookie,
                                                      clientId,
                                                      offset,
                                                      sessionId,
@@ -635,7 +635,7 @@ void TPartitionFixture::SendSetOffset(ui64 cookie,
 void TPartitionFixture::SendGetOffset(ui64 cookie,
                                       const TString& clientId)
 {
-    auto event = MakeHolder<TEvPQ::TEvGetClientOffset>(cookie,
+    auto event = std::make_unique<TEvPQ::TEvGetClientOffset>(cookie,
                                                        clientId);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
@@ -772,7 +772,7 @@ void TPartitionFixture::WaitCmdWriteTx(const TCmdWriteTxMatcher& matcher)
 
 void TPartitionFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseStatus status)
 {
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(status);
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
@@ -780,7 +780,7 @@ void TPartitionFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseStatus statu
 
 void TPartitionFixture::SendSubDomainStatus(bool subDomainOutOfSpace)
 {
-    auto event = MakeHolder<TEvPQ::TEvSubDomainStatus>();
+    auto event = std::make_unique<TEvPQ::TEvSubDomainStatus>();
     event->Record.SetSubDomainOutOfSpace(subDomainOutOfSpace);
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
@@ -788,7 +788,7 @@ void TPartitionFixture::SendSubDomainStatus(bool subDomainOutOfSpace)
 
 void TPartitionFixture::SendReserveBytes(const ui64 cookie, const ui32 size, const TString& ownerCookie, const ui64 messageNo, bool lastRequest)
 {
-    auto event = MakeHolder<TEvPQ::TEvReserveBytes>(cookie, size, ownerCookie, messageNo, lastRequest);
+    auto event = std::make_unique<TEvPQ::TEvReserveBytes>(cookie, size, ownerCookie, messageNo, lastRequest);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -816,18 +816,18 @@ void TPartitionFixture::SendWrite
     TVector<TEvPQ::TEvWrite::TMsg> msgs;
     msgs.push_back(msg);
 
-    auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), isDirectWrite, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
+    auto event = std::make_unique<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), isDirectWrite, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force)
 {
-    auto event = MakeHolder<TEvPQ::TEvChangeOwner>(cookie, owner, pipeClient, Ctx->Edge, force, true);
+    auto event = std::make_unique<TEvPQ::TEvChangeOwner>(cookie, owner, pipeClient, Ctx->Edge, force, true);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
 void TPartitionFixture::SendGetWriteInfo(bool skipSrcIdInfo) {
-    auto event = MakeHolder<TEvPQ::TEvGetWriteInfoRequest>(skipSrcIdInfo);
+    auto event = std::make_unique<TEvPQ::TEvGetWriteInfoRequest>(skipSrcIdInfo);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -900,7 +900,7 @@ void TPartitionFixture::WaitConfigRequest()
 
 void TPartitionFixture::SendConfigResponse(const TConfigParams& config)
 {
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto read = event->Record.AddReadResult();
@@ -931,7 +931,7 @@ void TPartitionFixture::WaitDiskStatusRequest()
 
 void TPartitionFixture::SendDiskStatusResponse(TMaybe<ui64>* cookie)
 {
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     if (cookie && cookie->Defined()) {
         event->Record.SetCookie(cookie->GetRef());
     }
@@ -954,7 +954,7 @@ void TPartitionFixture::WaitMetaReadRequest()
 
 void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp)
 {
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     //
@@ -1033,7 +1033,7 @@ void TPartitionFixture::SendBlobReadResponse(ui64 begin, ui64 end)
     TString valueD;
     batch.SerializeTo(valueD);
 
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto read = event->Record.AddReadResult();
@@ -1054,7 +1054,7 @@ void TPartitionFixture::WaitInfoRangeRequest()
 void TPartitionFixture::SendInfoRangeResponse(ui32 partition,
                                               const TVector<TCreateConsumerParams>& consumers)
 {
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto read = event->Record.AddReadRangeResult();
@@ -1101,7 +1101,7 @@ void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
 {
     Y_ABORT_UNLESS(begin <= end);
 
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto read = event->Record.AddReadRangeResult();
@@ -1125,7 +1125,7 @@ void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
 
 void TPartitionFixture::SendDataRangeNodataResponse()
 {
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto read = event->Record.AddReadRangeResult();
@@ -1136,7 +1136,7 @@ void TPartitionFixture::SendDataRangeNodataResponse()
 
 void TPartitionFixture::SendDataRangeEmptyOkResponse()
 {
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto read = event->Record.AddReadRangeResult();
@@ -1158,7 +1158,7 @@ void TPartitionFixture::SendDeduplicatorRangeResponse(ui32 partitionId)
 {
     Y_UNUSED(partitionId);
 
-    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    auto event = std::make_unique<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto read = event->Record.AddReadRangeResult();
@@ -1174,7 +1174,7 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
                                                       bool immediate,
                                                       ui64 txId)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());
     auto* body = event->Record.MutableData();
@@ -1214,7 +1214,7 @@ void TPartitionFixture::SendCalcPredicate(ui64 step,
                                           const TActorId& suppPartitionId,
                                           bool killReadSession)
 {
-    auto event = MakeHolder<TEvPQ::TEvTxCalcPredicate>(step, txId);
+    auto event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(step, txId);
     if (suppPartitionId) {
         event->SupportivePartitionActor = suppPartitionId;
     } else {
@@ -1251,7 +1251,7 @@ void TPartitionFixture::WaitCalcPredicateResult(const TCalcPredicateMatcher& mat
 void TPartitionFixture::SendCommitTx(ui64 step, ui64 txId, const TSendCommitTxOptions& options)
 {
     TEvPQ::TMessageGroupsPtr explicitMessageGroups = options.ExplicitMessageGroups;
-    auto event = MakeHolder<TEvPQ::TEvTxCommit>(step, txId, std::move(explicitMessageGroups));
+    auto event = std::make_unique<TEvPQ::TEvTxCommit>(step, txId, std::move(explicitMessageGroups));
     event->SerializedTx = options.SerializedTx;
     event->TabletConfig = options.TabletConfig;
     event->BootstrapConfig = options.BootstrapConfig;
@@ -1261,7 +1261,7 @@ void TPartitionFixture::SendCommitTx(ui64 step, ui64 txId, const TSendCommitTxOp
 
 void TPartitionFixture::SendRollbackTx(ui64 step, ui64 txId)
 {
-    auto event = MakeHolder<TEvPQ::TEvTxRollback>(step, txId);
+    auto event = std::make_unique<TEvPQ::TEvTxRollback>(step, txId);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1318,7 +1318,7 @@ void TPartitionFixture::AssertNoUnexpectedStaleMetaTxDone(const TString& reason)
     UNIT_ASSERT_C(!Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxDone>(TDuration::MilliSeconds(200)), reason);
 }
 
-THolder<TEvKeyValue::TEvRequest> TPartitionFixture::GrabStaleMetaKvRequest(const TString& failReason) const
+std::unique_ptr<TEvKeyValue::TEvRequest> TPartitionFixture::GrabStaleMetaKvRequest(const TString& failReason) const
 {
     auto kv = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(10));
     UNIT_ASSERT_C(kv, failReason);
@@ -1342,7 +1342,7 @@ void TPartitionFixture::AssertStaleMetaKvHasTxKey(
 
 void TPartitionFixture::SendChangePartitionConfig(const TConfigParams& config)
 {
-    auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, MakeConfig(config.Version,
+    auto event = std::make_unique<TEvPQ::TEvChangePartitionConfig>(TopicConverter, MakeConfig(config.Version,
                                                                                         config.Consumers,
                                                                                         1,
                                                                                         config.MeteringMode));
@@ -1631,13 +1631,13 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
     }
 }
 
-THolder<TEvPQ::TEvApproveWriteQuota> TPartitionFixture::WaitForRequestQuotaAndHoldApproveWriteQuota()
+std::unique_ptr<TEvPQ::TEvApproveWriteQuota> TPartitionFixture::WaitForRequestQuotaAndHoldApproveWriteQuota()
 {
-    THolder<TEvPQ::TEvApproveWriteQuota> approveWriteQuota;
+    std::unique_ptr<TEvPQ::TEvApproveWriteQuota> approveWriteQuota;
 
     auto observer = [&approveWriteQuota](TAutoPtr<IEventHandle>& ev) mutable {
         if (auto* event = ev->CastAsLocal<TEvPQ::TEvApproveWriteQuota>()) {
-            approveWriteQuota = MakeHolder<TEvPQ::TEvApproveWriteQuota>(event->Cookie,
+            approveWriteQuota = std::make_unique<TEvPQ::TEvApproveWriteQuota>(event->Cookie,
                                                                         event->AccountQuotaWaitTime,
                                                                         event->PartitionQuotaWaitTime);
             return TTestActorRuntimeBase::EEventAction::DROP;
@@ -1661,7 +1661,7 @@ THolder<TEvPQ::TEvApproveWriteQuota> TPartitionFixture::WaitForRequestQuotaAndHo
 
 void TPartitionFixture::SendDeletePartition()
 {
-    auto event = MakeHolder<TEvPQ::TEvDeletePartition>();
+    auto event = std::make_unique<TEvPQ::TEvDeletePartition>();
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1671,7 +1671,7 @@ void TPartitionFixture::WaitForDeletePartitionDoneTimeout()
     UNIT_ASSERT_VALUES_EQUAL(event, nullptr);
 }
 
-void TPartitionFixture::SendApproveWriteQuota(THolder<TEvPQ::TEvApproveWriteQuota>&& event)
+void TPartitionFixture::SendApproveWriteQuota(std::unique_ptr<TEvPQ::TEvApproveWriteQuota>&& event)
 {
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
     event = nullptr;
@@ -1756,7 +1756,7 @@ private:
     THashMap<TActorId, bool> ExpectedWriteInfoRequests;
     TQueue<std::pair<TActorId, TActorId>> ReceivedWriteInfoRequests;
     TAdaptiveLock Lock;
-    THashMap<TActorId, THolder<TEvPQ::TEvGetWriteInfoResponse>> WriteInfoData;
+    THashMap<TActorId, std::unique_ptr<TEvPQ::TEvGetWriteInfoResponse>> WriteInfoData;
 
     TVector<std::pair<TString, TString>> Sessions;
     THashMap<TString, std::pair<TString, ui64>> Owners;
@@ -1764,7 +1764,7 @@ private:
     TPartition* PartitionPtr = nullptr;
 
 public:
-    THolder<TEvKeyValue::TEvRequest> LastKvRequest;
+    std::unique_ptr<TEvKeyValue::TEvRequest> LastKvRequest;
 
     void Init(const TTxBatchingTestParams& params = {})
     {
@@ -1883,7 +1883,7 @@ ui64 TPartitionTxTestHelper::MakeAndSendTxOffsetCommit(ui64 client, ui64 begin, 
     const auto& [clientId, _] = Sessions[client - 1];
     auto id = NextActId++;
     TTestUserAct act{.ClientId = clientId, .OffsetRange = {begin, end}, .IsImmediateTx = false, .TxId = id};
-    auto event = MakeHolder<TEvPQ::TEvTxCalcPredicate>(TxStep, act.TxId);
+    auto event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(TxStep, act.TxId);
     event->AddOperation(clientId, begin, end);
     SendEvent(event.Release());
     UserActs.emplace(id, std::move(act));
@@ -2114,7 +2114,7 @@ ui64 TPartitionTxTestHelper::AddAndSendNormalWrite(
             msgs.push_back(makeMsg( sourceId, seqNo));
         }
     }
-    auto event = MakeHolder<TEvPQ::TEvWrite>(id, messageNo, act.OwnerCookie, id * 10, std::move(msgs), false, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
+    auto event = std::make_unique<TEvPQ::TEvWrite>(id, messageNo, act.OwnerCookie, id * 10, std::move(msgs), false, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
     SendEvent(event.Release());
     UserActs.emplace(id, act);
     messageNo++;
@@ -2132,7 +2132,7 @@ auto TPartitionTxTestHelper::AddWriteTxImpl(const TSrcIdMap& srcIdsAffected, ui6
         srcIdMap.emplace(key, std::move(srcInfo));
     }
     auto iter = UserActs.insert(std::make_pair(id, act)).first;
-    auto ev = MakeHolder<TEvPQ::TEvGetWriteInfoResponse>();
+    auto ev = std::make_unique<TEvPQ::TEvGetWriteInfoResponse>();
     ev->SrcIdInfo = std::move(srcIdMap);
 
     Y_UNUSED(blobFromHead);
@@ -2148,7 +2148,7 @@ auto TPartitionTxTestHelper::AddWriteTxImpl(const TSrcIdMap& srcIdsAffected, ui6
 
 ui64 TPartitionTxTestHelper::MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected, TMaybe<NPQ::TClientBlob>&& blobFromHead) {
     auto actIter = AddWriteTxImpl(srcIdsAffected, NextActId++, TxStep, std::move(blobFromHead));
-    auto event = MakeHolder<TEvPQ::TEvTxCalcPredicate>(TxStep, actIter->second.TxId);
+    auto event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(TxStep, actIter->second.TxId);
     event->SupportivePartitionActor = actIter->second.SupportivePartitionId;
     Cerr << "Create distr tx with id = " << actIter->second.TxId << " and act no: " << actIter->first << Endl;
 
@@ -2159,7 +2159,7 @@ ui64 TPartitionTxTestHelper::MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected,
 ui64 TPartitionTxTestHelper::MakeAndSendImmediateTx(const TSrcIdMap& srcIdsAffected) {
     auto actIter = AddWriteTxImpl(srcIdsAffected, NextActId++, 0);
 
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+    auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());
     auto* body = event->Record.MutableData();
@@ -2414,7 +2414,7 @@ TString PackResetOffsetBatches(const TVector<std::pair<ui64, TClientBlob>>& batc
     return raw;
 }
 
-THolder<TEvPQ::TEvBlobResponse> MakeResetOffsetBlobResponse(
+std::unique_ptr<TEvPQ::TEvBlobResponse> MakeResetOffsetBlobResponse(
     TEvPQ::TEvBlobRequest& request,
     const TString& packed)
 {
@@ -2431,7 +2431,7 @@ THolder<TEvPQ::TEvBlobResponse> MakeResetOffsetBlobResponse(
             src.Key,
             src.CreationUnixTime));
     }
-    return MakeHolder<TEvPQ::TEvBlobResponse>(request.Cookie, std::move(blobs));
+    return std::make_unique<TEvPQ::TEvBlobResponse>(request.Cookie, std::move(blobs));
 }
 
 void PutMessagesInNewHead(THead& newHead, ui64 offset, TVector<TClientBlob> messages, bool pack) {
@@ -2619,7 +2619,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtBeforeAndAfterPartitionRange, TPartitionFi
             },
             TDuration::Seconds(5));
         UNIT_ASSERT(blobRequest);
-        return THolder<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
+        return std::unique_ptr<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
     };
 
     auto runAt = [&](TInstant ts, ui64 cookie, ui64 expectedOffset) {
@@ -2697,7 +2697,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtKafkaBatchIsAtomic, TPartitionFixture)
             },
             TDuration::Seconds(5));
         UNIT_ASSERT(blobRequest);
-        return THolder<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
+        return std::unique_ptr<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
     };
 
     auto runAt = [&](TInstant ts, ui64 cookie, ui64 expectedOffset) {
@@ -2797,7 +2797,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtLargeMessagePartsInOneBlob, TPartitionFixt
             },
             TDuration::Seconds(5));
         UNIT_ASSERT(blobRequest);
-        return THolder<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
+        return std::unique_ptr<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
     };
 
     auto runAt = [&](TInstant ts, ui64 cookie, ui64 expectedOffset) {
@@ -2882,7 +2882,7 @@ Y_UNIT_TEST_F(ResetOffsetFromWrittenAtLargeMessagePartsAcrossBlobs, TPartitionFi
             },
             TDuration::Seconds(5));
         UNIT_ASSERT(blobRequest);
-        return THolder<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
+        return std::unique_ptr<TEvPQ::TEvBlobRequest>(handle->Release<TEvPQ::TEvBlobRequest>());
     };
 
     SendEvent(new TEvPQ::TEvResetOffsetRequest(
@@ -3066,14 +3066,14 @@ Y_UNIT_TEST_F(InternalErrorDoesNotBreakTimestampRead, TPartitionFixture)
 
 namespace {
 
-THolder<TEvPQ::TEvRead> MakeTestRead(
+std::unique_ptr<TEvPQ::TEvRead> MakeTestRead(
     ui64 cookie,
     ui64 offset,
     ui32 count,
     const TString& client = "client",
     const TActorId& replyTo = {})
 {
-    return MakeHolder<TEvPQ::TEvRead>(
+    return std::make_unique<TEvPQ::TEvRead>(
         cookie,
         offset,
         /*lastOffset=*/0,
@@ -3407,7 +3407,7 @@ Y_UNIT_TEST_F(KillReadSessionFailsPendingHasData, TPartitionFixture)
     CreateSession(client, session);
 
     {
-        auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+        auto event = std::make_unique<TEvPersQueue::TEvHasDataInfo>();
         event->Record.SetPartition(partition.InternalPartitionId);
         event->Record.SetOffset(end);
         event->Record.SetDeadline((TInstant::Now() + TDuration::Minutes(1)).MilliSeconds());
@@ -3465,7 +3465,7 @@ Y_UNIT_TEST_F(HasDataRejectedByPendingSessionAfterCommitWithoutSession, TPartiti
 
     // Commit without session id → pending.Session cleared, FailStale, then persist.
     {
-        auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+        auto event = std::make_unique<TEvPQ::TEvSetClientInfo>(
             /*cookie=*/7, client, /*offset=*/2, /*session=*/"",
             /*partitionSessionId=*/0, /*gen=*/0, /*step=*/0, TActorId{});
         event->Strict = true;
@@ -3479,7 +3479,7 @@ Y_UNIT_TEST_F(HasDataRejectedByPendingSessionAfterCommitWithoutSession, TPartiti
     }
 
     {
-        auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+        auto event = std::make_unique<TEvPersQueue::TEvHasDataInfo>();
         event->Record.SetPartition(partition.InternalPartitionId);
         event->Record.SetOffset(end);
         event->Record.SetDeadline((TInstant::Now() + TDuration::Minutes(1)).MilliSeconds());
@@ -3936,7 +3936,7 @@ void TPartitionFixture::SendGetWriteInfoError(ui32 internalPartitionId,
                                               TString message,
                                               const TActorId& suppPartitionId)
 {
-    auto event = MakeHolder<TEvPQ::TEvGetWriteInfoError>(internalPartitionId,
+    auto event = std::make_unique<TEvPQ::TEvGetWriteInfoError>(internalPartitionId,
                                                          std::move(message));
     //event->SupportivePartition = suppPartitionId;
 
@@ -4178,8 +4178,8 @@ Y_UNIT_TEST_F(ShadowPartitionCountersRestore, TPartitionFixture) {
     Ctx->Runtime->GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
 
     auto* partition = CreatePartition({.Partition=partitionId, .Begin=begin, .End=end});
-    auto initializer = MakeHolder<TInitializer>(partition);
-    auto metaStep = MakeHolder<TInitMetaStep>(initializer.Get());
+    auto initializer = std::make_unique<TInitializer>(partition);
+    auto metaStep = std::make_unique<TInitMetaStep>(initializer.Get());
     TPartitionTestWrapper wrapper{metaStep.Get()};
     NKikimrPQ::TPartitionCounterData countersProto;
     //auto protoStr =
@@ -5679,7 +5679,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyUsesKeyOfCurrentBlob, TPartitionFixture) {
         info.Blobs = blobs;
         info.CompactedBlobsCount = 2;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         NKikimrClient::TResponse& res = *answer->Response;
         auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
 
@@ -5763,7 +5763,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRename, TPartitionFix
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         NKikimrClient::TResponse& res = *answer->Response;
         auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
 
@@ -5853,7 +5853,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRenameWithOffsetDelta
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         NKikimrClient::TResponse& res = *answer->Response;
         auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
 
@@ -5940,7 +5940,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRenameMultiBatch, TPa
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
 
         bool needStop = false;
@@ -6016,7 +6016,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRenameMultipart, TPar
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
 
         bool needStop = false;
@@ -6103,7 +6103,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRenameMultipartAcross
         info.Blobs = blobs;
         info.CompactedBlobsCount = 2;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
 
         bool needStop = false;
@@ -6167,7 +6167,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRenameFromBlobStart, 
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
 
         bool needStop = false;
@@ -6251,7 +6251,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRenameBodyKeysChain, 
         info.Blobs = blobs;
         info.CompactedBlobsCount = 2;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
 
         bool needStop = false;
@@ -6326,7 +6326,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRenameNonZeroHeaderBa
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
 
         bool needStop = false;
@@ -6410,7 +6410,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyUpdateUsageLimitSplitMidBatchAfterTxKeyRename, TPa
             info.Blobs = blobs;
             info.CompactedBlobsCount = 1;
 
-            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
             auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
             bool needStop = false;
             ui32 cnt = 0;
@@ -6442,7 +6442,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyUpdateUsageLimitSplitMidBatchAfterTxKeyRename, TPa
             info.Blobs = blobs;
             info.CompactedBlobsCount = 1;
 
-            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
             auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
             bool needStop = false;
             ui32 cnt = 0;
@@ -6822,7 +6822,7 @@ Y_UNIT_TEST_F(PartitionedBlobRenameThenAddBlobsFromBodyMidRead, TPartitionFixtur
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
 
         bool needStop = false;
@@ -7132,7 +7132,7 @@ Y_UNIT_TEST_F(CompactionRewriteAlignsHeaderWithKeyThenMidRead, TPartitionFixture
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
 
         bool needStop = false;
@@ -7268,7 +7268,7 @@ Y_UNIT_TEST_F(CommitWriteOperationsRenamesBodyKeysThenMidRead, TPartitionTxTestH
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
         bool needStop = false;
         ui32 cnt = 0;
@@ -7353,7 +7353,7 @@ Y_UNIT_TEST_F(CommitWriteOperationsRenamesBodyKeysThenMidReadNonZeroParent, TPar
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
         bool needStop = false;
         ui32 cnt = 0;
@@ -7435,7 +7435,7 @@ Y_UNIT_TEST_F(CommitWriteOperationsRenamesBodyKeysThenMidReadWithLmc, TPartition
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
         bool needStop = false;
         ui32 cnt = 0;
@@ -7508,7 +7508,7 @@ Y_UNIT_TEST_F(RenameCompactedBlobPathKeepsKeySpaceOffsetMidRead, TPartitionFixtu
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
         bool needStop = false;
         ui32 cnt = 0;
@@ -7663,7 +7663,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyStopsOnEmptyBlob, TPartitionFixture) {
         info.Blobs = blobs;
         info.CompactedBlobsCount = 2;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         NKikimrClient::TResponse& res = *answer->Response;
         auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
 
@@ -7734,7 +7734,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyGotGap, TPartitionFixture) {
             info.Blobs = blobs;
             info.CompactedBlobsCount = 1;
 
-            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
             NKikimrClient::TResponse& res = *answer->Response;
             auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
 
@@ -7783,7 +7783,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyGotGap, TPartitionFixture) {
             info.Blobs = blobs;
             info.CompactedBlobsCount = 1;
 
-            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
             NKikimrClient::TResponse& res = *answer->Response;
             auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
 
@@ -7849,7 +7849,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodySkipsBatchWhenReaderAhead, TPartitionFixture) {
         info.Blobs = blobs;
         info.CompactedBlobsCount = 1;
 
-        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
         NKikimrClient::TResponse& res = *answer->Response;
         auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
 
@@ -7917,7 +7917,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
             info.Blobs = blobs;
             info.CompactedBlobsCount = 1;
 
-            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
             auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
             bool needStop = false;
             ui32 cnt = 0;
@@ -7964,7 +7964,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
             info.Blobs = blobs;
             info.CompactedBlobsCount = 1;
 
-            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
             auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
             bool needStop = false;
             ui32 cnt = 0;
@@ -8004,7 +8004,7 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
             info.Blobs = blobs;
             info.CompactedBlobsCount = 1;
 
-            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto answer = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
             auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
             bool needStop = false;
             ui32 cnt = 0;

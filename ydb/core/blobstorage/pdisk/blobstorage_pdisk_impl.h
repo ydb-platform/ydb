@@ -192,7 +192,7 @@ public:
     TPDiskCategory PDiskCategory;
     TNonceJumpLogPageHeader2 LastNonceJumpLogPageHeader2;
 
-    THolder<TBufferPool> BufferPool;
+    std::unique_ptr<TBufferPool> BufferPool;
 
     // In-memory dynamic state
     TMutex StateMutex; // The state is modified mainly by the PDisk thread, but can be accessed by other threads.
@@ -226,7 +226,7 @@ public:
     ui64 ShredReqIdx = 0;
     std::atomic<ui64> ChunkBeingShreddedInFlight = 0;
     std::deque<std::tuple<TActorId, ui64>> ShredRequesters;
-    THolder<TAlignedData> ShredPayload[2];
+    std::unique_ptr<TAlignedData> ShredPayload[2];
     std::atomic<ui64> ShredLogPaddingInFlight = 0;
     std::atomic<ui64> ShredIsWaitingForCutLog = 0;
     std::atomic<ui64> ContinueShredsInFlight = 0;
@@ -249,7 +249,7 @@ public:
 
     // Incapsulated components
     TPDiskThread PDiskThread;
-    THolder<IBlockDevice> BlockDevice;
+    std::unique_ptr<IBlockDevice> BlockDevice;
 #if defined(__linux__)
     // Created and used by the PDisk worker. Normal Stop() joins that worker
     // before retiring the router; error stop runs on the worker. DDisk/PB may
@@ -258,8 +258,8 @@ public:
 #endif
     bool SharedUringCreateAttempted = false;
     bool SharedUringFailureReported = false;
-    THolder<TLogWriter> CommonLogger;
-    THolder<TSysLogWriter> SysLogger;
+    std::unique_ptr<TLogWriter> CommonLogger;
+    std::unique_ptr<TSysLogWriter> SysLogger;
 
     // Initialization data
     ui64 InitialSysLogWritePosition = 0;

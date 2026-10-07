@@ -55,7 +55,7 @@ void TTxProcessor::ProcessTx(ITransaction *tx,
     YDB_LOG_TRACE_CTX(ctx, "Enqueue tx",
         {"logPrefix", LogPrefix});
 
-    TxQueue.push_back(THolder<ITransaction>(tx));
+    TxQueue.push_back(std::unique_ptr<ITransaction>(tx));
     ProcessNextTx(ctx);
 }
 

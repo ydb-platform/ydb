@@ -360,11 +360,11 @@ public:
         };
 
         if (EnableAccessServiceV2Interface) {
-            auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeRequestV2>();
+            auto request = std::make_unique<NCloud::TEvAccessService::TEvAuthorizeRequestV2>();
             setupRequest(request);
             Send(MakeKqpAccessServiceId(), std::move(request), NActors::IEventHandle::FlagTrackDelivery);
         } else {
-            auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeRequest>();
+            auto request = std::make_unique<NCloud::TEvAccessService::TEvAuthorizeRequest>();
             setupRequest(request);
             Send(MakeKqpAccessServiceId(), std::move(request), NActors::IEventHandle::FlagTrackDelivery);
         }

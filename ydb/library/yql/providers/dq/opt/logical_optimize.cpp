@@ -360,8 +360,8 @@ private:
     TTypeAnnotationContext& TypesCtx;
 };
 
-THolder<IGraphTransformer> CreateDqsLogOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config) {
-    return THolder(new TDqsLogicalOptProposalTransformer(typeCtx, config));
+std::unique_ptr<IGraphTransformer> CreateDqsLogOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config) {
+    return std::unique_ptr<TDqsLogicalOptProposalTransformer>(new TDqsLogicalOptProposalTransformer(typeCtx, config));
 }
 
 } // NYql::NDqs

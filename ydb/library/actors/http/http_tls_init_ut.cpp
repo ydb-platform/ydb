@@ -98,7 +98,7 @@ struct TSimulatedProxy {
         EdgeId = Runtime.AllocateEdgeActor();
     }
 
-    void AddListeningPort(THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add) {
+    void AddListeningPort(std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add) {
         add->Address = "127.0.0.1";
         Runtime.Send(new NActors::IEventHandle(ProxyId, EdgeId, add.Release()), 0, true);
     }
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         TIpPort port = portManager.GetTcpPort();
 
         TSimulatedProxy proxy;
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->Secure = true;
         add->SslCertificatePem = MALFORMED_PEM;
         proxy.AddListeningPort(std::move(add));
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         TIpPort port = portManager.GetTcpPort();
 
         TSimulatedProxy proxy;
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->Secure = true;
         add->CertificateFile = certificateFile.Name();
         add->PrivateKeyFile = certificateFile.Name();
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         TIpPort port = portManager.GetTcpPort();
 
         TSimulatedProxy proxy;
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->Secure = true;
         add->CertificateFile = certificateFile.Name();
         add->PrivateKeyFile = privateKeyFile.Name();
@@ -215,7 +215,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         TIpPort port = portManager.GetTcpPort();
 
         TSimulatedProxy proxy;
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->Secure = true;
         add->SslCertificatePem = TString(server.Certificate) + EC_PRIVATE_KEY_PEM;
         proxy.AddListeningPort(std::move(add));
@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         TIpPort port = portManager.GetTcpPort();
 
         TSimulatedProxy proxy;
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->Secure = true;
         add->CertificateFile = certificateFile.Name();
         add->PrivateKeyFile = privateKeyFile.Name();
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         runtime.Initialize();
 
         NActors::TActorId proxyId = runtime.Register(NHttp::CreateHttpProxy());
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->Secure = true;
         add->SslCertificatePem = GenerateServerPem();
         runtime.Send(new NActors::IEventHandle(proxyId, runtime.AllocateEdgeActor(), add.Release()), 0, true);
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
             "The prebound socket must be listening before the acceptor sees it");
 
         TSimulatedProxy proxy;
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->Secure = true;
         add->SslCertificatePem = MALFORMED_PEM;
         add->PreboundSocket = socket;
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         TIpPort port = portManager.GetTcpPort();
 
         // No SO_REUSEADDR/SO_REUSEPORT here, so the acceptor's bind cannot succeed.
-        auto occupier = MakeHolder<TInet64StreamSocket>();
+        auto occupier = std::make_unique<TInet64StreamSocket>();
         UNIT_ASSERT_EQUAL(occupier->Bind(occupier->MakeAddress(TString(), port).get()), 0);
         UNIT_ASSERT_EQUAL(occupier->Listen(1), 0);
 
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         runtime.Initialize();
 
         NActors::TActorId proxyId = runtime.Register(NHttp::CreateHttpProxy());
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        std::unique_ptr<NHttp::TEvHttpProxy::TEvAddListeningPort> add = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->Secure = true;
         add->SslCertificatePem = GenerateServerPem();
         runtime.Send(new NActors::IEventHandle(proxyId, runtime.AllocateEdgeActor(), add.Release()), 0, true);

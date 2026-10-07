@@ -187,7 +187,7 @@ struct TEvPartitionWriter {
         TEvTxWriteRequest(
             const TString& sessionId,
             const TString& txId,
-            THolder<TEvWriteRequest>&& request,
+            std::unique_ptr<TEvWriteRequest>&& request,
             TMaybe<TDeferredPublishWriterOpts> deferredPublish = Nothing())
             : SessionId(sessionId)
             , TxId(txId)
@@ -198,7 +198,7 @@ struct TEvPartitionWriter {
 
         TString SessionId;
         TString TxId;
-        THolder<TEvWriteRequest> Request;
+        std::unique_ptr<TEvWriteRequest> Request;
         TMaybe<TDeferredPublishWriterOpts> DeferredPublish;
     };
 

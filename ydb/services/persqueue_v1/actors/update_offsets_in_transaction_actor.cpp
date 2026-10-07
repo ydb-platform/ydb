@@ -27,7 +27,7 @@ void TUpdateOffsetsInTransactionActor::Proceed(const NActors::TActorContext& ctx
                      ctx);
     }
 
-    auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
     SetAuthToken(ev, *Request_);
     SetDatabase(ev, *Request_);
 

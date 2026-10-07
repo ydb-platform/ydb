@@ -407,7 +407,7 @@ TStatus TGenerateClient::Upsert(const TString& dbPath,
                                 const std::vector<NYdb::NTable::TTableColumn>& tableColumns,
                                 const TGenerateSettings& settings,
                                 ProgressCallbackFunc& progressCallback) {
-    THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
+    std::unique_ptr<IThreadPool> pool = CreateThreadPool(settings.Threads_);
 
     const ui64 numRows = settings.RowsPerRequest_;
     std::vector<TAsyncStatus> inFlightRequests;

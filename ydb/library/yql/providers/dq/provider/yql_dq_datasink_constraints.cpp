@@ -73,8 +73,8 @@ private:
 
 } // anonymous namespace
 
-THolder<IGraphTransformer> CreateDqDataSinkConstraintTransformer(bool processSortConstraint) {
-    return THolder<IGraphTransformer>(new TDqDataSinkConstraintTransformer(processSortConstraint));
+std::unique_ptr<IGraphTransformer> CreateDqDataSinkConstraintTransformer(bool processSortConstraint) {
+    return std::unique_ptr<IGraphTransformer>(new TDqDataSinkConstraintTransformer(processSortConstraint));
 }
 
 } // namespace NYql

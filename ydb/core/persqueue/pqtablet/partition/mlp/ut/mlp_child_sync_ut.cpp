@@ -62,8 +62,8 @@ NKikimrPQ::TPQTabletConfig::TConsumer MakeConsumerConfig() {
     return consumer;
 }
 
-THolder<TEvKeyValue::TEvResponse> MakeEmptySnapshotResponse(ui64 cookie) {
-    auto response = MakeHolder<TEvKeyValue::TEvResponse>();
+std::unique_ptr<TEvKeyValue::TEvResponse> MakeEmptySnapshotResponse(ui64 cookie) {
+    auto response = std::make_unique<TEvKeyValue::TEvResponse>();
     response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     response->Record.SetCookie(cookie);
     response->Record.AddReadResult()->SetStatus(NKikimrProto::NODATA);
@@ -71,8 +71,8 @@ THolder<TEvKeyValue::TEvResponse> MakeEmptySnapshotResponse(ui64 cookie) {
     return response;
 }
 
-THolder<TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId> MakeUpdateExternal(ui32 partitionId) {
-    auto ev = MakeHolder<TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId>();
+std::unique_ptr<TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId> MakeUpdateExternal(ui32 partitionId) {
+    auto ev = std::make_unique<TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId>();
     ev->Record.SetConsumer(kConsumer);
     ev->Record.SetPartitionId(partitionId);
     auto* update = ev->Record.MutableUpdate();
@@ -252,7 +252,7 @@ Y_UNIT_TEST(MlpRequestsWaitForConfigThenDeliver) {
     PrepareMlpTablet(tc);
 
     bool holdKv = false;
-    TVector<THolder<IEventHandle>> heldKv;
+    TVector<std::unique_ptr<IEventHandle>> heldKv;
     tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         if (holdKv && ev->GetTypeRewrite() == TEvKeyValue::TEvResponse::EventType) {
             heldKv.emplace_back(ev.Release());

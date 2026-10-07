@@ -29,9 +29,9 @@ class TDriveEstimator {
     std::unique_ptr<TActorSystemCreator> ActorSystemCreator;
     TActorSystem *ActorSystem;
     const ui32 QueueDepth;
-    THolder<IBlockDevice> Device;
+    std::unique_ptr<IBlockDevice> Device;
     ui64 DriveSize;
-    THolder<TBufferPool> BufferPool;
+    std::unique_ptr<TBufferPool> BufferPool;
     TBuffer::TPtr Buffer;
     ui32 Counter = 0;
     TString IoError;

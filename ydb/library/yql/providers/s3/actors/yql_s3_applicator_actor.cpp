@@ -658,7 +658,7 @@ private:
 
 } // namespace
 
-THolder<NActors::IActor> MakeS3ApplicatorActor(
+std::unique_ptr<NActors::IActor> MakeS3ApplicatorActor(
     NActors::TActorId parentId,
     IHTTPGateway::TPtr gateway,
     const TString& queryId,
@@ -669,7 +669,7 @@ THolder<NActors::IActor> MakeS3ApplicatorActor(
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const NYql::NDqProto::TExternalEffect& externalEffect) {
 
-    return MakeHolder<TS3ApplicatorActor>(
+    return std::make_unique<TS3ApplicatorActor>(
         parentId,
         gateway,
         queryId,

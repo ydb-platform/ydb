@@ -412,19 +412,19 @@ public:
             Notify();
         }
 
-        THolder<NInternalEvents::TEvNotifyBuilder> BuildNotify(bool forceStrong = false) const {
-            THolder<NInternalEvents::TEvNotifyBuilder> notify;
+        std::unique_ptr<NInternalEvents::TEvNotifyBuilder> BuildNotify(bool forceStrong = false) const {
+            std::unique_ptr<NInternalEvents::TEvNotifyBuilder> notify;
 
             const bool isDeletion = IsEmpty();
 
             if (!PathId) {
                 Y_ABORT_UNLESS(isDeletion);
-                notify = MakeHolder<NInternalEvents::TEvNotifyBuilder>(Path, isDeletion);
+                notify = std::make_unique<NInternalEvents::TEvNotifyBuilder>(Path, isDeletion);
             } else if (!Path) {
                 Y_ABORT_UNLESS(isDeletion);
-                notify = MakeHolder<NInternalEvents::TEvNotifyBuilder>(PathId, isDeletion);
+                notify = std::make_unique<NInternalEvents::TEvNotifyBuilder>(PathId, isDeletion);
             } else {
-                notify = MakeHolder<NInternalEvents::TEvNotifyBuilder>(Path, PathId, isDeletion);
+                notify = std::make_unique<NInternalEvents::TEvNotifyBuilder>(Path, PathId, isDeletion);
             }
 
             if (!isDeletion) {
@@ -1205,7 +1205,7 @@ private:
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
         const auto limit = ev->Get()->Record.GetLimitRepeatedFields();
 
-        auto response = MakeHolder<TSchemeBoardMonEvents::TEvInfoResponse>(SelfId(), ActorActivityType());
+        auto response = std::make_unique<TSchemeBoardMonEvents::TEvInfoResponse>(SelfId(), ActorActivityType());
         auto& record = *response->Record.MutableReplicaResponse();
 
         for (const auto& [owner, populator] : Populators) {

@@ -71,7 +71,7 @@ namespace NActors {
         static bool Forward(TAutoPtr<IEventHandle>& ev, const TActorId& recipient);
 
         template <ESendingType SendingType = ESendingType::Common>
-        static bool Forward(THolder<IEventHandle>& ev, const TActorId& recipient);
+        static bool Forward(std::unique_ptr<IEventHandle>& ev, const TActorId& recipient);
 
         /**
          * Schedule one-shot event that will be send at given time point in the future.
@@ -158,7 +158,7 @@ namespace NActors {
         template <ESendingType SendingType = ESendingType::Common>
         bool Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
         template <ESendingType SendingType = ESendingType::Common>
-        bool Send(const TActorId& recipient, THolder<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+        bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
             return Send<SendingType>(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
         template <ESendingType SendingType = ESendingType::Common>
@@ -174,7 +174,7 @@ namespace NActors {
         template <ESendingType SendingType = ESendingType::Common>
         bool Forward(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) const;
         template <ESendingType SendingType = ESendingType::Common>
-        bool Forward(THolder<IEventHandle>& ev, const TActorId& recipient) const;
+        bool Forward(std::unique_ptr<IEventHandle>& ev, const TActorId& recipient) const;
 
         TInstant Now() const;
         TMonotonic Monotonic() const;
@@ -816,7 +816,7 @@ namespace NActors {
         bool Send(TAutoPtr<IEventHandle> ev) const noexcept;
         bool SendActorLivenessCheck(const TActorId& target, ui64 cookie = 0) const noexcept;
         bool Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
-        bool Send(const TActorId& recipient, THolder<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
+        bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
             return Send(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
         bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
@@ -825,13 +825,13 @@ namespace NActors {
 
         template <class TEvent, class ... TEventArgs>
         bool Send(TActorId recipient, TEventArgs&& ... args) const {
-            return Send(recipient, MakeHolder<TEvent>(std::forward<TEventArgs>(args)...));
+            return Send(recipient, std::make_unique<TEvent>(std::forward<TEventArgs>(args)...));
         }
 
         template <ESendingType SendingType>
         bool Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const;
         template <ESendingType SendingType>
-        bool Send(const TActorId& recipient, THolder<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
+        bool Send(const TActorId& recipient, std::unique_ptr<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const {
             return Send(recipient, ev.Release(), flags, cookie, std::move(traceId));
         }
         template <ESendingType SendingType>
@@ -843,7 +843,7 @@ namespace NActors {
             return TActivationContext::Forward(ev, recipient);
         }
 
-        static bool Forward(THolder<IEventHandle>& ev, const TActorId& recipient) {
+        static bool Forward(std::unique_ptr<IEventHandle>& ev, const TActorId& recipient) {
             return TActivationContext::Forward(ev, recipient);
         }
 
@@ -1009,10 +1009,10 @@ namespace NActors {
 
     class TDecorator : public IActorCallback {
     protected:
-        THolder<IActor> Actor;
+        std::unique_ptr<IActor> Actor;
 
     public:
-        TDecorator(THolder<IActor>&& actor)
+        TDecorator(std::unique_ptr<IActor>&& actor)
             : IActorCallback(static_cast<TReceiveFunc>(&TDecorator::State), actor->GetActivityType())
             , Actor(std::move(actor))
         {
@@ -1042,7 +1042,7 @@ namespace NActors {
 
     // TTestDecorator doesn't work with the real actor system
     struct TTestDecorator : public TDecorator {
-        TTestDecorator(THolder<IActor>&& actor)
+        TTestDecorator(std::unique_ptr<IActor>&& actor)
             : TDecorator(std::move(actor))
         {
         }

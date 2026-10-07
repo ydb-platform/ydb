@@ -95,7 +95,7 @@ public:
             {"record", record.ShortDebugString()},
         );
 
-        Response = MakeHolder<TEvBackup::TEvListIncrementalBackupsResponse>();
+        Response = std::make_unique<TEvBackup::TEvListIncrementalBackupsResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(
@@ -156,7 +156,7 @@ private:
 private:
     TSideEffects SideEffects;
     TEvBackup::TEvListIncrementalBackupsRequest::TPtr Request;
-    THolder<TEvBackup::TEvListIncrementalBackupsResponse> Response;
+    std::unique_ptr<TEvBackup::TEvListIncrementalBackupsResponse> Response;
 };
 
 ITransaction* TSchemeShard::CreateTxList(TEvBackup::TEvListIncrementalBackupsRequest::TPtr& ev) {

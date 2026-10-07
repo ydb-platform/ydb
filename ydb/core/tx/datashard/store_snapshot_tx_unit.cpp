@@ -32,11 +32,11 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateStoreSnapshotTxUnit(
+std::unique_ptr<TExecutionUnit> CreateStoreSnapshotTxUnit(
         TDataShard& dataShard,
         TPipeline& pipeline)
 {
-    return THolder(new TStoreSnapshotTxUnit(dataShard, pipeline));
+    return std::unique_ptr<TStoreSnapshotTxUnit>(new TStoreSnapshotTxUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

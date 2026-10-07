@@ -241,7 +241,7 @@ private:
 
     TPathId TargetTablePathId;
     ui64 TargetTableVersion;
-    THolder<TKeyDesc> KeyDesc;
+    std::unique_ptr<TKeyDesc> KeyDesc;
     bool NoMoreData = false;
     bool FirstServe = false;
 }; // TIncrRestoreChangeSenderMain

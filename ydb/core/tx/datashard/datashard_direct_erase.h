@@ -8,8 +8,8 @@ namespace NDataShard {
 
 class TDirectTxErase : public IDirectTx {
     TEvDataShard::TEvEraseRowsRequest::TPtr Ev;
-    THolder<TEvDataShard::TEvEraseRowsResponse> Result;
-    THolder<IDataShardChangeCollector> ChangeCollector;
+    std::unique_ptr<TEvDataShard::TEvEraseRowsResponse> Result;
+    std::unique_ptr<IDataShardChangeCollector> ChangeCollector;
 
     enum class EStatus {
         Success,

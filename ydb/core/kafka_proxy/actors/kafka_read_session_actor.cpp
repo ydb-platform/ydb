@@ -533,7 +533,7 @@ void TKafkaReadSessionActor::RegisterBalancerSession(const TString& topic, const
     YDB_LOG_INFO("Register session",
         {LogPrefix()},
         {"topic", topic});
-    auto request = MakeHolder<TEvPersQueue::TEvRegisterReadSession>();
+    auto request = std::make_unique<TEvPersQueue::TEvRegisterReadSession>();
 
     auto& req = request->Record;
     req.SetSession(Session);
@@ -668,7 +668,7 @@ void TKafkaReadSessionActor::InformBalancerAboutPartitionRelease(const TString& 
         {LogPrefix()},
         {"topic", topic},
         {"partition", partition});
-    auto request = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
+    auto request = std::make_unique<TEvPersQueue::TEvPartitionReleased>();
 
     auto topicIt = TopicsInfo.find(topic);
     AFL_ENSURE(topicIt != TopicsInfo.end())("topic", topic)("partition", partition)("session", Session)("database", Context->DatabasePath);

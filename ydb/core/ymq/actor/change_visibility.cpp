@@ -19,7 +19,7 @@ class TChangeMessageVisibilityActor
     : public TActionActor<TChangeMessageVisibilityActor>
 {
 public:
-    TChangeMessageVisibilityActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb)
+    TChangeMessageVisibilityActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, std::unique_ptr<IReplyCallback> cb)
         : TActionActor(sourceSqsRequest, isBatch ? EAction::ChangeMessageVisibilityBatch : EAction::ChangeMessageVisibility, std::move(cb))
         , IsBatch_(isBatch)
     {
@@ -61,7 +61,7 @@ protected:
                 // Create request
                 if (!shardInfo.Request_) {
                     ++RequestsToLeader_;
-                    shardInfo.Request_ = MakeHolder<TSqsEvents::TEvChangeMessageVisibilityBatch>();
+                    shardInfo.Request_ = std::make_unique<TSqsEvents::TEvChangeMessageVisibilityBatch>();
                     shardInfo.Request_->Shard = receipt.GetShard();
                     shardInfo.Request_->RequestId = RequestId_;
                     shardInfo.Request_->NowTimestamp = NowTimestamp_;
@@ -269,7 +269,7 @@ private:
 
     struct TShardInfo {
         std::vector<size_t> RequestToReplyIndexMapping_;
-        THolder<TSqsEvents::TEvChangeMessageVisibilityBatch> Request_; // actual when processing initial request, then nullptr
+        std::unique_ptr<TSqsEvents::TEvChangeMessageVisibilityBatch> Request_; // actual when processing initial request, then nullptr
     };
     size_t RequestsToLeader_ = 0;
     std::vector<TShardInfo> ShardInfo_;
@@ -278,11 +278,11 @@ private:
     TInstant NowTimestamp_;
 };
 
-IActor* CreateChangeMessageVisibilityActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateChangeMessageVisibilityActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TChangeMessageVisibilityActor(sourceSqsRequest, false, std::move(cb));
 }
 
-IActor* CreateChangeMessageVisibilityBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+IActor* CreateChangeMessageVisibilityBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, std::unique_ptr<IReplyCallback> cb) {
     return new TChangeMessageVisibilityActor(sourceSqsRequest, true, std::move(cb));
 }
 

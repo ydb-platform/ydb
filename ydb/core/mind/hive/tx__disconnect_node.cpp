@@ -8,10 +8,10 @@ namespace NHive {
 
 class TTxDisconnectNode : public TTransactionBase<THive> {
 protected:
-    THolder<TEvInterconnect::TEvNodeDisconnected> Event;
+    std::unique_ptr<TEvInterconnect::TEvNodeDisconnected> Event;
 
 public:
-    TTxDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected> event, THive* hive)
+    TTxDisconnectNode(std::unique_ptr<TEvInterconnect::TEvNodeDisconnected> event, THive* hive)
         : TBase(hive)
         , Event(std::move(event))
     {}
@@ -25,7 +25,7 @@ public:
         if (node != nullptr) {
             Self->ScheduleUnlockTabletExecution(*node, NKikimrHive::LOCK_LOST_REASON_NODE_DISCONNECTED);
             if (node->BecomeDisconnecting()) {
-                THolder<TEvPrivate::TEvProcessDisconnectNode> event = MakeHolder<TEvPrivate::TEvProcessDisconnectNode>();
+                std::unique_ptr<TEvPrivate::TEvProcessDisconnectNode> event = std::make_unique<TEvPrivate::TEvProcessDisconnectNode>();
                 event->NodeId = node->Id;
                 event->Local = node->Local;
                 event->StartTime = TActivationContext::Now();
@@ -53,7 +53,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected> event) {
+ITransaction* THive::CreateDisconnectNode(std::unique_ptr<TEvInterconnect::TEvNodeDisconnected> event) {
     return new TTxDisconnectNode(std::move(event), this);
 }
 

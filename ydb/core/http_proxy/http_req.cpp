@@ -36,7 +36,7 @@ namespace NKikimr::NHttpProxy {
     }
 
     bool THttpRequestProcessors::Execute(const TString&, THttpRequestContext&& context,
-                                         THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
+                                         std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> signature,
                                          const TActorContext&) {
 
         const auto* controller = GetHttpControllerRegistry().GetController(context.ApiVersion, context.ServiceConfig);
@@ -99,15 +99,15 @@ namespace NKikimr::NHttpProxy {
         }
     }
 
-    THolder<NKikimr::NSQS::TAwsRequestSignV4> THttpRequestContext::GetSignature() {
-        THolder<NKikimr::NSQS::TAwsRequestSignV4> signature;
+    std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> THttpRequestContext::GetSignature() {
+        std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> signature;
         if (IamToken.empty()) {
             const TString fullRequest = TString(Request->Method) + " " +
                 Request->URL + " " +
                 Request->Protocol + "/" + Request->Version + "\r\n" +
                 Request->Headers +
                 Request->Body;
-            signature = MakeHolder<NKikimr::NSQS::TAwsRequestSignV4>(fullRequest);
+            signature = std::make_unique<NKikimr::NSQS::TAwsRequestSignV4>(fullRequest);
         }
 
         return signature;

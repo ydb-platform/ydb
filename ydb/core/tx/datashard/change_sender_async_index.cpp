@@ -31,7 +31,7 @@ class TResolveIndexState
 
 public:
     void ResolveIndex() {
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(AsDerived()->IndexPathId, TNavigate::OpList));
 
         AsDerived()->Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
@@ -339,7 +339,7 @@ private:
 
     TPathId TargetTablePathId;
     ui64 TargetTableVersion;
-    THolder<TKeyDesc> KeyDesc;
+    std::unique_ptr<TKeyDesc> KeyDesc;
 }; // TAsyncIndexChangeSenderMain
 
 IActor* CreateAsyncIndexChangeSender(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId) {

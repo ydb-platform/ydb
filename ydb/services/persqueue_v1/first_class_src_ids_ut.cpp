@@ -10,17 +10,17 @@ using namespace NPersQueue;
 
 
 Y_UNIT_TEST_SUITE(TFstClassSrcIdPQTest) {
-    THolder<NYdb::TDriver> GetDriver(TTestServer& server) {
+    std::unique_ptr<NYdb::TDriver> GetDriver(TTestServer& server) {
         NYdb::TDriverConfig driverCfg;
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort);
-        return THolder<NYdb::TDriver>(new NYdb::TDriver(driverCfg));
+        return std::unique_ptr<NYdb::TDriver>(new NYdb::TDriver(driverCfg));
     }
 
-    std::pair<THolder<TTestServer>, THolder<NYdb::TDriver>> Setup(const TString& topic, bool useMapping) {
+    std::pair<std::unique_ptr<TTestServer>, std::unique_ptr<NYdb::TDriver>> Setup(const TString& topic, bool useMapping) {
         auto settings = PQSettings(0);
         settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
         settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(useMapping);
-        auto server = MakeHolder<TTestServer>(settings);
+        auto server = std::make_unique<TTestServer>(settings);
 
         server->AnnoyingClient->CreateTopicNoLegacy(topic, 1);
         auto ydbDriver = GetDriver(*server);

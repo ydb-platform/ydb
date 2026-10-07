@@ -29,8 +29,8 @@ ICq::TPtr GetCqHandle(NActors::TTestActorRuntimeBase* actorSystem, TRdmaCtx* ctx
     return cqHandle->CqPtr;
 }
 
-std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntime(TString defIp) {
-    auto actorSystem = MakeHolder<NActors::TTestActorRuntimeBase>(1, 1, true);
+std::tuple<std::unique_ptr<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntime(TString defIp) {
+    auto actorSystem = std::make_unique<NActors::TTestActorRuntimeBase>(1, 1, true);
     actorSystem->Initialize();
 
     TDispatchOptions opts;

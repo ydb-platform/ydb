@@ -153,7 +153,7 @@ private:
 private:
     const TActorId Parent_;
     TString RequestId_;
-    THolder<TEvTxUserProxy::TEvProposeTransaction> ProposeTransactionRequest_;
+    std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> ProposeTransactionRequest_;
     TMaybe<TParameters> Parameters_;
     bool RetryOnTimeout_ = false;
     bool IsFifoQueue_ = false;
@@ -183,7 +183,7 @@ public:
     TMiniKqlExecutionActor(
         const TActorId sender,
         TString requestId,
-        THolder<TRequest> req,
+        std::unique_ptr<TRequest> req,
         bool retryOnTimeout,
         const TQueuePath& path, // queue or user
         const TIntrusivePtr<TTransactionCounters>& counters,
@@ -250,7 +250,7 @@ private:
     const TActorId Sender_;
     const TString RequestId_;
     const TSqsEvents::TExecutedCallback Cb_;
-    THolder<TRequest> Request_;
+    std::unique_ptr<TRequest> Request_;
     TString MkqlProgramText_;
     THashMap<TString, ui64> CompileResolveCookies_;
     bool CompilationPending_ = false;

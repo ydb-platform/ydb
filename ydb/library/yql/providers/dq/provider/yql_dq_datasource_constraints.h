@@ -4,6 +4,6 @@
 
 namespace NYql {
 
-THolder<IGraphTransformer> CreateDqDataSourceConstraintTransformer();
+std::unique_ptr<IGraphTransformer> CreateDqDataSourceConstraintTransformer();
 
 } // NYql

@@ -147,7 +147,7 @@ int TCommandExecuteSqlBase::ExecuteScriptAsync(TClientCommand::TConfig& config, 
             throw TMisuseException() << "Can't execute several async scripts (with \""
                 << InputFramingFormat << "\" framing format).";
         }
-        THolder<TParamsBuilder> paramBuilder;
+        std::unique_ptr<TParamsBuilder> paramBuilder;
         if (GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             // Execute script with parameters
             Operation = queryClient.ExecuteScript(

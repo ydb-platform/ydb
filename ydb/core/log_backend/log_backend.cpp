@@ -9,7 +9,7 @@ namespace NKikimr {
 
 class TLogBackendWithJsonEnvelope : public TLogBackend {
 public:
-    TLogBackendWithJsonEnvelope(const TString& jsonEnvelope, THolder<TLogBackend> logBackend)
+    TLogBackendWithJsonEnvelope(const TString& jsonEnvelope, std::unique_ptr<TLogBackend> logBackend)
         : JsonEnvelope(jsonEnvelope)
         , LogBackend(std::move(logBackend))
     {}
@@ -54,7 +54,7 @@ public:
 
 private:
     const TJsonEnvelope JsonEnvelope;
-    const THolder<TLogBackend> LogBackend;
+    const std::unique_ptr<TLogBackend> LogBackend;
 };
 
 TAutoPtr<TLogBackend> CreateLogBackendWithUnifiedAgent(
@@ -189,19 +189,19 @@ TAutoPtr<TLogBackend> CreateAuditLogUnifiedAgentBackend(
     );
 }
 
-THolder<TLogBackend> MaybeWrapWithJsonEnvelope(THolder<TLogBackend> logBackend, const TString& jsonEnvelope) {
+std::unique_ptr<TLogBackend> MaybeWrapWithJsonEnvelope(std::unique_ptr<TLogBackend> logBackend, const TString& jsonEnvelope) {
     Y_ASSERT(logBackend);
     if (jsonEnvelope.empty()) {
         return logBackend;
     }
 
-    return MakeHolder<TLogBackendWithJsonEnvelope>(jsonEnvelope, std::move(logBackend));
+    return std::make_unique<TLogBackendWithJsonEnvelope>(jsonEnvelope, std::move(logBackend));
 }
 
-TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> CreateAuditLogBackends(
+TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<std::unique_ptr<TLogBackend>>> CreateAuditLogBackends(
         const TKikimrRunConfig& runConfig,
         NMonitoring::TDynamicCounterPtr counters) {
-    TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> logBackends;
+    TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<std::unique_ptr<TLogBackend>>> logBackends;
 
     if (runConfig.AppConfig.HasAuditConfig()) {
         const auto& auditConfig = runConfig.AppConfig.GetAuditConfig();

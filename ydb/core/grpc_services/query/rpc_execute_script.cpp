@@ -130,11 +130,11 @@ private:
         Reply(ev->Get()->Status, std::move(operation), ev->Get()->Issues);
     }
 
-    THolder<NKqp::TEvKqp::TEvScriptRequest> MakeScriptRequest(NYql::TIssues& issues, Ydb::StatusIds::StatusCode& status) const {
+    std::unique_ptr<NKqp::TEvKqp::TEvScriptRequest> MakeScriptRequest(NYql::TIssues& issues, Ydb::StatusIds::StatusCode& status) const {
         const auto* req = GetProtoRequest();
         const auto traceId = Request->GetTraceId();
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvScriptRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvScriptRequest>();
 
         SetAuthToken(ev, *Request);
         SetDatabase(ev, *Request);

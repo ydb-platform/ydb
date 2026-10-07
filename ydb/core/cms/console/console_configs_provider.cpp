@@ -71,7 +71,7 @@ public:
         if (!Pipe)
             OpenPipe(ctx);
 
-        auto request = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
+        auto request = std::make_unique<TEvConsole::TEvConfigNotificationRequest>();
         request->Record.SetSubscriptionId(Subscription->Id);
         Subscription->CurrentConfigId.Serialize(*request->Record.MutableConfigId());
         request->Record.MutableConfig()->CopyFrom(Subscription->CurrentConfig);
@@ -189,7 +189,7 @@ public:
 
     void SendNotifyRequest(const TActorContext &ctx)
     {
-        auto request = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
+        auto request = std::make_unique<TEvConsole::TEvConfigNotificationRequest>();
         request->Record.SetSubscriptionId(Subscription->Id);
         Subscription->CurrentConfigId.Serialize(*request->Record.MutableConfigId());
         request->Record.MutableConfig()->CopyFrom(Subscription->CurrentConfig);
@@ -713,7 +713,7 @@ bool TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
     NKikimrConfig::TAppConfig appConfig;
     config->ComputeConfig(affectedKinds, appConfig, true);
 
-    auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>(
+    auto request = std::make_unique<TEvConsole::TEvConfigSubscriptionNotification>(
             subscription->Generation,
             std::move(appConfig),
             affectedKinds);
@@ -921,7 +921,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvCheckConfigUpdatesRequest::TPtr &ev
 {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvCheckConfigUpdatesResponse>();
+    auto response = std::make_unique<TEvConsole::TEvCheckConfigUpdatesResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     THashSet<ui64> base;
@@ -956,7 +956,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigItemsRequest::TPtr &ev, co
 {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvGetConfigItemsResponse>();
+    auto response = std::make_unique<TEvConsole::TEvGetConfigItemsResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     THashSet<ui32> kinds;
@@ -1075,7 +1075,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr &e
 void TConfigsProvider::Handle(TEvConsole::TEvGetConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx)
 {
     ui64 id = ev->Get()->Record.GetSubscriptionId();
-    auto resp = MakeHolder<TEvConsole::TEvGetConfigSubscriptionResponse>();
+    auto resp = std::make_unique<TEvConsole::TEvGetConfigSubscriptionResponse>();
     auto subscription = SubscriptionIndex.GetSubscription(id);
     if (subscription) {
         resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
@@ -1095,7 +1095,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigItemsRequest::TPtr &ev
 {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvGetNodeConfigItemsResponse>();
+    auto response = std::make_unique<TEvConsole::TEvGetNodeConfigItemsResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     THashSet<ui32> kinds;
@@ -1118,7 +1118,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
 {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvGetNodeConfigResponse>();
+    auto response = std::make_unique<TEvConsole::TEvGetNodeConfigResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     THashSet<ui32> kinds;
@@ -1169,7 +1169,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvListConfigSubscriptionsRequest::TPt
 {
     auto &rec = ev->Get()->Record;
 
-    auto response = MakeHolder<TEvConsole::TEvListConfigSubscriptionsResponse>();
+    auto response = std::make_unique<TEvConsole::TEvListConfigSubscriptionsResponse>();
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
     if (rec.HasSubscriber()) {
@@ -1315,7 +1315,7 @@ bool TConfigsProvider::UpdateConfig(TInMemorySubscription::TPtr subscription,
                                     const TActorContext &ctx)
 {
     if (subscription->ServeYaml) {
-        auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>(
+        auto request = std::make_unique<TEvConsole::TEvConfigSubscriptionNotification>(
                 subscription->Generation,
                 NKikimrConfig::TAppConfig{},
                 THashSet<ui32>{});

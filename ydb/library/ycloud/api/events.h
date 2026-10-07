@@ -18,7 +18,7 @@ struct TEvGrpcProtoRequest : NActors::TEventLocal<TEv, TEventType> {
 
 template <typename TEv, ui32 TEventType, typename TProtoMessage>
 struct TEvGrpcProtoResponse : NActors::TEventLocal<TEv, TEventType> {
-    THolder<NActors::IEventHandle> Request;
+    std::unique_ptr<NActors::IEventHandle> Request;
     TProtoMessage Response;
     NYdbGrpc::TGrpcStatus Status;
 };

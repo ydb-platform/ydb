@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         };
 
         // Capture all upload rows requests
-        TVector<THolder<IEventHandle>> uploadRequests;
+        TVector<std::unique_ptr<IEventHandle>> uploadRequests;
 
         auto observerHolder = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&uploadRequests](auto& ev) {
             Cerr << "... captured TEvUploadRowsRequest" << Endl;
@@ -700,7 +700,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         auto [shards, _] = CreateShardedTable(server, sender, "/Root", "table-1", 2, false);
 
-        TVector<THolder<IEventHandle>> blockedEnqueueRecords;
+        TVector<std::unique_ptr<IEventHandle>> blockedEnqueueRecords;
         TVector<TActorId> requestedTablets;
         auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvUploadRowsRequest) {
@@ -739,7 +739,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         for (auto& ev : blockedEnqueueRecords) {
             auto shardResponse = ev->Get<TEvDataShard::TEvUploadRowsResponse>();
             if (shardResponse->Record.GetTabletID() == minTabletId) {
-                auto response = MakeHolder<TEvDataShard::TEvUploadRowsResponse>();
+                auto response = std::make_unique<TEvDataShard::TEvUploadRowsResponse>();
                 response->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
                 response->Record.SetTabletID(shardResponse->Record.GetTabletID());
                 runtime.Send(ev->Recipient, ev->Sender, response.Release());
@@ -789,7 +789,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         );
 
         TVector<ui32> observedUploadStatus;
-        TVector<THolder<IEventHandle>> blockedEnqueueRecords;
+        TVector<std::unique_ptr<IEventHandle>> blockedEnqueueRecords;
 
         auto observerRequestHandler = runtime.AddObserver<TEvDataShard::TEvUploadRowsRequest>([&overloadSubscribe](auto& ev) {
             if (!overloadSubscribe) {
@@ -821,7 +821,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             return;
         }
 
-        TVector<THolder<TEvTxUserProxy::TEvUploadRowsResponse>> responses;
+        TVector<std::unique_ptr<TEvTxUserProxy::TEvUploadRowsResponse>> responses;
         auto responseAwaiter = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxUserProxy::TEvUploadRowsResponse::EventType: {

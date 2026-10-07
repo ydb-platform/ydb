@@ -157,8 +157,8 @@ TIntervals MakeIntervalSet(ui64 n, ui32 len) {
             Name_ = TestName;                               \
             ForceFork_ = false;                             \
         }                                                   \
-        static THolder<NUnitTest::TBaseTestCase> Create() { \
-            return ::MakeHolder<TTestCase##N>();            \
+        static std::unique_ptr<NUnitTest::TBaseTestCase> Create() { \
+            return ::std::make_unique<TTestCase##N>();            \
         }                                                   \
         void Execute_(NUnitTest::TTestContext&) override;   \
     };                                                      \

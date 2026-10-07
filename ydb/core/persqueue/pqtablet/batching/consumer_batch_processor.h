@@ -27,7 +27,7 @@ private:
     TStructuredMessage LogPrefix_;
 
     // codec -> batch cutter
-    THashMap<int, THolder<IBatchCutter>> BatchCutters;
+    THashMap<int, std::unique_ptr<IBatchCutter>> BatchCutters;
     THashMap<ui32, ui64> CPUUsageMetricByPartition;
     ui64 CurrentCPUUsageMetric = 0;
     ui32 CurrentCPUUsagePartitionId = 0;

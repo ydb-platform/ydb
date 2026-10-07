@@ -56,7 +56,7 @@ struct TStatisticsAggregator::TTxAnalyzeOpCancel : public TTxBase {
             {"tabletId", Self->TabletID()},
             {"opId", operationId.Quote()});
 
-        auto response = MakeHolder<TEvStatistics::TEvAnalyzeOpCancelResponse>();
+        auto response = std::make_unique<TEvStatistics::TEvAnalyzeOpCancelResponse>();
         auto& rec = response->Record;
 
         auto* op = Self->ForceTraversalOperation(operationId);

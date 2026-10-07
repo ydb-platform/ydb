@@ -4,12 +4,12 @@
 
 namespace NKikimr::NTable {
 
-THolder<IPartGroupIndexIter> CreateIndexIter(const TPart* part, IPages* env, NPage::TGroupId groupId)
+std::unique_ptr<IPartGroupIndexIter> CreateIndexIter(const TPart* part, IPages* env, NPage::TGroupId groupId)
 {
     if (part->IndexPages.HasBTree()) {
-        return MakeHolder<TPartGroupBtreeIndexIter>(part, env, groupId);
+        return std::make_unique<TPartGroupBtreeIndexIter>(part, env, groupId);
     } else {
-        return MakeHolder<TPartGroupFlatIndexIter>(part, env, groupId);
+        return std::make_unique<TPartGroupFlatIndexIter>(part, env, groupId);
     }
 }
 

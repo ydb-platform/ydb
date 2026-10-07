@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NMsgBusProxy {
 
 class TMessageBusFillNode : public TMessageBusSecureRequest<TMessageBusTabletRequest<TMessageBusFillNode, TEvHive::TEvFillNodeResult>> {
-    THolder<TBusFillNode> Request;
+    std::unique_ptr<TBusFillNode> Request;
     ui32 NodeId;
 public:
     static ui64 GetHiveTabletId(const TActorContext& ctx) {

@@ -241,7 +241,7 @@ namespace {
         };
         TTcpControlReadState TcpControlRead;
 
-        THolder<TEvRdmaIoDone::THandle> PendingIoDone;
+        std::unique_ptr<TEvRdmaIoDone::THandle> PendingIoDone;
 
     public:
         TRdmaSyncActor(
@@ -377,7 +377,7 @@ namespace {
             Send(Creator, new TEvRdmaSyncResult(std::move(session)));
         }
 
-        THolder<IEventHandle> WaitForEvent() {
+        std::unique_ptr<IEventHandle> WaitForEvent() {
             auto ev = TActorCoroImpl::WaitForEvent();
             if (ev && ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
                 throw TExPoison();
@@ -429,7 +429,7 @@ namespace {
                     }
                     if (ev->GetTypeRewrite() == TEvRdmaIoReceiveDone::EventType) {
                         if (!HandleRdmaReceiveEvent(
-                                THolder<TEvRdmaIoReceiveDone::THandle>(
+                                std::unique_ptr<TEvRdmaIoReceiveDone::THandle>(
                                     static_cast<TEvRdmaIoReceiveDone::THandle*>(ev.Release())),
                                 error)) {
                             return false;
@@ -621,7 +621,7 @@ namespace {
             return false;
         }
 
-        bool Y_NO_INLINE HandleEvent(THolder<IEventHandle> ev, TString& error) {
+        bool Y_NO_INLINE HandleEvent(std::unique_ptr<IEventHandle> ev, TString& error) {
             if (!ev) {
                 error = "unable to wait RDMA sync event";
                 return false;
@@ -637,7 +637,7 @@ namespace {
                     return true;
                 case TEvRdmaIoReceiveDone::EventType:
                     return HandleRdmaReceiveEvent(
-                        THolder<TEvRdmaIoReceiveDone::THandle>(static_cast<TEvRdmaIoReceiveDone::THandle*>(ev.Release())),
+                        std::unique_ptr<TEvRdmaIoReceiveDone::THandle>(static_cast<TEvRdmaIoReceiveDone::THandle*>(ev.Release())),
                         error);
                 case TEvPollerReady::EventType:
                     TcpControlRead.ReadRequested = false;
@@ -786,7 +786,7 @@ namespace {
             }
         }
 
-        THolder<TEvRdmaIoDone::THandle> WaitRdmaIoDone(TString& error) {
+        std::unique_ptr<TEvRdmaIoDone::THandle> WaitRdmaIoDone(TString& error) {
             if (!PumpUntil([this] { return static_cast<bool>(PendingIoDone); }, error)) {
                 return nullptr;
             }
@@ -833,7 +833,7 @@ namespace {
             return false;
         }
 
-        bool Y_NO_INLINE HandleRdmaReceiveEvent(THolder<TEvRdmaIoReceiveDone::THandle> ev, TString& error) {
+        bool Y_NO_INLINE HandleRdmaReceiveEvent(std::unique_ptr<TEvRdmaIoReceiveDone::THandle> ev, TString& error) {
             if (!ev->Get()->IsSuccess()) {
                 error = TStringBuilder()
                     << "RDMA sync RECEIVE failed, err source: " << ev->Get()->GetErrSource()
@@ -1177,7 +1177,7 @@ NActors::IActor* CreateRdmaOutgoingSyncActor(
     TQueuePair::TPtr qp,
     ICq::TPtr cq)
 {
-    return new NActors::TActorCoro(MakeHolder<TRdmaSyncActor>(
+    return new NActors::TActorCoro(std::make_unique<TRdmaSyncActor>(
         std::move(common), selfVirtualId, peerVirtualId, peerNodeId, std::move(socket), std::move(qp), std::move(cq), false));
 }
 
@@ -1190,7 +1190,7 @@ NActors::IActor* CreateRdmaIncommingSyncActor(
     TQueuePair::TPtr qp,
     ICq::TPtr cq)
 {
-    return new NActors::TActorCoro(MakeHolder<TRdmaSyncActor>(
+    return new NActors::TActorCoro(std::make_unique<TRdmaSyncActor>(
         std::move(common), selfVirtualId, peerVirtualId, peerNodeId, std::move(socket), std::move(qp), std::move(cq), true));
 }
 

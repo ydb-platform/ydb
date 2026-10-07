@@ -31,7 +31,7 @@ private:
 
         TString queryText = NDataIntegrity::TNodeQueryTextCache::Instance().Get(querySpanId);
 
-        auto response = MakeHolder<TEvLookupQueryTextResponse>();
+        auto response = std::make_unique<TEvLookupQueryTextResponse>();
         response->Record.SetQuerySpanId(querySpanId);
         if (!queryText.empty()) {
             response->Record.SetQueryText(queryText);

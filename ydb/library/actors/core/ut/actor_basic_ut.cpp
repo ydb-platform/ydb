@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(ActorBasic) {
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
 
     Y_UNIT_TEST(ActorSendReceive) {
-        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        std::unique_ptr<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 1, 1, false);
 
         TActorSystem actorSystem(setup);
@@ -48,8 +48,8 @@ Y_UNIT_TEST_SUITE(ActorBasic) {
             TMailboxType::HTSwap,
             followerPoolId
         );
-        THolder<IActor> leader{
-            new TTestEndDecorator(THolder(new TActorBenchmark::TSendReceiveActor(
+        std::unique_ptr<IActor> leader{
+            new TTestEndDecorator(std::unique_ptr<TActorBenchmark::TSendReceiveActor>(new TActorBenchmark::TSendReceiveActor(
                 TSendReceiveActorParams{.OwnEvents=2, .Receivers={followerId}, .Allocation=true}
             )),
             &pad,

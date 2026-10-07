@@ -174,7 +174,7 @@ struct TEvBenchFlatMessage : TEventFlat<TEvBenchFlatMessage, TEvBenchFlatMessage
     auto Value5() const { return this->template Field<TValue5Tag>(); }
 
     static TEvBenchFlatMessage* Make(ui64 base) {
-        THolder<TEvBenchFlatMessage> holder(TBase::MakeEvent());
+        std::unique_ptr<TEvBenchFlatMessage> holder(TBase::MakeEvent());
         auto frontend = holder->GetFrontend<TSchemeV1>();
         frontend.template Field<TValue1Tag>() = base + 1;
         frontend.template Field<TValue2Tag>() = base + 2;
@@ -280,7 +280,7 @@ struct TEvBenchFlatThirtyMessage : TEventFlat<TEvBenchFlatThirtyMessage, TEvBenc
     friend class TEventFlat<TEvBenchFlatThirtyMessage, TEvBenchFlatThirtyMessageScheme>;
 
     static TEvBenchFlatThirtyMessage* Make(ui64 base) {
-        THolder<TEvBenchFlatThirtyMessage> holder(TBase::MakeEvent());
+        std::unique_ptr<TEvBenchFlatThirtyMessage> holder(TBase::MakeEvent());
         auto frontend = holder->GetFrontend<TSchemeV1>();
 #define SET_VALUE_TAG(N) frontend.template Field<TScheme::TValue##N##Tag>() = base + N;
         BENCH_30_U64_FIELDS(SET_VALUE_TAG)
@@ -373,7 +373,7 @@ struct TEvBenchAck : TEventFlat<TEvBenchAck, TEvBenchAckScheme> {
     auto Checksum() const { return this->template Field<TChecksumTag>(); }
 
     static TEvBenchAck* Make(ui32 count, ui64 checksum) {
-        THolder<TEvBenchAck> holder(TBase::MakeEvent());
+        std::unique_ptr<TEvBenchAck> holder(TBase::MakeEvent());
         holder->Count() = count;
         holder->Checksum() = checksum;
         return holder.Release();
@@ -402,7 +402,7 @@ struct TEvBenchFlush : TEventFlat<TEvBenchFlush, TEvBenchFlushScheme> {
     auto Value() const { return this->template Field<TTag>(); }
 
     static TEvBenchFlush* Make() {
-        THolder<TEvBenchFlush> holder(TBase::MakeEvent());
+        std::unique_ptr<TEvBenchFlush> holder(TBase::MakeEvent());
         holder->Value() = 0;
         return holder.Release();
     }

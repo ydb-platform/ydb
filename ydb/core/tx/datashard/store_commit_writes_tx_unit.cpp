@@ -34,8 +34,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateStoreCommitWritesTxUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TStoreCommitWritesTxUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateStoreCommitWritesTxUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TStoreCommitWritesTxUnit>(new TStoreCommitWritesTxUnit(self, pipeline));
 }
 
 } // namespace NDataShard

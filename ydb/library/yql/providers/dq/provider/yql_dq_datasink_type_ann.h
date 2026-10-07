@@ -7,6 +7,6 @@
 
 namespace NYql {
 
-THolder<TVisitorTransformerBase> CreateDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx);
+std::unique_ptr<TVisitorTransformerBase> CreateDqsDataSinkTypeAnnotationTransformer(TTypeAnnotationContext* typeCtx);
 
 } // NYql

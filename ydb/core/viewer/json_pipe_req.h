@@ -305,8 +305,8 @@ protected:
     void RequestBSControllerConfigWithStoragePools();
     [[nodiscard]] TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> MakeRequestBSControllerConfigWithStoragePools();
     void RequestBSControllerInfo();
-    void RequestBSControllerSelectGroups(THolder<TEvBlobStorage::TEvControllerSelectGroups> request);
-    [[nodiscard]] TRequestResponse<TEvBlobStorage::TEvControllerSelectGroupsResult> MakeRequestBSControllerSelectGroups(THolder<TEvBlobStorage::TEvControllerSelectGroups> request, ui64 cookie = 0);
+    void RequestBSControllerSelectGroups(std::unique_ptr<TEvBlobStorage::TEvControllerSelectGroups> request);
+    [[nodiscard]] TRequestResponse<TEvBlobStorage::TEvControllerSelectGroupsResult> MakeRequestBSControllerSelectGroups(std::unique_ptr<TEvBlobStorage::TEvControllerSelectGroups> request, ui64 cookie = 0);
     [[nodiscard]] TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force = false);
     [[nodiscard]] TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGeneration, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool force = false);
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> RequestBSControllerPDiskInfo(ui32 nodeId, ui32 pdiskId);
@@ -323,7 +323,7 @@ protected:
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResponse> MakeCachedRequestBSControllerStorageStats();
     [[nodiscard]] TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force = false);
 
-    THolder<NSchemeCache::TSchemeCacheNavigate> SchemeCacheNavigateRequestBuilder(NSchemeCache::TSchemeCacheNavigate::TEntry&& entry);
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> SchemeCacheNavigateRequestBuilder(NSchemeCache::TSchemeCacheNavigate::TEntry&& entry);
 
     void RequestSchemeCacheNavigate(const TString& path);
     void RequestSchemeCacheNavigate(const TPathId& pathId);

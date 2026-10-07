@@ -209,7 +209,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         };
         HivePipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, HiveId, pipeConfig));
 
-        THolder<TEvLocal::TEvRegisterNode> request = MakeHolder<TEvLocal::TEvRegisterNode>(HiveId);
+        std::unique_ptr<TEvLocal::TEvRegisterNode> request = std::make_unique<TEvLocal::TEvRegisterNode>(HiveId);
         for (auto &domain: ServicedDomains) {
             *request->Record.AddServicedDomains() = NKikimrSubDomains::TDomainKey(domain);
         }
@@ -249,7 +249,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     void Handle(TEvLocal::TEvEnumerateTablets::TPtr &ev, const TActorContext &ctx) {
         const NKikimrLocal::TEvEnumerateTablets &record = ev->Get()->Record;
 
-        THolder<TEvLocal::TEvEnumerateTabletsResult> result(
+        std::unique_ptr<TEvLocal::TEvEnumerateTabletsResult> result(
             new TEvLocal::TEvEnumerateTabletsResult(NKikimrProto::OK));
 
         bool isFilteringNeeded = false;
@@ -1194,7 +1194,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             {"tenantName", info.TenantName},
             {"schemeRoot", SchemeRoot});
 
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(info.TenantName);
+        auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(info.TenantName);
         NTabletPipe::SendData(ctx.SelfID, SchemeShardPipe, request.Release());
     }
 
@@ -1433,7 +1433,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             ResolveTasks.erase(path);
 
             // subscribe for schema updates
-            THolder<IActor> subscriber(CreateSchemeBoardSubscriber(SelfId(), path, ESchemeBoardSubscriberDeletionPolicy::Majority));
+            std::unique_ptr<IActor> subscriber(CreateSchemeBoardSubscriber(SelfId(), path, ESchemeBoardSubscriberDeletionPolicy::Majority));
             tenant.Subscriber = Register(subscriber.Release());
         } else {
             YDB_LOG_WARN_CTX(ctx, "TDomainLocal::HandleResolve: local tenant info not found for path",

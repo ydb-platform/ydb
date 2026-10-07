@@ -105,7 +105,7 @@ public:
 
         for (const auto& [requestId, state] : LockIdToState) {
             Settings.Counters->SentIteratorCancels->Inc();
-            auto cancel = MakeHolder<NEvents::TDataEvents::TEvLockRowsCancel>();
+            auto cancel = std::make_unique<NEvents::TDataEvents::TEvLockRowsCancel>();
             cancel->Record.SetRequestId(requestId);
             Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
         }
@@ -265,7 +265,7 @@ public:
         return KeyColumnTypes;
     }
 
-    void StartLockRequest(ui64 cookie, ui64 shardId, THolder<NEvents::TDataEvents::TEvLockRows> request) {
+    void StartLockRequest(ui64 cookie, ui64 shardId, std::unique_ptr<NEvents::TDataEvents::TEvLockRows> request) {
         Settings.Counters->SentLocks->Inc();
         auto& record = request->Record;
 
@@ -580,14 +580,14 @@ public:
 
         Partitioning.reset();
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Settings.Database;
 
         TVector<TCell> minusInf(KeyColumnTypes.size());
         TVector<TCell> plusInf;
         TTableRange range(minusInf, true, plusInf, true, false);
 
-        request->ResultSet.emplace_back(MakeHolder<TKeyDesc>(Settings.TableId, range, TKeyDesc::ERowOperation::Read,
+        request->ResultSet.emplace_back(std::make_unique<TKeyDesc>(Settings.TableId, range, TKeyDesc::ERowOperation::Read,
             KeyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
 
         Settings.Counters->IteratorsShardResolve->Inc();

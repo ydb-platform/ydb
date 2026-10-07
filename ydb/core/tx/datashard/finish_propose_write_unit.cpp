@@ -241,9 +241,9 @@ void TFinishProposeWriteUnit::UpdateCounters(const TWriteOperation* writeOp, con
 
 
 
-THolder<TExecutionUnit> CreateFinishProposeWriteUnit(TDataShard &dataShard, TPipeline &pipeline)
+std::unique_ptr<TExecutionUnit> CreateFinishProposeWriteUnit(TDataShard &dataShard, TPipeline &pipeline)
 {
-    return THolder(new TFinishProposeWriteUnit(dataShard, pipeline));
+    return std::unique_ptr<TFinishProposeWriteUnit>(new TFinishProposeWriteUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

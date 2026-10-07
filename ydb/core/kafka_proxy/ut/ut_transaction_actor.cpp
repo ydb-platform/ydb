@@ -67,7 +67,7 @@ namespace {
             }
 
             void Handle(NKqp::TEvKqp::TEvCreateSessionRequest::TPtr& ev, const TActorContext& ctx) {
-                auto response = MakeHolder<TEvKqp::TEvCreateSessionResponse>();
+                auto response = std::make_unique<TEvKqp::TEvCreateSessionResponse>();
                 response->Record.SetYdbStatus(ReturnSuccessOnCreateSession ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAVAILABLE);
                 if (ReturnSuccessOnCreateSession) {
                     response->Record.MutableResponse()->SetSessionId("123");
@@ -83,7 +83,7 @@ namespace {
                     HeldCommitCookie = ev->Cookie;
                     return;
                 }
-                THolder<NKqp::TEvKqp::TEvQueryResponse> response;
+                std::unique_ptr<NKqp::TEvKqp::TEvQueryResponse> response;
                 if (ev->Get()->Record.GetRequest().GetTxControl().commit_tx()) {
                     Cout << "Sending response on commit from dummy kqp" << Endl;
                     response = MakeStatusResponse(CommitStatus);
@@ -103,14 +103,14 @@ namespace {
                 ));
             }
 
-            THolder<NKqp::TEvKqp::TEvQueryResponse> MakeStatusResponse(Ydb::StatusIds::StatusCode status) {
-                auto response = MakeHolder<NKqp::TEvKqp::TEvQueryResponse>();
+            std::unique_ptr<NKqp::TEvKqp::TEvQueryResponse> MakeStatusResponse(Ydb::StatusIds::StatusCode status) {
+                auto response = std::make_unique<NKqp::TEvKqp::TEvQueryResponse>();
                 response->Record.SetYdbStatus(status);
                 return response;
             }
 
-            THolder<NKqp::TEvKqp::TEvQueryResponse> MakeResponseOnSelectFromKqp() {
-                auto response = MakeHolder<NKqp::TEvKqp::TEvQueryResponse>();
+            std::unique_ptr<NKqp::TEvKqp::TEvQueryResponse> MakeResponseOnSelectFromKqp() {
+                auto response = std::make_unique<NKqp::TEvKqp::TEvQueryResponse>();
                 NKikimrKqp::TEvQueryResponse record;
 
                 record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
@@ -269,7 +269,7 @@ namespace {
                 Ctx->Finalize();
             }
 
-            THolder<NKafka::TEvKafka::TEvResponse> SendAddPartitionsToTxnRequest(std::vector<TTopicPartitions> topicPartitions, ui64 correlationId = 0) {
+            std::unique_ptr<NKafka::TEvKafka::TEvResponse> SendAddPartitionsToTxnRequest(std::vector<TTopicPartitions> topicPartitions, ui64 correlationId = 0) {
                 auto message = std::make_shared<NKafka::TAddPartitionsToTxnRequestData>();
                 message->TransactionalId = TransactionalId;
                 message->ProducerId = ProducerId;
@@ -282,20 +282,20 @@ namespace {
                     }
                     message->Topics.push_back(topic);
                 }
-                auto event = MakeHolder<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge, Database, Database);
+                auto event = std::make_unique<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge, Database, Database);
 
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 
                 return Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
             }
 
-            THolder<NKafka::TEvKafka::TEvResponse> SendAddOffsetsToTxnRequest(const TString& groupId, ui64 correlationId = 0) {
+            std::unique_ptr<NKafka::TEvKafka::TEvResponse> SendAddOffsetsToTxnRequest(const TString& groupId, ui64 correlationId = 0) {
                 auto message = std::make_shared<NKafka::TAddOffsetsToTxnRequestData>();
                 message->TransactionalId = TransactionalId;
                 message->ProducerId = ProducerId;
                 message->ProducerEpoch = ProducerEpoch;
                 message->GroupId = groupId;
-                auto event = MakeHolder<NKafka::TEvKafka::TEvAddOffsetsToTxnRequest>(
+                auto event = std::make_unique<NKafka::TEvKafka::TEvAddOffsetsToTxnRequest>(
                     correlationId,
                     NKafka::TMessagePtr<NKafka::TAddOffsetsToTxnRequestData>({}, message),
                     Ctx->Edge,
@@ -307,7 +307,7 @@ namespace {
                 return Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
             }
 
-            THolder<NKafka::TEvKafka::TEvResponse> SendTxnOffsetCommitRequest(const TCommitRequest& commitRequest, ui64 correlationId = 0) {
+            std::unique_ptr<NKafka::TEvKafka::TEvResponse> SendTxnOffsetCommitRequest(const TCommitRequest& commitRequest, ui64 correlationId = 0) {
                 auto message = std::make_shared<NKafka::TTxnOffsetCommitRequestData>();
                 message->TransactionalId = TransactionalId;
                 message->ProducerId = ProducerId;
@@ -325,7 +325,7 @@ namespace {
                     }
                     message->Topics.push_back(topic);
                 }
-                auto event = MakeHolder<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>(correlationId, NKafka::TMessagePtr<NKafka::TTxnOffsetCommitRequestData>({}, message), Ctx->Edge, Database, Database);
+                auto event = std::make_unique<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>(correlationId, NKafka::TMessagePtr<NKafka::TTxnOffsetCommitRequestData>({}, message), Ctx->Edge, Database, Database);
 
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 
@@ -338,7 +338,7 @@ namespace {
                 message->ProducerId = ProducerId;
                 message->ProducerEpoch = ProducerEpoch;
                 message->Committed = commit;
-                auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(
+                auto event = std::make_unique<NKafka::TEvKafka::TEvEndTxnRequest>(
                     correlationId,
                     NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message),
                     Ctx->Edge,
@@ -349,7 +349,7 @@ namespace {
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
-            THolder<NKafka::TEvKafka::TEvResponse> SendEndTxnRequest(bool commit = false, ui64 correlationId = 0) {
+            std::unique_ptr<NKafka::TEvKafka::TEvResponse> SendEndTxnRequest(bool commit = false, ui64 correlationId = 0) {
                 SendEndTxnRequestAsync(commit, correlationId);
                 return Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
             }
@@ -388,7 +388,7 @@ namespace {
             }
 
             void AssertEndTxnResponse(
-                    const THolder<NKafka::TEvKafka::TEvResponse>& response,
+                    const std::unique_ptr<NKafka::TEvKafka::TEvResponse>& response,
                     ui64 correlationId,
                     NKafka::EKafkaErrors errorCode) {
                 UNIT_ASSERT(response != nullptr);

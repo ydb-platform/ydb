@@ -116,7 +116,7 @@ public:
         TMkqlIOSpecs specs;
         specs.Init(codecCtx, meta, {path}, TMaybe<TVector<TString>>{});
         TVector<std::pair<TString, NYql::NFile::TColumnsInfo>> files{{path, NYql::NFile::TColumnsInfo{}}};
-        THolder<IInputState> input = MakeHolder<TFileInputState>(specs, HolderFactory, NYql::NFile::MakeTextYsonInputs(files), 0u, 1_MB);
+        std::unique_ptr<IInputState> input = std::make_unique<TFileInputState>(specs, HolderFactory, NYql::NFile::MakeTextYsonInputs(files), 0u, 1_MB);
 
         auto keyColumns = MemberToIndex(KeyType);
         auto payloadColumns = MemberToIndex(PayloadType);

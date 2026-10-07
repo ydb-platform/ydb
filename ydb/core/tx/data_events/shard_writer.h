@@ -209,7 +209,7 @@ private:
 
     void SendWriteRequest();
     static TDuration OverloadTimeout() noexcept;
-    void SendToTablet(THolder<IEventBase> event) {
+    void SendToTablet(std::unique_ptr<IEventBase> event) {
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true), IEventHandle::FlagTrackDelivery, 0,
             ActorSpan.GetTraceId());
     }

@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
 
             auto prevObserver = runtime.SetObserverFunc(defObserver);
 
-            TVector<THolder<IEventHandle>> suppressed;
+            TVector<std::unique_ptr<IEventHandle>> suppressed;
             auto suppressEvent  = [&](TAutoPtr<IEventHandle>& ev) -> auto {
                 if (ev->GetTypeRewrite() == TEvDataShard::TEvStateChanged::EventType) {
                     auto *msg = ev->Get<TEvDataShard::TEvStateChanged>();

@@ -51,7 +51,7 @@ public:
     {
     }
 
-    THolder<NActors::IEventHandle> FillResponse(const TUpdateConfigOpBaseContext& opCtx, auto& ev, auto errorLevel, const TActorContext &ctx) {
+    std::unique_ptr<NActors::IEventHandle> FillResponse(const TUpdateConfigOpBaseContext& opCtx, auto& ev, auto errorLevel, const TActorContext &ctx) {
         for (auto& [path, info] : opCtx.UnknownFields) {
             auto *issue = ev->Record.AddIssues();
             issue->set_severity(errorLevel);
@@ -64,18 +64,18 @@ public:
             issue->set_message(TStringBuilder{} << "Deprecated key# " << info.first << " in proto# " << info.second << " found in path# " << path);
         }
 
-        return MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+        return std::make_unique<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
     }
 
     void HandleError(const TString& error, const TActorContext& ctx) {
         Error = true;
-        auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+        auto ev = std::make_unique<TEvConsole::TEvGenericError>();
         ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         auto *issue = ev->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(error);
         ErrorReason = error;
-        Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+        Response = std::make_unique<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
     }
 
 protected:
@@ -86,7 +86,7 @@ protected:
     const bool Force = false;
     const bool AllowUnknownFields = false;
     const bool DryRun = false;
-    THolder<NActors::IEventHandle> Response;
+    std::unique_ptr<NActors::IEventHandle> Response;
     bool Error = false;
     TString ErrorReason;
     bool Modify = false;
@@ -162,15 +162,15 @@ public:
 
             if (hasForbiddenUnknown) {
                 Error = true;
-                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+                auto ev = std::make_unique<TEvConsole::TEvGenericError>();
                 ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
                 ErrorReason = "Unknown keys in config.";
                 Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_ERROR, ctx);
             } else if (!Force) {
-                auto ev = MakeHolder<TEvConsole::TEvReplaceYamlConfigResponse>();
+                auto ev = std::make_unique<TEvConsole::TEvReplaceYamlConfigResponse>();
                 Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_WARNING, ctx);
             } else {
-                auto ev = MakeHolder<TEvConsole::TEvSetYamlConfigResponse>();
+                auto ev = std::make_unique<TEvConsole::TEvSetYamlConfigResponse>();
                 Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_WARNING, ctx);
             }
         }
@@ -206,7 +206,7 @@ public:
 
             Self->VolatileYamlConfigs.clear();
 
-            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->MainYamlConfig, Self->DatabaseYamlConfigs);
+            auto resp = std::make_unique<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(Self->MainYamlConfig, Self->DatabaseYamlConfigs);
             ctx.Send(Self->ConfigsProvider, resp.Release());
         } else if (Error && !DryRun) {
             if (!SkipAuditLog) {
@@ -301,14 +301,14 @@ public:
 
             if (!AppData(ctx)->FeatureFlags.GetDatabaseYamlConfigAllowed()) {
                 Error = true;
-                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+                auto ev = std::make_unique<TEvConsole::TEvGenericError>();
 
                 auto *issue = ev->Record.AddIssues();
                 ErrorReason = "Per database config is disabled";
                 issue->set_severity(NYql::TSeverityIds::S_ERROR);
                 issue->set_message(ErrorReason);
                 ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-                Response = MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
+                Response = std::make_unique<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
                 return true;
             }
 
@@ -325,15 +325,15 @@ public:
 
             if (hasForbiddenUnknown) {
                 Error = true;
-                auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+                auto ev = std::make_unique<TEvConsole::TEvGenericError>();
                 ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
                 ErrorReason = "Unknown keys in config.";
                 Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_ERROR, ctx);
             } else if (!Force) {
-                auto ev = MakeHolder<TEvConsole::TEvReplaceYamlConfigResponse>();
+                auto ev = std::make_unique<TEvConsole::TEvReplaceYamlConfigResponse>();
                 Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_WARNING, ctx);
             } else {
-                auto ev = MakeHolder<TEvConsole::TEvSetYamlConfigResponse>();
+                auto ev = std::make_unique<TEvConsole::TEvSetYamlConfigResponse>();
                 Response = FillResponse(opCtx, ev, NYql::TSeverityIds::S_WARNING, ctx);
             }
         }
@@ -396,7 +396,7 @@ public:
                 .Version = Version + 1,
             };
 
-            auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(
+            auto resp = std::make_unique<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(
                 Self->MainYamlConfig,
                 Self->DatabaseYamlConfigs,
                 Self->VolatileYamlConfigs,

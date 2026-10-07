@@ -47,7 +47,7 @@ TUaEventsWriter::TUaEventsWriter(const TString& uri, const NMonitoring::TDynamic
     NUnifiedAgent::TSessionParameters sessionSettings;
     sessionSettings.SetCounters(counters);
     Client = NUnifiedAgent::MakeClient(uaParams);
-    Session = MakeHolder<TUaEventsSession>(Client->CreateSession(sessionSettings));
+    Session = std::make_unique<TUaEventsSession>(Client->CreateSession(sessionSettings));
 }
 
 TUaEventsWriter::TUaEventsWriter(IUaEventsSession::TPtr session)

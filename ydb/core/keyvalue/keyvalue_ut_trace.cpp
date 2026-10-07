@@ -12,7 +12,7 @@ using namespace NActors;
 using namespace NKikimr;
 
 struct TTestEnvironment {
-    THolder<TTestBasicRuntime> Runtime;
+    std::unique_ptr<TTestBasicRuntime> Runtime;
     const ui32 NodeCount;
     TActorId Edge;
     const ui64 TabletId = MakeTabletID(false, 1);
@@ -44,7 +44,7 @@ struct TTestEnvironment {
     }
 
     void SetupRuntime() {
-        Runtime = MakeHolder<TTestBasicRuntime>(NodeCount, 1u);
+        Runtime = std::make_unique<TTestBasicRuntime>(NodeCount, 1u);
         Runtime->AddAppDataInit([](ui32, NKikimr::TAppData& appData) {
             appData.FeatureFlags.SetEnablePutBatchingForBlobStorage(false);
         });
@@ -62,7 +62,7 @@ struct TTestEnvironment {
     }
 
     template<class TRequest>
-    auto DoKVRequest(THolder<TRequest> request) {
+    auto DoKVRequest(std::unique_ptr<TRequest> request) {
         Runtime->SendToPipe(TabletId, Edge, request.Release(), 0, NTabletPipe::TClientConfig(), TActorId(),
                 0, NWilson::TTraceId::NewTraceId(15, 4095));
         TAutoPtr<IEventHandle> handle;
@@ -75,16 +75,16 @@ struct TTestEnvironment {
     }
 };
 
-THolder<TEvKeyValue::TEvExecuteTransaction> CreateWrite(TString key, TString value) {
-    auto request = MakeHolder<TEvKeyValue::TEvExecuteTransaction>();
+std::unique_ptr<TEvKeyValue::TEvExecuteTransaction> CreateWrite(TString key, TString value) {
+    auto request = std::make_unique<TEvKeyValue::TEvExecuteTransaction>();
     auto write = request->Record.add_commands()->mutable_write();
     write->set_key(std::move(key));
     write->set_value(std::move(value));
     return request;
 }
 
-THolder<TEvKeyValue::TEvRead> CreateRead(TString key) {
-    auto request = MakeHolder<TEvKeyValue::TEvRead>();
+std::unique_ptr<TEvKeyValue::TEvRead> CreateRead(TString key) {
+    auto request = std::make_unique<TEvKeyValue::TEvRead>();
     auto& record = request->Record;
     record.set_key(std::move(key));
     record.set_offset(0);

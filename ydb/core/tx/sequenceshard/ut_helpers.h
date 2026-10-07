@@ -15,7 +15,7 @@ namespace NSequenceShard {
     struct TTestContext {
         TTabletTypes::EType TabletType = TTabletTypes::SequenceShard;
         ui64 TabletId = MakeTabletID(false, 1);
-        THolder<TTestActorRuntime> Runtime;
+        std::unique_ptr<TTestActorRuntime> Runtime;
         TActorId ClientId;
         TActorId UnmarkedClientId;
         TMap<std::tuple<ui64, ui64, ui64>, TActorId> MarkedClientIds;
@@ -32,12 +32,12 @@ namespace NSequenceShard {
         void WaitTabletBoot();
 
         template<class TEvent>
-        THolder<TEvent> ExpectEdgeEvent(const TActorId& actor) {
+        std::unique_ptr<TEvent> ExpectEdgeEvent(const TActorId& actor) {
             return Runtime->GrabEdgeEvent<TEvent>(actor)->Release();
         }
 
         template<class TEvent>
-        THolder<TEvent> ExpectEdgeEvent(const TActorId& actor, ui64 cookie) {
+        std::unique_ptr<TEvent> ExpectEdgeEvent(const TActorId& actor, ui64 cookie) {
             auto ev = Runtime->GrabEdgeEvent<TEvent>(actor);
             UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, cookie);
             return ev->Release();
@@ -50,61 +50,61 @@ namespace NSequenceShard {
 
         void SendCreateSequence(
             ui64 cookie, const TActorId& edge,
-            THolder<TEvSequenceShard::TEvCreateSequence> msg);
-        THolder<TEvSequenceShard::TEvCreateSequenceResult> NextCreateSequenceResult(
+            std::unique_ptr<TEvSequenceShard::TEvCreateSequence> msg);
+        std::unique_ptr<TEvSequenceShard::TEvCreateSequenceResult> NextCreateSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvCreateSequenceResult> CreateSequence(
-            THolder<TEvSequenceShard::TEvCreateSequence> msg);
+        std::unique_ptr<TEvSequenceShard::TEvCreateSequenceResult> CreateSequence(
+            std::unique_ptr<TEvSequenceShard::TEvCreateSequence> msg);
 
         void SendAllocateSequence(
             ui64 cookie, const TActorId& edge,
             const TPathId& pathId, ui64 cache = 0);
-        THolder<TEvSequenceShard::TEvAllocateSequenceResult> NextAllocateSequenceResult(
+        std::unique_ptr<TEvSequenceShard::TEvAllocateSequenceResult> NextAllocateSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvAllocateSequenceResult> AllocateSequence(
+        std::unique_ptr<TEvSequenceShard::TEvAllocateSequenceResult> AllocateSequence(
             const TPathId& pathId, ui64 cache = 0);
 
         void SendDropSequence(
             ui64 cookie, const TActorId& edge, const TPathId& pathId);
-        THolder<TEvSequenceShard::TEvDropSequenceResult> NextDropSequenceResult(
+        std::unique_ptr<TEvSequenceShard::TEvDropSequenceResult> NextDropSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvDropSequenceResult> DropSequence(
+        std::unique_ptr<TEvSequenceShard::TEvDropSequenceResult> DropSequence(
             const TPathId& pathId);
 
         void SendUpdateSequence(
             ui64 cookie, const TActorId& edge,
-            THolder<TEvSequenceShard::TEvUpdateSequence> msg);
-        THolder<TEvSequenceShard::TEvUpdateSequenceResult> NextUpdateSequenceResult(
+            std::unique_ptr<TEvSequenceShard::TEvUpdateSequence> msg);
+        std::unique_ptr<TEvSequenceShard::TEvUpdateSequenceResult> NextUpdateSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvUpdateSequenceResult> UpdateSequence(
-            THolder<TEvSequenceShard::TEvUpdateSequence> msg);
+        std::unique_ptr<TEvSequenceShard::TEvUpdateSequenceResult> UpdateSequence(
+            std::unique_ptr<TEvSequenceShard::TEvUpdateSequence> msg);
 
         void SendFreezeSequence(
             ui64 cookie, const TActorId& edge, const TPathId& pathId);
-        THolder<TEvSequenceShard::TEvFreezeSequenceResult> NextFreezeSequenceResult(
+        std::unique_ptr<TEvSequenceShard::TEvFreezeSequenceResult> NextFreezeSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvFreezeSequenceResult> FreezeSequence(
+        std::unique_ptr<TEvSequenceShard::TEvFreezeSequenceResult> FreezeSequence(
             const TPathId& pathId);
 
         void SendRestoreSequence(
             ui64 cookie, const TActorId& edge,
-            THolder<TEvSequenceShard::TEvRestoreSequence> msg);
-        THolder<TEvSequenceShard::TEvRestoreSequenceResult> NextRestoreSequenceResult(
+            std::unique_ptr<TEvSequenceShard::TEvRestoreSequence> msg);
+        std::unique_ptr<TEvSequenceShard::TEvRestoreSequenceResult> NextRestoreSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvRestoreSequenceResult> RestoreSequence(
-            THolder<TEvSequenceShard::TEvRestoreSequence> msg);
+        std::unique_ptr<TEvSequenceShard::TEvRestoreSequenceResult> RestoreSequence(
+            std::unique_ptr<TEvSequenceShard::TEvRestoreSequence> msg);
 
         void SendRedirectSequence(
             ui64 cookie, const TActorId& edge,
             const TPathId& pathId, ui64 redirectTo);
-        THolder<TEvSequenceShard::TEvRedirectSequenceResult> NextRedirectSequenceResult(
+        std::unique_ptr<TEvSequenceShard::TEvRedirectSequenceResult> NextRedirectSequenceResult(
             ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvRedirectSequenceResult> RedirectSequence(
+        std::unique_ptr<TEvSequenceShard::TEvRedirectSequenceResult> RedirectSequence(
             const TPathId& pathId, ui64 redirectTo);
 
         void SendGetSequence(ui64 cookie, const TActorId& edge, const TPathId& pathId);
-        THolder<TEvSequenceShard::TEvGetSequenceResult> NextGetSequenceResult(ui64 cookie, const TActorId& edge);
-        THolder<TEvSequenceShard::TEvGetSequenceResult> GetSequence(const TPathId& pathId);
+        std::unique_ptr<TEvSequenceShard::TEvGetSequenceResult> NextGetSequenceResult(ui64 cookie, const TActorId& edge);
+        std::unique_ptr<TEvSequenceShard::TEvGetSequenceResult> GetSequence(const TPathId& pathId);
     };
 
 } // namespace NSequenceShard

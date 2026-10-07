@@ -31,7 +31,7 @@ void InitRoot(Tests::TServer::TPtr server,
 
 ui64 RunSchemeTx(
         TTestActorRuntimeBase& runtime,
-        THolder<TEvTxUserProxy::TEvProposeTransaction>&& request,
+        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction>&& request,
         TActorId sender = {},
         bool viaActorSystem = false,
         TEvTxUserProxy::TEvProposeTransactionStatus::EStatus expectedStatus = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress)
@@ -47,11 +47,11 @@ ui64 RunSchemeTx(
     return ev->Get()->Record.GetTxId();
 }
 
-THolder<TEvTxUserProxy::TEvProposeTransaction> SchemeTxTemplate(
+std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> SchemeTxTemplate(
         NKikimrSchemeOp::EOperationType type,
         const TString& workingDir = {})
 {
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     request->Record.SetExecTimeoutPeriod(Max<ui64>());
 
     auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
@@ -68,7 +68,7 @@ void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId)
     auto &runtime = *server->GetRuntime();
     auto &settings = server->GetSettings();
 
-    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+    auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
     request->Record.SetTxId(txId);
     auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
     runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
@@ -117,7 +117,7 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server
     TAutoPtr<IEventHandle> handle;
     TVector<ui64> shards;
 
-    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
     request->Record.MutableDescribePath()->SetPath(path);
     request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
@@ -147,7 +147,7 @@ std::pair<TTableInfoMap, ui64> GetTables(
     auto &runtime = *server->GetRuntime();
 
     auto sender = runtime.AllocateEdgeActor();
-    auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+    auto request = std::make_unique<TEvDataShard::TEvGetInfoRequest>();
     runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
     TTableInfoMap result;

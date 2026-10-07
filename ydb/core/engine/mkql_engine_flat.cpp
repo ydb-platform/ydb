@@ -314,7 +314,7 @@ public:
                 return EResult::ProgramError;
             }
 
-            TVector<THolder<TKeyDesc>> dbKeys;
+            TVector<std::unique_ptr<TKeyDesc>> dbKeys;
             TExploringNodeVisitor explorer;
 
             {
@@ -331,7 +331,7 @@ public:
                     auto it = ProxyCallables.insert(std::make_pair(uniqueId, ctx)).first;
                     callable.SetUniqueId(uniqueId);
 
-                    THolder<TKeyDesc> desc = ExtractTableKey(callable, Strings, Env);
+                    std::unique_ptr<TKeyDesc> desc = ExtractTableKey(callable, Strings, Env);
                     if (desc) {
                         it->second.Key = desc.Get();
                         dbKeys.push_back(std::move(desc));
@@ -375,7 +375,7 @@ public:
         return EResult::Ok;
     }
 
-    TVector<THolder<TKeyDesc>>& GetDbKeys() noexcept override {
+    TVector<std::unique_ptr<TKeyDesc>>& GetDbKeys() noexcept override {
         Y_ABORT_UNLESS(Program.GetNode(), "Program is not set");
         return DbKeys;
     }
@@ -531,7 +531,7 @@ public:
         Y_ABORT_UNLESS(AreAffectedShardsPrepared, "PrepareShardPrograms must be called first");
         Y_ABORT_UNLESS(!AreShardProgramsExtracted, "AfterShardProgramsExtracted is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
-        TVector<THolder<TKeyDesc>>().swap(DbKeys);
+        TVector<std::unique_ptr<TKeyDesc>>().swap(DbKeys);
         TVector<TProgramParts>().swap(SpecializedParts);
         AreShardProgramsExtracted = true;
     }
@@ -931,7 +931,7 @@ public:
                         return EResult::ProgramError;
                     }
 
-                    THolder<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env);
+                    std::unique_ptr<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env);
                     Y_ABORT_UNLESS(desc);
                     Y_ABORT_UNLESS(desc->RowOperation == TKeyDesc::ERowOperation::Read);
                     TValidatedKey validKey(std::move(desc), false);
@@ -964,7 +964,7 @@ public:
                         return EResult::ProgramError;
                     }
 
-                    THolder<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env);
+                    std::unique_ptr<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env);
                     Y_ABORT_UNLESS(desc);
                     Y_ABORT_UNLESS(desc->RowOperation == TKeyDesc::ERowOperation::Update ||
                              desc->RowOperation == TKeyDesc::ERowOperation::Erase);
@@ -1050,7 +1050,7 @@ public:
 
         TGuard<TScopedAlloc> allocGuard(Alloc);
 
-        TVector<THolder<TKeyDesc>> prechargeKeys;
+        TVector<std::unique_ptr<TKeyDesc>> prechargeKeys;
         // iterate over all ProgramPerOrigin (for merged datashards)
         for (const auto& pi : ProgramPerOrigin) {
             auto pgm = pi.second;
@@ -1072,7 +1072,7 @@ public:
                 for (ui32 i = 0, e = myOpsStruct->GetValuesCount(); i < e; ++i) {
                     TRuntimeNode item = myOpsStruct->GetValue(i);
                     Y_ABORT_UNLESS(item.GetNode()->GetType()->IsCallable(), "Bad shard program");
-                    THolder<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env);
+                    std::unique_ptr<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env);
                     Y_ABORT_UNLESS(desc);
                     prechargeKeys.emplace_back(std::move(desc));
                 }
@@ -1349,7 +1349,7 @@ public:
                         Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
                     auto pattern = MakeComputationPattern(runExplorer, runPgm, {}, opts);
                     auto compOpts = opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider);
-                    THolder<IComputationGraph> runGraph = pattern->Clone(compOpts);
+                    std::unique_ptr<IComputationGraph> runGraph = pattern->Clone(compOpts);
 
                     const TBindTerminator bind(runGraph->GetTerminator());
 
@@ -2098,7 +2098,7 @@ private:
     TVector<TProgramParts> SpecializedParts;
     TMap<ui64, TRuntimeNode> ProgramPerOrigin;
     TMap<ui64, ui64> ProgramSizes;
-    TVector<THolder<TKeyDesc>> DbKeys;
+    TVector<std::unique_ptr<TKeyDesc>> DbKeys;
     TVector<TShardData> AffectedShards;
     TMaybe<bool> ReadOnlyProgram;
     THashMap<ui32, TCallableContext> ProxyCallables;
@@ -2120,7 +2120,7 @@ private:
     bool IsExecuted;
     TMap<ui64, TString> ExecutionReplies;
     IComputationPattern::TPtr Pattern;
-    THolder<IComputationGraph> ResultGraph;
+    std::unique_ptr<IComputationGraph> ResultGraph;
     THashMap<TString, NUdf::TUnboxedValue> ResultValues;
     bool ReadOnlyOriginPrograms;
     bool IsCancelled;

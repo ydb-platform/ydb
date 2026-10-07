@@ -6,7 +6,7 @@ namespace NKikimr::NReplication::NController {
 
 class TController::TTxCreateReplication: public TTxBase {
     TEvController::TEvCreateReplication::TPtr Ev;
-    THolder<TEvController::TEvCreateReplicationResult> Result;
+    std::unique_ptr<TEvController::TEvCreateReplicationResult> Result;
     TReplication::TPtr Replication;
 
 public:
@@ -26,7 +26,7 @@ public:
             {"ev", Ev->Get()->ToString()});
 
         auto& record = Ev->Get()->Record;
-        Result = MakeHolder<TEvController::TEvCreateReplicationResult>();
+        Result = std::make_unique<TEvController::TEvCreateReplicationResult>();
         Result->Record.MutableOperationId()->CopyFrom(record.GetOperationId());
         Result->Record.SetOrigin(Self->TabletID());
 

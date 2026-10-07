@@ -296,7 +296,7 @@ private:
                     {"status", Ydb::StatusIds::StatusCode_Name(status)},
                     {"traceId", TraceId()});
 
-                auto ev = MakeHolder<TEvKqpNode::TEvCancelKqpTasksRequest>();
+                auto ev = std::make_unique<TEvKqpNode::TEvCancelKqpTasksRequest>();
                 ev->Record.SetTxId(TxId);
                 ev->Record.SetReason(Ydb::StatusIds::StatusCode_Name(status));
 

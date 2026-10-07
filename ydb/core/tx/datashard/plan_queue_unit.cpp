@@ -110,10 +110,10 @@ void TPlanQueueUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreatePlanQueueUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreatePlanQueueUnit(TDataShard &dataShard,
                                             TPipeline &pipeline)
 {
-    return THolder(new TPlanQueueUnit(dataShard, pipeline));
+    return std::unique_ptr<TPlanQueueUnit>(new TPlanQueueUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

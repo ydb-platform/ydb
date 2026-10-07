@@ -234,9 +234,9 @@ class TRestoreClient {
     TRestoreResult RestoreDatabaseImpl(const TString& fsPath, const TRestoreDatabaseSettings& settings);
     TRestoreResult RestorePermissionsImpl(NScheme::TSchemeClient& client, const TFsPath& fsPath, const TString& dbPath);
 
-    THolder<NPrivate::IDataWriter> CreateDataWriter(const TString& dbPath, const TRestoreSettings& settings,
-        const NTable::TTableDescription& desc, ui32 partitionCount, const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators);
-    TRestoreResult CreateDataAccumulators(TVector<THolder<NPrivate::IDataAccumulator>>& outAccumulators,
+    std::unique_ptr<NPrivate::IDataWriter> CreateDataWriter(const TString& dbPath, const TRestoreSettings& settings,
+        const NTable::TTableDescription& desc, ui32 partitionCount, const TVector<std::unique_ptr<NPrivate::IDataAccumulator>>& accumulators);
+    TRestoreResult CreateDataAccumulators(TVector<std::unique_ptr<NPrivate::IDataAccumulator>>& outAccumulators,
         const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc,
         ui32 dataFilesCount);
 

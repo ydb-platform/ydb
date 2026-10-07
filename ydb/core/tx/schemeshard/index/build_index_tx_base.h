@@ -39,7 +39,7 @@ private:
     bool OnUnhandledExceptionSafe(TTransactionContext& txc, const TActorContext& ctx, const std::exception& exc);
 
 protected:
-    void Send(TActorId dst, THolder<IEventBase> message, ui32 flags = 0, ui64 cookie = 0);
+    void Send(TActorId dst, std::unique_ptr<IEventBase> message, ui32 flags = 0, ui64 cookie = 0);
     void AllocateTxId(TIndexBuildId buildId);
     void ChangeState(TIndexBuildId id, TIndexBuildInfo::EState state);
     void ChangeState(TIndexBuildId id, TSetColumnConstraintOperationInfo::EOperationState state);
@@ -80,7 +80,7 @@ template<typename TRequest, typename TResponse>
 class TSchemeShard::TIndexBuilder::TTxSimple : public TSchemeShard::TIndexBuilder::TTxBase {
 public:
     typename TRequest::TPtr Request;
-    THolder<TResponse> Response;
+    std::unique_ptr<TResponse> Response;
     const bool IsMutableOperation;
 
     explicit TTxSimple(TSelf* self, TIndexBuildId buildId, typename TRequest::TPtr& ev, NKikimr::NSchemeShard::ETxTypes txType, bool isMutableOperation = true)

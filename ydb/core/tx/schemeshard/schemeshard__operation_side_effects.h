@@ -97,7 +97,7 @@ public:
 
     void Send(TActorId dst, ::NActors::IEventBase* message, ui64 cookie = 0, ui32 flags = 0);
     template <typename TEvent>
-    void Send(TActorId dst, THolder<TEvent> message, ui64 cookie = 0, ui32 flags = 0) {
+    void Send(TActorId dst, std::unique_ptr<TEvent> message, ui64 cookie = 0, ui32 flags = 0) {
         Send(dst, static_cast<::NActors::IEventBase*>(message.Release()), cookie, flags);
     }
     void BindMsgToPipe(TOperationId opId, TTabletId dst, TPathId pathId, TAutoPtr<::NActors::IEventBase> message);

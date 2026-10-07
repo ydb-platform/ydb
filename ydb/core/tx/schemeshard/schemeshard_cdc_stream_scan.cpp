@@ -23,7 +23,7 @@ public:
         return NKikimrServices::TActivity::SCHEMESHARD_CDC_STREAM_SCAN_FINALIZER;
     }
 
-    explicit TCdcStreamScanFinalizer(const TActorId& ssActorId, THolder<TEvSchemeShard::TEvModifySchemeTransaction>&& req)
+    explicit TCdcStreamScanFinalizer(const TActorId& ssActorId, std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction>&& req)
         : SSActorId(ssActorId)
         , Request(std::move(req->Record)) // template without txId
     {
@@ -54,7 +54,7 @@ private:
     }
 
     void SendRequest() {
-        auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        auto ev = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>();
         ev->Record = Request;
         Send(SSActorId, std::move(ev));
     }
@@ -86,10 +86,10 @@ struct TSchemeShard::TCdcStreamScan::TTxProgress: public TTransactionBase<TSchem
     } PipeRetry;
 
     // side effects
-    TDeque<std::tuple<TPathId, TTabletId, THolder<IEventBase>>> ScanRequests;
+    TDeque<std::tuple<TPathId, TTabletId, std::unique_ptr<IEventBase>>> ScanRequests;
     TPathId StreamToProgress;
-    THolder<NMetering::TEvMetering::TEvWriteMeteringJson> Metering;
-    THolder<TEvSchemeShard::TEvModifySchemeTransaction> Finalize;
+    std::unique_ptr<NMetering::TEvMetering::TEvWriteMeteringJson> Metering;
+    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> Finalize;
 
 public:
     explicit TTxProgress(TSelf* self, TEvPrivate::TEvRunCdcStreamScan::TPtr& ev)
@@ -201,7 +201,7 @@ private:
             streamInfo->InProgressShards.insert(*it);
             streamInfo->PendingShards.erase(it);
 
-            auto ev = MakeHolder<TEvDataShard::TEvCdcStreamScanRequest>();
+            auto ev = std::make_unique<TEvDataShard::TEvCdcStreamScanRequest>();
             tablePathId.ToProto(ev->Record.MutableTablePathId());
             ev->Record.SetTableSchemaVersion(table->AlterVersion);
             streamPathId.ToProto(ev->Record.MutableStreamPathId());
@@ -213,7 +213,7 @@ private:
         if (streamInfo->DoneShards.size() == streamInfo->ScanShards.size()) {
             const auto path = TPath::Init(streamPathId, Self);
 
-            Finalize = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+            Finalize = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>();
             auto& tx = *Finalize->Record.AddTransaction();
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterCdcStream);
             tx.SetWorkingDir(path.Parent().Parent().PathString()); // stream -> table -> working dir
@@ -443,7 +443,7 @@ private:
             {"streamPathId", pathId},
             {"record", billRecord},
         );
-        Metering = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
+        Metering = std::make_unique<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
     }
 };
 

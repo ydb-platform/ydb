@@ -203,7 +203,7 @@ namespace NKikimr {
             TTabletTypes::EType Type = TTabletTypes::TypeInvalid;
             NMonitoring::TDynamicCounterPtr PublicGroup;
             TYdbMetricsAggregatorPtr Aggregator;
-            THashMap<TBucketKey, THolder<TPublishedBucket>> Buckets;
+            THashMap<TBucketKey, std::unique_ptr<TPublishedBucket>> Buckets;
         };
 
         class TProcessorDatabaseMetricsAggregatorImpl: public TProcessorDatabaseMetricsAggregator {
@@ -294,7 +294,7 @@ namespace NKikimr {
                         ? EYdbMetricNameScope::Partition
                         : EYdbMetricNameScope::Aggregate;
                     const bool isFollowerSource = key && key->second != 0;
-                    bucket = MakeHolder<TPublishedBucket>(*descriptor, mappedGroup, nameScope, isFollowerSource);
+                    bucket = std::make_unique<TPublishedBucket>(*descriptor, mappedGroup, nameScope, isFollowerSource);
                     table.Aggregator->AddSourceCountersGroup(SourceId(key), mappedGroup, isFollowerSource, nameScope);
                 }
                 bucket->Apply(nodeId, values);

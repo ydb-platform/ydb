@@ -128,7 +128,7 @@ struct TTransaction {
     TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> ProposeTransaction;
 
     //Data Tx
-    THolder<TEvPQ::TEvGetWriteInfoResponse> WriteInfo;
+    std::unique_ptr<TEvPQ::TEvGetWriteInfoResponse> WriteInfo;
     bool WriteInfoApplied = false;
     TString Message;
     ECommitState State = ECommitState::Pending;
@@ -480,21 +480,21 @@ private:
     TUserInfoBase& GetOrCreatePendingUser(const TString& user, TMaybe<ui64> readRuleGeneration = {});
     TUserInfoBase* GetPendingUserIfExists(const TString& user);
 
-    THolder<TEvPQ::TEvProxyResponse> MakeReplyOk(const ui64 dst, bool internal);
-    THolder<TEvPQ::TEvProxyResponse> MakeReplyGetClientOffsetOk(const ui64 dst,
+    std::unique_ptr<TEvPQ::TEvProxyResponse> MakeReplyOk(const ui64 dst, bool internal);
+    std::unique_ptr<TEvPQ::TEvProxyResponse> MakeReplyGetClientOffsetOk(const ui64 dst,
                                                                 const i64 offset,
                                                                 const TInstant writeTimestamp,
                                                                 const TInstant createTimestamp,
                                                                 bool consumerHasAnyCommits,
                                                                 const std::optional<TString>& committedMetadata);
-    THolder<TEvPQ::TEvError> MakeReplyError(const ui64 dst,
+    std::unique_ptr<TEvPQ::TEvError> MakeReplyError(const ui64 dst,
                                             NPersQueue::NErrorCode::EErrorCode errorCode,
                                             const TString& error, bool isInternal = false);
-    THolder<TEvPersQueue::TEvProposeTransactionResult> MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
+    std::unique_ptr<TEvPersQueue::TEvProposeTransactionResult> MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
                                                                         NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                                                                         NKikimrPQ::TError::EKind kind,
                                                                         const TString& reason);
-    THolder<TEvPQ::TEvTxDone> MakeTxDone(ui64 step, ui64 txId) const;
+    std::unique_ptr<TEvPQ::TEvTxDone> MakeTxDone(ui64 step, ui64 txId) const;
 
     bool BeginTransactionConfig();
 
@@ -562,7 +562,7 @@ private:
     TConsumerSnapshot CreateSnapshot(TUserInfo& userInfo) const;
     bool IsKeyCompactionEnabled() const;
     void CreateCompacter();
-    void SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request);
+    void SendCompacterWriteRequest(std::unique_ptr<TEvKeyValue::TEvRequest>&& request);
 
     ::NMonitoring::TDynamicCounterPtr GetPerPartitionCounterSubgroup() const;
     void SetupDetailedMetrics();
@@ -942,7 +942,7 @@ private:
     bool HaveDrop = false;
     TMaybe<TPartitionSourceManager::TModificationBatch> SourceIdBatch;
     TMaybe<ProcessParameters> Parameters;
-    THolder<TEvKeyValue::TEvRequest> PersistRequest;
+    std::unique_ptr<TEvKeyValue::TEvRequest> PersistRequest;
     NWilson::TSpan PersistRequestSpan;
     NWilson::TSpan CurrentPersistRequestSpan;
 
@@ -981,7 +981,7 @@ private:
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
     std::deque<TUserActionAndTransactionEvent> UserActionAndTxPendingCommit;
     std::deque<TUserActionAndTransactionEvent> UserActionAndTxPendingWrite;
-    TVector<THolder<TEvPQ::TEvGetWriteInfoResponse>> WriteInfosApplied;
+    TVector<std::unique_ptr<TEvPQ::TEvGetWriteInfoResponse>> WriteInfosApplied;
 
     THashMap<ui64, TSimpleSharedPtr<TTransaction>> TransactionsInflight;
     THashMap<TActorId, TSimpleSharedPtr<TTransaction>> WriteInfosToTx;
@@ -1011,7 +1011,7 @@ private:
     bool TxIdHasChanged = false;
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
     TEvPQ::TMessageGroupsPtr PendingExplicitMessageGroups;
-    TVector<THolder<TEvPQ::TEvSetClientInfo>> ChangeConfigActs;
+    TVector<std::unique_ptr<TEvPQ::TEvSetClientInfo>> ChangeConfigActs;
     bool ChangingConfig = false;
     bool SendChangeConfigReply = true;
     TMessageQueue Responses;
@@ -1036,7 +1036,7 @@ private:
 
     TSourceIdStorage SourceIdStorage;
 
-    std::deque<THolder<TEvPQ::TEvChangeOwner>> WaitToChangeOwner;
+    std::deque<std::unique_ptr<TEvPQ::TEvChangeOwner>> WaitToChangeOwner;
 
     TTabletCountersBase TabletCounters;
     std::optional<TTabletLabeledCountersBase> PartitionCountersLabeled;
@@ -1080,7 +1080,7 @@ private:
     TActorId ReadQuotaTrackerActor;
     const TActorId WriteQuotaTrackerActor;
     const TActorId BatchProcessorActor;
-    THolder<TPercentileCounter> PartitionWriteQuotaWaitCounter;
+    std::unique_ptr<TPercentileCounter> PartitionWriteQuotaWaitCounter;
     TInstant QuotaDeadline = TInstant::Zero();
 
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgWriteBytes;
@@ -1096,7 +1096,7 @@ private:
     NKikimrPQ::EScaleStatus ScaleStatus = NKikimrPQ::EScaleStatus::NORMAL;
 
     ui64 ReservedSize;
-    std::deque<THolder<TEvPQ::TEvReserveBytes>> ReserveRequests;
+    std::deque<std::unique_ptr<TEvPQ::TEvReserveBytes>> ReserveRequests;
 
     ui32 Channel;
     ui32 NumChannels;
@@ -1109,8 +1109,8 @@ private:
     bool ManageWriteTimestampEstimate = true;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
     //ToDo - counters.
-    THolder<TPercentileCounter> InputTimeLag;
-    THolder<TMultiBucketCounter> SupportivePartitionTimeLag;
+    std::unique_ptr<TPercentileCounter> InputTimeLag;
+    std::unique_ptr<TMultiBucketCounter> SupportivePartitionTimeLag;
     TPartitionHistogramWrapper MessageSize;
 
     TPercentileCounter WriteLatency;
@@ -1148,22 +1148,22 @@ private:
     // Wait topic quota metrics
     ui64 TotalPartitionWriteSpeed = 0;
     ui64 TotalPartitionWriteSpeedInMessages = 0;
-    THolder<TPercentileCounter> TopicWriteQuotaWaitCounter;
+    std::unique_ptr<TPercentileCounter> TopicWriteQuotaWaitCounter;
     TInstant WriteStartTime;
     TDuration TopicQuotaWaitTimeForCurrentBlob;
     TDuration PartitionQuotaWaitTimeForCurrentBlob;
 
     TDeque<NKikimrPQ::TStatusResponse::TErrorMessage> Errors;
 
-    THolder<TMirrorerInfo> Mirrorer;
+    std::unique_ptr<TMirrorerInfo> Mirrorer;
 
     TInstant LastUsedStorageMeterTimestamp;
 
     ui64 CompacterCookie = 0;
-    THolder<TPartitionCompaction> Compacter;
+    std::unique_ptr<TPartitionCompaction> Compacter;
     bool CompacterPartitionRequestInflight = false;
     bool CompacterKvRequestInflight = false;
-    THolder<TEvKeyValue::TEvRequest> CompacterKvRequest;
+    std::unique_ptr<TEvKeyValue::TEvRequest> CompacterKvRequest;
 
     using TPendingEvent = std::variant<
         std::unique_ptr<TEvPQ::TEvTxCalcPredicate>,

@@ -148,7 +148,7 @@ public:
                 Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response));
                 RequestOwner = TActorId();
             }
-            THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
+            std::unique_ptr<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
             Send(Owner, sensors.Release());
         }
         if (!AllowConnectionReuse || Response->IsConnectionClose()) {
@@ -189,7 +189,7 @@ public:
                 }
             }
             RequestOwner = TActorId();
-            THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
+            std::unique_ptr<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
             Send(Owner, sensors.Release());
         }
         PassAway();
@@ -481,7 +481,7 @@ protected:
             {"message", response->Message});
         Send(pending.RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(pending.Request, response));
 
-        THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(pending.Request, response));
+        std::unique_ptr<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(pending.Request, response));
         Send(Owner, sensors.Release());
 
         H2->PendingRequests.erase(it);

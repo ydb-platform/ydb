@@ -39,7 +39,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Y_UNUSED(ctx);
         const auto req = this->GetProtoRequest();
-        auto ev = MakeHolder<EvRequestType>();
+        auto ev = std::make_unique<EvRequestType>();
         auto request = dynamic_cast<RpcRequestType*>(this->Request_.get());
         Y_ABORT_UNLESS(request);
         auto proxyCtx = dynamic_cast<IRequestProxyCtx*>(request);

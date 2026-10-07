@@ -93,7 +93,7 @@ private:
         const auto& filters = request.GetWorkerFilterPerTask();
         Y_ABORT_UNLESS((ui32)count == (ui32)filters.size(), "count %" PRIu32 ", filters size %" PRIu32, (ui32)count, (ui32)filters.size());
 
-        auto response = MakeHolder<NDqs::TEvAllocateWorkersResponse>();
+        auto response = std::make_unique<NDqs::TEvAllocateWorkersResponse>();
         if (count == 0) {
             auto& error = *response->Record.MutableError();
             error.SetStatusCode(NYql::NDqProto::StatusIds::BAD_REQUEST);
@@ -123,7 +123,7 @@ private:
         Send(ev->Sender, response.Release());
     }
 
-    void ScheduleUniformly(const NYql::NDqProto::TAllocateWorkersRequest& request, THolder<NDqs::TEvAllocateWorkersResponse>& response) {
+    void ScheduleUniformly(const NYql::NDqProto::TAllocateWorkersRequest& request, std::unique_ptr<NDqs::TEvAllocateWorkersResponse>& response) {
         const auto count = request.GetCount();
         auto resourceId = request.GetResourceId();
         const auto& filtersPerTask = request.GetWorkerFilterPerTask();
@@ -204,7 +204,7 @@ private:
         }
     }
 
-    void ScheduleOnSingleNode(const NYql::NDqProto::TAllocateWorkersRequest& request, THolder<NDqs::TEvAllocateWorkersResponse>& response) {
+    void ScheduleOnSingleNode(const NYql::NDqProto::TAllocateWorkersRequest& request, std::unique_ptr<NDqs::TEvAllocateWorkersResponse>& response) {
         const auto count = request.GetCount();
         auto resourceId = request.GetResourceId();
         const auto& filtersPerTask = request.GetWorkerFilterPerTask();
@@ -300,7 +300,7 @@ private:
 
     void Handle(NFq::TEvNodesManager::TEvGetNodesRequest::TPtr& ev) {
         YDB_LOG_TRACE("Received TNodesManagerActor::TEvGetNodesRequest");
-        auto response = MakeHolder<NFq::TEvNodesManager::TEvGetNodesResponse>();
+        auto response = std::make_unique<NFq::TEvNodesManager::TEvGetNodesResponse>();
         response->NodeIds.reserve(Peers.size());
         for (const auto& info : Peers) {
             response->NodeIds.push_back(info.NodeId);
@@ -310,7 +310,7 @@ private:
 
     void ResolveSelfAddress() {
         YDB_LOG_DEBUG("TNodesManagerActor::ResolveSelfAddress");
-        auto resolve = MakeHolder<NActors::TEvResolveAddress>();
+        auto resolve = std::make_unique<NActors::TEvResolveAddress>();
         resolve->Address = HostName();
         resolve->Port = IcPort;
         Send(GetNameserviceActorId(), resolve.Release());
@@ -391,7 +391,7 @@ private:
             YDB_LOG_TRACE("Send NodeInfo with to DynamicNameserver",
                 {"size", nodesInfo->size()});
             if (!nodesInfo->empty()) {
-                THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo(nodesInfo));
+                std::unique_ptr<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo(nodesInfo));
                 Send(GetNameserviceActorId(), nameServiceUpdateReq.Release());
             }
         } catch (yexception &e) {

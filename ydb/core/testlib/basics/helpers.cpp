@@ -7,7 +7,7 @@ namespace NKikimr {
     TTabletStorageInfo* CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType,
             TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId)
     {
-        THolder<TTabletStorageInfo> x(new TTabletStorageInfo());
+        std::unique_ptr<TTabletStorageInfo> x(new TTabletStorageInfo());
 
         x->TabletID = tabletId;
         x->TabletType = tabletType;
@@ -90,7 +90,7 @@ namespace NKikimr {
 
         Runtime.BlockOutputForActor(pDiskServiceId);
         Runtime.BlockOutputForActor(actorId);
-        auto factory = CreateStrandingDecoratorFactory(&Runtime, []{ return MakeHolder<TPDiskReplyChecker>(); });
+        auto factory = CreateStrandingDecoratorFactory(&Runtime, []{ return std::make_unique<TPDiskReplyChecker>(); });
         IActor* wrappedActor = factory->Wrap(actorId, true, TVector<TActorId>());
         TActorId wrappedActorId = Runtime.Register(wrappedActor, nodeIndex, poolId, TMailboxType::Revolving);
         Runtime.RegisterService(pDiskServiceId, wrappedActorId, nodeIndex);

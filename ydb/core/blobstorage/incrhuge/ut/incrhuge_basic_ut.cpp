@@ -42,7 +42,7 @@ public:
 
     void Setup(bool format = true, ui32 counter = 0, TManualEvent *event = nullptr, ui32 numChunks = 1000,
             ui32 chunkSize = 16 << 20) {
-        auto setup = MakeHolder<TActorSystemSetup>();
+        auto setup = std::make_unique<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 3;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[3]);

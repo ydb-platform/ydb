@@ -52,7 +52,7 @@ public:
     const TRowVersion& GetHeartbeat() const;
 
 private:
-    THolder<NKikimrReplication::TRunWorkerCommand> Command;
+    std::unique_ptr<NKikimrReplication::TRunWorkerCommand> Command;
     TMaybe<ui32> Session;
     bool DataEnded = false;
     TMaybe<TRowVersion> Heartbeat;

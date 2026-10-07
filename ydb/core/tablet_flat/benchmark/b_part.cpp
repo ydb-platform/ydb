@@ -102,12 +102,12 @@ BENCHMARK_DEFINE_F(TPartFixture, SeekRowId)(benchmark::State& state) {
     const bool useBTree = state.range(0);
 
     for (auto _ : state) {
-        THolder<IPartGroupIndexIter> iter;
+        std::unique_ptr<IPartGroupIndexIter> iter;
 
         if (useBTree) {
-            iter = MakeHolder<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
+            iter = std::make_unique<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
         } else {
-            iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
+            iter = std::make_unique<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
         }
 
         iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));    
@@ -117,12 +117,12 @@ BENCHMARK_DEFINE_F(TPartFixture, SeekRowId)(benchmark::State& state) {
 BENCHMARK_DEFINE_F(TPartFixture, Next)(benchmark::State& state) {
     const bool useBTree = state.range(0);
 
-    THolder<IPartGroupIndexIter> iter;
+    std::unique_ptr<IPartGroupIndexIter> iter;
 
     if (useBTree) {
-        iter = MakeHolder<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
+        iter = std::make_unique<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
     } else {
-        iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
+        iter = std::make_unique<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
     }
 
     iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));
@@ -138,12 +138,12 @@ BENCHMARK_DEFINE_F(TPartFixture, Next)(benchmark::State& state) {
 BENCHMARK_DEFINE_F(TPartFixture, Prev)(benchmark::State& state) {
     const bool useBTree = state.range(0);
 
-    THolder<IPartGroupIndexIter> iter;
+    std::unique_ptr<IPartGroupIndexIter> iter;
 
     if (useBTree) {
-        iter = MakeHolder<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
+        iter = std::make_unique<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
     } else {
-        iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
+        iter = std::make_unique<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
     }
 
     iter->Seek(RandomNumber<ui32>(Part->Stat.Rows));
@@ -167,12 +167,12 @@ BENCHMARK_DEFINE_F(TPartFixture, SeekKey)(benchmark::State& state) {
     }
 
     for (auto _ : state) {
-        THolder<IPartGroupIndexIter> iter;
+        std::unique_ptr<IPartGroupIndexIter> iter;
 
         if (useBTree) {
-            iter = MakeHolder<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
+            iter = std::make_unique<TPartGroupBtreeIndexIter>(Part, &Env, GroupId);
         } else {
-            iter = MakeHolder<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
+            iter = std::make_unique<TPartGroupFlatIndexIter>(Part, &Env, GroupId);
         }
 
         state.PauseTiming();

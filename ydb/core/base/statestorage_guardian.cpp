@@ -406,7 +406,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     THashSet<TActorId> MissingReplicas;
     ui32 ReplicasOnlineThreshold;
 
-    THolder<TFollowerTracker> FollowerTracker;
+    std::unique_ptr<TFollowerTracker> FollowerTracker;
 
     TActorId Launcher() const {
         return Info ? Info->Leader : FollowerInfo->Follower;

@@ -8,6 +8,6 @@
 
 namespace NYql {
 
-THolder<IDqIntegration> CreateClickHouseDqIntegration(TClickHouseState::TPtr state);
+std::unique_ptr<IDqIntegration> CreateClickHouseDqIntegration(TClickHouseState::TPtr state);
 
 }

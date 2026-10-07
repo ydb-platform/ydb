@@ -433,7 +433,7 @@ class TExecutor
     bool CompactionChangesActivating = false;
 
     TSeatList PostponedTransactions;
-    THashMap<ui64, THolder<TScanSnapshot>> ScanSnapshots;
+    THashMap<ui64, std::unique_ptr<TScanSnapshot>> ScanSnapshots;
     ui64 ScanSnapshotId = 1;
 
     class TActiveTransactionZone;
@@ -453,14 +453,14 @@ class TExecutor
     TWaitingSnaps WaitingSnapshots;
 
     ui64 BootAttempt = 0;
-    THolder<TExecutorBootLogic> BootLogic;
-    THolder<TPrivatePageCache> PrivatePageCache;
+    std::unique_ptr<TExecutorBootLogic> BootLogic;
+    std::unique_ptr<TPrivatePageCache> PrivatePageCache;
 
-    THolder<TExecutorCounters> Counters;
-    THolder<TTabletCountersBase> AppCounters;
-    THolder<TTabletCountersBase> CountersBaseline;
-    THolder<TTabletCountersBase> AppCountersBaseline;
-    THolder<NMetrics::TResourceMetrics> ResourceMetrics;
+    std::unique_ptr<TExecutorCounters> Counters;
+    std::unique_ptr<TTabletCountersBase> AppCounters;
+    std::unique_ptr<TTabletCountersBase> CountersBaseline;
+    std::unique_ptr<TTabletCountersBase> AppCountersBaseline;
+    std::unique_ptr<NMetrics::TResourceMetrics> ResourceMetrics;
 
     TAutoPtr<NTable::TDatabase> Database;
 
@@ -471,10 +471,10 @@ class TExecutor
     TAutoPtr<TLogicSnap> LogicSnap;
     TAutoPtr<TLogicRedo> LogicRedo;
     TAutoPtr<TLogicAlter> LogicAlter;
-    THolder<TExecutorGCLogic> GcLogic;
-    THolder<TCompactionLogic> CompactionLogic;
-    THolder<TExecutorBorrowLogic> BorrowLogic;
-    THolder<TVacuumLogic> VacuumLogic;
+    std::unique_ptr<TExecutorGCLogic> GcLogic;
+    std::unique_ptr<TCompactionLogic> CompactionLogic;
+    std::unique_ptr<TExecutorBorrowLogic> BorrowLogic;
+    std::unique_ptr<TVacuumLogic> VacuumLogic;
 
     TLoadBlobQueue PendingBlobQueue;
 
@@ -498,10 +498,10 @@ class TExecutor
 
     THashMap<ui32, TIntrusivePtr<TBarrier>> InFlyCompactionGcBarriers;
     THashMap<ui32, TIntrusivePtr<TBarrier>> DirectWriteBarriers;
-    TDeque<THolder<TEvTablet::TFUpdateBody>> PostponedFollowerUpdates;
+    TDeque<std::unique_ptr<TEvTablet::TFUpdateBody>> PostponedFollowerUpdates;
     THashMap<ui32, TVector<TIntrusivePtr<TBarrier>>> InFlySnapCollectionBarriers;
 
-    THolder<TExecutorStatsImpl> Stats;
+    std::unique_ptr<TExecutorStatsImpl> Stats;
     bool HasYellowCheckInFly = false;
 
     TDeque<TPendingPartSwitch> PendingPartSwitches;
@@ -588,7 +588,7 @@ class TExecutor
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     THashMap<NTable::TTag, ECacheMode> GetCacheModes(ui32 tableId);
     ECacheMode GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& columns, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
-    THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
+    std::unique_ptr<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);
     void StartScan(ui64 serial, ui32 table);
@@ -596,7 +596,7 @@ class TExecutor
     void StartSeat(ui64 task, TResource*);
     void PostponedScanCleared(NResourceBroker::TEvResourceBroker::TEvResourceAllocated *msg, const TActorContext &ctx);
 
-    void ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update);
+    void ApplyFollowerUpdate(std::unique_ptr<TEvTablet::TFUpdateBody> update);
     void ApplyFollowerAuxUpdate(const TString &auxBody);
     void ApplyFollowerPostponedUpdates();
     void AddFollowerPartSwitch(const NKikimrExecutorFlat::TTablePartSwitch &switchProto,
@@ -664,7 +664,7 @@ class TExecutor
     TVector<NTable::TPartView> TableParts(ui32 table) override;
     TVector<TIntrusiveConstPtr<NTable::TColdPart>> TableColdParts(ui32 table) override;
     const NTable::TRowVersionRanges& TableRemovedRowVersions(ui32 table) override;
-    ui64 BeginCompaction(THolder<NTable::TCompactionParams> params) override;
+    ui64 BeginCompaction(std::unique_ptr<NTable::TCompactionParams> params) override;
     bool CancelCompaction(ui64 compactionId) override;
     void RequestChanges(ui32 table) override;
 
@@ -725,7 +725,7 @@ public:
     ui64 CompactMemTable(ui32 tableId) override;
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
-    THolder<TDirectPartWriter> BeginWritePart(ui32 tableId) override;
+    std::unique_ptr<TDirectPartWriter> BeginWritePart(ui32 tableId) override;
     void ReleaseWritePart(ui32 step) override;
 
     void StartVacuum(TVacuumTag tag) override;
@@ -743,7 +743,7 @@ public:
     void FollowerSyncComplete() override;
     void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) override;
     void FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) override;
-    void FollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) override;
+    void FollowerUpdate(std::unique_ptr<TEvTablet::TFUpdateBody> update) override;
     void FollowerAuxUpdate(TString upd) override;
 
     void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const override;

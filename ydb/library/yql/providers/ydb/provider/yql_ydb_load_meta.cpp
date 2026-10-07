@@ -280,8 +280,8 @@ private:
 
 }
 
-THolder<IGraphTransformer> CreateYdbLoadTableMetadataTransformer(TYdbState::TPtr state, NYdb::TDriver driver) {
-    return MakeHolder<TYdbLoadTableMetadataTransformer>(state, driver);
+std::unique_ptr<IGraphTransformer> CreateYdbLoadTableMetadataTransformer(TYdbState::TPtr state, NYdb::TDriver driver) {
+    return std::make_unique<TYdbLoadTableMetadataTransformer>(state, driver);
 }
 
 } // namespace NYql

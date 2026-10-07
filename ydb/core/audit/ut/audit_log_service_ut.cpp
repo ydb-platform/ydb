@@ -112,8 +112,8 @@ public:
 
     TAuditLogBackends MakeBackends(NKikimrConfig::TAuditConfig::EFormat format) {
         TAuditLogBackends backends;
-        backends[format].emplace_back(MakeHolder<TTestLogBackend>(LogQueue));
-        backends[format].emplace_back(MakeHolder<TExceptionLogBackend>());
+        backends[format].emplace_back(std::make_unique<TTestLogBackend>(LogQueue));
+        backends[format].emplace_back(std::make_unique<TExceptionLogBackend>());
         return backends;
     }
 

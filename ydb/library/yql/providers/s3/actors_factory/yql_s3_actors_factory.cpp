@@ -6,7 +6,7 @@ namespace NYql::NDq {
 
     class TDefaultS3ActorsFactory : public IS3ActorsFactory {
     public:
-        THolder<NActors::IActor> CreateS3ApplicatorActor(
+        std::unique_ptr<NActors::IActor> CreateS3ApplicatorActor(
             NActors::TActorId parentId,
             IHTTPGateway::TPtr gateway,
             const TString& queryId,

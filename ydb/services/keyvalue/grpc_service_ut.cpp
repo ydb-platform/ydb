@@ -235,7 +235,7 @@ public:
         annoyingClient.InitRootScheme("Root");
         if (s3Settings) {
             auto* runtime = Server_->GetRuntime();
-            auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
             auto* config = request->Record.MutableRequest();
             config->AddCommand()->MutableDefineStoragePool()->CopyFrom(ServerSettings->StoragePoolTypes.at("s3"));
             auto* group = config->AddCommand()->MutableAllocateVirtualGroup();
@@ -260,7 +260,7 @@ public:
             const ui32 groupId = response->Record.GetResponse().GetStatus(1).GetGroupId(0);
             const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
             for (;;) {
-                auto query = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+                auto query = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
                 query->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
                 runtime->SendToPipe(MakeBSControllerID(), edge, query.Release(), 0, pipeConfig);
                 response = runtime->GrabEdgeEvent<TEvBlobStorage::TEvControllerConfigResponse>(handle);
@@ -311,7 +311,7 @@ public:
 
     Tests::TServerSettings::TPtr ServerSettings;
     Tests::TServer::TPtr Server_;
-    THolder<Tests::TTenants> Tenants_;
+    std::unique_ptr<Tests::TTenants> Tenants_;
 private:
     TPortManager PortManager;
     ui16 GRpcPort_;
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         Y_ABORT_UNLESS(keys.size() == values.size());
         TAutoPtr<IEventHandle> handle;
         TEvKeyValue::TEvResponse *result;
-        THolder<TEvKeyValue::TEvRequest> request;
+        std::unique_ptr<TEvKeyValue::TEvRequest> request;
         TActorId edgeActor = server.GetRuntime()->AllocateEdgeActor();
         for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
             try {
@@ -508,7 +508,7 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         bool again = true;
         for (ui32 i = 0; i < 10 && again; ++i) {
             Cerr << "Wait iteration# " << i << Endl;
-            auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            auto req = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             auto& entry = req->ResultSet.emplace_back();
             entry.Path = SplitPath(path);
             entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;

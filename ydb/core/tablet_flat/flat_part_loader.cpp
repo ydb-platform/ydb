@@ -247,7 +247,7 @@ void TLoader::StageParseMeta()
         PageCollections.back() = std::move(cache);
     }
 
-    LoaderEnv = MakeHolder<TLoaderEnv>(PageCollections[0]);
+    LoaderEnv = std::make_unique<TLoaderEnv>(PageCollections[0]);
 
     if (!HasBasics() || (Rooted && SchemeId != meta.TotalPages() - 1)
         || (LargeId == Max<TPageId>()) != (GlobsId == Max<TPageId>())
@@ -476,7 +476,7 @@ TLoader::TFetch TLoader::StagePreloadData()
                 for (ui32 groupIndex : xrange(indexes.size())) {
                     if (indexes[groupIndex].HasRootV2()) {
                         auto& item = PreloadBTreeWalkers.emplace_back();
-                        item.Walker = MakeHolder<TBTreePartWalker>();
+                        item.Walker = std::make_unique<TBTreePartWalker>();
                         item.Walker->Start(indexes[groupIndex]);
                         item.GroupId = NPage::TGroupId(groupIndex, historic);
                         item.SkipDataPages = groupIndex != 0;

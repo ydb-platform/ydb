@@ -438,7 +438,7 @@ class TDbPoolMap final : public TThrRefBase {
     const NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     const NMonitoring::TDynamicCounterPtr Counters;
     THashMap<ui32, TDbPoolPtr> Pools;
-    THolder<NYdb::NTable::TTableClient> TableClient;
+    std::unique_ptr<NYdb::NTable::TTableClient> TableClient;
     TMutex Mutex;
 
 public:
@@ -473,7 +473,7 @@ public:
             credSettings.UseLocalMetadata = Config.GetUseLocalMetadataService();
             credSettings.OAuthToken = Config.GetToken();
 
-            TableClient = MakeHolder<NYdb::NTable::TTableClient>(Driver, NYdb::NTable::TClientSettings()
+            TableClient = std::make_unique<NYdb::NTable::TTableClient>(Driver, NYdb::NTable::TClientSettings()
                 .UseQueryCache(false)
                 .SessionPoolSettings(NYdb::NTable::TSessionPoolSettings().MaxActiveSessions(1 + maxSessionCount))
                 .Database(Config.GetDatabase())

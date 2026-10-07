@@ -557,7 +557,7 @@ Y_UNIT_TEST_SUITE(TabletMon) {
         bool delayBlobResults = true;
         bool timeoutSeen = false;
         TString timeoutBody;
-        TVector<THolder<IEventHandle>> delayedBlobResults;
+        TVector<std::unique_ptr<IEventHandle>> delayedBlobResults;
         ui32 remoteRequests = 0;
         ui32 delayedBlobResultCount = 0;
         ui32 remoteResponses = 0;

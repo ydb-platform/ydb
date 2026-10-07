@@ -44,7 +44,7 @@ namespace NLongTxService {
             YDB_LOG_DEBUG("Sending navigate request",
                 {"logPrefix", LogPrefix},
                 {"databaseName", DatabaseName});
-            auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             request->DatabaseName = DatabaseName;
             auto& entry = request->ResultSet.emplace_back();
             entry.Path = ::NKikimr::SplitPath(DatabaseName);
@@ -131,7 +131,7 @@ namespace NLongTxService {
                 YDB_LOG_DEBUG("Sending acquire step to coordinator",
                     {"logPrefix", LogPrefix},
                     {"coordinator", coordinator});
-                SendToTablet(coordinator, MakeHolder<TEvTxProxy::TEvAcquireReadStep>(coordinator));
+                SendToTablet(coordinator, std::make_unique<TEvTxProxy::TEvAcquireReadStep>(coordinator));
             }
         }
 
@@ -191,7 +191,7 @@ namespace NLongTxService {
         }
 
     private:
-        void SendToTablet(ui64 tabletId, THolder<IEventBase> event, bool subscribe = true) {
+        void SendToTablet(ui64 tabletId, std::unique_ptr<IEventBase> event, bool subscribe = true) {
             Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), tabletId, subscribe),
                 IEventHandle::FlagTrackDelivery);
         }

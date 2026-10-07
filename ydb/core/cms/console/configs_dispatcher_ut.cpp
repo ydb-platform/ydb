@@ -1596,7 +1596,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
                                 const TString& mainYaml, const std::optional<TString>& databaseYaml,
                                 ui64 mainVersion, ui64 databaseVersion) {
         // Synchronize with the actor through a state request following the update.
-        auto notification = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>();
+        auto notification = std::make_unique<TEvConsole::TEvConfigSubscriptionNotification>();
         notification->Record.SetMainYamlConfig(mainYaml);
         if (databaseYaml) {
             notification->Record.SetDatabaseYamlConfig(*databaseYaml);
@@ -1954,7 +1954,7 @@ selector_config: []
         runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
 
         const TActorId edge = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<THttpRequest>(HTTP_METHOD_GET);
+        auto request = std::make_unique<THttpRequest>(HTTP_METHOD_GET);
         request->HttpHeaders.AddHeader("Content-Type", "application/json");
         NMonitoring::TMonService2HttpRequest monReq(nullptr, request.Get(), nullptr, nullptr, "", nullptr);
         runtime.Send(new IEventHandle(dispatcherId, edge, new NMon::TEvHttpInfo(monReq)));
@@ -2000,7 +2000,7 @@ selector_config: []
         }
 
         const TActorId edge = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<THttpRequest>(HTTP_METHOD_GET);
+        auto request = std::make_unique<THttpRequest>(HTTP_METHOD_GET);
         request->HttpHeaders.AddHeader("Content-Type", "application/json");
         NMonitoring::TMonService2HttpRequest monReq(nullptr, request.Get(), nullptr, nullptr, "", nullptr);
         runtime.Send(new IEventHandle(dispatcherId, edge, new NMon::TEvHttpInfo(monReq)));

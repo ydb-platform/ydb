@@ -65,7 +65,7 @@ TPDiskSession OpenTool(TIntrusivePtr<NPDisk::TSectorMap> map) {
 }
 
 struct TYard {
-    THolder<TTestActorRuntime> Runtime;
+    std::unique_ptr<TTestActorRuntime> Runtime;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
     TIntrusivePtr<NPDisk::TSectorMap> Map;
     TActorId PDiskActor;
@@ -77,7 +77,7 @@ struct TYard {
     {
         Map = FormatMap(guid);
         Runtime.Reset(new TTestActorRuntime(1, 1, true));
-        auto app = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
+        auto app = std::make_unique<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
         IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
         app->IoContextFactory = IoContext.get();
         Runtime->SetLogBackend(NActors::CreateNullBackend());
@@ -100,7 +100,7 @@ struct TYard {
     }
 
     template <typename TRes>
-    THolder<TRes> Call(IEventBase* ev) {
+    std::unique_ptr<TRes> Call(IEventBase* ev) {
         Runtime->Send(new IEventHandle(PDiskActor, Edge, ev));
         auto res = Runtime->GrabEdgeEvent<TRes>();
         UNIT_ASSERT(res);

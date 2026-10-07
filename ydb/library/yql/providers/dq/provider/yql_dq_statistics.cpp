@@ -63,8 +63,8 @@ private:
     TDqStatePtr State;
 };
 
-THolder<IGraphTransformer> CreateDqsStatisticsTransformer(TDqStatePtr state, const IProviderContext& ctx) {
-    return MakeHolder<TDqsStatisticsTransformer>(state, ctx);
+std::unique_ptr<IGraphTransformer> CreateDqsStatisticsTransformer(TDqStatePtr state, const IProviderContext& ctx) {
+    return std::make_unique<TDqsStatisticsTransformer>(state, ctx);
 }
 
 } // namespace NYql

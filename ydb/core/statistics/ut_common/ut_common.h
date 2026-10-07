@@ -81,14 +81,14 @@ private:
 
     Tests::TServerSettings::TPtr Settings;
     Tests::TServer::TPtr Server;
-    THolder<Tests::TClient> Client;
-    THolder<Tests::TTenants> Tenants;
+    std::unique_ptr<Tests::TClient> Client;
+    std::unique_ptr<Tests::TTenants> Tenants;
     TAdaptiveThreadPool ThreadPool;
     bool ThreadPoolStarted = false;
 
     TString Endpoint;
     NYdb::TDriverConfig DriverConfig;
-    THolder<NYdb::TDriver> Driver;
+    std::unique_ptr<NYdb::TDriver> Driver;
     NYDBTest::TControllers::TGuard<NYDBTest::NColumnShard::TController> CSController;
 };
 

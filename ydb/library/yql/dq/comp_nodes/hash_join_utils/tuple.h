@@ -191,7 +191,7 @@ struct TTupleLayout {
     bool HashVariableKey(const ui8* res, ui32 keyColIdx) const;
 
     // Creates new tuple layout based on provided columns description.
-    static THolder<TTupleLayout>
+    static std::unique_ptr<TTupleLayout>
     Create(const std::vector<TColumnDesc> &columns);
 
     TTupleLayout(const std::vector<TColumnDesc> &columns)

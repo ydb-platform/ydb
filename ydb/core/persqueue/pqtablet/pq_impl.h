@@ -390,7 +390,7 @@ private:
     TVector<TReplyToActor> RepliesToActor;
 
     TIntrusivePtr<NTabletPipe::TBoundedClientCacheConfig> PipeClientCacheConfig;
-    THolder<NTabletPipe::IClientCache> PipeClientCache;
+    std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     TMap<ui64, TActorId> PartitionWriteQuoters;
 
     bool SubDomainOutOfSpace = false;

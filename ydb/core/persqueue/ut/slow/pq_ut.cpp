@@ -76,7 +76,7 @@ Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
         for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
             try {
                 TString cookie = CmdSetOwner(0, tc).first;
-                THolder<TEvPersQueue::TEvRequest> request;
+                std::unique_ptr<TEvPersQueue::TEvRequest> request;
                 tc.Runtime->ResetScheduledCount();
                 request.Reset(new TEvPersQueue::TEvRequest);
                 auto req = request->Record.MutablePartitionRequest();

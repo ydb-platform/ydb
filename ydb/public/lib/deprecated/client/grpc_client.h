@@ -32,7 +32,7 @@ namespace NKikimr {
         class TGRpcClient {
             TGRpcClientConfig Config;
             class TImpl;
-            THolder<TImpl> Impl;
+            std::unique_ptr<TImpl> Impl;
 
         public:
             TGRpcClient(const TGRpcClientConfig& config);

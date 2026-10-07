@@ -213,10 +213,10 @@ void TWaitForStreamClearanceUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateWaitForStreamClearanceUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateWaitForStreamClearanceUnit(TDataShard &dataShard,
                                                          TPipeline &pipeline)
 {
-    return THolder(new TWaitForStreamClearanceUnit(dataShard, pipeline));
+    return std::unique_ptr<TWaitForStreamClearanceUnit>(new TWaitForStreamClearanceUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

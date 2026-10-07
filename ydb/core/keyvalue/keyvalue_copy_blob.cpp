@@ -117,7 +117,7 @@ public:
 
         // TODO: more error handing
 
-        THolder<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+        std::unique_ptr<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
             .BlobId = NewBlobId,
             .Buffer = std::move(buffer),
             .Deadline = TInstant::Max(),

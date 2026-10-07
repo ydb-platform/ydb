@@ -412,7 +412,7 @@ TString TViewerPipeClient::GetError(const NKqp::TEvGetScriptExecutionOperationRe
 
 void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
-    THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
+    std::unique_ptr<TEvHive::TEvRequestHiveDomainStats> request = std::make_unique<TEvHive::TEvRequestHiveDomainStats>();
     request->Record.SetReturnFollowers(Followers);
     request->Record.SetReturnMetrics(Metrics);
     SendRequestToPipe(pipeClient, request.Release(), hiveId);
@@ -420,7 +420,7 @@ void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId
 
 void TViewerPipeClient::RequestHiveNodeStats(NNodeWhiteboard::TTabletId hiveId, TPathId pathId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
-    THolder<TEvHive::TEvRequestHiveNodeStats> request = MakeHolder<TEvHive::TEvRequestHiveNodeStats>();
+    std::unique_ptr<TEvHive::TEvRequestHiveNodeStats> request = std::make_unique<TEvHive::TEvRequestHiveNodeStats>();
     request->Record.SetReturnMetrics(Metrics);
     if (pathId != TPathId()) {
         request->Record.SetReturnExtendedTabletInfo(true);
@@ -432,7 +432,7 @@ void TViewerPipeClient::RequestHiveNodeStats(NNodeWhiteboard::TTabletId hiveId, 
 
 void TViewerPipeClient::RequestHiveStorageStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
-    THolder<TEvHive::TEvRequestHiveStorageStats> request = MakeHolder<TEvHive::TEvRequestHiveStorageStats>();
+    std::unique_ptr<TEvHive::TEvRequestHiveStorageStats> request = std::make_unique<TEvHive::TEvRequestHiveStorageStats>();
     SendRequestToPipe(pipeClient, request.Release(), hiveId);
 }
 
@@ -493,7 +493,7 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
 
 TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveDomainStats> TViewerPipeClient::MakeRequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
-    THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
+    std::unique_ptr<TEvHive::TEvRequestHiveDomainStats> request = std::make_unique<TEvHive::TEvRequestHiveDomainStats>();
     request->Record.SetReturnFollowers(Followers);
     request->Record.SetReturnMetrics(Metrics);
     auto response = MakeRequestToPipe<TEvHive::TEvResponseHiveDomainStats>(pipeClient, request.Release(), hiveId);
@@ -506,7 +506,7 @@ TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveDomainStats> TViewer
 
 TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveStorageStats> TViewerPipeClient::MakeRequestHiveStorageStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
-    THolder<TEvHive::TEvRequestHiveStorageStats> request = MakeHolder<TEvHive::TEvRequestHiveStorageStats>();
+    std::unique_ptr<TEvHive::TEvRequestHiveStorageStats> request = std::make_unique<TEvHive::TEvRequestHiveStorageStats>();
     auto response = MakeRequestToPipe<TEvHive::TEvResponseHiveStorageStats>(pipeClient, request.Release(), hiveId);
     if (response.Span) {
         auto hive_id = "#" + ::ToString(hiveId);
@@ -565,19 +565,19 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
 
 void TViewerPipeClient::RequestConsoleListTenants() {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
-    THolder<NConsole::TEvConsole::TEvListTenantsRequest> request = MakeHolder<NConsole::TEvConsole::TEvListTenantsRequest>();
+    std::unique_ptr<NConsole::TEvConsole::TEvListTenantsRequest> request = std::make_unique<NConsole::TEvConsole::TEvListTenantsRequest>();
     SendRequestToPipe(pipeClient, request.Release());
 }
 
 TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> TViewerPipeClient::MakeRequestConsoleListTenants() {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
-    THolder<NConsole::TEvConsole::TEvListTenantsRequest> request = MakeHolder<NConsole::TEvConsole::TEvListTenantsRequest>();
+    std::unique_ptr<NConsole::TEvConsole::TEvListTenantsRequest> request = std::make_unique<NConsole::TEvConsole::TEvListTenantsRequest>();
     return MakeRequestToPipe<NConsole::TEvConsole::TEvListTenantsResponse>(pipeClient, request.Release());
 }
 
 TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvGetNodeConfigResponse> TViewerPipeClient::MakeRequestConsoleNodeConfigByTenant(TString tenant, ui64 cookie) {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
-    auto request = MakeHolder<NConsole::TEvConsole::TEvGetNodeConfigRequest>();
+    auto request = std::make_unique<NConsole::TEvConsole::TEvGetNodeConfigRequest>();
     request->Record.MutableNode()->SetTenant(tenant);
     request->Record.AddItemKinds(static_cast<ui32>(NKikimrConsole::TConfigItem::FeatureFlagsItem));
     return MakeRequestToPipe<NConsole::TEvConsole::TEvGetNodeConfigResponse>(pipeClient, request.Release(), cookie);
@@ -590,14 +590,14 @@ TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvGetAllConfigsRespon
 
 void TViewerPipeClient::RequestConsoleGetTenantStatus(const TString& path) {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
-    THolder<NConsole::TEvConsole::TEvGetTenantStatusRequest> request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+    std::unique_ptr<NConsole::TEvConsole::TEvGetTenantStatusRequest> request = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
     request->Record.MutableRequest()->set_path(path);
     SendRequestToPipe(pipeClient, request.Release());
 }
 
 TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResponse> TViewerPipeClient::MakeRequestConsoleGetTenantStatus(const TString& path) {
     TActorId pipeClient = ConnectTabletPipe(GetConsoleId());
-    THolder<NConsole::TEvConsole::TEvGetTenantStatusRequest> request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+    std::unique_ptr<NConsole::TEvConsole::TEvGetTenantStatusRequest> request = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
     request->Record.MutableRequest()->set_path(path);
     auto response = MakeRequestToPipe<NConsole::TEvConsole::TEvGetTenantStatusResponse>(pipeClient, request.Release());
     if (response.Span) {
@@ -608,14 +608,14 @@ TViewerPipeClient::TRequestResponse<NConsole::TEvConsole::TEvGetTenantStatusResp
 
 void TViewerPipeClient::RequestBSControllerConfig() {
     TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
-    THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+    std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     request->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
     SendRequestToPipe(pipeClient, request.Release());
 }
 
 void TViewerPipeClient::RequestBSControllerConfigWithStoragePools() {
     TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
-    THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+    std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     request->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
     request->Record.MutableRequest()->AddCommand()->MutableReadStoragePool()->SetBoxId(Max<ui64>());
     SendRequestToPipe(pipeClient, request.Release());
@@ -623,7 +623,7 @@ void TViewerPipeClient::RequestBSControllerConfigWithStoragePools() {
 
 TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::MakeRequestBSControllerConfigWithStoragePools() {
     TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
-    THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+    std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     request->Record.MutableRequest()->AddCommand()->MutableQueryBaseConfig();
     request->Record.MutableRequest()->AddCommand()->MutableReadStoragePool()->SetBoxId(Max<ui64>());
     return MakeRequestToPipe<TEvBlobStorage::TEvControllerConfigResponse>(pipeClient, request.Release());
@@ -631,16 +631,16 @@ TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse>
 
 void TViewerPipeClient::RequestBSControllerInfo() {
     TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
-    THolder<TEvBlobStorage::TEvRequestControllerInfo> request = MakeHolder<TEvBlobStorage::TEvRequestControllerInfo>();
+    std::unique_ptr<TEvBlobStorage::TEvRequestControllerInfo> request = std::make_unique<TEvBlobStorage::TEvRequestControllerInfo>();
     SendRequestToPipe(pipeClient, request.Release());
 }
 
-void TViewerPipeClient::RequestBSControllerSelectGroups(THolder<TEvBlobStorage::TEvControllerSelectGroups> request) {
+void TViewerPipeClient::RequestBSControllerSelectGroups(std::unique_ptr<TEvBlobStorage::TEvControllerSelectGroups> request) {
     TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
     SendRequestToPipe(pipeClient, request.Release());
 }
 
-TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerSelectGroupsResult> TViewerPipeClient::MakeRequestBSControllerSelectGroups(THolder<TEvBlobStorage::TEvControllerSelectGroups> request, ui64 cookie) {
+TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerSelectGroupsResult> TViewerPipeClient::MakeRequestBSControllerSelectGroups(std::unique_ptr<TEvBlobStorage::TEvControllerSelectGroups> request, ui64 cookie) {
     TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
     return MakeRequestToPipe<TEvBlobStorage::TEvControllerSelectGroupsResult>(pipeClient, request.Release(), cookie);
 }
@@ -667,7 +667,7 @@ bool TViewerPipeClient::RequireAdminIfForce(bool& force, TStringBuf forceParamNa
 }
 
 TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force) {
-    THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+    std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     auto* restartPDisk = request->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();
     restartPDisk->MutableTargetPDiskId()->SetNodeId(nodeId);
     restartPDisk->MutableTargetPDiskId()->SetPDiskId(pdiskId);
@@ -683,7 +683,7 @@ TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse>
 }
 
 TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGeneration, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool force) {
-    THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+    std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     auto* evictVDisk = request->Record.MutableRequest()->AddCommand()->MutableReassignGroupDisk();
     evictVDisk->SetGroupId(groupId);
     evictVDisk->SetGroupGeneration(groupGeneration);
@@ -827,7 +827,7 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResp
 }
 
 TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force) {
-    THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+    std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     auto* updateDriveStatus = request->Record.MutableRequest()->AddCommand()->MutableUpdateDriveStatus();
     updateDriveStatus->CopyFrom(driveStatus);
     if (force) {
@@ -836,10 +836,10 @@ TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse>
     return MakeRequestToTablet<TEvBlobStorage::TEvControllerConfigResponse>(GetBSControllerId(), request.Release());
 }
 
-THolder<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNavigateRequestBuilder (
+std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNavigateRequestBuilder (
         NSchemeCache::TSchemeCacheNavigate::TEntry&& entry
 ) {
-    THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     entry.RedirectRequired = false;
     entry.ShowPrivatePath = true;
     if (entry.Operation == NSchemeCache::TSchemeCacheNavigate::OpUnknown)
@@ -873,7 +873,7 @@ void TViewerPipeClient::RequestSchemeCacheNavigate(const TPathId& pathId) {
 }
 
 TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> TViewerPipeClient::MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie) {
-    THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.Path = SplitPath(path);
     entry.RedirectRequired = false;
@@ -892,7 +892,7 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
 }
 
 TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> TViewerPipeClient::MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie) {
-    THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.TableId.PathId = pathId;
     entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
@@ -912,7 +912,7 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
 }
 
 TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> TViewerPipeClient::MakeRequestSchemeCacheNavigateWithoutToken(TPathId pathId, ui64 cookie) {
-    THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.TableId.PathId = pathId;
     entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
@@ -966,7 +966,7 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
 }
 
 void TViewerPipeClient::RequestTxProxyDescribe(const TString& path, const NKikimrSchemeOp::TDescribeOptions& options) {
-    THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
+    std::unique_ptr<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
     request->Record.MutableDescribePath()->SetPath(path);
     request->Record.MutableDescribePath()->MutableOptions()->CopyFrom(options);
     if (Event && !Event->Get()->UserToken.empty()) {

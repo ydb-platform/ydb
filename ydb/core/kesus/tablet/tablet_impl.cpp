@@ -166,7 +166,7 @@ void TKesusTablet::Handle(TEvKesus::TEvDescribeProxies::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
 
-    auto event = MakeHolder<TEvKesus::TEvDescribeProxiesResult>();
+    auto event = std::make_unique<TEvKesus::TEvDescribeProxiesResult>();
     for (const auto& kv : Proxies) {
         const auto* proxy = &kv.second;
         auto* proxyInfo = event->Record.AddProxies();

@@ -14,7 +14,7 @@ using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
     TEvSchemeShard::TEvListUsers::TPtr Request;
-    THolder<TEvSchemeShard::TEvListUsersResult> Result = MakeHolder<TEvSchemeShard::TEvListUsersResult>();
+    std::unique_ptr<TEvSchemeShard::TEvListUsersResult> Result = std::make_unique<TEvSchemeShard::TEvListUsersResult>();
 
     TTxListUsers(TSelf *self, TEvSchemeShard::TEvListUsers::TPtr &ev)
         : TTransactionBase<TSchemeShard>(self)

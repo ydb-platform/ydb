@@ -625,8 +625,8 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
                 bool collect = tenv.Rand(2);
                 bool isMultiCollectAllowed = tenv.Rand(2);
 
-                THolder<TVector<TLogoBlobID>> keep(new TVector<TLogoBlobID>());
-                THolder<TVector<TLogoBlobID>> doNotKeep(new TVector<TLogoBlobID>());
+                std::unique_ptr<TVector<TLogoBlobID>> keep(new TVector<TLogoBlobID>());
+                std::unique_ptr<TVector<TLogoBlobID>> doNotKeep(new TVector<TLogoBlobID>());
 
                 for (auto& blob : blobs) {
                     if (blob.Status == TBlobInfo::EStatus::WRITTEN) {
@@ -662,8 +662,8 @@ void TestVerifiedRandom(TBlobDepotTestEnvironment& tenv, ui32 nodeCount, ui64 ta
                 bool collect = tenv.Rand(2);
                 bool isMultiCollectAllowed = tenv.Rand(2);
 
-                THolder<TVector<TLogoBlobID>> keep(new TVector<TLogoBlobID>());
-                THolder<TVector<TLogoBlobID>> doNotKeep(new TVector<TLogoBlobID>());
+                std::unique_ptr<TVector<TLogoBlobID>> keep(new TVector<TLogoBlobID>());
+                std::unique_ptr<TVector<TLogoBlobID>> doNotKeep(new TVector<TLogoBlobID>());
 
                 for (auto& blob : blobs) {
                     if (blob.Status == TBlobInfo::EStatus::WRITTEN) {

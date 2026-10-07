@@ -33,7 +33,7 @@ public:
             Modify = true;
         }
 
-        auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+        auto resp = std::make_unique<TEvConsole::TEvConfigNotificationResponse>(rec);
         Response = new IEventHandle(Event->Sender, Self->SelfId(), resp.Release(),
                                         0, Event->Cookie);
 

@@ -51,7 +51,7 @@ namespace NInterconnect {
                 hops->erase(hops->begin());
 
                 // forward message to next hop; preserve flags and cookie
-                auto msg = MakeHolder<TEvLoadMessage>();
+                auto msg = std::make_unique<TEvLoadMessage>();
                 record.Swap(&msg->Record);
                 bytes += msg->CalculateSerializedSizeCached();
                 ctx.Send(nextHopActorId, msg.Release(), ev->Flags, ev->Cookie);
@@ -209,7 +209,7 @@ namespace NInterconnect {
                 TString id = Sprintf("%" PRIu64, cookie);
 
                 // create message and send it to the first hop
-                THolder<TEvLoadMessage> ev;
+                std::unique_ptr<TEvLoadMessage> ev;
                 if (Params.UseProtobufWithPayload && size) {
                     TRcBuf buffer = Params.RdmaMode
                         ? ctx.ActorSystem()->GetRcBufAllocator()->AllocRcBuf(size, 0, 0)

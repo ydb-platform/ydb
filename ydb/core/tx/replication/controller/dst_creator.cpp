@@ -94,7 +94,7 @@ bool NotReplica(const NKikimrSchemeOp::TTableDescription& table) {
 
 class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void Resolve(const TPathId& pathId) {
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = Database;
 
         auto& entry = request->ResultSet.emplace_back();
@@ -163,7 +163,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         YDB_LOG_TRACE("Get table profiles");
 
         using namespace NKikimrConsole;
-        auto ev = MakeHolder<TEvConfigsDispatcher::TEvGetConfigRequest>((ui32)TConfigItem::TableProfilesConfigItem);
+        auto ev = std::make_unique<TEvConfigsDispatcher::TEvGetConfigRequest>((ui32)TConfigItem::TableProfilesConfigItem);
         Send(MakeConfigsDispatcherID(SelfId().NodeId()), std::move(ev), IEventHandle::FlagTrackDelivery);
 
         Become(&TThis::StateGetTableProfiles);
@@ -369,7 +369,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void ExecuteSchemeTx(const NKikimrSchemeOp::TModifyScheme& tx) {
-        auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+        auto ev = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         *ev->Record.AddTransaction() = tx;
 
         if (Owner) {

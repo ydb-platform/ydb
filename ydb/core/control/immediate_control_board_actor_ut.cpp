@@ -44,10 +44,10 @@ do { \
 
 static bool IsVerbose = false;
 
-static THolder<TActorSystem> ActorSystem;
+static std::unique_ptr<TActorSystem> ActorSystem;
 
 static TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-static THolder<NActors::TMon> Monitoring;
+static std::unique_ptr<NActors::TMon> Monitoring;
 
 static TAtomic DoneCounter = 0;
 static TSystemEvent DoneEvent(TSystemEvent::rAuto);
@@ -88,7 +88,7 @@ static void Run(i64 instances = 1) {
         nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001));
         nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002));
 
-        THolder<TActorSystemSetup> setup(new TActorSystemSetup());
+        std::unique_ptr<TActorSystemSetup> setup(new TActorSystemSetup());
         setup->NodeId = 1;
         setup->ExecutorsCount = 3;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[3]);
@@ -107,7 +107,7 @@ static void Run(i64 instances = 1) {
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(IcbActorId, std::move(testSetup)));
 
 
-        THolder<TTestConfig> testConfig(new TTestConfig(IcbActorId, appData.Icb.Get(), appData.Dcb.Get()));
+        std::unique_ptr<TTestConfig> testConfig(new TTestConfig(IcbActorId, appData.Icb.Get(), appData.Dcb.Get()));
         for (ui32 i = 0; i < instances; ++i) {
             testIds[i] = MakeBlobStorageProxyID(1 + i);
             TActorSetupCmd testSetup(new T(testConfig.Get()), TMailboxType::Revolving, 0);

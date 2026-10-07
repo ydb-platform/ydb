@@ -47,7 +47,7 @@ public:
             {"record", record.ShortDebugString()},
         );
 
-        Response = MakeHolder<TEvBackup::TEvListFullBackupsResponse>();
+        Response = std::make_unique<TEvBackup::TEvListFullBackupsResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(
@@ -111,7 +111,7 @@ private:
 private:
     TSideEffects SideEffects;
     TEvBackup::TEvListFullBackupsRequest::TPtr Request;
-    THolder<TEvBackup::TEvListFullBackupsResponse> Response;
+    std::unique_ptr<TEvBackup::TEvListFullBackupsResponse> Response;
 };
 
 ITransaction* TSchemeShard::CreateTxListFullBackups(TEvBackup::TEvListFullBackupsRequest::TPtr& ev) {

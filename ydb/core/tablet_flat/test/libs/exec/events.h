@@ -62,11 +62,11 @@ namespace NFake {
             Txs.emplace_back(tx);
         }
 
-        TEvExecute(THolder<ITransaction> tx) {
+        TEvExecute(std::unique_ptr<ITransaction> tx) {
             Txs.push_back(std::move(tx));
         }
 
-        TEvExecute(TVector<THolder<ITransaction>> txs)
+        TEvExecute(TVector<std::unique_ptr<ITransaction>> txs)
             : Txs(std::move(txs))
         { }
 
@@ -74,7 +74,7 @@ namespace NFake {
             Lambdas.push_back(std::move(lambda));
         }
 
-        TVector<THolder<ITransaction>> Txs;
+        TVector<std::unique_ptr<ITransaction>> Txs;
         TVector<TLambda> Lambdas;
     };
 

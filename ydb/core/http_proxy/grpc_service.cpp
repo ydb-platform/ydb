@@ -56,7 +56,7 @@ private:
     }
 
     void SendYdbDriverRequest(const TActorContext& ctx) {
-        auto request = MakeHolder<TEvServerlessProxy::TEvDiscoverDatabaseEndpointRequest>();
+        auto request = std::make_unique<TEvServerlessProxy::TEvDiscoverDatabaseEndpointRequest>();
         const auto& res = ReqCtx->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER);
         TString database;
         if (!res.empty()) {

@@ -111,7 +111,7 @@ namespace NActors {
         return true;
     }
 
-    TActorId TActorTracker::RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx,
+    TActorId TActorTracker::RegisterSubactor(std::unique_ptr<TTrackedActorBase>&& subactor, const TActorContext& ctx,
             TMailboxType::EType mailboxType, ui32 poolId) {
         if (!PreRegister()) {
             return TActorId();
@@ -129,7 +129,7 @@ namespace NActors {
         return subactorId;
     }
 
-    TActorId TActorTracker::RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx) {
+    TActorId TActorTracker::RegisterLocalSubactor(std::unique_ptr<TTrackedActorBase>&& subactor, const TActorContext& ctx) {
         if (!PreRegister()) {
             return TActorId();
         }
@@ -154,13 +154,13 @@ namespace NActors {
 
 
 
-    TActorId TTrackedActorBase::RegisterSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx,
+    TActorId TTrackedActorBase::RegisterSubactor(std::unique_ptr<TTrackedActorBase>&& subactor, const TActorContext& ctx,
             TMailboxType::EType mailboxType, ui32 poolId) {
         Y_ABORT_UNLESS(Tracker);
         return Tracker->RegisterSubactor(std::move(subactor), ctx, mailboxType, poolId);
     }
 
-    TActorId TTrackedActorBase::RegisterLocalSubactor(THolder<TTrackedActorBase>&& subactor, const TActorContext& ctx) {
+    TActorId TTrackedActorBase::RegisterLocalSubactor(std::unique_ptr<TTrackedActorBase>&& subactor, const TActorContext& ctx) {
         Y_ABORT_UNLESS(Tracker);
         return Tracker->RegisterLocalSubactor(std::move(subactor), ctx);
     }

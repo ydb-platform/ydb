@@ -1126,8 +1126,8 @@ private:
 
 } // anonymous namespace
 
-THolder<IDqIntegration> CreatePqDqIntegration(const TPqState::TPtr& state) {
-    return MakeHolder<TPqDqIntegration>(state);
+std::unique_ptr<IDqIntegration> CreatePqDqIntegration(const TPqState::TPtr& state) {
+    return std::make_unique<TPqDqIntegration>(state);
 }
 
 } // namespace NYql

@@ -290,7 +290,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
-        auto response = MakeHolder<TEvDataShard::TEvRecomputeKMeansResponse>();
+        auto response = std::make_unique<TEvDataShard::TEvRecomputeKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
         YDB_LOG_NOTICE("Starting K-means recompute scan",

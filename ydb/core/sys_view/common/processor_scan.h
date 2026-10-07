@@ -69,7 +69,7 @@ private:
             return;
         }
 
-        auto req = MakeHolder<TEvRequest>();
+        auto req = std::make_unique<TEvRequest>();
         req->Record.CopyFrom(Request);
 
         this->SendThroughPipeCache(req.Release(), this->SysViewProcessorId);

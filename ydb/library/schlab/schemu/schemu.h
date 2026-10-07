@@ -20,8 +20,8 @@ public:
 
     ui64 EstimateCost(ui64 size);
 protected:
-    THolder<NSchLab::TSchOotGenSet> GenSet;
-    THolder<TScheduler> Scheduler;
+    std::unique_ptr<NSchLab::TSchOotGenSet> GenSet;
+    std::unique_ptr<TScheduler> Scheduler;
     double TimeMs;
     TString ErrorReason;
     std::unordered_map<TString, ui32> OwnerForUser;

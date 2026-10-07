@@ -17,31 +17,31 @@ TSqsWorkloadStatsCollector::TSqsWorkloadStatsCollector(
     WarmupSec(warmupSec),
     Percentile(percentile),
     ErrorFlag(errorFlag),
-    WindowStats(MakeHolder<TSqsWorkloadStats>())
+    WindowStats(std::make_unique<TSqsWorkloadStats>())
 {
-    SendRequestDoneEventQueue = MakeHolder<
+    SendRequestDoneEventQueue = std::make_unique<
         TAutoLockFreeQueue<TSqsWorkloadStats::SendRequestDoneEvent>>();
-    ReceiveRequestDoneEventQueue = MakeHolder<
+    ReceiveRequestDoneEventQueue = std::make_unique<
         TAutoLockFreeQueue<TSqsWorkloadStats::ReceiveRequestDoneEvent>>();
-    DeleteRequestDoneEventQueue = MakeHolder<
+    DeleteRequestDoneEventQueue = std::make_unique<
         TAutoLockFreeQueue<TSqsWorkloadStats::DeleteRequestDoneEvent>>();
     GotMessageEventQueue =
-        MakeHolder<TAutoLockFreeQueue<TSqsWorkloadStats::GotMessageEvent>>();
-    SendRequestErrorEventQueue = MakeHolder<
+        std::make_unique<TAutoLockFreeQueue<TSqsWorkloadStats::GotMessageEvent>>();
+    SendRequestErrorEventQueue = std::make_unique<
         TAutoLockFreeQueue<TSqsWorkloadStats::SendRequestErrorEvent>>();
-    ReceiveRequestErrorEventQueue = MakeHolder<
+    ReceiveRequestErrorEventQueue = std::make_unique<
         TAutoLockFreeQueue<TSqsWorkloadStats::ReceiveRequestErrorEvent>>();
-    DeleteRequestErrorEventQueue = MakeHolder<
+    DeleteRequestErrorEventQueue = std::make_unique<
         TAutoLockFreeQueue<TSqsWorkloadStats::DeleteRequestErrorEvent>>();
     SentMessagesEventQueue =
-        MakeHolder<TAutoLockFreeQueue<TSqsWorkloadStats::SentMessagesEvent>>();
-    DeletedMessagesEventQueue = MakeHolder<
+        std::make_unique<TAutoLockFreeQueue<TSqsWorkloadStats::SentMessagesEvent>>();
+    DeletedMessagesEventQueue = std::make_unique<
         TAutoLockFreeQueue<TSqsWorkloadStats::DeletedMessagesEvent>>();
-    FinishProcessMessagesEventQueue = MakeHolder<
+    FinishProcessMessagesEventQueue = std::make_unique<
         TAutoLockFreeQueue<TSqsWorkloadStats::FinishProcessMessagesEvent>>();
-    PushAsyncRequestTaskToQueueEventQueue = MakeHolder<TAutoLockFreeQueue<
+    PushAsyncRequestTaskToQueueEventQueue = std::make_unique<TAutoLockFreeQueue<
         TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent>>();
-    ErrorWhileProcessingMessagesEventQueue = MakeHolder<TAutoLockFreeQueue<
+    ErrorWhileProcessingMessagesEventQueue = std::make_unique<TAutoLockFreeQueue<
         TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>>();
 }
 
@@ -147,7 +147,7 @@ void TSqsWorkloadStatsCollector::PrintWindowStats(ui32 windowIt) {
 
     auto messagesInFlight = WindowStats->MessagesInFlight;
     auto asyncRequestTasks = WindowStats->AsyncRequestTasks;
-    WindowStats = MakeHolder<TSqsWorkloadStats>();
+    WindowStats = std::make_unique<TSqsWorkloadStats>();
     WindowStats->MessagesInFlight = messagesInFlight;
     WindowStats->MessagesInFlightHist.RecordValue(messagesInFlight);
     WindowStats->AsyncRequestTasks = asyncRequestTasks;
@@ -236,7 +236,7 @@ void TSqsWorkloadStatsCollector::CollectEvents()
 template <class T>
 void TSqsWorkloadStatsCollector::CollectEvents()
 {
-    THolder<T> event;
+    std::unique_ptr<T> event;
     if constexpr (std::is_same_v<T, TSqsWorkloadStats::SendRequestDoneEvent>) {
         while (SendRequestDoneEventQueue->Dequeue(&event)) {
             WindowStats->AddEvent(*event);
@@ -324,91 +324,91 @@ void TSqsWorkloadStatsCollector::AddSendRequestDoneEvent(
     const TSqsWorkloadStats::SendRequestDoneEvent& event)
 {
     SendRequestDoneEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::SendRequestDoneEvent>(event));
+        std::make_unique<TSqsWorkloadStats::SendRequestDoneEvent>(event));
 }
 
 void TSqsWorkloadStatsCollector::AddReceiveRequestDoneEvent(
     const TSqsWorkloadStats::ReceiveRequestDoneEvent& event)
 {
     ReceiveRequestDoneEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::ReceiveRequestDoneEvent>(event));
+        std::make_unique<TSqsWorkloadStats::ReceiveRequestDoneEvent>(event));
 }
 
 void TSqsWorkloadStatsCollector::AddDeleteRequestDoneEvent(
     const TSqsWorkloadStats::DeleteRequestDoneEvent& event)
 {
     DeleteRequestDoneEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::DeleteRequestDoneEvent>(event));
+        std::make_unique<TSqsWorkloadStats::DeleteRequestDoneEvent>(event));
 }
 
 void TSqsWorkloadStatsCollector::AddGotMessageEvent(
     TSqsWorkloadStats::GotMessageEvent& event)
 {
     GotMessageEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::GotMessageEvent>(event));
+        std::make_unique<TSqsWorkloadStats::GotMessageEvent>(event));
 }
 
 void TSqsWorkloadStatsCollector::AddSendRequestErrorEvent(
     const TSqsWorkloadStats::SendRequestErrorEvent& event)
 {
     SendRequestErrorEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::SendRequestErrorEvent>(event));
+        std::make_unique<TSqsWorkloadStats::SendRequestErrorEvent>(event));
 }
 
 void TSqsWorkloadStatsCollector::AddReceiveRequestErrorEvent(
     const TSqsWorkloadStats::ReceiveRequestErrorEvent& event)
 {
     ReceiveRequestErrorEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::ReceiveRequestErrorEvent>(event));
+        std::make_unique<TSqsWorkloadStats::ReceiveRequestErrorEvent>(event));
 }
 
 void TSqsWorkloadStatsCollector::AddDeleteRequestErrorEvent(
     const TSqsWorkloadStats::DeleteRequestErrorEvent& event)
 {
     DeleteRequestErrorEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::DeleteRequestErrorEvent>(event));
+        std::make_unique<TSqsWorkloadStats::DeleteRequestErrorEvent>(event));
 }
 
 void TSqsWorkloadStatsCollector::AddSentMessagesEvent(
     const TSqsWorkloadStats::SentMessagesEvent& event)
 {
     SentMessagesEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::SentMessagesEvent>(event));
+        std::make_unique<TSqsWorkloadStats::SentMessagesEvent>(event));
 }
 
 void TSqsWorkloadStatsCollector::AddDeletedMessagesEvent(
     const TSqsWorkloadStats::DeletedMessagesEvent& event)
 {
     DeletedMessagesEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::DeletedMessagesEvent>(event));
+        std::make_unique<TSqsWorkloadStats::DeletedMessagesEvent>(event));
 }
 
 void TSqsWorkloadStatsCollector::AddFinishProcessMessagesEvent(
     const TSqsWorkloadStats::FinishProcessMessagesEvent& event)
 {
     FinishProcessMessagesEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::FinishProcessMessagesEvent>(event));
+        std::make_unique<TSqsWorkloadStats::FinishProcessMessagesEvent>(event));
 }
 
 void TSqsWorkloadStatsCollector::AddPushAsyncRequestTaskToQueueEvent(
     const TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent& event)
 {
     PushAsyncRequestTaskToQueueEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent>(event));
+        std::make_unique<TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent>(event));
 }
 
 void TSqsWorkloadStatsCollector::AddErrorWhileProcessingMessagesEvent(
     const TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent& event)
 {
     ErrorWhileProcessingMessagesEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>(event));
+        std::make_unique<TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>(event));
 }
 
 template <class T>
-void TSqsWorkloadStatsCollector::AddEvent(THolder<TAutoLockFreeQueue<T>>& queue,
+void TSqsWorkloadStatsCollector::AddEvent(std::unique_ptr<TAutoLockFreeQueue<T>>& queue,
                                           const T& event)
 {
     if ((WarmupTime != TInstant()) && (Now() >= WarmupTime)) {
-        queue->Enqueue(MakeHolder<T>(event));
+        queue->Enqueue(std::make_unique<T>(event));
     }
 }

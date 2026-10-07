@@ -44,7 +44,7 @@ void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
         YDB_LOG_ERROR("Handle TEvHive::TEvCreateTablet: invalid arguments",
             {"logPrefix", GetLogPrefix()},
             {"record", rec.DebugString()});
-        THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>();
+        std::unique_ptr<TEvHive::TEvCreateTabletReply> reply = std::make_unique<TEvHive::TEvCreateTabletReply>();
         reply->Record.SetStatus(NKikimrProto::EReplyStatus::ERROR);
         reply->Record.SetErrorReason(NKikimrHive::EErrorReason::ERROR_REASON_INVALID_ARGUMENTS);
         if (rec.HasOwner()) {
@@ -739,7 +739,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
                 {"logPrefix", GetLogPrefix()},
                 {"tenantPathId", Info()->TenantPathId});
 
-            auto msg = MakeHolder<TEvHive::TEvConfigureHive>(TSubDomainKey(Info()->TenantPathId.OwnerId, Info()->TenantPathId.LocalPathId));
+            auto msg = std::make_unique<TEvHive::TEvConfigureHive>(TSubDomainKey(Info()->TenantPathId.OwnerId, Info()->TenantPathId.LocalPathId));
             TEvHive::TEvConfigureHive::TPtr event((TEventHandle<TEvHive::TEvConfigureHive>*) new IEventHandle(
                 TActorId(), TActorId(), msg.Release()
             ));
@@ -748,7 +748,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
 
         if (!TabletOwnersSynced) {
             // this code should be removed later
-            THolder<TEvHive::TEvRequestTabletOwners> request(new TEvHive::TEvRequestTabletOwners());
+            std::unique_ptr<TEvHive::TEvRequestTabletOwners> request(new TEvHive::TEvRequestTabletOwners());
             request->Record.SetOwnerID(TabletID());
             YDB_LOG_DEBUG("Handle TEvPrivate::TEvBootTablets: requesting TabletOwners from root Hive",
                 {"logPrefix", GetLogPrefix()});
@@ -757,7 +757,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         }
     }
     if (!tabletsToReleaseFromParent.empty()) {
-        THolder<TEvHive::TEvReleaseTablets> request(new TEvHive::TEvReleaseTablets());
+        std::unique_ptr<TEvHive::TEvReleaseTablets> request(new TEvHive::TEvReleaseTablets());
         request->Record.SetNewOwnerID(TabletID());
         for (TTabletId tabletId : tabletsToReleaseFromParent) {
             request->Record.AddTabletIDs(tabletId);
@@ -1056,11 +1056,11 @@ void THive::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
     if (ConnectedNodes.erase(nodeId)) {
        UpdateCounterNodesConnected(-1);
     }
-    Execute(CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected>(ev->Release().Release())));
+    Execute(CreateDisconnectNode(std::unique_ptr<TEvInterconnect::TEvNodeDisconnected>(ev->Release().Release())));
 }
 
 void THive::Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
-    THolder<TEvInterconnect::TNodeInfo>& node = ev->Get()->Node;
+    std::unique_ptr<TEvInterconnect::TNodeInfo>& node = ev->Get()->Node;
     if (node) {
         TEvInterconnect::TNodeInfo& nodeInfo = *node;
         NodesInfo[node->NodeId] = nodeInfo;
@@ -1087,7 +1087,7 @@ void THive::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     MaybeLoadEverything();
 }
 
-void THive::ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode> event) {
+void THive::ScheduleDisconnectNode(std::unique_ptr<TEvPrivate::TEvProcessDisconnectNode> event) {
     auto itCategory = event->Tablets.begin();
     if (itCategory != event->Tablets.end()) {
         TTabletCategoryInfo& category = GetTabletCategory(itCategory->first);
@@ -1342,17 +1342,17 @@ void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
 
     if (!storagePoolsToRefresh.empty()) {
         // we need to refresh storage pool state from BSC
-        TVector<THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters>> requests;
+        TVector<std::unique_ptr<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters>> requests;
         for (TString storagePoolName : storagePoolsToRefresh) {
             TStoragePoolInfo& storagePool = GetStoragePool(storagePoolName);
             if (storagePool.AddTabletToWait(tablet.Id)) {
-                THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> item = storagePool.BuildRefreshRequest();
+                std::unique_ptr<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> item = storagePool.BuildRefreshRequest();
                 ++storagePool.RefreshRequestInFlight;
                 requests.emplace_back(std::move(item));
             }
         }
         if (!requests.empty()) {
-            THolder<TEvBlobStorage::TEvControllerSelectGroups> ev = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+            std::unique_ptr<TEvBlobStorage::TEvControllerSelectGroups> ev = std::make_unique<TEvBlobStorage::TEvControllerSelectGroups>();
             NKikimrBlobStorage::TEvControllerSelectGroups& record = ev->Record;
             record.SetReturnAllMatchingGroups(true);
             for (auto& request : requests) {
@@ -2529,7 +2529,7 @@ void THive::Handle(TEvHive::TEvRequestHiveDomainStats::TPtr& ev) {
         }
     }
 
-    THolder<TEvHive::TEvResponseHiveDomainStats> response = MakeHolder<TEvHive::TEvResponseHiveDomainStats>();
+    std::unique_ptr<TEvHive::TEvResponseHiveDomainStats> response = std::make_unique<TEvHive::TEvResponseHiveDomainStats>();
     auto& record = response->Record;
 
     for (const auto& pr1 : subDomainStats) {
@@ -2557,7 +2557,7 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
     const auto& request(ev->Get()->Record);
     TInstant now = TActivationContext::Now();
     TInstant restartsBarrierTime = now - GetNodeRestartWatchPeriod();
-    THolder<TEvHive::TEvResponseHiveNodeStats> response = MakeHolder<TEvHive::TEvResponseHiveNodeStats>();
+    std::unique_ptr<TEvHive::TEvResponseHiveNodeStats> response = std::make_unique<TEvHive::TEvResponseHiveNodeStats>();
     auto& record = response->Record;
     if (request.GetReturnExtendedTabletInfo()) {
         record.SetExtendedTabletInfo(true);
@@ -2655,7 +2655,7 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
 }
 
 void THive::Handle(TEvHive::TEvRequestHiveStorageStats::TPtr& ev) {
-    THolder<TEvHive::TEvResponseHiveStorageStats> response = MakeHolder<TEvHive::TEvResponseHiveStorageStats>();
+    std::unique_ptr<TEvHive::TEvResponseHiveStorageStats> response = std::make_unique<TEvHive::TEvResponseHiveStorageStats>();
     auto& record = response->Record;
     for (const auto& [name, pool] : StoragePools) {
         auto& pbPool = *record.AddPools();
@@ -3352,8 +3352,8 @@ const TVector<i64>& THive::GetTabletTypeAllowedMetricIds(TTabletTypes::EType typ
     return GetDefaultAllowedMetricIdsForType(type);
 }
 
-THolder<TGroupFilter> THive::BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId) {
-    auto filter = MakeHolder<TGroupFilter>();
+std::unique_ptr<TGroupFilter> THive::BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId) {
+    auto filter = std::make_unique<TGroupFilter>();
     Y_ABORT_UNLESS(channelId < tablet.BoundChannels.size());
     const auto& binding = tablet.BoundChannels[channelId];
     filter->GroupParameters.MutableStoragePoolSpecifier()->SetName(binding.GetStoragePoolName());
@@ -3699,16 +3699,16 @@ void THive::InitDefaultChannelBind(TChannelBind& bind) {
 void THive::RequestPoolsInformation() {
     YDB_LOG_DEBUG("THive::RequestPoolsInformation:",
         {"logPrefix", GetLogPrefix()});
-    TVector<THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters>> requests;
+    TVector<std::unique_ptr<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters>> requests;
 
     for (auto& [poolName, storagePool] : StoragePools) {
-        THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> item = storagePool.BuildRefreshRequest();
+        std::unique_ptr<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> item = storagePool.BuildRefreshRequest();
         ++storagePool.RefreshRequestInFlight;
         requests.emplace_back(std::move(item));
     }
 
     if (!requests.empty()) {
-        THolder<TEvBlobStorage::TEvControllerSelectGroups> ev = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+        std::unique_ptr<TEvBlobStorage::TEvControllerSelectGroups> ev = std::make_unique<TEvBlobStorage::TEvControllerSelectGroups>();
         NKikimrBlobStorage::TEvControllerSelectGroups& record = ev->Record;
         record.SetReturnAllMatchingGroups(true);
         record.SetBlockUntilAllResourcesAreComplete(true);
@@ -4035,7 +4035,7 @@ void THive::Handle(NSysView::TEvSysView::TEvGetTabletIdsRequest::TPtr& ev) {
     auto fromId = request.GetFrom();
     auto toId = request.GetTo();
 
-    auto response = MakeHolder<NSysView::TEvSysView::TEvGetTabletIdsResponse>();
+    auto response = std::make_unique<NSysView::TEvSysView::TEvGetTabletIdsResponse>();
     auto& record = response->Record;
 
     for (const auto& [tabletId, _] : Tablets) {
@@ -4050,7 +4050,7 @@ void THive::Handle(NSysView::TEvSysView::TEvGetTabletIdsRequest::TPtr& ev) {
 void THive::Handle(NSysView::TEvSysView::TEvGetTabletsRequest::TPtr& ev) {
     const auto& request = ev->Get()->Record;
 
-    auto response = MakeHolder<NSysView::TEvSysView::TEvGetTabletsResponse>();
+    auto response = std::make_unique<NSysView::TEvSysView::TEvGetTabletsResponse>();
     auto& record = response->Record;
 
     auto limit = request.GetBatchSizeLimit();
@@ -4410,9 +4410,9 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
     }
 
     if (pool.SetShrinkRequest(std::move(ev))) {
-        THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> item = pool.BuildRefreshRequest();
+        std::unique_ptr<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> item = pool.BuildRefreshRequest();
         ++pool.RefreshRequestInFlight;
-        THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
+        std::unique_ptr<TEvBlobStorage::TEvControllerSelectGroups> request = std::make_unique<TEvBlobStorage::TEvControllerSelectGroups>();
         NKikimrBlobStorage::TEvControllerSelectGroups& selectRecord = request->Record;
         selectRecord.SetReturnAllMatchingGroups(true);
         selectRecord.MutableGroupParameters()->AddAllocated(std::move(item).Release());
@@ -4778,7 +4778,7 @@ void THive::ReportTabletStateToWhiteboard(const TLeaderTabletInfo& tablet, NKiki
     TSubDomainKey tenantId(pathId.OwnerId, pathId.LocalPathId);
     for (TNodeId nodeId : GetNodesForWhiteboardBroadcast()) {
         TActorId whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
-        THolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate> event = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>();
+        std::unique_ptr<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate> event = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>();
         event->Record.SetTabletId(tablet.Id);
         event->Record.SetType(tablet.Type);
         event->Record.SetLeader(true);
@@ -4788,7 +4788,7 @@ void THive::ReportTabletStateToWhiteboard(const TLeaderTabletInfo& tablet, NKiki
         event->Record.MutableTenantId()->CopyFrom(tenantId);
         Send(whiteboardId, event.Release());
         for (const TFollowerTabletInfo& follower : tablet.Followers) {
-            THolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate> event = MakeHolder<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>();
+            std::unique_ptr<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate> event = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>();
             event->Record.SetTabletId(follower.LeaderTablet.Id);
             event->Record.SetFollowerId(follower.Id);
             event->Record.SetType(tablet.Type);

@@ -18,7 +18,7 @@ struct TReadProcessingContext {
     ui32 Count = std::numeric_limits<ui32>::max();
     ui64 LastOffset = 0;
     NActors::TActorId ResponseActor;
-    THolder<NActors::IEventBase> Event;
+    std::unique_ptr<NActors::IEventBase> Event;
 };
 
 struct TEvProcessBatch : public NActors::TEventLocal<TEvProcessBatch, TEvPQ::EvProcessBatchRead> {

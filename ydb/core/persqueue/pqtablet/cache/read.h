@@ -135,7 +135,7 @@ namespace NPQ {
                     {"fromCache", fromCache}
                 );
 
-                THolder<TEvPQ::TEvBlobResponse> response = kvReq.MakePQResponse(ctx);
+                std::unique_ptr<TEvPQ::TEvBlobResponse> response = kvReq.MakePQResponse(ctx);
                 response->Check();
 
                 ctx.Send(kvReq.Sender, response.Release()); // -> Partition
@@ -158,7 +158,7 @@ namespace NPQ {
             );
 
             SaveInProgress(kvReq);
-            THolder<TEvKeyValue::TEvRequest> request = kvReq.MakeKvRequest(); // before save
+            std::unique_ptr<TEvKeyValue::TEvRequest> request = kvReq.MakeKvRequest(); // before save
             ui64 cookie = SaveKvRequest(std::move(kvReq));
             request->Record.SetCookie(cookie);
             ctx.Send(TabletActorId, request.Release()); // -> KV
@@ -260,7 +260,7 @@ namespace NPQ {
 
             TVector<TKvRequest> unblockedReads = RemoveFromProgress(ctx, kvReq); // before kvReq.MakePQResponse()
 
-            THolder<TEvPQ::TEvBlobResponse> response = kvReq.MakePQResponse(ctx, error);
+            std::unique_ptr<TEvPQ::TEvBlobResponse> response = kvReq.MakePQResponse(ctx, error);
             response->Check();
             ctx.Send(kvReq.Sender, response.Release()); // -> Partition
 
@@ -287,7 +287,7 @@ namespace NPQ {
                 Cache.SaveHeadBlobs(ctx, kvReq);
             }
 
-            auto response = MakeHolder<TEvKeyValue::TEvResponse>();
+            auto response = std::make_unique<TEvKeyValue::TEvResponse>();
             response->Record = std::move(resp);
             if (kvReq.CookiePQ == Max<ui64>()) {
                 response->Record.ClearCookie(); //cookie must not leak to Partition - it uses cookie for SetOffset requests
@@ -318,7 +318,7 @@ namespace NPQ {
 
             ui64 cookie = SaveKvRequest(std::move(kvReq));
 
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            auto request = std::make_unique<TEvKeyValue::TEvRequest>();
             request->Record = std::move(srcRequest);
             request->Record.SetCookie(cookie);
 
@@ -409,7 +409,7 @@ namespace NPQ {
 
         void Handle(TEvPqCache::TEvCacheL2Response::TPtr& ev, const TActorContext& ctx)
         {
-            THolder<TCacheL2Response> resp(ev->Get()->Data.Release());
+            std::unique_ptr<TCacheL2Response> resp(ev->Get()->Data.Release());
             AFL_ENSURE(resp->TabletId == TabletId);
 
             for (const TCacheBlobL2& blob : resp->Removed)
@@ -471,7 +471,7 @@ namespace NPQ {
             if (now < CountersUpdateTime + TDuration::Seconds(UPDATE_TIMEOUT_S))
                 return;
 
-            auto event = MakeHolder<TEvPQ::TEvTabletCacheCounters>();
+            auto event = std::make_unique<TEvPQ::TEvTabletCacheCounters>();
             event->Counters.CacheSizeBytes = Cache.GetCounters().SizeBytes;
             event->Counters.CacheSizeBlobs = Cache.GetSize();
             event->Counters.CachedOnRead = Cache.GetCounters().CachedOnRead;

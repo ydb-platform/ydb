@@ -141,7 +141,7 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
             continue;
         }
         if (resource.ResourceType != TOPIC_RESOURCE_TYPE) {
-            auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+            auto result = std::make_unique<TEvKafka::TEvTopicModificationResponse>();
             result->TopicPath = topicName;
             result->Status = EKafkaErrors::INVALID_REQUEST;
             result->Message = "Only TOPIC resource type is supported.";
@@ -154,7 +154,7 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
         std::optional<ECleanupPolicy> cleanupPolicy;
         std::optional<TString> messageTimestampType;
 
-        std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> unsupportedConfigResponse;
+        std::optional<std::unique_ptr<TEvKafka::TEvTopicModificationResponse>> unsupportedConfigResponse;
 
         for (auto& config : resource.Configs) {
             unsupportedConfigResponse = ValidateTopicConfigName(config.Name.value());

@@ -154,7 +154,7 @@ public:
     {}
 
     void Bootstrap() {
-        auto request = MakeHolder<TEvLookupQueryText>();
+        auto request = std::make_unique<TEvLookupQueryText>();
         request->Record.SetQuerySpanId(BreakerQuerySpanId);
         Send(MakeKqpQueryTextCacheServiceId(BreakerNodeId), request.Release(), IEventHandle::FlagTrackDelivery);
         Schedule(LookupTimeout, new TEvents::TEvWakeup());
@@ -2566,7 +2566,7 @@ public:
 
     void InvalidateQuery() {
         if (QueryState->CompileResult) {
-            auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(
+            auto invalidateEv = std::make_unique<TEvKqp::TEvCompileInvalidateRequest>(
                 QueryState->CompileResult->Uid, Settings.DbCounters);
 
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), invalidateEv.Release());
@@ -3072,7 +3072,7 @@ public:
         issues.AddIssue(reason);
 
         if (ExecuterId) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), issues);
+            auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(msg.GetStatusCode(), issues);
             Send(ExecuterId, abortEv.Release(), IEventHandle::FlagTrackDelivery);
         } else {
             ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), "", MessageFromIssues(issues));
@@ -3776,7 +3776,7 @@ public:
             return;
         }
         {
-            auto abort = MakeHolder<NYql::NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Query execution is cancelled because session was requested to be closed.");
+            auto abort = std::make_unique<NYql::NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Query execution is cancelled because session was requested to be closed.");
             Send(SelfId(), abort.Release());
         }
     }
@@ -4114,12 +4114,12 @@ public:
 
     void Handle(TEvKqp::TEvCancelQueryRequest::TPtr& ev) {
         {
-            auto abort = MakeHolder<NYql::NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Request was canceled");
+            auto abort = std::make_unique<NYql::NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Request was canceled");
             Send(SelfId(), abort.Release());
         }
 
         {
-            auto resp = MakeHolder<TEvKqp::TEvCancelQueryResponse>();
+            auto resp = std::make_unique<TEvKqp::TEvCancelQueryResponse>();
             resp->Record.SetStatus(Ydb::StatusIds::SUCCESS);
             Send(ev->Sender, resp.Release(), 0, ev->Cookie);
         }

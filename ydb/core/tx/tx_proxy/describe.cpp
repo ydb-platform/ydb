@@ -27,7 +27,7 @@ namespace {
 class TDescribeReq : public TActor<TDescribeReq> {
     const TTxProxyServices Services;
 
-    THolder<TEvTxProxyReq::TEvNavigateScheme> SchemeRequest;
+    std::unique_ptr<TEvTxProxyReq::TEvNavigateScheme> SchemeRequest;
     TIntrusivePtr<TTxProxyMon> TxProxyMon;
 
     TInstant WallClockStarted;
@@ -128,7 +128,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
     {
         auto schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
 
-        auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
+        auto result = std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
             path, TPathId());
 
         auto* pathDescription = result->Record.MutablePathDescription();
@@ -196,7 +196,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
     {
         auto schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
 
-        auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
+        auto result = std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
             path, TPathId());
 
         auto* pathDescription = result->Record.MutablePathDescription();

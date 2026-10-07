@@ -140,7 +140,7 @@ struct TEnvironmentSetup {
             const ui64 cookie = ++LastCookie;
 
             for (auto& id : Subscribers) {
-                auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+                auto update = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
                 update->Record.CopyFrom(ev->Get()->Record);
                 Send(id, update.Release(), IEventHandle::FlagTrackDelivery, cookie);
                 task->RepliesPending.insert(id);
@@ -185,7 +185,7 @@ struct TEnvironmentSetup {
 
             const size_t numErased = Subscribers.erase(ev->Sender);
             Y_ABORT_UNLESS(numErased);
-            Send(ev->Sender, MakeHolder<NConsole::TEvConsole::TEvRemoveConfigSubscriptionResponse>().Release());
+            Send(ev->Sender, std::make_unique<NConsole::TEvConsole::TEvRemoveConfigSubscriptionResponse>().Release());
         }
     };
 

@@ -24,7 +24,7 @@ namespace NKikimr::NHttpProxy {
 
             bool Execute(
                 THttpRequestContext&& context,
-                THolder<NKikimr::NSQS::TAwsRequestSignV4> signature
+                std::unique_ptr<NKikimr::NSQS::TAwsRequestSignV4> signature
             ) const override {
                 return GetController(context.ServiceConfig)->Execute(std::move(context), std::move(signature));
             }

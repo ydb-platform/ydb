@@ -49,7 +49,7 @@ public:
 
 private:
     const TDqFunctionState::TPtr State;
-    const THolder<IGraphTransformer> LoadMetaDataTransformer;
+    const std::unique_ptr<IGraphTransformer> LoadMetaDataTransformer;
 };
 }
 

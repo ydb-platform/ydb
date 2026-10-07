@@ -22,7 +22,7 @@ public:
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& request = Request->Get()->Record;
 
-        Response = MakeHolder<TEvSetColumnConstraint::TEvCreateResponse>(request.GetTxId());
+        Response = std::make_unique<TEvSetColumnConstraint::TEvCreateResponse>(request.GetTxId());
 
         if (!AppData()->FeatureFlags.GetEnableSetColumnConstraint()) {
             return Reply(Ydb::StatusIds::UNSUPPORTED, "SetColumnConstraint feature is disabled");

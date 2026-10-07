@@ -31,8 +31,8 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateCheckReadUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TCheckReadUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateCheckReadUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TCheckReadUnit>(new TCheckReadUnit(self, pipeline));
 }
 
 } // NKikimr::NDataShard

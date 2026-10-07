@@ -10,7 +10,7 @@ namespace NKikimr::NSQS {
         TDuration sendAfter,
         const TActorContext& ctx
     ) {
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         auto* request = ev->Record.MutableRequest();
 
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);

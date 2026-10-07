@@ -8,6 +8,6 @@
 
 namespace NYql {
 
-THolder<IDqIntegration> CreateSolomonDqIntegration(const TSolomonState::TPtr& state);
+std::unique_ptr<IDqIntegration> CreateSolomonDqIntegration(const TSolomonState::TPtr& state);
 
 }

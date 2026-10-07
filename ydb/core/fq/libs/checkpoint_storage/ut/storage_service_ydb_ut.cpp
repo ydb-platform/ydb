@@ -97,7 +97,7 @@ public:
         GrpcPort = PortManager.GetPort(2135);
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBuiltinDomain(true);
-        ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
+        ServerSettings = std::make_unique<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
         ServerSettings->AppConfig->MutableTableServiceConfig()->MutableQueryLimits()->SetResultRowsLimit(5);
 
@@ -109,8 +109,8 @@ public:
         ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
         ServerSettings->SetGrpcPort(GrpcPort);
         ServerSettings->NodeCount = 1;
-        Server = MakeHolder<Tests::TServer>(*ServerSettings);
-        Client = MakeHolder<Tests::TClient>(*ServerSettings);
+        Server = std::make_unique<Tests::TServer>(*ServerSettings);
+        Client = std::make_unique<Tests::TClient>(*ServerSettings);
         GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
         GetRuntime()->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NActors::NLog::PRI_DEBUG);
         GetRuntime()->SetDispatchTimeout(TestTimeout);
@@ -693,12 +693,12 @@ private:
     ui16 MsgBusPort = 0;
     ui16 GrpcPort = 0;
     TString TablePrefix;  // Stores the table prefix used during SDK initialization
-    THolder<Tests::TServerSettings> ServerSettings;
-    THolder<Tests::TServer> Server;
-    THolder<Tests::TClient> Client;
-    THolder<NYdb::TDriver> YdbDriver;
-    THolder<NYdb::NTable::TTableClient> TableClient;
-    THolder<NYdb::NTable::TSession> TableClientSession;
+    std::unique_ptr<Tests::TServerSettings> ServerSettings;
+    std::unique_ptr<Tests::TServer> Server;
+    std::unique_ptr<Tests::TClient> Client;
+    std::unique_ptr<NYdb::TDriver> YdbDriver;
+    std::unique_ptr<NYdb::NTable::TTableClient> TableClient;
+    std::unique_ptr<NYdb::NTable::TSession> TableClientSession;
 
     TRuntimePtr Runtime;
 };

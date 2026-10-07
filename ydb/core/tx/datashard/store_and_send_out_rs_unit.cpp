@@ -95,10 +95,10 @@ void TStoreAndSendOutRSUnit::Complete(TOperation::TPtr op,
         DataShard.SendReadSets(ctx, std::move(op->PreparedOutReadSets()));
 }
 
-THolder<TExecutionUnit> CreateStoreAndSendOutRSUnit(TDataShard &dataShard,
+std::unique_ptr<TExecutionUnit> CreateStoreAndSendOutRSUnit(TDataShard &dataShard,
                                                     TPipeline &pipeline)
 {
-    return THolder(new TStoreAndSendOutRSUnit(dataShard, pipeline));
+    return std::unique_ptr<TStoreAndSendOutRSUnit>(new TStoreAndSendOutRSUnit(dataShard, pipeline));
 }
 
 } // namespace NDataShard

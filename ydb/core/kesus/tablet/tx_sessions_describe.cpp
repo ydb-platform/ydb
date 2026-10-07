@@ -9,7 +9,7 @@ struct TKesusTablet::TTxSessionsDescribe : public TTxBase {
     const TActorId Sender;
     const ui64 Cookie;
 
-    THolder<TEvKesus::TEvDescribeSessionsResult> Reply;
+    std::unique_ptr<TEvKesus::TEvDescribeSessionsResult> Reply;
 
     TTxSessionsDescribe(TSelf* self, const TActorId& sender, ui64 cookie)
         : TTxBase(self)

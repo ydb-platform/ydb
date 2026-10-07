@@ -159,10 +159,10 @@ public:
     void OnSuccess(const TActorContext &ctx) override {
         TBase::OnSuccess(ctx);
 
-        THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(NodeId));
+        std::unique_ptr<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(NodeId));
         auto it = Config->DynamicNodes.find(NodeId);
         if (it != Config->DynamicNodes.end())
-            reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
+            reply->Node = std::make_unique<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
                                                          it->second.Host, it->second.ResolveHost,
                                                          it->second.Port, it->second.Location);
         ctx.Send(OrigRequest->Sender, reply.Release());
@@ -171,7 +171,7 @@ public:
     void OnError(const TString &error, const TActorContext &ctx) override {
         TBase::OnError(error, ctx);
 
-        THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(NodeId));
+        std::unique_ptr<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(NodeId));
         ctx.Send(OrigRequest->Sender, reply.Release());
     }
 
@@ -386,7 +386,7 @@ void TDynamicNameserver::ResolveDynamicNode(ui32 nodeId,
             RegisterWithSameMailbox(actor);
             actor->SendRequest();
         } else {
-            auto holder = MakeHolder<TCacheMissResolve>(nodeId, config, ev, deadline, SyncCookie + 1);
+            auto holder = std::make_unique<TCacheMissResolve>(nodeId, config, ev, deadline, SyncCookie + 1);
             cacheMiss = holder.get();
             config->CacheMissHolders.emplace(cacheMiss, std::move(holder));
 
@@ -665,13 +665,13 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
         {"eventString", ev->Get()->ToString()});
 
     ui32 nodeId = ev->Get()->NodeId;
-    THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(nodeId));
+    std::unique_ptr<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(nodeId));
     auto config = AppData(ctx)->DynamicNameserviceConfig;
 
     if (!config || nodeId <= config->MaxStaticNodeId) {
         auto it = StaticConfig->StaticNodeTable.find(nodeId);
         if (it != StaticConfig->StaticNodeTable.end())
-            reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
+            reply->Node = std::make_unique<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
                                                          it->second.Host, it->second.ResolveHost,
                                                          it->second.Port, it->second.Location);
         ctx.Send(ev->Sender, reply.Release());
@@ -680,7 +680,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
         const auto& config = DynamicConfigs[domain];
         auto it = config->DynamicNodes.find(nodeId);
         if (it != config->DynamicNodes.end() && it->second.EffectiveExpire(EnableLongLease) > ctx.Now()) {
-            reply->Node = MakeHolder<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
+            reply->Node = std::make_unique<TEvInterconnect::TNodeInfo>(it->first, it->second.Address,
                                                          it->second.Host, it->second.ResolveHost,
                                                          it->second.Port, it->second.Location);
             ctx.Send(ev->Sender, reply.Release());
@@ -696,7 +696,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
                 RegisterWithSameMailbox(actor);
                 actor->SendRequest();
             } else {
-                auto holder = MakeHolder<TCacheMissGet>(nodeId, config, ev.Release(), deadline, SyncCookie + 1);
+                auto holder = std::make_unique<TCacheMissGet>(nodeId, config, ev.Release(), deadline, SyncCookie + 1);
                 cacheMiss = holder.get();
                 config->CacheMissHolders.emplace(cacheMiss, std::move(holder));
 
@@ -727,7 +727,7 @@ void TDynamicNameserver::RegisterNewCacheMiss(TCacheMiss* cacheMiss, TDynamicCon
 void TDynamicNameserver::SendSyncRequest(TActorId pipe, const TActorContext &ctx)
 {
     if (!SyncInProgress) {
-        auto request = MakeHolder<TEvNodeBroker::TEvSyncNodesRequest>();
+        auto request = std::make_unique<TEvNodeBroker::TEvSyncNodesRequest>();
         request->Record.SetSeqNo(SeqNo);
         NTabletPipe::SendData(ctx, pipe, request.Release(), ++SyncCookie);
         SyncInProgress = true;
@@ -763,7 +763,7 @@ void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, con
         if (EnableDeltaProtocol && versionInfo.GetSupportDeltaProtocol()) {
             ProtocolState = EProtocolState::UseDeltaProtocol;
 
-            auto request = MakeHolder<TEvNodeBroker::TEvSubscribeNodesRequest>();
+            auto request = std::make_unique<TEvNodeBroker::TEvSubscribeNodesRequest>();
             request->Record.SetSeqNo(SeqNo);
             request->Record.SetCachedVersion(DynamicConfigs[domain]->Epoch.Version);
             NTabletPipe::SendData(ctx, DynamicConfigs[domain]->NodeBrokerPipe, request.Release());
@@ -778,7 +778,7 @@ void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, con
             RequestEpochUpdate(domain, epoch, ctx);
 
             if (!ListNodesQueue.empty()) {
-                auto request = MakeHolder<TEvNodeBroker::TEvListNodes>();
+                auto request = std::make_unique<TEvNodeBroker::TEvListNodes>();
                 request->Record.SetCachedVersion(DynamicConfigs[domain]->Epoch.Version);
                 NTabletPipe::SendData(ctx, DynamicConfigs[domain]->NodeBrokerPipe, request.Release());
             }

@@ -212,7 +212,7 @@ public:
 
 TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConfig::TPtr& config)
     : TTargetWithStream(replication, ETargetKind::Transfer, id, config)
-    , MetricsConfig(MakeHolder<TMetricsConfig>())
+    , MetricsConfig(std::make_unique<TMetricsConfig>())
 {
     Stats.reset(new TTransferStats(Now()));
     if (replication->GetConfig().HasMetricsConfig()) {

@@ -31,7 +31,7 @@ public:
         : State_(state)
         , Gateway_(gateway)
         , ConfigurationTransformer_([this]() {
-            return MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{ PqProviderName });
+            return std::make_unique<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{ PqProviderName });
         })
         , LoadMetaDataTransformer_(CreatePqLoadTopicMetadataTransformer(State_))
         , TypeAnnotationTransformer_(CreatePqDataSourceTypeAnnotationTransformer(State_))
@@ -352,9 +352,9 @@ private:
     TPqState::TPtr State_;
     IPqGateway::TPtr Gateway_;
     TLazyInitHolder<IGraphTransformer> ConfigurationTransformer_;
-    THolder<IGraphTransformer> LoadMetaDataTransformer_;
-    THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
-    THolder<IGraphTransformer> IODiscoveryTransformer_;
+    std::unique_ptr<IGraphTransformer> LoadMetaDataTransformer_;
+    std::unique_ptr<TVisitorTransformerBase> TypeAnnotationTransformer_;
+    std::unique_ptr<IGraphTransformer> IODiscoveryTransformer_;
     const TAutoPtr<IGraphTransformer> ConstraintsTransformer_;
 };
 

@@ -8,7 +8,7 @@
 
 namespace NYql {
 
-THolder<NActors::IActor> MakeTaskController(
+std::unique_ptr<NActors::IActor> MakeTaskController(
     const TString& traceId,
     const NActors::TActorId& executerId,
     const NActors::TActorId& resultId,

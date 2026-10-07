@@ -60,13 +60,13 @@ TInflyMessages::~TInflyMessages() {
     MessagesByOffset.Init();
 }
 
-void TInflyMessages::Add(THolder<TInflyMessage> msg) {
+void TInflyMessages::Add(std::unique_ptr<TInflyMessage> msg) {
     ++Size;
     MessagesByVisibilityDeadline.Insert(msg.Get());
     MessagesByOffset.Insert(msg.Release());
 }
 
-THolder<TInflyMessage> TInflyMessages::Delete(ui64 offset) {
+std::unique_ptr<TInflyMessage> TInflyMessages::Delete(ui64 offset) {
     auto* msg = MessagesByOffset.Find(offset);
     if (msg) {
         Y_ASSERT(Size > 0);
@@ -74,7 +74,7 @@ THolder<TInflyMessage> TInflyMessages::Delete(ui64 offset) {
         TInflyMessageWithVisibilityDeadlineKey* byVisibilityDeadline = &msg->Message();
         byVisibilityDeadline->UnLink();
         msg->UnLink();
-        return THolder<TInflyMessage>(&msg->Message());
+        return std::unique_ptr<TInflyMessage>(&msg->Message());
     }
     return nullptr;
 }
@@ -82,10 +82,10 @@ THolder<TInflyMessage> TInflyMessages::Delete(ui64 offset) {
 TInflyMessages::TReceiveCandidates TInflyMessages::Receive(size_t maxCount, TInstant now) {
     maxCount = Min(maxCount, Size);
     size_t added = 0;
-    THolder<TOffsetTree> tree;
+    std::unique_ptr<TOffsetTree> tree;
     while (added < maxCount && MessagesByVisibilityDeadline.Begin()->Message().GetVisibilityDeadline() < now) {
         if (!tree) {
-            tree = MakeHolder<TOffsetTree>();
+            tree = std::make_unique<TOffsetTree>();
         }
         ++added;
         TInflyMessage* msg = &MessagesByVisibilityDeadline.Begin()->Message();
@@ -103,7 +103,7 @@ TInflyMessages::TReceiveCandidates TInflyMessages::Receive(size_t maxCount, TIns
     return TReceiveCandidates(this, std::move(tree));
 }
 
-TInflyMessages::TReceiveCandidates::TReceiveCandidates(TIntrusivePtr<TInflyMessages> parent, THolder<TOffsetTree> messages)
+TInflyMessages::TReceiveCandidates::TReceiveCandidates(TIntrusivePtr<TInflyMessages> parent, std::unique_ptr<TOffsetTree> messages)
     : Parent(std::move(parent))
     , ReceivedMessages(std::move(messages))
 {
@@ -117,13 +117,13 @@ void TInflyMessages::TReceiveCandidates::SetVisibilityDeadlineAndReceiveCount(ui
     }
 }
 
-THolder<TInflyMessage> TInflyMessages::TReceiveCandidates::Delete(ui64 offset) {
+std::unique_ptr<TInflyMessage> TInflyMessages::TReceiveCandidates::Delete(ui64 offset) {
     Y_ASSERT(Parent && ReceivedMessages);
     if (auto* msg = ReceivedMessages->Find(offset)) {
         Y_ASSERT(Parent->HoldCount > 0);
         --Parent->HoldCount;
         msg->UnLink();
-        return THolder<TInflyMessage>(&msg->Message());
+        return std::unique_ptr<TInflyMessage>(&msg->Message());
     }
     return nullptr;
 }
@@ -143,7 +143,7 @@ struct TInflyMessages::TReturnToParent : public TInflyMessages::TOffsetTree::TDe
         TDestroy::operator()(v); // remove from tree
         TInflyMessageWithVisibilityDeadlineKey* byVisibilityDeadline = &v.Message();
         byVisibilityDeadline->UnLink();
-        Parent->Add(THolder<TInflyMessage>(static_cast<TInflyMessage*>(&v)));
+        Parent->Add(std::unique_ptr<TInflyMessage>(static_cast<TInflyMessage*>(&v)));
         --Parent->HoldCount;
     }
 
@@ -176,7 +176,7 @@ bool TInflyMessages::TChangeVisibilityCandidates::Add(ui64 offset) {
     auto* byOffset = Parent->MessagesByOffset.Find(offset);
     if (byOffset) {
         if (!Messages) {
-            Messages = MakeHolder<TOffsetTree>();
+            Messages = std::make_unique<TOffsetTree>();
         }
 
         TInflyMessageWithVisibilityDeadlineKey* byVisibilityDeadline = &byOffset->Message();
@@ -207,7 +207,7 @@ void TInflyMessages::TChangeVisibilityCandidates::SetVisibilityDeadline(ui64 off
     }
 }
 
-THolder<TInflyMessage> TInflyMessages::TChangeVisibilityCandidates::Delete(ui64 offset) {
+std::unique_ptr<TInflyMessage> TInflyMessages::TChangeVisibilityCandidates::Delete(ui64 offset) {
     Y_ASSERT(Parent);
     if (!Messages) {
         return nullptr;
@@ -218,7 +218,7 @@ THolder<TInflyMessage> TInflyMessages::TChangeVisibilityCandidates::Delete(ui64 
         msg->UnLink();
         TInflyMessageWithVisibilityDeadlineKey* byVisibilityDeadline = &msg->Message();
         byVisibilityDeadline->UnLink();
-        return THolder<TInflyMessage>(&msg->Message());
+        return std::unique_ptr<TInflyMessage>(&msg->Message());
     }
     return nullptr;
 }

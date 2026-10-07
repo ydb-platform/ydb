@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
@@ -13,26 +13,26 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TString& error
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelRestoreTableDataPropose(
+std::unique_ptr<TEvSchemeShard::TEvCancelTx> CancelRestoreTableDataPropose(
     const TImportInfo& importInfo,
     TTxId restoreTxId
 );
 
-THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
+std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
@@ -40,13 +40,13 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
     const TString& uid
 );
 
-THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
+std::unique_ptr<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
     TSchemeShard* ss,
     const TImportInfo& importInfo,
     TTxId indexBuildId
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
@@ -54,14 +54,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TString& error
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
     TImportInfo::TItem& item
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,

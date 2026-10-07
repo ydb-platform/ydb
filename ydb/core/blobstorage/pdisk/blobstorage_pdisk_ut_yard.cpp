@@ -989,7 +989,7 @@ YARD_UNIT_TEST(TestInitOnOldDisk) {
     {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         TPDiskMon mon(counters);
-        THolder<NPDisk::IBlockDevice> device(NPDisk::CreateSyncBlockDevice(path, 999, mon));
+        std::unique_ptr<NPDisk::IBlockDevice> device(NPDisk::CreateSyncBlockDevice(path, 999, mon));
         VERBOSE_COUT("  Performing Pread of " << dataSize);
         device->PreadAsync(data0.Get(), dataSize, 0, nullptr, 9999, {});
     }

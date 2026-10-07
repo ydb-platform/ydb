@@ -94,8 +94,8 @@ public:
 
 }; // TRestoreUnit
 
-THolder<TExecutionUnit> CreateRestoreUnit(TDataShard& self, TPipeline& pipeline) {
-    return THolder(new TRestoreUnit(self, pipeline));
+std::unique_ptr<TExecutionUnit> CreateRestoreUnit(TDataShard& self, TPipeline& pipeline) {
+    return std::unique_ptr<TRestoreUnit>(new TRestoreUnit(self, pipeline));
 }
 
 } // namespace NDataShard

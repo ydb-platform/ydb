@@ -29,14 +29,14 @@ public:
     void UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorContext& ctx) override;
     IEventBase* MakeQuotaApprovedEvent(TRequestContext& context) override;
     void Bootstrap(const TActorContext &ctx) override;
-    THolder<TAccountQuoterHolder> CreateAccountQuotaTracker() const;
+    std::unique_ptr<TAccountQuoterHolder> CreateAccountQuotaTracker() const;
 
     TStructuredMessage BuildLogPrefix() const override;
 
 protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;
     void HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr& ev) override;
-    TAccountQuoterHolder* GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) override;
+    TAccountQuoterHolder* GetAccountQuotaTracker(const std::unique_ptr<TEvPQ::TEvRequestQuota>& request) override;
     void OnAccountQuotaApproved(TRequestContext&& request) override;
     ui64 GetTotalPartitionSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const override;
     ui64 GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const override;
@@ -54,7 +54,7 @@ protected:
 private:
     bool GetAccountQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig) const;
     bool QuotingEnabled;
-    THolder<TAccountQuoterHolder> AccountQuotaTracker;
+    std::unique_ptr<TAccountQuoterHolder> AccountQuotaTracker;
 
     TQuotaTracker IncomingMessagesQuotaTracker;
 };

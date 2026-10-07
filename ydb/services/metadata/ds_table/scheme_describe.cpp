@@ -32,7 +32,7 @@ void TSchemeDescriptionActorImpl::Handle(TEvTxProxySchemeCache::TEvNavigateKeySe
 void TSchemeDescriptionActorImpl::Bootstrap() {
     Become(&TSchemeDescriptionActor::StateMain);
 
-    auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     request->DatabaseName = AppData()->TenantName;
     auto& entry = request->ResultSet.emplace_back();
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;

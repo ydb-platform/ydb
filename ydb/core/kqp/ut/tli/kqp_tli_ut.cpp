@@ -499,7 +499,7 @@ namespace {
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         auto edgeActor = runtime.AllocateEdgeActor();
 
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         auto* tliConfig = request->Record.MutableConfig()->MutableTliConfig();
         for (const auto& regex : ignoredTableRegexes) {
             tliConfig->AddIgnoredTableRegexes(regex);

@@ -60,12 +60,12 @@ protected:
     }
 };
 
-THolder<NActors::IActor> CreateOwnersScan(const NActors::TActorId& ownerId, ui32 scanId,
+std::unique_ptr<NActors::IActor> CreateOwnersScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TOwnersScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken));
+    return std::make_unique<TOwnersScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken));
 }
 
 }

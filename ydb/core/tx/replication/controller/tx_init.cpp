@@ -31,7 +31,7 @@ class TController::TTxInit: public TTxBase {
             return false;
         }
 
-        auto loader = MakeHolder<TSysParamLoader<decltype(rowset)>>(rowset);
+        auto loader = std::make_unique<TSysParamLoader<decltype(rowset)>>(rowset);
         while (!rowset.EndOfSet()) {
             Self->SysParams.Load(rowset.GetValue<Schema::SysParams::Id>(), loader.Get());
             if (!rowset.Next()) {

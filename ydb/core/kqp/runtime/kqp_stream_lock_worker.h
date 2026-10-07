@@ -46,7 +46,7 @@ struct TKqpStreamLockSettings {
 
 class TKqpStreamLockWorker {
 public:
-    using TLockRequestList = std::vector<std::pair<ui64, THolder<NEvents::TDataEvents::TEvLockRows>>>;
+    using TLockRequestList = std::vector<std::pair<ui64, std::unique_ptr<NEvents::TDataEvents::TEvLockRows>>>;
     using TPartitionInfo = TPartitioning::TCPtr;
 
     struct TRowBatchInfo {
@@ -75,7 +75,7 @@ public:
 
     void ResetLockRowsProcessing(ui64 requestId);
 
-    std::pair<ui64, THolder<NEvents::TDataEvents::TEvLockRows>> PopNextLockRequest();
+    std::pair<ui64, std::unique_ptr<NEvents::TDataEvents::TEvLockRows>> PopNextLockRequest();
 
     void AddLockResult(ui64 requestId, NEvents::TDataEvents::TEvLockRowsResult* result);
 
@@ -102,7 +102,7 @@ private:
 
     NUdf::TUnboxedValue ConvertRowToUnboxedValue(const TOwnedCellVec& row) const;
 
-    THolder<NEvents::TDataEvents::TEvLockRows> BuildLockRequestMessage(
+    std::unique_ptr<NEvents::TDataEvents::TEvLockRows> BuildLockRequestMessage(
         ui64 requestId,
         const TVector<TCell>& allCells,
         size_t batchSize,
@@ -120,7 +120,7 @@ private:
 
     std::vector<TOwnedCellVec> InputRows;
     std::unordered_map<ui64, TRowBatchInfo> BatchesByRequestId;
-    std::deque<std::pair<ui64, THolder<NEvents::TDataEvents::TEvLockRows>>> PendingLockRequests;
+    std::deque<std::pair<ui64, std::unique_ptr<NEvents::TDataEvents::TEvLockRows>>> PendingLockRequests;
 };
 
 } // namespace NKqp

@@ -48,10 +48,10 @@ TPath GetShardsPath(TSchemeShard* ss, const TIndexBuildInfo& buildInfo) {
     }
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo, TTxId txId, const TPath& path)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     propose->Record.SetFailOnExist(false);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
@@ -70,10 +70,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
+std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.UnlockTxId), ss->TabletID());
+    auto propose = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.UnlockTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
 
     auto addUnlock = [&](TPath path) {

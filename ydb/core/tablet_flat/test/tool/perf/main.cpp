@@ -15,7 +15,7 @@ int main(int argc, char* argv[])
     opts.AddLongOption("smp",  "sampling settings").RequiredArgument("STR");
     opts.AddLongOption("test", "tests to perform").RequiredArgument("STR");
 
-    THolder<TOptsParseResult> res(new TOptsParseResult(&opts, argc, argv));
+    std::unique_ptr<TOptsParseResult> res(new TOptsParseResult(&opts, argc, argv));
 
     NKikimr::NTable::NPerf::TApp app;
 

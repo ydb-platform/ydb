@@ -80,7 +80,7 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
     const auto topicIt = OffsetsActorToTopic.find(ev->Sender);
     const TString topicName = topicIt != OffsetsActorToTopic.end() ? topicIt->second : TString();
 
-    auto converted = MakeHolder<TEvKafka::TEvCommitedOffsetsResponse>();
+    auto converted = std::make_unique<TEvKafka::TEvCommitedOffsetsResponse>();
     converted->TopicName = topicName;
     converted->Status = ConvertErrorCode(ev->Get()->Status);
     if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {

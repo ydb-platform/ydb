@@ -84,7 +84,7 @@ int NewTestClient(int argc, char** argv) {
 
     SetupAiPresets();
 
-    auto commandsRoot = MakeHolder<TClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
+    auto commandsRoot = std::make_unique<TClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
     commandsRoot->Opts.SetTitle("YDB client");
     TClientCommand::TConfig config(argc, argv);
     return commandsRoot->Process(config);

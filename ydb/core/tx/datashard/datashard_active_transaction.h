@@ -253,7 +253,7 @@ private:
 ///
 class TDistributedEraseTx {
 public:
-    using TPtr = THolder<TDistributedEraseTx>;
+    using TPtr = std::unique_ptr<TDistributedEraseTx>;
     using TProto = NKikimrTxDataShard::TDistributedEraseTransaction;
 
 public:
@@ -284,7 +284,7 @@ private:
 ///
 class TCommitWritesTx {
 public:
-    using TPtr = THolder<TCommitWritesTx>;
+    using TPtr = std::unique_ptr<TCommitWritesTx>;
     using TProto = NKikimrTxDataShard::TCommitWritesTransaction;
 
 public:
@@ -551,8 +551,8 @@ private:
 
 private:
     TValidatedDataTx::TPtr DataTx;
-    THolder<NKikimrTxDataShard::TFlatSchemeTransaction> SchemeTx;
-    THolder<NKikimrTxDataShard::TSnapshotTransaction> SnapshotTx;
+    std::unique_ptr<NKikimrTxDataShard::TFlatSchemeTransaction> SchemeTx;
+    std::unique_ptr<NKikimrTxDataShard::TSnapshotTransaction> SnapshotTx;
     TDistributedEraseTx::TPtr DistributedEraseTx;
     TCommitWritesTx::TPtr CommitWritesTx;
     TString TxBody;

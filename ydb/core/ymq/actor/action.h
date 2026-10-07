@@ -63,7 +63,7 @@ class TActionActor
     : public TActorBootstrapped<TDerived>
 {
 public:
-    TActionActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, EAction action, THolder<IReplyCallback> cb)
+    TActionActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, EAction action, std::unique_ptr<IReplyCallback> cb)
         : Action_(action)
         , RequestId_(sourceSqsRequest.GetRequestId())
         , Cb_(std::move(cb))
@@ -111,7 +111,7 @@ public:
         }
         bool enableThrottling = (Action_ != EAction::CreateQueue);
         this->Send(MakeSqsServiceID(this->SelfId().NodeId()),
-            MakeHolder<TSqsEvents::TEvGetConfiguration>(
+            std::make_unique<TSqsEvents::TEvGetConfiguration>(
                 RequestId_,
                 UserName_,
                 GetQueueName(),
@@ -414,7 +414,7 @@ protected:
         const TDuration workingDuration = GetRequestWorkingDuration();
         if (QueueLeader_ && (IsActionForQueue(Action_) || IsActionForQueueYMQ(Action_))
             && !ShouldReportTopicActionMetricsToPqrb()) {
-            auto counterChangedEvent = MakeHolder<TSqsEvents::TEvActionCounterChanged>();
+            auto counterChangedEvent = std::make_unique<TSqsEvents::TEvActionCounterChanged>();
             counterChangedEvent->Record.set_action(Action_);
             counterChangedEvent->Record.set_durationms(duration.MilliSeconds());
             counterChangedEvent->Record.set_workingdurationms(workingDuration.MilliSeconds());
@@ -681,7 +681,7 @@ protected:
     }
 
     void RequestSchemeCache(const TString& path) {
-        auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
 
         entry.Path = SplitPath(path);
@@ -1047,7 +1047,7 @@ protected:
 
     const EAction Action_;
     const TString RequestId_;
-    THolder<IReplyCallback> Cb_;
+    std::unique_ptr<IReplyCallback> Cb_;
     TString  RootUrl_;
     TString  UserName_;
     TString  SecurityToken_;

@@ -310,7 +310,7 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(numErased == 1);
 
                 for (auto& [timestamp, ev] : queue) {
-                    THolder<IEventHandle> tmp(ev.release());
+                    std::unique_ptr<IEventHandle> tmp(ev.release());
                     TActivationContext::Forward(tmp, ev->GetForwardOnNondeliveryRecipient());
                 }
 

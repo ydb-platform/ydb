@@ -491,8 +491,8 @@ private:
 
 } // anonymous namespace
 
-THolder<TVisitorTransformerBase> CreateS3DataSinkTypeAnnotationTransformer(TS3State::TPtr state) {
-    return MakeHolder<TS3DataSinkTypeAnnotationTransformer>(state);
+std::unique_ptr<TVisitorTransformerBase> CreateS3DataSinkTypeAnnotationTransformer(TS3State::TPtr state) {
+    return std::make_unique<TS3DataSinkTypeAnnotationTransformer>(state);
 }
 
 } // namespace NYql

@@ -13,7 +13,7 @@ struct TKesusTablet::TTxConfigSet : public TTxBase {
     const ui64 Cookie;
     const NKikimrKesus::TEvSetConfig Record;
 
-    THolder<TEvKesus::TEvSetConfigResult> Reply;
+    std::unique_ptr<TEvKesus::TEvSetConfigResult> Reply;
 
     TTxConfigSet(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvSetConfig& record)
         : TTxBase(self)
@@ -31,7 +31,7 @@ struct TKesusTablet::TTxConfigSet : public TTxBase {
             {"cookie", Cookie},
             {"path", Record.GetConfig().path()});
 
-        Reply = MakeHolder<TEvKesus::TEvSetConfigResult>(Record.GetTxId(), Self->TabletID());
+        Reply = std::make_unique<TEvKesus::TEvSetConfigResult>(Record.GetTxId(), Self->TabletID());
 
         ui64 newVersion = Record.GetVersion();
         if (newVersion == 0) {

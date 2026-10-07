@@ -63,7 +63,7 @@ private:
     size_t Index_ = 0;
 };
 
-THolder<IComputationGraph> BuildGraph(TDqSetup<false>& setup, const std::vector<std::string>& partitions) {
+std::unique_ptr<IComputationGraph> BuildGraph(TDqSetup<false>& setup, const std::vector<std::string>& partitions) {
     auto& pgmBuilder = setup.GetDqProgramBuilder();
     auto stringType = pgmBuilder.NewDataType(NYql::NProto::String);
     auto ui64Type = pgmBuilder.NewDataType(NYql::NProto::Uint64);

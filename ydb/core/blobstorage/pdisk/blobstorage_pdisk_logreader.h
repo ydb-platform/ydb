@@ -67,13 +67,13 @@ class TLogReader : public TLogReaderBase {
     TLogPosition OwnerLogStartPosition;
     TLogPosition Position;
     ui64 SizeLimit;
-    THolder<TEvReadLogResult> Result;
+    std::unique_ptr<TEvReadLogResult> Result;
     TLogChunkInfo *ChunkInfo;
 
     const ui32 BufferSizeSectors;
-    THolder<TDoubleBuffer> Sector;
+    std::unique_ptr<TDoubleBuffer> Sector;
 
-    THolder<TMap<ui32, TChunkState>> ChunkOwnerMap;
+    std::unique_ptr<TMap<ui32, TChunkState>> ChunkOwnerMap;
     ELogReaderState State;
     std::atomic<bool> IsReplied;
 

@@ -72,7 +72,7 @@ public:
 private:
     void CreateSessionImpl() {
         const auto& traceId = Request->GetTraceId();
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
 
         ev->Record.SetDeadlineUs(Request->GetDeadline().MicroSeconds());
         SetClientIdentitySettings(ev, *Request);
@@ -234,7 +234,7 @@ private:
     void DeleteSessionImpl() {
         const auto sessionId = GetSessionId();
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
 
         if (CheckSession(sessionId, Request.get())) {
             ev->Record.MutableRequest()->SetSessionId(sessionId);

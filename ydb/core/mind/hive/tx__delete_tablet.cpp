@@ -79,7 +79,7 @@ public:
 
     void RespondToSender(NKikimrProto::EReplyStatus status, const NKikimrHive::TForwardRequest& forwardRequest = {}) {
         const NKikimrHive::TEvDeleteTablet& rec = Event->Get()->Record;
-        auto response = MakeHolder<TEvHive::TEvDeleteTabletReply>(status, Self->TabletID(), rec);
+        auto response = std::make_unique<TEvHive::TEvDeleteTabletReply>(status, Self->TabletID(), rec);
         if (forwardRequest.GetHiveTabletId() != 0) {
             response->Record.MutableForwardRequest()->CopyFrom(forwardRequest);
         }
@@ -184,7 +184,7 @@ public:
 
     void RespondToSender(NKikimrProto::EReplyStatus status) {
         const NKikimrHive::TEvDeleteOwnerTablets& rec = Event->Get()->Record;
-        auto response = MakeHolder<TEvHive::TEvDeleteOwnerTabletsReply>(status, Self->TabletID(), rec.GetOwner(), rec.GetTxId());
+        auto response = std::make_unique<TEvHive::TEvDeleteOwnerTabletsReply>(status, Self->TabletID(), rec.GetOwner(), rec.GetTxId());
         YDB_LOG_DEBUG("THive::TTxDeleteOwnerTablets::Execute sending delete owner tablets reply",
             {"logPrefix", GetLogPrefix()},
             {"response", response->Record.ShortDebugString()});

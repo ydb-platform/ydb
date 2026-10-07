@@ -20,7 +20,7 @@ struct TRetentionsConversionResult {
     std::vector<TString> ErrorMessages;
 
     TAutoPtr<TEvKafka::TEvTopicModificationResponse> GetKafkaErrorResponse(TString topicName) {
-        auto response = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+        auto response = std::make_unique<TEvKafka::TEvTopicModificationResponse>();
         response->TopicPath = topicName;
 
         if (ErrorMessages.size() == 0) {
@@ -95,9 +95,9 @@ inline TStringBuilder InputLogMessage(
     return stringBuilder;
 }
 
-inline std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ValidateTopicConfigName(TString configName) {
+inline std::optional<std::unique_ptr<TEvKafka::TEvTopicModificationResponse>> ValidateTopicConfigName(TString configName) {
     if (configName == COMPRESSION_TYPE) {
-        auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+        auto result = std::make_unique<TEvKafka::TEvTopicModificationResponse>();
         result->Status = EKafkaErrors::INVALID_REQUEST;
         result->Message = TStringBuilder()
             << "Topic-level config '"
@@ -105,7 +105,7 @@ inline std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ValidateTo
             << "' is not allowed.";
         return result;
     } else {
-        return std::optional<THolder<TEvKafka::TEvTopicModificationResponse>>();
+        return std::optional<std::unique_ptr<TEvKafka::TEvTopicModificationResponse>>();
     }
 }
 
@@ -155,7 +155,7 @@ public:
     ~TAlterTopicActor() = default;
 
     void SendResult(const EKafkaErrors status, const TString& message) {
-        THolder<TEvKafka::TEvTopicModificationResponse> response(new TEvKafka::TEvTopicModificationResponse());
+        std::unique_ptr<TEvKafka::TEvTopicModificationResponse> response(new TEvKafka::TEvTopicModificationResponse());
         response->Status = status;
         response->TopicPath = TopicPath;
         response->Message = message;
@@ -392,10 +392,10 @@ enum class ECleanupPolicy {
     UNKNOWN
 };
 
-std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPolicy(const std::optional<TString>& configValue,
+std::optional<std::unique_ptr<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPolicy(const std::optional<TString>& configValue,
                                                                                     std::optional<ECleanupPolicy>& cleanupPolicy);
 
-std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertTimestampType(
+std::optional<std::unique_ptr<TEvKafka::TEvTopicModificationResponse>> ConvertTimestampType(
         const std::optional<TString>& configValue, std::optional<TString>& correctTimestampType);
 
 } //namespace NKafka

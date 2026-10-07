@@ -108,7 +108,7 @@ public:
         LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
             << " sends event for session creation to proxy# " << kqpProxy.ToString());
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
         ev->Record.MutableRequest()->SetDatabase(Request.GetTableSetup().GetWorkingDir());
         Send(kqpProxy, ev.Release());
     }
@@ -121,7 +121,7 @@ public:
         LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
             << " sends session close query to proxy: " << kqpProxy);
 
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(Session);
         ctx.Send(kqpProxy, ev.Release());
     }
@@ -227,7 +227,7 @@ public:
 
     void SendQuery(const TActorContext& ctx, TString&& query) {
         const auto& setup = Request.GetTableSetup();
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         ev->Record.MutableRequest()->SetDatabase(setup.GetWorkingDir());
         ev->Record.MutableRequest()->SetSessionId(Session);
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);

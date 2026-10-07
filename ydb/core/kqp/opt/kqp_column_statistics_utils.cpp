@@ -68,7 +68,7 @@ void DispatchStatRequests(TActorSystem* actorSystem, TVector<NThreading::TFuture
         return;
     }
 
-    auto request = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
+    auto request = std::make_unique<NStat::TEvStatistics::TEvGetStatistics>();
     request->Database = database;
     request->StatType = type;
     request->StatRequests = std::move(statRequests);

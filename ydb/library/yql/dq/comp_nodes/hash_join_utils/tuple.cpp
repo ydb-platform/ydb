@@ -280,19 +280,19 @@ void TTupleLayout::ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColum
     }
 }
 
-THolder<TTupleLayout>
+std::unique_ptr<TTupleLayout>
 TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
 #ifdef USE_X86_SIMD
     if (NX86::HaveAVX2())
-        return MakeHolder<TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>>(
+        return std::make_unique<TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>>(
             columns);
 
     if (NX86::HaveSSE42())
-        return MakeHolder<TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>>(
+        return std::make_unique<TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>>(
             columns);
 #endif
 
-    return MakeHolder<TTupleLayoutFallback>(
+    return std::make_unique<TTupleLayoutFallback>(
         columns);
 }
 

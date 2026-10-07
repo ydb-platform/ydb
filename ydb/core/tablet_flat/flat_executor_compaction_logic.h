@@ -84,7 +84,7 @@ struct TCompactionLogicState {
         // The default value is used as a marker for uninitialized strategies
         NKikimrCompaction::ECompactionStrategy StrategyType = NKikimrCompaction::CompactionStrategyUnset;
 
-        THolder<NTable::ICompactionStrategy> Strategy;
+        std::unique_ptr<NTable::ICompactionStrategy> Strategy;
 
         TIntrusivePtr<NMemory::IMemoryConsumer> MemTableMemoryConsumer;
 
@@ -180,7 +180,7 @@ class TCompactionLogic {
 
     bool BeginMemTableCompaction(ui64 taskId, ui32 tableId);
 
-    THolder<NTable::ICompactionStrategy> CreateStrategy(ui32 tableId, NKikimrCompaction::ECompactionStrategy);
+    std::unique_ptr<NTable::ICompactionStrategy> CreateStrategy(ui32 tableId, NKikimrCompaction::ECompactionStrategy);
 
     void StopTable(TCompactionLogicState::TTableInfo &table);
     void StrategyChanging(TCompactionLogicState::TTableInfo &table);
@@ -243,12 +243,12 @@ public:
 
     TTableCompactionResult CompleteCompaction(
         ui64 compactionId,
-        THolder<NTable::TCompactionParams> params,
-        THolder<NTable::TCompactionResult> result);
+        std::unique_ptr<NTable::TCompactionParams> params,
+        std::unique_ptr<NTable::TCompactionResult> result);
 
     void CancelledCompaction(
         ui64 compactionId,
-        THolder<NTable::TCompactionParams> params);
+        std::unique_ptr<NTable::TCompactionParams> params);
 
     void BorrowedPart(ui32 tableId, NTable::TPartView partView);
     void BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part);

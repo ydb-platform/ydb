@@ -9,7 +9,7 @@ class TClickbenchWorkloadParams final: public TWorkloadBaseParams {
 public:
     TClickbenchWorkloadParams();
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
-    THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
+    std::unique_ptr<IWorkloadQueryGenerator> CreateGenerator() const override;
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
     TString GetWorkloadName() const override;
     YDB_READONLY_DEF(TFsPath, DataFiles);

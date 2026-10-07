@@ -62,7 +62,7 @@ public:
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
         }
 
-        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         navigate->DatabaseName = Request_->GetDatabaseName().GetOrElse("");
         auto& entry = navigate->ResultSet.emplace_back();
         entry.Path = paths;

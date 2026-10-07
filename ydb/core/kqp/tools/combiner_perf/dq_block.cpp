@@ -191,7 +191,7 @@ NYql::TExprNode::TPtr CompileAstLambda(
     return result;
 }
 
-THolder<TAggregationAst> LoadAggregationAst(const std::string& path)
+std::unique_ptr<TAggregationAst> LoadAggregationAst(const std::string& path)
 {
     TString source = TFileInput(path).ReadAll();
     const size_t first = source.find_first_not_of(" \t\r\n");
@@ -208,7 +208,7 @@ THolder<TAggregationAst> LoadAggregationAst(const std::string& path)
             "Cannot unwrap quoted custom AST root");
         root = root->GetChild(1);
     }
-    auto result = MakeHolder<TAggregationAst>();
+    auto result = std::make_unique<TAggregationAst>();
     const auto items = ExtractAstTuple(*root);
     if (!IsAstEmptyList(*items[0])) {
         Y_ENSURE(IsAstLambda(*items[0]), "Custom AST input transform is neither a lambda nor an empty list");
@@ -225,7 +225,7 @@ THolder<TAggregationAst> LoadAggregationAst(const std::string& path)
     return result;
 }
 
-THolder<TInputTransformAst> LoadInputTransformAst(const std::string& path)
+std::unique_ptr<TInputTransformAst> LoadInputTransformAst(const std::string& path)
 {
     TString source = TFileInput(path).ReadAll();
     const size_t first = source.find_first_not_of(" \t\r\n");
@@ -243,7 +243,7 @@ THolder<TInputTransformAst> LoadInputTransformAst(const std::string& path)
         root = root->GetChild(1);
     }
 
-    auto result = MakeHolder<TInputTransformAst>();
+    auto result = std::make_unique<TInputTransformAst>();
     auto* inputTransform = ExtractInputTransformAst(*root);
     if (!IsAstEmptyList(*inputTransform)) {
         Y_ENSURE(IsAstLambda(*inputTransform),
@@ -881,7 +881,7 @@ std::vector<TType*> MakeAggregationInputBlockTypes(
         *setup.FunctionRegistry, inputTransformAst->ExprContext));
 }
 
-THolder<IComputationGraph> BuildInputTransformGraph(
+std::unique_ptr<IComputationGraph> BuildInputTransformGraph(
     TKqpSetup<false, false>& setup,
     const TDqBlockData& data,
     TInputTransformAst& inputTransformAst,
@@ -902,7 +902,7 @@ THolder<IComputationGraph> BuildInputTransformGraph(
 }
 
 template<bool LLVM, bool Spilling>
-THolder<IComputationGraph> BuildBlockCombineHashedGraph(
+std::unique_ptr<IComputationGraph> BuildBlockCombineHashedGraph(
     TKqpSetup<LLVM, Spilling>& setup,
     const std::vector<TType*>& inputBlockTypes,
     const std::vector<size_t>& keys,
@@ -959,7 +959,7 @@ THolder<IComputationGraph> BuildBlockCombineHashedGraph(
 }
 
 template<bool LLVM, bool Spilling>
-THolder<IComputationGraph> BuildGraph(
+std::unique_ptr<IComputationGraph> BuildGraph(
     TKqpSetup<LLVM, Spilling>& setup,
     const std::vector<TType*>& inputBlockTypes,
     const std::vector<size_t>& keys,
@@ -1439,10 +1439,10 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
         ? ReadDqBlockDataFromParquet(params)
         : GenerateShuffledUint32Data(params);
     auto aggregationAst = params.DqBlockAstFile.empty()
-        ? THolder<TAggregationAst>()
+        ? std::unique_ptr<TAggregationAst>()
         : LoadAggregationAst(params.DqBlockAstFile);
     auto generatorAst = params.DqBlockGeneratorAstFile.empty()
-        ? THolder<TInputTransformAst>()
+        ? std::unique_ptr<TInputTransformAst>()
         : LoadInputTransformAst(params.DqBlockGeneratorAstFile);
     Y_ENSURE(!aggregationAst || !generatorAst,
         "Aggregation AST and input transform AST cannot be used together");
@@ -1461,14 +1461,14 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
         "BlockCombineHashed does not support custom aggregation lambdas");
     params.RowsPerRun = data.Rows;
 
-    THolder<TKqpSetup<false, false>> transformSetup;
-    THolder<IComputationGraph> transformGraph;
+    std::unique_ptr<TKqpSetup<false, false>> transformSetup;
+    std::unique_ptr<IComputationGraph> transformGraph;
     std::vector<TType*> transformOutputBlockTypes;
     TBlockDatums transformedBlocks;
-    THolder<TKqpSetup<LLVM, Spilling>> setup;
+    std::unique_ptr<TKqpSetup<LLVM, Spilling>> setup;
     std::vector<std::vector<TUnboxedValue>> blockValues;
     if (inputTransformAst && inputTransformAst->InputTransform) {
-        transformSetup = MakeHolder<TKqpSetup<false, false>>(GetPerfTestFactory());
+        transformSetup = std::make_unique<TKqpSetup<false, false>>(GetPerfTestFactory());
         transformGraph = BuildInputTransformGraph(
             *transformSetup, data, *inputTransformAst, transformOutputBlockTypes);
         auto inputStream = TUnboxedValuePod(new TPrebuiltBlockStream(
@@ -1480,7 +1480,7 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
         transformGraph.Reset();
     }
 
-    setup = MakeHolder<TKqpSetup<LLVM, Spilling>>(GetPerfTestFactory());
+    setup = std::make_unique<TKqpSetup<LLVM, Spilling>>(GetPerfTestFactory());
     setup->Alloc.Ref().ForcefullySetMemoryYellowZone(Spilling);
     const auto inputBlockTypes = MakeAggregationInputBlockTypes(*setup, data, inputTransformAst);
     if (!transformOutputBlockTypes.empty()) {

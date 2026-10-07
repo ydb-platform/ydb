@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
             auto observerHolder = runtime.AddObserver<TEvDataShard::TEvBuildIndexProgressResponse>(
                 [&](TEvDataShard::TEvBuildIndexProgressResponse::TPtr& event) {
-                    auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+                    auto copy = std::make_unique<TEvDataShard::TEvBuildIndexProgressResponse>();
                     copy->Record = event->Get()->Record;
                     runtime.Send(new IEventHandle(sender, event->Sender, copy.Release()));
                 });

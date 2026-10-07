@@ -14,15 +14,15 @@ namespace NKikimr {
 namespace NPQ {
 
 struct TRequestContext {
-    THolder<TEvPQ::TEvRequestQuota> Request;
+    std::unique_ptr<TEvPQ::TEvRequestQuota> Request;
     TDuration AccountQuotaWaitTime;
     TInstant PartitionQuotaWaitStart;
     TDuration TotalQuotaWaitTime;
     TActorId PartitionActor;
 
     TRequestContext();
-    TRequestContext(THolder<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor);
-    TRequestContext(THolder<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor, const TDuration& accountWaitTime, TInstant now);
+    TRequestContext(std::unique_ptr<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor);
+    TRequestContext(std::unique_ptr<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor, const TDuration& accountWaitTime, TInstant now);
 };
 
 struct TAccountQuoterHolder {
@@ -35,7 +35,7 @@ struct TAccountQuoterHolder {
 class TConsumerReadQuota {
 public:
     TConsumerReadQuota(
-        THolder<TAccountQuoterHolder> accountQuotaTracker,
+        std::unique_ptr<TAccountQuoterHolder> accountQuotaTracker,
         ui64 readQuotaBurst,
         ui64 readQuotaSpeed,
         ui64 readMessageQuotaBurst,
@@ -45,7 +45,7 @@ public:
 public:
     TQuotaTracker PartitionPerConsumerQuotaTracker;
     TQuotaTracker PartitionPerConsumerMessageQuotaTracker;
-    THolder<TAccountQuoterHolder> AccountQuotaTracker;
+    std::unique_ptr<TAccountQuoterHolder> AccountQuotaTracker;
     std::deque<TRequestContext> ReadRequests;
 };
 
@@ -86,7 +86,7 @@ protected:
     virtual void HandleQuotaRequestImpl(TRequestContext& context) = 0;
     virtual void HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr& ev) = 0;
 
-    virtual TAccountQuoterHolder* GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) = 0;
+    virtual TAccountQuoterHolder* GetAccountQuotaTracker(const std::unique_ptr<TEvPQ::TEvRequestQuota>& request) = 0;
     virtual void OnAccountQuotaApproved(TRequestContext&& context) = 0;
     virtual IEventBase* MakeQuotaApprovedEvent(TRequestContext& context) = 0;
     virtual void HandleWakeUpImpl() = 0;

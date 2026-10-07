@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
         {
             runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender);
 
-            auto evSubscribe = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(100);
+            auto evSubscribe = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(100);
             runtime.SendToPipe(schemeShardId, sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries());
 
             TAutoPtr<IEventHandle> handle;
@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
         {
             runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender);
 
-            auto evSubscribe = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(100);
+            auto evSubscribe = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(100);
             runtime.SendToPipe(schemeShardId, sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries());
 
             TAutoPtr<IEventHandle> handle;
@@ -516,7 +516,7 @@ Y_UNIT_TEST_SUITE(ExternalBlobsMultipleChannels) {
 
             UNIT_ASSERT_VALUES_EQUAL(NKikimrScheme::StatusAccepted, status);
 
-            auto evSubscribe = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(txId);
+            auto evSubscribe = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(txId);
             runtime.SendToPipe(schemeShardId, sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries());
 
             TAutoPtr<IEventHandle> handle;

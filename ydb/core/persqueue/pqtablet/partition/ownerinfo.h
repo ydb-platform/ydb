@@ -20,7 +20,7 @@ namespace NPQ {
         ui64 ReservedSize;
         std::deque<ui64> Requests;
 
-        std::deque<THolder<TEvPQ::TEvChangeOwner>> WaitToChangeOwner;
+        std::deque<std::unique_ptr<TEvPQ::TEvChangeOwner>> WaitToChangeOwner;
 
         TOwnerInfo()
             : NeedResetOwner(true)

@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
+std::unique_ptr<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
                                             TDataShard &dataShard,
                                             TPipeline &pipeline)
 {

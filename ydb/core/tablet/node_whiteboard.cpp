@@ -98,7 +98,7 @@ protected:
     ui32 MaxClockSkewPeerId = 0;
     ui64 SumNetworkWriteThroughput = 0;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
-    THolder<NTracing::ITraceCollection> TabletIntrospectionData;
+    std::unique_ptr<NTracing::ITraceCollection> TabletIntrospectionData;
 
     NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
     NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
@@ -1098,7 +1098,7 @@ protected:
     }
 
     void Handle(TEvWhiteboard::TEvTabletLookupRequest::TPtr& ev) {
-        THolder<TEvWhiteboard::TEvTabletLookupResponse> response = MakeHolder<TEvWhiteboard::TEvTabletLookupResponse>();
+        std::unique_ptr<TEvWhiteboard::TEvTabletLookupResponse> response = std::make_unique<TEvWhiteboard::TEvTabletLookupResponse>();
         auto& record = response->Record;
         TVector<ui64> tabletIDs;
         TabletIntrospectionData->GetTabletIDs(tabletIDs);
@@ -1110,7 +1110,7 @@ protected:
 
     void Handle(TEvWhiteboard::TEvTraceLookupRequest::TPtr& ev) {
         ui64 tabletID = ev->Get()->Record.GetTabletID();
-        THolder<TEvWhiteboard::TEvTraceLookupResponse> response = MakeHolder<TEvWhiteboard::TEvTraceLookupResponse>();
+        std::unique_ptr<TEvWhiteboard::TEvTraceLookupResponse> response = std::make_unique<TEvWhiteboard::TEvTraceLookupResponse>();
         auto& record = response->Record;
         TVector<NTracing::TTraceID> tabletTraces;
         TabletIntrospectionData->GetTraces(tabletID, tabletTraces);
@@ -1125,7 +1125,7 @@ protected:
         ui64 tabletID = requestRecord.GetTabletID();
         NTracing::TTraceID traceID = NTracing::TraceIDFromTraceID(requestRecord.GetTraceID());
 
-        THolder<TEvWhiteboard::TEvTraceResponse> response = MakeHolder<TEvWhiteboard::TEvTraceResponse>();
+        std::unique_ptr<TEvWhiteboard::TEvTraceResponse> response = std::make_unique<TEvWhiteboard::TEvTraceResponse>();
         auto& responseRecord = response->Record;
         auto trace = TabletIntrospectionData->GetTrace(tabletID, traceID);
         NTracing::TTraceInfo traceInfo = {
@@ -1153,7 +1153,7 @@ protected:
         NTracing::TTraceID traceID = NTracing::TraceIDFromTraceID(requestRecord.GetTraceID());
         TString signalID = requestRecord.GetSignalID();
 
-        THolder<TEvWhiteboard::TEvSignalBodyResponse> response = MakeHolder<TEvWhiteboard::TEvSignalBodyResponse>();
+        std::unique_ptr<TEvWhiteboard::TEvSignalBodyResponse> response = std::make_unique<TEvWhiteboard::TEvSignalBodyResponse>();
         auto& responseRecord = response->Record;
         auto trace = TabletIntrospectionData->GetTrace(tabletID, traceID);
         TStringStream str;

@@ -204,7 +204,7 @@ void TKeyRangeCache::CollectGarbage() {
     }
 
     if (Pool->TotalUsed() < Pool->TotalGarbage() / 2) {
-        THolder<TSpecialMemoryPool> newPool = MakeHolder<TSpecialMemoryPool>();
+        std::unique_ptr<TSpecialMemoryPool> newPool = std::make_unique<TSpecialMemoryPool>();
         newPool->Reserve(Pool->TotalUsed());
         for (auto& constEntry : Entries) {
             auto& entry = const_cast<TKeyRangeEntryLRU&>(constEntry);

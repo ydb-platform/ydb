@@ -63,7 +63,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 }
 
                 auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(Kind);
-                auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(kind, Self->TabletID(), TxId, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+                auto result = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(kind, Self->TabletID(), TxId, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
                 result->AddError(status, errMessage);
 
                 TActorId target = Op ? Op->GetTarget() : Ev->Sender;

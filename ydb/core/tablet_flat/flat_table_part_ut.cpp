@@ -308,8 +308,8 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         TTestEnv env;
         TStatsIterator stIter(lay2.RowScheme()->Keys);
         {
-            auto it1 = MakeHolder<TStatsScreenedPartIterator>(TPartView{eggs2.At(0), screen2, nullptr}, &env, lay2.RowScheme()->Keys, nullptr, nullptr, 0, 0);
-            auto it2 = MakeHolder<TStatsScreenedPartIterator>(TPartView{eggs1.At(0), screen1, nullptr}, &env, lay2.RowScheme()->Keys, nullptr, nullptr, 0, 0);
+            auto it1 = std::make_unique<TStatsScreenedPartIterator>(TPartView{eggs2.At(0), screen2, nullptr}, &env, lay2.RowScheme()->Keys, nullptr, nullptr, 0, 0);
+            auto it2 = std::make_unique<TStatsScreenedPartIterator>(TPartView{eggs1.At(0), screen1, nullptr}, &env, lay2.RowScheme()->Keys, nullptr, nullptr, 0, 0);
             UNIT_ASSERT_VALUES_EQUAL(it1->Start(), EReady::Data);
             UNIT_ASSERT_VALUES_EQUAL(it2->Start(), EReady::Data);
             stIter.Add(std::move(it1));

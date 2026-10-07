@@ -371,7 +371,7 @@ struct TWriterEnv {
         UNIT_ASSERT(ev);
     }
 
-    THolder<TEvWorker::TEvGone> WaitGone() {
+    std::unique_ptr<TEvWorker::TEvGone> WaitGone() {
         Pump();
         auto ev = Runtime.GrabEdgeEvent<TEvWorker::TEvGone>(TDuration::Zero());
         UNIT_ASSERT(ev);
@@ -379,7 +379,7 @@ struct TWriterEnv {
     }
 
     template <typename TEvent>
-    THolder<TEvent> Grab() {
+    std::unique_ptr<TEvent> Grab() {
         Pump();
         auto ev = Runtime.GrabEdgeEvent<TEvent>(TDuration::Zero());
         UNIT_ASSERT(ev);

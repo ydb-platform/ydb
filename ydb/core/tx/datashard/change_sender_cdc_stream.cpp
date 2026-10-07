@@ -147,7 +147,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     /// Write
 
     void Write(NKikimrClient::TPersQueueRequest&& request) {
-        auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>();
+        auto ev = std::make_unique<TEvPartitionWriter::TEvWriteRequest>();
         ev->Record = std::move(request);
         ev->Record.MutablePartitionRequest()->SetCookie(++Cookie);
 
@@ -322,7 +322,7 @@ private:
     const ui32 PartitionId;
     const ui64 ShardId;
     const TString SourceId;
-    THolder<IChangeRecordSerializer> Serializer;
+    std::unique_ptr<IChangeRecordSerializer> Serializer;
 
     TActorId Writer;
     i64 MaxSeqNo = 0;
@@ -463,7 +463,7 @@ class TCdcChangeSenderMain
     /// ResolveCdcStream
 
     void ResolveCdcStream() {
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(StreamPathId, TNavigate::OpList));
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
@@ -535,7 +535,7 @@ class TCdcChangeSenderMain
     /// ResolveTopic
 
     void ResolveTopic() {
-        auto request = MakeHolder<TNavigate>();
+        auto request = std::make_unique<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(TopicPathId, TNavigate::OpTopic));
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
@@ -758,7 +758,7 @@ private:
     TUserTable::TCdcStream Stream;
     TPathId TopicPathId;
     ui64 TopicVersion;
-    THolder<NKikimr::TKeyDesc> KeyDesc;
+    std::unique_ptr<NKikimr::TKeyDesc> KeyDesc;
     THashMap<ui32, ui64> PartitionToShard;
 
 }; // TCdcChangeSenderMain

@@ -108,7 +108,7 @@ private:
             PendingDirectRead = isDirectRead;
             PendingPartitionResponse.CopyFrom(partitionResponse);
 
-            auto proxyEvent = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto proxyEvent = std::make_unique<TEvPQ::TEvProxyResponse>(0, false);
             proxyEvent->Response->CopyFrom(responseRecord);
 
             const auto& cmdRead = Request.GetPartitionRequest().GetCmdRead();
@@ -315,7 +315,7 @@ private:
             Request.SetRequestId(TMP_REQUEST_MARKER);
             Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
             Request.MutablePartitionRequest()->MutableCmdRead()->SetPartNo(0);
-            THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+            std::unique_ptr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
             req->Record = Request;
             Send(TabletActorId, req.Release());
             return;
@@ -335,7 +335,7 @@ private:
                 read->ClearMaxTimeLagMs();
                 read->SetReadTimestampMs(readFromTimestampMs);
 
-                THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+                std::unique_ptr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
                 req->Record = Request;
                 Send(TabletActorId, req.Release());
                 InitialRequest = false;
@@ -390,7 +390,7 @@ private:
     const TActorId Sender;
     const ui32 TabletGeneration;
     NKikimrClient::TPersQueueRequest Request;
-    THolder<TEvPersQueue::TEvResponse> Response;
+    std::unique_ptr<TEvPersQueue::TEvResponse> Response;
     std::shared_ptr<NKikimrClient::TResponse> PreparedResponse;
     TDirectReadKey DirectReadKey;
     const ui64 InitialReadOffset;

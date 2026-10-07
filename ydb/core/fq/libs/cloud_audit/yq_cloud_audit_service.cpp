@@ -414,7 +414,7 @@ public:
         }
 
         auto clientParameters = NUnifiedAgent::TClientParameters(Config.GetUAConfig().GetUri());
-        SdkLogger = std::make_unique<TLog>(MakeHolder<TActorLogBackend>(ctx.ActorSystem(), NKikimrServices::EServiceKikimr::YDB_SDK));
+        SdkLogger = std::make_unique<TLog>(std::make_unique<TActorLogBackend>(ctx.ActorSystem(), NKikimrServices::EServiceKikimr::YDB_SDK));
         clientParameters.SetLog(*SdkLogger);
 
         const auto& sharedKey = Config.GetUAConfig().GetSharedSecretKey();

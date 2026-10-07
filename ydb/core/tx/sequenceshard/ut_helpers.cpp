@@ -92,12 +92,12 @@ namespace NSequenceShard {
 
     void TTestContext::SendCreateSequence(
         ui64 cookie, const TActorId& edge,
-        THolder<TEvSequenceShard::TEvCreateSequence> msg)
+        std::unique_ptr<TEvSequenceShard::TEvCreateSequence> msg)
     {
         SendFromEdge(edge, msg.Release(), cookie);
     }
 
-    THolder<TEvSequenceShard::TEvCreateSequenceResult> TTestContext::NextCreateSequenceResult(
+    std::unique_ptr<TEvSequenceShard::TEvCreateSequenceResult> TTestContext::NextCreateSequenceResult(
         ui64 cookie, const TActorId& edge)
     {
         auto result = ExpectEdgeEvent<TEvSequenceShard::TEvCreateSequenceResult>(edge, cookie);
@@ -105,8 +105,8 @@ namespace NSequenceShard {
         return result;
     }
 
-    THolder<TEvSequenceShard::TEvCreateSequenceResult> TTestContext::CreateSequence(
-        THolder<TEvSequenceShard::TEvCreateSequence> msg)
+    std::unique_ptr<TEvSequenceShard::TEvCreateSequenceResult> TTestContext::CreateSequence(
+        std::unique_ptr<TEvSequenceShard::TEvCreateSequence> msg)
     {
         ui64 cookie = RandomNumber<ui64>();
         auto edge = Runtime->AllocateEdgeActor();
@@ -124,7 +124,7 @@ namespace NSequenceShard {
             cookie);
     }
 
-    THolder<TEvSequenceShard::TEvAllocateSequenceResult> TTestContext::NextAllocateSequenceResult(
+    std::unique_ptr<TEvSequenceShard::TEvAllocateSequenceResult> TTestContext::NextAllocateSequenceResult(
         ui64 cookie, const TActorId& edge)
     {
         auto result = ExpectEdgeEvent<TEvSequenceShard::TEvAllocateSequenceResult>(edge, cookie);
@@ -132,7 +132,7 @@ namespace NSequenceShard {
         return result;
     }
 
-    THolder<TEvSequenceShard::TEvAllocateSequenceResult> TTestContext::AllocateSequence(
+    std::unique_ptr<TEvSequenceShard::TEvAllocateSequenceResult> TTestContext::AllocateSequence(
         const TPathId& pathId, ui64 cache)
     {
         ui64 cookie = RandomNumber<ui64>();
@@ -150,7 +150,7 @@ namespace NSequenceShard {
             cookie);
     }
 
-    THolder<TEvSequenceShard::TEvDropSequenceResult> TTestContext::NextDropSequenceResult(
+    std::unique_ptr<TEvSequenceShard::TEvDropSequenceResult> TTestContext::NextDropSequenceResult(
         ui64 cookie, const TActorId& edge)
     {
         auto result = ExpectEdgeEvent<TEvSequenceShard::TEvDropSequenceResult>(edge, cookie);
@@ -158,7 +158,7 @@ namespace NSequenceShard {
         return result;
     }
 
-    THolder<TEvSequenceShard::TEvDropSequenceResult> TTestContext::DropSequence(
+    std::unique_ptr<TEvSequenceShard::TEvDropSequenceResult> TTestContext::DropSequence(
         const TPathId& pathId)
     {
         ui64 cookie = RandomNumber<ui64>();
@@ -169,12 +169,12 @@ namespace NSequenceShard {
 
     void TTestContext::SendUpdateSequence(
         ui64 cookie, const TActorId& edge,
-        THolder<TEvSequenceShard::TEvUpdateSequence> msg)
+        std::unique_ptr<TEvSequenceShard::TEvUpdateSequence> msg)
     {
         SendFromEdge(edge, msg.Release(), cookie);
     }
 
-    THolder<TEvSequenceShard::TEvUpdateSequenceResult> TTestContext::NextUpdateSequenceResult(
+    std::unique_ptr<TEvSequenceShard::TEvUpdateSequenceResult> TTestContext::NextUpdateSequenceResult(
         ui64 cookie, const TActorId& edge)
     {
         auto result = ExpectEdgeEvent<TEvSequenceShard::TEvUpdateSequenceResult>(edge, cookie);
@@ -182,8 +182,8 @@ namespace NSequenceShard {
         return result;
     }
 
-    THolder<TEvSequenceShard::TEvUpdateSequenceResult> TTestContext::UpdateSequence(
-        THolder<TEvSequenceShard::TEvUpdateSequence> msg)
+    std::unique_ptr<TEvSequenceShard::TEvUpdateSequenceResult> TTestContext::UpdateSequence(
+        std::unique_ptr<TEvSequenceShard::TEvUpdateSequence> msg)
     {
         ui64 cookie = RandomNumber<ui64>();
         auto edge = Runtime->AllocateEdgeActor();
@@ -200,7 +200,7 @@ namespace NSequenceShard {
             cookie);
     }
 
-    THolder<TEvSequenceShard::TEvFreezeSequenceResult> TTestContext::NextFreezeSequenceResult(
+    std::unique_ptr<TEvSequenceShard::TEvFreezeSequenceResult> TTestContext::NextFreezeSequenceResult(
         ui64 cookie, const TActorId& edge)
     {
         auto result = ExpectEdgeEvent<TEvSequenceShard::TEvFreezeSequenceResult>(edge, cookie);
@@ -208,7 +208,7 @@ namespace NSequenceShard {
         return result;
     }
 
-    THolder<TEvSequenceShard::TEvFreezeSequenceResult> TTestContext::FreezeSequence(
+    std::unique_ptr<TEvSequenceShard::TEvFreezeSequenceResult> TTestContext::FreezeSequence(
         const TPathId& pathId)
     {
         ui64 cookie = RandomNumber<ui64>();
@@ -219,12 +219,12 @@ namespace NSequenceShard {
 
     void TTestContext::SendRestoreSequence(
         ui64 cookie, const TActorId& edge,
-        THolder<TEvSequenceShard::TEvRestoreSequence> msg)
+        std::unique_ptr<TEvSequenceShard::TEvRestoreSequence> msg)
     {
         SendFromEdge(edge, msg.Release(), cookie);
     }
 
-    THolder<TEvSequenceShard::TEvRestoreSequenceResult> TTestContext::NextRestoreSequenceResult(
+    std::unique_ptr<TEvSequenceShard::TEvRestoreSequenceResult> TTestContext::NextRestoreSequenceResult(
         ui64 cookie, const TActorId& edge)
     {
         auto result = ExpectEdgeEvent<TEvSequenceShard::TEvRestoreSequenceResult>(edge, cookie);
@@ -232,8 +232,8 @@ namespace NSequenceShard {
         return result;
     }
 
-    THolder<TEvSequenceShard::TEvRestoreSequenceResult> TTestContext::RestoreSequence(
-        THolder<TEvSequenceShard::TEvRestoreSequence> msg)
+    std::unique_ptr<TEvSequenceShard::TEvRestoreSequenceResult> TTestContext::RestoreSequence(
+        std::unique_ptr<TEvSequenceShard::TEvRestoreSequence> msg)
     {
         ui64 cookie = RandomNumber<ui64>();
         auto edge = Runtime->AllocateEdgeActor();
@@ -251,7 +251,7 @@ namespace NSequenceShard {
             cookie);
     }
 
-    THolder<TEvSequenceShard::TEvRedirectSequenceResult> TTestContext::NextRedirectSequenceResult(
+    std::unique_ptr<TEvSequenceShard::TEvRedirectSequenceResult> TTestContext::NextRedirectSequenceResult(
         ui64 cookie, const TActorId& edge)
     {
         auto result = ExpectEdgeEvent<TEvSequenceShard::TEvRedirectSequenceResult>(edge, cookie);
@@ -259,7 +259,7 @@ namespace NSequenceShard {
         return result;
     }
 
-    THolder<TEvSequenceShard::TEvRedirectSequenceResult> TTestContext::RedirectSequence(
+    std::unique_ptr<TEvSequenceShard::TEvRedirectSequenceResult> TTestContext::RedirectSequence(
         const TPathId& pathId, ui64 redirectTo)
     {
         ui64 cookie = RandomNumber<ui64>();
@@ -276,7 +276,7 @@ namespace NSequenceShard {
             cookie);
     }
 
-    THolder<TEvSequenceShard::TEvGetSequenceResult> TTestContext::NextGetSequenceResult(
+    std::unique_ptr<TEvSequenceShard::TEvGetSequenceResult> TTestContext::NextGetSequenceResult(
         ui64 cookie, const TActorId& edge)
     {
         auto result = ExpectEdgeEvent<TEvSequenceShard::TEvGetSequenceResult>(edge, cookie);
@@ -284,7 +284,7 @@ namespace NSequenceShard {
         return result;
     }
 
-    THolder<TEvSequenceShard::TEvGetSequenceResult> TTestContext::GetSequence(
+    std::unique_ptr<TEvSequenceShard::TEvGetSequenceResult> TTestContext::GetSequence(
         const TPathId& pathId)
     {
         ui64 cookie = RandomNumber<ui64>();

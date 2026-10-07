@@ -445,7 +445,7 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
         query->SetTargetNumVChunks(vChunkPerDbgCount);
     }
 
-    SendToBsc(ctx, THolder<IEventBase>(request.release()));
+    SendToBsc(ctx, std::unique_ptr<IEventBase>(request.release()));
 }
 
 std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
@@ -953,7 +953,7 @@ void TPartitionActor::HandleSetVChunkTouched(
 
 void TPartitionActor::SendToBsc(
     const TActorContext& ctx,
-    THolder<IEventBase> request,
+    std::unique_ptr<IEventBase> request,
     ui64 cookie)
 {
     if (CurrentStateFunc() == &TThis::StateDelete) {

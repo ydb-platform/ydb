@@ -178,8 +178,8 @@ private:
     TNodeMap<TLoadSolomonMetaRequest> LabelNamesRequests_;
 };
 
-THolder<IGraphTransformer> CreateSolomonLoadTableMetadataTransformer(TSolomonState::TPtr state) {
-    return THolder(new TSolomonLoadTableMetadataTransformer(state));
+std::unique_ptr<IGraphTransformer> CreateSolomonLoadTableMetadataTransformer(TSolomonState::TPtr state) {
+    return std::unique_ptr<TSolomonLoadTableMetadataTransformer>(new TSolomonLoadTableMetadataTransformer(state));
 }
 
 } // namespace NYql

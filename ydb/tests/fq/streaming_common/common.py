@@ -79,7 +79,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         "enable_streaming_queries_pq_sink_deduplication",
         "enable_external_data_source_auth_method_iam",
         "allow_ydb_requests_without_database",
-  #      "enable_updating_partitions_on_streaming_query_restart",
+        "enable_updating_partitions_on_streaming_query_restart",
         "enable_pq_source_rescaling",
     }
     disabled_feature_flags = []
@@ -396,6 +396,7 @@ class YdbClient:
 
 
 _SECTIONS_FOR_CMS = [
+    "feature_flags",
     "table_service_config",
     "federated_query_config",
     "log_config",

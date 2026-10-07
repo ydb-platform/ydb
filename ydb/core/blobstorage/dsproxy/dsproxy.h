@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/blobstorage/base/dsproxy_events.h>
 #include "dsproxy_mon.h"
 #include "dsproxy_responsiveness.h"
 #include "log_acc.h"
@@ -120,20 +121,6 @@ inline TStoragePoolCounters::EHandleClass HandleClassToHandleClass(NKikimrBlobSt
 NActors::NLog::EPriority PriorityForStatusOutbound(NKikimrProto::EReplyStatus status);
 NActors::NLog::EPriority PriorityForStatusResult(NKikimrProto::EReplyStatus status);
 NActors::NLog::EPriority PriorityForStatusInbound(NKikimrProto::EReplyStatus status);
-
-#define DSPROXY_ENUM_EVENTS(XX) \
-    XX(TEvBlobStorage::TEvPut) \
-    XX(TEvBlobStorage::TEvGet) \
-    XX(TEvBlobStorage::TEvBlock) \
-    XX(TEvBlobStorage::TEvGetBlock) \
-    XX(TEvBlobStorage::TEvDiscover) \
-    XX(TEvBlobStorage::TEvRange) \
-    XX(TEvBlobStorage::TEvCollectGarbage) \
-    XX(TEvBlobStorage::TEvStatus) \
-    XX(TEvBlobStorage::TEvPatch) \
-    XX(TEvBlobStorage::TEvAssimilate) \
-    XX(TEvBlobStorage::TEvCheckIntegrity) \
-//
 
 #define DSPROXY_ENUM_DISK_EVENTS(XX) \
     XX(TEvBlobStorage::TEvVMovedPatch) \

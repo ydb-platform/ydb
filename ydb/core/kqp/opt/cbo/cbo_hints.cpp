@@ -87,9 +87,16 @@ private:
     void JoinOrder(bool leading /* is keyword "Leading" or "JoinOrder" */) {
         i32 beginPos = Pos_ + 1;
 
-        Keyword({"("});
+        auto openBracket = Keyword({"(", "["});
         auto joinOrderHintTree = JoinOrderLabels();
-        Keyword({")"});
+
+        if (openBracket == "[") {
+            auto joinNode = std::static_pointer_cast<TJoinOrderHints::TJoinNode>(joinOrderHintTree);
+            joinNode->IsCommutativeHint = true;
+            Keyword({"]"});
+        } else {
+            Keyword({")"});
+        }
 
         Hints_.JoinOrderHints->PushBack(
             std::move(joinOrderHintTree),
@@ -109,9 +116,22 @@ private:
             auto join = JoinOrderLabels();
             Keyword({")"});
             return join;
+        } else if (auto maybeSquare = MaybeKeyword({"["})) {
+            auto join = std::static_pointer_cast<TJoinOrderHints::TJoinNode>(JoinOrderLabels());
+            join->IsCommutativeHint = true;
+            Keyword({"]"});
+            return join;
+        } else if (auto maybeBrace = MaybeKeyword({"{"})) {
+            auto labels = CollectLabels();
+            if (labels.empty()) {
+                ParseError("Partial order hint {...} must contain at least one relation label", Pos_);
+            }
+            Keyword({"}"});
+            return std::make_shared<TJoinOrderHints::TPartialNode>(std::move(labels));
         }
 
-        ParseError(Sprintf("JoinOrder args must be either a relation, either a join, example of the format: JoinOrder(t1 (t2 t3))"), Pos_);
+        ParseError(Sprintf("JoinOrder args must be a relation, exact join (...), commutative join [...],"
+                           " or partial set {...}, example: JoinOrder(t1 [t2 t3]) or JoinOrder({t1 t2} t3)"), Pos_);
         Y_UNREACHABLE();
     }
 

@@ -58,6 +58,11 @@ struct TChangefeedTopicSettings {
     }
 };
 
+struct TChangefeedRoundTripSpec {
+    TString Name;
+    bool CompareInitialPartitionCount = true;
+};
+
 class TShowCreateChecker {
 public:
 
@@ -137,32 +142,55 @@ public:
             const std::string& changefeedName, const std::string& alterTopicQuery = {},
             bool compareInitialPartitionCount = true)
     {
+        CheckChangefeedsRoundTrip(query, tableName,
+            {{TString(changefeedName), compareInitialPartitionCount}}, alterTopicQuery);
+    }
+
+    void CheckChangefeedsRoundTrip(const std::string& query, const std::string& tableName,
+            const TVector<TChangefeedRoundTripSpec>& changefeeds,
+            const std::string& alterTopicQuery = {})
+    {
         ExecuteQuery(Session, query);
 
-        const TString topicPath = TStringBuilder() << "/Root/" << tableName << "/" << changefeedName;
-        WaitForCdcStreamReady(topicPath);
+        for (const auto& changefeed : changefeeds) {
+            WaitForCdcStreamReady(TStringBuilder() << "/Root/" << tableName << "/" << changefeed.Name);
+        }
 
         if (!alterTopicQuery.empty()) {
             ExecuteQuery(Session, alterTopicQuery);
         }
 
         const auto originalTableDescription = DescribeTable(tableName);
-        const auto originalTopicSettings = DescribeTopicSettings(topicPath, compareInitialPartitionCount);
+        TVector<TChangefeedTopicSettings> originalTopicSettings;
+        originalTopicSettings.reserve(changefeeds.size());
+        for (const auto& changefeed : changefeeds) {
+            const TString topicPath = TStringBuilder() << "/Root/" << tableName << "/" << changefeed.Name;
+            originalTopicSettings.push_back(
+                DescribeTopicSettings(topicPath, changefeed.CompareInitialPartitionCount));
+        }
         const auto showCreateTableQuery = ShowCreateTable(Session, tableName);
 
         DropTable(Session, tableName);
         ExecuteDdlStatements(TString(showCreateTableQuery));
-        WaitForCdcStreamReady(topicPath);
+        for (const auto& changefeed : changefeeds) {
+            WaitForCdcStreamReady(TStringBuilder() << "/Root/" << tableName << "/" << changefeed.Name);
+        }
 
         const auto recreatedTableDescription = DescribeTable(tableName);
-        const auto recreatedTopicSettings = DescribeTopicSettings(topicPath, compareInitialPartitionCount);
 
         CompareDescriptions(originalTableDescription, recreatedTableDescription, showCreateTableQuery);
-        UNIT_ASSERT_C(originalTopicSettings == recreatedTopicSettings,
-            "Changefeed topic settings differ after SHOW CREATE TABLE round-trip"
-            << "\nOriginal: " << originalTopicSettings.DebugString()
-            << "\nRecreated: " << recreatedTopicSettings.DebugString()
-            << "\nDDL:\n" << showCreateTableQuery);
+        for (size_t i = 0; i < changefeeds.size(); ++i) {
+            const auto& changefeed = changefeeds[i];
+            const TString topicPath = TStringBuilder() << "/Root/" << tableName << "/" << changefeed.Name;
+            const auto recreatedTopicSettings =
+                DescribeTopicSettings(topicPath, changefeed.CompareInitialPartitionCount);
+            UNIT_ASSERT_C(originalTopicSettings[i] == recreatedTopicSettings,
+                "Changefeed topic settings differ after SHOW CREATE TABLE round-trip"
+                << "\nChangefeed: " << changefeed.Name
+                << "\nOriginal: " << originalTopicSettings[i].DebugString()
+                << "\nRecreated: " << recreatedTopicSettings.DebugString()
+                << "\nDDL:\n" << showCreateTableQuery);
+        }
 
         DropTable(Session, tableName);
     }
@@ -2265,6 +2293,54 @@ Y_UNIT_TEST(TableChangefeedStringKeyPartitionSettingsRoundTrip) {
             max_active_partitions = 4
         );
     )", false);
+}
+
+Y_UNIT_TEST(TableMultipleAutoPartitionedChangefeedsRoundTrip) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+    TShowCreateChecker checker(env);
+
+    checker.CheckChangefeedsRoundTrip(R"(
+        CREATE TABLE show_create_multiple_auto_changefeeds (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+        ALTER TABLE show_create_multiple_auto_changefeeds
+            ADD CHANGEFEED `feed_scale_up` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                RETENTION_PERIOD = INTERVAL('PT2H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+        ALTER TABLE show_create_multiple_auto_changefeeds
+            ADD CHANGEFEED `feed_paused` WITH (
+                MODE = 'KEYS_ONLY',
+                FORMAT = 'JSON',
+                RETENTION_PERIOD = INTERVAL('PT3H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 3,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 6
+            );
+    )", "show_create_multiple_auto_changefeeds", {
+        {.Name = "feed_scale_up"},
+        {.Name = "feed_paused"},
+    }, R"(
+        ALTER TOPIC `/Root/show_create_multiple_auto_changefeeds/feed_scale_up` SET (
+            max_active_partitions = 5,
+            auto_partitioning_stabilization_window = INTERVAL('PT10M'),
+            auto_partitioning_up_utilization_percent = 75,
+            auto_partitioning_down_utilization_percent = 20
+        );
+        ALTER TOPIC `/Root/show_create_multiple_auto_changefeeds/feed_paused` SET (
+            max_active_partitions = 9,
+            auto_partitioning_strategy = 'paused',
+            auto_partitioning_stabilization_window = INTERVAL('PT20M'),
+            auto_partitioning_up_utilization_percent = 80,
+            auto_partitioning_down_utilization_percent = 30
+        );
+    )");
 }
 
 Y_UNIT_TEST(TableChangefeedSettingsWithAdditionalDdlRoundTrip) {

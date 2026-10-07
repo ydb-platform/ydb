@@ -39,6 +39,12 @@ namespace NKikimr {
             ui64 Ingress;
         };
 
+        struct TOutputLogoBlobFull {
+            TKeyLogoBlob Key;
+            TMemRecLogoBlob MemRec;
+        };
+        static_assert(sizeof(TOutputLogoBlobFull) == sizeof(TKeyLogoBlob) + sizeof(TMemRecLogoBlob));
+
         struct TOutputBlock {
             TKeyBlock Key;
             TMemRecBlock MemRec;
@@ -54,16 +60,17 @@ namespace NKikimr {
             ui32 Database : 2;
             ui32 TableType : 2;
             ui32 Level : 6;
-            ui32 Reserved : 22;
+            ui32 FullMemRec : 1; // LogoBlob records are TOutputLogoBlobFull instead of TOutputLogoBlob
+            ui32 Reserved : 21;
             ui64 SstId;
         };
 #pragma pack(pop)
 
     private:
-        static constexpr size_t GetRecLen(EDatabase database) {
+        static constexpr size_t GetRecLen(EDatabase database, bool fullMemRec) {
             switch (database) {
                 case EDatabase::LOGOBLOBS:
-                    return sizeof(TOutputLogoBlob);
+                    return fullMemRec ? sizeof(TOutputLogoBlobFull) : sizeof(TOutputLogoBlob);
 
                 case EDatabase::BLOCKS:
                     return sizeof(TOutputBlock);
@@ -148,8 +155,13 @@ namespace NKikimr {
 
        private:
             std::deque<TBlock> Blocks;
+            const bool FullMemRec;
 
         public:
+            explicit TDumpProcessor(bool fullMemRec)
+                : FullMemRec(fullMemRec)
+            {}
+
             template<typename TKey, typename TMemRec>
             void UpdateFresh(const char *segName, const TKey& key, const TMemRec& memRec) {
                 Update(TTableId(segName), key, memRec);
@@ -197,7 +209,8 @@ namespace NKikimr {
                 for (; !Blocks.empty(); Blocks.pop_front()) {
                     TBlock& front = Blocks.front();
 
-                    const size_t outputRecLen = GetRecLen(front.Database);
+                    const bool fullMemRec = FullMemRec && front.Database == EDatabase::LOGOBLOBS;
+                    const size_t outputRecLen = GetRecLen(front.Database, fullMemRec);
 
                     const size_t inputRecLen = front.Database == EDatabase::LOGOBLOBS
                         ? sizeof(TKeyLogoBlob) + sizeof(TMemRecLogoBlob)
@@ -215,6 +228,7 @@ namespace NKikimr {
                         .Database = static_cast<ui32>(front.Database),
                         .TableType = front.TableId.GetType(),
                         .Level = front.TableId.GetLevel(),
+                        .FullMemRec = fullMemRec,
                         .Reserved = 0,
                         .SstId = front.TableId.GetSstId(),
                     };
@@ -223,6 +237,12 @@ namespace NKikimr {
 
                     switch (front.Database) {
                         case EDatabase::LOGOBLOBS: {
+                            if (fullMemRec) {
+                                // key + memrec are stored in the block as is
+                                memcpy(p, front.GetData(), front.GetLen());
+                                p += front.GetLen();
+                                break;
+                            }
                             const void *input = front.GetData();
                             for (ui32 i = 0; i < numRecs; ++i) {
                                 auto *key = static_cast<const TKeyLogoBlob*>(input);
@@ -267,6 +287,7 @@ namespace NKikimr {
         TLevelIndexStreamActor(THullDsSnap&& fullSnap, TEvBlobStorage::TEvMonStreamQuery::TPtr& ev)
             : FullSnap(std::move(fullSnap))
             , StreamId(std::move(ev->Get()->StreamId))
+            , Processor(ev->Get()->FullMemRec)
         {}
 
         void Bootstrap(const TActorId& parentId, const TActorContext& ctx) {

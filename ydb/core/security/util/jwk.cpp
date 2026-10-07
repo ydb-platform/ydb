@@ -149,8 +149,8 @@ std::optional<std::vector<std::string>> ParseX5C(const NJson::TJsonValue& jwk) {
     return x5c;
 }
 
-// This will be removed in near future (Base64StrictDecodeUneven is being moved to library/cpp/string_utils/base64/base64.h)
-TString LocalBase64StrictDecodeUneven(const TStringBuf s) {
+// this is copy-paste from Base64DecodeUneven except it uses Base64StrictDecode
+TString Base64StrictDecodeUneven(const TStringBuf s) {
     const size_t tail = s.length() % 4;
     if (tail == 0) {
         return Base64StrictDecode(s);
@@ -172,7 +172,7 @@ std::optional<std::string> ParseThumbprint(
     }
 
     try {
-        auto decoded = LocalBase64StrictDecodeUneven(thumbprint.value());
+        auto decoded = NKikimr::NSecurity::Base64StrictDecodeUneven(thumbprint.value());
         if (decoded.size() != expectedLength) {
             return std::nullopt;
         }

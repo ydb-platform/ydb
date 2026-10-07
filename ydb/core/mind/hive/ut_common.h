@@ -25,6 +25,10 @@ class TTestHive : public THive {
 public:
     TTestHive(TTabletStorageInfo *info, const TActorId &tablet) : THive(info, tablet) {}
 
+    TNodeInfo& Node(TNodeId nodeId) {
+        return Nodes.at(nodeId);
+    }
+
     template<typename F>
     void UpdateConfig(F func) {
         func(ClusterConfig);

@@ -1,3 +1,4 @@
+#include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/actors/helpers/selfping_actor.h>

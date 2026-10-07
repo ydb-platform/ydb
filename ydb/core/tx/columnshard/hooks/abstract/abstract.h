@@ -459,21 +459,12 @@ public:
 
 class TControllers {
 private:
-    std::atomic<ICSController::TPtr*> CSControllerPtr{ new ICSController::TPtr(std::make_shared<ICSController>()) };
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
 
-    void ReplaceCSController(const ICSController::TPtr& newController) {
-        auto* newPtr = new ICSController::TPtr(newController);
-        auto* oldPtr = CSControllerPtr.exchange(newPtr);
-        delete oldPtr;
-    }
+    // The CS controller is kept in abstract.cpp, see there
+    static void ReplaceCSController(const ICSController::TPtr& newController);
 
 public:
-    ~TControllers() {
-        auto* ptr = CSControllerPtr.load();
-        delete ptr;
-    }
-
     template <class TController>
     class TGuard: TMoveOnly {
     private:
@@ -494,6 +485,7 @@ public:
 
         TGuard& operator=(TGuard&& other) {
             std::swap(Controller, other.Controller);
+            return *this;
         }
 
         TController* operator->() {
@@ -502,8 +494,7 @@ public:
 
         ~TGuard() {
             if (Controller) {
-                auto* controllers = Singleton<TControllers>();
-                controllers->ReplaceCSController(std::make_shared<ICSController>());
+                ReplaceCSController(std::make_shared<ICSController>());
             }
         }
     };
@@ -511,15 +502,11 @@ public:
     template <class T, class... Types>
     static TGuard<T> RegisterCSControllerGuard(Types... args) {
         auto result = std::make_shared<T>(args...);
-        auto* controllers = Singleton<TControllers>();
-        controllers->ReplaceCSController(result);
+        ReplaceCSController(result);
         return result;
     }
 
-    static ICSController::TPtr GetColumnShardController() {
-        auto* controllers = Singleton<TControllers>();
-        return *controllers->CSControllerPtr.load();
-    }
+    static ICSController::TPtr GetColumnShardController();
 
     template <class T>
     static T* GetControllerAs() {

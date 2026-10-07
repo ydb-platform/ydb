@@ -3038,6 +3038,22 @@ FROM (
             )",
         };
 
+        // A single range known at compile time is passed to a row table read as literal key bounds, so it is not
+        // computed in a separate transaction. Other ranges, and the ranges of a column table read, are computed.
+        auto checkRanges = [&](const TString& ast, const std::string& query, bool literal) {
+            if (literal && !columnTables) {
+                UNIT_ASSERT_C(ast.Contains("KqlKeyInc") || ast.Contains("KqlKeyExc"),
+                              "Ranges not pushed as a literal range for query: " << query << ", ast:\n" << ast);
+                UNIT_ASSERT_C(!ast.Contains("RangeFinalize") && !ast.Contains("kqp_physical_tx_param_binding"),
+                              "Ranges computed for query: " << query << ", ast:\n" << ast);
+            } else {
+                UNIT_ASSERT_C(ast.Contains("RangeFinalize"), "Ranges not pushed for query: " << query << ", ast:\n" << ast);
+            }
+        };
+        // IN lists are several ranges. The bound of IS NOT NULL and a literal bound cannot be compared at compile time,
+        // so their intersection is not a literal range either.
+        const std::vector<bool> literalRanges = {true, true, true, true, true, true, false, false, false};
+
         auto queryClient = kikimr.GetQueryClient();
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto &query = queries[i];
@@ -3047,8 +3063,7 @@ FROM (
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            auto ast = *result.GetStats()->GetAst();
-            UNIT_ASSERT_C(ast.find("RangeFinalize") != TString::npos, "Ranges not pushed for query: " << query);
+            checkRanges(TString{*result.GetStats()->GetAst()}, query, literalRanges[i]);
 
             result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
                          .ExtractValueSync();
@@ -3096,8 +3111,8 @@ FROM (
                 session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-            auto ast = *result.GetStats()->GetAst();
-            UNIT_ASSERT_C(ast.find("RangeFinalize") != TString::npos, "Ranges not pushed");
+            // The parameters have the key column type, so the bounds are the parameters themselves.
+            checkRanges(TString{*result.GetStats()->GetAst()}, query, /*literal=*/true);
 
             auto params = paramsVector[i];
             // clang-format off
@@ -3123,6 +3138,233 @@ FROM (
 
     Y_UNIT_TEST_TWIN(RangePushdown, ColumnStore) {
         TestRangePushdown(ColumnStore);
+    }
+
+    Y_UNIT_TEST(LiteralRanges) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                s String NOT NULL,
+                v Int64,
+                PRIMARY KEY (a, s)
+            );
+
+            CREATE TABLE `/Root/t2` (
+                k Int64,
+                v Int64,
+                PRIMARY KEY (k)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [a, s, v] : TVector<std::tuple<i64, TString, i64>>{
+                     {1, "a", 10}, {1, "b", 20}, {2, "a", 20}, {3, "c", 30}, {4, "d", 40}}) {
+                rows.AddListItem().BeginStruct()
+                    .AddMember("a").Int64(a)
+                    .AddMember("s").String(s)
+                    .AddMember("v").OptionalInt64(v)
+                    .EndStruct();
+            }
+            rows.EndList();
+            auto upsertResult = db.BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+        }
+
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [k, v] : TVector<std::pair<std::optional<i64>, i64>>{{std::nullopt, 100}, {1, 101}, {2, 102}}) {
+                rows.AddListItem().BeginStruct()
+                    .AddMember("k").OptionalInt64(k)
+                    .AddMember("v").OptionalInt64(v)
+                    .EndStruct();
+            }
+            rows.EndList();
+            auto upsertResult = db.BulkUpsert("/Root/t2", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+        }
+
+        // BulkUpsert does not support tables with sync indexes, so the index is built after loading.
+        schemeResult = session.ExecuteSchemeQuery("ALTER TABLE `/Root/t1` ADD INDEX idx_v GLOBAL ON (v);").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        struct TCase {
+            TString Query;
+            // A literal range is passed to the read as is; otherwise the ranges are computed in a separate transaction.
+            bool Literal;
+            TString Result;
+            std::optional<i64> Param;
+            TString ReadTable;
+        };
+
+        const TVector<TCase> cases = {
+            // The Int32 literal is converted to the Int64 key type at compile time.
+            {"SELECT a, s FROM `/Root/t1` WHERE a = 1 AND s = \"b\" ORDER BY a, s;", true, R"([[1;"b"]])", {}, "/Root/t1"},
+            // The Utf8 literal is converted to the String key type at compile time.
+            {"SELECT a, s FROM `/Root/t1` WHERE a = 1 AND s = \"b\"u ORDER BY a, s;", true, R"([[1;"b"]])", {}, "/Root/t1"},
+            {"SELECT a, s FROM `/Root/t1` WHERE a = 2 ORDER BY a, s;", true, R"([[2;"a"]])", {}, "/Root/t1"},
+            {"SELECT a, s FROM `/Root/t1` WHERE a > 1 AND a <= 3 ORDER BY a, s;", true, R"([[2;"a"];[3;"c"]])", {}, "/Root/t1"},
+            {"SELECT a, s FROM `/Root/t1` WHERE a >= 3 ORDER BY a, s;", true, R"([[3;"c"];[4;"d"]])", {}, "/Root/t1"},
+            // The read is redirected to the covering index, whose key starts with v.
+            {"SELECT a, s FROM `/Root/t1` WHERE v = 20 ORDER BY a, s;", true, R"([[1;"b"];[2;"a"]])", {}, "/Root/t1/idx_v/indexImplTable"},
+            {"SELECT k, v FROM `/Root/t2` WHERE k IS NULL;", true, R"([[#;[100]]])", {}, "/Root/t2"},
+            {"DECLARE $p AS Int64; SELECT a, s FROM `/Root/t1` WHERE a = $p ORDER BY a, s;", true, R"([[3;"c"]])", 3, "/Root/t1"},
+            // The parameter has to be converted to the key type, which needs computing.
+            {"DECLARE $p AS Int32; SELECT a, s FROM `/Root/t1` WHERE a = $p ORDER BY a, s;", false, R"([[3;"c"]])", 3, "/Root/t1"},
+            // Several ranges are not a single literal range.
+            {"SELECT a, s FROM `/Root/t1` WHERE a IN (1, 3) ORDER BY a, s;", false, R"([[1;"a"];[1;"b"];[3;"c"]])", {}, "/Root/t1"},
+        };
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const auto& testCase : cases) {
+            NYdb::TParamsBuilder paramsBuilder;
+            if (testCase.Param) {
+                if (testCase.Query.Contains("AS Int32")) {
+                    paramsBuilder.AddParam("$p").Int32(*testCase.Param).Build();
+                } else {
+                    paramsBuilder.AddParam("$p").Int64(*testCase.Param).Build();
+                }
+            }
+            const auto params = paramsBuilder.Build();
+
+            auto explained = querySession.ExecuteQuery(testCase.Query, NYdb::NQuery::TTxControl::NoTx(), params,
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explained.IsSuccess(), testCase.Query << ": " << explained.GetIssues().ToString());
+            const TString ast{*explained.GetStats()->GetAst()};
+            Cerr << "EXAMPLE-AST-BEGIN " << testCase.Query << "\n" << ast << "\nEXAMPLE-AST-END" << Endl;  // TEMPORARY
+
+            UNIT_ASSERT_C(ast.Contains(TStringBuilder() << "'\"" << testCase.ReadTable << "\""),
+                          testCase.Query << ": expected a read of " << testCase.ReadTable << ", ast:\n" << ast);
+            size_t transactions = 0;
+            for (size_t pos = ast.find("(KqpPhysicalTx "); pos != TString::npos; pos = ast.find("(KqpPhysicalTx ", pos + 1)) {
+                ++transactions;
+            }
+            const auto sourceBegin = ast.find("(KqpRowsSourceSettings ");
+            UNIT_ASSERT_C(sourceBegin != TString::npos, testCase.Query << ": expected a read source, ast:\n" << ast);
+            const TString source = ast.substr(sourceBegin, ast.find('\n', sourceBegin) - sourceBegin);
+            const bool literalBounds = ast.Contains("KqlKeyInc") || ast.Contains("KqlKeyExc");
+            if (testCase.Literal) {
+                // The read source takes the bounds as is: no ranges are computed and there is no separate transaction.
+                UNIT_ASSERT_C(literalBounds, testCase.Query << ": expected a literal range, ast:\n" << ast);
+                UNIT_ASSERT_C(!source.Contains("kqp_physical_tx_param_binding"), testCase.Query << ": expected literal bounds in " << source);
+                UNIT_ASSERT_C(!ast.Contains("RangeFinalize") && !ast.Contains("'\"compute\""),
+                              testCase.Query << ": expected no computed ranges, ast:\n" << ast);
+                UNIT_ASSERT_VALUES_EQUAL_C(transactions, 1, testCase.Query << ", ast:\n" << ast);
+            } else {
+                // A compute transaction runs the ranges program and passes its result to the read as a parameter.
+                UNIT_ASSERT_C(!literalBounds, testCase.Query << ": expected no literal range, ast:\n" << ast);
+                UNIT_ASSERT_C(ast.Contains("RangeFinalize") && ast.Contains("DqCnValue") && ast.Contains("'\"compute\""),
+                              testCase.Query << ": expected ranges computed by a compute transaction, ast:\n" << ast);
+                UNIT_ASSERT_C(source.Contains("%kqp_physical_tx_param_binding_"), testCase.Query << ": expected the computed ranges in " << source);
+                UNIT_ASSERT_VALUES_EQUAL_C(transactions, 2, testCase.Query << ", ast:\n" << ast);
+            }
+
+            auto result = querySession.ExecuteQuery(testCase.Query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params)
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), testCase.Query << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), testCase.Result, testCase.Query);
+        }
+    }
+
+    // The bounds of a literal range can be parameters of the key column types. The read source takes the parameters
+    // as is and the executer reads their values when the query runs, so one plan serves any values and needs no
+    // separate transaction to compute the ranges.
+    Y_UNIT_TEST(LiteralRangeWithParameters) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                s String NOT NULL,
+                v Int64,
+                PRIMARY KEY (a, s)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [a, s, v] : TVector<std::tuple<i64, TString, i64>>{
+                     {1, "a", 10}, {1, "b", 20}, {2, "a", 20}, {3, "c", 30}, {4, "d", 40}}) {
+                rows.AddListItem().BeginStruct()
+                    .AddMember("a").Int64(a)
+                    .AddMember("s").String(s)
+                    .AddMember("v").OptionalInt64(v)
+                    .EndStruct();
+            }
+            rows.EndList();
+            auto upsertResult = db.BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+        }
+
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto checkLiteralRange = [&](const TString& query, const TVector<TString>& bounds) {
+            auto explained = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+            UNIT_ASSERT_C(explained.IsSuccess(), query << ": " << explained.GetIssues().ToString());
+            const TString ast{*explained.GetStats()->GetAst()};
+
+            for (const auto& bound : bounds) {
+                UNIT_ASSERT_C(ast.Contains(bound), query << ": expected the bound " << bound << ", ast:\n" << ast);
+            }
+            UNIT_ASSERT_C(!ast.Contains("RangeFinalize") && !ast.Contains("kqp_physical_tx_param_binding") && !ast.Contains("'\"compute\""),
+                          query << ": expected no computed ranges, ast:\n" << ast);
+            size_t transactions = 0;
+            for (size_t pos = ast.find("(KqpPhysicalTx "); pos != TString::npos; pos = ast.find("(KqpPhysicalTx ", pos + 1)) {
+                ++transactions;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(transactions, 1, query << ", ast:\n" << ast);
+        };
+
+        // A point on the whole key.
+        const TString pointQuery = R"(
+            DECLARE $a AS Int64;
+            DECLARE $s AS String;
+            SELECT a, s, v FROM `/Root/t1` WHERE a = $a AND s = $s;
+        )";
+        checkLiteralRange(pointQuery, {"(KqlKeyInc $a $s)"});
+        for (const auto& [a, s, expected] : TVector<std::tuple<i64, TString, TString>>{
+                 {1, "b", R"([[1;"b";[20]]])"}, {3, "c", R"([[3;"c";[30]]])"}, {3, "x", "[]"}, {9, "a", "[]"}}) {
+            const auto params = NYdb::TParamsBuilder().AddParam("$a").Int64(a).Build().AddParam("$s").String(s).Build().Build();
+            auto result = querySession.ExecuteQuery(pointQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params)
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, "a = " << a << ", s = " << s);
+        }
+
+        // A range between two parameters. The bounds are only known when the query runs, so the range can be empty.
+        const TString rangeQuery = R"(
+            DECLARE $lo AS Int64;
+            DECLARE $hi AS Int64;
+            SELECT a, s FROM `/Root/t1` WHERE a >= $lo AND a < $hi ORDER BY a, s;
+        )";
+        checkLiteralRange(rangeQuery, {"(KqlKeyInc $lo)", "(KqlKeyExc $hi)"});
+        for (const auto& [lo, hi, expected] : TVector<std::tuple<i64, i64, TString>>{
+                 {1, 3, R"([[1;"a"];[1;"b"];[2;"a"]])"}, {3, 10, R"([[3;"c"];[4;"d"]])"}, {2, 2, "[]"}, {4, 1, "[]"}}) {
+            const auto params = NYdb::TParamsBuilder().AddParam("$lo").Int64(lo).Build().AddParam("$hi").Int64(hi).Build().Build();
+            auto result = querySession.ExecuteQuery(rangeQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params)
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, "lo = " << lo << ", hi = " << hi);
+        }
     }
 
     Y_UNIT_TEST(RangePushdownExplain) {

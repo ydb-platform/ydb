@@ -221,13 +221,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
         TExprNode::TPtr stage;
         if (graph.IsSourceStageRowType(id)) {
             stage = Stages[rootIdx].at(id);
-            // Want to build materialize for ranges.
-            // TODO: Actually old optimizer has some machinery to compute ranges during compilation for some cases, for
-            // example when `LiteralRange` is defined, but currenlty we put any case in separate tx. Performance improvement is possible here.
+            // Computed ranges are materialized in a separate transaction. A literal range is taken by the source as is.
             auto rowSettingsPtr = FindNode(stage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpReadRangesSourceSettings>(node); });
             if (rowSettingsPtr) {
                 auto rowSettings = TExprBase(rowSettingsPtr).Cast<TKqpReadRangesSourceSettings>();
-                if (!rowSettings.RangesExpr().Maybe<TCoVoid>()) {
+                if (!rowSettings.RangesExpr().Maybe<TCoVoid>() && !rowSettings.RangesExpr().Maybe<TKqlKeyRange>()) {
                     const auto materializeResult = BuildMaterialize(rootIdx, rowSettings.RangesExpr().Ptr());
                     // clang-fomrat off
                     const auto newRowSettings = Build<TKqpReadRangesSourceSettings>(ctx, rowSettingsPtr->Pos())

@@ -456,6 +456,9 @@ TString TOpRead::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) 
     if (const auto ranges = GetRanges()) {
         res << " Ranges: (" << PrintRBOExpression(ranges, ctx) << ")";
     }
+    if (const auto literalRange = GetLiteralRange()) {
+        res << " Literal range: (" << PrintRBOExpression(literalRange, ctx) << ")";
+    }
     if (SortDir != ESortDir::None) {
         res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");
         res << ")";

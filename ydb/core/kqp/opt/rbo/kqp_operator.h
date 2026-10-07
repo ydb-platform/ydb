@@ -607,6 +607,10 @@ public:
         const TStructExprType* PointsItemType = nullptr;
         TVector<TString> PointColumns;
         TMaybe<size_t> ExpectedMaxPoints;
+        // The ranges as a single KqlKeyRange with literal or parameter bounds, when they are known at compile
+        // time. A row storage read passes it to the source as is, so the ranges are not computed in a separate
+        // transaction. ComputeNode describes the same ranges.
+        TExprNode::TPtr LiteralRange;
     };
 
     // Fresh definitions, allocated together in source-schema order. Conversion
@@ -639,6 +643,7 @@ public:
     NYql::EStorageType GetTableStorageType() const;
 
     TExprNode::TPtr GetRanges() const { return RangeInfo ? RangeInfo->ComputeNode : nullptr; }
+    TExprNode::TPtr GetLiteralRange() const { return RangeInfo ? RangeInfo->LiteralRange : nullptr; }
     TExprNode::TPtr GetTable() const { return TableCallable; }
 
     // TODO: make it private members, we should not access it directly

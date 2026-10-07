@@ -140,6 +140,7 @@ private:
         LogRequest(event);
 
         IRequestProxyCtx* requestBaseCtx = event->Get();
+        requestBaseCtx->CountRequestPaths();
         if (!SchemeCache) {
             const TString error = "Grpc proxy is not ready to accept request, no proxy service";
             YDB_LOG_ERROR_CTX(ctx, error);

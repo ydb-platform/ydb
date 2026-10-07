@@ -784,6 +784,12 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadSessionS
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr& ev, const TActorContext& ctx) {
+    if constexpr (!UseMigrationProtocol) {
+        for (const auto& settings : ev->Get()->Request.init_request().topics_read_settings()) {
+            Request->CountResourcePath(settings.path());
+        }
+    }
+
     if (!Topics.empty()) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "got second init request", ctx);
     }

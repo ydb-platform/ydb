@@ -49,7 +49,8 @@ public:
         const TInFlightReadsTracker& inFlightReadsTracker, const NOlap::IPathIdTranslator& pathIdTranslator)
         : InFlightReadsTracker(inFlightReadsTracker)
         , PathIdTranslator(pathIdTranslator)
-        , MinSnapshotForNewReads(BuildLocalMinSnapshotForNewReads(passedStep, lastCleanupSnapshot)) {
+        , MinSnapshotForNewReads(BuildLocalMinSnapshotForNewReads(passedStep, lastCleanupSnapshot))
+    {
     }
 
     NOlap::TSnapshot GetMinSnapshotForNewReads() const override {
@@ -130,7 +131,8 @@ public:
         , InFlightReadsTracker(inFlightReadsTracker)
         , PathIdTranslator(pathIdTranslator)
         , Registry(std::move(registry))
-        , MinSnapshotForNewReads(BuildRegistryMinSnapshotForNewReads(passedStep, lastCleanupSnapshot, Registry, longTxConfig)) {
+        , MinSnapshotForNewReads(BuildRegistryMinSnapshotForNewReads(passedStep, lastCleanupSnapshot, Registry, longTxConfig))
+    {
         AFL_VERIFY(Registry);
     }
 

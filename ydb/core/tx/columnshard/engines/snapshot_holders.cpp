@@ -18,7 +18,8 @@ TRegistrySnapshotHolders::TRegistrySnapshotHolders(const TSnapshot minSnapshotFo
     , Registry(std::move(registry))
     , SchemeShardId(schemeShardId)
     , PathIdTranslator(pathIdTranslator)
-    , LocalActiveSnapshots(std::move(localActiveSnapshots)) {
+    , LocalActiveSnapshots(std::move(localActiveSnapshots))
+{
     AFL_VERIFY(Registry);
     VerifyBelow(LocalActiveSnapshots.ForAllTables, MinSnapshotForNewReads);
     for (const auto& [_, snapshots] : LocalActiveSnapshots.ByPathId) {

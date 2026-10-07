@@ -30,7 +30,8 @@ public:
         : TBase(sourceIdx, tabletId, std::move(start), std::move(finish), tasks.size(), TSnapshot::Zero(), TSnapshot::Zero(), context)
         , Granule(granule)
         , OptimizerTasks(std::move(tasks))
-        , ExternalPathId(externalPathId) {
+        , ExternalPathId(externalPathId)
+    {
     }
 };
 

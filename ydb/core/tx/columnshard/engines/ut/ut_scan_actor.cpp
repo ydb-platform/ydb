@@ -26,7 +26,8 @@ Y_UNIT_TEST_SUITE(TColumnShardScanActorTests) {
     class TIdleReadMetadata: public TReadMetadataBase {
     public:
         TIdleReadMetadata()
-            : TReadMetadataBase(nullptr, ERequestSorting::ASC, TProgramContainer(), nullptr, TSnapshot(1, 1), nullptr, /*tabletId*/ 1) {
+            : TReadMetadataBase(nullptr, ERequestSorting::ASC, TProgramContainer(), nullptr, TSnapshot(1, 1), nullptr, /*tabletId*/ 1)
+        {
         }
 
         std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& /*readContext*/) const override {

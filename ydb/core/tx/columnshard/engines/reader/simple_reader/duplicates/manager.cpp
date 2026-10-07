@@ -39,7 +39,8 @@ public:
         : NGroupedMemoryManager::IAllocation(mem)
         , Owner(owner)
         , Request(request)
-        , RequestGuard(std::move(requestGuard)) {
+        , RequestGuard(std::move(requestGuard))
+    {
     }
 };
 }   // namespace
@@ -56,7 +57,8 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
     , FiltersCache(FILTER_CACHE_SIZE)
     , MaterializedBordersCache(BORDER_CACHE_SIZE_COUNT)
-    , AbortionFlag(context.GetDuplicatesAbortionFlag()) {
+    , AbortionFlag(context.GetDuplicatesAbortionFlag())
+{
 }
 
 bool TDuplicateManager::IsExclusiveInterval(const NArrow::TSimpleRow& begin, const NArrow::TSimpleRow& end) const {

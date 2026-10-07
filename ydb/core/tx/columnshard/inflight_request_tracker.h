@@ -23,7 +23,8 @@ private:
     YDB_READONLY(bool, IsLock, false);
 
     TSnapshotLiveInfo(const NOlap::TSnapshot& snapshot)
-        : Snapshot(snapshot) {
+        : Snapshot(snapshot)
+    {
     }
 
 public:
@@ -155,7 +156,8 @@ public:
     TInFlightReadsTracker(
         const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const std::shared_ptr<TRequestsTracerCounters>& counters)
         : Counters(counters)
-        , StoragesManager(storagesManager) {
+        , StoragesManager(storagesManager)
+    {
     }
 
 private:

@@ -26,7 +26,8 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardTests) {
     public:
         explicit TTestReadMetadata(const NOlap::TSnapshot& snapshot)
             : TReadMetadataBase(
-                  nullptr, NOlap::NReader::ERequestSorting::ASC, NOlap::TProgramContainer(), nullptr, snapshot, nullptr, /*tabletId*/ 1) {
+                  nullptr, NOlap::NReader::ERequestSorting::ASC, NOlap::TProgramContainer(), nullptr, snapshot, nullptr, /*tabletId*/ 1)
+        {
         }
 
         std::unique_ptr<NOlap::NReader::TScanIteratorBase> StartScan(

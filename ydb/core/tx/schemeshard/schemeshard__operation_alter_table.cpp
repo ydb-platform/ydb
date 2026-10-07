@@ -1072,8 +1072,7 @@ static void CollectIndexImplTableMetricsAlters(TIndexImplTableAlters& alters,
 // Validate DROP NOT NULL before any Propose: TAlterTable cannot roll back its DB writes.
 // This collector has no dependency on detailed metrics or their feature flag.
 static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlters& alters,
-        THashSet<TPathId>& pathsToCheck, TOperationId id,
-        const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
+        TOperationId id, const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
 {
     TVector<TString> columns;
     for (const auto& column : tx.GetAlterTable().GetColumns()) {
@@ -1090,7 +1089,6 @@ static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlt
     if (tableIt == context.SS->Tables.end()) {
         return nullptr;
     }
-    const auto& table = tableIt->second;
 
     for (const auto& [_, childPathId] : tablePath.Base()->GetChildren()) {
         const auto& child = context.SS->PathsById.at(childPathId);
@@ -1102,18 +1100,6 @@ static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlt
         TString errStr;
         if (!CheckIndexNotNullConstraints(tx.GetAlterTable(), indexPath, context, errStr)) {
             return CreateReject(id, NKikimrScheme::StatusPreconditionFailed, errStr);
-        }
-        const auto& index = context.SS->Indexes.at(childPathId);
-        bool affectsIndex = false;
-        for (const auto& column : columns) {
-            const auto columnId = table->GetColumnIdByNameSlow(column);
-            const bool primaryKey = columnId != TTableInfo::InvalidColumnId
-                && table->Columns.at(columnId).KeyOrder != Max<ui32>();
-            affectsIndex |= primaryKey || Find(index->IndexKeys, column) != index->IndexKeys.end()
-                || Find(index->IndexDataColumns, column) != index->IndexDataColumns.end();
-        }
-        if (affectsIndex) {
-            pathsToCheck.insert(childPathId);
         }
         for (const auto& [_, implTablePathId] : indexPath.Base()->GetChildren()) {
             const TPath implTablePath = TPath::Init(implTablePathId, context.SS);
@@ -1135,12 +1121,6 @@ static ISubOperation::TPtr CollectIndexImplTableNotNullAlters(TIndexImplTableAlt
                     implColumn->SetNotNull(false);
                 }
             }
-            // Validate affected indexes even when the source column is transformed and
-            // has no counterpart in an implementation table (e.g. tokenized text).
-            if (affectsIndex || implTableAlter.ColumnsSize() != 0) {
-                pathsToCheck.insert(childPathId);
-                pathsToCheck.insert(implTablePathId);
-            }
             if (implTableAlter.ColumnsSize() != 0) {
                 alters[implTablePathId].MergeFrom(implTableAlter);
             }
@@ -1153,12 +1133,12 @@ static ISubOperation::TPtr AppendIndexImplTableAlters(TVector<ISubOperation::TPt
         const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
 {
     TIndexImplTableAlters alters;
-    THashSet<TPathId> pathsToCheck;
-    if (auto reject = CollectIndexImplTableNotNullAlters(alters, pathsToCheck, id, tx, tablePath, context)) {
+    if (auto reject = CollectIndexImplTableNotNullAlters(alters, id, tx, tablePath, context)) {
         return reject;
     }
     CollectIndexImplTableMetricsAlters(alters, tx, tablePath, context);
 
+    THashSet<TPathId> pathsToCheck;
     for (const auto& [implTablePathId, _] : alters) {
         pathsToCheck.insert(implTablePathId);
         pathsToCheck.insert(context.SS->PathsById.at(implTablePathId)->ParentPathId);

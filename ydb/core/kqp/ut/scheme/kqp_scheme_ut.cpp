@@ -14828,6 +14828,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(ShowCreateChangefeedSettingsAsIndependentQueries) {
         using namespace NTopic;
 
+        struct TTopicSnapshot {
+            TDuration RetentionPeriod;
+            ui64 MinActivePartitions;
+            ui64 MaxActivePartitions;
+            EAutoPartitioningStrategy AutoPartitioningStrategy;
+            size_t PartitionCount;
+        };
+
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
         auto topicClient = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
         auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -14846,6 +14854,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto description = NYdb::TProtoAccessor::GetProto(result.GetTableDescription());
             description.mutable_self()->clear_created_at();
             return description;
+        };
+
+        auto describeTopic = [&topicClient]() {
+            const auto description = DescribeTopic(topicClient, "/Root/show_create_changefeed/feed");
+            const auto& partitioningSettings = description.GetPartitioningSettings();
+
+            return TTopicSnapshot{
+                .RetentionPeriod = description.GetRetentionPeriod(),
+                .MinActivePartitions = partitioningSettings.GetMinActivePartitions(),
+                .MaxActivePartitions = partitioningSettings.GetMaxActivePartitions(),
+                .AutoPartitioningStrategy = partitioningSettings.GetAutoPartitioningSettings().GetStrategy(),
+                .PartitionCount = description.GetPartitions().size(),
+            };
         };
 
         executeQuery(R"(
@@ -14876,6 +14897,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         )");
 
         const auto originalTableDescription = describeTable();
+        const auto originalTopicDescription = describeTopic();
+
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.RetentionPeriod, TDuration::Hours(6));
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MinActivePartitions, 3);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MaxActivePartitions, 8);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStrategy, EAutoPartitioningStrategy::Paused);
 
         auto showCreateResult = querySession.ExecuteQuery(
             "SHOW CREATE TABLE `/Root/show_create_changefeed`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -14902,6 +14929,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         const auto recreatedTableDescription = describeTable();
+        const auto recreatedTopicDescription = describeTopic();
         google::protobuf::util::MessageDifferencer differencer;
         TString descriptionDiff;
         differencer.ReportDifferencesToString(&descriptionDiff);
@@ -14909,14 +14937,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Table descriptions differ after SHOW CREATE TABLE replay:\n" << descriptionDiff
             << "\nDDL:\n" << *showCreateQuery);
 
-        const auto topicDescription = DescribeTopic(topicClient, "/Root/show_create_changefeed/feed");
-        const auto& partitioningSettings = topicDescription.GetPartitioningSettings();
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.RetentionPeriod, recreatedTopicDescription.RetentionPeriod);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MinActivePartitions, recreatedTopicDescription.MinActivePartitions);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MaxActivePartitions, recreatedTopicDescription.MaxActivePartitions);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStrategy, recreatedTopicDescription.AutoPartitioningStrategy);
 
-        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetRetentionPeriod(), TDuration::Hours(6));
-        UNIT_ASSERT_VALUES_EQUAL(partitioningSettings.GetMinActivePartitions(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(partitioningSettings.GetMaxActivePartitions(), 8);
-        UNIT_ASSERT_VALUES_EQUAL(partitioningSettings.GetAutoPartitioningSettings().GetStrategy(), EAutoPartitioningStrategy::Paused);
-        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetPartitions().size(), 3);
+        // Altering the minimum partition count may repartition asynchronously, so compare only the stable settings.
+        UNIT_ASSERT_VALUES_EQUAL(recreatedTopicDescription.PartitionCount, 3);
     }
 
     Y_UNIT_TEST_TWIN(CreateTopicMeteringModeRequestUnits, UseQueryService) {

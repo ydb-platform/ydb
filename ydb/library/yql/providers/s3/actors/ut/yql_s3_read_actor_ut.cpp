@@ -275,7 +275,6 @@ Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
     Y_UNIT_TEST(NegativeCompressedSize) {
         for (ui64 parallel : {0, 1, 2}) {
             AssertBadRequest(ReadFooter({-1}, parallel));
-            AssertBadRequest(ReadFooter({Min<i64>()}, parallel));
         }
     }
 

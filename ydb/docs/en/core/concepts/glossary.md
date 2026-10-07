@@ -669,6 +669,26 @@ In addition, there is a **root SchemeShard** that stores information about datab
 
 **DataShard** or **Data shard** is a tablet that manages a segment of a [row-based user table](datamodel/table.md#row-oriented-tables). A logical user table is divided into segments based on continuous ranges of the table's primary key. A separate DataShard tablet is responsible for each such range. The range itself is also called a [partition](#partition). The DataShard tablet stores data row-wise, which is efficient for OLTP workloads.
 
+#### Split {#split}
+
+A **split** is an operation that divides one table [partition](#partition) into two by picking a split boundary key and distributing the partition's rows between the two resulting partitions. Splits are issued automatically by [auto-partitioning](#auto-partitioning) when a partition exceeds a configured threshold (data size or CPU load).
+
+#### Merge {#merge}
+
+A **merge** is the inverse of a [split](#split): two adjacent [partitions](#partition) are combined into one. Merges are issued automatically by [auto-partitioning](#auto-partitioning) when partitions become small relative to the configured thresholds, for example after the size threshold is raised or the load drops.
+
+#### Auto-partitioning {#auto-partitioning}
+
+**Auto-partitioning** is the server mechanism that monitors [partition](#partition) statistics (data size, CPU load) and issues [splits](#split) and [merges](#merge) automatically to keep partitions within configured bounds. It applies to [row-oriented tables](#row-oriented-table). It is configured per table via the `AUTO_PARTITIONING_*` settings: `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`, `AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`, `AUTO_PARTITIONING_PARTITION_SIZE_MB`, and `AUTO_PARTITIONING_BY_LOAD`.
+
+#### Split by load {#split-by-load}
+
+**Split by load** is a [split](#split) triggered by sustained CPU load on a shard rather than by data size. It is enabled by the `AUTO_PARTITIONING_BY_LOAD` table setting. The counterpart merge fires when the load signal decays.
+
+#### Merge cascade {#merge-cascade}
+
+A **merge cascade** is a chain reaction of [merges](#merge): after a threshold change (for example, raising `AUTO_PARTITIONING_PARTITION_SIZE_MB`), each merge produces a larger partition that may itself become eligible for further merging, so the cascade drains over multiple waves.
+
 #### ColumnShard {#column-shard}
 
 **ColumnShard** or **Column shard** is a tablet that stores a data segment of a [column-based user table](datamodel/table.md#column-oriented-tables).

@@ -370,7 +370,8 @@ public:
         default:
             YDB_LOG_WARN_COMP(NKikimrServices::GRPC_SERVER, "Unexpected status",
                 {"entry", entry});
-            return ReplyUnauthenticatedAndDie();
+            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, "Unknown resource database");
+            return ReplyUnavailableAndDie(issue);
         }
 
         ResourceDatabaseName = CanonizePath(entry.Path);
@@ -674,11 +675,6 @@ private:
     void ReplyUnavailableAndDie(const NYql::TIssues& issue) {
         GrpcRequestBaseCtx_->RaiseIssues(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-        PassAway();
-    }
-
-    void ReplyUnauthenticatedAndDie() {
-        GrpcRequestBaseCtx_->ReplyUnauthenticated("Unknown resource database");
         PassAway();
     }
 

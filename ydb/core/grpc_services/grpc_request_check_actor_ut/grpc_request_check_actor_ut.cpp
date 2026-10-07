@@ -25,6 +25,8 @@ struct TTestSetup {
     TTicketParserAccessServiceMockV2 AccessServiceMock;
     std::unique_ptr<grpc::Server> AccessServiceServer;
     std::unique_ptr<TServer> Server;
+    // Keep request-check counters independent of resets by TLabelsMaintainer
+    NMonitoring::TDynamicCounterPtr GrpcCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     TActorId FakeMonActor;
     TSchemeBoardEvents::TDescribeSchemeResult DescribeSchemeResult;
     TVector<std::pair<TString, TString>> RootAttributes;
@@ -147,7 +149,7 @@ struct TTestSetup {
             DescribeSchemeResult,
             securityObject,
             request,
-            NGRpcService::CreateGRpcProxyCounters(runtime->GetAppData().Counters), // Counters
+            NGRpcService::CreateGRpcProxyCounters(GrpcCounters), // Counters
             false,
             RootAttributes,
             nullptr, // FacilityProvider
@@ -450,8 +452,8 @@ struct TDatabaseAccessCounters {
     i64 AccessDeny = 0;
 };
 
-TDatabaseAccessCounters ReadDatabaseAccessCounters(TTestActorRuntime* runtime) {
-    const auto serviceCounters = GetServiceCounters(runtime->GetAppData().Counters, "grpc");
+TDatabaseAccessCounters ReadDatabaseAccessCounters(const TTestSetup& setup) {
+    const auto serviceCounters = GetServiceCounters(setup.GrpcCounters, "grpc");
     return {
         .HttpAccessDeny = serviceCounters->GetCounter("databaseHttpAccessDeny", true)->Val(),
         .AccessDeny = serviceCounters->GetCounter("databaseAccessDeny", true)->Val(),
@@ -466,7 +468,6 @@ THttpAuthCheckResponse RunAuthAndCheck(
 )
 {
     TTestActorRuntime* runtime = setup.GetRuntime();
-    runtime->GetAppData().FeatureFlags.SetCheckDatabaseAccessPermission(false);
 
     const TString userToken = "Bearer " + setup.UserSid;
     auto ev = std::make_unique<NGRpcService::TEvHttpRequestAuthAndCheck>(
@@ -492,7 +493,7 @@ THttpAuthCheckResponse RunAuthAndCheck(
         describeSchemeResult,
         std::move(securityObject),
         request,
-        NGRpcService::CreateGRpcProxyCounters(runtime->GetAppData().Counters),
+        NGRpcService::CreateGRpcProxyCounters(setup.GrpcCounters),
         false,
         setup.RootAttributes,
         nullptr,
@@ -553,11 +554,11 @@ Y_UNIT_TEST(DedicatedNoConnectRightButSuccess) {
     ConfigureSecurityConfig(setup.GetRuntime());
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
-    const auto before = ReadDatabaseAccessCounters(setup.GetRuntime());
+    const auto before = ReadDatabaseAccessCounters(setup);
     const auto response = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
     UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
-    const auto after = ReadDatabaseAccessCounters(setup.GetRuntime());
+    const auto after = ReadDatabaseAccessCounters(setup);
     UNIT_ASSERT_VALUES_EQUAL(after.HttpAccessDeny, before.HttpAccessDeny);
     UNIT_ASSERT_VALUES_EQUAL(after.AccessDeny, before.AccessDeny);
 }
@@ -663,12 +664,12 @@ Y_UNIT_TEST(DedicatedOwnDbOk) {
     ConfigureSecurityConfig(setup.GetRuntime());
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
-    const auto before = ReadDatabaseAccessCounters(setup.GetRuntime());
+    const auto before = ReadDatabaseAccessCounters(setup);
     const auto response = RunHttpAuthCheckWithDatabaseAccessEnforce(
         setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithConnect(TString{DatabaseOnlySid}));
     UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
-    const auto after = ReadDatabaseAccessCounters(setup.GetRuntime());
+    const auto after = ReadDatabaseAccessCounters(setup);
     UNIT_ASSERT_VALUES_EQUAL(after.HttpAccessDeny, before.HttpAccessDeny);
     UNIT_ASSERT_VALUES_EQUAL(after.AccessDeny, before.AccessDeny);
 }
@@ -678,12 +679,12 @@ Y_UNIT_TEST(DedicatedNoConnectRightUnauthorized) {
     ConfigureSecurityConfig(setup.GetRuntime());
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
-    const auto before = ReadDatabaseAccessCounters(setup.GetRuntime());
+    const auto before = ReadDatabaseAccessCounters(setup);
     const auto response = RunHttpAuthCheckWithDatabaseAccessEnforce(
         setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
     UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::UNAUTHORIZED);
     UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
-    const auto after = ReadDatabaseAccessCounters(setup.GetRuntime());
+    const auto after = ReadDatabaseAccessCounters(setup);
     UNIT_ASSERT_VALUES_EQUAL(after.HttpAccessDeny - before.HttpAccessDeny, 1);
     UNIT_ASSERT_VALUES_EQUAL(after.AccessDeny, before.AccessDeny);
 }
@@ -779,15 +780,14 @@ Y_UNIT_TEST(HttpEnforceDeniesWithoutGrpcAccessDenyCounter) {
     setup.GetRuntime()->GetAppData().FeatureFlags.SetCheckDatabaseAccessPermission(true);
     TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
-    const auto before = ReadDatabaseAccessCounters(setup.GetRuntime());
+    const auto before = ReadDatabaseAccessCounters(setup);
     const auto response = RunAuthAndCheck(
         setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
     UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::UNAUTHORIZED);
     UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
-    const auto after = ReadDatabaseAccessCounters(setup.GetRuntime());
+    const auto after = ReadDatabaseAccessCounters(setup);
     UNIT_ASSERT_VALUES_EQUAL(after.HttpAccessDeny - before.HttpAccessDeny, 1);
     UNIT_ASSERT_VALUES_EQUAL(after.AccessDeny, before.AccessDeny);
 }
 
 } // DatabaseAccessCheckFlagsInterplay
-

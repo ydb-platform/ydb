@@ -71,7 +71,8 @@ ui64 TPartition::GetReadOffset(const ui64 offset, const TMaybe<TInstant> srcRead
         estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, readTimestamp);
     }
     if (!estimatedOffset.Defined()) {
-        if (EndWriteTimestamp < *srcReadTimestamp && skipObsoleteMessages && !AppData()->FeatureFlags.GetEnableTopicReadPriorRetention()) {
+        const bool storedMessagesAreOlder = EndWriteTimestamp != TInstant::Zero() && EndWriteTimestamp < *srcReadTimestamp && skipObsoleteMessages && !AppData()->FeatureFlags.GetEnableTopicReadPriorRetention();
+        if (storedMessagesAreOlder) {
             estimatedOffset = BlobEncoder.EndOffset;
         } else {
             estimatedOffset = Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1);
@@ -177,12 +178,12 @@ TPartition::EProcessHasDataRequestResult TPartition::ProcessHasDataRequest(const
         return EProcessHasDataRequestResult::HasResult;
     } else {
         if (request.Offset < GetEndOffset()) {
-            if (request.ReadTimestamp.GetOrElse(TInstant::Zero()) <= EndWriteTimestamp) {
+            const bool storedMessagesAreOlder = request.ReadTimestamp.Defined() && EndWriteTimestamp != TInstant::Zero() && *request.ReadTimestamp > EndWriteTimestamp;
+            if (!storedMessagesAreOlder) {
                 sendResponse(GetSizeLag(request.Offset), false);
                 return EProcessHasDataRequestResult::HasResult;
-            } else {
-                return EProcessHasDataRequestResult::PostponeUntilEndWriteTimestampChange;
             }
+            return EProcessHasDataRequestResult::PostponeUntilEndWriteTimestampChange;
         } else {
             return EProcessHasDataRequestResult::PostponeUntilEndOffsetChange;
         }

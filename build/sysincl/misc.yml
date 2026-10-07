@@ -479,3 +479,8 @@
 # in order to ease the migration.
 - includes:
   - openssl/core_names.h: contrib/libs/openssl-3/include/openssl/core_names.h
+
+- source_filter: "^contrib/libs/wamr/"
+  includes:
+    - aot.h: contrib/libs/wamr/core/iwasm/compilation/aot.h
+    - aot_llvm.h: contrib/libs/wamr/core/iwasm/compilation/aot_llvm.h

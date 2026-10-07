@@ -336,6 +336,66 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
         UNIT_ASSERT_VALUES_EQUAL(messages[0], "fresh-message");
     }
 
+    // Stored messages are older than read_from. The session must move to EndOffset
+    // without a new write. HasData used to answer after the session had already dropped the wait.
+    Y_UNIT_TEST(ReadFromTimestampReachesEndWithoutNewData) {
+        auto serverSettings = TTopicSdkTestSetup::MakeServerSettings();
+        serverSettings.FeatureFlags.SetEnableSkipMessagesWithObsoleteTimestamp(true);
+        auto setup = TTopicSdkTestSetup("ReadFromTimestampReachesEnd", serverSettings, false);
+        setup.CreateTopic();
+        constexpr ui64 messageCount = 3;
+        for (ui64 i = 0; i < messageCount; ++i) {
+            setup.Write(TStringBuilder() << "m" << i);
+        }
+
+        TTopicClient client(setup.MakeDriver());
+        const TInstant readFrom = TInstant::Now() + TDuration::Seconds(1);
+        TReadSessionSettings settings;
+        settings.WithoutConsumer();
+        settings.AppendTopics(TTopicReadSettings().Path(setup.GetFullTopicPath()).ReadFromTimestamp(readFrom).AppendPartitionIds(0));
+        auto session = client.CreateReadSession(settings);
+
+        NYdb::NTopic::TPartitionSession::TPtr partitionSession;
+        TMaybe<ui64> readOffset;
+        TMaybe<ui64> endOffset;
+        TInstant nextStatusRequest = TInstant::Zero();
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(25);
+        while (TInstant::Now() < deadline) {
+            session->WaitEvent().Wait(TDuration::Seconds(1));
+            if (partitionSession && TInstant::Now() >= nextStatusRequest) {
+                partitionSession->RequestStatus();
+                nextStatusRequest = TInstant::Now() + TDuration::Seconds(1);
+            }
+            while (auto event = session->GetEvent(false)) {
+                if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    partitionSession = start->GetPartitionSession();
+                    start->Confirm();
+                    partitionSession->RequestStatus();
+                    nextStatusRequest = TInstant::Now() + TDuration::Seconds(1);
+                    continue;
+                }
+                if (auto* received = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    UNIT_ASSERT_C(received->GetMessages().empty(), "messages older than read_from must be skipped");
+                    continue;
+                }
+                if (auto* status = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
+                    readOffset = status->GetReadOffset();
+                    endOffset = status->GetEndOffset();
+                    if (*endOffset == messageCount && *readOffset >= *endOffset) {
+                        session->Close(TDuration::Seconds(1));
+                        return;
+                    }
+                    continue;
+                }
+                if (auto* closed = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                    UNIT_FAIL(closed->DebugString());
+                }
+            }
+        }
+        session->Close(TDuration::Seconds(1));
+        UNIT_ASSERT_C(false, "read session did not reach the end, readOffset " << readOffset.GetOrElse(Max<ui64>()) << " endOffset " << endOffset.GetOrElse(Max<ui64>()));
+    }
+
     struct TTestRegistration {
         TTestRegistration() {
             [[maybe_unused]] constexpr bool xfail = false;

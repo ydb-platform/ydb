@@ -65,6 +65,9 @@ private:
     static constexpr TDuration PREWAIT_DATA = TDuration::Seconds(9);
     static constexpr TDuration READ_METRICS_UPDATE_INTERVAL = TDuration::Seconds(10);
     static constexpr TDuration WAIT_DELTA = TDuration::MilliSeconds(500);
+    // The partition applies a HasData deadline on its 5s wakeup. When messages are already stored,
+    // the deadline expires one wakeup before WAIT_DATA drops the cookie.
+    static constexpr TDuration WAIT_STORED_DATA = TDuration::Seconds(4);
 
     static constexpr ui32 MAX_PIPE_RESTARTS = 100; //after 100 restarts without progress kill session
     static constexpr ui32 RESTART_PIPE_DELAY_MS = 100;

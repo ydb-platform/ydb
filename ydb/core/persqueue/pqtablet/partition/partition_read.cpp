@@ -1028,6 +1028,13 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
             {"effectiveOffset", offset}
     );
 
+    if (offset == GetEndOffset() && read->Offset < GetEndOffset()) {
+        TReadAnswer answer = info.FormAnswer(ctx, nullptr, GetStartOffset(), offset, Partition, nullptr, info.Destination, 0, TabletActorId, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(info.User));
+        ctx.Send(ReplyTo(info.Destination, answer.ReplyTo), answer.Event.Release());
+        OnReadRequestFinished(info.Destination, answer.Size, answer.ConsumedMessages, info.User, ctx);
+        return;
+    }
+
     if (offset == GetEndOffset() && !(read->Timeout == 0 && read->IsInternal())) { // Why? If read timeout = 0 we wait?
         const ui32 maxTimeout = IsActive() ? 30000 : 1000;
         if (read->Timeout > maxTimeout) {

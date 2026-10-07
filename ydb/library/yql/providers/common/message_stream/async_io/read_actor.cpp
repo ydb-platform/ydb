@@ -973,7 +973,7 @@ private:
         }
 
         void operator()(NFq::TMessageStreamSessionClosedEvent& ev) {
-            TString message = (TStringBuilder() << "Read session to topic \"" << Self.Settings.Stream << "\" " << (Cluster ? ('[' + Cluster + ']') : "") << " was closed");
+            TString message = (TStringBuilder() << "Read session to topic \"" << Self.Settings.Stream << "\"" << (Cluster ? (" [" + Cluster + ']') : "") << " was closed");
             SRC_LOG_W("SessionId: " << Self.GetSessionId(Index) << " " << message << ": " << ev.Issues.ToOneLineString());
 
             ClusterState.Available = false;

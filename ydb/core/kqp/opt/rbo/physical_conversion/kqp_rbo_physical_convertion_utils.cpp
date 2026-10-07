@@ -64,8 +64,7 @@ TExprNode::TPtr BuildSwitch(TExprNode::TPtr input, TReplicate& hub, const TPhysi
     const auto& outputs = hub.GetOutputs();
     TVector<TOpReplicate*> ports(outputs.size());
     for (auto* port : outputs) {
-        Y_ENSURE(port->Props.StageOutputIndex);
-        ports.at(*port->Props.StageOutputIndex) = port;
+        ports.at(*GetReplicateOutputIndex(*port)) = port;
     }
     Y_ENSURE(!ports.empty());
     auto buildBranch = [&](TExprNode::TPtr stream, TOpReplicate& port) {

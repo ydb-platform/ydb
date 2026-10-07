@@ -124,7 +124,6 @@ struct TDetachedMiniKqlEnv {
         : Alloc(std::make_shared<TScopedAlloc>(
               __LOCATION__,
               NKikimr::TAlignedPagePoolCounters(),
-              /*supportsSizedAllocators=*/true,
               /*initiallyAcquired=*/false))
         , MemInfo("bridge_leak_ut")
     {

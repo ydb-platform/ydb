@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: yarl
-Version: 1.24.5
+Version: 1.25.1
 Summary: Yet another URL library
 Home-page: https://github.com/aio-libs/yarl
 Author: Andrew Svetlov
@@ -265,6 +265,197 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+v1.25.1
+=======
+
+*(2026-09-15)*
+
+
+Contributor-facing changes
+--------------------------
+
+- Stopped running the test suite inside the riscv64 wheel builds; every wheel
+  for that architecture is built under emulation and the test run did not fit
+  in the job timeout -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1906 <https://github.com/aio-libs/yarl/issues/1906>`__.
+
+
+----
+
+
+v1.25.0
+=======
+
+*(2026-09-15)*
+
+
+Bug fixes
+---------
+
+- Made the C and pure Python quoting implementations reject ``%`` in ``safe``
+  or ``protected`` when requoting and a space in ``safe`` or ``protected`` for
+  query strings, since the two implementations disagreed on those
+  configurations -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1869 <https://github.com/aio-libs/yarl/issues/1869>`__.
+
+- Made the pure Python quoter reject non-ASCII ``safe`` and ``protected``
+  characters when it is created, the same way the C extension does
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1893 <https://github.com/aio-libs/yarl/issues/1893>`__.
+
+- Fixed ``URL.query`` returning empty fields and keeping
+  invalid percent-encoded UTF-8 as is, a regression in 1.19.0. It matches
+  ``urllib.parse.parse_qsl`` again, and so do the methods built on it,
+  ``yarl.URL.update_query()``, ``yarl.URL.without_query_params()`` and
+  ``yarl.URL.human_repr()``, which also no longer double encode those escapes
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1899 <https://github.com/aio-libs/yarl/issues/1899>`__.
+
+
+Features
+--------
+
+- Added ``~yarl.query_to_pairs``, a faster replacement for
+  ``urllib.parse.parse_qsl`` with ``keep_blank_values=True`` that also
+  takes ``max_fields`` and ``encoding`` arguments -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1899 <https://github.com/aio-libs/yarl/issues/1899>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- Added CodSpeed benchmarks for unquoting long strings, decoding
+  ``+`` as a space, and parsing real world form bodies and large query
+  strings
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1884 <https://github.com/aio-libs/yarl/issues/1884>`__.
+
+- Stopped running the test suite inside the wheel build jobs outside of
+  release builds, since the test matrix already installs and tests the
+  same wheels, and added Python 3.15 and 3.15t to the test matrix so
+  those wheels stay covered. Release builds still test every wheel, and
+  all release checks in the CI workflow now use ``github.ref_type``
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1885 <https://github.com/aio-libs/yarl/issues/1885>`__, `#1892 <https://github.com/aio-libs/yarl/issues/1892>`__.
+
+- Added tests that check the C and pure Python unquoting implementations
+  produce the same output, including long runs and invalid or incomplete
+  UTF-8 escapes, and that ``plus=True`` matches
+  ``urllib.parse.unquote_plus`` for valid input -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1888 <https://github.com/aio-libs/yarl/issues/1888>`__.
+
+- Added tests that check the C and pure Python unquoting implementations
+  agree for any combination of ``ignore``, ``qs`` and ``plus``, including
+  non-ASCII ``ignore`` characters -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1890 <https://github.com/aio-libs/yarl/issues/1890>`__.
+
+- Added CodSpeed benchmarks for the pure Python unquoter, which is used
+  when the C extension is not available, and for unquoting with several
+  unsafe characters -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1891 <https://github.com/aio-libs/yarl/issues/1891>`__.
+
+- Added tests that check the C and pure Python unquoting implementations
+  never return a string longer than their input -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1896 <https://github.com/aio-libs/yarl/issues/1896>`__.
+
+- Added tests that pin how the C and pure Python unquoting implementations
+  handle overlong, surrogate and out of range UTF-8 escapes, the smallest and
+  largest valid sequences, and sequences interrupted by other characters, so
+  they also run when hypothesis is not installed -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1898 <https://github.com/aio-libs/yarl/issues/1898>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of the C unquoter, especially for long strings and
+  strings with many percent-encoded characters -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1886 <https://github.com/aio-libs/yarl/issues/1886>`__.
+
+- Improved performance of the pure Python unquoter, especially for long
+  strings and strings with many percent-encoded characters
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1889 <https://github.com/aio-libs/yarl/issues/1889>`__.
+
+- Removed the unused ``unsafe`` option from the internal unquoting classes;
+  the unquoting done by ``~yarl.URL`` never depended on it
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1894 <https://github.com/aio-libs/yarl/issues/1894>`__.
+
+- Replaced magic numbers in the C quoting helpers with named constants
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1897 <https://github.com/aio-libs/yarl/issues/1897>`__.
+
+- Made the internal unquoting classes, C and pure Python, reject ``ignore``
+  characters that are decoded anyway, such as letters or ``+`` when not parsing
+  a query string, instead of silently accepting them -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1900 <https://github.com/aio-libs/yarl/issues/1900>`__.
+
+- Removed unused string constants from the C and pure Python quoting modules
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1901 <https://github.com/aio-libs/yarl/issues/1901>`__.
+
+- Simplified the C unquoter so it writes the escapes for ignored characters
+  itself instead of calling the quoter, which also made it slightly faster
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1902 <https://github.com/aio-libs/yarl/issues/1902>`__.
+
+- Made the internal unquoting classes, C and pure Python, reject non-ASCII
+  ``ignore`` characters, as the quoting classes already do for ``safe``
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1903 <https://github.com/aio-libs/yarl/issues/1903>`__.
+
+- Simplified the pure Python unquoter so it writes the escapes for ignored
+  characters itself instead of calling the quoter, which also made decoding
+  escaped ASCII characters faster -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1904 <https://github.com/aio-libs/yarl/issues/1904>`__.
+
+
+----
+
 
 v1.24.5
 =======

@@ -705,6 +705,7 @@ private:
                     .EnableSourceLocation = writerConfig->EnableSourceLocation,
                     .EnableSystemFields = writerConfig->EnableSystemFields,
                     .EnableHostField = writerConfig->EnableHostField,
+                    .EnableSpanIdField = writerConfig->EnableSpanIdField,
                     .EnableNativeTags = writerConfig->EnableNativeTags,
                     .JsonFormat = writerConfig->JsonFormat,
                     .YsonFormat = writerConfig->YsonFormat,

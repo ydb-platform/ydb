@@ -19,12 +19,19 @@ export function formatMetricValue(value,{unit='number',precision=null}={}){
  else suffix={percent:'%',seconds:' s',milliseconds:' ms',cores:' cores'}[unit]||'';
  return number.toLocaleString(undefined,precision===null?{maximumSignificantDigits:3}:{minimumFractionDigits:precision,maximumFractionDigits:precision})+suffix;
 }
+const withinStepHistory=(series,time)=>!series.closed||!!series.points.length&&time<=series.points.at(-1).time;
+export function chartPointAt(series,time){
+ if(series.step&&!withinStepHistory(series,time))return null;
+ let a=0,b=series.points.length;while(a<b){const m=(a+b)>>1;if(series.points[m].time<=time)a=m+1;else b=m;}
+ if(series.step)return a?series.points[a-1]:null;
+ const p=series.points[a-1],q=series.points[a];return !p?q:!q?p:time-p.time<=q.time-time?p:q;
+}
 // Interpolate sampled lines and preserve discontinuities of on-change lines.
 function sampleAt(series,time,before=false){
  const points=series.points;let a=0,b=points.length;
  while(a<b){const m=(a+b)>>1;if(points[m].time<time||(!before&&points[m].time===time))a=m+1;else b=m;}
  const previous=points[a-1],next=points[a];
- if(series.step)return previous&&(!series.closed||time<=points.at(-1).time)?previous.value:null;
+ if(series.step)return previous&&withinStepHistory(series,time)?previous.value:null;
  if(next?.time===time)return next.value;
  if(previous?.time===time)return previous.value;
  if(!previous||!next||previous.value===null||next.value===null)return null;
@@ -72,11 +79,11 @@ export function prepareChartKitSeries(series,begin,end){
 }
 export function seriesStats(s,begin,end){
   const pts=s.points.filter(p=>p.time>=begin&&p.time<=end), valid=pts.filter(p=>p.value!==null);let avg=null;
-  if(s.step){let sum=0,duration=0;for(let i=0;i<s.points.length;i++){const p=s.points[i],a=Math.max(begin,p.time),b=Math.min(end,i+1<s.points.length?s.points[i+1].time:end);if(p.value!==null&&b>a){sum+=p.value*(b-a);duration+=b-a;}}if(duration)avg=sum/duration;}
+  if(s.step){let sum=0,duration=0;for(let i=0;i<s.points.length;i++){const p=s.points[i],a=Math.max(begin,p.time),b=Math.min(end,i+1<s.points.length?s.points[i+1].time:s.closed?p.time:end);if(p.value!==null&&b>a){sum+=p.value*(b-a);duration+=b-a;}}if(duration)avg=sum/duration;}
   else if(valid.length)avg=valid.reduce((a,p)=>a+p.value,0)/valid.length;
-  const valueAtEnd=s.step?s.points.filter(p=>p.time<=end).at(-1):pts.at(-1);
+  const valueAtEnd=s.step?chartPointAt(s,end):pts.at(-1);
   // Include the predecessor in step statistics only when it covers the selected interval.
-  let exact=valid.map(p=>p.raw);if(s.step){const prev=s.points.filter(p=>p.time<begin).at(-1);if(prev&&prev.value!==null){exact.push(prev.raw);}}
+  let exact=valid.map(p=>p.raw);if(s.step&&withinStepHistory(s,begin)){const prev=s.points.filter(p=>p.time<begin).at(-1);if(prev&&prev.value!==null){exact.push(prev.raw);}}
   exact.sort((a,b)=>{if(/^-?\d+$/.test(a)&&/^-?\d+$/.test(b)){const x=BigInt(a),y=BigInt(b);return x<y?-1:x>y?1:0;}return Number(a)-Number(b);});
   return {last:valueAtEnd&&valueAtEnd.value!==null?valueAtEnd.raw:null,min:exact.length?exact[0]:null,max:exact.length?exact.at(-1):null,avg,count:pts.length};
  }
@@ -147,7 +154,7 @@ export function createMetricChart(chart,options={}){
    const clamped=Math.max(0,Math.min(plot.clientWidth,px));
    return {px:clamped,py,inside,time:u.posToVal(clamped,'x')};
   };
-  function at(s,t){let a=0,b=s.points.length;while(a<b){const m=(a+b)>>1;if(s.points[m].time<=t)a=m+1;else b=m;}if(s.step)return a?s.points[a-1]:null;const p=s.points[a-1],q=s.points[a];return !p?q:!q?p:t-p.time<=q.time-t?p:q;}
+
   const setPinned=value=>{pinned=value;cursorPinned=value;tip.classList.toggle('ymc-tooltip-pinned',value);if(value)options.onPin?.();const hint=tip.querySelector('footer');if(hint)hint.textContent=value?'Pinned. Click the chart again to move the tooltip.':'Click the chart to pin the tooltip.';};
   releaseTooltip=()=>{setPinned(false);tip.hidden=true;};
   function renderTooltip(){
@@ -158,7 +165,7 @@ export function createMetricChart(chart,options={}){
    const sumRows=rows.filter(row=>row.point&&row.point.value!==null),sum=sumRows.reduce((total,row)=>total+row.point.value,0),foot=document.createElement('tfoot'),sumRow=document.createElement('tr');sumRow.append(text('th','Sum'),text('th',sumRows.length&&Number.isFinite(sum)?format(sum):'\u2014'));foot.append(sumRow);table.append(foot);tip.append(table,text('footer',pinned?'Pinned. Click the chart again to move the tooltip.':'Click the chart to pin the tooltip.'));
   }
   const hover=e=>{if(pinned&&start===null)return;const p=pos(e);if(start===null&&!p.inside){tip.hidden=true;cursorTime=null;drawCursor();publishCursor(null);return;}cursorTime=p.time;drawCursor();publishCursor(p.time);if(start!==null){selection.style.left=Math.min(start.px,p.px)+'px';selection.style.width=Math.abs(start.px-p.px)+'px';return;}
-   const rows=active.map(series=>({series,point:at(series,p.time)})),py=p.py;let nearest=null,distance=Infinity;for(const row of rows)if(row.point&&row.point.value!==null){let delta=Math.abs(y(row.point.value)-py);if(row.series.type==='area'){const value=sampleAt(row.series,p.time);if(value===null)continue;const base=stackBase(areas,areas.findIndex(s=>s.key===row.series.key),p.time,value),a=y(base),b=y(base+value);delta=Math.max(Math.min(a,b)-py,py-Math.max(a,b),0);}if(delta<distance){distance=delta;nearest=row.series.key;}}tooltipData={time:p.time,rows,nearest};renderTooltip();tip.hidden=false;
+   const rows=active.map(series=>({series,point:chartPointAt(series,p.time)})),py=p.py;let nearest=null,distance=Infinity;for(const row of rows)if(row.point&&row.point.value!==null){let delta=Math.abs(y(row.point.value)-py);if(row.series.type==='area'){const value=sampleAt(row.series,p.time);if(value===null)continue;const base=stackBase(areas,areas.findIndex(s=>s.key===row.series.key),p.time,value),a=y(base),b=y(base+value);delta=Math.max(Math.min(a,b)-py,py-Math.max(a,b),0);}if(delta<distance){distance=delta;nearest=row.series.key;}}tooltipData={time:p.time,rows,nearest};renderTooltip();tip.hidden=false;
    const margin=8,gap=16,leftSpace=e.clientX-margin,rightSpace=innerWidth-e.clientX-margin;
    tip.style.width=Math.min(480,Math.max(120,Math.max(leftSpace,rightSpace)-gap))+'px';tip.style.maxHeight=Math.max(80,Math.min(430,innerHeight-2*margin))+'px';
    const width=tip.offsetWidth,height=tip.offsetHeight;

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {prepareChartKitSeries, formatSeriesName, seriesStats} from '../chart.js';
+import {prepareChartKitSeries, formatSeriesName, seriesStats, chartPointAt} from '../chart.js';
 const point=(time,value)=>({time,value,raw:String(value)});
 const line=(key,values,extra={})=>({key,display:key,color:'#2678bc',points:values.map(([t,v])=>point(t,v)),...extra});
 
@@ -53,4 +53,24 @@ test('disjoint histories cannot multiply aligned data without a bound',()=>{
  assert.equal(data.sampled,true);
  assert.ok(data.graphs.reduce((n,g)=>n+g.data.length,0)<=1000000);
  assert.ok(data.graphs[0].data.some((v,i)=>v===null&&data.timeline[i]>31900&&data.timeline[i]<32200));
+});
+
+test('closed step tooltip and statistics stop at the retained closure boundary',()=>{
+ const s=line('closed',[[0,1],[10,3],[20,3]],{step:true,closed:true});
+ assert.equal(chartPointAt(s,20).raw,'3');
+ assert.equal(chartPointAt(s,21),null);
+ assert.equal(seriesStats(s,0,100).avg,2);
+ assert.equal(seriesStats(s,0,100).last,null);
+ assert.deepEqual(seriesStats(s,30,100),{last:null,min:null,max:null,avg:null,count:0});
+ assert.equal(seriesStats(s,5,15).avg,2);
+ assert.equal(seriesStats(s,5,15).last,'3');
+});
+test('open step histories continue and empty closed histories remain empty',()=>{
+ const open=line('open',[[0,1],[10,3]],{step:true});
+ assert.equal(chartPointAt(open,100).raw,'3');
+ assert.equal(seriesStats(open,20,100).avg,3);
+ assert.equal(seriesStats(open,20,100).last,'3');
+ const empty=line('empty',[],{step:true,closed:true});
+ assert.equal(chartPointAt(empty,100),null);
+ assert.deepEqual(seriesStats(empty,0,100),{last:null,min:null,max:null,avg:null,count:0});
 });

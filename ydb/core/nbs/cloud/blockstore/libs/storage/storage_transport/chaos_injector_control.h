@@ -14,17 +14,17 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 // Names the IStorageTransport method a fault rule can match.
 enum class EStorageOperation
 {
-    Connect,                   // Connect
-    ReadFromPBuffer,           // ReadFromPBuffer
-    ReadFromDDisk,             // ReadFromDDisk
-    WriteToPBuffer,            // WriteToPBuffer
-    WriteToManyPBuffers,       // WriteToManyPBuffers
-    WriteToDDisk,              // WriteToDDisk
-    SyncWithPBuffer,           // SyncWithPBuffer (flush)
-    BatchEraseFromPBuffer,     // BatchEraseFromPBuffer
-    BarrierEraseFromPBuffer,   // BarrierEraseFromPBuffer
-    ListPBufferEntries,        // ListPBufferEntries
-    DeleteTabletChunks,        // DeleteTabletChunks
+    Connect,
+    ReadFromPBuffer,
+    ReadFromDDisk,
+    WriteToPBuffer,
+    WriteToManyPBuffers,
+    WriteToDDisk,
+    SyncWithPBuffer,
+    BatchEraseFromPBuffer,
+    BarrierEraseFromPBuffer,
+    ListPBufferEntries,
+    DeleteTabletChunks,
 };
 
 // Arms a fault rule; armed rules are listed by GetFaultRules.

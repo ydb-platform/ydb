@@ -22,6 +22,7 @@
 #include <system_error>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -33,6 +34,12 @@
 #else
     #include <fcntl.h>
     #include <unistd.h>
+#endif
+
+#if defined(_darwin_)
+    #include <membership.h>
+    #include <sys/acl.h>
+    #include <uuid/uuid.h>
 #endif
 
 namespace NYdb::NConsoleClient {
@@ -96,7 +103,7 @@ void ValidateRegularFile(const TFileStat& stat, const std::string& path) {
     }
 }
 
-// TFile does not expose no-follow/nonblocking open modes or Windows ACLs.
+// TFile does not expose no-follow/nonblocking open modes or platform ACLs.
 // Keep these operations and account lookup platform-specific; use util for
 // handle lifetime, metadata, I/O, temporary-file cleanup and atomic replacement.
 #if defined(_win_)
@@ -251,6 +258,46 @@ TFile CreateOwnerOnlyFile(const TFsPath& path) {
     return TFile(handle.Release(), path.GetPath());
 }
 #else
+#if defined(_darwin_)
+using TAcl = std::unique_ptr<std::remove_pointer_t<acl_t>, decltype(&acl_free)>;
+using TFileSecurity = std::unique_ptr<std::remove_pointer_t<filesec_t>, decltype(&filesec_free)>;
+
+void ValidateExtendedAcl(const TFile& file, const std::string& path);
+
+void ValidateExtendedAcl(const TFile& file, const std::string& path) {
+    const TAcl acl(acl_get_fd_np(file.GetHandle(), ACL_TYPE_EXTENDED), &acl_free);
+    if (acl == nullptr) {
+        ThrowCacheError(path, "failed to inspect extended ACL");
+    }
+    acl_entry_t entry = nullptr;
+    int entryId = ACL_FIRST_ENTRY;
+    while (acl_get_entry(acl.get(), entryId, &entry) == 0) {
+        entryId = ACL_NEXT_ENTRY;
+        acl_tag_t tag;
+        if (acl_get_tag_type(entry, &tag) != 0) {
+            ThrowCacheError(path, "failed to inspect extended ACL");
+        }
+        if (tag == ACL_EXTENDED_DENY) {
+            continue;
+        }
+        // Accept owner grants only, without trying to reproduce ordered ACL
+        // evaluation. This also excludes grants to change the ACL or owner.
+        const std::unique_ptr<void, decltype(&acl_free)> principal(acl_get_qualifier(entry), &acl_free);
+        uuid_t owner;
+        if (tag != ACL_EXTENDED_ALLOW || principal == nullptr ||
+            mbr_uid_to_uuid(geteuid(), owner) != 0 ||
+            uuid_compare(static_cast<const unsigned char*>(principal.get()), owner) != 0)
+        {
+            ThrowCacheError(path, "extended ACL permissions must allow access only to the owner");
+        }
+    }
+    // Unlike POSIX ACL iteration, Darwin reports the end with -1 / EINVAL.
+    if (errno != EINVAL) {
+        ThrowCacheError(path, "failed to inspect extended ACL");
+    }
+}
+#endif
+
 void ValidateCachePermissions(const TFile& file, const std::string& path) {
     const TFileStat stat(file);
     if (stat.IsNull()) {
@@ -262,6 +309,9 @@ void ValidateCachePermissions(const TFile& file, const std::string& path) {
     if ((stat.Mode & (S_IRWXG | S_IRWXO)) != 0) {
         ThrowCacheError(path, "file permissions must allow access only to the owner (chmod 600)");
     }
+#if defined(_darwin_)
+    ValidateExtendedAcl(file, path);
+#endif
 }
 
 bool IsNotFoundError(int error) {
@@ -280,7 +330,36 @@ TFileHandle OpenCacheHandle(const TFsPath& path) {
 }
 
 TFile CreateOwnerOnlyFile(const TFsPath& path) {
+#if defined(_darwin_)
+    const TAcl acl(acl_init(0), &acl_free);
+    const TFileSecurity security(filesec_init(), &filesec_free);
+    acl_flagset_t flags = nullptr;
+    const mode_t mode = S_IRUSR | S_IWUSR;
+    const acl_t rawAcl = acl.get();
+    if (acl == nullptr || security == nullptr ||
+        acl_get_flagset_np(acl.get(), &flags) != 0 ||
+        acl_add_flag_np(flags, ACL_FLAG_NO_INHERIT) != 0 ||
+        filesec_set_property(security.get(), FILESEC_MODE, &mode) != 0 ||
+        filesec_set_property(security.get(), FILESEC_ACL, &rawAcl) != 0)
+    {
+        ThrowCacheError(path.GetPath(), "failed to create owner-only ACL");
+    }
+    // Install the empty, non-inheriting ACL atomically with creation. Removing
+    // inherited grants after open would leave a window for another account to
+    // open the file and retain access when we subsequently write the tokens.
+    int descriptor;
+    do {
+        descriptor = openx_np(path.GetPath().c_str(), O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, security.get());
+    } while (descriptor < 0 && errno == EINTR);
+    if (descriptor < 0) {
+        ThrowCacheError(path.GetPath(), "failed to create owner-only temporary file");
+    }
+    TFile file(descriptor, path.GetPath());
+    ValidateCachePermissions(file, path.GetPath());
+    return file;
+#else
     return TFile(path.GetPath(), CreateNew | WrOnly | CloseOnExec | ARUser | AWUser);
+#endif
 }
 #endif
 

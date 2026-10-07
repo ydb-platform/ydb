@@ -10,6 +10,7 @@ import ydb
 import pytest
 import random
 import requests
+import re
 
 from collections import defaultdict
 from typing import List, Dict, Optional, Self
@@ -678,6 +679,33 @@ class Kikimr:
 
     def get_database_name(self) -> str:
         return self.endpoint.database
+
+    def wait_kqp_node_count(self, expected_count: int, timeout_seconds: int = 60) -> None:
+        node_counts = {}
+
+        def resources_updated() -> bool:
+            node_counts.clear()
+            for node_id in counter_nodes(self.cluster):
+                try:
+                    response = requests.get(
+                        monitoring_endpoint(self.cluster, node_id) + "/actors/kqp_resource_manager",
+                        headers={"Authorization": "root@builtin"},
+                        timeout=5,
+                    )
+                    response.raise_for_status()
+                except requests.RequestException as error:
+                    node_counts[node_id] = str(error)
+                    continue
+                # Read the published snapshot used by the planner. The
+                # RM/NodeNumberInSnapshot counter changes before it is published.
+                match = re.search(r"Nodes count: (\d+)", response.text)
+                node_counts[node_id] = int(match.group(1)) if match else 0
+            logger.info("KQP resource snapshot node counts: %s (expected %s)", node_counts, expected_count)
+            return bool(node_counts) and all(count == expected_count for count in node_counts.values())
+
+        assert wait_for(resources_updated, timeout_seconds=timeout_seconds, step_seconds=0.5, multiply=1), (
+            f"Expected {expected_count} nodes in every KQP resource snapshot, got {node_counts}"
+        )
 
 
 class StreamingTestBase(TestYdsBase):

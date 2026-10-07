@@ -10,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/nbs1_compat/classic_volume.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
@@ -40,6 +41,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 using namespace NActors;
+
+namespace {
+
+using TEvStatVolumeResponse =
+    NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeResponse;
+
+}   // namespace
 
 TPartitionActor::TPartitionActor(
     const TActorId& tablet,
@@ -846,6 +854,36 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
 }
 
+void TPartitionActor::HandleStatVolume(
+    const NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest::TPtr&
+        ev,
+    const NActors::TActorContext& ctx)
+{
+    if (VolumeConfig.PartitionsSize() == 0) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Reject StatVolume: volume config is not loaded",
+            LogTitle.GetWithTime().c_str());
+
+        auto response = std::make_unique<TEvStatVolumeResponse>(
+            MakeError(E_REJECTED, "volume config is not loaded"));
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Handle StatVolume for %s",
+        LogTitle.GetWithTime().c_str(),
+        VolumeConfig.GetDiskId().c_str());
+
+    auto response = std::make_unique<TEvStatVolumeResponse>();
+    *response->Record.MutableVolume() = MakeClassicVolume(VolumeConfig);
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
 void TPartitionActor::HandleMountSession(
     const TEvPartitionSession::TEvMount::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -1027,6 +1065,9 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
             HandleUpdateVolumeConfig);
+        HFunc(
+            NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest,
+            HandleStatVolume);
         HFunc(
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
             HandleUpdateVChunkConfig);

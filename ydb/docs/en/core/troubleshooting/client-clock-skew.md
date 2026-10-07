@@ -33,6 +33,8 @@ Configure time synchronization on client hosts with `chrony` or `ntpd` and multi
 
 The primary fix is to synchronize the system clocks.
 
+{% include [example_clock_skew_internal](_includes/example_clock_skew_internal.md) %}
+
 ## See also
 
 * [{#T}](performance/system/system-clock-drift.md)

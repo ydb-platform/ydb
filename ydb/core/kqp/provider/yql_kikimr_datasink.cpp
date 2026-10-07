@@ -1062,10 +1062,11 @@ public:
 
         YQL_ENSURE(ExternalSourceFactory);
         if (metadata.IsExternalDataSource()) {
-            const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(metadata.GetExternalSourceType());
+            const auto& dataSource = metadata.ExternalDataSource();
+            const TString providerName = dataSource.GetProviderName(ExternalSourceFactory);
             auto writeArgs = node->ChildrenList();
             writeArgs[1] = Build<TCoDataSink>(ctx, node->Pos())
-                            .Category(ctx.NewAtom(node->Pos(), externalSourceInfo->GetName()))
+                            .Category(ctx.NewAtom(node->Pos(), providerName))
                             .FreeArgs()
                                 .Add(writeArgs[1]->ChildrenList()[1])
                             .Build()
@@ -1075,7 +1076,13 @@ public:
         }
 
         const auto& externalTable = metadata.ExternalTable();
-        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(metadata.GetExternalSourceType());
+        const auto& databaseType = metadata.GetExternalSourceDatabaseType();
+        if (!databaseType) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+                << "Unknown source type for external table \"" << key.GetTablePath() << "\""));
+            return false;
+        }
+        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(*databaseType);
         TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), externalTable.GetLocation()) });
         auto table = ctx.NewList(node->Pos(), {ctx.NewAtom(node->Pos(), "table"), path});
         auto keyNode = ctx.NewCallable(node->Pos(), "Key", {table});

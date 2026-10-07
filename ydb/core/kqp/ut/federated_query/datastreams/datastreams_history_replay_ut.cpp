@@ -33,7 +33,6 @@ public:
         if (sharedReading) {
             config.MutableFeatureFlags()->SetEnableStreamingQueriesCounters(false);
         }
-        CreateTopic("historyInput");
         if (sharedReading) {
             ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
             ExecQuery(fmt::format(R"(
@@ -122,6 +121,7 @@ public:
 Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
     Y_UNIT_TEST_TWIN_F(SharedHoppingRequiresProgramWatermarkGenerator, Force, THistoryReplayFixture) {
         Init(/* enabled */ true, /* readFrom */ false, /* compressedGraph */ false, /* sharedReading */ true);
+        CreateScopedTopic("historyInput");
         ExecQuery("CREATE STREAMING QUERY historyQuery AS " + Body(3, "shared-old"));
         const auto base = TInstant::Seconds(TInstant::Now().Seconds());
         for (ui32 second = 0; second < 10; ++second) {
@@ -148,6 +148,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
 
     Y_UNIT_TEST_F(SharedStatelessReaderContinuesWithoutForce, THistoryReplayFixture) {
         Init(/* enabled */ true, /* readFrom */ false, /* compressedGraph */ false, /* sharedReading */ true);
+        CreateScopedTopic("historyInput");
         const auto body = [](TStringBuf sensor) {
             return fmt::format(R"(DO BEGIN
                 INSERT INTO historySink.`history-replay/tests/custom`
@@ -175,6 +176,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
 
     Y_UNIT_TEST_TWIN_F(ExplicitOutputFromOnCreateAlterAndReplace, CompressedGraph, THistoryReplayFixture) {
         Init(/* enabled */ true, /* readFrom */ false, CompressedGraph);
+        CreateScopedTopic("historyInput");
         const auto base = TInstant::Seconds(TInstant::Now().Seconds());
         for (ui32 second = 0; second < 10; ++second) {
             WriteEvent(base + TDuration::Seconds(second));
@@ -208,6 +210,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
 
     Y_UNIT_TEST_F(ExplicitOutputFromRepositionsWithoutTextChange, THistoryReplayFixture) {
         Init();
+        CreateScopedTopic("historyInput");
         const auto base = TInstant::Seconds(TInstant::Now().Seconds());
         ExecQuery(fmt::format("CREATE STREAMING QUERY historyQuery WITH (OUTPUT_FROM = Timestamp(\"{}\")) AS {}",
             (base + TDuration::Seconds(1000)).ToString(), Body(3, "reposition")));
@@ -224,7 +227,8 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
 
     Y_UNIT_TEST_TWIN_F(StatelessOutputFromUsesRequestedReadPosition, ReadFrom, THistoryReplayFixture) {
         Init(/* enabled */ true, ReadFrom);
-        CreateTopic("historyOutput");
+        CreateScopedTopic("historyInput");
+        CreateScopedTopic("historyOutput");
         WriteTopicMessage("historyInput", "before-output-from");
         Sleep(TDuration::Seconds(1));
         const auto outputFrom = TInstant::Now();
@@ -248,7 +252,8 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
 
     Y_UNIT_TEST_TWIN_F(OutputFromRejectsDisabledCheckpoints, ReadFrom, THistoryReplayFixture) {
         Init(/* enabled */ true, ReadFrom);
-        CreateTopic("historyOutput");
+        CreateScopedTopic("historyInput");
+        CreateScopedTopic("historyOutput");
         const std::string body = R"( AS DO BEGIN
             PRAGMA ydb.DisableCheckpoints = "TRUE";
             INSERT INTO historySource.historyOutput SELECT Data FROM historySource.historyInput
@@ -275,6 +280,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
 
     Y_UNIT_TEST_F(OutputFromWithReadFromOnCreateAlterAndReplace, THistoryReplayFixture) {
         Init(/* enabled */ true, /* readFrom */ true);
+        CreateScopedTopic("historyInput");
         const auto base = TInstant::Seconds(TInstant::Now().Seconds());
         for (ui32 second = 3; second < 6; ++second) {
             WriteEvent(base + TDuration::Seconds(second));
@@ -321,6 +327,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
 
     Y_UNIT_TEST_TWIN_F(ChangedWindowReplaysConsumedHistory, Force, THistoryReplayFixture) {
         Init();
+        CreateScopedTopic("historyInput");
         ExecQuery("CREATE STREAMING QUERY historyQuery AS " + Body(3, "old"));
         const auto base = TInstant::Seconds(TInstant::Now().Seconds());
         for (ui32 second = 0; second < 10; ++second) {
@@ -350,6 +357,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
 
     Y_UNIT_TEST_TWIN_F(StatelessOutputReplaysEarlyArrivingEvents, KeepWatermarks, THistoryReplayFixture) {
         Init();
+        CreateScopedTopic("historyInput");
         ExecQuery("CREATE STREAMING QUERY historyQuery AS " + Body(3, "early-old"));
         // These records are accepted by the watermark generator but their write
         // times precede the event-time frontier saved in the old checkpoint.
@@ -375,7 +383,8 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
 
     Y_UNIT_TEST_TWIN_F(DeduplicatingPqSinkRequiresForce, CompressedGraph, THistoryReplayFixture) {
         Init(true, false, CompressedGraph);
-        CreateTopic("historyOutput");
+        CreateScopedTopic("historyInput");
+        CreateScopedTopic("historyOutput");
         ExecQuery(R"(
             CREATE STREAMING QUERY historyQuery AS DO BEGIN
                 PRAGMA pq.EnableDeduplication = "TRUE";
@@ -396,20 +405,22 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         ReadTopicMessages("historyOutput", {"old", "new:live"});
     }
 
-    Y_UNIT_TEST_TWIN_F(ConsumerAheadOfCheckpointIsRewoundOnTextChange, SharedReading, THistoryReplayFixture) {
+    Y_UNIT_TEST_TWIN_F(ChangedConsumerAheadOfCheckpointIsRewound, SharedReading, THistoryReplayFixture) {
         Init(/* enabled */ true, /* readFrom */ false, /* compressedGraph */ false, SharedReading);
-        CreateTopic("historyOutput");
-        const auto body = [](TStringBuf prefix) {
+        CreateScopedTopic("historyInput");
+        CreateScopedTopic("historyOutput");
+        AlterTopic("historyInput", NYdb::NTopic::TAlterTopicSettings().BeginAddConsumer("replacement_consumer").EndAddConsumer());
+        const auto body = [](TStringBuf prefix, TStringBuf consumer) {
             return fmt::format(R"( AS DO BEGIN
-                PRAGMA pq.Consumer = "test_consumer";
+                PRAGMA pq.Consumer = "{1}";
                 PRAGMA pq.EnableDeduplication = "FALSE";
-                INSERT INTO historySource.historyOutput SELECT "{}" || payload FROM historySource.historyInput
+                INSERT INTO historySource.historyOutput SELECT "{0}" || payload FROM historySource.historyInput
                     WITH (FORMAT = json_each_row, SCHEMA (payload String NOT NULL))
-            END DO)", prefix);
+            END DO)", prefix, consumer);
         };
-        const auto waitConsumer = [&](bool running) {
+        const auto waitConsumer = [&](bool running, const TString& consumer = "test_consumer") {
             NTestUtils::WaitFor(TDuration::Seconds(30), "consumer session", [&](TString& error) {
-                const auto result = GetTopicClient()->DescribeConsumer("historyInput", "test_consumer",
+                const auto result = GetTopicClient()->DescribeConsumer("historyInput", consumer,
                     NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValue(TEST_OPERATION_TIMEOUT);
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 const auto& stats = result.GetConsumerDescription().GetPartitions().front().GetPartitionConsumerStats();
@@ -418,7 +429,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
                 return error.empty() != running;
             });
         };
-        ExecQuery("CREATE STREAMING QUERY historyQuery" + body(""));
+        ExecQuery("CREATE STREAMING QUERY historyQuery" + body("", "test_consumer"));
         waitConsumer(true);
         WriteTopicMessage("historyInput", R"({"payload":"old"})");
         ReadTopicMessages("historyOutput", {"old"});
@@ -426,16 +437,17 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         ExecQuery("ALTER STREAMING QUERY historyQuery SET (RUN = FALSE)");
         waitConsumer(false);
         WriteTopicMessage("historyInput", R"({"payload":"queued"})");
-        const auto committed = GetTopicClient()->CommitOffset("historyInput", 0, "test_consumer", 2).GetValue(TEST_OPERATION_TIMEOUT);
+        const auto committed = GetTopicClient()->CommitOffset("historyInput", 0, "replacement_consumer", 2).GetValue(TEST_OPERATION_TIMEOUT);
         UNIT_ASSERT_C(committed.IsSuccess(), committed.GetIssues().ToString());
-        ExecQuery("ALTER STREAMING QUERY historyQuery SET (RUN = TRUE, FORCE = FALSE)" + body("new:"));
-        waitConsumer(true);
+        ExecQuery("ALTER STREAMING QUERY historyQuery SET (RUN = TRUE, FORCE = FALSE)" + body("new:", "replacement_consumer"));
+        waitConsumer(true, "replacement_consumer");
         ReadTopicMessages("historyOutput", {"old", "new:queued"});
     }
 
     Y_UNIT_TEST_TWIN_F(StatelessQueryContinuesWithoutForce, NewDeduplication, THistoryReplayFixture) {
         Init();
-        CreateTopic("historyOutput");
+        CreateScopedTopic("historyInput");
+        CreateScopedTopic("historyOutput");
         ExecQuery(R"(
             CREATE STREAMING QUERY historyQuery AS DO BEGIN
                 PRAGMA pq.EnableDeduplication = "FALSE";
@@ -457,7 +469,8 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
 
     Y_UNIT_TEST_F(DisabledFlagPreservesExistingTextChangeRules, THistoryReplayFixture) {
         Init(false);
-        CreateTopic("historyOutput");
+        CreateScopedTopic("historyInput");
+        CreateScopedTopic("historyOutput");
         ExecQuery(R"(
             CREATE STREAMING QUERY historyQuery AS DO BEGIN
                 INSERT INTO historySource.historyOutput SELECT Data FROM historySource.historyInput
@@ -470,7 +483,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
             INSERT INTO historySource.historyOutput SELECT "new:" || Data FROM historySource.historyInput
         END DO)";
         ExecQuery("ALTER STREAMING QUERY historyQuery SET (FORCE = FALSE)" + body,
-            NYdb::EStatus::PRECONDITION_FAILED, "Please use FORCE=true");
+            NYdb::EStatus::PRECONDITION_FAILED, "Changing the query text will result in the loss of the checkpoint.");
         ExecQuery("ALTER STREAMING QUERY historyQuery SET (FORCE = TRUE)" + body);
         WriteTopicMessage("historyInput", "live");
         ReadTopicMessages("historyOutput", {"old", "new:live"});
@@ -478,7 +491,8 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
 
     Y_UNIT_TEST_TWIN_F(ReadFromBypassesHistoryReplay, Replace, THistoryReplayFixture) {
         Init(/* enabled */ true, /* readFrom */ true);
-        CreateTopic("historyOutput");
+        CreateScopedTopic("historyInput");
+        CreateScopedTopic("historyOutput");
         ExecQuery(R"(
             CREATE STREAMING QUERY historyQuery AS DO BEGIN
                 PRAGMA pq.EnableDeduplication = "TRUE";
@@ -502,6 +516,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
 
     Y_UNIT_TEST_TWIN_F(NestedWindowsReplayCompleteAggregates, ExplicitOutputFrom, THistoryReplayFixture) {
         Init();
+        CreateScopedTopic("historyInput");
         const auto body = [](ui32 innerWindow, TStringBuf sensor) {
             return fmt::format(R"( DO BEGIN
                 $input = SELECT CAST(ts AS Timestamp) AS event_time, k FROM historySource.historyInput WITH (

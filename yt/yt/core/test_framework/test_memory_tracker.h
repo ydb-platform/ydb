@@ -58,7 +58,7 @@ private:
         const TMemoryUsageTrackerGuard Guard_;
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     i64 AdjustedLimit_ = std::numeric_limits<i64>::max();
     i64 Limit_;
     i64 Usage_ = 0;

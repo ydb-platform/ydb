@@ -61,7 +61,7 @@ public:
                 actor.SelfId(),
                 actor.GetHolderFactory(),
                 actor.TypeEnv,
-                nullptr,
+                std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>(&actor.Alloc, [](auto*) {}),
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 gateway,
                 1,

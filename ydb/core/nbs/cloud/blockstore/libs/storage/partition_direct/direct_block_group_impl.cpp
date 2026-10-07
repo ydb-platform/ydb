@@ -668,6 +668,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
             range.Size() * BlockSize),
         NKikimr::NDDisk::TWriteInstruction(0),
         guardedSglist,
+        /*checksums=*/{},
         childSpan.get());
     future.Subscribe(
         [weakSelf = weak_from_this(),
@@ -747,6 +748,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
         pBufferKey.Lsn,
         NKikimr::NDDisk::TWriteInstruction(0),
         guardedSglist,
+        /*checksums=*/{},
         childSpan.get());
     future.Subscribe(
         [weakSelf = weak_from_this(),
@@ -891,6 +893,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
         std::move(disksIds),
         replyTimeout,
         guardedSglist,
+        /*checksums=*/{},
         CreateChildSpan(traceId, "NbsPartition.WriteBlocksToManyPBuffers"),
         std::move(writeToManyPBuffersCB));
 }

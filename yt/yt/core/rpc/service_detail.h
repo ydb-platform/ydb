@@ -41,8 +41,8 @@
 
 #include <library/cpp/containers/concurrent_hash/concurrent_hash.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <atomic>
 
@@ -837,7 +837,7 @@ protected:
 
         std::atomic<ERequestTracingMode> TracingMode = ERequestTracingMode::Enable;
 
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, RequestQueuesLock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, RequestQueuesLock);
         std::vector<TRequestQueue*> RequestQueues;
     };
 
@@ -980,7 +980,7 @@ private:
 
     struct TRequestBucket
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
         THashMap<TRequestId, TWeakPtr<TServiceContext>> RequestIdToContext;
         THashMap<TRequestId, TPendingPayloadsEntry> RequestIdToPendingPayloads;
     };
@@ -996,7 +996,7 @@ private:
 
     struct TReplyBusBucket
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
         THashMap<NYT::NBus::IBusPtr, TReplyBusData> ReplyBusToData;
     };
 
@@ -1005,7 +1005,7 @@ private:
 
     struct TQueuedReplyBucket
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
         THashMap<TRequestId, TFuture<void>> QueuedReplies;
     };
 
@@ -1036,7 +1036,7 @@ private:
 
     using TDiscoverRequestSet = TConcurrentHashMap<TCtxDiscoverPtr, int>;
     THashMap<std::string, TDiscoverRequestSet> DiscoverRequestsByPayload_;
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, DiscoverRequestsByPayloadLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, DiscoverRequestsByPayloadLock_);
 
     const TPerformanceCountersPtr PerformanceCounters_;
     const TMethodPerformanceCountersPtr UnknownMethodPerformanceCounters_;
@@ -1183,7 +1183,7 @@ private:
     const std::string Name_;
     const std::any Tag_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, RegisterLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, RegisterLock_);
     std::atomic<bool> Registered_ = false;
     TServiceBase* Service_;
     TServiceBase::TRuntimeMethodInfo* RuntimeInfo_ = nullptr;

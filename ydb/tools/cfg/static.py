@@ -4,6 +4,7 @@ import copy
 import base64
 import collections
 import itertools
+import json
 import logging
 import subprocess
 import tempfile
@@ -215,7 +216,16 @@ class StaticConfigGenerator(object):
 
     @property
     def grpc_txt(self):
-        return self.__proto_config("grpc.txt", config_pb2.TGRpcConfig, self.__cluster_details.grpc_config)
+        grpc_config = copy.deepcopy(self.__cluster_details.grpc_config)
+        bootstrap = grpc_config.get("xds_bootstrap", {})
+        node = bootstrap.get("node", {})
+        if isinstance(node.get("meta"), dict):
+            node["meta"] = json.dumps(node["meta"])
+        for server in bootstrap.get("xds_servers", []):
+            for credentials in server.get("channel_creds", []):
+                if isinstance(credentials.get("config"), dict):
+                    credentials["config"] = json.dumps(credentials["config"])
+        return self.__proto_config("grpc.txt", config_pb2.TGRpcConfig, grpc_config)
 
     @property
     def dyn_ns_txt(self):

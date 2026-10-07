@@ -2593,6 +2593,17 @@ TExprNode::TPtr BuildAggregationTraits(
     // clang-format on
 }
 
+TExprNode::TPtr MakeAbsentGroupingKey(const TExprNode& group, TExprContext& ctx) {
+    const TTypeAnnotationNode* type = group.Tail().GetTypeAnn().Get();
+    if (type->GetKind() == ETypeAnnotationKind::Null) {
+        return ctx.NewCallable(group.Pos(), "Null", {});
+    }
+    if (!type->IsOptionalOrNull()) {
+        type = ctx.MakeType<TOptionalExprType>(type);
+    }
+    return ctx.NewCallable(group.Pos(), "Nothing", {ExpandType(group.Pos(), *type, ctx)});
+}
+
 TExprNode::TPtr BuildGroup(
     TPositionHandle pos,
     TExprNode::TPtr list,
@@ -2800,11 +2811,17 @@ TExprNode::TPtr BuildGroup(
 
     TVector<ui32> currentSetIndices;
     TVector<ui32> setCounts;
+    THashSet<ui32> availableGroupKeys;
     currentSetIndices.resize(groupSets->Tail().ChildrenSize());
     for (ui32 i = 0; i < groupSets->Tail().ChildrenSize(); ++i) {
         auto set = groupSets->Tail().Child(i);
         YQL_ENSURE(set->ChildrenSize() >= 1);
         setCounts.push_back(set->ChildrenSize());
+        for (const auto& group : set->Children()) {
+            for (const auto& key : group->Children()) {
+                availableGroupKeys.insert(FromString<ui32>(key->Content()));
+            }
+        }
     }
 
     TExprNode::TListType unionAllItems;
@@ -2939,6 +2956,11 @@ TExprNode::TPtr BuildGroup(
                                                     .Seal()
                                                     .Seal();
                                                 // clang-format on
+                                                // Union fills keys present in another set; declared-only keys need an explicit NULL.
+                                                if (isYql && !availableGroupKeys.contains(i)) {
+                                                    parent.Add(j++, ctx.NewList(pos, {groupKeysItems[i],
+                                                        MakeAbsentGroupingKey(*groupExprs->Tail().Child(i), ctx)}));
+                                                }
                                             }
                                         }
 

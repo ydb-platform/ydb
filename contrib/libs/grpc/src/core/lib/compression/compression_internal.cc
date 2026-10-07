@@ -37,7 +37,6 @@
 #include "src/core/lib/gprpp/crash.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/ref_counted_string.h"
-#include "src/core/lib/surface/api_trace.h"
 
 namespace grpc_core {
 
@@ -117,8 +116,6 @@ y_absl::optional<grpc_compression_algorithm> ParseCompressionAlgorithm(
 grpc_compression_algorithm
 CompressionAlgorithmSet::CompressionAlgorithmForLevel(
     grpc_compression_level level) const {
-  GRPC_API_TRACE("grpc_message_compression_algorithm_for_level(level=%d)", 1,
-                 ((int)level));
   if (level > GRPC_COMPRESS_LEVEL_HIGH) {
     Crash(y_absl::StrFormat("Unknown message compression level %d.",
                           static_cast<int>(level)));

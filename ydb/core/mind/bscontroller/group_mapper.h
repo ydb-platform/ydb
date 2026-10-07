@@ -147,20 +147,24 @@ namespace NKikimr {
                 const TNodeLocation Location;
                 const bool Usable;
                 ui32 NumActiveSlots;
+                ui64 NumActiveUnits = 0;
                 const ui32 ExpectedSlotCount;
                 const ui32 SlotSizeInUnits;
                 const ui64 SlotSizeInBytes;
                 TStackVec<ui32, 16> Groups;
-                i64 SpaceAvailable;
+                i64 SpaceAvailable; // PDisk free bytes after margin and replication adjustments.
                 const bool Operational;
                 const bool Decommitted;
                 TString WhyUnusable;
                 TBridgePileId BridgePileId;
                 std::optional<TString> DiskScope;
+                std::optional<ui64> CapacityUnits;
+                std::optional<ui64> EnforcedDynamicSlotSize;
             };
 
             struct TPDiskSpaceState {
                 std::optional<ui64> EnforcedDynamicSlotSize;
+                std::optional<ui64> UserChunkPoolSize;
                 ui64 AvailableSize = 0;
                 ui64 TotalSize = 0;
             };
@@ -170,6 +174,7 @@ namespace NKikimr {
                 TNodeLocation Location;
                 bool Usable = true;
                 ui32 NumActiveSlots = 0;
+                ui64 NumActiveUnits = 0;
                 ui32 ExpectedSlotCount = 0;
                 ui32 SlotSizeInUnits = 0;
                 ui64 SlotSizeInBytes = 0;
@@ -294,8 +299,12 @@ namespace NKikimr {
                        && colorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW;
             }
 
-            static i64 CalculateSpaceAvailable(const TPDiskSpaceState& space,
-                                               NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder, ui32 marginPromille);
+            static i64 CalculateSpaceAvailable(const TPDiskSpaceState& space, ui32 marginPromille);
+            static std::optional<ui64> CalculateCapacityUnits(std::optional<ui64> userChunkPoolSize,
+                                                             std::optional<ui64> enforcedDynamicSlotSize) {
+                return userChunkPoolSize && enforcedDynamicSlotSize && *enforcedDynamicSlotSize
+                    ? std::make_optional(*userChunkPoolSize / *enforcedDynamicSlotSize) : std::nullopt;
+            }
             static constexpr bool AcceptsNewSlots(NKikimrBlobStorage::EDriveStatus status,
                                                   NKikimrBlobStorage::TMaintenanceStatus::E maintenanceStatus) {
                 return status == NKikimrBlobStorage::EDriveStatus::ACTIVE

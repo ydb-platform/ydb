@@ -500,6 +500,12 @@ message TKqpFullTextSource {
     optional TIndexTable UniqueIndexImplTable = 16;
 }
 
+message TKqpReadSampling {
+    double Rate = 1;
+    uint64 Seed = 2;
+    uint32 MemtableStride = 3;
+}
+
 message TKqpReadRangesSource {
     TKqpPhyTableId Table = 1;
     repeated TKqpPhyColumnId Columns = 2;
@@ -517,6 +523,7 @@ message TKqpReadRangesSource {
     bool IsTableImmutable = 10;
     // Vector top-K pushdown for brute force vector search
     TKqpPhyVectorTopK VectorTopK = 11;
+    TKqpReadSampling Sampling = 12;
 }
 
 message TKqpSysViewSource {

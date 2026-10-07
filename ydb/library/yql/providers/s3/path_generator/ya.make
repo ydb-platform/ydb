@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/scheme
+    yql/essentials/minikql/computation
     yql/essentials/minikql/datetime
     yql/essentials/public/udf
 )

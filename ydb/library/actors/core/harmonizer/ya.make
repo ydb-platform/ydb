@@ -19,6 +19,7 @@ SRCS(
     shared_info.cpp
     waiting_stats.cpp
     harmonizer.cpp
+    harmonizer_metrics.h
 )
 
 PEERDIR(

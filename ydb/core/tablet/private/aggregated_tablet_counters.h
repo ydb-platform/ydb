@@ -12,6 +12,10 @@ class TDbCounters;
 
 namespace NKikimr::NPrivate {
 
+inline ui64 DifferentiateToPerSecondRate(ui64 delta, TDuration interval) {
+    return interval ? delta * 1000000 / interval.MicroSeconds() : 0;
+}
+
 /**
  * The aggregate of a single category (the Executor counters or the application counters)
  * of the low level counters of one or more tablets of the same type.

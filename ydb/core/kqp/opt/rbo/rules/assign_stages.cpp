@@ -12,6 +12,15 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+bool ColumnsSupportedByBlockHashJoin(const IOperator& input) {
+    for (const auto* item : input.Type->Cast<NYql::TListExprType>()->GetItemType()->Cast<NYql::TStructExprType>()->GetItems()) {
+        if (!NYql::IsDataOrOptionalOfDataOrPg(item->GetItemType())) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
     auto& props = join.Props;
     const auto& config = *rboCtx.KqpCtx.Config;
@@ -29,9 +38,11 @@ void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
         }
     }
 
+    const bool typesOk = ColumnsSupportedByBlockHashJoin(*join.GetLeftInput())
+        && ColumnsSupportedByBlockHashJoin(*join.GetRightInput());
     const auto joinKind = GetValidJoinKind(join.JoinKind);
     if (joinKind == "Cross") {
-        props.UseBlockHashJoin = config.GetUseBlockHashJoin() && config.GetUseBlockHashJoinForCross();
+        props.UseBlockHashJoin = config.GetUseBlockHashJoin() && config.GetUseBlockHashJoinForCross() && typesOk;
         if (props.UseBlockHashJoin) {
             props.JoinAlgo = EJoinAlgoType::GraceJoin;
         }
@@ -41,7 +52,8 @@ void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
     const auto joinAlgo = *props.JoinAlgo;
     props.UseBlockHashJoin = config.GetUseBlockHashJoin()
         && (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin || joinAlgo == EJoinAlgoType::MapJoin)
-        && (joinKind == "Inner" || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly");
+        && (joinKind == "Inner" || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly")
+        && typesOk;
 }
 
 // For row storage read we create a separate stage.

@@ -896,6 +896,83 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(UnsupportedTypeFallbackToGraceJoin, NewRBO) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRBO);
+        settings.AppConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/left_table` (
+                        id Int32 NOT NULL,
+                        items List<Int32>,
+                        PRIMARY KEY (id)
+                    );
+
+                    CREATE TABLE `/Root/right_table` (
+                        id Int32 NOT NULL,
+                        data String NOT NULL,
+                        PRIMARY KEY (id)
+                    );
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/left_table` (id, items) VALUES
+                        (1, AsList(1)),
+                        (2, AsList(2, 20));
+
+                    INSERT INTO `/Root/right_table` (id, data) VALUES
+                        (2, "x"),
+                        (3, "y");
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        const TString joinQuery = R"(
+            PRAGMA TablePathPrefix='/Root';
+            PRAGMA ydb.UseBlockHashJoin = 'true';
+            PRAGMA ydb.HashJoinMode = 'grace';
+            PRAGMA ydb.CostBasedOptimizationLevel = '0';
+
+            SELECT L.id AS left_id, L.items, R.id AS right_id
+            FROM `left_table` AS L
+            INNER JOIN `right_table` AS R
+            ON L.id = R.id
+            ORDER BY left_id;
+        )";
+
+        auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(status.GetResultSets()[0].RowsCount(), 1);
+
+        auto explainResult = queryClient.ExecuteQuery(
+            joinQuery,
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+        ).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+        auto astOpt = explainResult.GetStats()->GetAst();
+        UNIT_ASSERT(astOpt.has_value());
+        TString ast = TString(*astOpt);
+        Cout << "AST (unsupported List payload, NewRBO=" << NewRBO << "): " << ast << Endl;
+
+        UNIT_ASSERT_C(ast.Contains("GraceJoin"),
+            TStringBuilder() << "Unsupported column type should fall back to GraceJoin. Actual AST: " << ast);
+        UNIT_ASSERT_C(!ast.Contains("BlockHashJoin") && !ast.Contains("DqBlockHashJoin"),
+            TStringBuilder() << "Unsupported column type should NOT use BlockHashJoin. Actual AST: " << ast);
+    }
+
     Y_UNIT_TEST(BlockHashJoinWithTypeRemapping) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

@@ -4,6 +4,7 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -1432,6 +1433,13 @@ TExprBase DqBuildHashJoin(
 
     const auto leftStructType = GetSequenceItemType(leftIn, false, ctx)->Cast<TStructExprType>();
     const auto rightStructType = GetSequenceItemType(rightIn, false, ctx)->Cast<TStructExprType>();
+
+    for (const auto* item : leftStructType->GetItems()) {
+        useBlockHashJoin = useBlockHashJoin && IsDataOrOptionalOfDataOrPg(item->GetItemType());
+    }
+    for (const auto* item : rightStructType->GetItems()) {
+        useBlockHashJoin = useBlockHashJoin && IsDataOrOptionalOfDataOrPg(item->GetItemType());
+    }
 
     const auto& leftItems = leftStructType->GetItems();
     const auto& rightItems = rightStructType->GetItems();

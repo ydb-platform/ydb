@@ -16,6 +16,7 @@ TLoader::TLoader(TPartComponents components, TVector<TIntrusivePtr<TPageCollecti
     , Opaque(std::move(Components.Opaque))
     , Deltas(std::move(Components.Deltas))
     , Epoch(Components.Epoch)
+    , HiddenSince(Components.HiddenSince)
 {
     if (PageCollections.empty() && Components.PageCollectionComponents.empty()) {
         Y_TABLET_ERROR("Cannot load TPart from " << PageCollections.size() << " page collections");
@@ -417,6 +418,9 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
     auto overlay = TOverlay::Decode(Legacy, Opaque);
 
     PartView = { partStore, std::move(overlay.Screen), std::move(overlay.Slices) };
+    if (HiddenSince) {
+        PartView.HiddenSince = HiddenSince;
+    }
 
     LoaderEnv->ProvidePart(PartView.Part.Get());
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "flat_table_metadata.h"
 #include "flat_table_subset.h"
 #include "flat_sausage_solid.h"
 #include "util_fmt_flat.h"
@@ -36,7 +37,7 @@ namespace NTable {
 
         bool HasAny() const noexcept
         {
-            return Scheme || Redo || RemovedRowVersions;
+            return Scheme || Redo || RemovedRowVersions || VersionedMetadata || Expired;
         }
 
         void Describe(IOutputStream &out) const
@@ -63,9 +64,17 @@ namespace NTable {
 
         TVector<TTruncate> Truncated; /* Truncated tables */
 
+        struct TExpired {
+            ui32 Table;
+            TAutoPtr<TSubset> Subset;
+        };
+
+        TVector<TExpired> Expired;
+
         ui32 Snapshots = 0;
 
         TMap<ui32, TVector<TRemovedRowVersions>> RemovedRowVersions;
+        TMap<ui32, TVector<TVersionedTableMetadata>> VersionedMetadata;
 
         TStats Stats;
     };

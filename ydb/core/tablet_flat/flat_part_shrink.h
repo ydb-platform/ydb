@@ -75,7 +75,7 @@ namespace NTable {
 
                             if (run->size() > 0) {
                                 run->Validate();
-                                PartView.emplace_back(TPartView{ partView.Part, screen, std::move(run) });
+                                PartView.emplace_back(TPartView{ partView.Part, screen, std::move(run), partView.HiddenSince });
                             }
                         }
                     }

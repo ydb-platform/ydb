@@ -218,6 +218,12 @@ public:
 
     TEpoch TxSnapTable(ui32 table);
     void Truncate(ui32 table);
+    void Truncate(ui32 table, TRowVersion version);
+
+    bool HasEraseAll(ui32 table) const;
+    const TVector<TVersionedTableMetadata>& GetVersionedMetadata(ui32 table) const;
+    void SetVersionedMetadata(ui32 table, TVector<TVersionedTableMetadata> metadata);
+    std::optional<TRowVersion> SourceHiddenSince(ui32 table, TEpoch epoch, const std::optional<TRowVersion>& stamp) const;
 
     const TScheme& GetScheme() const noexcept;
 
@@ -231,6 +237,7 @@ public:
     void EnumerateTableTxStatusParts(ui32 table, const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     ui64 GetTableMemSize(ui32 table, TEpoch epoch = TEpoch::Max()) const;
+    std::optional<TEpoch> GetTableOldestMemEpoch(ui32 table, TEpoch before) const;
     ui64 GetTableMemRowCount(ui32 tableId) const;
     ui64 GetTableMemOpsCount(ui32 tableId) const;
     ui64 GetTableIndexSize(ui32 table) const;

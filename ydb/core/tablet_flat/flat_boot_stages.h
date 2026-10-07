@@ -146,7 +146,8 @@ namespace NBoot {
                                         std::move(bundle.LargeGlobIds),
                                         std::move(bundle.Legacy),
                                         std::move(bundle.Opaque),
-                                        bundle.Epoch));
+                                        bundle.Epoch,
+                                        bundle.HiddenSince));
                                 continue;
                             }
 
@@ -166,6 +167,10 @@ namespace NBoot {
 
                 for (auto &range : std::exchange(se.RemovedRowVersions, { })) {
                     wrap->RemoveRowVersions(range.Lower, range.Upper);
+                }
+
+                if (se.HasVersionedMetadata) {
+                    wrap->SetVersionedMetadata(std::move(se.VersionedMetadata));
                 }
             }
 

@@ -13,6 +13,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/queue.h>
 
+#include <memory>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -255,6 +257,10 @@ public:
     void Push(TAutoPtr<TMemIter>);
     void Push(TAutoPtr<TRunIter>);
 
+    TVector<std::shared_ptr<const TRun>>& KeepRuns() {
+        return OwnedRuns;
+    }
+
     void StopBefore(TArrayRef<const TCell> key);
     void StopAfter(TArrayRef<const TCell> key);
 
@@ -364,6 +370,7 @@ public:
     TIteratorStats Stats;
 
 private:
+    TVector<std::shared_ptr<const TRun>> OwnedRuns;
     ui64 Limit = 0;
 
     TRowState State;

@@ -170,6 +170,24 @@ class PresetTests(unittest.TestCase):
         with self.assertRaisesRegex(gen.Error, 'Duplicate'):
             gen.inject_presets('default:\n  x: true\n  x: false\n', {'feature_flags': {}})
 
+    def test_four_space_default_stays_valid_and_idempotent(self):
+        text = 'default:\n    existing: true\n'
+        variables = {'feature_flags': {'enabled': False}, 'proto_flags': {}, 'compile_time_flags': {}}
+        updated = gen.inject_presets(text, variables)
+        loaded = yaml.safe_load(updated)
+        self.assertEqual(loaded['default']['existing'], True)
+        self.assertEqual(loaded['default']['feature_flags'], {'enabled': False})
+        self.assertEqual(gen.inject_presets(updated, variables), updated)
+
+    def test_flow_style_default_stays_valid_and_idempotent(self):
+        text = 'default: {existing: true}\n'
+        variables = {'feature_flags': {'enabled': False}, 'proto_flags': {}, 'compile_time_flags': {}}
+        updated = gen.inject_presets(text, variables)
+        loaded = yaml.safe_load(updated)
+        self.assertEqual(loaded['default']['existing'], True)
+        self.assertEqual(loaded['default']['feature_flags'], {'enabled': False})
+        self.assertEqual(gen.inject_presets(updated, variables), updated)
+
 
 class ReferenceTests(unittest.TestCase):
     def validate(self, text):
@@ -207,8 +225,15 @@ class ReferenceTests(unittest.TestCase):
 '''), 1)
 
     def test_dynamic_lookup_rejected(self):
-        with self.assertRaisesRegex(gen.Error, 'static, qualified'):
-            self.validate('{{ feature_flags[variable] }}')
+        expressions = [
+            '{{ feature_flags[variable] }}',
+            '{% if feature_flags.enable_known["typo"] == false %}warning{% endif %}',
+            '{% if feature_flags.enable_known[variable] == false %}warning{% endif %}',
+        ]
+        for expression in expressions:
+            with self.subTest(expression=expression):
+                with self.assertRaisesRegex(gen.Error, 'static, qualified'):
+                    self.validate(expression)
 
 
 if __name__ == '__main__':

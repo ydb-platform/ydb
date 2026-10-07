@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -145,6 +146,13 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
         const auto host = pbufferResponse.HostIndex;
         AnsweredIndirectWrites.Set(host);
 
+        // Undelivery does not fail a non-coordinator: a direct write may land.
+        const bool undeliveredOtherDisk =
+            HasError(pbufferResponse.Error) &&
+            !IndirectCoordinator.Get(host) &&
+            pbufferResponse.Error.GetMessage().Contains(
+                UndeliveryErrorMessage);
+
         if (!HasError(pbufferResponse.Error)) {
             LOG_DEBUG(
                 *ActorSystem,
@@ -154,7 +162,7 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
                 PrintHostAndNode(host).c_str());
 
             CompletedWrites.Set(host);
-        } else {
+        } else if (!undeliveredOtherDisk) {
             LOG_WARN(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,

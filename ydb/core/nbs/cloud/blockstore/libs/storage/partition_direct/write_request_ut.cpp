@@ -4,6 +4,8 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;
@@ -709,6 +711,91 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         UNIT_ASSERT_VALUES_EQUAL(true, WriteClient->Response.has_value());
         const auto& response = *WriteClient->Response;
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldReplaceUndeliveredIndirectWithDirect,
+        TWriteRequestTestFixture)
+    {
+        Init();
+
+        THostIndex coordinator = 255;
+        TVector<THostIndex> directHosts;
+
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            [&](ui32,
+                THostIndex coordinatorHostIndex,
+                THostMask,
+                TPBufferKey,
+                TBlockRange16,
+                TDuration,
+                const TGuardedSgList&,
+                const NWilson::TTraceId&,
+                IDirectBlockGroup::TWriteBlocksToManyPBuffersCallback callback)
+        {
+            coordinator = coordinatorHostIndex;
+            ManyPBufferCallback = std::move(callback);
+        };
+
+        DirectBlockGroup->WriteBlocksToPBufferHandler =
+            [&](ui32 vChunkIndex,
+                THostIndex hostIndex,
+                TPBufferKey,
+                TBlockRange16 range,
+                const TGuardedSgList&,
+                const NWilson::TTraceId&)
+        {
+            UNIT_ASSERT_VALUES_EQUAL(
+                VChunkConfig.GetVChunkIndex(),
+                vChunkIndex);
+            UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
+
+            directHosts.push_back(hostIndex);
+            auto response = NewPromise<TDBGWriteBlocksResponse>();
+            DirectWritePromises.push_back(response);
+            return response.GetFuture();
+        };
+
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::IndirectWrite);
+        writeRequest->Run();
+
+        const auto undelivered = MakeError(
+            E_FAIL,
+            TString("ERROR ") + UndeliveryErrorMessage);
+        TDBGWriteBlocksToManyPBuffersResponse manyResponse;
+        const THostIndex desired[] = {0, 1, 2};
+        for (auto host: desired) {
+            manyResponse.Responses.push_back(
+                {.HostIndex = host, .Error = undelivered});
+        }
+        ManyPBufferCallback(std::move(manyResponse));
+
+        UNIT_ASSERT_VALUES_EQUAL(false, WriteClient->Response.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(3, directHosts.size());
+
+        bool wroteOtherDesired = false;
+        for (auto host: directHosts) {
+            UNIT_ASSERT_VALUES_UNEQUAL(coordinator, host);
+            if (host < DefaultPrimaryCount) {
+                wroteOtherDesired = true;
+            }
+        }
+        UNIT_ASSERT(wroteOtherDesired);
+
+        for (auto& promise: DirectWritePromises) {
+            promise.SetValue(CreateOkDirectResponse());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(true, WriteClient->Response.has_value());
+        const auto& reply = *WriteClient->Response;
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, reply.Error.GetCode());
+        UNIT_ASSERT(!reply.CompletedWrites.Get(coordinator));
+        UNIT_ASSERT_VALUES_EQUAL(3, reply.CompletedWrites.Count());
+        for (auto host: desired) {
+            UNIT_ASSERT(reply.AnsweredWrites.Get(host));
+        }
     }
 
     Y_UNIT_TEST_F(ShouldWorkWithMultipleResponses, TWriteRequestTestFixture)

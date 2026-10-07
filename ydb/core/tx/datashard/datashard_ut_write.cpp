@@ -4485,8 +4485,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         UNIT_ASSERT_VALUES_EQUAL(getTxCompleteLagCounter(), 0u);
     }
 
-<<<<<<< HEAD
-=======
     Y_UNIT_TEST(UncommittedWriteSeqNumChain) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -5796,6 +5794,5 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
->>>>>>> 3be83a7ac85 (Fix lost Cookies in Datashard (#53714))
 } // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

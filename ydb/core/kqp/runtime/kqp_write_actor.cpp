@@ -894,9 +894,6 @@ public:
 
             const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
             if (metadata && ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
-<<<<<<< HEAD
-                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
-=======
                 YDB_LOG_INFO("Waiting for overloaded shard.",
                     {"logPrefix", this->LogPrefix},
                     {"tablePath", TablePath},
@@ -909,7 +906,6 @@ public:
                 // delay under sustained overload). No sends happen while we wait, so the
                 // attempts are merely frozen; OnOverloadReady resets them right before the
                 // resend, once the shard reports it is ready.
->>>>>>> 130a6938b73 (Fix retries attempts reset for Overloaded (#55218))
             }
 
             return;

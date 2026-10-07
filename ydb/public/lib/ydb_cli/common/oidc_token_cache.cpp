@@ -37,9 +37,7 @@
 #endif
 
 #if defined(_darwin_)
-    #include <membership.h>
     #include <sys/acl.h>
-    #include <uuid/uuid.h>
 #endif
 
 namespace NYdb::NConsoleClient {
@@ -277,18 +275,10 @@ void ValidateExtendedAcl(const TFile& file, const std::string& path) {
         if (acl_get_tag_type(entry, &tag) != 0) {
             ThrowCacheError(path, "failed to inspect extended ACL");
         }
-        if (tag == ACL_EXTENDED_DENY) {
-            continue;
-        }
-        // Accept owner grants only, without trying to reproduce ordered ACL
-        // evaluation. This also excludes grants to change the ACL or owner.
-        const std::unique_ptr<void, decltype(&acl_free)> principal(acl_get_qualifier(entry), &acl_free);
-        uuid_t owner;
-        if (tag != ACL_EXTENDED_ALLOW || principal == nullptr ||
-            mbr_uid_to_uuid(geteuid(), owner) != 0 ||
-            uuid_compare(static_cast<const unsigned char*>(principal.get()), owner) != 0)
-        {
-            ThrowCacheError(path, "extended ACL permissions must allow access only to the owner");
+        // Conservatively reject all grants, including changes to the ACL or
+        // owner. Deny entries cannot broaden access allowed by the mode bits.
+        if (tag != ACL_EXTENDED_DENY) {
+            ThrowCacheError(path, "extended ACL grants are not supported for token caches (chmod -N)");
         }
     }
     // Unlike POSIX ACL iteration, Darwin reports the end with -1 / EINVAL.

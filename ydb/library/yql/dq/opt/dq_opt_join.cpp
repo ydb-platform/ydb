@@ -4,7 +4,6 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
-#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -1406,6 +1405,42 @@ TVector<TCoNameValueTuple> BuildBlockHashJoinSettings(
     return joinSettings;
 }
 
+bool BlocksBlockHashJoin(const TTypeAnnotationNode* type) {
+    while (type && (type->GetKind() == ETypeAnnotationKind::Tagged || type->GetKind() == ETypeAnnotationKind::Optional)) {
+        if (type->GetKind() == ETypeAnnotationKind::Tagged) {
+            type = type->Cast<TTaggedExprType>()->GetBaseType();
+        } else {
+            type = type->Cast<TOptionalExprType>()->GetItemType();
+        }
+    }
+    if (!type) {
+        return true;
+    }
+    switch (type->GetKind()) {
+        case ETypeAnnotationKind::List:
+        case ETypeAnnotationKind::Dict:
+        case ETypeAnnotationKind::Variant:
+        case ETypeAnnotationKind::Resource:
+            return true;
+        case ETypeAnnotationKind::Struct:
+            for (const auto* item : type->Cast<TStructExprType>()->GetItems()) {
+                if (BlocksBlockHashJoin(item->GetItemType())) {
+                    return true;
+                }
+            }
+            return false;
+        case ETypeAnnotationKind::Tuple:
+            for (const auto* element : type->Cast<TTupleExprType>()->GetItems()) {
+                if (BlocksBlockHashJoin(element)) {
+                    return true;
+                }
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
 TExprBase DqBuildHashJoin(
     const TDqJoin& join,
     EHashJoinMode mode,
@@ -1435,10 +1470,10 @@ TExprBase DqBuildHashJoin(
     const auto rightStructType = GetSequenceItemType(rightIn, false, ctx)->Cast<TStructExprType>();
 
     for (const auto* item : leftStructType->GetItems()) {
-        useBlockHashJoin = useBlockHashJoin && IsDataOrOptionalOfDataOrPg(item->GetItemType());
+        useBlockHashJoin = useBlockHashJoin && !BlocksBlockHashJoin(item->GetItemType());
     }
     for (const auto* item : rightStructType->GetItems()) {
-        useBlockHashJoin = useBlockHashJoin && IsDataOrOptionalOfDataOrPg(item->GetItemType());
+        useBlockHashJoin = useBlockHashJoin && !BlocksBlockHashJoin(item->GetItemType());
     }
 
     const auto& leftItems = leftStructType->GetItems();

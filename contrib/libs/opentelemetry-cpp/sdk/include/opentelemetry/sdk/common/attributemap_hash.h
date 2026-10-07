@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include <stddef.h>
+#include <cstddef>
 #include <functional>
-#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -55,7 +54,7 @@ struct GetHashForAttributeValueVisitor
   {
     GetHash(seed_, v);
   }
-  size_t &seed_;
+  std::reference_wrapper<size_t> seed_;
 };
 
 // Calculate hash of keys and values of attribute map

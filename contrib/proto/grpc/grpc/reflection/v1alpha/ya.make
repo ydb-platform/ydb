@@ -6,16 +6,13 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2026-01-31)
+VERSION(2026-09-02)
 
-ORIGINAL_SOURCE(https://github.com/grpc/grpc-proto/archive/dafe8c0aa9c80e28da7808ffade0f33638a16e3d.tar.gz)
+ORIGINAL_SOURCE(https://github.com/grpc/grpc-proto/archive/dd549fc4ed04b60b0fdd3866b82ef0a7c87c6e4f.tar.gz)
 
 PY_NAMESPACE(grpc.reflection.v1alpha)
 
-PROTO_NAMESPACE(
-    GLOBAL
-    contrib/proto/grpc
-)
+PROTO_NAMESPACE(contrib/proto/grpc)
 
 GRPC()
 

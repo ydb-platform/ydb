@@ -7,13 +7,14 @@
 #include "util.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
-
-#include <ydb/core/protos/metrics_config.pb.h>
-#include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -25,16 +26,23 @@ namespace {
 
 class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_W("Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Retry.");
+                YDB_LOG_WARN("Error of resolving topic",
+                    {"streamPath", SrcStreamPath},
+                    {"ev", ev->Get()->ToString()},
+                    {"outcome", "retry"});
                 return Retry();
             }
 
-            LOG_E("Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Stop.");
+            YDB_LOG_ERROR("Error of resolving topic",
+                {"streamPath", SrcStreamPath},
+                {"ev", ev->Get()->ToString()},
+                {"outcome", "stop"});
             return; // TODO: hard error
         }
 
@@ -50,11 +58,13 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
             Send(Parent, std::move(ev));
         }
 
+        Send(Parent, new TEvPrivate::TEvCompleteWorkerSet(ReplicationId, TargetId));
+
         PassAway();
     }
 
     void Retry() {
-        LOG_D("Retry");
+        YDB_LOG_DEBUG("Retry");
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
@@ -77,8 +87,7 @@ public:
             const NKikimrReplication::TBatchingSettings& batchingSettings,
             const TString& database,
             const TMetricsConfig& metricsConfig,
-            const NKikimrReplication::TReplicationLocationConfig& location
-    )
+            const NKikimrReplication::TReplicationLocationConfig& location)
         : Parent(parent)
         , YdbProxy(proxy)
         , ConnectionParams(connectionParams)
@@ -88,7 +97,7 @@ public:
         , SrcStreamPath(srcStreamPath)
         , SrcStreamConsumerName(srcStreamConsumerName)
         , DstPathId(dstPathId)
-        , LogPrefix("TableWorkerRegistar", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("TableWorkerRegistar", ReplicationId, TargetId))
         , Config(config)
         , BatchingSettings(batchingSettings)
         , Database(database)
@@ -98,11 +107,14 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         Become(&TThis::StateWork);
         Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(SrcStreamPath, {}));
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
             sFunc(TEvents::TEvWakeup, Bootstrap);
@@ -120,7 +132,7 @@ private:
     const TString SrcStreamPath;
     const TString SrcStreamConsumerName;
     const TPathId DstPathId;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
     const TReplication::ITarget::IConfig::TPtr Config;
     const NKikimrReplication::TBatchingSettings BatchingSettings;
     const TString Database;
@@ -130,7 +142,6 @@ private:
 }; // TWorkerRegistar
 
 } // namespace
-
 
 TTargetWithStreamStats::TTargetWithStreamStats(TInstant startTime)
     : CollectionStartTime(startTime)
@@ -142,29 +153,24 @@ void TTargetWithStreamStats::RemoveWorker(ui64) {
 }
 
 bool TTargetWithStreamStats::UpdateWithSingleStatsItem(ui64, ui64 key, i64 value) {
-    const auto eKey = static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(key);
-    switch (eKey) {
-        case NKikimrReplication::TWorkerStats::READ_BYTES:
-            ReadBytes.Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::READ_MESSAGES:
-            ReadMessages.Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::WRITE_BYTES:
-            WriteBytes.Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::WRITE_ROWS:
-            WriteRows.Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU:
-            DecompressionCpuTime.Add(value);
-            break;
-        default:
-            return false;
+    switch (static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(key)) {
+    case NKikimrReplication::TWorkerStats::READ_BYTES:
+        ReadBytes.Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::READ_MESSAGES:
+        ReadMessages.Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::WRITE_BYTES:
+        WriteBytes.Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::WRITE_ROWS:
+        WriteRows.Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU:
+        DecompressionCpuTime.Add(value);
+        break;
+    default:
+        return false;
     }
 
     return true;
@@ -180,47 +186,65 @@ void TTargetWithStreamStats::Serialize(NKikimrReplication::TEvDescribeReplicatio
     dstStats.MutableStatsCollectionStart()->CopyFrom(NProtoInterop::CastToProto(CollectionStartTime));
 }
 
-
 bool TTargetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 value) {
     if (!CountersGroup) {
         return false;
     }
 
-    const auto eKey = static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(key);
-    switch (eKey) {
-        case NKikimrReplication::TWorkerStats::READ_TIME:
-            ReadTime->Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::WRITE_TIME:
-            WriteTime->Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU:
-            DecompressionCpuTime->Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::WRITE_BYTES:
-            WriteBytes->Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::WRITE_ROWS:
-            WriteRows->Add(value);
-            break;
-
-        case NKikimrReplication::TWorkerStats::WRITE_ERRORS:
-            WriteErrors->Add(value);
-            break;
-
-        default:
-            return false;
+    switch (static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(key)) {
+    case NKikimrReplication::TWorkerStats::READ_TIME:
+        ReadTime->Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::WRITE_TIME:
+        WriteTime->Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU:
+        DecompressionCpuTime->Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::WRITE_BYTES:
+        WriteBytes->Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::WRITE_ROWS:
+        WriteRows->Add(value);
+        break;
+    case NKikimrReplication::TWorkerStats::WRITE_ERRORS:
+        WriteErrors->Add(value);
+        break;
+    default:
+        return false;
     }
 
     return true;
 }
 
+bool TTargetWithStream::CanDetachWithoutStream() const {
+    if (!IsIndexBuild() || GetReplication()->GetDesiredState() != TReplication::EState::Done) {
+        return false;
+    }
+
+    if (GetStreamState() == EStreamState::Removing) {
+        return false;
+    }
+
+    switch (GetDstState()) {
+    case EDstState::Paused:
+    case EDstState::Alter:
+    case EDstState::Done:
+        return true;
+    default:
+        return false;
+    }
+}
+
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
+
+    if (CanDetachWithoutStream()) {
+        // Keep the stream metadata so a later DROP can clean up a stream whose
+        // creation was already submitted when the build was cancelled.
+        TTargetBase::Progress(ctx);
+        return;
+    }
 
     switch (GetStreamState()) {
     case EStreamState::Creating:
@@ -239,6 +263,13 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
         }
         return;
     case EStreamState::Ready:
+        if (GetKind() == TReplication::ETargetKind::Table && !GetStreamSchemaChanges().has_value() && !StreamCreator) {
+            // Streams created before capability persistence need one read-only
+            // description. Index workers wait until its result is durable.
+            StreamCreator = ctx.Register(CreateStreamCreator(replication, GetId(), ctx, true));
+        }
+
+        break;
     case EStreamState::Removed:
     case EStreamState::Error:
         break;
@@ -272,6 +303,7 @@ bool TTargetWithStream::UpdateStats(ui64 workerId, const NKikimrReplication::TWo
         if (stats) {
             stats->RemoveWorker(workerId);
         }
+
         return false;
     }
 
@@ -283,6 +315,7 @@ bool TTargetWithStream::UpdateStats(ui64 workerId, const NKikimrReplication::TWo
             counters->UpdateWithSingleStatsItem(workerId, item.GetKey(), item.GetValue());
         }
     }
+
     return true;
 }
 
@@ -315,4 +348,5 @@ void TTargetWithStream::SetLocation() {
         Location->CopyFrom(GetReplication()->GetLocation());
     }
 }
+
 }

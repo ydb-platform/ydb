@@ -21,7 +21,7 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
     return setup;
 }
 
-TActorId RegisterQuoter(auto& runtime, auto& edgeActor, size_t writeSpeedInBytesPerSecond, size_t deduplicationIdQuota) {
+TActorId RegisterQuoter(auto& runtime, auto& edgeActor, size_t writeSpeedInBytesPerSecond, size_t writeSpeedInMessagesPerSecond, size_t burstSizeInMessages) {
     NKikimrPQ::TPQConfig pqConfig;
     pqConfig.MutableQuotingConfig()->SetEnableQuoting(true);
     pqConfig.SetTopicsAreFirstClassCitizen(true);
@@ -30,8 +30,9 @@ TActorId RegisterQuoter(auto& runtime, auto& edgeActor, size_t writeSpeedInBytes
     NKikimrPQ::TPQTabletConfig config;
     config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(writeSpeedInBytesPerSecond);
     config.MutablePartitionConfig()->SetBurstSize(writeSpeedInBytesPerSecond);
-    config.MutablePartitionConfig()->SetWriteMessageDeduplicationIdPerSecond(deduplicationIdQuota);
-
+    config.MutablePartitionConfig()->SetWriteSpeedInMessagesPerSecond(writeSpeedInMessagesPerSecond);
+    config.MutablePartitionConfig()->SetBurstSizeInMessages(burstSizeInMessages);
+ 
     TPartitionId partitionId;
     TActorId tabletActor = edgeActor;
     ui64 tabletId = 28739;
@@ -55,17 +56,17 @@ THolder<TEvPQ::TEvApproveWriteQuota> WaitForQuotaApproved(TTestActorRuntime& run
     return std::move(event);
 }
 
-void ConsumeQuota(auto& runtime, auto& quoterId, auto& edgeActorId, size_t bytes, size_t deduplicationIds) {
+void ConsumeQuota(auto& runtime, auto& quoterId, auto& edgeActorId, size_t bytes, size_t messages) {
     runtime.Send(quoterId, edgeActorId,
-        new TEvPQ::TEvConsumed(bytes, deduplicationIds, 1, "client"));
+        new TEvPQ::TEvConsumed(bytes, messages, 1, "client"));
 }
 
-Y_UNIT_TEST(WaitDeduplicationIdQuota) {
+Y_UNIT_TEST(WaitMessagesQuota) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
     auto edgeActorId = runtime.AllocateEdgeActor();
 
-    auto quoterId = RegisterQuoter(runtime, edgeActorId, 1_MB, 1);
+    auto quoterId = RegisterQuoter(runtime, edgeActorId, 1_MB, 1, 1);
     RequestQuota(runtime, quoterId, edgeActorId);
     UNIT_ASSERT(WaitForQuotaApproved(runtime));
 

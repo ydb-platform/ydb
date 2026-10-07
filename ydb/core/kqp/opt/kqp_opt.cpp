@@ -1,5 +1,9 @@
 #include "kqp_opt_impl.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -38,10 +42,66 @@ TExprBase ProjectColumnsInternal(const TExprBase& input, const T& columnNames, T
         .Done();
 }
 
-} // namespace
+} // anonymous namespace
 
-bool IsKqpPureLambda(const TCoLambda& lambda) {
-    return !FindNode(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) {
+TKqpOptimizeContext::TKqpOptimizeContext(const TString& cluster, const TIntrusivePtr<NYql::TKikimrConfiguration>& config,
+    const TIntrusivePtr<NYql::TKikimrQueryContext> queryCtx, const TIntrusivePtr<NYql::TKikimrTablesData>& tables,
+    const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext, bool usePessimisticLocks)
+    : Cluster(cluster)
+    , Config(config)
+    , QueryCtx(queryCtx)
+    , Tables(tables)
+    , UserRequestContext(userRequestContext)
+    , UsePessimisticLocks(usePessimisticLocks)
+{
+    YQL_ENSURE(Config);
+    YQL_ENSURE(QueryCtx);
+    YQL_ENSURE(Tables);
+}
+
+bool TKqpOptimizeContext::NeedPessimisticLocks() const {
+    return UsePessimisticLocks && !Config->KqpDisablePessimisticLocks.Get().GetOrElse(false);
+}
+
+std::shared_ptr<NJson::TJsonValue> TKqpOptimizeContext::GetOverrideStatistics() {
+    if (!Config->OptOverrideStatistics.Get()) {
+        return std::shared_ptr<NJson::TJsonValue>();
+    }
+
+    if (!OverrideStatistics) {
+        auto jsonValue = new NJson::TJsonValue();
+        NJson::ReadJsonTree(*Config->OptOverrideStatistics.Get(), jsonValue, true);
+        OverrideStatistics = std::shared_ptr<NJson::TJsonValue>(jsonValue);
+    }
+
+    return OverrideStatistics;
+}
+
+NKikimr::NKqp::TOptimizerHints TKqpOptimizeContext::GetOptimizerHints() {
+    if (Config->OptimizerHints.Get()) {
+        if (!Hints) {
+            Hints = std::make_shared<NKikimr::NKqp::TOptimizerHints>(*Config->OptimizerHints.Get());
+        }
+        return *Hints;
+    }
+
+    return NKikimr::NKqp::TOptimizerHints();
+}
+
+bool TKqpOptimizeContext::IsDataQuery() const {
+    return QueryCtx->Type == NYql::EKikimrQueryType::Dml;
+}
+
+bool TKqpOptimizeContext::IsScanQuery() const {
+    return QueryCtx->Type == NYql::EKikimrQueryType::Scan;
+}
+
+bool TKqpOptimizeContext::IsGenericQuery() const {
+    return QueryCtx->Type == NYql::EKikimrQueryType::Query || QueryCtx->Type == NYql::EKikimrQueryType::Script;
+}
+
+bool IsKqpPureExpr(const TExprBase& expr, bool checkDqSources, bool checkIndexReads) {
+    return !FindNode(expr.Ptr(), [checkDqSources, checkIndexReads](const TExprNode::TPtr& node) {
         if (TMaybeNode<TKqlReadTableBase>(node)) {
             return true;
         }
@@ -58,8 +118,22 @@ bool IsKqpPureLambda(const TCoLambda& lambda) {
             return true;
         }
 
+        if (checkDqSources && (TCoDataSource::Match(node.Get()) || TDqSource::Match(node.Get())
+            || TDqReadWrapBase::Match(node.Get()))) {
+            return true;
+        }
+
+        if (checkIndexReads && (TKqlReadTableFullTextIndex::Match(node.Get())
+            || TKqpReadTableFullTextIndex::Match(node.Get()) || TKqlReadTableVectorIndex::Match(node.Get()))) {
+            return true;
+        }
+
         return false;
     });
+}
+
+bool IsKqpPureLambda(const TCoLambda& lambda) {
+    return IsKqpPureExpr(lambda.Body());
 }
 
 bool IsKqpPureInputs(const TExprList& inputs) {
@@ -81,17 +155,6 @@ bool IsKqpPureInputs(const TExprList& inputs) {
 
         return false;
     });
-}
-
-bool IsKqpEffectsStage(const TDqStageBase& stage) {
-    return stage.Program().Body().Maybe<TKqpEffects>().IsValid();
-}
-
-bool NeedSinks(const TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
-    return (kqpCtx.IsGenericQuery()
-            || (kqpCtx.IsDataQuery() && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->GetAllowOlapDataQuery())))
-        && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->GetEnableOlapSink())
-        && (table.Metadata->Kind != EKikimrTableKind::Datashard || kqpCtx.Config->GetEnableOltpSink());
 }
 
 bool CanEnableStreamWrite(const NYql::TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {

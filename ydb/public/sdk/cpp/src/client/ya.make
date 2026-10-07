@@ -23,6 +23,7 @@ RECURSE(
     impl/internal/logger
     impl/internal/make_request
     impl/internal/plain_status
+    impl/internal/sdk_runtime
     impl/internal/scheme_helpers
     impl/internal/thread_pool
     impl/internal/value_helpers
@@ -41,16 +42,19 @@ RECURSE(
     rate_limiter
     resources
     result
+    row_ranges
     scheme
     secret
     table
     table/impl
     table/query_stats
+    test_shard
     topic
     topic/codecs
     topic/impl
     trace
     types
+    types/core_facility
     types/credentials
     types/exceptions
     types/fatal_error_handlers

@@ -159,12 +159,20 @@ def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db,
         yield database
     finally:
         logger.info("destroy ydb_serverless_db_with_exclusive_nodes for %s", database)
+
+        # Exclusive nodes serve the database as a static slot, so they must not
+        # outlive it: a node that is still resolving the database path when the
+        # path is dropped gets UNKNOWN_TENANT and aborts with "Cannot start
+        # static tenant" (ydb/core/mind/tenant_pool.cpp). wait_tenant_up above
+        # is satisfied by the hostel nodes, so an exclusive node may still be
+        # starting up here, which is what happens under sanitizers. Stop the
+        # nodes first and drop the database afterwards.
+        ydb_cluster.unregister_and_stop_slots(database_nodes)
+
         ydb_cluster.remove_database(
             database,
             timeout_seconds=timeout_seconds
         )
-
-        ydb_cluster.unregister_and_stop_slots(database_nodes)
 
 
 @pytest.fixture(scope='module')

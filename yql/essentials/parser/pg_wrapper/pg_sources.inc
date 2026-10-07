@@ -802,6 +802,7 @@ SRCS(
     postgresql/src/port/strerror.c
     postgresql/src/port/tar.c
     postgresql/src/port/thread.c
+    postgresql/src/port/timingsafe_bcmp.c
     postgresql/src/timezone/localtime.c
     postgresql/src/timezone/pgtz.c
     postgresql/src/timezone/strftime.c

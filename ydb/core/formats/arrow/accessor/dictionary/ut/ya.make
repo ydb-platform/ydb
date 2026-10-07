@@ -6,6 +6,8 @@ PEERDIR(
     ydb/core/formats/arrow/accessor/dictionary
     ydb/core/formats/arrow/accessor/plain
     ydb/core/formats/arrow
+    ydb/core/formats/arrow/filter
+    ydb/library/formats/arrow
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
 )

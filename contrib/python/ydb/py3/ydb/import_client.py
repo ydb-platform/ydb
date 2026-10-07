@@ -16,7 +16,7 @@ except ImportError:
 from . import operation
 
 _ImportFromS3 = "ImportFromS3"
-_progresses = {}
+_progresses: "dict[int, ImportProgress]" = {}
 
 
 @enum.unique

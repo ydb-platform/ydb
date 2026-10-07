@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    local_rpc.h
+    local_rpc.cpp
 )
 
 PEERDIR(
@@ -15,7 +15,5 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/status
     ydb/public/sdk/cpp/src/library/issue
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

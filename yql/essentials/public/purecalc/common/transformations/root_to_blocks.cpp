@@ -23,7 +23,6 @@ public:
     {
     }
 
-public:
     void Rewind() override {
         Wrapped_ = false;
     }
@@ -51,7 +50,7 @@ public:
 
         Wrapped_ = true;
 
-        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
     }
 };
 

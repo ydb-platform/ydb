@@ -4,8 +4,8 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/common/actor.h>
-#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/util/backoff.h>
 
@@ -19,6 +19,12 @@ public:
 
     void Bootstrap();
     void PassAway() override;
+
+protected:
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"topic", Settings.TopicName});
+    }
 
 private:
 
@@ -58,7 +64,7 @@ private:
         ui64 Offset = 0;
     };
     std::vector<TPendingMessage> PendingMessages;
-    NDescriber::EStatus DescribeStatus = NDescriber::EStatus::UNKNOWN_ERROR;
+    NDescriber::EStatus DescribeStatus = NDescriber::EStatus::UnknownError;
 };
 
 } // namespace NKikimr::NPQ::NMLP

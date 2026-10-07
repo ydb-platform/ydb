@@ -674,7 +674,7 @@ private:
 
 void TPCCChecker::CheckSync() {
     auto connectionConfigCopy = ConnectionConfig;
-    TDriver driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
+    auto driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
     TQueryClient queryClient(driver);
 
     // Each member starts multiple async checks. To evenly load the cluster we

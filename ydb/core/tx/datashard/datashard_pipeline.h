@@ -15,6 +15,10 @@
 #include <ydb/core/util/intrusive_heap.h>
 #include <ydb/library/actors/async/async.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -118,7 +122,7 @@ public:
     TOperation::TPtr GetNextActiveOp(bool dryRun);
     bool IsReadyOp(TOperation::TPtr op);
 
-    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx, NACLib::TUserContext::TPtr userCtx);
+    bool LoadTxDetails(TTransactionContext &txc, const TActorContext &ctx, TActiveTransaction::TPtr tx, TIntrusivePtr<NACLib::TUserContext> userCtx);
     bool LoadWriteDetails(TTransactionContext& txc, const TActorContext& ctx, TWriteOperation::TPtr tx);
 
     void DeactivateOp(TOperation::TPtr op, TTransactionContext& txc, const TActorContext &ctx);
@@ -177,7 +181,6 @@ public:
     bool HasAlterCdcStream() const { return SchemaTx && SchemaTx->IsAlterCdcStream(); }
     bool HasDropCdcStream() const { return SchemaTx && SchemaTx->IsDropCdcStream(); }
     bool HasRotateCdcStream() const { return SchemaTx && SchemaTx->IsRotateCdcStream(); }
-    bool HasCreateIncrementalRestoreSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalRestoreSrc(); }
     bool HasCreateIncrementalBackupSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalBackupSrc(); }
     bool HasTruncate() const { return SchemaTx && SchemaTx->IsTruncate(); }
 
@@ -272,7 +275,7 @@ public:
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
                                     const TActorContext &ctx, NWilson::TSpan &&operationSpan,
-                                    NACLib::TUserContext::TPtr userCtx);
+                                    TIntrusivePtr<NACLib::TUserContext> userCtx);
     TOperation::TPtr BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&& ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
@@ -280,12 +283,12 @@ public:
     void BuildDataTx(TActiveTransaction *tx,
                      TTransactionContext &txc,
                      const TActorContext &ctx,
-                     NACLib::TUserContext::TPtr userCtx);
+                     TIntrusivePtr<NACLib::TUserContext> userCtx);
     ERestoreDataStatus RestoreDataTx(
             TActiveTransaction *tx,
             TTransactionContext &txc,
             const TActorContext &ctx,
-            NACLib::TUserContext::TPtr userCtx)
+            TIntrusivePtr<NACLib::TUserContext> userCtx)
     {
         return tx->RestoreTxData(Self, txc, ctx, userCtx);
     }
@@ -387,11 +390,12 @@ public:
     size_t WaitingCoroutinesCount() const { return WaitingCoroutines.Size(); }
 
     /**
-     * Waits until the specified snapshot is potentially readable
-     *
-     * Returns true on success and false when there are too many waiting requests already.
+     * Waits until the specified snapshot is potentially readable. This means that a read
+     * operation at this snapshot will be allowed to enter the pipeline and that the dependency
+     * tracker has all the info about planned writes at or below the snapshot. Note that this
+     * does *not* mean that all relevant changes are already executed against the localdb.
      */
-    async<bool> WaitForSnapshot(const TRowVersion& snapshot);
+    async<void> WaitForSnapshot(const TRowVersion& snapshot);
 
     TRowVersion GetReadEdge() const;
     TRowVersion GetUnreadableEdge() const;

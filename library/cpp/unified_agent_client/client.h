@@ -68,6 +68,8 @@ namespace NUnifiedAgent {
 
         // Force-cancel and recreate active grpc stream if there are inflight messages,
         // but no grpc callback activity for too long. This is a fail-safe for transport stalls.
+        // Only applies after a successful session init with negotiated protocol_version > 0;
+        // legacy sessions (no negotiated version) are not force-cancelled on inactivity.
         //
         // Default: 30 sec (use 0 to disable)
         TClientParameters& SetGrpcCallInactivityTimeout(TDuration timeout) {
@@ -87,6 +89,13 @@ namespace NUnifiedAgent {
         // Default: 10 millis.
         TClientParameters& SetGrpcSendDelay(TDuration delay) {
             GrpcSendDelay = delay;
+            return *this;
+        }
+
+        // Max protocol version offered to the agent (HTTP Accept-style). 0 = legacy only (do not send accept_protocol_version).
+        // Default: DefaultMaxAcceptProtocolVersion (v1).
+        TClientParameters& SetMaxAcceptProtocolVersion(ui32 version) {
+            MaxAcceptProtocolVersion = version;
             return *this;
         }
 
@@ -129,6 +138,7 @@ namespace NUnifiedAgent {
         static const size_t DefaultGrpcMaxMessageSize;
         static const TDuration DefaultGrpcSendDelay;
         static const TDuration DefaultGrpcCallInactivityTimeout;
+        static const ui32 DefaultMaxAcceptProtocolVersion;
 
     public:
         TString Uri;
@@ -142,6 +152,7 @@ namespace NUnifiedAgent {
         bool EnableForkSupport;
         size_t GrpcMaxMessageSize;
         TIntrusivePtr<TClientCounters> Counters;
+        ui32 MaxAcceptProtocolVersion;
     };
 
     struct TSessionParameters {

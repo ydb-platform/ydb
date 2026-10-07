@@ -94,7 +94,7 @@ struct TRecord
     i8 Attributes = 0;
 
     // Present in v2 only.
-    i32 TimestampDelta = 0;
+    i64 TimestampDelta = 0;
     i32 OffsetDelta = 0;
 
     // Present in v1 and v2.

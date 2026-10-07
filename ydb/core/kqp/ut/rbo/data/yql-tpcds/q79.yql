@@ -7,15 +7,15 @@ PRAGMA AnsiImplicitCrossJoin;
 SELECT
     c_last_name,
     c_first_name,
-    Substring(s_city, 1, 30),
+    Substring(CAST(s_city AS String), 1, 30),
     ss_ticket_number,
     amt,
     profit
 FROM (
     SELECT
-        ss_ticket_number,
-        ss_customer_sk,
-        store.s_city,
+        store_sales.ss_ticket_number AS ss_ticket_number,
+        store_sales.ss_customer_sk AS ss_customer_sk,
+        store.s_city AS s_city,
         Sum(ss_coupon_amt) AS amt,
         Sum(ss_net_profit) AS profit
     FROM
@@ -47,6 +47,6 @@ WHERE
 ORDER BY
     c_last_name,
     c_first_name,
-    Substring(s_city, 1, 30),
+    Substring(CAST(s_city AS String), 1, 30),
     profit
 LIMIT 100;

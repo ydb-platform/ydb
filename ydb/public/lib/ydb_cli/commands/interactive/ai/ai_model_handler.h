@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
 
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/lazy_driver.h>
 
 #include <util/generic/fwd.h>
 #include <util/stream/output.h>
@@ -18,10 +19,11 @@ class TModelHandler {
 
 public:
     struct TSettings {
+        TInteractiveConfigurationManager::TPtr ConfigurationManager;
         TAiModelConfig::TPtr Profile;
         TString Prompt; // Current interactive CLI prompt
         TString Database;
-        TDriver Driver;
+        TLazyDriver::TPtr LazyDriver;
         TString ConnectionString;
         TClientCommand::TConfig::TUsageInfoGetter UsageInfoGetter;
     };
@@ -33,15 +35,18 @@ public:
     void ClearContext();
 
 private:
-    IModel::TToolResponse CallTool(const IModel::TResponse::TToolCall& toolCall, std::vector<TString>& userMessages, bool& interrupted) const;
+    IModel::TToolResponse CallTool(const IModel::TResponse::TToolCall& toolCall, std::vector<TString>& userMessages, bool& interrupted);
 
     void SetupModel(TAiModelConfig::TPtr profile, const TSettings& settings);
 
     void SetupTools(const TSettings& settings);
 
 private:
+    TInteractiveConfigurationManager::TPtr ConfigurationManager;
+    bool AuditEnabled = false;
     IModel::TPtr Model;
     std::unordered_map<TString, ITool::TPtr> Tools;
+    ui64 AuditSeq = 0;
 };
 
 } // namespace NYdb::NConsoleClient::NAi

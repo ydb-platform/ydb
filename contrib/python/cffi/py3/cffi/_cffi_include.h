@@ -28,8 +28,13 @@
 #if !defined(_CFFI_USE_EMBEDDING) && !defined(Py_LIMITED_API)
 #  ifdef _MSC_VER
 #    if !defined(_DEBUG) && !defined(Py_DEBUG) && !defined(Py_TRACE_REFS) && !defined(Py_REF_DEBUG) && !defined(_CFFI_NO_LIMITED_API)
-#      define Py_LIMITED_API
+#      if !defined(Py_GIL_DISABLED)
+#        define Py_LIMITED_API
+#      else
+#        define Py_LIMITED_API 0x030f0000
+#      endif
 #    endif
+
 #    include <pyconfig.h>
      /* sanity-check: Py_LIMITED_API will cause crashes if any of these
         are also defined.  Normally, the Python file PC/pyconfig.h does not
@@ -49,7 +54,11 @@
 #  else
 #    include <pyconfig.h>
 #    if !defined(Py_DEBUG) && !defined(Py_TRACE_REFS) && !defined(Py_REF_DEBUG) && !defined(_CFFI_NO_LIMITED_API)
-#      define Py_LIMITED_API
+#      if !defined(Py_GIL_DISABLED)
+#        define Py_LIMITED_API
+#      else
+#        define Py_LIMITED_API 0x030f0000
+#      endif
 #    endif
 #  endif
 #endif
@@ -59,6 +68,9 @@
 extern "C" {
 #endif
 #include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "parse_c_type.h"
 
 /* this block of #ifs should be kept exactly identical between
@@ -128,13 +140,9 @@ extern "C" {
 #ifndef PYPY_VERSION
 
 
-#if PY_MAJOR_VERSION >= 3
-# define PyInt_FromLong PyLong_FromLong
-#endif
-
 #define _cffi_from_c_double PyFloat_FromDouble
 #define _cffi_from_c_float PyFloat_FromDouble
-#define _cffi_from_c_long PyInt_FromLong
+#define _cffi_from_c_long PyLong_FromLong
 #define _cffi_from_c_ulong PyLong_FromUnsignedLong
 #define _cffi_from_c_longlong PyLong_FromLongLong
 #define _cffi_from_c_ulonglong PyLong_FromUnsignedLongLong
@@ -146,12 +154,12 @@ extern "C" {
 #define _cffi_from_c_int(x, type)                                        \
     (((type)-1) > 0 ? /* unsigned */                                     \
         (sizeof(type) < sizeof(long) ?                                   \
-            PyInt_FromLong((long)x) :                                    \
+            PyLong_FromLong((long)x) :                                   \
          sizeof(type) == sizeof(long) ?                                  \
             PyLong_FromUnsignedLong((unsigned long)x) :                  \
             PyLong_FromUnsignedLongLong((unsigned long long)x)) :        \
         (sizeof(type) <= sizeof(long) ?                                  \
-            PyInt_FromLong((long)x) :                                    \
+            PyLong_FromLong((long)x) :                                   \
             PyLong_FromLongLong((long long)x)))
 
 #define _cffi_to_c_int(o, type)                                          \

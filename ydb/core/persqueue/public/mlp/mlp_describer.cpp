@@ -3,6 +3,8 @@
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NMLP {
 
 TDescriberActor::TDescriberActor(const TActorId& parentId, const TDescribeSettings& settings)
@@ -37,7 +39,7 @@ void TDescriberActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
 
     auto& topic = topics.begin()->second;
     switch(topic.Status) {
-        case NDescriber::EStatus::SUCCESS: {
+        case NDescriber::EStatus::Success: {
             TopicInfo = std::move(topic);
             auto consumerConfig = GetConsumer(TopicInfo.Info->Description.GetPQTabletConfig(), Settings.Consumer);
             if (!consumerConfig) {
@@ -45,6 +47,10 @@ void TDescriberActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
                     TStringBuilder() << "Consumer '" << Settings.Consumer << "' does not exist");
             }
             return DoRuntimeAttributes();
+        }
+        case NDescriber::EStatus::BadRequest: {
+            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
+                NDescriber::Description(Settings.TopicName, topic.Status));
         }
         default: {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
@@ -67,7 +73,10 @@ void TDescriberActor::DoRuntimeAttributes() {
 }
 
 void TDescriberActor::Handle(TEvPQ::TEvMLPGetRuntimeAttributesResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPGetRuntimeAttributesResponse " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "Handle TEvPQ::TEvMLPGetRuntimeAttributesResponse",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     auto* result = ev->Get();
 
     auto response = std::make_unique<TEvDescribeResponse>();
@@ -103,7 +112,10 @@ STFUNC(TDescriberActor::RuntimeAttributesState) {
 
 
 void TDescriberActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "Handle TEvPQ::TEvMLPErrorResponse",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
 }
 
@@ -113,7 +125,10 @@ void TDescriberActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 }
 
 void TDescriberActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    LOG_I("Reply error " << Ydb::StatusIds::StatusCode_Name(errorCode));
+    LOG_I(
+        "Reply error",
+        {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)}
+    );
     Send(ParentId, new TEvDescribeResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }

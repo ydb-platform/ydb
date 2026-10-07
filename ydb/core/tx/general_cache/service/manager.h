@@ -382,8 +382,10 @@ public:
         , ObjectsProcessor(TPolicy::BuildObjectsProcessor(ownerActorId))
         , Cache(Counters->GetConfig().GetMemoryLimit().value_or(DEFAULT_CACHE_SIZE))
         , UseCacheSizeFromConfig(Counters->GetConfig().GetMemoryLimit().has_value()) {
-        AFL_NOTICE(NKikimrServices::GENERAL_CACHE)("event", "general_cache_manager")("owner_actor_id", ownerActorId)(
-            "config", Counters->GetConfig().DebugString());
+        YDB_LOG_NOTICE_COMP(NKikimrServices::GENERAL_CACHE, "",
+            {"event", "general_cache_manager"},
+            {"ownerActorId", ownerActorId},
+            {"config", Counters->GetConfig().DebugString()});
         Counters->CacheSizeLimitBytes->Set(Cache.GetMaxSize());
         Counters->CacheConfigSizeLimitBytes->Set(Counters->GetConfig().GetMemoryLimit().value_or(DEFAULT_CACHE_SIZE));
     }
@@ -421,7 +423,8 @@ public:
     }
 
     void AddRequest(const std::shared_ptr<TRequest>& request) {
-        AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "add_request");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::GENERAL_CACHE, "",
+            {"event", "add_request"});
         if (request->IsAborted()) {
             Counters->IncomingAbortedRequestsCount->Inc();
             return;
@@ -443,7 +446,8 @@ public:
     }
 
     void OnAdditionalObjectsInfo(const TSourceId sourceId, THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& remove) {
-        AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "objects_info");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::GENERAL_CACHE, "",
+            {"event", "objects_info"});
         const TMonotonic now = TMonotonic::Now();
         const bool inFlightLimitBrokenBefore = !Counters->CheckTotalLimit();
         CleanUseless(add.size());
@@ -463,7 +467,8 @@ public:
 
     void OnRequestResult(
         const TSourceId sourceId, THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& failed) {
-        AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "on_result");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::GENERAL_CACHE, "",
+            {"event", "on_result"});
         const TMonotonic now = TMonotonic::Now();
         const bool inFlightLimitBrokenBefore = !Counters->CheckTotalLimit();
         CleanUseless(add.size());
@@ -493,8 +498,11 @@ public:
             return;
         }
 
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "update_max_cache_size")("id", TPolicy::GetCacheName())("new_value", maxCacheSize)(
-            "old_value", Cache.GetMaxSize());
+        YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "update_max_cache_size"},
+            {"id", TPolicy::GetCacheName()},
+            {"newValue", maxCacheSize},
+            {"oldValue", Cache.GetMaxSize()});
         Cache.SetMaxSize(maxCacheSize);
         Counters->CacheSizeLimitBytes->Set(Cache.GetMaxSize());
     }

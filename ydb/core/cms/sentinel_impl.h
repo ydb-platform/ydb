@@ -5,10 +5,11 @@
 #include "pdisk_state.h"
 #include "pdisk_status.h"
 
+#include <ydb/core/base/nodestate.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
-#include <ydb/core/base/nodestate.h>
 
 namespace NKikimr::NCms::NSentinel {
 
@@ -16,11 +17,16 @@ using TLimitsMap = TMap<EPDiskState, ui32>;
 
 class TPDiskStatusComputer {
 public:
-    explicit TPDiskStatusComputer(const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits,
-                                  TInstant cmsFirstBootTimestamp, const TDuration& initialDeploymentGracePeriod);
+    explicit TPDiskStatusComputer(
+        const ui32& defaultStateLimit,
+        const ui32& goodStateLimit,
+        const TLimitsMap& stateLimits,
+        TInstant cmsFirstBootTimestamp,
+        const TDuration& initialDeploymentGracePeriod);
 
     void AddState(EPDiskState state, bool isNodeLocked);
     EPDiskStatus Compute(EPDiskStatus current, TString& reason) const;
+    EMaintenanceStatus::E ComputeMaintenanceStatus(EMaintenanceStatus::E current) const;
 
     EPDiskState GetState() const;
     EPDiskState GetPrevState() const;
@@ -34,6 +40,8 @@ public:
 
     bool IsInitialDeploymentGracePeriod() const;
 
+    void SetMaintenanceStatus(EMaintenanceStatus::E status);
+
 private:
     const ui32& DefaultStateLimit;
     const ui32& GoodStateLimit;
@@ -43,7 +51,7 @@ private:
     mutable EPDiskState PrevState = State;
     ui64 StateCounter;
     TMaybe<EPDiskStatus> ForcedStatus;
-
+    EMaintenanceStatus::E MaintenanceStatus = EMaintenanceStatus::NOT_SET;
     mutable bool HadBadStateRecently = false;
 
     TInstant CMSFirstBootTimestamp;
@@ -53,16 +61,34 @@ private:
 
 class TPDiskStatus: public TPDiskStatusComputer {
 public:
-    explicit TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit,
-                          const ui32& goodStateLimit, const TLimitsMap& stateLimits,
-                          TInstant cmsFirstBootTimestamp, const TDuration& initialDeploymentGracePeriod);
+    explicit TPDiskStatus(
+        EPDiskStatus initialStatus,
+        const ui32& defaultStateLimit,
+        const ui32& goodStateLimit,
+        const TLimitsMap& stateLimits,
+        TInstant cmsFirstBootTimestamp,
+        const TDuration& initialDeploymentGracePeriod);
+
+    explicit TPDiskStatus(
+            EPDiskStatus initialStatus,
+            EMaintenanceStatus::E initialMaintenanceStatus,
+            const ui32& defaultStateLimit,
+            const ui32& goodStateLimit,
+            const TLimitsMap& stateLimits,
+            TInstant cmsFirstBootTimestamp,
+            const TDuration& initialDeploymentGracePeriod);
 
     void AddState(EPDiskState state, bool isNodeLocked);
     bool IsChanged() const;
+    bool IsDriveStatusChanged() const;
+    bool IsMaintenanceStatusChanged() const;
     void ApplyChanges(TString& reason);
     void ApplyChanges();
+    void ApplyDriveStatusChanges(TString& reason);
+    void ApplyMaintenanceStatusChanges();
     EPDiskStatus GetStatus() const;
     bool IsNewStatusGood() const;
+    EMaintenanceStatus::E GetMaintenanceStatus() const;
 
     bool IsChangingAllowed() const;
     void AllowChanging();
@@ -70,6 +96,7 @@ public:
 
 private:
     EPDiskStatus Current;
+    EMaintenanceStatus::E CurrentMaintenanceStatus;
     bool ChangingAllowed;
 
 }; // TPDiskStatus
@@ -96,6 +123,8 @@ struct TPDiskInfo
 
     EPDiskStatus ActualStatus = EPDiskStatus::ACTIVE;
     EPDiskStatus PrevStatus = EPDiskStatus::UNKNOWN;
+    EMaintenanceStatus::E ActualMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
+    EMaintenanceStatus::E PrevMaintenanceStatus = NKikimrBlobStorage::TMaintenanceStatus::NOT_SET;
     TInstant LastStatusChange;
     bool StatusChangeFailed = false;
     // means that this pdisk status change last time was the reason of whole request failure
@@ -104,9 +133,14 @@ struct TPDiskInfo
     ui32 PrevStatusChangeAttempt = 0;
     EIgnoreReason IgnoreReason = NKikimrCms::TPDiskInfo::NOT_IGNORED;
 
-    explicit TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit,
-                        const ui32& goodStateLimit, const TLimitsMap& stateLimits,
-                        TInstant cmsFirstBootTimestamp, const TDuration& initialDeploymentGracePeriod);
+    explicit TPDiskInfo(
+        EPDiskStatus initialStatus,
+        EMaintenanceStatus::E initialMaintenanceStatus,
+        const ui32& defaultStateLimit,
+        const ui32& goodStateLimit,
+        const TLimitsMap& stateLimits,
+        TInstant cmsFirstBootTimestamp,
+        const TDuration& initialDeploymentGracePeriod);
 
     bool IsTouched() const { return Touched; }
     void Touch() { Touched = true; }
@@ -140,7 +174,7 @@ struct TNodeStatusComputer {
     bool DefinitelyGood() const { return CurrentState == ENodeState::GOOD && StateCounter >= GoodStateLimit; }
 };
 
-struct TNodeInfo : public TNodeStatusComputer {
+struct TNodeInfo: public TNodeStatusComputer {
     TString Host;
     NActors::TNodeLocation Location;
     TMaybeFail<ui32> PileId;
@@ -198,7 +232,7 @@ public:
 
 }; // TClusterMap
 
-class TGuardian : public TClusterMap {
+class TGuardian: public TClusterMap {
     static bool CheckRatio(ui32 check, ui32 base, ui32 ratio) {
         return (check * 100) <= (base * ratio);
     }
@@ -208,8 +242,13 @@ class TGuardian : public TClusterMap {
     }
 
 public:
-    explicit TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio = 100, ui32 roomRatio = 100,
-                       ui32 rackRatio = 100, ui32 pileRatio = 100, ui32 faultyPDisksThresholdPerNode = 0);
+    explicit TGuardian(
+        TSentinelState::TPtr state,
+        ui32 dataCenterRatio = 100,
+        ui32 roomRatio = 100,
+        ui32 rackRatio = 100,
+        ui32 pileRatio = 100,
+        ui32 faultyPDisksThresholdPerNode = 0);
 
     TPDiskIDSet GetAllowedPDisks(const TClusterMap& all, TString& issues, TPDiskIgnoredMap& disallowed) const;
 

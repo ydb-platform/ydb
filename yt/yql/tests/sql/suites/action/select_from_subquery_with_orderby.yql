@@ -1,5 +1,3 @@
-/* postgres can not */
-/* syntax version 1 */
 define subquery $src() as
   select * from plato.Input order by subkey;
 end define;

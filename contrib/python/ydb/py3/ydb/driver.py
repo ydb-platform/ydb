@@ -6,7 +6,6 @@ from typing import Any, List, Optional, Tuple, Type, TYPE_CHECKING
 
 from . import credentials as credentials_impl, table, scheme, pool
 from . import tracing
-from . import iam
 from . import _utilities
 
 if TYPE_CHECKING:
@@ -63,6 +62,7 @@ def credentials_from_env_variables(tracer: Optional[tracing.Tracer] = None) -> "
         metadata_credentials = os.getenv("YDB_METADATA_CREDENTIALS", "0") == "1"
         if metadata_credentials:
             ctx.trace({"credentials.metadata": True})
+            from . import iam
 
             return iam.MetadataUrlCredentials(tracer=tracer)
 
@@ -84,6 +84,8 @@ def credentials_from_env_variables(tracer: Optional[tracing.Tracer] = None) -> "
                 "credentials.metadata": True,
             }
         )
+        from . import iam
+
         return iam.MetadataUrlCredentials(tracer=tracer)
 
 
@@ -158,7 +160,7 @@ class DriverConfig(object):
         :param grpc_keep_alive_timeout: GRpc KeepAlive timeout, ms
         :param ydb.Tracer tracer: ydb.Tracer instance to trace requests in driver.\
         If tracing aio ScopeManager must be ContextVarsScopeManager
-        :param grpc_lb_policy_name: A load balancing policy to be used for discovery channel construction. Default value is `round_round`
+        :param grpc_lb_policy_name: A load balancing policy to be used for discovery channel construction. Default value is `round_robin`
         :param discovery_request_timeout: A default timeout to complete the discovery. The default value is 10 seconds.
         :param disable_discovery: If True, endpoint discovery is disabled and only the start endpoint is used for all requests.
         :param detect_local_dc: If True, detect nearest datacenter using TCP latency measurement instead of using\
@@ -310,7 +312,7 @@ class Driver(pool.ConnectionPool):
         :param connection_string: A string in the following format: <protocol>://<hostame>:<port>/?database=/path/to/the/database
         :param endpoint: An endpoint specified in the following format: <protocol>://<hostame>:<port>
         :param database: A database path
-        :param credentials: A credentials. If not specifed credentials constructed by default.
+        :param credentials: A credentials. If not specified credentials constructed by default.
         """
         from . import topic  # local import for prevent cycle import error
         from . import coordination  # local import for prevent cycle import error

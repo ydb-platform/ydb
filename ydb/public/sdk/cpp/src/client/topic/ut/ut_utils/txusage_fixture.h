@@ -209,6 +209,8 @@ protected:
 
     void TestTransactionsConflictOnSeqNo();
 
+    void TestEmptySourceIdParallelTx();
+
     void TestWriteToTopic1();
 
     void TestWriteToTopic4();
@@ -254,6 +256,9 @@ protected:
     void TestWriteToTopic47();
 
     void TestWriteToTopic50();
+
+    void TestTxWriteMidCommitReconnectAssertsParentOffsets();
+    void TestTxWriteSmallMaxMemoryMidBatchReconnectAssertsParentOffsets();
 
     struct TAvgWriteBytes {
         std::uint64_t PerSec = 0;

@@ -1,6 +1,9 @@
 
 INCLUDE(header.ya.make.inc)
 
+ENABLE(TIDY_ALLOW_GENERATED)
+SET(TIDY_HEADER_FILTER "${ARCADIA_ROOT}/yql/essentials/minikql/computation/")
+
 SET(ORIG_SRC_DIR yql/essentials/minikql/computation)
 
 SET(ORIG_SOURCES
@@ -27,8 +30,6 @@ PEERDIR(
     yql/essentials/utils
     library/cpp/threading/future
 )
-
-YQL_LAST_ABI_VERSION()
 
 ADDINCL(
     ${ORIG_SRC_DIR}

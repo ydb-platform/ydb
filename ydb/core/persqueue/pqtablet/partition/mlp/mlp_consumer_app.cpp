@@ -54,6 +54,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                             PROPERTY("Inflight unlocked count", metrics.UnprocessedMessageCount);
                             PROPERTY("Inflight locked count", metrics.LockedMessageCount);
                             PROPERTY("Inflight locked group count", metrics.LockedMessageGroupCount);
+                            PROPERTY("Inflight group count", metrics.InflightMessageGroupCount);
                             PROPERTY("Inflight delayed count", metrics.DelayedMessageCount);
                             PROPERTY("Inflight committed count", metrics.CommittedMessageCount);
                             PROPERTY("Inflight scheduled to DLQ count", metrics.DLQMessageCount);

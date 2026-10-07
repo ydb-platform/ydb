@@ -6,8 +6,18 @@ Distributed under the [Boost Software License, Version 1.0](http://www.boost.org
 
 ### Properties
 
-* C++03
+* C++11
 * Requires Linking
+
+### Development
+
+The library is essentially done. No major new features are expected, the primary goal is stability, as well as small
+changes to re-align with the evolution of Boost C++ Libraries and C++.
+
+* Good PRs within the scope are welcome. It may take some time, and maybe a ping or two, to get merged.
+* Good issues are appreciated, but realistically, might remain open indefinitely, unless you also prepare a PR.
+* Drive-by PRs and issues are not welcome.
+* AI-assisted PRs are OK, but you should self-review every changed line.
 
 ### Build Status
 (in progress...)

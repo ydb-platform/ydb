@@ -5,38 +5,33 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 TRangeLock::TRangeLock(TRangeLock&& other) noexcept
-    : LockableRanges(other.LockableRanges)
-    , Lsn(other.Lsn)
+    : LockableRanges(std::move(other.LockableRanges))
+    , PBufferKey(other.PBufferKey)
     , Range(other.Range)
+    , Mask(other.Mask)
     , LockRange(other.LockRange)
     , Armed(other.Armed)
 {
     other.Armed = false;
-    other.LockRange = {};
 }
 
 TRangeLock::~TRangeLock()
 {
-    if (!Armed) {
-        return;
-    }
-
-    if (Lsn) {
-        LockableRanges->UnlockPBuffer(Lsn);
-    } else {
-        LockableRanges->UnLockDDiskRange(LockRange);
-    }
+    Disarm();
 }
 
 TRangeLock& TRangeLock::operator=(TRangeLock&& other) noexcept
 {
-    LockableRanges = other.LockableRanges;
-    Lsn = other.Lsn;
+    Disarm();
+
+    LockableRanges = std::move(other.LockableRanges);
+    PBufferKey = other.PBufferKey;
     Range = other.Range;
-    Armed = other.Armed;
+    Mask = other.Mask;
     LockRange = other.LockRange;
+    Armed = other.Armed;
+
     other.Armed = false;
-    other.LockRange = {};
     return *this;
 }
 
@@ -45,26 +40,46 @@ void TRangeLock::Arm()
     if (Armed) {
         return;
     }
-
     Armed = true;
 
-    if (Lsn) {
-        LockableRanges->LockPBuffer(Lsn);
-    } else {
-        LockRange = LockableRanges->LockDDiskRange(Range, Mask);
+    if (auto lockableRanges = LockableRanges.lock()) {
+        if (PBufferKey.Lsn) {
+            lockableRanges->LockPBuffer(PBufferKey);
+        } else {
+            Y_ABORT_UNLESS(!Mask.Empty());
+            LockRange = lockableRanges->LockDDiskRange(Range, Mask);
+        }
     }
 }
 
-TRangeLock::TRangeLock(ILockableRanges* lockableRanges, ui64 lsn)
-    : LockableRanges(lockableRanges)
-    , Lsn(lsn)
+void TRangeLock::Disarm()
+{
+    if (!Armed) {
+        return;
+    }
+    Armed = false;
+
+    if (auto lockableRanges = LockableRanges.lock()) {
+        if (PBufferKey.Lsn) {
+            lockableRanges->UnlockPBuffer(PBufferKey);
+        } else {
+            lockableRanges->UnLockDDiskRange(LockRange);
+        }
+    }
+}
+
+TRangeLock::TRangeLock(
+    ILockableRangesWeakPtr lockableRanges,
+    TPBufferKey pBufferKey)
+    : LockableRanges(std::move(lockableRanges))
+    , PBufferKey(pBufferKey)
 {}
 
 TRangeLock::TRangeLock(
-    ILockableRanges* lockableRanges,
-    TBlockRange64 range,
-    TLocationMask mask)
-    : LockableRanges(lockableRanges)
+    ILockableRangesWeakPtr lockableRanges,
+    TBlockRange16 range,
+    THostMask mask)
+    : LockableRanges(std::move(lockableRanges))
     , Range(range)
     , Mask(mask)
 {}

@@ -9,6 +9,8 @@
 #include <util/datetime/base.h>
 #include <unordered_map>
 #include <string>
+#include <memory>
+#include <new>
 
 namespace NYdbGrpc {
 inline namespace Dev {
@@ -29,6 +31,7 @@ struct TGRpcClientConfig {
     std::string LoadBalancingPolicy = { };
     std::string SslTargetNameOverride = { };
     bool UseXds = false;
+    std::string UserAgentPrefix = { };
 
     TGRpcClientConfig() = default;
     TGRpcClientConfig(const TGRpcClientConfig&) = default;
@@ -52,11 +55,14 @@ struct TGRpcClientConfig {
     {}
 };
 
+bool ValidateTlsCredentials(const grpc::SslCredentialsOptions& sslCredentials, std::string& errorMessage);
+
 inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRpcClientConfig& config, grpc_socket_mutator* mutator = nullptr){
     grpc::ChannelArguments args;
     args.SetMaxReceiveMessageSize(config.MaxInboundMessageSize ? config.MaxInboundMessageSize : config.MaxMessageSize);
     args.SetMaxSendMessageSize(config.MaxOutboundMessageSize ? config.MaxOutboundMessageSize : config.MaxMessageSize);
     args.SetCompressionAlgorithm(config.CompressionAlgorithm);
+    args.SetUserAgentPrefix(NYdb::TStringType{config.UserAgentPrefix});
 
     for (const auto& kvp: config.StringChannelParams) {
         args.SetString(NYdb::TStringType{kvp.first}, NYdb::TStringType{kvp.second});

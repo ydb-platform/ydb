@@ -38,7 +38,10 @@ TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId opId, const
         }
     }
 
-    TVector<ISubOperation::TPtr> result;
+    NKikimrSchemeOp::TDropCdcStream dropCdcStreamOp;
+    dropCdcStreamOp.SetTableName(tableName);
+    TVector<TPath> streamPaths;
+
     for (auto& [child, _] : tablePath.Base()->GetChildren()) {
         if (child.EndsWith("_continuousBackupImpl")) {
             const auto checksResult = NCdc::DoDropStreamPathChecks(opId, workingDirPath, tableName, child);
@@ -57,13 +60,14 @@ TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId opId, const
                 return {reject};
             }
 
-            NKikimrSchemeOp::TDropCdcStream dropCdcStreamOp;
-            dropCdcStreamOp.SetTableName(tableName);
             dropCdcStreamOp.AddStreamName(child);
-
-            TVector<TPath> streamPaths = {streamPath};
-            NCdc::DoDropStream(result, dropCdcStreamOp, opId, workingDirPath, tablePath, streamPaths, InvalidTxId, context);
+            streamPaths.push_back(streamPath);
         }
+    }
+
+    TVector<ISubOperation::TPtr> result;
+    if (!streamPaths.empty()) {
+        NCdc::DoDropStream(result, dropCdcStreamOp, opId, workingDirPath, tablePath, streamPaths, InvalidTxId, context);
     }
 
     return result;

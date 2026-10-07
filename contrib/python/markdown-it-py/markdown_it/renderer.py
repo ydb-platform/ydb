@@ -209,6 +209,26 @@ class RendererHTML(RendererProtocol):
 
     ###################################################
 
+    def list_item_open(
+        self,
+        tokens: Sequence[Token],
+        idx: int,
+        options: OptionsDict,
+        env: EnvType,
+    ) -> str:
+        token = tokens[idx]
+        result = self.renderToken(tokens, idx, options, env)
+        if token.meta and "checked" in token.meta:
+            checked_attr = ' checked=""' if token.meta["checked"] else ""
+            disabled_attr = (
+                "" if options.get("tasklists_editable", False) else ' disabled=""'
+            )
+            result += (
+                '<input class="task-list-item-checkbox"'
+                f'{disabled_attr} type="checkbox"{checked_attr}> '
+            )
+        return result
+
     def code_inline(
         self, tokens: Sequence[Token], idx: int, options: OptionsDict, env: EnvType
     ) -> str:

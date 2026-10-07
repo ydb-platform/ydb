@@ -27,10 +27,12 @@ Adding rows is a special update or replace case, and a record of adding a row in
 
 All changes in {{ ydb-short-name }} tables are arranged according to the order in which transactions are performed. Each change is marked with a virtual timestamp which consists of two elements:
 
-1. Global coordinator time.
-2. Unique transaction ID.
+1. Global [coordinator](../concepts/glossary.md#coordinator) time.
+1. Unique [transaction ID](../concepts/glossary.md#txid).
 
 Using these timestamps, you can arrange records from different partitions of the topic relative to each other or use them for filtering (for example, to exclude old change records).
+
+For [single-shard transactions](../concepts/glossary.md#transactions), the timestamp of an existing distributed transaction in the execution queue can be used, which allows the timestamp to be non-unique. If there are no distributed transactions in the execution queue, the first element of the timestamp will be the time obtained from the coordinator, and the unique transaction ID will take the maximum possible value `18446744073709551615` (2<sup>64</sup>-1, the maximum value of `Uint64`).
 
 {% note info %}
 
@@ -92,7 +94,9 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
     "erase": {},
     "newImage": {<columns>},
     "oldImage": {<columns>},
-    "ts": [<step>, <txId>]
+    "ts": [<step>, <txId>],
+    "user": "<user SID>",
+    "traceId": "<Trace ID>"
 }
 ```
 
@@ -103,6 +107,8 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 * `newImage`: Row snapshot that results from its being changed. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `oldImage`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `ts`: [Virtual timestamp](#virtual-timestamps). Present if the `VIRTUAL_TIMESTAMPS` setting is enabled. Contains the value of the global coordinator time (`step`) and the unique transaction ID (`txId`).
+* `user`: User identifier. Present if the `USER_SIDS` setting is enabled. Contains the user's [SID](glossary.md#sid-access-sid) and is set to `ttl@system` if the record is deleted by the [TTL](ttl.md) process.
+* `traceId`: OpenTelemetry [trace identifier](../reference/observability/tracing/external-traces.md). Present if the `TRACE_IDS` setting is enabled.
 
 Sample record of an update in `UPDATES` mode:
 
@@ -188,6 +194,7 @@ The record structure is the same as for [Amazon DynamoDB Streams](https://docs.a
 * `eventName`: `INSERT`, `MODIFY`, or `REMOVE`. You can only use `INSERT` in the `NEW_AND_OLD_IMAGES` mode.
 * `eventSource`: Includes the `ydb:document-table` string.
 * `eventVersion`: Includes the `1.0` string.
+* `userIdentity`: Includes user information. Present if the `USER_SIDS` setting is enabled. Contains `type` (`"User"` or `"Service"`) and `principalId` (user's [SID](glossary.md#sid-access-sid)). If record is deleted by the [TTL](ttl.md) process, `type` is `"Service"` and `principalId` is `"dynamodb.amazonaws.com"`.
 
 {% endif %}
 
@@ -207,7 +214,9 @@ A [Debezium](https://debezium.io)-compatible JSON record structure has the follo
             "ts_ms": <ts_ms>,
             "step": <step>,
             "txId": <txId>,
-            "snapshot": <bool>
+            "snapshot": <bool>,
+            "user": <user SID>,
+            "traceId": <Trace ID>
         }
     }
 }
@@ -230,6 +239,8 @@ A [Debezium](https://debezium.io)-compatible JSON record structure has the follo
   * `step`: Global coordinator time. Part of the [virtual timestamp](#virtual-timestamps).
   * `txId`: Unique transaction ID. Part of the [virtual timestamp](#virtual-timestamps).
   * `snapshot`: Whether the event is part of a snapshot.
+  * `user`: User identifier. Present if the `USER_SIDS` setting is enabled. Contains the user's [SID](glossary.md#sid-access-sid) and equals `ttl@system` if the record is deleted by the [TTL](ttl.md) process.
+  * `traceId`: OpenTelemetry [trace identifier](../reference/observability/tracing/external-traces.md). Present if the `TRACE_IDS` setting is enabled.
 
 When reading using Kafka API, the Debezium-compatible primary key of the modified row is specified as the message key:
 
@@ -289,6 +300,8 @@ The topic settings can be updated using the expression [ALTER TOPIC](../yql/refe
 
   * `retention_period`;
   * `retention_storage_mb`;
+  * `partition_write_burst_bytes`;
+  * `partition_write_speed_bytes_per_second`.
 
 * [updating consumers](../yql/reference/syntax/alter-topic.md#updating-a-set-of-consumers).
 

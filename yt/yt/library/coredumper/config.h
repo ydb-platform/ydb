@@ -12,11 +12,11 @@ struct TCoreDumperConfig
     : public NYTree::TYsonStruct
 {
     //! A path to store the core files.
-    TString Path;
+    std::string Path;
 
     //! A name under which the core file should be placed.
     //! Some of the Porto variables like %CORE_PID, %CORE_TID etc are supported, refer to the implementation.
-    TString Pattern;
+    std::string Pattern;
 
     REGISTER_YSON_STRUCT(TCoreDumperConfig);
 

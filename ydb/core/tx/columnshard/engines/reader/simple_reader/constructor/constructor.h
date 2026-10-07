@@ -9,6 +9,10 @@ public:
         return "SIMPLE";
     }
 
+    virtual EReaderClass GetReaderClass() const override {
+        return EReaderClass::Simple;
+    }
+
 private:
     using TBase = IScannerConstructor;
     static const inline TFactory::TRegistrator<TIndexScannerConstructor> Registrator =
@@ -16,7 +20,9 @@ private:
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(const NKikimrKqp::TEvKqpScanCursor::ImplementationCase impl) const override;
 
 protected:
-    virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const override;
+    virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(
+        const NColumnShard::TColumnShard* self, const TReadDescription& read) const override;
+
 public:
     using TBase::TBase;
     virtual TConclusionStatus ParseProgram(
@@ -24,4 +30,4 @@ public:
     virtual std::vector<TNameTypeInfo> GetPrimaryKeyScheme(const NColumnShard::TColumnShard* self) const override;
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader::NSimple

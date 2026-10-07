@@ -27,4 +27,4 @@ struct TOverloadSubscriberInfo {
     TSeqNo SeqNo;
 };
 
-} // namespace NKikimr::NColumnShard::NOverload
+}   // namespace NKikimr::NColumnShard::NOverload

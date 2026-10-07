@@ -72,7 +72,7 @@ public:
 
 class TOneCompactionCommand: public ICommand {
 private:
-    virtual TConclusionStatus DoExecute(TKikimrRunner& /*kikimr*/) override;
+    virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override;
 
 public:
     TOneCompactionCommand() {

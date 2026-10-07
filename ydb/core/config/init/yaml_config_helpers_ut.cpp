@@ -40,7 +40,7 @@ config:
                 LoadYamlAsJsonOrThrow("bad: [yaml: {broken", "my_config.yaml");
                 UNIT_FAIL("Expected exception");
             } catch (const TInitializationException& e) {
-                AssertErrorCode(e, "YDB-CFG01");
+                AssertErrorCode(e, "YDBE-10001");
                 TString msg = e.what();
                 UNIT_ASSERT_C(msg.Contains("my_config.yaml"), "source missing: " << msg);
                 UNIT_ASSERT_C(msg.Contains("Failed to parse"), "prefix missing: " << msg);
@@ -51,7 +51,7 @@ config:
                 LoadYamlAsJsonOrThrow("bad: [yaml: {broken", {});
                 UNIT_FAIL("Expected exception");
             } catch (const TInitializationException& e) {
-                AssertErrorCode(e, "YDB-CFG01");
+                AssertErrorCode(e, "YDBE-10001");
                 TString msg = e.what();
                 UNIT_ASSERT_C(msg.Contains("YAML config"), "default source missing: " << msg);
             }
@@ -61,7 +61,7 @@ config:
                 LoadYamlAsJsonOrThrow("config:\n  key: 1\n  key: 2\n", "dup.yaml");
                 UNIT_FAIL("Expected exception on duplicate key");
             } catch (const TInitializationException& e) {
-                AssertErrorCode(e, "YDB-CFG05");
+                AssertErrorCode(e, "YDBE-10005");
                 TString msg = e.what();
                 UNIT_ASSERT_C(msg.Contains("duplicate key"), "duplicate key message missing: " << msg);
                 UNIT_ASSERT_C(msg.Contains("dup.yaml"), "source missing: " << msg);
@@ -77,7 +77,7 @@ config:
             ParseJsonConfigOrThrow(json, "test.yaml", config);
             UNIT_FAIL("Expected exception");
         } catch (const TInitializationException& e) {
-            AssertErrorCode(e, "YDB-CFG02");
+            AssertErrorCode(e, "YDBE-10002");
             TString msg = e.what();
             UNIT_ASSERT_C(msg.Contains("fake_field"), "field name missing: " << msg);
             UNIT_ASSERT_C(msg.Contains("test.yaml"), "source missing: " << msg);
@@ -93,5 +93,32 @@ config:
         UNIT_ASSERT_NO_EXCEPTION(ParseJsonConfigOrThrow(json, "test.yaml", config));
         UNIT_ASSERT(config.HasLogConfig());
         UNIT_ASSERT_VALUES_EQUAL(config.GetLogConfig().GetDefaultLevel(), 3);
+    }
+
+    Y_UNIT_TEST(ParseJsonConfig_AllowUnknownFields) {
+        auto json = LoadYamlAsJsonOrThrow(minimalValidConfig, "test.yaml");
+        json["config"]["fake_field"] = 123;
+        json["config"]["log_config"]["fake_field"] = 456;
+        json["config"]["log_config"]["default_level"] = 3;
+
+        NKikimrConfig::TAppConfig config;
+        UNIT_ASSERT_NO_EXCEPTION(ParseJsonConfigOrThrow(json, "test.yaml", config, true));
+        UNIT_ASSERT_VALUES_EQUAL(config.GetLogConfig().GetDefaultLevel(), 3);
+    }
+
+    Y_UNIT_TEST(ParseJsonConfig_AllowUnknownFieldsRejectsInvalidKnownField) {
+        auto json = LoadYamlAsJsonOrThrow(minimalValidConfig, "test.yaml");
+        json["config"]["fake_field"] = 123;
+        json["config"]["log_config"]["entry"].AppendValue("not-a-map");
+
+        NKikimrConfig::TAppConfig config;
+        try {
+            ParseJsonConfigOrThrow(json, "test.yaml", config, true);
+            UNIT_FAIL("Expected invalid value error");
+        } catch (const TInitializationException& e) {
+            AssertErrorCode(e, "YDBE-10003");
+            UNIT_ASSERT_STRING_CONTAINS(e.what(), "/config/log_config/entry/0");
+            UNIT_ASSERT_STRING_CONTAINS(e.what(), "expected json map");
+        }
     }
 }

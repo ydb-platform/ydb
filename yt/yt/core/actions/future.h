@@ -6,7 +6,11 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <library/cpp/yt/misc/strong_typedef.h>
+
+#include <limits>
 #include <optional>
+#include <type_traits>
 
 namespace NYT {
 
@@ -112,7 +116,7 @@ void swap(TPromise<T>& lhs, TPromise<T>& rhs);
 // A bunch of widely-used preset futures.
 
 //! A pre-set successful |void| future.
-extern const TFuture<void> OKFuture;
+extern const TFuture<void>& OKFuture;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -158,8 +162,8 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 //! An opaque future callback id.
-using TFutureCallbackCookie = int;
-constexpr TFutureCallbackCookie NullFutureCallbackCookie = -1;
+YT_DEFINE_STRONG_TYPEDEF(TFutureCallbackCookie, ui32);
+constexpr auto NullFutureCallbackCookie = TFutureCallbackCookie(-1);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -578,6 +582,7 @@ public:
     //! Converts promise into future.
     operator TFuture<T>() const;
     TFuture<T> ToFuture() const;
+    explicit operator TUniqueFuture<T>() const;
 
 protected:
     explicit TPromiseBase(TIntrusivePtr<NYT::NDetail::TPromiseState<T>> impl);
@@ -736,6 +741,25 @@ struct TFutureCombinerOptions
     bool CancelInputOnShortcut = true;
 };
 
+//! Result type returned by #AnySetMatching.
+template <class T>
+struct TAnySetMatchingResult
+{
+    //! Index of the input future that satisfied the predicate, or
+    //! #std::nullopt if all futures completed without a match.
+    std::optional<int> MatchingIndex;
+
+    //! Per-future results. #Results[i] holds the result of #futures[i] if it
+    //! has completed; otherwise #std::nullopt. When #MatchingIndex is set,
+    //! some entries may remain #std::nullopt because the corresponding
+    //! futures were cancelled by the shortcut.
+    std::vector<std::optional<TErrorOr<T>>> Results;
+};
+
+template <class TPredicate, class T>
+concept CAnySetMatchingPredicate =
+    std::is_nothrow_invocable_r_v<bool, const TPredicate&, const TErrorOr<T>&>;
+
 //! Returns the future that gets set when any of #futures is set.
 //! The value of the returned future is set to the value of that first-set
 //! future among #futures.
@@ -751,6 +775,23 @@ TFuture<T> AnySucceeded(
 template <class T>
 TFuture<T> AnySet(
     std::vector<TFuture<T>> futures,
+    TFutureCombinerOptions options = {});
+
+//! Returns a future that gets set when any of #futures produces a result
+//! accepted by #isMatching, or when all futures have completed without a
+//! match. In the former case the returned #TAnySetMatchingResult has
+//! #MatchingIndex set to the index of the matched future; in the latter
+//! case #MatchingIndex is #std::nullopt and #Results contains every
+//! completed result.
+//!
+//! NB: #isMatching may be invoked concurrently from arbitrary threads and
+//! must therefore be thread-safe. It may also be invoked even when its
+//! result is ultimately discarded (because another future has already won
+//! the race), so it must be free of observable side effects.
+template <class T, CAnySetMatchingPredicate<T> TPredicate>
+TFuture<TAnySetMatchingResult<T>> AnySetMatching(
+    std::vector<TFuture<T>> futures,
+    TPredicate isMatching,
     TFutureCombinerOptions options = {});
 
 //! Returns the future that gets set when all of #futures are set.

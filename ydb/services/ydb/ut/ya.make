@@ -22,8 +22,10 @@ SRCS(
     ydb_register_node_ut.cpp
     ydb_scripting_ut.cpp
     ydb_table_ut.cpp
+    ydb_unary_retry_ut.cpp
     ydb_stats_ut.cpp
     ydb_logstore_ut.cpp
+    ydb_path_aliasing_ingress_ut.cpp
     ydb_olapstore_ut.cpp
     ydb_monitoring_ut.cpp
     ydb_query_ut.cpp
@@ -67,6 +69,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/monitoring
     ydb/services/ydb
+    ydb/services/keyvalue
 )
 
 YQL_LAST_ABI_VERSION()

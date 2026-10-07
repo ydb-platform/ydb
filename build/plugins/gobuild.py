@@ -1,8 +1,8 @@
-import base64
 import itertools
 from hashlib import md5
 import os
-from _common import rootrel_arc_src, tobuilddir
+import posixpath
+from _common import resolve_common_const, rootrel_arc_src, tobuilddir
 import ymake
 
 runtime_cgo_path = os.path.join('runtime', 'cgo')
@@ -90,7 +90,26 @@ def need_lint(path):
     return not path.startswith('$S/vendor/') and not path.startswith('$S/contrib/')
 
 
-def on_go_process_srcs(unit):
+def resolve_go_path(unit, path):
+    # resolve_arc_path leaves $-prefixed paths unchanged, including source
+    # variables. Missing paths resolve to an empty string; generated files to $B.
+    resolved = resolve_common_const(path.replace('\\', '/'))
+    if resolved.startswith('${CURDIR}/'):
+        resolved = unit.path() + '/' + resolved[len('${CURDIR}/') :]
+    elif resolved.startswith('${BINDIR}/'):
+        resolved = tobuilddir(unit.path()) + '/' + resolved[len('${BINDIR}/') :]
+    if not resolved.startswith(('$S/', '$B/')):
+        resolved = unit.resolve_arc_path([resolved])
+    if resolved.startswith(('$S/', '$B/')):
+        root = resolved[:3]
+        resolved = posixpath.normpath(resolved)
+        if resolved.startswith(root):
+            return resolved
+    return None
+
+
+@ymake.macro
+def _GO_PROCESS_SRCS(unit: ymake.Unit):
     """
     _GO_PROCESS_SRCS() macro processes only 'CGO' files. All remaining *.go files
     and other input files are currently processed by a link command of the
@@ -154,6 +173,20 @@ def on_go_process_srcs(unit):
             ymake.report_configure_error('file {} must be listed in GO_TEST_SRCS() or GO_XTEST_SRCS() macros'.format(f))
     go_test_files = get_appended_values(unit, '_GO_TEST_SRCS_VALUE')
     go_xtest_files = get_appended_values(unit, '_GO_XTEST_SRCS_VALUE')
+    skipped_tests = get_appended_values(unit, '_ALL_GO_SKIPPED_TEST_FILES')
+    if skipped_tests:
+        go_unused_test_files = get_appended_values(unit, '_GO_UNUSED_TEST_SRCS_VALUE')
+        declared_tests = {resolve_go_path(unit, f) for f in go_test_files + go_xtest_files + go_unused_test_files}
+        missing_tests = [f for f in skipped_tests if resolve_go_path(unit, f) not in declared_tests]
+        if missing_tests:
+            unit.message(
+                [
+                    'WARN',
+                    'ALL_GO_SRCS() skips test files not declared in GO_TEST_SRCS(), GO_XTEST_SRCS() '
+                    'or GO_UNUSED_TEST_SRCS() (intentionally unused): '
+                    + ', '.join(rootrel_arc_src(f, unit) for f in missing_tests),
+                ]
+            )
     for f in go_test_files + go_xtest_files:
         if not f.endswith('_test.go'):
             ymake.report_configure_error(
@@ -188,15 +221,21 @@ def on_go_process_srcs(unit):
 
     if add_fmt:
         resolved_go_files = []
-        go_source_files = [] if is_test_module and unit.get(['GO_TEST_FOR_DIR']) else go_files
+        go_source_files = []
+        if not (is_test_module and unit.get('GO_TEST_FOR_DIR')):
+            go_source_files = list(go_files)
+            # Keep globbed sources in style checks, including CGO originals.
+            all_go_files = unit.get('_ALL_GO_FILES')
+            if all_go_files:
+                go_source_files.extend(all_go_files.split())
         for path in itertools.chain(go_source_files, go_test_files, go_xtest_files):
             if path.endswith('.go'):
-                resolved = unit.resolve_arc_path([path])
-                if resolved != path and need_lint(resolved):
+                resolved = resolve_go_path(unit, path)
+                if resolved and resolved.startswith('$S/') and need_lint(resolved):
                     resolved_go_files.append(resolved)
         if resolved_go_files:
             basedirs = {}
-            for f in resolved_go_files:
+            for f in dict.fromkeys(resolved_go_files):
                 basedir = os.path.dirname(f)
                 if basedir not in basedirs:
                     basedirs[basedir] = []
@@ -204,36 +243,45 @@ def on_go_process_srcs(unit):
             for basedir in basedirs:
                 unit.onadd_check(['gofmt'] + basedirs[basedir])
 
+    # ALL_GO_SRCS and SRCS may name the same file differently. Compare resolved
+    # source paths, but keep the first spelling and order for build commands.
+    # CGO originals must only enter the CGO pipeline, never Go coverage/compile.
+    cgo_files = get_appended_values(unit, '_CGO_SRCS_VALUE')
+    seen_go_files = {resolve_go_path(unit, f) or f for f in cgo_files}
+    unique_go_files = []
+    for f in go_files:
+        key = resolve_go_path(unit, f) or f
+        if key not in seen_go_files:
+            seen_go_files.add(key)
+            unique_go_files.append(f)
+    go_files = unique_go_files
+
     # Go coverage instrumentation (NOTE! go_files list is modified here)
     if is_test_module and unit.enabled('GO_TEST_COVER'):
-        if unit.enabled('GO_COVERAGE_PER_PKG'):
-            go_giles = []
-            for go_file in go_files:
-                if go_file.endswith('_test.go'):
-                    continue
-                go_giles.append(unit.resolve_arc_path(go_file))
-            unit.set(['GO_COVER_MODE', 'set'])  # Enable Go coverage with mode="set"
-            unit.on_go_gen_cover([go_package_name(unit), *go_files])
-        else:  # deprecated
-            cover_info = []
+        cover_files = []
+        cover_outputs = []
+        # Only output names are localized; keep the original source arguments.
+        # Match _GoToolCover._cover_go_path in build/scripts/go.py.
+        cover_module = rootrel_arc_src(unit.get('GO_TEST_FOR_DIR') or unit_path, unit).strip('/')
+        generated_go_files = []
+        for f in go_files:
+            resolved = resolve_go_path(unit, f)
+            if resolved and resolved.startswith('$S/'):
+                cover_files.append(f)
+                relative = posixpath.relpath(resolved[3:], cover_module)
+                if relative.startswith('../'):
+                    relative = '_external/' + resolved[3:]
+                cover_outputs.append(relative)
+            else:
+                generated_go_files.append(f)
+        unit.set(['GO_COVER_MODE', 'set'])  # Enable Go coverage with mode="set"
+        unit.set(['_GO_COVER_FILES', ' '.join(cover_outputs)])
+        unit.on_go_gen_cover([go_package_name(unit), *cover_files])
 
-            for f in go_files:
-                if f.endswith('_test.go'):
-                    continue
-                cover_var = 'GoCover' + base64.b32encode(f.encode('utf-8')).decode('utf-8').rstrip('=')
-                cover_file = unit.resolve_arc_path(f)
-                cover_file_output = '{}/{}'.format(unit_path, os.path.basename(f))
-                unit.on_go_gen_cover_go([cover_file, cover_file_output, cover_var])
-                if cover_file.startswith('$S/'):
-                    cover_file = arc_project_prefix + cover_file[3:]
-                cover_info.append('{}:{}'.format(cover_var, cover_file))
-
-            unit.set(['GO_COVER_INFO_VALUE', ' '.join(cover_info)])
-
-        # go_files should be empty now since the initial list shouldn't contain
-        # any non-go or go test file. The value of go_files list will be used later
-        # to update the value of _GO_SRCS_VALUE
-        go_files = []
+        # The coverage command reads paths relative to the source root. Generated
+        # files must keep their original inputs and generation dependencies, just
+        # as files added automatically by generators after this plugin runs.
+        go_files = generated_go_files
 
     # We have cleaned up the list of files from _GO_SRCS_VALUE var and we have to update
     # the value since it is used in module command line
@@ -271,8 +319,6 @@ def on_go_process_srcs(unit):
         unit.on_go_compile_symabis(asm_files + symabis_flags)
 
     # Process cgo files
-    cgo_files = get_appended_values(unit, '_CGO_SRCS_VALUE')
-
     cgo_cflags = []
     if len(c_files) + len(cxx_files) + len(s_files) + len(cgo_files) > 0:
         if is_test_module:
@@ -317,7 +363,8 @@ def on_go_process_srcs(unit):
         unit.on_go_compile_cgo2(args)
 
 
-def on_go_resource(unit, *args):
+@ymake.macro
+def _GO_RESOURCE(unit: ymake.Unit, *args: str):
     args = list(args)
     files = args[::2]
     keys = args[1::2]

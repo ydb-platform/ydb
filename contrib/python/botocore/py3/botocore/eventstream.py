@@ -10,7 +10,7 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
-"""Binary Event Stream Decoding """
+"""Binary Event Stream Decoding"""
 
 from binascii import crc32
 from struct import unpack
@@ -20,7 +20,7 @@ from botocore.exceptions import EventStreamError
 # byte length of the prelude (total_length + header_length + prelude_crc)
 _PRELUDE_LENGTH = 12
 _MAX_HEADERS_LENGTH = 128 * 1024  # 128 Kb
-_MAX_PAYLOAD_LENGTH = 16 * 1024**2  # 16 Mb
+_MAX_PAYLOAD_LENGTH = 24 * 1024 * 1024  # 24 Mb
 
 
 class ParserError(Exception):
@@ -33,7 +33,7 @@ class DuplicateHeader(ParserError):
     """Duplicate header found in the event."""
 
     def __init__(self, header):
-        message = 'Duplicate header present: "%s"' % header
+        message = f'Duplicate header present: "{header}"'
         super().__init__(message)
 
 
@@ -41,10 +41,7 @@ class InvalidHeadersLength(ParserError):
     """Headers length is longer than the maximum."""
 
     def __init__(self, length):
-        message = 'Header length of {} exceeded the maximum of {}'.format(
-            length,
-            _MAX_HEADERS_LENGTH,
-        )
+        message = f'Header length of {length} exceeded the maximum of {_MAX_HEADERS_LENGTH}'
         super().__init__(message)
 
 
@@ -52,10 +49,7 @@ class InvalidPayloadLength(ParserError):
     """Payload length is longer than the maximum."""
 
     def __init__(self, length):
-        message = 'Payload length of {} exceeded the maximum of {}'.format(
-            length,
-            _MAX_PAYLOAD_LENGTH,
-        )
+        message = f'Payload length of {length} exceeded the maximum of {_MAX_PAYLOAD_LENGTH}'
         super().__init__(message)
 
 
@@ -63,12 +57,7 @@ class ChecksumMismatch(ParserError):
     """Calculated checksum did not match the expected checksum."""
 
     def __init__(self, expected, calculated):
-        message = (
-            'Checksum mismatch: expected 0x{:08x}, calculated 0x{:08x}'.format(
-                expected,
-                calculated,
-            )
-        )
+        message = f'Checksum mismatch: expected 0x{expected:08x}, calculated 0x{calculated:08x}'
         super().__init__(message)
 
 
@@ -477,9 +466,9 @@ class EventStreamBuffer:
         prelude_bytes = self._data[:_PRELUDE_LENGTH]
         raw_prelude, _ = DecodeUtils.unpack_prelude(prelude_bytes)
         prelude = MessagePrelude(*raw_prelude)
-        self._validate_prelude(prelude)
         # The minus 4 removes the prelude crc from the bytes to be checked
         _validate_checksum(prelude_bytes[: _PRELUDE_LENGTH - 4], prelude.crc)
+        self._validate_prelude(prelude)
         return prelude
 
     def _parse_headers(self):

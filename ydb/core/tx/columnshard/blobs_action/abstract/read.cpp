@@ -1,5 +1,7 @@
 #include "read.h"
+
 #include <ydb/library/actors/core/log.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -12,7 +14,7 @@ void IBlobsReadingAction::StartReading(std::vector<TBlobRange>&& ranges) {
     }
     THashSet<TBlobRange> result;
     Groups = GroupBlobsForOptimization(std::move(ranges));
-    for (auto&& [range, _] :Groups) {
+    for (auto&& [range, _] : Groups) {
         result.emplace(range);
     }
     return DoStartReading(std::move(result));
@@ -44,17 +46,18 @@ void IBlobsReadingAction::Start(const THashSet<TBlobRange>& rangesInProgress) {
     }
 }
 
-void IBlobsReadingAction::OnReadResult(const TBlobRange& range, const TString& data) {
+void IBlobsReadingAction::OnReadResult(const TBlobRange& range, const TString& data, const bool fromCache) {
     auto it = Groups.find(range);
-    AFL_VERIFY(it != Groups.end());
+    AFL_VERIFY(it != Groups.end())("range", range.ToString())("from_cache", fromCache);
     AFL_VERIFY(Counters);
     WaitingRangesCount -= it->second.size();
     AFL_VERIFY(WaitingRangesCount >= 0);
     Counters->OnReply(range.Size, TMonotonic::Now() - StartWaitingRanges);
-    AFL_VERIFY(data.size() == range.Size);
+    AFL_VERIFY(data.size() == range.Size)("data", data.size())("range", range.ToString())("from_cache", fromCache);
     for (auto&& i : it->second) {
-        AFL_VERIFY(i.Offset + i.GetBlobSize() <= range.Offset + data.size());
-        AFL_VERIFY(range.Offset <= i.Offset);
+        AFL_VERIFY(static_cast<ui64>(i.Offset) + i.GetBlobSize() <= static_cast<ui64>(range.Offset) + data.size())
+        ("group", range.ToString())("sub", i.ToString())("data", data.size());
+        AFL_VERIFY(range.Offset <= i.Offset)("group", range.ToString())("sub", i.ToString());
         Replies.emplace(i, data.substr(i.Offset - range.Offset, i.GetBlobSize()));
     }
     Groups.erase(it);
@@ -93,4 +96,4 @@ TString TActionReadBlobs::DebugString() const {
     return JoinSeq(",", ranges);
 }
 
-}
+}   // namespace NKikimr::NOlap

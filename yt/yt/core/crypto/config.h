@@ -13,13 +13,13 @@ namespace NYT::NCrypto {
 struct TPemBlobConfig
     : public NYTree::TYsonStruct
 {
-    std::optional<TString> EnvironmentVariable;
-    std::optional<TString> FileName;
-    std::optional<TString> Value;
+    std::optional<std::string> EnvironmentVariable;
+    std::optional<std::string> FileName;
+    std::optional<std::string> Value;
 
-    TString LoadBlob(TCertificatePathResolver pathResolver = nullptr) const;
+    std::string LoadBlob(TCertificatePathResolver pathResolver = nullptr) const;
 
-    static TPemBlobConfigPtr CreateFileReference(const TString& fileName);
+    static TPemBlobConfigPtr CreateFileReference(const std::string& fileName);
 
     REGISTER_YSON_STRUCT(TPemBlobConfig);
 
@@ -66,6 +66,20 @@ struct TSslContextConfig
 };
 
 DEFINE_REFCOUNTED_TYPE(TSslContextConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TServerSslContextConfig
+    : public virtual TSslContextConfig
+{
+    std::optional<TDuration> UpdatePeriod;
+
+    REGISTER_YSON_STRUCT(TServerSslContextConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TServerSslContextConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

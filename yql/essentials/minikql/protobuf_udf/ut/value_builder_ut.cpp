@@ -36,7 +36,8 @@ struct TSetup {
         , Env(Alloc)
         , FunctionRegistry(CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr()))
         , TypeInfoHelper(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder(UnknownLangVersion, Env, TypeInfoHelper, "", nullptr, NYql::NUdf::TSourcePosition())
+        , RuntimeSettings(MakeRuntimeSettings())
+        , FunctionTypeInfoBuilder(UnknownLangVersion, *RuntimeSettings, Env, TypeInfoHelper, "", /*countersProvider=*/nullptr, NYql::NUdf::TSourcePosition())
         , PgmBuilder(Env, *FunctionRegistry)
         , MemInfo("Test")
         , HolderFactory(Alloc.Ref(), MemInfo)
@@ -48,6 +49,7 @@ struct TSetup {
     TTypeEnvironment Env;
     IFunctionRegistry::TPtr FunctionRegistry;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
     TFunctionTypeInfoBuilder FunctionTypeInfoBuilder;
     TProgramBuilder PgmBuilder;
     TMemoryUsageInfo MemInfo;
@@ -119,8 +121,8 @@ TString ProtoTextToYson(TSetup& setup, NUdf::TProtoInfo& info, TStringBuf protoT
 
     auto value = FillValueFromProto(proto, &setup.ValueBuilder, info);
     TTestWriter out;
-    NCommon::TOutputBuf buf(out, nullptr);
-    WriteYsonValueInTableFormat(buf, static_cast<NKikimr::NMiniKQL::TStructType*>(info.StructType), 0, value, true);
+    NCommon::TOutputBuf buf(out, /*writeTimer=*/nullptr);
+    WriteYsonValueInTableFormat(buf, static_cast<NKikimr::NMiniKQL::TStructType*>(info.StructType), 0, value, /*topLevel=*/true);
     buf.Finish();
 
     return NYT::NodeToYsonString(NYT::NodeFromYsonString(out.Str()), ::NYson::EYsonFormat::Text);

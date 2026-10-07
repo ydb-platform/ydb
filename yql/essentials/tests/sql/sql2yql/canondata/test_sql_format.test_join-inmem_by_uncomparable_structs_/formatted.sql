@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $l = [
     <|Key: <|a: 1, b: 2, c: NULL|>, Lhs: '1,2,#'|>,
     <|Key: <|a: 2, b: 3, c: NULL|>, Lhs: '4,5,#'|>,

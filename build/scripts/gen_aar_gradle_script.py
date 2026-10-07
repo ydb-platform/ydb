@@ -58,9 +58,9 @@ ext.compileOnlyAndroidArs = [
 ]
 
 def minVersion = 26
-def compileVersion = 35
-def targetVersion = 35
-def buildVersion = '35.0.0'
+def compileVersion = 36
+def targetVersion = 36
+def buildVersion = '36.0.0'
 
 import java.nio.file.Files
 import java.nio.file.Paths

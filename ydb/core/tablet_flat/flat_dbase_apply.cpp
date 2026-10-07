@@ -1,5 +1,6 @@
 #include "flat_dbase_apply.h"
 #include "util_fmt_abort.h"
+#include "bloom_filter_defaults.h"
 
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -48,7 +49,8 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         TCell null;
 
         if (delta.HasDefault()) {
-            auto raw = delta.GetDefault();
+            // the cell points into the proto's string; a copy would die at the end of this block
+            const auto& raw = delta.GetDefault();
 
             null = TCell(raw.data(), raw.size());
         }
@@ -61,7 +63,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             typeInfoProto = NKikimr::NScheme::DefaultDecimalProto();
         }
         changes |= AddColumnWithTypeInfo(table, delta.GetColumnName(), delta.GetColumnId(),
-            delta.GetColumnType(), typeInfoProto, delta.GetNotNull(), delta.GetIsSensitive(), null);
+            delta.GetColumnType(), typeInfoProto, delta.GetNotNull(), delta.GetIsSensitive(), null, delta.GetSetNotNullInProgress());
     } else if (action == TAlterRecord::DropColumn) {
         changes |= DropColumn(table, delta.GetColumnId());
     } else if (action == TAlterRecord::AddColumnToKey) {
@@ -177,6 +179,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
                     Y_ENSURE(len <= keyCount,
                         "Bloom filter prefix " << len << " exceeds key column count " << keyCount);
                     double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : DefaultBloomFilterFpp;
+                    Y_ENSURE(fpp > 0.0 && fpp < 1.0, "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)");
                     prefixMap[len] = fpp;
                 }
             }
@@ -201,6 +204,11 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         if (delta.HasColdBorrow()) {
             bool enabled = delta.GetColdBorrow();
             changes |= ChangeTableSetting(table, tableInfo.ColdBorrow, enabled);
+        }
+
+        if (delta.HasSpecialTableType()) {
+            ui32 type = delta.GetSpecialTableType();
+            changes |= ChangeTableSetting(table, tableInfo.SpecialTableType, type);
         }
 
     } else if (action == TAlterRecord::UpdateExecutorInfo) {
@@ -300,14 +308,14 @@ bool TSchemeModifier::DropTable(ui32 id)
     return false;
 }
 
-bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null)
+bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null, bool setNotNullInProgress)
 {
     Y_ENSURE(!NScheme::NTypeIds::IsParametrizedType(type));
-    return AddColumnWithTypeInfo(tid, name, id, type, {}, notNull, isSensitive, null);
+    return AddColumnWithTypeInfo(tid, name, id, type, {}, notNull, isSensitive, null, setNotNullInProgress);
 }
 
 bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 id, ui32 type,
-        const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null)
+        const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null, bool setNotNullInProgress)
 {
     auto *table = Table(tid);
 
@@ -357,6 +365,9 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
 
         bool changes = false;
         // We check if some properties have changed in the new scheme and update them if needed
+        if (it->second.SetNotNullInProgress != setNotNullInProgress) {
+            changes |= ChangeTableSetting(tid, it->second.SetNotNullInProgress, setNotNullInProgress);
+        }
         if (it->second.IsSensitive != isSensitive) {
             changes |= ChangeTableSetting(tid, it->second.IsSensitive, isSensitive);
         }
@@ -378,7 +389,7 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
         return true;
     }
 
-    auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, pgTypeMod, notNull, isSensitive));
+    auto pr = table->Columns.emplace(id, TColumn(name, id, typeInfo, pgTypeMod, notNull, isSensitive, setNotNullInProgress));
     Y_ENSURE(pr.second);
     it = pr.first;
     table->ColumnNames.emplace(name, id);

@@ -1,8 +1,18 @@
 #pragma once
 
+#include "public.h"
+
 #include "restore_request.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_checksums.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ddisk_balance.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
@@ -13,9 +23,9 @@
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 
-namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+#include <functional>
 
-////////////////////////////////////////////////////////////////////////////////
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 struct TDBGReadBlocksResponse
 {
@@ -31,16 +41,11 @@ struct TDBGWriteBlocksToManyPBuffersResponse
 {
     struct TSinglePersistentBufferResult
     {
-        ui8 HostIndex = 0;
+        THostIndex HostIndex = InvalidHostIndex;
         NProto::TError Error;
     };
 
-    static TDBGWriteBlocksToManyPBuffersResponse MakeOverallError(
-        EWellKnownResultCodes code,
-        TString reason);
-
     TVector<TSinglePersistentBufferResult> Responses;
-    NProto::TError OverallError;
 };
 
 struct TDBGFlushResponse
@@ -57,9 +62,9 @@ struct TDBGRestoreResponse
 {
     struct TRestoreMeta
     {
-        ui64 Lsn = 0;
-        TBlockRange64 Range;
-        ui8 HostIndex = 0;
+        TPBufferKey PBufferKey;
+        TBlockRange16 Range;
+        THostIndex HostIndex = InvalidHostIndex;
     };
 
     NProto::TError Error;
@@ -69,8 +74,8 @@ struct TDBGRestoreResponse
 struct TListPBufferMeta
 {
     ui32 VChunkIndex = 0;
-    ui64 Lsn = 0;
-    TBlockRange64 Range;
+    TPBufferKey PBufferKey;
+    TBlockRange16 Range;
 };
 
 using TListPBufferMetaVector = TVector<TListPBufferMeta>;
@@ -84,13 +89,21 @@ struct TListPBufferResponse
 struct TAggregatedListPBufferResponse
 {
     NProto::TError Error;
-    TMap<ui8, TListPBufferMetaVector> Meta;
+    TMap<THostIndex, TListPBufferMetaVector> Meta;
 };
 
-struct TDDiskIdLess
+struct TDBGDumpResponse
 {
-    using TDDiskId = NKikimrBlobStorage::NDDisk::TDDiskId;
-    bool operator()(const TDDiskId& lhs, const TDDiskId& rhs) const;
+    size_t DirectBlockGroupIndex = 0;
+    TString Dump;
+
+    struct TVChunkDump
+    {
+        TVChunkConfig VChunkConfig;
+        TString Dump;
+    };
+
+    TVector<TVChunkDump> Dumps;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -101,7 +114,37 @@ class IDirectBlockGroup
 public:
     virtual ~IDirectBlockGroup() = default;
 
+    virtual void Register(TVChunkWeakPtr vChunk) = 0;
+
+    // Reserves the least loaded enabled host without a DDisk in config.
+    // Returns InvalidHostIndex when no host is available.
+    virtual THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) = 0;
+
+    // Reserves the selected host for a VChunk DDisk promotion.
+    virtual void AllocateDDiskPromotion(
+        ui32 vChunkId,
+        THostIndex hostIndex) = 0;
+
+    // Releases the reservation after config persistence succeeds or is
+    // canceled.
+    virtual void CommitDDiskPromotion(const TVChunkConfig& config) = 0;
+
+    // Selects a DDisk on the most loaded candidate host for demotion.
+    virtual THostMask SelectDDiskForDemote(THostMask candidates) const = 0;
+
     virtual TExecutorPtr GetExecutor() = 0;
+
+    virtual TArenaAllocatorPoolPtr GetArenaAllocatorPool()
+    {
+        return {};
+    }
+
+    // The tablet generation this DBG was created with. New records are
+    // minted under it; restored records keep the generation they were
+    // written in.
+    virtual ui32 GetTabletGeneration() const = 0;
+
+    virtual IOraclePtr GetOracle() = 0;
 
     virtual void Schedule(TDuration delay, TCallback callback) = 0;
 
@@ -109,47 +152,65 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) = 0;
 
-    virtual void EstablishConnections() = 0;
+    // Starts the DBG and returns a future that resolves when the locked-session
+    // quorum is reached for the first time. Intended only to gate the
+    // synchronous start.
+    virtual NThreading::TFuture<void> Run(
+        ITraceService* traceService,
+        IPartitionDirectService* service) = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
-        ui8 hostIndex,
-        TBlockRange64 range,
+        THostIndex hostIndex,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
-        ui64 lsn,
-        TBlockRange64 range,
+        THostIndex hostIndex,
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
+    // Checksums of guardedSglist in the DDisk format, passed to the transport
+    // unchanged; empty means not calculated.
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
-        ui8 hostIndex,
-        TBlockRange64 range,
+        THostIndex hostIndex,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) = 0;
 
+    // Checksums of guardedSglist in the DDisk format, passed to the transport
+    // unchanged; empty means not calculated.
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
-        ui8 hostIndex,
-        ui64 lsn,
-        TBlockRange64 range,
+        THostIndex hostIndex,
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) = 0;
 
-    virtual NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-    WriteBlocksToManyPBuffers(
+    using TWriteBlocksToManyPBuffersCallback =
+        std::function<void(TDBGWriteBlocksToManyPBuffersResponse)>;
+
+    // Checksums of guardedSglist in the DDisk format, passed to the transport
+    // unchanged; empty means not calculated.
+    virtual void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
-        std::vector<ui8> hostIndexes,
-        ui64 lsn,
-        TBlockRange64 range,
+        THostIndex coordinatorHostIndex,
+        THostMask hostIndexes,
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
-        const NWilson::TTraceId& traceId) = 0;
+        const TBlockChecksums& checksums,
+        const NWilson::TTraceId& traceId,
+        TWriteBlocksToManyPBuffersCallback callback) = 0;
 
     // Batch operation to flush a list of PBuffer entries. It can be executed in
     // two modes - when the source and destination are the same host, and when
@@ -158,16 +219,15 @@ public:
     // entries from PBuffer and write it to DDisk to self.
     virtual NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
-        ui8 pbufferHostIndex,   // source host
-        ui8 ddiskHostIndex,     // destination host
+        THostIndex pbufferHostIndex,   // source host
+        THostIndex ddiskHostIndex,     // destination host
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) = 0;
 
     // Batch operation to erase a list of PBuffer entries.
-    virtual NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
-        ui32 vChunkIndex,
-        ui8 hostIndex,
-        const TVector<TPBufferSegment>& segments,
+    virtual NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
+        THostIndex hostIndex,
+        const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) = 0;
 
     // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
@@ -176,7 +236,45 @@ public:
 
     // Query persistent buffer from Node.
     virtual NThreading::TFuture<TListPBufferResponse> ListPBuffers(
-        ui8 hostIndex) = 0;
+        THostIndex hostIndex) = 0;
+
+    virtual void OnAddHostSucceeded(
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+        ui32 dbgConnectionsConfigGeneration) = 0;
+
+    virtual void OnAddHostFailed(const NProto::TError& error) = 0;
+
+    virtual void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 dbgConnectionsConfigGeneration) = 0;
+
+    virtual void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) = 0;
+
+    // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
+    // by all DirectBlockGroups. Returns the delay before the operation may
+    // start. Zero means it may start immediately or throttling is disabled.
+    [[nodiscard]] virtual TDuration TakeCopyRangeBudget(ui64 byteCount) = 0;
+
+    // Translate host index to NodeId.
+    [[nodiscard]] virtual ui32 GetNodeId(THostIndex host) const = 0;
+
+    // Query dump for DirectBlockGroup and VChunks.
+    virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
+
+    // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
+    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot(
+        EDbgMonSnapshotDetail detail) const = 0;
+
+    // Requests balancing of DDisks in this DBG using the strategy.
+    virtual void BalanceDDisks(EDDiskBalanceStrategy strategy) = 0;
+
+    // Sums (and optionally lists) vchunk stats on the executor thread.
+    virtual NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
+        EVChunkStatsDetail detail) const = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

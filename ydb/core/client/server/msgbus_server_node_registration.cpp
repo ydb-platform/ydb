@@ -169,6 +169,7 @@ public:
             HFunc(TEvInterconnect::TEvNodesInfo, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            CFunc(TEvents::TSystem::PoisonPill, TBase::Cancel);
         }
     }
 

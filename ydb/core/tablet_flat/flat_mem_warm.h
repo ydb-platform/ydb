@@ -16,8 +16,8 @@
 #include <ydb/core/util/btree_cow.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/vector.h>
@@ -204,11 +204,14 @@ namespace NMem {
         {}
 
         void Update(ERowOp rop, TRawVals key_, TOpsRef ops, TArrayRef<const TMemGlob> pages, TRowVersion rowVersion,
-                    NTable::ITransactionMapSimplePtr committed)
+                    NTable::ITransactionMapSimplePtr committed, ui32 savepointSeqNum = 0)
         {
             Y_DEBUG_ABORT_UNLESS(
                 rop == ERowOp::Upsert || rop == ERowOp::Erase || rop == ERowOp::Reset,
                 "Unexpected row operation");
+
+            Y_ENSURE(savepointSeqNum == 0 || rowVersion.Step == Max<ui64>(),
+                "Savepoint seq num is only allowed for uncommitted updates");
 
             Y_ENSURE(ops.size() < Max<ui16>(), "Too large update ops array");
 
@@ -360,6 +363,7 @@ namespace NMem {
             update->Items = mergedSize;
             update->Rop = rop;
             update->Lock = ELockMode::None;
+            update->SavepointSeqNum = savepointSeqNum;
 
             ui32 dstIndex = 0;
 
@@ -459,6 +463,7 @@ namespace NMem {
             update->Items = 0;
             update->Rop = ERowOp::Absent;
             update->Lock = mode;
+            update->SavepointSeqNum = 0;
 
             if (current) {
                 Tree.UpdateUnsafe()->Chain = update;

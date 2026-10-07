@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows:
       - Build documentation
+      - Rebuild documentation
     types:
       - completed
 
@@ -11,7 +12,7 @@ jobs:
   post-build:
     permissions: write-all
     concurrency:
-      group: preview-documentation-${{ github.ref }}
+      group: preview-documentation-${{ github.event.workflow_run.id }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:

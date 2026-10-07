@@ -13,7 +13,7 @@ public:
     };
 
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlackboard& /*blackboard*/, TGroupDiskRequests &groupDiskRequests,
+            TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests,
             const TAccelerationParams& accelerationParams) override {
         Y_UNUSED(accelerationParams);
         // Look at the current layout and set the status if possible
@@ -41,7 +41,7 @@ public:
             EvaluateCurrentLayout(logCtx, state, info, &pessimisticState, &optimisticState, &altruisticState, false);
             if (auto res = SetAbsentForUnrecoverableAltruistic(altruisticState, state)) {
                 return *res;
-            } else if (auto res = ProcessOptimistic(altruisticState, optimisticState, false, state, info)) {
+            } else if (auto res = ProcessOptimistic(logCtx, altruisticState, optimisticState, false, state, info, blackboard.GroupQueues)) {
                 return *res;
             } else if (auto res = ProcessPessimistic(info, pessimisticState, true, state)) {
                 return *res;

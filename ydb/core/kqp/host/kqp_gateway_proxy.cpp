@@ -7,16 +7,19 @@
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/protos/set_column_constraint.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
-#include <ydb/services/lib/actors/pq_schema_actor.h>
+#include <ydb/services/metadata/manager/abstract.h>
 
 #include <util/generic/overloaded.h>
 
@@ -315,6 +318,10 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         proto.mutable_storage_settings()->set_external_data_channels_count(*count);
     }
 
+    if (const auto level = metadata->TableSettings.MetricsLevel) {
+        proto.mutable_metrics_settings()->set_metrics_level(*level);
+    }
+
     proto.set_temporary(metadata->Temporary);
 
     return true;
@@ -360,6 +367,15 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
                 cMeta.DefaultFromLiteral);
         }
 
+        if (cMeta.IsDefaultFromExpression()) {
+            auto& generated = *columnDesc.MutableDefaultFromExpression();
+            generated.SetExprText(cMeta.DefaultExpression->ExprText);
+            generated.SetStored(cMeta.DefaultExpression->Stored);
+            for (const auto& dependency : cMeta.DefaultExpression->Dependencies) {
+                generated.AddDependencyColumnNames(dependency);
+            }
+        }
+
         if (NScheme::NTypeIds::IsParametrizedType(columnIt->second.TypeInfo.GetTypeId())) {
             ProtoFromTypeInfo(columnIt->second.TypeInfo, columnIt->second.TypeMod, *columnDesc.MutableTypeInfo());
         }
@@ -377,6 +393,32 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
 
     for (const TString& keyColumn : metadata->KeyColumnNames) {
         tableDesc.AddKeyColumnNames(keyColumn);
+    }
+
+    return true;
+}
+
+template <typename TTableDescProto>
+bool FillMultiColumnStatisticsDesc(TTableDescProto& tableDesc,
+    const TVector<TMultiColumnStatisticsDescription>& statisticsList, Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    for (const auto& statistics : statisticsList) {
+        auto* statisticsDesc = tableDesc.AddMultiColumnStatistics();
+        statisticsDesc->SetName(statistics.Name);
+        for (const auto& column : statistics.Columns) {
+            statisticsDesc->AddColumnNames(column);
+        }
+        for (const auto& type : statistics.Types) {
+            if (type == "COUNT_MIN_SKETCH") {
+                statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+            } else if (type == "EQ_HEIGHT_HISTOGRAM") {
+                statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
+            } else {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown multi-column statistics type: " << type;
+                return false;
+            }
+        }
     }
 
     return true;
@@ -406,6 +448,11 @@ bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp
     if (!NGRpcService::FillCreateTableSettingsDesc(tableDesc, createTableProto, profiles, code, error, warnings)) {
         return false;
     }
+
+    if (!FillMultiColumnStatisticsDesc(tableDesc, metadata->MultiColumnStatistics, code, error)) {
+        return false;
+    }
+
     return true;
 }
 
@@ -445,6 +492,7 @@ bool FillSerializer(
 
         const auto level = *from->Level;
         if (!from->Algorithm) {
+            code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Compression level " << level <<" for a column `" << name << "` specified without an algorithm";
             return false;
         }
@@ -452,6 +500,7 @@ bool FillSerializer(
         const auto codec = NArrow::CompressionFromProto(arrowCompression->GetCodec());
 
         if (!NArrow::SupportsCompressionLevel(codec.value())) {
+            code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder()
                 << "Column `" << name << "`: algorithm `" << algoName
                 << "` does not support compression level";
@@ -524,6 +573,12 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
             return false;
         }
 
+        if (columnIt->second.IsDefaultFromExpression()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Generated columns are not supported in column tables";
+            return false;
+        }
+
         NKikimrSchemeOp::TOlapColumnDescription& columnDesc = *schema.AddColumns();
         columnDesc.SetId(nextColumnId++);
         columnDesc.SetName(columnIt->second.Name);
@@ -551,22 +606,25 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
     return true;
 }
 
-static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
+static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
     const TVector<TIndexDescription>& indexes, Ydb::StatusIds::StatusCode& code, TString& error)
 {
     THashMap<TString, ui32> columnIdsByName;
-    for (auto&& column : tableDesc.GetSchema().GetColumns()) {
-        if (column.HasId()) {
-            columnIdsByName.emplace(column.GetName(), column.GetId());
+    ui32 nextEntityId = 1;
+    for (const auto& column : tableDesc.GetSchema().GetColumns()) {
+        if (!column.HasId()) {
+            continue;
         }
+        const ui32 columnId = column.GetId();
+        columnIdsByName.emplace(column.GetName(), columnId);
+        nextEntityId = Max(nextEntityId, columnId + 1);
     }
 
-    ui32 nextIndexId = 1;
     for (auto&& index : indexes) {
         switch (index.Type) {
             case TIndexDescription::EType::LocalBloomFilter: {
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
-                upsert->SetId(nextIndexId++);
+                upsert->SetId(nextEntityId++);
                 upsert->SetName(index.Name);
                 if (index.KeyColumns.size() != 1 || !index.DataColumns.empty()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
@@ -593,7 +651,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
             }
             case TIndexDescription::EType::LocalBloomNgramFilter: {
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
-                upsert->SetId(nextIndexId++);
+                upsert->SetId(nextEntityId++);
                 upsert->SetName(index.Name);
                 if (index.KeyColumns.size() != 1 || !index.DataColumns.empty()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
@@ -624,6 +682,44 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                     ngram->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
                 }
 
+                break;
+            }
+            case TIndexDescription::EType::LocalMinMax: {
+                if (index.KeyColumns.size() != 1) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.KeyColumns);
+                    return false;
+                }
+                if (!index.DataColumns.empty()) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.DataColumns);
+                    return false;
+                }
+                const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
+                for (auto& column: tableDesc.GetSchema().GetColumns()) {
+                    if (column.GetName() == index.KeyColumns.front()) {
+                        columnDesc = &column;
+                        break;
+                    }
+                }
+                if (!columnDesc) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    TVector<TString> tableColumnNames;
+                    for (const auto& col: tableDesc.GetSchema().GetColumns()) {
+                        tableColumnNames.push_back(col.GetName());
+                    }
+                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front(), tableColumnNames);
+                    return false;
+                }
+                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
+
+                auto* upsert = tableDesc.MutableSchema()->AddIndexes();
+                upsert->SetId(nextEntityId++);
+                upsert->SetName(index.Name);
+                upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
+                auto* minmax = upsert->MutableMinMaxIndex();
+                minmax->SetColumnId(columnIdIt->second);
+                NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*upsert, columnDesc->GetType());
                 break;
             }
             default:
@@ -682,6 +778,9 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
             tierProto->SetApplyAfterSeconds(tier.ApplyAfter.Seconds());
             if (tier.StorageName) {
                 tierProto->MutableEvictToExternalStorage()->SetStorage(*tier.StorageName);
+                if (tier.ObjectKeyPrefix) {
+                    tierProto->MutableEvictToExternalStorage()->SetObjectKeyPrefix(*tier.ObjectKeyPrefix);
+                }
             } else {
                 tierProto->MutableDelete();
             }
@@ -692,7 +791,11 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
     }
 
-    if (!FillCreateColumnTableIndexDesc(tableDesc, metadata->Indexes, code, error)) {
+    if (!FillCreateLocalIndexDesc(tableDesc, metadata->Indexes, code, error)) {
+        return false;
+    }
+
+    if (!FillMultiColumnStatisticsDesc(tableDesc, metadata->MultiColumnStatistics, code, error)) {
         return false;
     }
 
@@ -839,12 +942,6 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    // TODO: flown4qqqq. Need to remove.
-    TFuture<TGenericResult> SetConstraint(const TString&, TVector<TSetColumnConstraintSettings>&&) override {
-        TString error = "NotImplemented";
-        return MakeFuture<TGenericResult>(ResultFromError<TGenericResult>(error));
-    }
-
     TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {
         if (TIssue error; !NSchemeHelpers::Validate(settings, error)) {
             TGenericResult result;
@@ -872,8 +969,8 @@ public:
             return result;
         }
 
-        if (settings.SchemeLimits) {
-            NSchemeHelpers::FillAlterDatabaseSchemeLimits(modifyScheme, basename, *settings.SchemeLimits);
+        if (settings.SchemeLimits || settings.TablesMetricsLevel) {
+            NSchemeHelpers::FillAlterDatabaseSettings(modifyScheme, basename, settings);
 
             TGenericResult result;
             result.SetSuccess();
@@ -906,7 +1003,7 @@ public:
                 if (settings.Owner) {
                     *schemeOp.MutableModifyPermissions() = modifyScheme;
                 }
-                if (settings.SchemeLimits) {
+                if (settings.SchemeLimits || settings.TablesMetricsLevel) {
                     *schemeOp.MutableAlterDatabase() = modifyScheme;
                 }
 
@@ -1036,9 +1133,51 @@ public:
                                         }
                                     }
                                 }
-                                bloomPrefixes[prefix] = fpp;
+
+                                if (AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                                    // The named scheme object stores the index columns explicitly, so they
+                                    // must be a genuine leading prefix of the primary key (the engine prefix
+                                    // is length-only and always covers the first N PK columns).
+                                    const auto& pk = metadata->KeyColumnNames;
+                                    bool validPrefix = index.KeyColumns.size() <= pk.size();
+                                    for (size_t i = 0; validPrefix && i < index.KeyColumns.size(); ++i) {
+                                        validPrefix = (index.KeyColumns[i] == pk[i]);
+                                    }
+                                    if (!validPrefix) {
+                                        tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                            "Bloom filter index columns must be a prefix of the primary key"));
+                                        return;
+                                    }
+
+                                    // Mirror the prefix bloom filter as a named TTableIndex scheme object,
+                                    // in addition to the engine-facing ByKeyFilterPrefixes. Two indexes over
+                                    // the same PK prefix would collapse to a single engine prefix, so reject
+                                    // the duplicate column set.
+                                    if (!bloomPrefixes.emplace(prefix, fpp).second) {
+                                        tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                            "Multiple LocalBloomFilter indexes over the same primary-key prefix are not allowed"));
+                                        return;
+                                    }
+                                    auto* indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();
+                                    indexDesc->SetName(index.Name);
+                                    indexDesc->SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+                                    indexDesc->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+                                    for (const auto& col : index.KeyColumns) {
+                                        indexDesc->AddKeyColumnNames(col);
+                                    }
+                                    indexDesc->MutableBloomFilterDescription()->SetFalsePositiveProbability(fpp);
+                                } else {
+                                    bloomPrefixes[prefix] = fpp;
+                                }
                             }
                             continue;
+                        }
+
+                        if (index.Type == TIndexDescription::EType::LocalMinMax) {
+                            if (metadata->StoreType != EStoreType::Column) {
+                                tablePromise.SetValue(ResultFromError<TGenericResult>(NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
+                                return;
+                            }
                         }
 
                         auto indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();
@@ -1057,6 +1196,7 @@ public:
                             case TIndexDescription::EType::GlobalAsync:
                             case TIndexDescription::EType::GlobalSyncUnique:
                             case TIndexDescription::EType::GlobalJson:
+                            case TIndexDescription::EType::GlobalJsonCompact:
                                 // no specialized index description
                                 Y_ASSERT(std::holds_alternative<std::monostate>(index.SpecializedIndexDescription));
                                 break;
@@ -1065,6 +1205,8 @@ public:
                                 break;
                             case TIndexDescription::EType::GlobalFulltextPlain:
                             case TIndexDescription::EType::GlobalFulltextRelevance:
+                            case TIndexDescription::EType::GlobalFulltextCompact:
+                            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
                                 *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
                             default:
@@ -1179,10 +1321,21 @@ public:
             // DataShard LocalBloomFilter: not a real secondary index — maps to ByKeyFilterPrefixes
             // in the partition config via ESchemeOpAlterTable. ColumnShard LocalBloomFilter is
             // handled by AlterColumnTable and never reaches this path.
-            const bool isLocalBloom = std::all_of(req.add_indexes().begin(), req.add_indexes().end(),
+            const bool hasLocalBloom = std::any_of(req.add_indexes().begin(), req.add_indexes().end(),
                 [](const auto& idx) {
                     return idx.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex;
                 });
+            const bool isLocalBloom = hasLocalBloom && std::all_of(req.add_indexes().begin(), req.add_indexes().end(),
+                [](const auto& idx) {
+                    return idx.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex;
+                });
+            if (hasLocalBloom && !isLocalBloom) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue("ALTER TABLE cannot mix LocalBloomFilter indexes with secondary indexes in a single request"));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
 
             if (isLocalBloom) {
                 Ydb::StatusIds::StatusCode code;
@@ -1231,6 +1384,26 @@ public:
                 tablePromise.SetValue(errResult);
                 return tablePromise.GetFuture();
             }
+            TGenericResult result;
+            result.SetSuccess();
+            tablePromise.SetValue(result);
+            return tablePromise.GetFuture();
+        } else if (opType == EAlterOperationKind::SetColumnConstraint) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            auto* setColumnConstraintOp = phyTx.MutableSchemeOperation()->MutableSetColumnConstraint();
+
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!BuildAlterTableSetColumnConstraintRequest(&req, setColumnConstraintOp, code, error)) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
+
             TGenericResult result;
             result.SetSuccess();
             tablePromise.SetValue(result);
@@ -1448,34 +1621,49 @@ public:
 
         std::pair<TString, TString> pathPair;
         TString error;
-        auto createPromise = NewPromise<TGenericResult>();
         if (!NSchemeHelpers::SplitTablePath(request.path(), GetDatabase(), pathPair, error, false)) {
             return MakeFuture(ResultFromError<TGenericResult>(error));
         }
-        NKikimrSchemeOp::TModifyScheme schemeTx;
-        schemeTx.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
 
-        schemeTx.SetWorkingDir(pathPair.first);
-
-        auto pqDescr = schemeTx.MutableCreatePersQueueGroup();
-        pqDescr->SetName(pathPair.second);
-        NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(pathPair.second, request, schemeTx, AppData(ActorSystem), error, pathPair.first);
+        auto createPromise = NewPromise<TGenericResult>();
 
         if (IsPrepare()) {
-            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-            auto& phyTx = *phyQuery.AddTransactions();
-            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            TCreateTopicSettings settings{
+                .Request = std::move(request),
+                .Name = pathPair.second,
+                .WorkDir = pathPair.first,
+                .ExistingOk = existingOk
+            };
+            auto getModifySchemeFuture = Gateway->CreateTopicPrepared(std::move(settings));
 
+            auto* phyQuery = SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
 
-            phyTx.MutableSchemeOperation()->MutableCreateTopic()->Swap(&schemeTx);
-            phyTx.MutableSchemeOperation()->MutableCreateTopic()->SetFailedOnAlreadyExists(!existingOk);
-            TGenericResult result;
-            result.SetSuccess();
-            createPromise.SetValue(result);
+            getModifySchemeFuture.Subscribe([=] (const auto future) mutable {
+                TGenericResult result;
+                auto modifySchemeResult = future.GetValue();
+                if (modifySchemeResult.Status == Ydb::StatusIds::SUCCESS) {
+                    if (modifySchemeResult.ModifyScheme.HasCreatePersQueueGroup()) {
+                        auto* phyTx = phyQuery->AddTransactions();
+                        phyTx->SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                        phyTx->MutableSchemeOperation()->MutableCreateTopic()->Swap(&modifySchemeResult.ModifyScheme);
+                    }
+                    result.SetSuccess();
+
+                } else {
+                    result.SetStatus(NYql::YqlStatusFromYdbStatus(modifySchemeResult.Status));
+                    result.AddIssue(NYql::TIssue(modifySchemeResult.ErrorMessage));
+                }
+                createPromise.SetValue(result);
+            });
         } else {
             return Gateway->CreateTopic(cluster, std::move(request), existingOk);
         }
+
         return createPromise.GetFuture();
+    }
+
+    NThreading::TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> CreateTopicPrepared(TCreateTopicSettings&& settings) override {
+        return Gateway->CreateTopicPrepared(std::move(settings));
     }
 
     TFuture<TGenericResult> AlterTopic(const TString& cluster, Ydb::Topic::AlterTopicRequest&& request, bool missingOk) override {
@@ -1489,9 +1677,13 @@ public:
         auto alterPromise = NewPromise<TGenericResult>();
 
         if (IsPrepare()) {
-            TAlterTopicSettings settings{std::move(request), pathPair.second, pathPair.first, missingOk};
+            TAlterTopicSettings settings{
+                .Request = std::move(request),
+                .Name = pathPair.second,
+                .WorkDir = pathPair.first,
+                .MissingOk = missingOk
+            };
             auto getModifySchemeFuture = Gateway->AlterTopicPrepared(std::move(settings));
-
 
             auto* phyQuery = SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
 
@@ -1503,10 +1695,8 @@ public:
                         auto* phyTx = phyQuery->AddTransactions();
                         phyTx->SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
                         phyTx->MutableSchemeOperation()->MutableAlterTopic()->Swap(&modifySchemeResult.ModifyScheme);
-                        phyTx->MutableSchemeOperation()->MutableAlterTopic()->SetSuccessOnNotExist(missingOk);
                     }
                     result.SetSuccess();
-
                 } else {
                     result.SetStatus(NYql::YqlStatusFromYdbStatus(modifySchemeResult.Status));
                     result.AddIssue(NYql::TIssue(modifySchemeResult.ErrorMessage));
@@ -1517,11 +1707,11 @@ public:
         } else {
             return Gateway->AlterTopic(cluster, std::move(request), missingOk);
         }
-        return alterPromise.GetFuture();
 
+        return alterPromise.GetFuture();
     }
 
-    NThreading::TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {
+    NThreading::TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {
         return Gateway->AlterTopicPrepared(std::move(settings));
     }
 
@@ -2137,6 +2327,10 @@ public:
     TFuture<TGenericResult> UpsertObject(const TString& cluster, const TUpsertObjectSettings& settings) override {
         CHECK_PREPARED_DDL(UpsertObject);
 
+        if (const auto rejected = CheckOldSecretCreationDisabled(settings.GetTypeId())) {
+            return MakeFuture(*rejected);
+        }
+
         if (IsPrepare()) {
             return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareUpsertObjectSchemeOperation));
         } else {
@@ -2146,6 +2340,10 @@ public:
 
     TFuture<TGenericResult> CreateObject(const TString& cluster, const TCreateObjectSettings& settings) override {
         CHECK_PREPARED_DDL(CreateObject);
+
+        if (const auto rejected = CheckOldSecretCreationDisabled(settings.GetTypeId())) {
+            return MakeFuture(*rejected);
+        }
 
         if (IsPrepare()) {
             return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareCreateObjectSchemeOperation));
@@ -2172,6 +2370,27 @@ public:
         } else {
             return Gateway->DropObject(cluster, settings);
         }
+    }
+
+    TFuture<TGenericResult> KillSession(const TString& cluster, const TString& sessionId, bool isParameter) override {
+        CHECK_PREPARED_DDL(KillSession);
+        if (!IsPrepare()) {
+            // Closing a session is a runtime effect, never a compilation side effect.
+            return Gateway->KillSession(cluster, sessionId, isParameter);
+        }
+        if (!Gateway->HasCluster(cluster)) {
+            return InvalidCluster<TGenericResult>(cluster);
+        }
+
+        auto& phyTx = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->AddTransactions();
+        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+        auto* operation = phyTx.MutableSchemeOperation()->MutableKillSession();
+        if (isParameter) {
+            operation->SetSessionIdParameter(sessionId);
+        } else {
+            operation->SetSessionId(sessionId);
+        }
+        return PrepareSuccess<TGenericResult>();
     }
 
     TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) override {
@@ -2363,41 +2582,107 @@ public:
         }
     }
 
-    TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) override {
-        CHECK_PREPARED_DDL(AlterColumnTable);
+    TFuture<TGenericResult> PrepareAlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req)
+    {
+        YQL_ENSURE(SessionCtx->Query().PreparingQuery);
 
-        try {
-            if (cluster != SessionCtx->GetCluster()) {
-                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
-            }
+        const auto ops = GetAlterOperationKinds(&req);
+        if (ops.size() != 1) {
+            IKqpGateway::TGenericResult errResult;
+            errResult.AddIssue(NYql::TIssue("Unqualified alter column table request."));
+            errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
+            return MakeFuture(errResult);
+        }
 
-            NKikimrSchemeOp::TModifyScheme schemeTx;
+        const auto opType = *ops.begin();
 
+        auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+        auto& phyTx = *phyQuery.AddTransactions();
+        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+        if (opType == EAlterOperationKind::Compact) {
+            auto compactOp = phyTx.MutableSchemeOperation()->MutableCompactTable();
             Ydb::StatusIds::StatusCode code;
             TString error;
-            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, code, error)) {
+            if (!BuildAlterTableCompactRequest(&req, compactOp, code, error)) {
                 IKqpGateway::TGenericResult errResult;
                 errResult.AddIssue(NYql::TIssue(error));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
                 return MakeFuture(errResult);
             }
-
-            if (IsPrepare()) {
-                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-                auto& phyTx = *phyQuery.AddTransactions();
-                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+        } else {
+            try {
+                auto metadata = SessionCtx->Tables().GetTable(cluster, req.path()).Metadata;
+                NKikimrSchemeOp::TModifyScheme schemeTx;
+                Ydb::StatusIds::StatusCode code;
+                TString error;
+                if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, metadata, code, error)) {
+                    IKqpGateway::TGenericResult errResult;
+                    errResult.AddIssue(NYql::TIssue(error));
+                    errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                    return MakeFuture(errResult);
+                }
                 phyTx.MutableSchemeOperation()->MutableAlterColumnTable()->Swap(&schemeTx);
-
-                TGenericResult result;
-                result.SetSuccess();
-                return MakeFuture(result);
-            } else {
-                return Gateway->ModifyScheme(std::move(schemeTx));
+            } catch (yexception& e) {
+                return MakeFuture(ResultFromException<TGenericResult>(e));
             }
         }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
+
+        TGenericResult result;
+        result.SetSuccess();
+        return MakeFuture(result);
+    }
+
+    TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) override {
+        CHECK_PREPARED_DDL(AlterColumnTable);
+
+        auto tablePromise = NewPromise<TGenericResult>();
+
+        if (!IsPrepare()) {
+            SessionCtx->Query().PrepareOnly = false;
+            if (!SessionCtx->Query().PreparingQuery) {
+                SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+            }
+
+            if (SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->GetTransactions().size() > 0) {
+                auto code = Ydb::StatusIds::BAD_REQUEST;
+                auto error = TStringBuilder() << "multiple transactions are not supported for alter column table operation.";
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
         }
+
+        auto prepareFuture = PrepareAlterColumnTable(cluster, std::move(req));
+        if (IsPrepare())
+            return prepareFuture;
+
+        auto sessionCtx = SessionCtx;
+        auto gateway = Gateway;
+        prepareFuture.Subscribe([cluster, tablePromise, sessionCtx, gateway](const TFuture<IKqpGateway::TGenericResult>& future) mutable {
+            auto result = future.GetValue();
+            TPreparedQueryHolder::TConstPtr preparedQuery = std::make_shared<TPreparedQueryHolder>(sessionCtx->Query().PreparingQuery.release(), nullptr);
+            if (result.Success()) {
+                auto executeFuture = gateway->SendSchemeExecuterRequest(cluster, Nothing(), preparedQuery->GetPhyTx(0));
+                executeFuture.Subscribe([tablePromise](const TFuture<IKqpGateway::TGenericResult>& future) mutable {
+                    auto fresult = future.GetValue();
+                    if (fresult.Success()) {
+                        TGenericResult result;
+                        result.SetSuccess();
+                        tablePromise.SetValue(result);
+                    } else {
+                        tablePromise.SetValue(ResultFromIssues<TGenericResult>(fresult.Status(), fresult.Issues()));
+                    }
+                });
+                return;
+            } else {
+                tablePromise.SetValue(ResultFromIssues<TGenericResult>(result.Status(), result.Issues()));
+            }
+        });
+
+        return tablePromise.GetFuture();
     }
 
     TFuture<TGenericResult> CreateSequence(const TString& cluster,
@@ -2629,7 +2914,7 @@ public:
 
             if (!settings.ColumnFamilies.empty()) {
                 IKqpGateway::TGenericResult errResult;
-                errResult.AddIssue(NYql::TIssue("TableStore does not support column families"));
+                errResult.AddIssue(NYql::TIssue("Column FAMILY is not supported for column tables"));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
                 return MakeFuture(std::move(errResult));
             }
@@ -2773,9 +3058,10 @@ public:
             schemeTx.SetWorkingDir(pathPair.first);
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalTable);
             schemeTx.SetFailedOnAlreadyExists(!existingOk);
+            schemeTx.SetReplaceIfExists(replaceIfExists);
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
-            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, replaceIfExists, settings);
+            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
             TGenericResult result;
             result.SetSuccess();
             phyTxRemover.Forget();
@@ -3330,6 +3616,7 @@ public:
 
             NKqpProto::TKqpAnalyzeOperation analyzeTx;
             analyzeTx.SetTablePath(settings.TablePath);
+            analyzeTx.SetSampleRate(settings.SampleRate);
             for (const auto& column: settings.Columns) {
                 *analyzeTx.AddColumns() = column;
             }
@@ -3383,6 +3670,15 @@ public:
                 NKikimrSchemeOp::TModifyScheme tx;
                 tx.SetWorkingDir(pathPair.first);
                 tx.SetOperationType(GetOperationType());
+
+                // Set flags for IF NOT EXISTS / IF EXISTS handling
+                // FailOnExist is read by schemeshard to decide whether to accept existing paths
+                // FailedOnAlreadyExists is read by KQP gateway to translate StatusAlreadyExists to success
+                // SuccessOnNotExist is read by KQP gateway to translate StatusPathDoesNotExist to success
+                tx.SetFailOnExist(!settings.ExistingOk && !settings.ReplaceIfExists);
+                tx.SetFailedOnAlreadyExists(!settings.ExistingOk && !settings.ReplaceIfExists);
+                tx.SetSuccessOnNotExist(settings.MissingOk);
+                tx.SetReplaceIfExists(settings.ReplaceIfExists);
 
                 TSecretSchemaOp& op = GetSecretSchemaOp(tx);
                 op.SetName(pathPair.second);
@@ -3467,7 +3763,9 @@ public:
             } else {
                 op.SetValue(settings.Value);
             }
-            op.SetInheritPermissions(settings.InheritPermissions);
+            if (settings.InheritPermissions.has_value()) {
+                op.SetInheritPermissions(*settings.InheritPermissions);
+            }
         }
 
     private:
@@ -3567,6 +3865,18 @@ public:
     }
 
 private:
+    TMaybe<TGenericResult> CheckOldSecretCreationDisabled(const TString& typeId) const {
+        if (!AppData()->FeatureFlags.GetDisableOldSecretCreation() || to_lower(typeId) != "secret") {
+            return Nothing();
+        }
+        TGenericResult errResult;
+        const auto status = NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        errResult.SetStatus(status);
+        errResult.AddIssue(NYql::TIssue(NMetadata::NModifications::GetOldSecretCreationDisabledMessage())
+            .SetCode(status, NYql::TSeverityIds::S_ERROR));
+        return errResult;
+    }
+
     bool IsPrepare() const {
         if (!SessionCtx) {
             return false;

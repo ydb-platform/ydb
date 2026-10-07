@@ -152,7 +152,9 @@ private:
         }
 
         const TString database = RequestEvent->GetDatabaseName().GetOrElse("");
-        KesusPath = StartRequest->Record.session_start().path();
+        const auto& path = StartRequest->Record.session_start().path();
+        RequestEvent->CountResourcePath(path);
+        KesusPath = RequestEvent->NormalizePath(path);
 
         auto resolve = MakeHolder<TEvKesusProxy::TEvResolveKesusProxy>(database, KesusPath);
         if (!Send(MakeKesusProxyServiceId(), resolve.Release())) {
@@ -184,13 +186,6 @@ private:
 
             return SecurityObject->CheckAccess(access, *UserToken);
         } else {
-            const auto& ctx = TActivationContext::AsActorContext();
-
-            // Anonymous users have all access unless token is enforced
-            if (AppData(ctx)->EnforceUserTokenRequirement) {
-                return false;
-            }
-
             return true;
         }
     }
@@ -315,6 +310,7 @@ private:
                 return;
             }
             case TRequest::kSessionStart: {
+                RequestEvent->CountResourcePath(request.session_start().path());
                 return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Session cannot be started twice");
             }
             case TRequest::kSessionStop: {

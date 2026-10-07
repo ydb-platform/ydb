@@ -1,0 +1,33 @@
+syntax = "proto2";
+
+package NYql.NPq.NProto;
+
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+
+message TEvDescribeConsumer {
+    message TConnection {
+        optional string Endpoint = 1;
+        optional string Database = 2;
+        optional string TopicPath = 3;
+        optional string ConsumerName = 4;
+        optional bool UseSsl = 5;
+        optional bool AddBearerToToken = 6;
+        optional string TokenName = 7;
+    }
+
+    optional TConnection Connection = 1;
+    repeated uint64 PartitionIds = 2;
+}
+
+message TEvDescribeConsumerResult {
+    message TPartitionOffsets {
+        optional uint64 PartitionId = 1;
+        optional uint64 StartOffset = 2;
+        optional uint64 CommittedOffset = 3;
+    }
+
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    repeated TPartitionOffsets Partitions = 3;
+}

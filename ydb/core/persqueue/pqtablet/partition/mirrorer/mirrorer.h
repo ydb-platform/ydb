@@ -18,14 +18,8 @@ private:
     const TDuration WRITE_RETRY_TIMEOUT_MAX = TDuration::Seconds(1);
     const TDuration WRITE_RETRY_TIMEOUT_START = TDuration::MilliSeconds(1);
 
-    const TDuration CONSUMER_INIT_TIMEOUT_MAX = TDuration::Seconds(60);
-    const TDuration CONSUMER_INIT_TIMEOUT_START = TDuration::Seconds(5);
-
     const TDuration CONSUMER_INIT_INTERVAL_MAX = TDuration::Seconds(60);
     const TDuration CONSUMER_INIT_INTERVAL_START = TDuration::Seconds(1);
-
-    const TDuration READ_RETRY_TIMEOUT_MAX = TDuration::Seconds(1);
-    const TDuration READ_RETRY_TIMEOUT_START = TDuration::MilliSeconds(1);
 
     const TDuration UPDATE_COUNTERS_INTERVAL = TDuration::Seconds(5);
 
@@ -56,6 +50,7 @@ private:
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvUpdateCounters, Handle);
+            HFuncTraced(TEvPQ::TEvRewindCommitResult, HandleRewindCommit);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             break;
@@ -75,6 +70,7 @@ private:
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvUpdateCounters, Handle);
             HFuncTraced(TEvPQ::TEvReaderEventArrived, ProcessNextReaderEvent);
+            HFuncTraced(TEvPQ::TEvRewindCommitResult, HandleRewindCommit);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             break;
@@ -88,11 +84,6 @@ private:
         timeout = Min(timeout * 2, maxTimeout);
     }
 
-    bool AddToWriteRequest(
-        NKikimrClient::TPersQueuePartitionRequest& request,
-        NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message,
-        bool& incorrectRequest
-    );
     void ProcessError(const TActorContext& ctx, const TString& msg);
     void ProcessError(const TActorContext& ctx, const TString& msg, const NKikimrClient::TResponse& response);
     void AfterSuccesWrite(const TActorContext& ctx);
@@ -107,7 +98,9 @@ private:
     void ProcessNextReaderEvent(TEvPQ::TEvReaderEventArrived::TPtr& ev, const TActorContext& ctx);
     void DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup=false);
 
-    TString BuildLogPrefix() const override;
+    bool TryRewindCommittedOffset(const TActorContext& ctx);
+
+    TStructuredMessage BuildLogPrefix() const override;
 
     TString GetCurrentState() const;
 
@@ -137,6 +130,7 @@ public:
     void HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& ev, const TActorContext& ctx);
     void HandleWakeup(const TActorContext& ctx);
     void CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr& ev, const TActorContext& ctx);
+    void HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const TActorContext& ctx);
     void RequestSourcePartitionStatus(TEvPQ::TEvRequestPartitionStatus::TPtr& ev, const TActorContext& ctx);
     void RequestSourcePartitionStatus();
     void TryUpdateWriteTimetsamp(const TActorContext &ctx);
@@ -152,6 +146,7 @@ private:
     const bool IsLocalDC;
     ui64 EndOffset;
     ui64 OffsetToRead;
+    TMaybe<ui64> LastReadOffset;
     NKikimrPQ::TMirrorPartitionConfig Config;
 
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> Queue;
@@ -161,6 +156,7 @@ private:
     std::optional<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent> EndPartitionSessionEvent;
     TDuration WriteRetryTimeout = WRITE_RETRY_TIMEOUT_START;
     TInstant WriteRequestTimestamp;
+    TInstant LastRewindCommitTimestamp;
     NYdb::TCredentialsProviderFactoryPtr CredentialsProvider;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     ui64 ReaderGeneration = 0;
@@ -168,9 +164,7 @@ private:
     THolder<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent> StreamStatus;
     TInstant LastInitStageTimestamp;
 
-    TDuration ConsumerInitTimeout = CONSUMER_INIT_TIMEOUT_START;
     TDuration ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
-    TDuration ReadRetryTimeout = READ_RETRY_TIMEOUT_START;
 
     TTabletCountersBase Counters;
 
@@ -190,6 +184,13 @@ private:
     ui64 ReadFuturesInFlight = 0;
     TInstant LastReadEventTime;
 };
+
+bool AppendToWriteRequest(
+    NKikimrClient::TPersQueuePartitionRequest& request,
+    NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message,
+    bool& incorrectRequest,
+    ui64& nextOffset
+);
 
 }// NPQ
 }// NKikimr

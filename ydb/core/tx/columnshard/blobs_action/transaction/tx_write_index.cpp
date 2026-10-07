@@ -1,24 +1,39 @@
 #include "tx_write_index.h"
+
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
 bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     auto changes = Ev->Get()->IndexChanges;
     TMemoryProfileGuard mpg("TTxWriteIndex::Execute::" + changes->TypeString());
-    TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("external_task_id", changes->GetTaskIdentifier());
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS,
+        {"tabletId", Self->TabletID()},
+        {"externalTaskId", changes->GetTaskIdentifier()});
     Y_ABORT_UNLESS(Self->TablesManager.HasPrimaryIndex());
     txc.DB.NoMoreReadsForTx();
 
-    ACFL_DEBUG("event", "TTxWriteIndex::Execute")("change_type", changes->TypeString())("details", changes->DebugString());
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"event", "TTxWriteIndex::Execute"},
+        {"changeType", changes->TypeString()},
+        {"details", changes->DebugString()});
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
         AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, Self->GetLastTxSnapshot()));
-        LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
+        YDB_LOG_DEBUG("apply",
+            {"step", "write"},
+            {"tabletTxNo", TabletTxNo},
+            {"changes", changes->TypeString()},
+            {"tabletId", Self->TabletID()});
         NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot);
         changes->WriteIndexOnExecute(Self, context);
 
@@ -32,24 +47,38 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         changes->MutableBlobsAction().OnExecuteTxAfterAction(*Self, blobsDb, false);
         for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
             const auto* portion = changes->GetWritePortionInfo(i);
-            LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << portion->DebugString() << ") blob cannot apply changes: " << TxSuffix());
+            YDB_LOG_WARN("blob cannot apply",
+                {"step", "write"},
+                {"tabletTxNo", TabletTxNo},
+                {"changes", changes->TypeString()},
+                {"portion", portion->DebugString()},
+                {"tabletId", Self->TabletID()});
         }
-        NOlap::TChangesFinishContext context("cannot write index blobs: " + ::ToString(Ev->Get()->GetPutStatus()) + ", error: " + Ev->Get()->ErrorMessage);
+        NOlap::TChangesFinishContext context(
+            "cannot write index blobs: " + ::ToString(Ev->Get()->GetPutStatus()) + ", error: " + Ev->Get()->ErrorMessage);
         changes->Abort(*Self, context);
-        LOG_S_ERROR(TxPrefix() << " (" << changes->TypeString() << ") cannot write index blobs" << TxSuffix());
+        YDB_LOG_ERROR("cannot write index blobs",
+            {"step", "write"},
+            {"tabletTxNo", TabletTxNo},
+            {"changes", changes->TypeString()},
+            {"tabletId", Self->TabletID()});
     }
 
-    Self->EnqueueProgressTx(ctx, std::nullopt);
+    Self->EnqueueProgressTx(ctx);
     return true;
 }
 
 void TTxWriteIndex::Complete(const TActorContext& ctx) {
     CompleteReady = true;
     auto changes = Ev->Get()->IndexChanges;
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())(
-        "task_id", changes->GetTaskIdentifier()));
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS,
+        {"tabletId", Self->TabletID()},
+        {"taskId", changes->GetTaskIdentifier()});
     TMemoryProfileGuard mpg("TTxWriteIndex::Complete::" + changes->TypeString());
-    ACFL_DEBUG("event", "TTxWriteIndex::Complete")("change_type", changes->TypeString())("details", changes->DebugString());
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"event", "TTxWriteIndex::Complete"},
+        {"changeType", changes->TypeString()},
+        {"details", changes->DebugString()});
 
     const ui64 blobsWritten = changes->GetBlobsAction().GetWritingBlobsCount();
     const ui64 bytesWritten = changes->GetBlobsAction().GetWritingTotalSize();
@@ -78,7 +107,8 @@ TTxWriteIndex::TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr
     : TBase(self)
     , Ev(ev)
     , TabletTxNo(++Self->TabletTxCounter)
-    , CurrentSnapshot(Self->GetCurrentSnapshotForInternalModification()) {
+    , CurrentSnapshot(Self->GetCurrentSnapshotForInternalModification())
+{
     AFL_VERIFY(Ev && Ev->Get()->IndexChanges);
 
     auto changes = Ev->Get()->IndexChanges;
@@ -94,4 +124,4 @@ void TTxWriteIndex::Describe(IOutputStream& out) const noexcept {
     }
 }
 
-}
+}   // namespace NKikimr::NColumnShard

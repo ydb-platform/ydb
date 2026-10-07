@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "timing.h"
 #endif
-#undef TIMING_INL_H_
 
 namespace NYT::NProfiling {
 
@@ -36,17 +35,15 @@ inline TCpuDurationIncrementingGuard::~TCpuDurationIncrementingGuard()
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TTimer>
-TTimerGuard<TTimer>::TTimerGuard(TTimer* timer, NThreading::TSpinLock* lock)
+TTimerGuard<TTimer>::TTimerGuard(TTimer* timer)
     : Timer_(timer)
-    , TimerLock_(lock)
 {
-    auto guard = TimerLock_ ? std::optional(Guard(*TimerLock_)) : std::nullopt;
     Timer_->Start();
 }
 
 template <class TTimer>
 TTimerGuard<TTimer>::TTimerGuard(TTimerGuard&& other) noexcept
-    : Timer_(std::exchange(other.Timer_, nullptr), std::exchange(other.TimerLock_, nullptr))
+    : Timer_(std::exchange(other.Timer_, nullptr))
 { }
 
 template <class TTimer>
@@ -54,7 +51,7 @@ TTimerGuard<TTimer>& TTimerGuard<TTimer>::operator=(TTimerGuard&& other) noexcep
 {
     TryStopTimer();
 
-    Timer_ = std::exchange(other.Timer_);
+    Timer_ = std::exchange(other.Timer_, nullptr);
     return *this;
 }
 
@@ -68,9 +65,37 @@ template <class TTimer>
 void TTimerGuard<TTimer>::TryStopTimer() noexcept
 {
     if (Timer_) {
-        auto guard = TimerLock_ ? std::optional(Guard(*TimerLock_)) : std::nullopt;
         Timer_->Stop();
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TTimer>
+template <class... TArgs>
+TConcurrentTimer<TTimer>::TConcurrentTimer(TArgs&&... args)
+    : Timer_(std::forward<TArgs>(args)...)
+{ }
+
+template <class TTimer>
+bool TConcurrentTimer<TTimer>::Start()
+{
+    auto guard = Guard(Lock_);
+    return Timer_.Start();
+}
+
+template <class TTimer>
+bool TConcurrentTimer<TTimer>::Stop()
+{
+    auto guard = Guard(Lock_);
+    return Timer_.Stop();
+}
+
+template <class TTimer>
+TDuration TConcurrentTimer<TTimer>::GetElapsedTime() const
+{
+    auto guard = Guard(Lock_);
+    return Timer_.GetElapsedTime();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -7,6 +7,7 @@
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/udf/udf_log.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
@@ -33,7 +34,7 @@ struct TFilePathWithMd5 {
     TFilePathWithMd5& operator=(const TFilePathWithMd5& other) = default;
 };
 
-class IUdfResolver : public TThrRefBase {
+class IUdfResolver: public TThrRefBase {
 public:
     using TPtr = TIntrusiveConstPtr<IUdfResolver>;
 
@@ -47,6 +48,7 @@ public:
         const TTypeAnnotationNode* UserType = nullptr;
         THashMap<TString, TString> SecureParams;
         NYql::TLangVersion LangVer = NYql::UnknownLangVersion;
+        NYql::TRuntimeSettings::TConstPtr RuntimeSettings = MakeRuntimeSettings();
 
         // output
         TString NormalizedName;
@@ -76,7 +78,7 @@ public:
     */
     virtual TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const = 0;
     virtual bool LoadMetadata(const TVector<TImport*>& imports,
-        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const = 0;
+                              const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const = 0;
 
     virtual TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const = 0;
     virtual bool ContainsModule(const TStringBuf& moduleName) const = 0;
@@ -86,4 +88,4 @@ public:
 TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
 TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TString>& paths, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
 
-}
+} // namespace NYql

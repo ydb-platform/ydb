@@ -26,10 +26,12 @@ namespace NKikimr {
 
             TStrategySqueeze(
                     TIntrusivePtr<THullCtx> hullCtx,
+                    const TSelectorParams &params,
                     const TLevelIndexSnapshot &levelSnap,
                     TTask *task,
                     TInstant squeezeBefore)
                 : HullCtx(std::move(hullCtx))
+                , Params(params)
                 , LevelSnap(levelSnap)
                 , Task(task)
                 , SqueezeBefore(squeezeBefore)
@@ -40,16 +42,12 @@ namespace NKikimr {
                 EAction action = SelectQuantum();
                 if (action != ActNothing) {
                     Task->SetupAction(action);
+                    Task->SelectStrategy = ESelectStrategy::Squeeze;
                 }
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_LOG(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO,
-                            NKikimrServices::BS_HULLCOMP,
-                            VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: FreeSpace: action# %s timeSpent# %s",
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ActionToStr(action), (finishTime - startTime).ToString().data()));
+                    YDB_LOG_CTX_COMP(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: FreeSpace: action# %s timeSpent# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), ActionToStr(action), (finishTime - startTime).ToString().data()));
                 }
 
                 return action;
@@ -60,9 +58,20 @@ namespace NKikimr {
             // Private Fields
             ////////////////////////////////////////////////////////////////////////
             TIntrusivePtr<THullCtx> HullCtx;
+            const TSelectorParams &Params;
             const TLevelIndexSnapshot &LevelSnap;
             TTask *Task;
             const TInstant SqueezeBefore;
+
+            // The budget is what this VDisk may allocate for compaction output; the default is
+            // unbounded, for the case where no space observation has arrived yet.
+            bool FitsBudget(const TLevelSegment &sst) const {
+                if (Params.FreeChunksBudget == Max<ui32>()) {
+                    return true;
+                }
+                return TUtils::EstimateOutputChunks(TUtils::SstKeepBytes(sst), HullCtx->ChunkSize)
+                    <= Params.FreeChunksBudget;
+            }
 
             EAction SelectQuantum() {
                 // FIXME: compact level 0
@@ -76,8 +85,17 @@ namespace NKikimr {
                     TLevelSstPtr p = it.Get();
                     if (p.Level > 0) {
                         if (p.SstPtr->Info.CTime < SqueezeBefore) {
-                            LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                                HullCtx->VCtx->VDiskLogPrefix << " TStrategySqueeze decided to compact Sst " << p.ToString());
+                            if (!FitsBudget(*p.SstPtr)) {
+                                // Skip it rather than give up on the whole scan: another,
+                                // smaller stale sst may still fit what this VDisk was granted.
+                                it.Next();
+                                continue;
+                            }
+                            if (HullCtx->VCtx->ActorSystem) {
+                                YDB_LOG_INFO_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategySqueeze decided to compact Sst",
+                                    {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                                    {"p", p});
+                            }
                             // rewrite this SST squeezed
                             TUtils::SqueezeOneSst(LevelSnap.SliceSnap, p, Task->CompactSsts);
                             return ActCompactSsts;

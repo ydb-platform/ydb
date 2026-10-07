@@ -1,10 +1,16 @@
 #include "logger.h"
 
+#include "structured_payload.h"
+
 #include <library/cpp/yt/assert/assert.h>
+
+#include <library/cpp/yt/string/raw_formatter.h>
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
-#include <library/cpp/yt/misc/thread_name.h>
+#include <library/cpp/yt/memory/leaky_singleton.h>
+
+#include <library/cpp/yt/system/thread_name.h>
 
 #include <util/system/compiler.h>
 #include <util/system/thread.h>
@@ -15,104 +21,38 @@ namespace NYT::NLogging {
 
 namespace NDetail {
 
-void OnCriticalLogEvent(
+void AbortOnCriticalLogEvent(const TLogEvent& event)
+{
+    TRawFormatter<1024> renderedEvent;
+    FormatTaggedPayload(&renderedEvent, std::get<TTaggedLogEventPayload>(event.Payload));
+
+    // Writes the message to stderr; the crash handler shuts the log manager down.
+    ::NYT::NDetail::AssertTrapImpl(
+        event.Level == ELogLevel::Fatal ? "YT_LOG_FATAL" : "YT_LOG_ALERT",
+        renderedEvent.GetBuffer(),
+        /*description*/ {},
+        /*file*/ event.SourceFile,
+        /*line*/ event.SourceLine,
+        /*function*/ {});
+}
+
+void LogFatalEventAndAbort(
+    const TLoggingContext& loggingContext,
     const TLogger& logger,
-    const TLogEvent& event)
+    ::TSourceLocation sourceLocation,
+    TTaggedLogEventPayload payload)
 {
-    if (event.Level == ELogLevel::Fatal ||
-        event.Level == ELogLevel::Alert && logger.GetAbortOnAlert())
-    {
-        fprintf(stderr, "*** Aborting on critical log event\n");
-        fwrite(event.MessageRef.begin(), 1, event.MessageRef.size(), stderr);
-        fprintf(stderr, "\n");
-        YT_ABORT();
-    }
-}
+    auto event = CreateLogEvent(loggingContext, logger, ELogLevel::Fatal);
+    event.Payload = std::move(payload);
+    event.SourceFile = sourceLocation.File;
+    event.SourceLine = sourceLocation.Line;
 
-TSharedRef TMessageStringBuilder::Flush()
-{
-    return Buffer_.Slice(0, GetLength());
-}
-
-void TMessageStringBuilder::DoReset()
-{
-    Buffer_.Reset();
-}
-
-struct TPerThreadCache;
-
-YT_DEFINE_THREAD_LOCAL(TPerThreadCache*, Cache);
-YT_DEFINE_THREAD_LOCAL(bool, CacheDestroyed);
-
-struct TPerThreadCache
-{
-    TSharedMutableRef Chunk;
-    size_t ChunkOffset = 0;
-
-    ~TPerThreadCache()
-    {
-        TMessageStringBuilder::DisablePerThreadCache();
+    // A logger with no log manager cannot take the event; the abort still reports it.
+    if (logger) {
+        logger.Write(TLogEvent(event));
     }
 
-    static YT_PREVENT_TLS_CACHING TPerThreadCache* GetCache()
-    {
-        auto& cache = Cache();
-        if (Y_LIKELY(cache)) {
-            return cache;
-        }
-        if (CacheDestroyed()) {
-            return nullptr;
-        }
-        static thread_local TPerThreadCache CacheData;
-        cache = &CacheData;
-        return cache;
-    }
-};
-
-void TMessageStringBuilder::DisablePerThreadCache()
-{
-    Cache() = nullptr;
-    CacheDestroyed() = true;
-}
-
-void TMessageStringBuilder::DoReserve(size_t newCapacity)
-{
-    auto oldLength = GetLength();
-    newCapacity = FastClp2(newCapacity);
-
-    auto newChunkSize = std::max(ChunkSize, newCapacity);
-    // Hold the old buffer until the data is copied.
-    auto oldBuffer = std::move(Buffer_);
-    auto* cache = TPerThreadCache::GetCache();
-    if (Y_LIKELY(cache)) {
-        auto oldCapacity = End_ - Begin_;
-        auto deltaCapacity = newCapacity - oldCapacity;
-        if (End_ == cache->Chunk.Begin() + cache->ChunkOffset &&
-            cache->ChunkOffset + deltaCapacity <= cache->Chunk.Size())
-        {
-            // Resize inplace.
-            Buffer_ = cache->Chunk.Slice(cache->ChunkOffset - oldCapacity, cache->ChunkOffset + deltaCapacity);
-            cache->ChunkOffset += deltaCapacity;
-            End_ = Begin_ + newCapacity;
-            return;
-        }
-
-        if (Y_UNLIKELY(cache->ChunkOffset + newCapacity > cache->Chunk.Size())) {
-            cache->Chunk = TSharedMutableRef::Allocate<TMessageBufferTag>(newChunkSize, {.InitializeStorage = false});
-            cache->ChunkOffset = 0;
-        }
-
-        Buffer_ = cache->Chunk.Slice(cache->ChunkOffset, cache->ChunkOffset + newCapacity);
-        cache->ChunkOffset += newCapacity;
-    } else {
-        Buffer_ = TSharedMutableRef::Allocate<TMessageBufferTag>(newChunkSize, {.InitializeStorage = false});
-        newCapacity = newChunkSize;
-    }
-    if (oldLength > 0) {
-        ::memcpy(Buffer_.Begin(), Begin_, oldLength);
-    }
-    Begin_ = Buffer_.Begin();
-    End_ = Begin_ + newCapacity;
+    AbortOnCriticalLogEvent(event);
 }
 
 } // namespace NDetail
@@ -149,16 +89,34 @@ ELogLevel GetThreadMinLogLevel()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_THREAD_LOCAL(std::string, ThreadMessageTag);
+YT_DEFINE_THREAD_LOCAL(bool, ThreadMessageTagDestroyed, false);
 
-void SetThreadMessageTag(std::string messageTag)
+struct TThreadMessageTagStorage
 {
-    ThreadMessageTag() = std::move(messageTag);
+    TLoggingTagList Tags;
+
+    ~TThreadMessageTagStorage()
+    {
+        ThreadMessageTagDestroyed() = true;
+    }
+};
+
+YT_DEFINE_THREAD_LOCAL(TThreadMessageTagStorage, ThreadMessageTag);
+
+void SetThreadMessageTags(TLoggingTagList messageTags)
+{
+    if (Y_UNLIKELY(ThreadMessageTagDestroyed())) {
+        return;
+    }
+    ThreadMessageTag().Tags = std::move(messageTags);
 }
 
-std::string& GetThreadMessageTag()
+const TLoggingTagList& GetThreadMessageTags()
 {
-    return ThreadMessageTag();
+    if (Y_UNLIKELY(ThreadMessageTagDestroyed())) {
+        return *LeakySingleton<TLoggingTagList>();
+    }
+    return ThreadMessageTag().Tags;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -220,25 +178,22 @@ void TLogger::Write(TLogEvent&& event) const
     LogManager_->Enqueue(std::move(event));
 }
 
-void TLogger::AddRawTag(const std::string& tag)
+TLogger& TLogger::AddTags(const TLoggingTagList& tags)
 {
-    auto* state = GetMutableCoWState();
-    if (!state->Tag.empty()) {
-        state->Tag += ", ";
-    }
-    state->Tag += tag;
+    GetMutableCoWState()->Tags.Add(tags);
+    return *this;
 }
 
-TLogger TLogger::WithRawTag(const std::string& tag) const &
+TLogger TLogger::WithTags(const TLoggingTagList& tags) const &
 {
     auto result = *this;
-    result.AddRawTag(tag);
+    result.AddTags(tags);
     return result;
 }
 
-TLogger TLogger::WithRawTag(const std::string& tag) &&
+TLogger TLogger::WithTags(const TLoggingTagList& tags) &&
 {
-    AddRawTag(tag);
+    AddTags(tags);
     return std::move(*this);
 }
 
@@ -291,10 +246,10 @@ TLogger TLogger::WithMinLevel(ELogLevel minLevel) &&
     return std::move(*this);
 }
 
-const std::string& TLogger::GetTag() const
+const TLoggingTagList& TLogger::GetTags() const
 {
-    static const std::string emptyResult;
-    return CoWState_ ? CoWState_->Tag : emptyResult;
+    static const TLoggingTagList emptyResult;
+    return CoWState_ ? CoWState_->Tags : emptyResult;
 }
 
 const TLogger::TStructuredTags& TLogger::GetStructuredTags() const
@@ -350,8 +305,7 @@ void LogStructuredEvent(
         loggingContext,
         logger,
         level);
-    event.MessageKind = ELogMessageKind::Structured;
-    event.MessageRef = message.ToSharedRef();
+    event.Payload = MakeStructuredPayloadFromYson(message);
     event.Family = ELogFamily::Structured;
     logger.Write(std::move(event));
 }

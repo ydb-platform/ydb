@@ -24,6 +24,8 @@ extern TPipe SignalPipeR;
 
 void InitSignals();
 void InitSignalsWithSelfPipe();
+void ResetSignalFlags();
+void EnsureSignalsAreBlocked();
 void CatchInterruptSignal(bool doCatch);
 
 void SigSuspend(const sigset_t* mask);

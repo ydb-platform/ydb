@@ -29,5 +29,6 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    ut_manual
     ut_memory
 )

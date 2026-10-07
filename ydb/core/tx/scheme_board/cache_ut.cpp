@@ -247,6 +247,7 @@ public:
     UNIT_TEST(SystemViews);
     UNIT_TEST(SysLocks);
     UNIT_TEST(TableSchemaVersion);
+    UNIT_TEST(TableDescription);
     UNIT_TEST(MigrationCommon);
     UNIT_TEST(MigrationCommit);
     UNIT_TEST(MigrationLostMessage);
@@ -268,6 +269,7 @@ public:
     void SystemViews();
     void SysLocks();
     void TableSchemaVersion();
+    void TableDescription();
     void MigrationCommon();
     void MigrationCommit();
     void MigrationLostMessage();
@@ -548,6 +550,33 @@ void TCacheTest::TableSchemaVersion() {
         auto entry = TestNavigate("/Root/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_VALUES_EQUAL(entry.TableId.SchemaVersion, 2);
     }
+}
+
+void TCacheTest::TableDescription() {
+    Context->GetAppData().FeatureFlags.SetEnableColumnStatistics(true);
+
+    ui64 txId = 100;
+    TestCreateTable(*Context, ++txId, "/Root", R"(
+        Name: "Table1"
+        Columns { Name: "key" Type: "Uint32" }
+        Columns { Name: "value" Type: "Uint64" }
+        KeyColumnNames: [ "key" ]
+        MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+    )", {NKikimrScheme::StatusAccepted});
+
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, RootSchemeshardTabletId));
+
+    auto entry = TestNavigate("/Root/Table1", TNavigate::EStatus::Ok);
+    UNIT_ASSERT_VALUES_EQUAL(entry.MultiColumnStatistics.size(), 1);
+
+    const auto& statistics = entry.MultiColumnStatistics.front();
+    UNIT_ASSERT_VALUES_EQUAL(statistics.GetName(), "s1");
+    UNIT_ASSERT_VALUES_EQUAL(statistics.ColumnNamesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(statistics.GetColumnNames(0), "value");
+    UNIT_ASSERT_VALUES_EQUAL(statistics.TypesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(
+        static_cast<int>(statistics.GetTypes(0)),
+        static_cast<int>(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH));
 }
 
 void TCacheTest::MigrationCommon() {

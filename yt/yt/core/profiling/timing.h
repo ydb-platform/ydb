@@ -8,6 +8,8 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
+#include <library/cpp/yt/system/spin_lock.h>
+
 namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -118,7 +120,7 @@ class TTimerGuard
     : public TNonCopyable
 {
 public:
-    explicit TTimerGuard(TTimer* timer, NThreading::TSpinLock* lock = nullptr);
+    explicit TTimerGuard(TTimer* timer);
 
     TTimerGuard(TTimerGuard&& other) noexcept;
     TTimerGuard& operator=(TTimerGuard&& other) noexcept;
@@ -127,9 +129,30 @@ public:
 
 private:
     TTimer* Timer_;
-    NThreading::TSpinLock* TimerLock_;
 
     void TryStopTimer() noexcept;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Wraps #TTimer to make GetElapsedTime safe to call concurrently with Start/Stop.
+template <class TTimer>
+class TConcurrentTimer
+{
+public:
+    template <class... TArgs>
+    explicit TConcurrentTimer(TArgs&&... args);
+
+    TConcurrentTimer(const TConcurrentTimer&) = delete;
+    TConcurrentTimer& operator=(const TConcurrentTimer&) = delete;
+
+    bool Start();
+    bool Stop();
+    TDuration GetElapsedTime() const;
+
+private:
+    YT_DECLARE_SPIN_LOCK(mutable TSpinLock, Lock_);
+    TTimer Timer_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -56,6 +56,11 @@ public:
     [[nodiscard]] TConclusionStatus ReadFilter(const NKikimrSSA::TProgram::TFilter& filter);
     [[nodiscard]] TConclusionStatus ReadProjection(const NKikimrSSA::TProgram::TProjection& projection);
     [[nodiscard]] TConclusionStatus ReadGroupBy(const NKikimrSSA::TProgram::TGroupBy& groupBy);
+    [[nodiscard]] TConclusionStatus ReadDistinct(const NKikimrSSA::TProgram::TDistinct& distinct);
+
+    void EnableIndexMemoryReserve() {
+        Builder.EnableIndexMemoryReserve();
+    }
 
     TConclusion<std::shared_ptr<NGraph::NExecution::TCompiledGraph>> Finish() {
         return Builder.Finish();

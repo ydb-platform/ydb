@@ -1,17 +1,12 @@
 #pragma once
 
-#include "yql_kikimr_provider.h"
+#include "yql_kikimr_expr_nodes.h"
 
-#include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
-
-#include <yql/essentials/providers/common/provider/yql_provider.h>
-
+#include <yql/essentials/core/yql_graph_transformer.h>
 
 namespace NYql {
 
-class TKiSourceVisitorTransformer: public TSyncTransformerBase {
+class TKiSourceVisitorTransformer : public TSyncTransformerBase {
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
 
@@ -26,7 +21,7 @@ private:
 
 class TKiSinkVisitorTransformer : public TSyncTransformerBase {
 public:
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
 
     void Rewind() override {
     }
@@ -60,6 +55,7 @@ private:
     virtual TStatus HandleCreateObject(NNodes::TKiCreateObject node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterObject(NNodes::TKiAlterObject node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropObject(NNodes::TKiDropObject node, TExprContext& ctx) = 0;
+    virtual TStatus HandleKillSession(NNodes::TKiKillSession node, TExprContext& ctx) = 0;
     virtual TStatus HandleCreateGroup(NNodes::TKiCreateGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterGroup(NNodes::TKiAlterGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleRenameGroup(NNodes::TKiRenameGroup node, TExprContext& ctx) = 0;
@@ -308,6 +304,8 @@ TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePt
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types);
+TAutoPtr<IGraphTransformer> CreateKiSourceConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+TAutoPtr<IGraphTransformer> CreateKiSinkConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
 TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
@@ -317,6 +315,8 @@ TAutoPtr<IGraphTransformer> CreateKiSourceLoadTableMetadataTransformer(TIntrusiv
     const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory,
     bool isInternalCall);
 TAutoPtr<IGraphTransformer> CreateKiSinkIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+TAutoPtr<IGraphTransformer> CreateSqlPathAliasesTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    TAutoPtr<IGraphTransformer> intents);
 
 TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,
@@ -358,7 +358,7 @@ void FillLiteralProto(const NNodes::TCoPgConst& literal, Ydb::TypedValue& proto)
 
 // Optimizer rules
 TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
-    TTypeAnnotationContext& types, bool sequentialResults);
+    TTypeAnnotationContext& types, bool concurrentResults, bool isolateEffects = false);
 TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, TExprContext& ctx);
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions();
@@ -376,7 +376,19 @@ bool IsKikimrSystemColumn(const TStringBuf columnName);
 bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos);
 
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content);
-TString FillAuthProperties(THashMap<TString, TString>& properties, const TExternalSource& externalSource);
+
+// Single source of truth for the SHOW CREATE setting names attached to
+// KiReadTable nodes and the corresponding PathType values understood by
+// the .sys/show_create system view.
+bool IsShowCreateSettingName(TStringBuf name);
+// Returns the PathType ("Table" / "View" / "ExternalDataSource" /
+// "ExternalTable") for a SHOW CREATE setting name, or an empty string-buf
+// if `name` is not one of the known SHOW CREATE settings.
+TStringBuf ShowCreateSettingToPathType(TStringBuf name);
+// Returns the first SHOW CREATE setting name found in `settings`, or an
+// empty string-buf if none is present. The returned view is backed by static
+// storage and outlives any TExprNode.
+TStringBuf GetShowCreateSetting(const TExprNode& settings);
 
 TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(NNodes::TExprList node, TExprContext& ctx);
 

@@ -1,8 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/opt/kqp_opt_impl.h>
-
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 
 namespace NKikimr::NKqp::NOpt {
 

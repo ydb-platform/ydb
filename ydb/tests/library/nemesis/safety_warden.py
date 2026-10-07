@@ -179,6 +179,27 @@ def construct_list_of_grep_pattern_arguments(list_of_markers):
     ))
 
 
+def _as_naive_datetime(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromtimestamp(value)
+
+
+def resolve_log_search_window(hours_back=24, start_time=None, end_time=None):
+    """Return ``(start, end)`` naive local datetimes for log queries."""
+    end_dt = _as_naive_datetime(end_time) or datetime.now()
+    start_dt = _as_naive_datetime(start_time)
+    if start_dt is None:
+        start_dt = end_dt - timedelta(hours=hours_back)
+    return start_dt, end_dt
+
+
+def format_log_search_timestamp(value):
+    return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
 # ---------------------------------------------------------------------------
 # CommandBasedSafetyWarden — composition-based replacement
 # ---------------------------------------------------------------------------
@@ -347,13 +368,20 @@ class GrepGzippedLogFilesForMarkersSafetyWarden(CommandBasedSafetyWarden):
 
 
 class GrepJournalctlKernelForPatternsSafetyWarden(CommandBasedSafetyWarden):
-    def __init__(self, executor, list_of_markers, lines_after=1, hours_back=24):
+    def __init__(
+        self, executor, list_of_markers, lines_after=1, hours_back=24,
+        start_time=None, end_time=None,
+    ):
         name = "GrepJournalctlKernelForPatternsSafetyWarden for markers = {markers}".format(
             markers=list_of_markers,
         )
-        since_value = '{hours} hours ago'.format(hours=hours_back)
+        start_dt, end_dt = resolve_log_search_window(
+            hours_back=hours_back, start_time=start_time, end_time=end_time,
+        )
         command = [
-            'sudo', 'journalctl', '-k', '--no-pager', '--since', "'{since}'".format(since=since_value),
+            'sudo', 'journalctl', '-k', '--no-pager',
+            '--since', "'{since}'".format(since=format_log_search_timestamp(start_dt)),
+            '--until', "'{until}'".format(until=format_log_search_timestamp(end_dt)),
             '|',
             'grep',
             '-A', str(lines_after),
@@ -385,15 +413,19 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
     # Lines of context after each VERIFY failed match
     LINES_AFTER_MATCH = 25
 
-    def __init__(self, hours_back=24):
+    def __init__(self, hours_back=24, start_time=None, end_time=None):
         """
         Args:
-            hours_back: How many hours back to search (default 24)
+            hours_back: How many hours back to search when start/end are omitted (default 24)
+            start_time: Window start (datetime or unix timestamp)
+            end_time: Window end (datetime or unix timestamp)
         """
         super(UnifiedAgentVerifyFailedSafetyWarden, self).__init__(
             'UnifiedAgentVerifyFailedSafetyWarden'
         )
         self._hours_back = hours_back
+        self._start_time = start_time
+        self._end_time = end_time
 
     def list_of_safety_violations(self):
         """
@@ -404,13 +436,15 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
             Each violation is a full stack trace (up to LINES_AFTER_MATCH lines).
             Returns ALL errors found, not limited.
         """
-        end_time = datetime.now()
-        start_time = end_time - timedelta(hours=self._hours_back)
+        start_dt, end_dt = resolve_log_search_window(
+            hours_back=self._hours_back,
+            start_time=self._start_time,
+            end_time=self._end_time,
+        )
+        start_str = format_log_search_timestamp(start_dt)
+        end_str = format_log_search_timestamp(end_dt)
 
-        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
-        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
-
-        verify_pattern = 'VERIFY failed'
+        verify_pattern = 'VERIFY failed|unhandled exception'
         violations = []
 
         try:
@@ -419,8 +453,8 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
             sample_cmd = (
                 "ulimit -n 100500 2>/dev/null; "
                 "unified_agent select -S '{start}' -U '{end}' -s kikimr-start 2>/dev/null | "
-                "grep -i -A {lines} --no-group-separator '{pattern}' | "
-                "sed '/{pattern}/i --'"
+                "grep -iE -A {lines} --no-group-separator '{pattern}' | "
+                "sed -E '/{pattern}/i --'"
             ).format(start=start_str, end=end_str, lines=self.LINES_AFTER_MATCH, pattern=verify_pattern)
             sample_result = subprocess.run(
                 sample_cmd, shell=True, capture_output=True, text=True, timeout=1200  # 20 minutes
@@ -441,5 +475,97 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
             logger.warning("Error parsing unified_agent output: {}".format(e))
         except Exception as e:
             logger.warning("Error checking unified_agent: {}".format(e))
+
+        return violations
+
+
+class UnifiedAgentSanitizerSafetyWarden(SafetyWarden):
+    """
+    Safety warden that checks for sanitizer errors (ASan/LSan/TSan/MSan/UBSan)
+    in unified_agent logs.
+
+    Uses unified_agent to search kikimr-start logs for sanitizer report headers
+    ``ERROR:`` / ``WARNING: <Word>Sanitizer:`` (e.g. ``ERROR: LeakSanitizer:``,
+    ``WARNING: ThreadSanitizer:`` — TSan data races are WARNING by default).
+
+    Each violation in the returned list is a full sanitizer report block,
+    spanning from the leading ``=====`` separator line through the trailing
+    ``SUMMARY:`` line, so callers see the complete stack trace.
+
+    Based on logic from ``UnifiedAgentVerifyFailedSafetyWarden``.
+    Runs locally (no SSH).
+    """
+
+    def __init__(self, hours_back=24, start_time=None, end_time=None):
+        """
+        Args:
+            hours_back: How many hours back to search when start/end are omitted (default 24)
+            start_time: Window start (datetime or unix timestamp)
+            end_time: Window end (datetime or unix timestamp)
+        """
+        super(UnifiedAgentSanitizerSafetyWarden, self).__init__(
+            'UnifiedAgentSanitizerSafetyWarden'
+        )
+        self._hours_back = hours_back
+        self._start_time = start_time
+        self._end_time = end_time
+
+    def list_of_safety_violations(self):
+        """
+        Check unified_agent logs for sanitizer error/warning blocks.
+
+        Returns:
+            List of violation strings, empty if no violations found.
+            Each violation is a complete sanitizer report (from ``====...``
+            through ``SUMMARY:``). Returns ALL errors found, not limited.
+        """
+        start_dt, end_dt = resolve_log_search_window(
+            hours_back=self._hours_back,
+            start_time=self._start_time,
+            end_time=self._end_time,
+        )
+        start_str = format_log_search_timestamp(start_dt)
+        end_str = format_log_search_timestamp(end_dt)
+
+        violations = []
+
+        # AWK program: collect lines between the leading "=====...====="
+        # separator and the trailing "SUMMARY:" line. Emit the block only if
+        # it contains an "ERROR|WARNING: <Word>Sanitizer:" line. Blocks are
+        # separated by lines containing only "--" so we can split on them later.
+        awk_program = (
+            'BEGIN { buf=""; in_block=0; has_err=0 } '
+            '/^=+$/ { buf=$0 ORS; in_block=1; has_err=0; next } '
+            'in_block { buf=buf $0 ORS } '
+            'in_block && /(ERROR|WARNING):[[:space:]]*[A-Za-z]+Sanitizer:/ { has_err=1 } '
+            'in_block && /^SUMMARY:/ { '
+            'if (has_err) { printf "%s--%s", buf, ORS } '
+            'buf=""; in_block=0; has_err=0 '
+            '}'
+        )
+
+        try:
+            sample_cmd = (
+                "ulimit -n 100500 2>/dev/null; "
+                "unified_agent select -S '{start}' -U '{end}' -s kikimr-start 2>/dev/null | "
+                "awk '{awk}'"
+            ).format(start=start_str, end=end_str, awk=awk_program)
+
+            sample_result = subprocess.run(
+                sample_cmd, shell=True, capture_output=True, text=True, timeout=1200  # 20 minutes
+            )
+            if sample_result.returncode == 0 and sample_result.stdout.strip():
+                raw_output = sample_result.stdout.strip()
+                # AWK emits "--\n" between blocks; split and keep non-empty.
+                error_blocks = raw_output.split('\n--\n')
+                for block in error_blocks:
+                    block = block.strip()
+                    if block and block != '--':
+                        violations.append(block)
+
+        except subprocess.TimeoutExpired:
+            logger.warning("Timeout while checking unified_agent for sanitizer errors")
+        except Exception as e:
+            logger.warning("Error checking unified_agent for sanitizer errors: {}".format(e))
 
         return violations

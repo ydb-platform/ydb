@@ -15,8 +15,10 @@ class AlwaysOffSamplerConfiguration;
 class AlwaysOnSamplerConfiguration;
 class JaegerRemoteSamplerConfiguration;
 class ParentBasedSamplerConfiguration;
+class ProbabilitySamplerConfiguration;
 class TraceIdRatioBasedSamplerConfiguration;
 class ExtensionSamplerConfiguration;
+class CompositeSamplerConfiguration;
 
 class SamplerConfigurationVisitor
 {
@@ -32,8 +34,10 @@ public:
   virtual void VisitAlwaysOn(const AlwaysOnSamplerConfiguration *model)                   = 0;
   virtual void VisitJaegerRemote(const JaegerRemoteSamplerConfiguration *model)           = 0;
   virtual void VisitParentBased(const ParentBasedSamplerConfiguration *model)             = 0;
+  virtual void VisitProbability(const ProbabilitySamplerConfiguration *model)             = 0;
   virtual void VisitTraceIdRatioBased(const TraceIdRatioBasedSamplerConfiguration *model) = 0;
   virtual void VisitExtension(const ExtensionSamplerConfiguration *model)                 = 0;
+  virtual void VisitComposite(const CompositeSamplerConfiguration *model)                 = 0;
 };
 
 }  // namespace configuration

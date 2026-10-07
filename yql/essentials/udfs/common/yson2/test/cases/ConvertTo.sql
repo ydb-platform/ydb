@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $bool = Yson::Parse("true");
 $number = Yson::Parse("123");
 $string = Yson::Parse("\"123\"");

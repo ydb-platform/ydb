@@ -10,9 +10,6 @@ success
 
 ===== grpc_calls =====
 
-===== http_calls =====
-GET viewer/json/vdiskinfo?... (mocked)
-
 ===== mock_base_config =====
 
 TBaseConfig {
@@ -28,7 +25,7 @@ PDisk {
   ExpectedSlotCount: 8
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 8
+    ExpectedSlotCount: 8
     SlotSizeInUnits: 0
   }
 }
@@ -44,7 +41,7 @@ PDisk {
   ExpectedSlotCount: 4
   PDiskMetrics {
     EnforcedDynamicSlotSize: 0
-    SlotCount: 4
+    ExpectedSlotCount: 4
     SlotSizeInUnits: 0
   }
 }
@@ -59,8 +56,11 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+    State: OK
+    Replicated: true
   }
   Status: "READY"
+  Ready: true
 }
 VSlot {
   VSlotId {
@@ -73,8 +73,11 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+    State: OK
+    Replicated: true
   }
   Status: "READY"
+  Ready: true
 }
 Group {
   GroupId: 2147483649

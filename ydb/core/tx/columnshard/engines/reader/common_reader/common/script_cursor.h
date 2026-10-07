@@ -13,7 +13,8 @@ private:
 public:
     TFetchingScriptCursor(const std::shared_ptr<TFetchingScript>& script, const ui32 index)
         : CurrentStepIdx(index)
-        , Script(script) {
+        , Script(script)
+    {
         AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     }
 
@@ -51,7 +52,7 @@ public:
         return !Script->IsFinished(++CurrentStepIdx);
     }
 
-    TConclusion<bool> Execute(const std::shared_ptr<IDataSource>& source);
+    TConclusion<TExecutionResult> Execute(IDataSource& source);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -14,6 +15,7 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/testing/common/network.h>
 
 #include <fmt/format.h>
 
@@ -26,6 +28,71 @@ using namespace NTestUtils;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
+    Y_UNIT_TEST_TWIN(EvaluateExprQueryParameter, QueryService) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+        auto session = kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto params = TParamsBuilder().AddParam("$value").String("supplied").Build().Build();
+
+        for (const TString& expression : {
+            "$value",
+            "\"prefix_\" || $value",
+            "ListMap([\"prefix_\"], ($prefix) -> { RETURN $prefix || $value; })",
+        }) {
+            const TString sql = TStringBuilder()
+                << "DECLARE $value AS String; SELECT EvaluateExpr(" << expression << ");";
+            const auto checkError = [&sql](const TStatus& result) {
+                const TString issues = result.GetIssues().ToString();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, sql << "\n" << issues);
+                UNIT_ASSERT_C(!HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR), sql << "\n" << issues);
+                UNIT_ASSERT_C(!HasIssue(result.GetIssues(), NYql::TIssuesIds::UNEXPECTED), sql << "\n" << issues);
+                UNIT_ASSERT_C(issues.Contains("Cannot evaluate expression that depends on query parameter: $value"),
+                    sql << "\n" << issues);
+            };
+
+            if constexpr (QueryService) {
+                for (const auto mode : {EExecMode::Explain, EExecMode::Execute}) {
+                    checkError(db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(), params,
+                        TExecuteQuerySettings().ExecMode(mode)).GetValueSync());
+                }
+            } else {
+                checkError(session.PrepareDataQuery(sql).GetValueSync());
+                checkError(session.ExecuteDataQuery(sql,
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx(), params).GetValueSync());
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(EvaluateExprWithoutQueryParameterDependency, QueryService) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+        auto session = kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto params = TParamsBuilder().AddParam("$value").String("supplied").Build().Build();
+
+        for (const TString& expression : {
+            "IF(TRUE, \"constant\", $value)",
+            "Unwrap(ListHead(ListMap([\"constant\"], ($value) -> { RETURN $value; })))",
+        }) {
+            const TString sql = TStringBuilder() << "DECLARE $value AS String; SELECT EvaluateExpr("
+                << expression << ") AS evaluated, $value AS supplied;";
+            const auto checkResult = [&sql](const auto& result) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, sql << "\n" << result.GetIssues().ToString());
+                TResultSetParser parser(result.GetResultSet(0));
+                UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+                UNIT_ASSERT(parser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("evaluated").GetString(), "constant");
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("supplied").GetString(), "supplied");
+            };
+
+            if constexpr (QueryService) {
+                checkResult(db.ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(), params).GetValueSync());
+            } else {
+                checkResult(session.ExecuteDataQuery(sql,
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx(), params).GetValueSync());
+            }
+        }
+    }
+
     Y_UNIT_TEST(ExecuteScriptWithExternalTableResolve) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
@@ -958,8 +1025,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(InsertIntoBucketValuesCast) {
-        const TString writeDataSourceName = "/Root/write_data_source";
-        const TString writeTableName = "/Root/write_binding";
+        const TString writeDataSourceName1 = "/Root/write_data_source1";
+        const TString writeDataSourceName2 = "/Root/write_data_source2";
+        const TString writeTableName1 = "/Root/write_binding1";
+        const TString writeTableName2 = "/Root/write_binding2";
         const TString writeBucket = "test_bucket_values_cast";
         const TString writeObject = "test_object_write/";
         {
@@ -973,22 +1042,37 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto session = tc.CreateSession().GetValueSync().GetSession();
         {
             const TString query = fmt::format(R"(
-                CREATE EXTERNAL DATA SOURCE `{write_source}` WITH (
+                CREATE EXTERNAL DATA SOURCE `{write_source1}` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="{write_location}",
                     AUTH_METHOD="NONE"
                 );
-                CREATE EXTERNAL TABLE `{write_table}` (
+                CREATE EXTERNAL DATA SOURCE `{write_source2}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{write_location}",
+                    AUTH_METHOD="NONE"
+                );
+                CREATE EXTERNAL TABLE `{write_table1}` (
                     key Uint64 NOT NULL,
                     value String NOT NULL
                 ) WITH (
-                    DATA_SOURCE="{write_source}",
+                    DATA_SOURCE="{write_source1}",
+                    LOCATION="{write_object}",
+                    FORMAT="tsv_with_names"
+                );
+                CREATE EXTERNAL TABLE `{write_table2}` (
+                    key Uint64 NOT NULL,
+                    value String NOT NULL
+                ) WITH (
+                    DATA_SOURCE="{write_source2}",
                     LOCATION="{write_object}",
                     FORMAT="tsv_with_names"
                 );
                 )",
-                "write_source"_a = writeDataSourceName,
-                "write_table"_a = writeTableName,
+                "write_source1"_a = writeDataSourceName1,
+                "write_source2"_a = writeDataSourceName2,
+                "write_table1"_a = writeTableName1,
+                "write_table2"_a = writeTableName2,
                 "write_location"_a = GetBucketLocation(writeBucket),
                 "write_object"_a = writeObject);
 
@@ -999,31 +1083,33 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto db = kikimr->GetQueryClient();
         {
             const TString query = fmt::format(R"(
-                INSERT INTO `{write_table}`
+                INSERT INTO `{write_table1}`
                     (key, value)
                 VALUES
                     (1, "#######"),
                     (4294967295u, "#######");
 
-                INSERT INTO `{write_source}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
+                INSERT INTO `{write_source1}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
                     (key, value)
                 VALUES
                     (1, "#######"),
                     (4294967295u, "#######");
 
-                INSERT INTO `{write_table}` SELECT * FROM AS_TABLE([
+                INSERT INTO `{write_table2}` SELECT * FROM AS_TABLE([
                     <|key: 1, value: "#####"|>,
                     <|key: 4294967295u, value: "#####"|>
                 ]);
 
-                INSERT INTO `{write_source}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
+                INSERT INTO `{write_source2}`.`{write_object}` WITH (FORMAT = "tsv_with_names")
                 SELECT * FROM AS_TABLE([
                     <|key: 1, value: "#####"|>,
                     <|key: 4294967295u, value: "#####"|>
                 ]);
                 )",
-                "write_source"_a = writeDataSourceName,
-                "write_table"_a = writeTableName,
+                "write_source1"_a = writeDataSourceName1,
+                "write_source2"_a = writeDataSourceName2,
+                "write_table1"_a = writeTableName1,
+                "write_table2"_a = writeTableName2,
                 "write_object"_a = writeObject);
 
             const auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -2160,9 +2246,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        ui32 source1_id_and_join = 0;
-        ui32 source2_id = 0;
-        ui32 limit_id = 0;
+        ui32 source1Id = 0;
+        ui32 source2Id = 0;
+        ui32 joinId = 0;
+        ui32 finalId = 0;
         auto queryClient = kikimr->GetQueryClient();
 
         {
@@ -2187,13 +2274,19 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT(queryResult.GetStats()->GetPlan());
             NJson::TJsonValue plan;
             UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+            const auto& finalStage = plan["Plan"]["Plans"][0]["Plans"][0];
+            const auto& joinStage = finalStage["Plans"][0]["Plans"][0];
+            const auto& source1Stage = joinStage["Plans"][0]["Plans"][0];
+            const auto& source2Stage = joinStage["Plans"][1]["Plans"][0];
+            UNIT_ASSERT_VALUES_EQUAL(source1Stage["Stats"]["Tasks"].GetIntegerSafe(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(source2Stage["Stats"]["Tasks"].GetIntegerSafe(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(joinStage["Stats"]["Tasks"].GetIntegerSafe(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(finalStage["Stats"]["Tasks"].GetIntegerSafe(), 1);
 
-            source1_id_and_join = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
-            source2_id = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
-            limit_id = plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
+            source1Id = source1Stage["Stats"]["PhysicalStageId"].GetIntegerSafe();
+            source2Id = source2Stage["Stats"]["PhysicalStageId"].GetIntegerSafe();
+            joinId = joinStage["Stats"]["PhysicalStageId"].GetIntegerSafe();
+            finalId = finalStage["Stats"]["PhysicalStageId"].GetIntegerSafe();
         }
 
         {
@@ -2203,16 +2296,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                     pragma s3.UseRuntimeListing = "false";
                     pragma ydb.CostBasedOptimizationLevel = "1";
                     pragma ydb.OverridePlanner = @@ [
-                        {{ "tx": 0, "stage": {source1_id_and_join}, "tasks": 1 }},
-                        {{ "tx": 0, "stage": {source2_id}, "tasks": 1 }},
-                        {{ "tx": 0, "stage": {limit_id}, "tasks": 1 }}
+                        {{ "tx": 0, "stage": {source1Id}, "tasks": 1 }},
+                        {{ "tx": 0, "stage": {source2Id}, "tasks": 1 }},
+                        {{ "tx": 0, "stage": {joinId}, "tasks": 1 }},
+                        {{ "tx": 0, "stage": {finalId}, "tasks": 1 }}
                     ] @@;
 
                     SELECT SUM(t1.bar + t2.bar) as sum FROM `{table1}` as t1 JOIN /*+grace()*/ `{table2}`as t2 ON t1.foo = t2.foo
                 )",
-                "source1_id_and_join"_a = source1_id_and_join,
-                "source2_id"_a = source2_id,
-                "limit_id"_a = limit_id,
+                "source1Id"_a = source1Id,
+                "source2Id"_a = source2Id,
+                "joinId"_a = joinId,
+                "finalId"_a = finalId,
                 "table1"_a = root + table1,
                 "table2"_a = root + table2);
 
@@ -2226,9 +2321,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT(queryResult.GetStats()->GetPlan());
             NJson::TJsonValue plan;
             UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+            const auto& finalStage = plan["Plan"]["Plans"][0]["Plans"][0];
+            const auto& joinStage = finalStage["Plans"][0]["Plans"][0];
+            const auto& source1Stage = joinStage["Plans"][0]["Plans"][0];
+            const auto& source2Stage = joinStage["Plans"][1]["Plans"][0];
+            UNIT_ASSERT_VALUES_EQUAL(source1Stage["Stats"]["Tasks"].GetIntegerSafe(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(source2Stage["Stats"]["Tasks"].GetIntegerSafe(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(joinStage["Stats"]["Tasks"].GetIntegerSafe(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(finalStage["Stats"]["Tasks"].GetIntegerSafe(), 1);
         }
 
         {
@@ -2238,16 +2338,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                     pragma s3.UseRuntimeListing = "false";
                     pragma ydb.CostBasedOptimizationLevel = "1";
                     pragma ydb.OverridePlanner = @@ [
-                        {{ "tx": 0, "stage": {source1_id_and_join}, "tasks": 10 }},
-                        {{ "tx": 0, "stage": {source2_id}, "tasks": 10 }},
-                        {{ "tx": 0, "stage": {limit_id}, "tasks": 10 }}
+                        {{ "tx": 0, "stage": {source1Id}, "tasks": 10 }},
+                        {{ "tx": 0, "stage": {source2Id}, "tasks": 10 }},
+                        {{ "tx": 0, "stage": {joinId}, "tasks": 10 }},
+                        {{ "tx": 0, "stage": {finalId}, "tasks": 10 }}
                     ] @@;
 
                     SELECT SUM(t1.bar + t2.bar) as sum FROM `{table1}` as t1 JOIN /*+grace()*/ `{table2}`as t2 ON t1.foo = t2.foo
                 )",
-                "source1_id_and_join"_a = source1_id_and_join,
-                "source2_id"_a = source2_id,
-                "limit_id"_a = limit_id,
+                "source1Id"_a = source1Id,
+                "source2Id"_a = source2Id,
+                "joinId"_a = joinId,
+                "finalId"_a = finalId,
                 "table1"_a = root + table1,
                 "table2"_a = root + table2);
 
@@ -2261,12 +2363,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT(queryResult.GetStats()->GetPlan());
             NJson::TJsonValue plan;
             UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
-            // only 2 files => sources stay with 2 tasks
-            // join scales to 10 tasks
-            // limit ignores hint and keeps being in the only task
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 10);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
+            const auto& finalStage = plan["Plan"]["Plans"][0]["Plans"][0];
+            const auto& joinStage = finalStage["Plans"][0]["Plans"][0];
+            const auto& source1Stage = joinStage["Plans"][0]["Plans"][0];
+            const auto& source2Stage = joinStage["Plans"][1]["Plans"][0];
+            // Each source has only two files, while the join can scale to ten tasks.
+            UNIT_ASSERT_VALUES_EQUAL(source1Stage["Stats"]["Tasks"].GetIntegerSafe(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(source2Stage["Stats"]["Tasks"].GetIntegerSafe(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(joinStage["Stats"]["Tasks"].GetIntegerSafe(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(finalStage["Stats"]["Tasks"].GetIntegerSafe(), 1);
         }
     }
 
@@ -2932,7 +3037,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             const auto& issues = result.GetIssues().ToOneLineString();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
-            UNIT_ASSERT_STRING_CONTAINS(issues, "Subdirectory listing is not supported for local files (can not use delimiter: '/')");
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Subdirectory listing is not supported for local files (cannot use delimiter: '/')");
         }
     }
 
@@ -3037,7 +3142,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(TestRestartQueryAndCleanupWithGetOperation) {
-        auto kikimr = NTestUtils::MakeKikimrRunner(std::nullopt, {.EnableScriptExecutionBackgroundChecks = false});
+        auto kikimr = NTestUtils::MakeKikimrRunner(std::nullopt, {.EnableScriptExecutionBackgroundChecks = true}); // Script execution may be restarted only by background check
         auto db = kikimr->GetQueryClient();
 
         constexpr char BUCKET[] = "test_restart_query_and_cleanup_with_get_operation_bucket";
@@ -3189,6 +3294,86 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(BUCKET), "42");
         UNIT_ASSERT_VALUES_EQUAL(GetObjectKeys(BUCKET).size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(BUCKET), 0);
+    }
+
+    Y_UNIT_TEST(TestAtomicUploadCommitWithMultipleTransactions) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+
+        constexpr char BUCKET[] = "test_atomic_upload_commit_with_multiple_transactions";
+        constexpr char EXTERNAL_DATA_SOURCE_NAME[] = "test_bucket";
+        CreateBucket(BUCKET);
+
+        {   // Create external data source
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                ))",
+                "location"_a = GetBucketLocation(BUCKET),
+                "source_name"_a = EXTERNAL_DATA_SOURCE_NAME
+            );
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        constexpr char TABLE_NAME[] = "failure_table";
+
+        {   // Create sample table
+            const TString query = fmt::format(R"(
+                CREATE TABLE `{table_name}` (
+                    Key Int32 NOT NULL,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key)
+                );)",
+                "table_name"_a = TABLE_NAME
+            );
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString sql = fmt::format(R"(
+                PRAGMA s3.AtomicUploadCommit = "true";
+
+                INSERT INTO `{table_name}` (Key, Value) VALUES (42, "value");
+
+                INSERT INTO `{source_name}`.`f/` WITH (FORMAT = "json_each_row") SELECT 42;
+
+                SELECT * FROM `{table_name}`;
+
+                INSERT INTO `{source_name}`.`x/` WITH (FORMAT = "json_each_row") SELECT 42;
+            )",
+            "source_name"_a=EXTERNAL_DATA_SOURCE_NAME,
+            "table_name"_a=TABLE_NAME
+        );
+
+        auto scriptExecutionOperation = db.ExecuteScript(sql, TExecuteScriptSettings().StatsMode(EStatsMode::Profile)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
+
+        TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        const auto& metadata = readyOp.Metadata();
+        UNIT_ASSERT_VALUES_EQUAL_C(metadata.ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToOneLineString());
+
+        const auto& ast = metadata.ExecStats.GetAst();
+        UNIT_ASSERT(ast);
+        AstChecker(3, 5)(*ast);
+
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(results.GetStatus(), EStatus::SUCCESS, results.GetIssues().ToString());
+
+        TResultSetParser resultSet(results.ExtractResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Key").GetInt32(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Value").GetString(), "value");
+
+        UNIT_ASSERT_VALUES_EQUAL(GetObjectKeys(BUCKET).size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(BUCKET), "{\"column0\":42}\n{\"column0\":42}\n");
         UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(BUCKET), 0);
     }
 
@@ -3541,15 +3726,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-    Y_UNIT_TEST(ExecuteQueryWithReplicatedS3Write) {
+    Y_UNIT_TEST_TWIN(ExecuteQueryWithReplicatedS3Write, EnableIndexStreamWrite) {
         const TString externalDataSourceName = "/Root/external_data_source";
         const TString externalTableName = "/Root/test_binding_resolve";
-        const TString bucket = "test_bucket_s3_replicate";
+        const TString bucket = TStringBuilder() << "test_bucket_s3_replicate" << EnableIndexStreamWrite;
         const TString object = "object/test_object";
 
         CreateBucketWithObject(bucket, object, "test-data");
 
-        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto appConfig = NKikimrConfig::TAppConfig();
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
         auto db = kikimr->GetQueryClient();
 
         {
@@ -3677,6 +3865,171 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT(parser.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), size);
         }
+    }
+
+    Y_UNIT_TEST(ReturningWithInsertOnS3Storage) {
+        const TString dataSourceName = "/Root/s3_data_source";
+        const TString tableName = "/Root/external_table";
+        const TString bucket = "test_bucket_insert_returning";
+        const TString object = "test_object/";
+
+        {
+            Aws::S3::S3Client s3Client = MakeS3Client();
+            CreateBucket(bucket, s3Client);
+        }
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+
+        auto client = kikimr->GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        const TString createQuery = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{ds}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{loc}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{tbl}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{ds}",
+                LOCATION="{obj}",
+                FORMAT="tsv_with_names"
+            );
+        )", "ds"_a = dataSourceName, "loc"_a = GetBucketLocation(bucket), "tbl"_a = tableName, "obj"_a = object);
+
+        auto resultCreateDS = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(resultCreateDS.IsSuccess(), resultCreateDS.GetIssues().ToString());
+
+        auto db = kikimr->GetQueryClient();
+
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO `{tbl}` (key, value) VALUES ('1', 'test') RETURNING *;
+            )", "tbl"_a = tableName);
+
+            auto resultFuture = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx());
+            resultFuture.Wait();
+            auto result = resultFuture.GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO `{tbl}` (key, value) VALUES ('1', 'test') RETURNING key;
+            )", "tbl"_a = tableName);
+
+            auto resultFuture = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx());
+            resultFuture.Wait();
+            auto result = resultFuture.GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO `{ds}`.`{obj}` WITH (FORMAT = "tsv_with_names", SCHEMA (key Utf8 NOT NULL, value Utf8 NOT NULL)) (key, value) VALUES ('1', 'test') RETURNING key;
+            )", "ds"_a = dataSourceName, "obj"_a = object);
+
+            auto resultFuture = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx());
+            resultFuture.Wait();
+            auto result = resultFuture.GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(TestSuccessfulReadAfterPartialFileError) {
+        using NKikimr::NWrappers::NTestHelpers::TS3Mock;
+
+        constexpr TStringBuf bucket = "partial-read-bucket";
+        constexpr TStringBuf object = "test.json";
+        const TString objectPath = TStringBuilder() << "/" << bucket << "/" << object;
+        const auto port = NTesting::GetFreePort();
+
+        THashMap<TString, TString> data{{objectPath, TString(TEST_CONTENT)}};
+        TS3Mock s3Mock(
+            std::move(data),
+            TS3Mock::TSettings(port).WithPartialReadFailure(objectPath));
+        UNIT_ASSERT_C(s3Mock.Start(), s3Mock.GetError());
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+
+        auto result = db.ExecuteQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/partial_read_source` WITH (
+                SOURCE_TYPE = "ObjectStorage",
+                LOCATION = "http://localhost:{port}/{bucket}/",
+                AUTH_METHOD = "NONE"
+            );
+            CREATE EXTERNAL TABLE `/Root/partial_read_table` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE = "/Root/partial_read_source",
+                LOCATION = "{object}",
+                FORMAT = "json_each_row"
+            );)",
+            "port"_a = port,
+            "bucket"_a = bucket,
+            "object"_a = object
+        ), TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+        result = db.ExecuteQuery(R"(
+            SELECT COUNT(*)
+            FROM `/Root/partial_read_table`;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetPartialReadFailureCount(), 1);
+        UNIT_ASSERT_GE(s3Mock.GetPartialReadRequestCount(), 2);
+    }
+
+    Y_UNIT_TEST(MultipleWriteIntoExternalTableDisabled) {
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString externalTableName = "/Root/test_binding_disabled";
+        const TString bucket = "testBucketMultipleWriteIntoExternalTableDisabled";
+        CreateBucket(bucket);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto client = kikimr->GetQueryClient();
+
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "{location}",
+                    AUTH_METHOD = "NONE"
+                );
+                CREATE EXTERNAL TABLE `{external_table}` (
+                    key Utf8 NOT NULL,
+                    value Utf8 NOT NULL
+                ) WITH (
+                    DATA_SOURCE = "{external_source}",
+                    LOCATION = "/write-path/",
+                    FORMAT = "json_each_row"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName,
+                "location"_a = GetBucketLocation(bucket)
+            );
+            auto result = client.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString sql = fmt::format(R"(
+            INSERT INTO `{external_table}` SELECT 1 as key, "X" as value;
+            INSERT INTO `{external_table}` SELECT 2 as key, "Y" as value;
+        )", "external_table"_a=externalTableName);
+
+        auto result = client.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
+        const auto& issues = result.GetIssues().ToString();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+        UNIT_ASSERT_STRING_CONTAINS(issues, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for external table: db.[" << externalTableName);
     }
 }
 

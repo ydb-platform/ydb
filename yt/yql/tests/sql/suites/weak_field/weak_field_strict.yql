@@ -1,4 +1,3 @@
-/* postgres can not */
 use plato;
 SELECT
   WeakField(first_num, "uint32") as num_nodef,

@@ -20,7 +20,7 @@ $all_sales = (
             i_category_id,
             i_manufact_id,
             cs_quantity - COALESCE(cr_return_quantity, 0) AS sales_cnt,
-            cs_ext_sales_price - COALESCE(cr_return_amount, 0.0) AS sales_amt
+            cs_ext_sales_price - COALESCE(cr_return_amount, cast(0 as decimal(7,2))) AS sales_amt
         FROM
             `/Root/test/ds/catalog_sales`
         JOIN
@@ -48,7 +48,7 @@ $all_sales = (
             i_category_id,
             i_manufact_id,
             ss_quantity - COALESCE(sr_return_quantity, 0) AS sales_cnt,
-            ss_ext_sales_price - COALESCE(sr_return_amt, 0.0) AS sales_amt
+            ss_ext_sales_price - COALESCE(sr_return_amt, cast(0 as decimal(7,2))) AS sales_amt
         FROM
             `/Root/test/ds/store_sales`
         JOIN
@@ -76,7 +76,7 @@ $all_sales = (
             i_category_id,
             i_manufact_id,
             ws_quantity - COALESCE(wr_return_quantity, 0) AS sales_cnt,
-            ws_ext_sales_price - COALESCE(wr_return_amt, 0.0) AS sales_amt
+            ws_ext_sales_price - COALESCE(wr_return_amt, cast(0 as decimal(7,2))) AS sales_amt
         FROM
             `/Root/test/ds/web_sales`
         JOIN

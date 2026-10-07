@@ -87,6 +87,12 @@ std::string ConvertToTextYsonString<i8>(const i8& value)
 }
 
 template <>
+std::string ConvertToTextYsonString<i16>(const i16& value)
+{
+    return ConvertToTextYsonString(static_cast<i64>(value));
+}
+
+template <>
 std::string ConvertToTextYsonString<i32>(const i32& value)
 {
     return ConvertToTextYsonString(static_cast<i64>(value));
@@ -100,6 +106,12 @@ std::string ConvertToTextYsonString<i64>(const i64& value)
 
 template <>
 std::string ConvertToTextYsonString<ui8>(const ui8& value)
+{
+    return ConvertToTextYsonString(static_cast<ui64>(value));
+}
+
+template <>
+std::string ConvertToTextYsonString<ui16>(const ui16& value)
 {
     return ConvertToTextYsonString(static_cast<ui64>(value));
 }
@@ -296,7 +308,7 @@ double ParseDoubleFromTextYsonString(TStringBuf strBuf)
         try { \
             return CheckedIntegralCast<type>(ParseSomeIntFromTextYsonString<underlyingType>(str)); \
         } catch (const std::exception& ex) { \
-            THROW_ERROR_EXCEPTION("Error parsing \"" #type "\" value from YSON") << ex; \
+            THROW_ERROR_EXCEPTION("Error parsing \"" #type "\" value from YSON").With(ex); \
         } \
     }
 
@@ -319,7 +331,7 @@ std::string ConvertFromTextYsonString<std::string>(TStringBuf str)
     try {
         return ParseStringFromTextYsonString(str);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Error parsing \"string\" value from YSON") << ex;
+        THROW_ERROR_EXCEPTION("Error parsing \"string\" value from YSON").With(ex);
     }
 }
 
@@ -335,7 +347,7 @@ float ConvertFromTextYsonString<float>(TStringBuf str)
     try {
         return static_cast<float>(ParseDoubleFromTextYsonString(str));
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Error parsing \"float\" value from YSON") << ex;
+        THROW_ERROR_EXCEPTION("Error parsing \"float\" value from YSON").With(ex);
     }
 }
 
@@ -345,7 +357,7 @@ double ConvertFromTextYsonString<double>(TStringBuf str)
     try {
         return ParseDoubleFromTextYsonString(str);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Error parsing \"double\" value from YSON") << ex;
+        THROW_ERROR_EXCEPTION("Error parsing \"double\" value from YSON").With(ex);
     }
 }
 
@@ -397,7 +409,7 @@ bool ConvertFromTextYsonString<bool>(TStringBuf strBuf)
             "No known conversion to \"boolean\" value",
             strBuf);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Error parsing \"boolean\" value from YSON") << ex;
+        THROW_ERROR_EXCEPTION("Error parsing \"boolean\" value from YSON").With(ex);
     }
 }
 
@@ -407,7 +419,7 @@ TInstant ConvertFromTextYsonString<TInstant>(TStringBuf str)
     try {
         return TInstant::ParseIso8601(ParseStringFromTextYsonString(str));
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Error parsing \"instant\" value from YSON") << ex;
+        THROW_ERROR_EXCEPTION("Error parsing \"instant\" value from YSON").With(ex);
     }
 }
 
@@ -417,7 +429,7 @@ TDuration ConvertFromTextYsonString<TDuration>(TStringBuf str)
     try {
         return TDuration::MilliSeconds(ParseSomeIntFromTextYsonString<i64>(str));
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Error parsing \"duration\" value from YSON") << ex;
+        THROW_ERROR_EXCEPTION("Error parsing \"duration\" value from YSON").With(ex);
     }
 }
 
@@ -427,7 +439,7 @@ TGuid ConvertFromTextYsonString<TGuid>(TStringBuf str)
     try {
         return TGuid::FromString(ParseStringFromTextYsonString(str));
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Error parsing \"guid\" value from YSON") << ex;
+        THROW_ERROR_EXCEPTION("Error parsing \"guid\" value from YSON").With(ex);
     }
 }
 

@@ -19,6 +19,7 @@ TReadInfoActor::TReadInfoActor(
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
 )
     : TBase(request)
+    , TLogPrefix(NKikimrServices::PQ_READ_PROXY)
     , SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
     , AuthInitActor()
@@ -81,9 +82,10 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
 
 bool TReadInfoActor::OnUnhandledException(const std::exception& exc) {
     auto ctx = *NActors::TlsActivationContext;
-    LOG_CRIT_S(ctx, NKikimrServices::PQ_READ_PROXY,
-        TStringBuilder() << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-            << TBackTrace::FromCurrentException().PrintToString());
+    LOG_C("Unhandled exception",
+        {"typeName", TypeName(exc)},
+        {"exception", exc.what()},
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
     AnswerError( "Internal error", PersQueue::ErrorCode::ERROR, ctx.AsActorContext());
 
@@ -100,7 +102,8 @@ void TReadInfoActor::Die(const TActorContext& ctx) {
 
 void TReadInfoActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "GetReadInfo auth ok fo read info, got " << ev->Get()->TopicAndTablets.size() << " topics");
+    LOG_D("GetReadInfo auth ok fo read info, got topics",
+        {"topicAndTabletsSize", ev->Get()->TopicAndTablets.size()});
     TopicAndTablets = std::move(ev->Get()->TopicAndTablets);
     if (TopicAndTablets.empty()) {
         AnswerError("empty list of topics", PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);

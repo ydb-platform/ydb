@@ -2,12 +2,12 @@
 
 #include "tool_interface.h"
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/lib/ydb_cli/common/lazy_driver.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
 struct TExplainQueryToolSettings {
-    TDriver Driver;
+    TLazyDriver::TPtr LazyDriver;
 };
 
 ITool::TPtr CreateExplainQueryTool(const TExplainQueryToolSettings& settings);

@@ -1,0 +1,1 @@
+SELECT UserID, SearchPhrase, COUNT(*) as cnt FROM `/Root/hits` GROUP BY UserID, SearchPhrase ORDER BY cnt DESC LIMIT 10;

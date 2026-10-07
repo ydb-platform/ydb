@@ -1,8 +1,10 @@
 #include "fulltext_workload_generator.h"
 #include "fulltext_workload_params.h"
+#include "fulltext_quality_evaluator.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
+#include <util/folder/path.h>
 #include <util/string/builder.h>
 #include <util/generic/vector.h>
 
@@ -18,14 +20,32 @@ namespace NYdbWorkload {
 
     void TFulltextWorkloadGenerator::Init() {
         if (!Params.ModelPath.empty()) {
-            Evaluator = TMarkovModelEvaluator::LoadFromFile(Params.ModelPath);
-            return;
+            if (TFsPath(Params.ModelPath).Exists()) {
+                Evaluator = TMarkovModelEvaluator::LoadFromFile(Params.ModelPath);
+            } else {
+                Cerr << "Markov model file '" << Params.ModelPath << "' not found, queries will be taken from a table." << Endl;
+            }
         }
-        Y_ENSURE(!Params.QueryTable.empty(), "QueryTable must be set when ModelPath is not provided");
-        LoadQueries();
+
+        if (!Params.QueryTable.empty()) {
+            LoadQueries(Params.QueryTable);
+        } else if (!Evaluator && Params.RunWorkloadType == static_cast<int>(EFulltextWorkloadType::Select)) {
+            // No query generator and no explicit query table: fall back to the queries table
+            // filled by `workload fulltext import`, otherwise there would be nothing to run.
+            LoadQueries(Params.QueriesTable);
+        }
+
+        if (!Params.UpsertQueryTable.empty()) {
+            LoadUpsertQueries();
+        }
+
+        if (Params.Quality) {
+            TFulltextQualityEvaluator qualityEvaluator(Params);
+            qualityEvaluator.MeasureQuality();
+        }
     }
 
-    void TFulltextWorkloadGenerator::LoadQueries() {
+    void TFulltextWorkloadGenerator::LoadQueries(const TString& queryTable) {
         const TString limitClause = Params.TopSize != 0 ? std::format("LIMIT {}", Params.TopSize) : "";
         const TString selectQuery = std::format(
             R"sql(
@@ -33,17 +53,18 @@ namespace NYdbWorkload {
             FROM `{}`
             {}
         )sql",
-            Params.GetFullTableName(Params.QueryTable.c_str()).c_str(),
+            Params.GetFullTableName(queryTable.c_str()).c_str(),
             limitClause.c_str());
 
         std::optional<NYdb::TResultSet> resultSet;
-        NYdb::NStatusHelpers::ThrowOnError(Params.QueryClient->RetryQuerySync([&selectQuery, &resultSet](NYdb::NQuery::TSession session) {
+        NYdb::NStatusHelpers::ThrowOnError(Params.QueryClient->RetryQuerySync([&selectQuery, &resultSet, &queryTable](NYdb::NQuery::TSession session) {
             const auto result = session.ExecuteQuery(
                                            selectQuery,
                                            NYdb::NQuery::TTxControl::NoTx())
                                     .GetValueSync();
 
-            Y_ENSURE(result.IsSuccess(), std::format("Failed to read query table: {}", result.GetIssues().ToString().c_str()));
+            Y_ENSURE(result.IsSuccess(), std::format("Failed to read query table '{}': {}. Specify --query-table or --model.",
+                queryTable.c_str(), result.GetIssues().ToString().c_str()));
 
             resultSet = result.GetResultSet(0);
             return result;
@@ -75,8 +96,57 @@ namespace NYdbWorkload {
             }
         }
 
-        Y_ENSURE(!Queries.empty(), std::format("Query table '{}' is empty or has no 'query' column", Params.QueryTable.c_str()));
-        Cout << "Loaded " << Queries.size() << " queries from table " << Params.QueryTable << Endl;
+        Y_ENSURE(!Queries.empty(), std::format("Query table '{}' is empty or has no 'query' column", queryTable.c_str()));
+        Cout << "Loaded " << Queries.size() << " queries from table " << queryTable << Endl;
+    }
+
+    void TFulltextWorkloadGenerator::LoadUpsertQueries() {
+        const TString tablePath = Params.GetFullTableName(Params.UpsertQueryTable.c_str());
+        const TString selectQuery = std::format(
+            R"sql(
+            --!syntax_v1
+            SELECT `text`
+            FROM `{}`
+        )sql",
+            tablePath.c_str());
+
+        std::optional<NYdb::TResultSet> resultSet;
+        NYdb::NStatusHelpers::ThrowOnError(Params.QueryClient->RetryQuerySync([&selectQuery, &resultSet](NYdb::NQuery::TSession session) {
+            const auto result = session.ExecuteQuery(
+                                           selectQuery,
+                                           NYdb::NQuery::TTxControl::NoTx())
+                                    .GetValueSync();
+            Y_ENSURE(result.IsSuccess(), std::format("Failed to read upsert query table: {}", result.GetIssues().ToString().c_str()));
+            resultSet = result.GetResultSet(0);
+            return result;
+        }));
+
+        NYdb::TResultSetParser parser(*resultSet);
+        while (parser.TryNextRow()) {
+            auto& column = parser.ColumnParser("text");
+            const bool optional = column.GetKind() == NYdb::TTypeParser::ETypeKind::Optional;
+            if (optional) {
+                column.OpenOptional();
+            }
+
+            switch (column.GetPrimitiveType()) {
+                case NYdb::EPrimitiveType::Utf8:
+                    UpsertData.emplace_back(column.GetUtf8());
+                    break;
+                case NYdb::EPrimitiveType::String:
+                    UpsertData.emplace_back(column.GetString());
+                    break;
+                default:
+                    break;
+            }
+
+            if (optional) {
+                column.CloseOptional();
+            }
+        }
+
+        Y_ENSURE(!UpsertData.empty(), std::format("Upsert query table '{}' is empty or has no 'text' column", Params.UpsertQueryTable.c_str()));
+        Cout << "Loaded " << UpsertData.size() << " upsert entries from table " << Params.UpsertQueryTable << Endl;
     }
 
     std::string TFulltextWorkloadGenerator::GetDDLQueries() const {
@@ -91,6 +161,25 @@ namespace NYdbWorkload {
         ddl << "    AUTO_PARTITIONING_BY_LOAD = " << (Params.AutoPartitioningByLoad ? "ENABLED" : "DISABLED") << ",\n";
         ddl << "    AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.PartitionSizeMb << ",\n";
         ddl << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << Params.MinPartitions << "\n";
+        ddl << ");\n";
+
+        ddl << "CREATE TABLE `" << Params.GetFullTableName(Params.QueriesTable.c_str()) << "` (\n";
+        ddl << "    `id` Uint64 NOT NULL,\n";
+        ddl << "    `query` String NOT NULL,\n";
+        ddl << "    PRIMARY KEY (`id`)\n";
+        ddl << ");\n";
+
+        ddl << "CREATE TABLE `" << Params.GetFullTableName(Params.RelevancesTable.c_str()) << "` (\n";
+        ddl << "    `query_id` Uint64 NOT NULL,\n";
+        ddl << "    `document_id` Uint64 NOT NULL,\n";
+        ddl << "    `relevance` Float NOT NULL,\n";
+        ddl << "    PRIMARY KEY (`query_id`, `document_id`)\n";
+        ddl << ");\n";
+
+        ddl << "CREATE TABLE `" << Params.GetFullTableName(Params.UpsertQueriesTableName.c_str()) << "` (\n";
+        ddl << "    `id` Uint64 NOT NULL,\n";
+        ddl << "    `text` String NOT NULL,\n";
+        ddl << "    PRIMARY KEY (`id`)\n";
         ddl << ");";
         return ddl;
     }
@@ -100,7 +189,12 @@ namespace NYdbWorkload {
     }
 
     TVector<std::string> TFulltextWorkloadGenerator::GetCleanPaths() const {
-        return {Params.TableName};
+        return {
+            Params.TableName,
+            Params.QueriesTable,
+            Params.RelevancesTable,
+            Params.UpsertQueriesTableName,
+        };
     }
 
     TQueryInfoList TFulltextWorkloadGenerator::GetWorkload(int type) {
@@ -124,15 +218,13 @@ namespace NYdbWorkload {
             for (int attempt = 0; queryText.empty() && attempt < 10; ++attempt) {
                 queryText = Evaluator->GenerateSentence(queryLenDist(rng), rng);
             }
-            if (queryText.empty()) {
-                return {};
-            }
-        } else {
+        }
+
+        if (queryText.empty()) {
             if (Queries.empty()) {
                 return {};
             }
-            queryText = Queries[CurrentIndex];
-            CurrentIndex = (CurrentIndex + 1) % Queries.size();
+            queryText = Queries[CurrentIndex.fetch_add(1) % Queries.size()];
         }
 
         const TString tablePath = Params.GetFullTableName(Params.TableName.c_str());
@@ -179,12 +271,8 @@ namespace NYdbWorkload {
     }
 
     TQueryInfoList TFulltextWorkloadGenerator::Upsert() {
-        Y_ENSURE(Evaluator, "Markov model must be loaded for upsert workload. Specify --model.");
-        Y_ENSURE(Params.UpsertMinSentenceLen <= Params.UpsertMaxSentenceLen,
-            "min-sentence-len (" << Params.UpsertMinSentenceLen << ") must be <= max-sentence-len (" << Params.UpsertMaxSentenceLen << ")");
         static thread_local std::mt19937 rng(std::random_device{}());
         static thread_local std::uniform_int_distribution<ui64> idDist;
-        std::uniform_int_distribution<size_t> sentenceLenDist(Params.UpsertMinSentenceLen, Params.UpsertMaxSentenceLen);
 
         const size_t batchSize = Params.UpsertBulkSize;
 
@@ -196,13 +284,30 @@ namespace NYdbWorkload {
         NYdb::TParamsBuilder paramsBuilder;
         auto& listBuilder = paramsBuilder.AddParam("$rows").BeginList();
 
-        for (size_t i = 0; i < batchSize; ++i) {
-            const TString text = Evaluator->GenerateSentence(sentenceLenDist(rng), rng);
+        if (!UpsertData.empty()) {
+            const size_t baseIndex = UpsertCurrentIndex.fetch_add(batchSize);
+            for (size_t i = 0; i < batchSize; ++i) {
+                const TString& text = UpsertData[(baseIndex + i) % UpsertData.size()];
 
-            auto& item = listBuilder.AddListItem().BeginStruct();
-            item.AddMember("id").Uint64(idDist(rng));
-            item.AddMember("text").String(text);
-            item.EndStruct();
+                auto& item = listBuilder.AddListItem().BeginStruct();
+                item.AddMember("id").Uint64(idDist(rng));
+                item.AddMember("text").String(text);
+                item.EndStruct();
+            }
+        } else {
+            Y_ENSURE(Evaluator, "Markov model must be loaded for upsert workload. Specify --model or --upsert-query-table.");
+            Y_ENSURE(Params.UpsertMinSentenceLen <= Params.UpsertMaxSentenceLen,
+                "min-sentence-len (" << Params.UpsertMinSentenceLen << ") must be <= max-sentence-len (" << Params.UpsertMaxSentenceLen << ")");
+            std::uniform_int_distribution<size_t> sentenceLenDist(Params.UpsertMinSentenceLen, Params.UpsertMaxSentenceLen);
+
+            for (size_t i = 0; i < batchSize; ++i) {
+                const TString text = Evaluator->GenerateSentence(sentenceLenDist(rng), rng);
+
+                auto& item = listBuilder.AddListItem().BeginStruct();
+                item.AddMember("id").Uint64(idDist(rng));
+                item.AddMember("text").String(text);
+                item.EndStruct();
+            }
         }
         listBuilder.EndList().Build();
 

@@ -10,6 +10,19 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Determines from which point the inter-invocation delay is measured.
+DEFINE_ENUM(EPeriodicExecutorDelayMode,
+    //! The delay is counted from the end of the previous invocation to the start
+    //! of the next one (i.e. the gap between invocations is fixed).
+    (FromPreviousEnd)
+    //! The delay is counted from the start of the previous invocation to the start
+    //! of the next one (i.e. the start-to-start period is fixed). If an invocation
+    //! takes longer than the period, the next one starts immediately.
+    (FromPreviousStart)
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TPeriodicExecutorOptions
 {
     static constexpr double DefaultJitter = 0.2;
@@ -19,6 +32,7 @@ struct TPeriodicExecutorOptions
     std::optional<TDuration> Period;
     TDuration Splay;
     double Jitter = 0.0;
+    EPeriodicExecutorDelayMode DelayMode = EPeriodicExecutorDelayMode::FromPreviousEnd;
 
     bool operator==(const TPeriodicExecutorOptions& other) const = default;
 
@@ -146,6 +160,8 @@ DEFINE_REFCOUNTED_TYPE(TPrefetchingThrottlerConfig)
 struct TFiberManagerConfig
     : public NYTree::TYsonStruct
 {
+    //! Overrides fiber stack sizes.
+    THashMap<EExecutionStackKind, size_t> FiberStackSizes;
     THashMap<EExecutionStackKind, int> FiberStackPoolSizes;
     int MaxIdleFibers;
 
@@ -163,6 +179,7 @@ DEFINE_REFCOUNTED_TYPE(TFiberManagerConfig)
 struct TFiberManagerDynamicConfig
     : public NYTree::TYsonStruct
 {
+    THashMap<EExecutionStackKind, size_t> FiberStackSizes;
     THashMap<EExecutionStackKind, int> FiberStackPoolSizes;
     std::optional<int> MaxIdleFibers;
 

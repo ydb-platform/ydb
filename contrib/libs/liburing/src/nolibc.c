@@ -34,13 +34,18 @@ struct uring_heap {
 void *__uring_malloc(size_t len)
 {
 	struct uring_heap *heap;
+	size_t total = sizeof(*heap) + len;
 
-	heap = __sys_mmap(NULL, sizeof(*heap) + len, PROT_READ | PROT_WRITE,
+	/* check for overflow */
+	if (total < len)
+		return NULL;
+
+	heap = __sys_mmap(NULL, total, PROT_READ | PROT_WRITE,
 			  MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	if (IS_ERR(heap))
 		return NULL;
 
-	heap->len = sizeof(*heap) + len;
+	heap->len = total;
 	return heap->user_p;
 }
 

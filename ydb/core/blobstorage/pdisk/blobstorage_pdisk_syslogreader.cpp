@@ -98,20 +98,15 @@ void TSysLogReader::Start() {
     TVector<TBuffer *> bufferParts;
     completionParts.reserve(partsToRead);
     bufferParts.reserve(partsToRead);
-    auto *cumulativeCompletion = new TCumulativeCompletionHolder();
-    for (ui32 idx = 0; idx < partsToRead; ++idx) {
-        const ui32 offset = idx * bufferSize;
-        const ui32 sizeToReadPart = Min(bufferSize, SizeToRead - offset);
-        bufferParts.push_back(PDisk->BufferPool->Pop());
-        completionParts.push_back(new TSysLogReadCompletionPart(cumulativeCompletion, &Data,
-                bufferParts[idx], sizeToReadPart, offset));
-    }
+    auto *cumulativeCompletion = new TCumulativeCompletionHolder(partsToRead);
     cumulativeCompletion->SetCompletionAction(finalCompletion);
     for (ui32 idx = 0; idx < partsToRead; ++idx) {
         const ui32 offset = idx * bufferSize;
         const ui32 sizeToReadPart = Min(bufferSize, SizeToRead - offset);
-        PDisk->BlockDevice->PreadAsync(bufferParts[idx]->Data(), sizeToReadPart, BeginSectorIdx * format.SectorSize + offset,
-                completionParts[idx], ReqId, {});
+        bufferParts.push_back(PDisk->BufferPool->Pop());
+        completionParts.push_back(new TSysLogReadCompletionPart(cumulativeCompletion, &Data, bufferParts[idx], sizeToReadPart, offset));
+        PDisk->BlockDevice->PreadAsync(bufferParts[idx]->Data(), sizeToReadPart,
+            BeginSectorIdx * format.SectorSize + offset, completionParts[idx], ReqId, {});
     }
 }
 
@@ -323,8 +318,11 @@ void TSysLogReader::FindTheBestRecord() {
             BestRecordLastOffset = idx + LoopOffset;
         }
     }
-    P_LOG(PRI_INFO, BPD01, "SysLogReader found the best record", (BestRecordFirstOffset, BestRecordFirstOffset),
-            (BestRecordLastOffset, BestRecordLastOffset), (BestNonce, BestNonce));
+    YDB_LOG_P_LOG(PRI_INFO, "SysLogReader found the best record",
+        {"marker", "BPD01"},
+        {"bestRecordFirstOffset", BestRecordFirstOffset},
+        {"bestRecordLastOffset", BestRecordLastOffset},
+        {"bestNonce", BestNonce});
     VerboseCheck(BestNonce > 0, "No best record found! Marker# BPS06");
     // Can become replied at this point
 }
@@ -391,7 +389,8 @@ void TSysLogReader::PrepareResult() {
 
 void TSysLogReader::Reply() {
     if (!IsReplied) {
-        P_LOG(PRI_DEBUG, BPD01, Result->ToString());
+        YDB_LOG_P_LOG(PRI_DEBUG, Result->ToString(),
+            {"marker", "BPD01"});
         PCtx->ActorSystem->Send(PCtx->PDiskActor, Result.Release());
         IsReplied = true;
     }
@@ -406,7 +405,9 @@ bool TSysLogReader::VerboseCheck(bool condition, const char *desctiption) {
             str << desctiption << " ";
             DumpDebugInfo(str, true);
             Result->ErrorReason = str.Str();
-            P_LOG(PRI_ERROR, BPD01, "SysLogRead check failed", (Result, Result->ToString()));
+            YDB_LOG_P_LOG(PRI_ERROR, "SysLogRead check failed",
+                {"marker", "BPD01"},
+                {"result", Result->ToString()});
             Reply();
         }
     }

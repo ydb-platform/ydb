@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_external_node_invalidator.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 
 #include <memory>
@@ -32,7 +33,8 @@ struct TWorkerGraph {
         ui64 nativeYtTypeFlags,
         TMaybe<ui64> deterministicTimeProviderSeed,
         TLangVersion langver,
-        bool insideEvaluation);
+        bool insideEvaluation,
+        NYql::TRuntimeSettings::TConstPtr runtimeSettings);
 
     ~TWorkerGraph();
 
@@ -48,6 +50,7 @@ struct TWorkerGraph {
     TMaybe<TString> TimestampColumn;
     const NKikimr::NMiniKQL::TType* OutputType;
     const NKikimr::NMiniKQL::TType* RawOutputType;
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
     TVector<NKikimr::NMiniKQL::IComputationExternalNode*> SelfNodes;
     NKikimr::NMiniKQL::TComputationExternalNodeInvalidator ExternalNodeInvalidator;
     TVector<const NKikimr::NMiniKQL::TStructType*> InputTypes;
@@ -84,9 +87,9 @@ public:
         NKikimr::NUdf::ICountersProvider* countersProvider,
         ui64 nativeYtTypeFlags,
         TMaybe<ui64> deterministicTimeProviderSeed,
-        TLangVersion langver);
+        TLangVersion langver,
+        NYql::TRuntimeSettings::TConstPtr runtimeSettings);
 
-public:
     ui32 GetInputsCount() const override;
     const NKikimr::NMiniKQL::TStructType* GetInputType(ui32, bool) const override;
     const NKikimr::NMiniKQL::TStructType* GetInputType(bool) const override;
@@ -128,7 +131,6 @@ public:
     using TWorker::TWorker;
     ~TPullStreamWorker() override;
 
-public:
     void SetInput(NKikimr::NUdf::TUnboxedValue&&, ui32) override;
     NKikimr::NUdf::TUnboxedValue& GetOutput() override;
     void PrepareCheckState(bool finish) final;
@@ -151,7 +153,6 @@ public:
     using TWorker::TWorker;
     ~TPullListWorker() override;
 
-public:
     void SetInput(NKikimr::NUdf::TUnboxedValue&&, ui32) override;
     NKikimr::NUdf::TUnboxedValue& GetOutput() override;
     NKikimr::NUdf::TUnboxedValue& GetOutputIterator() override;

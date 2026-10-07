@@ -9,6 +9,7 @@ from ydb.tests.library.stress.fixtures import StressFixture
 class TestYdbMixedWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
+        self.base_duration = str(min(int(self.base_duration), 120))
         yield from self.setup_cluster()
 
     @pytest.mark.parametrize('store_type', ['row', 'column'])

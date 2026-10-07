@@ -2,6 +2,8 @@
 #include "incrhuge_keeper.h"
 #include "incrhuge_keeper_write.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_INCRHUGE
+
 namespace NKikimr {
     namespace NIncrHuge {
 
@@ -61,7 +63,10 @@ namespace NKikimr {
                         for (size_t i = 0; i < chunks.size(); ++i) {
                             TChunkSerNum chunkSerNum = baseSerNum.Add(i);
                             const ui32 chunkIdx = chunks[i];
-                            IHLOG_DEBUG(ctx, "ChunkIdx# %" PRIu32 " ChunkSerNum# %s", chunkIdx, chunkSerNum.ToString().data());
+                            YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, chunkIdx, chunkSerNum",
+                                {"logPrefix", LogPrefix},
+                                {"chunkIdx", chunkIdx},
+                                {"chunkSerNum", chunkSerNum});
                             Keeper.State.WriteIntentQueue.push(chunks[i]);
                             Keeper.State.Chunks.emplace(chunks[i], TChunkInfo{
                                     EChunkState::WriteIntent, // State

@@ -45,6 +45,9 @@ public:
      * criteria defined by the function.
      * @param scope_config the scope configuration to return for the matched scope.
      * @return this
+     *
+     * @note The scope_matcher function MUST return quickly and ideally be a pure (side-effect-free)
+     * function.
      */
     Builder &AddCondition(std::function<bool(const InstrumentationScope &)> scope_matcher,
                           T scope_config)

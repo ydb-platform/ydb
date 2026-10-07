@@ -5,7 +5,9 @@ import logging
 import os
 from collections import defaultdict
 
-from github_issue_utils import DEFAULT_BUILD_TYPE
+from github_issue_utils import (
+    DEFAULT_BUILD_TYPE,
+)
 
 from mute.constants import (
     get_manual_unmute_issue_closed_lookback_days,
@@ -31,6 +33,7 @@ from mute.fast_unmute_github import (
     fetch_issue_closers,
     fetch_issue_label_names,
     fetch_issue_numbers_in_manual_unmute_project,
+    fetch_issue_project_statuses,
     fetch_issue_states,
     remove_label_from_issue,
     reopen_issue,
@@ -47,13 +50,15 @@ from mute.fast_unmute_ydb import (
     fetch_all_rows,
     fetch_candidate_issues,
     fetch_currently_muted,
+    fetch_fast_unmute_active_rows,
+    fetch_grace_full_names,
     upsert_fast_unmute_grace_row,
     upsert_rows,
 )
 from mute.update_mute_issues import (
-    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
-    MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL,
     add_issue_comment,
+    MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL,
+    MANUAL_FAST_UNMUTE_GITHUB_LABEL,
     parse_body,
 )
 
@@ -74,6 +79,104 @@ def grace_ttl_calendar_days(mute_window_days, manual_unmute_window_days):
     Stored on insert so dashboards and TTL stay interpretable even if ``mute_config.json`` changes later.
     """
     return max(1, int(mute_window_days) - int(manual_unmute_window_days))
+
+
+def enter_fast_unmute_grace_for_unmuted_tests(ydb_wrapper, branch, build_type):
+    """Start grace when fast-unmute tests are no longer muted on branch (merged ``muted_ya``).
+
+    Runs in Job 2 after ``tests_monitor`` refresh so ``grace_started_at`` reflects the actual
+    unmute on main, not the hour when an unmute PR was opened (that PR may merge much later).
+    """
+    try:
+        active_table_path = ydb_wrapper.get_table_path('fast_unmute_active')
+        grace_table_path = ydb_wrapper.get_table_path('fast_unmute_grace')
+        tests_monitor_path = ydb_wrapper.get_table_path('tests_monitor')
+    except KeyError:
+        logging.info('fast_unmute tables not configured — skip enter_fast_unmute_grace')
+        return
+
+    create_fast_unmute_grace_table(ydb_wrapper, grace_table_path)
+
+    # NB: intentionally do NOT swallow YDB/query errors below. This step guards the
+    # re-mute decision that runs later in the same job, so silently skipping grace on a
+    # transient failure would re-introduce the race (#45582) with no signal. Let it fail
+    # loudly so the scheduled job can be retried/investigated instead.
+    active_rows = fetch_fast_unmute_active_rows(
+        ydb_wrapper, active_table_path, branch, build_type
+    )
+
+    if not active_rows:
+        logging.info(
+            'enter_fast_unmute_grace: no fast_unmute_active rows for branch=%s build_type=%s',
+            branch,
+            build_type,
+        )
+        return
+
+    currently_muted = fetch_currently_muted(
+        ydb_wrapper, tests_monitor_path, branch, build_type
+    )
+    existing_grace = fetch_grace_full_names(
+        ydb_wrapper, grace_table_path, branch, build_type
+    )
+
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    grace_ttl = grace_ttl_calendar_days(
+        get_mute_window_days(), get_manual_unmute_window_days()
+    )
+    recorded = 0
+    failed = 0
+
+    for row in active_rows:
+        full_name = row.get('full_name')
+        if not full_name or full_name in currently_muted:
+            continue
+        if full_name in existing_grace:
+            continue
+        requested_at = _coerce_dt(row.get('requested_at'))
+        try:
+            upsert_fast_unmute_grace_row(
+                ydb_wrapper,
+                grace_table_path,
+                full_name,
+                branch,
+                build_type,
+                int(row.get('github_issue_number') or 0),
+                requested_at or now,
+                now,
+                grace_ttl,
+            )
+            recorded += 1
+            logging.info(
+                'enter_fast_unmute_grace: started grace for %s (branch=%s build_type=%s)',
+                full_name,
+                branch,
+                build_type,
+            )
+        except Exception as exc:
+            failed += 1
+            logging.warning(
+                'enter_fast_unmute_grace: failed to upsert grace for %s: %s',
+                full_name,
+                exc,
+            )
+
+    if recorded:
+        logging.info(
+            'enter_fast_unmute_grace: recorded grace for %d test(s) on branch=%s build_type=%s',
+            recorded,
+            branch,
+            build_type,
+        )
+
+    # Fail the step if any grace write was lost: proceeding would let update_muted_ya
+    # make the re-mute decision with missing grace for these tests.
+    if failed:
+        raise RuntimeError(
+            'enter_fast_unmute_grace: failed to record grace for '
+            f'{failed} test(s) on branch={branch} build_type={build_type} '
+            '(see warnings above); failing the step to avoid a re-mute with missing grace'
+        )
 
 
 def load_config():
@@ -370,6 +473,24 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
 
     for (branch, build_type), group_rows in grouped.items():
         currently_muted = fetch_currently_muted(ydb_wrapper, tests_monitor_path, branch, build_type)
+        existing_grace = set()
+        # None ⇒ we could not read existing grace rows; in that case skip recording grace
+        # from Job 1 so we never overwrite an already-anchored grace_started_at (#45582).
+        grace_lookup_ok = True
+        if grace_table_path:
+            try:
+                existing_grace = fetch_grace_full_names(
+                    ydb_wrapper, grace_table_path, branch, build_type
+                )
+            except Exception as exc:
+                grace_lookup_ok = False
+                logging.warning(
+                    'manual_unmute_cleanup: failed to load grace names for %s/%s: %s '
+                    '(skipping grace recording this run to avoid resetting grace_started_at)',
+                    branch,
+                    build_type,
+                    exc,
+                )
         for row in group_rows:
             full_name = row.get('full_name')
             if not full_name:
@@ -378,7 +499,7 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
             issue_number = row.get('github_issue_number')
 
             if full_name not in currently_muted:
-                if grace_table_path:
+                if grace_table_path and grace_lookup_ok and full_name not in existing_grace:
                     try:
                         ft_at = requested_at or now
                         upsert_fast_unmute_grace_row(
@@ -503,14 +624,112 @@ def cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path):
             set_manual_unmute_project_board_status(
                 issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS
             )
+            remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
             add_label_to_issue(issue_id, MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL)
 
-        for issue_number in issues_to_delabel:
+        # Success-branch issues already had the label removed above; skip them
+        # to avoid an extra round-trip to GitHub.
+        for issue_number in issues_to_delabel - success_comment_issues:
             issue_id = issue_ids.get(issue_number)
             if issue_id:
                 remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL)
 
     logging.info('manual_unmute_cleanup: removed %d row(s)', delete_count)
+
+
+# Project statuses from which the reconciler is allowed to flip to ``Unmuted``.
+# Anything else (e.g. ``Muted`` set by abandon/TTL-fail, or a state a human picked
+# intentionally) is left alone to avoid clobbering meaningful state.
+_RECONCILE_STATUS_ALLOWED_FROM = frozenset(
+    s.lower() for s in (PROJECT_STATUS_ON_FAST_UNMUTE_REOPEN, '')
+)
+
+
+def reconcile_manual_fast_unmute_labels(ydb_wrapper, table_path, issues_table_path):
+    """Repair label/status for finished manual fast-unmute issues.
+
+    For issues that:
+    - are in the lookback YDB candidate set (CLOSED+COMPLETED there), and
+    - are still CLOSED+COMPLETED on GitHub (live re-check — YDB export can lag), and
+    - no longer have rows in ``fast_unmute_active``, and
+    - already participate in manual fast-unmute label flow
+      (have either ``manual-fast-unmute`` or ``fast-unmute-finished``):
+    we
+    - remove stale ``manual-fast-unmute`` label,
+    - ensure ``fast-unmute-finished`` label is present,
+    - flip project Status to ``Unmuted`` (only from ``Observation`` / empty, and
+      only for issues already on the manual-unmute project board — we never add
+      cards from here and never override ``Muted``).
+    """
+    raw_candidates = fetch_candidate_issues(
+        ydb_wrapper, issues_table_path, get_manual_unmute_issue_closed_lookback_days()
+    )
+    issue_meta = {
+        int(c['issue_number']): c.get('issue_id')
+        for c in raw_candidates
+        if c.get('issue_number') is not None and c.get('issue_id')
+    }
+    if not issue_meta:
+        return
+
+    issue_numbers = set(issue_meta.keys())
+    remaining = count_rows_per_issue(ydb_wrapper, table_path, issue_numbers)
+    zero_row_issues = {n for n in issue_numbers if remaining.get(n, 0) == 0}
+    if not zero_row_issues:
+        return
+
+    live_states = fetch_issue_states(zero_row_issues)
+    eligible_issues = {
+        n for n in zero_row_issues
+        if issue_eligible_for_manual_fast_unmute_entry(
+            (live_states.get(n) or {}).get('state'),
+            (live_states.get(n) or {}).get('state_reason'),
+        )
+    }
+    if not eligible_issues:
+        return
+
+    live_status_by_issue = fetch_issue_project_statuses(eligible_issues)
+    labels_by_issue = fetch_issue_label_names(eligible_issues)
+
+    label_ops = 0
+    status_flips = 0
+    for issue_number in sorted(eligible_issues):
+        labels = labels_by_issue.get(issue_number) or set()
+        has_manual = MANUAL_FAST_UNMUTE_GITHUB_LABEL in labels
+        has_finished = MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL in labels
+        if not (has_manual or has_finished):
+            continue
+
+        issue_id = (live_states.get(issue_number) or {}).get('id') or issue_meta.get(issue_number)
+        if not issue_id:
+            continue
+
+        # Only touch project status for issues that already have a card; never
+        # implicitly add cards from the reconciler.
+        if issue_number in live_status_by_issue:
+            project_status = str(live_status_by_issue[issue_number] or '').strip().lower()
+            if (
+                project_status != PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS.lower()
+                and project_status in _RECONCILE_STATUS_ALLOWED_FROM
+            ):
+                set_manual_unmute_project_board_status(
+                    issue_id, PROJECT_STATUS_ON_FAST_UNMUTE_SUCCESS
+                )
+                status_flips += 1
+        if has_manual:
+            if remove_label_from_issue(issue_id, MANUAL_FAST_UNMUTE_GITHUB_LABEL):
+                label_ops += 1
+        if not has_finished:
+            if add_label_to_issue(issue_id, MANUAL_FAST_UNMUTE_FINISHED_GITHUB_LABEL):
+                label_ops += 1
+
+    if label_ops or status_flips:
+        logging.info(
+            'manual_unmute_reconcile: %d label op(s), %d status flip(s)',
+            label_ops,
+            status_flips,
+        )
 
 
 def sync(ydb_wrapper):
@@ -538,5 +757,6 @@ def sync(ydb_wrapper):
         config['min_runs'],
     )
     cleanup_manual_unmute(ydb_wrapper, table_path, tests_monitor_path)
+    reconcile_manual_fast_unmute_labels(ydb_wrapper, table_path, issues_table_path)
     if grace_table_path:
         expire_fast_unmute_grace(ydb_wrapper, grace_table_path)

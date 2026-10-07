@@ -5,6 +5,11 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <util/string/cast.h>
 
+#include <yql/essentials/types/uuid/uuid.h>
+#include <util/stream/str.h>
+#include <util/system/byteorder.h>
+#include <util/system/unaligned_mem.h>
+
 namespace NYql {
 
     using namespace NNodes;
@@ -28,6 +33,8 @@ namespace NYql {
     TString FormatCoalesce(const TExpression::TCoalesce& coalesce);
     TString FormatIfExpression(const TExpression::TIf& sqlIf);
     TString FormatUnwrap(const TExpression::TUnwrap& unwrap);
+    TString FormatStructMember(const TExpression::TStructMember& structMember);
+    TString FormatTupleNth(const TExpression::TTupleNth& tupleNth);
     TString FormatMinOf(const TExpression::TMinOf& minOf);
     TString FormatMaxOf(const TExpression::TMaxOf& maxOf);
     TString FormatCurrentUtcTimestamp(const TExpression::TCurrentUtcTimestamp& currentUtcTimestamp);
@@ -55,13 +62,27 @@ namespace NYql {
             TExprContext& Ctx;
         };
 
-        bool SerializeMember(const TCoMember& member, TExpression* proto, TSerializationContext& ctx) {
-            if (member.Struct().Raw() != ctx.Arg.Raw()) { // member callable called not for lambda argument
-                ctx.Err << "member callable called not for lambda argument";
+        bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSerializationContext& ctx, ui64 depth);
+
+        bool SerializeMember(const TCoMember& member, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+            if (member.Struct().Raw() == ctx.Arg.Raw()) { // member callable called for lambda argument
+                proto->set_column(member.Name().StringValue());
+                return true;
+            }
+            auto structMember = proto->mutable_struct_member();
+            structMember->set_field(member.Name().StringValue());
+            return SerializeExpression(member.Struct(), structMember->mutable_operand(), ctx, depth + 1);
+        }
+
+        bool SerializeNth(const TCoNth& nth, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+            auto tupleNth = proto->mutable_tuple_nth();
+            auto index = TryFromString<ui64>(nth.Index().StringValue());
+            if (!index) {
+                ctx.Err << "Nth: expected ui64, got " << nth.Index().StringValue();
                 return false;
             }
-            proto->set_column(member.Name().StringValue());
-            return true;
+            tupleNth->set_field(*index);
+            return SerializeExpression(nth.Tuple(), tupleNth->mutable_operand(), ctx, depth + 1);
         }
 
         bool SerializeLambdaArgument(const TExprBase& node, TExpression* proto, TSerializationContext& ctx) {
@@ -84,7 +105,6 @@ namespace NYql {
             return TString(from);
         }
 
-        bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSerializationContext& ctx, ui64 depth);
         bool SerializeCompare(const TCoCompare& compare, TPredicate* predicateProto, TSerializationContext& ctx, ui64 depth);
         bool SerializeApply(const TCoApply& apply, TPredicate* proto, TSerializationContext& ctx, ui64 depth);
         bool SerializeExists(const TCoExists& exists, TPredicate* proto, TSerializationContext& ctx, bool withNot, ui64 depth);
@@ -155,7 +175,7 @@ namespace NYql {
                 return false;
             }
 
-            const auto toBytesExpr = TExprBase(toBytes.Ref().Child(0));
+            const auto toBytesExpr = TExprBase(toBytes.Ref().ChildPtr(0));
             auto typeAnnotation = toBytesExpr.Ref().GetTypeAnn();
             if (!typeAnnotation) {
                 ctx.Err << "expected non empty type annotation for ToBytes";
@@ -186,7 +206,7 @@ namespace NYql {
                 return false;
             }
 
-            const auto toStringExpr = TExprBase(toString.Ref().Child(0));
+            const auto toStringExpr = TExprBase(toString.Ref().ChildPtr(0));
             auto typeAnnotation = toStringExpr.Ref().GetTypeAnn();
             if (!typeAnnotation) {
                 ctx.Err << "expected non empty type annotation for ToString";
@@ -233,6 +253,22 @@ namespace NYql {
             return SerializeExpression(lambda.Body(), dstProto->mutable_then_expression(), ctx, depth + 1);
         }
 
+        bool SerializeUuid(const TCoUuid& uuid, TExpression* proto, TSerializationContext& ctx, ui64 /*depth*/) {
+            const auto literal = uuid.Literal().StringValue();
+            if (literal.size() != 16) {
+                ctx.Err << "Uuid: expected 16-byte literal, got size " << literal.size();
+                return false;
+            }
+            auto* value = proto->mutable_typed_value();
+            value->mutable_type()->set_type_id(Ydb::Type::UUID);
+            const ui64 low = LittleToHost(ReadUnaligned<ui64>(literal.data()));
+            const ui64 high = LittleToHost(ReadUnaligned<ui64>(literal.data() + sizeof(ui64)));
+            auto* v = value->mutable_value();
+            v->set_low_128(low);
+            v->set_high_128(high);
+            return true;
+        }
+
         bool SerializeDecimal(const TCoDecimal& coDecimal, TExpression* proto, TSerializationContext& /*ctx*/, ui64 /*depth*/) {
             auto* protoTypedValue = proto->mutable_typed_value();
             auto* protoDecimalType = protoTypedValue->mutable_type()->mutable_decimal_type();
@@ -276,7 +312,7 @@ namespace NYql {
     if (auto maybeExpr = expression.Maybe<Y_CAT(TCo, OpType)>()) {                                  \
         auto expr = maybeExpr.Cast();                                                               \
         auto* exprProto = proto->Y_CAT(mutable_, op_name)();                                        \
-        const auto child = expression.Ptr()->Child(0);                                              \
+        const auto child = expression.Ptr()->ChildPtr(0);                                           \
         if (!SerializeExpression(TExprBase(child), exprProto->mutable_operand(), ctx, depth + 1)) { \
             return false;                                                                           \
         }                                                                                           \
@@ -301,7 +337,10 @@ namespace NYql {
 
         bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
             if (auto member = expression.Maybe<TCoMember>()) {
-                return SerializeMember(member.Cast(), proto, ctx);
+                return SerializeMember(member.Cast(), proto, ctx, depth);
+            }
+            if (auto nth = expression.Maybe<TCoNth>()) {
+                return SerializeNth(nth.Cast(), proto, ctx, depth);
             }
             if (auto coalesce = expression.Maybe<TCoCoalesce>()) {
                 return SerializeCoalesceExpression(coalesce.Cast(), proto, ctx, depth);
@@ -329,6 +368,9 @@ namespace NYql {
             }
             if (auto decimal = expression.Maybe<TCoDecimal>()) {
                 return SerializeDecimal(decimal.Cast(), proto, ctx, depth);
+            }
+            if (auto uuid = expression.Maybe<TCoUuid>()) {
+                return SerializeUuid(uuid.Cast(), proto, ctx, depth);
             }
             if (auto compare = expression.Maybe<TCoCompare>()) {
                 return SerializeCompare(compare.Cast(), proto->mutable_predicate(), ctx, depth);
@@ -525,8 +567,8 @@ namespace NYql {
             }
             TPredicate::TComparison* proto = predicateProto->mutable_comparison();
             proto->set_operation(!invert ? TPredicate::TComparison::IND : TPredicate::TComparison::ID);
-            return SerializeExpression(TExprBase(predicate.Ref().Child(0)), proto->mutable_left_value(), ctx, depth + 1)
-                && SerializeExpression(TExprBase(predicate.Ref().Child(1)), proto->mutable_right_value(), ctx, depth + 1);
+            return SerializeExpression(TExprBase(predicate.Ref().ChildPtr(0)), proto->mutable_left_value(), ctx, depth + 1)
+                && SerializeExpression(TExprBase(predicate.Ref().ChildPtr(1)), proto->mutable_right_value(), ctx, depth + 1);
         }
 
         bool SerializeAnd(const TCoAnd& andExpr, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
@@ -558,8 +600,12 @@ namespace NYql {
             return SerializePredicate(notExpr.Value(), dstProto->mutable_operand(), ctx, depth + 1);
         }
 
-        bool SerializeMember(const TCoMember& member, TPredicate* proto, TSerializationContext& ctx) {
-            return SerializeMember(member, proto->mutable_bool_expression()->mutable_value(), ctx);
+        bool SerializeMember(const TCoMember& member, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
+            return SerializeMember(member, proto->mutable_bool_expression()->mutable_value(), ctx, depth);
+        }
+
+        bool SerializeNth(const TCoNth& nth, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
+            return SerializeNth(nth, proto->mutable_bool_expression()->mutable_value(), ctx, depth);
         }
 
         bool SerializeRegexp(const TCoUdf& regexp, const TExprNode::TListType& children, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
@@ -618,7 +664,10 @@ namespace NYql {
                 return SerializeNot(notExpr.Cast(), proto, ctx, depth);
             }
             if (auto member = predicate.Maybe<TCoMember>()) {
-                return SerializeMember(member.Cast(), proto, ctx);
+                return SerializeMember(member.Cast(), proto, ctx, depth);
+            }
+            if (auto nth = predicate.Maybe<TCoNth>()) {
+                return SerializeNth(nth.Cast(), proto, ctx, depth);
             }
             if (auto exists = predicate.Maybe<TCoExists>()) {
                 return SerializeExists(exists.Cast(), proto, ctx, false, depth);
@@ -652,6 +701,14 @@ namespace NYql {
         return NFq::EncloseAndEscapeString(value, '`');
     }
 
+    TString FormatStructMember(const TExpression::TStructMember& structMember) {
+        return TStringBuilder() << '(' << FormatExpression(structMember.operand()) << ')' << "." << NFq::EncloseAndEscapeString(structMember.field(), '`');
+    }
+
+    TString FormatTupleNth(const TExpression::TTupleNth& tupleNth) {
+        return TStringBuilder() << '(' << FormatExpression(tupleNth.operand()) << ')' << ".`" << tupleNth.field() << "`";
+    }
+
     TString FormatValue(const Ydb::Value& value) {
         switch (value.value_case()) {
             case  Ydb::Value::kBoolValue:
@@ -679,6 +736,8 @@ namespace NYql {
 
     TString FormatPrimitiveType(const Ydb::Type::PrimitiveTypeId& typeId) {
         switch (typeId) {
+            case Ydb::Type::UUID:
+                return "Uuid";
             case Ydb::Type::BOOL:
                 return "Bool";
             case Ydb::Type::INT8:
@@ -735,6 +794,15 @@ namespace NYql {
         case Ydb::Type::kTypeId: {
             const auto& typeId = type.type_id();
             switch (typeId) {
+            case Ydb::Type::UUID: {
+                const auto& value = typedValue.value();
+                if (value.value_case() == Ydb::Value::kLow128) {
+                    TStringStream uuid;
+                    NKikimr::NUuid::UuidHalfsToString(value.low_128(), value.high_128(), uuid);
+                    return TStringBuilder() << "Uuid(\"" << uuid.Str() << "\")";
+                }
+                break;
+            }
             case Ydb::Type::INTERVAL: {
                 const auto& value = typedValue.value();
                 switch (value.value_case()) {
@@ -851,6 +919,10 @@ namespace NYql {
                 return FormatCast(expression.cast());
             case TExpression::kUnwrap:
                 return FormatUnwrap(expression.unwrap());
+            case TExpression::kStructMember:
+                return FormatStructMember(expression.struct_member());
+            case TExpression::kTupleNth:
+                return FormatTupleNth(expression.tuple_nth());
             case TExpression::kMinOf:
                 return FormatMinOf(expression.min_of());
             case TExpression::kMaxOf:

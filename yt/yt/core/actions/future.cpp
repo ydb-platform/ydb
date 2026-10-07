@@ -7,6 +7,8 @@
 #include <library/cpp/yt/backtrace/backtrace.h>
 #endif
 
+#include <library/cpp/yt/memory/immortal.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -29,7 +31,14 @@ public:
     }
 };
 
-constinit NDetail::TOKPromiseState OKPromiseState;
+struct TOKFutureGlobals
+{
+    TOKPromiseState PromiseState;
+    const TFuture<void> Future{TOKFutureTag(), &PromiseState};
+};
+
+// OKFuture must be available to global constructors and survive static destruction.
+constinit TImmortal<TOKFutureGlobals> OKFutureGlobals;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -51,7 +60,7 @@ TFutureCallbackCookie TFutureState<void>::Subscribe(TVoidResultHandler handler)
             return NullFutureCallbackCookie;
         } else {
             HasHandlers_ = true;
-            return VoidResultHandlers_.Add(std::move(handler));
+            return EncodeFutureCallbackCookie(VoidResultHandlers_.Insert(std::move(handler)), VoidResultHandlerCookieBase);
         }
     }
 }
@@ -155,7 +164,7 @@ bool TFutureState<void>::BlockingWait(TInstant deadline) const
             return true;
         }
         if (!ReadyEvent_) {
-            ReadyEvent_.reset(new NThreading::TEvent());
+            ReadyEvent_.reset(new TEvent());
         }
     }
 
@@ -197,15 +206,15 @@ bool TFutureState<void>::TrySetError(const TError& error)
     return TrySet(error);
 }
 
-void TFutureState<void>::SetErrorGuarded(const TError& error, TGuard<NThreading::TSpinLock>&& guard)
+void TFutureState<void>::SetErrorGuarded(const TError& error, TGuard<TSpinLock>&& guard)
 {
     DoTrySet<true>(error, std::move(guard));
 }
 
-bool TFutureState<void>::DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard)
+bool TFutureState<void>::DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<TSpinLock>* guard)
 {
     YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
-    return VoidResultHandlers_.TryRemove(cookie, guard);
+    return TryUnsubscribe(&VoidResultHandlers_, cookie, VoidResultHandlerCookieBase, guard);
 }
 
 void TFutureState<void>::WaitUntilSet() const
@@ -223,7 +232,7 @@ void TFutureState<void>::WaitUntilSet() const
             return;
         }
         if (!ReadyEvent_) {
-            ReadyEvent_ = std::make_unique<NThreading::TEvent>();
+            ReadyEvent_ = std::make_unique<TEvent>();
         }
     }
 
@@ -291,7 +300,7 @@ void TFutureState<void>::OnLastPromiseRefLost()
     ] () mutable {
 #ifdef YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE
         // NB: Backtrace symbolization can take a quite and thus is being offloaded to Finalizer thread.
-        error <<= TErrorAttribute("backtrace_origin", NBacktrace::SymbolizeBacktrace(backtrace));
+        error.Add("backtrace_origin", NBacktrace::SymbolizeBacktrace(backtrace));
 #endif
         // Set the promise if the value is still missing.
         TrySetError(error);
@@ -306,7 +315,7 @@ void TFutureState<void>::OnLastPromiseRefLost()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const TFuture<void> OKFuture(NDetail::TOKFutureTag(), &NDetail::OKPromiseState);
+constinit const TFuture<void>& OKFuture = NDetail::OKFutureGlobals->Future;
 
 ////////////////////////////////////////////////////////////////////////////////
 

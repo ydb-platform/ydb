@@ -50,6 +50,7 @@ public:
     struct TPrepareSettings: public TExecSettings {
         TMaybe<bool> IsInternalCall;
         TMaybe<bool> ConcurrentResults;
+        bool UsePessimisticLocks = false;
 
         TString ToString() const {
             return TStringBuilder() << "TPrepareSettings{"
@@ -58,6 +59,7 @@ public:
                 << " SyntaxVersion: " << SyntaxVersion
                 << " IsInternalCall: " << IsInternalCall
                 << " ConcurrentResults: " << ConcurrentResults
+                << " UsePessimisticLocks: " << UsePessimisticLocks
                 << " }";
         }
     };
@@ -130,7 +132,8 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TMaybe<TString>& applicationName = Nothing(), const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
     bool keepConfigChanges = false, bool isInternalCall = false, TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
     NActors::TActorSystem* actorSystem = nullptr /*take from TLS by default*/,
-    NYql::TExprContext* ctx = nullptr, const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr);
+    NYql::TExprContext* ctx = nullptr, const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr,
+    bool usePessimisticLocks = false);
 
 } // namespace NKqp
 } // namespace NKikimr

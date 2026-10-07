@@ -33,7 +33,7 @@ protected:
 
 private:
     const TTpcBaseWorkloadParams& Params;
-    void PatchQuery(TString& query) const;
+    void PatchQuery(TString& query, size_t index) const;
     void FilterHeader(IOutputStream& result, TStringBuf header, const TString& query) const;
     TString GetHeader(const TString& query) const;
     TTpcBaseWorkloadParams::EFloatMode DetectFloatMode() const;

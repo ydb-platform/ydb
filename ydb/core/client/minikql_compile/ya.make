@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     compile_context.cpp
@@ -17,15 +17,12 @@ PEERDIR(
     library/cpp/threading/future
     ydb/core/base
     ydb/core/engine
-    ydb/core/kqp/provider
     ydb/core/scheme
     yql/essentials/ast
     yql/essentials/core
     yql/essentials/minikql
     yql/essentials/providers/common/mkql
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

@@ -204,12 +204,12 @@ UDF_TYPE_ID_MAP(MAKE_RESOURCE)
         topFreqType = builder.Resource(TopFreqResourceName##slot); \
         break;
 
-static const auto CreateName = TStringRef::Of("TopFreq_Create");
-static const auto AddValueName = TStringRef::Of("TopFreq_AddValue");
-static const auto SerializeName = TStringRef::Of("TopFreq_Serialize");
-static const auto DeserializeName = TStringRef::Of("TopFreq_Deserialize");
-static const auto MergeName = TStringRef::Of("TopFreq_Merge");
-static const auto GetName = TStringRef::Of("TopFreq_Get");
+const auto CreateName = TStringRef::Of("TopFreq_Create");
+const auto AddValueName = TStringRef::Of("TopFreq_AddValue");
+const auto SerializeName = TStringRef::Of("TopFreq_Serialize");
+const auto DeserializeName = TStringRef::Of("TopFreq_Deserialize");
+const auto MergeName = TStringRef::Of("TopFreq_Merge");
+const auto GetName = TStringRef::Of("TopFreq_Get");
 
 class TTopFreqModule: public IUdfModule {
 public:

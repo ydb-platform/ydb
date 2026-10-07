@@ -59,7 +59,7 @@ void SetupGlobalLogger(ui32 verbosityLevel);
 } // namespace NYdb::NConsoleClient
 
 // Logging macro for convenience
-#define YDB_CLI_LOG(level, stream)                                                          \
-    if (auto entry = NYdb::NConsoleClient::GetGlobalLogger().level(); entry.LogEnabled()) { \
-        entry << stream;                                                                    \
+#define YDB_CLI_LOG(level, stream)                                                                              \
+    if (auto _ydbCliLogEntry = NYdb::NConsoleClient::GetGlobalLogger().level(); _ydbCliLogEntry.LogEnabled()) { \
+        _ydbCliLogEntry << stream;                                                                              \
     }

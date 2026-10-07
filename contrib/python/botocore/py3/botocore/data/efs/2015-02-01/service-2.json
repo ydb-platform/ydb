@@ -4,11 +4,13 @@
     "apiVersion":"2015-02-01",
     "endpointPrefix":"elasticfilesystem",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceAbbreviation":"EFS",
     "serviceFullName":"Amazon Elastic File System",
     "serviceId":"EFS",
     "signatureVersion":"v4",
-    "uid":"elasticfilesystem-2015-02-01"
+    "uid":"elasticfilesystem-2015-02-01",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "CreateAccessPoint":{
@@ -29,7 +31,7 @@
         {"shape":"AccessPointLimitExceeded"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Creates an EFS access point. An access point is an application-specific view into an EFS file system that applies an operating system user and group, and a file system path, to any file system request made through the access point. The operating system user and group override any identity information provided by the NFS client. The file system path is exposed as the access point's root directory. Applications using the access point can only access data in the application's own directory and any subdirectories. To learn more, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/efs-access-points.html\">Mounting a file system using EFS access points</a>.</p> <note> <p>If multiple requests to create access points on the same file system are sent in quick succession, and the file system is near the limit of 1,000 access points, you may experience a throttling response for these requests. This is to ensure that the file system does not exceed the stated access point limit.</p> </note> <p>This operation requires permissions for the <code>elasticfilesystem:CreateAccessPoint</code> action.</p> <p>Access points can be tagged on creation. If tags are specified in the creation action, IAM performs additional authorization on the <code>elasticfilesystem:TagResource</code> action to verify if users have permissions to create tags. Therefore, you must grant explicit permissions to use the <code>elasticfilesystem:TagResource</code> action. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/using-tags-efs.html#supported-iam-actions-tagging.html\">Granting permissions to tag resources during creation</a>.</p>"
+      "documentation":"<p>Creates an EFS access point. An access point is an application-specific view into an EFS file system that applies an operating system user and group, and a file system path, to any file system request made through the access point. The operating system user and group override any identity information provided by the NFS client. The file system path is exposed as the access point's root directory. Applications using the access point can only access data in the application's own directory and any subdirectories. A file system can have a maximum of 10,000 access points unless you request an increase. To learn more, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/efs-access-points.html\">Mounting a file system using EFS access points</a>.</p> <note> <p>If multiple requests to create access points on the same file system are sent in quick succession, and the file system is near the limit of access points, you may experience a throttling response for these requests. This is to ensure that the file system does not exceed the stated access point limit.</p> </note> <p>This operation requires permissions for the <code>elasticfilesystem:CreateAccessPoint</code> action.</p> <p>Access points can be tagged on creation. If tags are specified in the creation action, IAM performs additional authorization on the <code>elasticfilesystem:TagResource</code> action to verify if users have permissions to create tags. Therefore, you must grant explicit permissions to use the <code>elasticfilesystem:TagResource</code> action. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/using-tags-efs.html#supported-iam-actions-tagging.html\">Granting permissions to tag resources during creation</a>.</p>"
     },
     "CreateFileSystem":{
       "name":"CreateFileSystem",
@@ -49,7 +51,7 @@
         {"shape":"ThroughputLimitExceeded"},
         {"shape":"UnsupportedAvailabilityZone"}
       ],
-      "documentation":"<p>Creates a new, empty file system. The operation requires a creation token in the request that Amazon EFS uses to ensure idempotent creation (calling the operation with same creation token has no effect). If a file system does not currently exist that is owned by the caller's Amazon Web Services account with the specified creation token, this operation does the following:</p> <ul> <li> <p>Creates a new, empty file system. The file system will have an Amazon EFS assigned ID, and an initial lifecycle state <code>creating</code>.</p> </li> <li> <p>Returns with the description of the created file system.</p> </li> </ul> <p>Otherwise, this operation returns a <code>FileSystemAlreadyExists</code> error with the ID of the existing file system.</p> <note> <p>For basic use cases, you can use a randomly generated UUID for the creation token.</p> </note> <p>The idempotent operation allows you to retry a <code>CreateFileSystem</code> call without risk of creating an extra file system. This can happen when an initial call fails in a way that leaves it uncertain whether or not a file system was actually created. An example might be that a transport level timeout occurred or your connection was reset. As long as you use the same creation token, if the initial call had succeeded in creating a file system, the client can learn of its existence from the <code>FileSystemAlreadyExists</code> error.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/creating-using-create-fs.html#creating-using-create-fs-part1\">Creating a file system</a> in the <i>Amazon EFS User Guide</i>.</p> <note> <p>The <code>CreateFileSystem</code> call returns while the file system's lifecycle state is still <code>creating</code>. You can check the file system creation status by calling the <a>DescribeFileSystems</a> operation, which among other things returns the file system state.</p> </note> <p>This operation accepts an optional <code>PerformanceMode</code> parameter that you choose for your file system. We recommend <code>generalPurpose</code> performance mode for all file systems. File systems using the <code>maxIO</code> mode is a previous generation performance type that is designed for highly parallelized workloads that can tolerate higher latencies than the General Purpose mode. Max I/O mode is not supported for One Zone file systems or file systems that use Elastic throughput.</p> <important> <p>Due to the higher per-operation latencies with Max I/O, we recommend using General Purpose performance mode for all file systems.</p> </important> <p>The performance mode can't be changed after the file system has been created. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/performance.html#performancemodes.html\">Amazon EFS performance modes</a>.</p> <p>You can set the throughput mode for the file system using the <code>ThroughputMode</code> parameter.</p> <p>After the file system is fully created, Amazon EFS sets its lifecycle state to <code>available</code>, at which point you can create one or more mount targets for the file system in your VPC. For more information, see <a>CreateMountTarget</a>. You mount your Amazon EFS file system on an EC2 instances in your VPC by using the mount target. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/how-it-works.html\">Amazon EFS: How it Works</a>. </p> <p>This operation requires permissions for the <code>elasticfilesystem:CreateFileSystem</code> action. </p> <p>File systems can be tagged on creation. If tags are specified in the creation action, IAM performs additional authorization on the <code>elasticfilesystem:TagResource</code> action to verify if users have permissions to create tags. Therefore, you must grant explicit permissions to use the <code>elasticfilesystem:TagResource</code> action. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/using-tags-efs.html#supported-iam-actions-tagging.html\">Granting permissions to tag resources during creation</a>.</p>"
+      "documentation":"<p>Creates a new, empty file system. The operation requires a creation token in the request that Amazon EFS uses to ensure idempotent creation (calling the operation with same creation token has no effect). If a file system does not currently exist that is owned by the caller's Amazon Web Services account with the specified creation token, this operation does the following:</p> <ul> <li> <p>Creates a new, empty file system. The file system will have an Amazon EFS assigned ID, and an initial lifecycle state <code>creating</code>.</p> </li> <li> <p>Returns with the description of the created file system.</p> </li> </ul> <p>Otherwise, this operation returns a <code>FileSystemAlreadyExists</code> error with the ID of the existing file system.</p> <note> <p>For basic use cases, you can use a randomly generated UUID for the creation token.</p> </note> <p>The idempotent operation allows you to retry a <code>CreateFileSystem</code> call without risk of creating an extra file system. This can happen when an initial call fails in a way that leaves it uncertain whether or not a file system was actually created. An example might be that a transport level timeout occurred or your connection was reset. As long as you use the same creation token, if the initial call had succeeded in creating a file system, the client can learn of its existence from the <code>FileSystemAlreadyExists</code> error.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/creating-using-create-fs.html#creating-using-create-fs-part1\">Creating a file system</a> in the <i>Amazon EFS User Guide</i>.</p> <note> <p>The <code>CreateFileSystem</code> call returns while the file system's lifecycle state is still <code>creating</code>. You can check the file system creation status by calling the <a>DescribeFileSystems</a> operation, which among other things returns the file system state.</p> </note> <p>This operation accepts an optional <code>PerformanceMode</code> parameter that you choose for your file system. We recommend <code>generalPurpose</code> <code>PerformanceMode</code> for all file systems. The <code>maxIO</code> mode is a previous generation performance type that is designed for highly parallelized workloads that can tolerate higher latencies than the <code>generalPurpose</code> mode. <code>MaxIO</code> mode is not supported for One Zone file systems or file systems that use Elastic throughput.</p> <p>The <code>PerformanceMode</code> can't be changed after the file system has been created. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/performance.html#performancemodes.html\">Amazon EFS performance modes</a>.</p> <p>You can set the throughput mode for the file system using the <code>ThroughputMode</code> parameter.</p> <p>After the file system is fully created, Amazon EFS sets its lifecycle state to <code>available</code>, at which point you can create one or more mount targets for the file system in your VPC. For more information, see <a>CreateMountTarget</a>. You mount your Amazon EFS file system on an EC2 instances in your VPC by using the mount target. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/how-it-works.html\">Amazon EFS: How it Works</a>. </p> <p>This operation requires permissions for the <code>elasticfilesystem:CreateFileSystem</code> action. </p> <p>File systems can be tagged on creation. If tags are specified in the creation action, IAM performs additional authorization on the <code>elasticfilesystem:TagResource</code> action to verify if users have permissions to create tags. Therefore, you must grant explicit permissions to use the <code>elasticfilesystem:TagResource</code> action. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/using-tags-efs.html#supported-iam-actions-tagging.html\">Granting permissions to tag resources during creation</a>.</p>"
     },
     "CreateMountTarget":{
       "name":"CreateMountTarget",
@@ -75,7 +77,7 @@
         {"shape":"UnsupportedAvailabilityZone"},
         {"shape":"AvailabilityZonesMismatch"}
       ],
-      "documentation":"<p>Creates a mount target for a file system. You can then mount the file system on EC2 instances by using the mount target.</p> <p>You can create one mount target in each Availability Zone in your VPC. All EC2 instances in a VPC within a given Availability Zone share a single mount target for a given file system. If you have multiple subnets in an Availability Zone, you create a mount target in one of the subnets. EC2 instances do not need to be in the same subnet as the mount target in order to access their file system.</p> <p>You can create only one mount target for a One Zone file system. You must create that mount target in the same Availability Zone in which the file system is located. Use the <code>AvailabilityZoneName</code> and <code>AvailabiltyZoneId</code> properties in the <a>DescribeFileSystems</a> response object to get this information. Use the <code>subnetId</code> associated with the file system's Availability Zone when creating the mount target.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/how-it-works.html\">Amazon EFS: How it Works</a>. </p> <p>To create a mount target for a file system, the file system's lifecycle state must be <code>available</code>. For more information, see <a>DescribeFileSystems</a>.</p> <p>In the request, provide the following:</p> <ul> <li> <p>The file system ID for which you are creating the mount target.</p> </li> <li> <p>A subnet ID, which determines the following:</p> <ul> <li> <p>The VPC in which Amazon EFS creates the mount target</p> </li> <li> <p>The Availability Zone in which Amazon EFS creates the mount target</p> </li> <li> <p>The IP address range from which Amazon EFS selects the IP address of the mount target (if you don't specify an IP address in the request)</p> </li> </ul> </li> </ul> <p>After creating the mount target, Amazon EFS returns a response that includes, a <code>MountTargetId</code> and an <code>IpAddress</code>. You use this IP address when mounting the file system in an EC2 instance. You can also use the mount target's DNS name when mounting the file system. The EC2 instance on which you mount the file system by using the mount target can resolve the mount target's DNS name to its IP address. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/how-it-works.html#how-it-works-implementation\">How it Works: Implementation Overview</a>. </p> <p>Note that you can create mount targets for a file system in only one VPC, and there can be only one mount target per Availability Zone. That is, if the file system already has one or more mount targets created for it, the subnet specified in the request to add another mount target must meet the following requirements:</p> <ul> <li> <p>Must belong to the same VPC as the subnets of the existing mount targets</p> </li> <li> <p>Must not be in the same Availability Zone as any of the subnets of the existing mount targets</p> </li> </ul> <p>If the request satisfies the requirements, Amazon EFS does the following:</p> <ul> <li> <p>Creates a new mount target in the specified subnet.</p> </li> <li> <p>Also creates a new network interface in the subnet as follows:</p> <ul> <li> <p>If the request provides an <code>IpAddress</code>, Amazon EFS assigns that IP address to the network interface. Otherwise, Amazon EFS assigns a free address in the subnet (in the same way that the Amazon EC2 <code>CreateNetworkInterface</code> call does when a request does not specify a primary private IP address).</p> </li> <li> <p>If the request provides <code>SecurityGroups</code>, this network interface is associated with those security groups. Otherwise, it belongs to the default security group for the subnet's VPC.</p> </li> <li> <p>Assigns the description <code>Mount target <i>fsmt-id</i> for file system <i>fs-id</i> </code> where <code> <i>fsmt-id</i> </code> is the mount target ID, and <code> <i>fs-id</i> </code> is the <code>FileSystemId</code>.</p> </li> <li> <p>Sets the <code>requesterManaged</code> property of the network interface to <code>true</code>, and the <code>requesterId</code> value to <code>EFS</code>.</p> </li> </ul> <p>Each Amazon EFS mount target has one corresponding requester-managed EC2 network interface. After the network interface is created, Amazon EFS sets the <code>NetworkInterfaceId</code> field in the mount target's description to the network interface ID, and the <code>IpAddress</code> field to its address. If network interface creation fails, the entire <code>CreateMountTarget</code> operation fails.</p> </li> </ul> <note> <p>The <code>CreateMountTarget</code> call returns only after creating the network interface, but while the mount target state is still <code>creating</code>, you can check the mount target creation status by calling the <a>DescribeMountTargets</a> operation, which among other things returns the mount target state.</p> </note> <p>We recommend that you create a mount target in each of the Availability Zones. There are cost considerations for using a file system in an Availability Zone through a mount target created in another Availability Zone. For more information, see <a href=\"http://aws.amazon.com/efs/\">Amazon EFS</a>. In addition, by always using a mount target local to the instance's Availability Zone, you eliminate a partial failure scenario. If the Availability Zone in which your mount target is created goes down, then you can't access your file system through that mount target. </p> <p>This operation requires permissions for the following action on the file system:</p> <ul> <li> <p> <code>elasticfilesystem:CreateMountTarget</code> </p> </li> </ul> <p>This operation also requires permissions for the following Amazon EC2 actions:</p> <ul> <li> <p> <code>ec2:DescribeSubnets</code> </p> </li> <li> <p> <code>ec2:DescribeNetworkInterfaces</code> </p> </li> <li> <p> <code>ec2:CreateNetworkInterface</code> </p> </li> </ul>"
+      "documentation":"<p>Creates a mount target for a file system. You can then mount the file system on EC2 instances by using the mount target.</p> <p>You can create one mount target in each Availability Zone in your VPC. All EC2 instances in a VPC within a given Availability Zone share a single mount target for a given file system. If you have multiple subnets in an Availability Zone, you create a mount target in one of the subnets. EC2 instances do not need to be in the same subnet as the mount target in order to access their file system.</p> <p>You can create only one mount target for a One Zone file system. You must create that mount target in the same Availability Zone in which the file system is located. Use the <code>AvailabilityZoneName</code> and <code>AvailabiltyZoneId</code> properties in the <a>DescribeFileSystems</a> response object to get this information. Use the <code>subnetId</code> associated with the file system's Availability Zone when creating the mount target.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/how-it-works.html\">Amazon EFS: How it Works</a>. </p> <p>To create a mount target for a file system, the file system's lifecycle state must be <code>available</code>. For more information, see <a>DescribeFileSystems</a>.</p> <p>In the request, provide the following:</p> <ul> <li> <p>The file system ID for which you are creating the mount target.</p> </li> <li> <p>A subnet ID, which determines the following:</p> <ul> <li> <p>The VPC in which Amazon EFS creates the mount target</p> </li> <li> <p>The Availability Zone in which Amazon EFS creates the mount target</p> </li> <li> <p>The IP address range from which Amazon EFS selects the IP address of the mount target (if you don't specify an IP address in the request)</p> </li> </ul> </li> </ul> <p>After creating the mount target, Amazon EFS returns a response that includes, a <code>MountTargetId</code> and an <code>IpAddress</code>. You use this IP address when mounting the file system in an EC2 instance. You can also use the mount target's DNS name when mounting the file system. The EC2 instance on which you mount the file system by using the mount target can resolve the mount target's DNS name to its IP address. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/how-it-works.html#how-it-works-implementation\">How it Works: Implementation Overview</a>. </p> <p>Note that you can create mount targets for a file system in only one VPC, and there can be only one mount target per Availability Zone. That is, if the file system already has one or more mount targets created for it, the subnet specified in the request to add another mount target must meet the following requirements:</p> <ul> <li> <p>Must belong to the same VPC as the subnets of the existing mount targets</p> </li> <li> <p>Must not be in the same Availability Zone as any of the subnets of the existing mount targets</p> </li> </ul> <p>If the request satisfies the requirements, Amazon EFS does the following:</p> <ul> <li> <p>Creates a new mount target in the specified subnet.</p> </li> <li> <p>Also creates a new network interface in the subnet as follows:</p> <ul> <li> <p>If the request provides an <code>IpAddress</code>, Amazon EFS assigns that IP address to the network interface. Otherwise, Amazon EFS assigns a free address in the subnet (in the same way that the Amazon EC2 <code>CreateNetworkInterface</code> call does when a request does not specify a primary private IP address).</p> </li> <li> <p>If the request provides <code>SecurityGroups</code>, this network interface is associated with those security groups. Otherwise, it belongs to the default security group for the subnet's VPC.</p> </li> <li> <p>Assigns the description <code>Mount target <i>fsmt-id</i> for file system <i>fs-id</i> </code> where <code> <i>fsmt-id</i> </code> is the mount target ID, and <code> <i>fs-id</i> </code> is the <code>FileSystemId</code>.</p> </li> <li> <p>Sets the <code>requesterManaged</code> property of the network interface to <code>true</code>, and the <code>requesterId</code> value to <code>EFS</code>.</p> </li> </ul> <p>Each Amazon EFS mount target has one corresponding requester-managed EC2 network interface. After the network interface is created, Amazon EFS sets the <code>NetworkInterfaceId</code> field in the mount target's description to the network interface ID, and the <code>IpAddress</code> field to its address. If network interface creation fails, the entire <code>CreateMountTarget</code> operation fails.</p> </li> </ul> <note> <p>The <code>CreateMountTarget</code> call returns only after creating the network interface, but while the mount target state is still <code>creating</code>, you can check the mount target creation status by calling the <a>DescribeMountTargets</a> operation, which among other things returns the mount target state.</p> </note> <p>We recommend that you create a mount target in each of the Availability Zones. There are cost considerations for using a file system in an Availability Zone through a mount target created in another Availability Zone. For more information, see <a href=\"http://aws.amazon.com/efs/pricing/\">Amazon EFS pricing</a>. In addition, by always using a mount target local to the instance's Availability Zone, you eliminate a partial failure scenario. If the Availability Zone in which your mount target is created goes down, then you can't access your file system through that mount target. </p> <p>This operation requires permissions for the following action on the file system:</p> <ul> <li> <p> <code>elasticfilesystem:CreateMountTarget</code> </p> </li> </ul> <p>This operation also requires permissions for the following Amazon EC2 actions:</p> <ul> <li> <p> <code>ec2:DescribeSubnets</code> </p> </li> <li> <p> <code>ec2:DescribeNetworkInterfaces</code> </p> </li> <li> <p> <code>ec2:CreateNetworkInterface</code> </p> </li> </ul>"
     },
     "CreateReplicationConfiguration":{
       "name":"CreateReplicationConfiguration",
@@ -99,7 +101,7 @@
         {"shape":"ConflictException"},
         {"shape":"InternalServerError"}
       ],
-      "documentation":"<p>Creates a replication configuration that replicates an existing EFS file system to a new, read-only file system. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/efs-replication.html\">Amazon EFS replication</a> in the <i>Amazon EFS User Guide</i>. The replication configuration specifies the following:</p> <ul> <li> <p> <b>Source file system</b> – The EFS file system that you want replicated. The source file system cannot be a destination file system in an existing replication configuration.</p> </li> <li> <p> <b>Amazon Web Services Region</b> – The Amazon Web Services Region in which the destination file system is created. Amazon EFS replication is available in all Amazon Web Services Regions in which EFS is available. The Region must be enabled. For more information, see <a href=\"https://docs.aws.amazon.com/general/latest/gr/rande-manage.html#rande-manage-enable\">Managing Amazon Web Services Regions</a> in the <i>Amazon Web Services General Reference Reference Guide</i>.</p> </li> <li> <p> <b>Destination file system configuration</b> – The configuration of the destination file system to which the source file system will be replicated. There can only be one destination file system in a replication configuration. </p> <p>Parameters for the replication configuration include:</p> <ul> <li> <p> <b>File system ID</b> – The ID of the destination file system for the replication. If no ID is provided, then EFS creates a new file system with the default settings. For existing file systems, the file system's replication overwrite protection must be disabled. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/efs-replication#replicate-existing-destination\"> Replicating to an existing file system</a>.</p> </li> <li> <p> <b>Availability Zone</b> – If you want the destination file system to use One Zone storage, you must specify the Availability Zone to create the file system in. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/storage-classes.html\"> EFS file system types</a> in the <i>Amazon EFS User Guide</i>.</p> </li> <li> <p> <b>Encryption</b> – All destination file systems are created with encryption at rest enabled. You can specify the Key Management Service (KMS) key that is used to encrypt the destination file system. If you don't specify a KMS key, your service-managed KMS key for Amazon EFS is used. </p> <note> <p>After the file system is created, you cannot change the KMS key.</p> </note> </li> </ul> </li> </ul> <note> <p>After the file system is created, you cannot change the KMS key.</p> </note> <p>For new destination file systems, the following properties are set by default:</p> <ul> <li> <p> <b>Performance mode</b> - The destination file system's performance mode matches that of the source file system, unless the destination file system uses EFS One Zone storage. In that case, the General Purpose performance mode is used. The performance mode cannot be changed.</p> </li> <li> <p> <b>Throughput mode</b> - The destination file system's throughput mode matches that of the source file system. After the file system is created, you can modify the throughput mode.</p> </li> </ul> <ul> <li> <p> <b>Lifecycle management</b> – Lifecycle management is not enabled on the destination file system. After the destination file system is created, you can enable lifecycle management.</p> </li> <li> <p> <b>Automatic backups</b> – Automatic daily backups are enabled on the destination file system. After the file system is created, you can change this setting.</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/efs-replication.html\">Amazon EFS replication</a> in the <i>Amazon EFS User Guide</i>.</p>"
+      "documentation":"<p>Creates a replication conﬁguration to either a new or existing EFS file system. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/efs-replication.html\">Amazon EFS replication</a> in the <i>Amazon EFS User Guide</i>. The replication configuration specifies the following:</p> <ul> <li> <p> <b>Source file system</b> – The EFS file system that you want to replicate. </p> </li> <li> <p> <b>Destination file system</b> – The destination file system to which the source file system is replicated. There can only be one destination file system in a replication configuration. </p> <note> <p>A file system can be part of only one replication configuration. </p> </note> <p>The destination parameters for the replication configuration depend on whether you are replicating to a new file system or to an existing file system, and if you are replicating across Amazon Web Services accounts. See <a>DestinationToCreate</a> for more information.</p> </li> </ul> <p>This operation requires permissions for the <code>elasticfilesystem:CreateReplicationConfiguration</code> action. Additionally, other permissions are required depending on how you are replicating file systems. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/efs-replication.html#efs-replication-permissions\">Required permissions for replication</a> in the <i>Amazon EFS User Guide</i>.</p>"
     },
     "CreateTags":{
       "name":"CreateTags",
@@ -147,7 +149,7 @@
         {"shape":"FileSystemNotFound"},
         {"shape":"FileSystemInUse"}
       ],
-      "documentation":"<p>Deletes a file system, permanently severing access to its contents. Upon return, the file system no longer exists and you can't access any contents of the deleted file system.</p> <p>You need to manually delete mount targets attached to a file system before you can delete an EFS file system. This step is performed for you when you use the Amazon Web Services console to delete a file system.</p> <note> <p>You cannot delete a file system that is part of an EFS Replication configuration. You need to delete the replication configuration first.</p> </note> <p> You can't delete a file system that is in use. That is, if the file system has any mount targets, you must first delete them. For more information, see <a>DescribeMountTargets</a> and <a>DeleteMountTarget</a>. </p> <note> <p>The <code>DeleteFileSystem</code> call returns while the file system state is still <code>deleting</code>. You can check the file system deletion status by calling the <a>DescribeFileSystems</a> operation, which returns a list of file systems in your account. If you pass file system ID or creation token for the deleted file system, the <a>DescribeFileSystems</a> returns a <code>404 FileSystemNotFound</code> error.</p> </note> <p>This operation requires permissions for the <code>elasticfilesystem:DeleteFileSystem</code> action.</p>"
+      "documentation":"<p>Deletes a file system, permanently severing access to its contents. Upon return, the file system no longer exists and you can't access any contents of the deleted file system.</p> <p>You need to manually delete mount targets attached to a file system before you can delete an EFS file system. This step is performed for you when you use the Amazon Web Services console to delete a file system.</p> <note> <p>You cannot delete a file system that is part of an EFS replication configuration. You need to delete the replication configuration first.</p> </note> <p> You can't delete a file system that is in use. That is, if the file system has any mount targets, you must first delete them. For more information, see <a>DescribeMountTargets</a> and <a>DeleteMountTarget</a>. </p> <note> <p>The <code>DeleteFileSystem</code> call returns while the file system state is still <code>deleting</code>. You can check the file system deletion status by calling the <a>DescribeFileSystems</a> operation, which returns a list of file systems in your account. If you pass file system ID or creation token for the deleted file system, the <a>DescribeFileSystems</a> returns a <code>404 FileSystemNotFound</code> error.</p> </note> <p>This operation requires permissions for the <code>elasticfilesystem:DeleteFileSystem</code> action.</p>"
     },
     "DeleteFileSystemPolicy":{
       "name":"DeleteFileSystemPolicy",
@@ -310,7 +312,7 @@
         {"shape":"BadRequest"},
         {"shape":"FileSystemNotFound"}
       ],
-      "documentation":"<p>Returns the current <code>LifecycleConfiguration</code> object for the specified Amazon EFS file system. Lifecycle management uses the <code>LifecycleConfiguration</code> object to identify when to move files between storage classes. For a file system without a <code>LifecycleConfiguration</code> object, the call returns an empty array in the response.</p> <p>This operation requires permissions for the <code>elasticfilesystem:DescribeLifecycleConfiguration</code> operation.</p>"
+      "documentation":"<p>Returns the current <code>LifecycleConfiguration</code> object for the specified EFS file system. Lifecycle management uses the <code>LifecycleConfiguration</code> object to identify when to move files between storage classes. For a file system without a <code>LifecycleConfiguration</code> object, the call returns an empty array in the response.</p> <p>This operation requires permissions for the <code>elasticfilesystem:DescribeLifecycleConfiguration</code> operation.</p>"
     },
     "DescribeMountTargetSecurityGroups":{
       "name":"DescribeMountTargetSecurityGroups",
@@ -467,7 +469,7 @@
         {"shape":"InvalidPolicyException"},
         {"shape":"IncorrectFileSystemLifeCycleState"}
       ],
-      "documentation":"<p>Applies an Amazon EFS <code>FileSystemPolicy</code> to an Amazon EFS file system. A file system policy is an IAM resource-based policy and can contain multiple policy statements. A file system always has exactly one file system policy, which can be the default policy or an explicit policy set or updated using this API operation. EFS file system policies have a 20,000 character limit. When an explicit policy is set, it overrides the default policy. For more information about the default file system policy, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/iam-access-control-nfs-efs.html#default-filesystempolicy\">Default EFS File System Policy</a>. </p> <note> <p>EFS file system policies have a 20,000 character limit.</p> </note> <p>This operation requires permissions for the <code>elasticfilesystem:PutFileSystemPolicy</code> action.</p>"
+      "documentation":"<p>Applies an Amazon EFS <code>FileSystemPolicy</code> to an Amazon EFS file system. A file system policy is an IAM resource-based policy and can contain multiple policy statements. A file system always has exactly one file system policy, which can be the default policy or an explicit policy set or updated using this API operation. EFS file system policies have a 20,000 character limit. When an explicit policy is set, it overrides the default policy. For more information about the default file system policy, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/iam-access-control-nfs-efs.html#default-filesystempolicy\"> Default EFS file system policy</a>. </p> <note> <p>EFS file system policies have a 20,000 character limit.</p> </note> <p>This operation requires permissions for the <code>elasticfilesystem:PutFileSystemPolicy</code> action.</p>"
     },
     "PutLifecycleConfiguration":{
       "name":"PutLifecycleConfiguration",
@@ -484,7 +486,7 @@
         {"shape":"FileSystemNotFound"},
         {"shape":"IncorrectFileSystemLifeCycleState"}
       ],
-      "documentation":"<p>Use this action to manage storage for your file system. A <code>LifecycleConfiguration</code> consists of one or more <code>LifecyclePolicy</code> objects that define the following:</p> <ul> <li> <p> <b> <code>TransitionToIA</code> </b> – When to move files in the file system from primary storage (Standard storage class) into the Infrequent Access (IA) storage.</p> </li> <li> <p> <b> <code>TransitionToArchive</code> </b> – When to move files in the file system from their current storage class (either IA or Standard storage) into the Archive storage.</p> <p>File systems cannot transition into Archive storage before transitioning into IA storage. Therefore, TransitionToArchive must either not be set or must be later than TransitionToIA.</p> <note> <p> The Archive storage class is available only for file systems that use the Elastic Throughput mode and the General Purpose Performance mode. </p> </note> </li> </ul> <ul> <li> <p> <b> <code>TransitionToPrimaryStorageClass</code> </b> – Whether to move files in the file system back to primary storage (Standard storage class) after they are accessed in IA or Archive storage.</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/lifecycle-management-efs.html\"> Managing file system storage</a>.</p> <p>Each Amazon EFS file system supports one lifecycle configuration, which applies to all files in the file system. If a <code>LifecycleConfiguration</code> object already exists for the specified file system, a <code>PutLifecycleConfiguration</code> call modifies the existing configuration. A <code>PutLifecycleConfiguration</code> call with an empty <code>LifecyclePolicies</code> array in the request body deletes any existing <code>LifecycleConfiguration</code>. In the request, specify the following: </p> <ul> <li> <p>The ID for the file system for which you are enabling, disabling, or modifying Lifecycle management.</p> </li> <li> <p>A <code>LifecyclePolicies</code> array of <code>LifecyclePolicy</code> objects that define when to move files to IA storage, to Archive storage, and back to primary storage.</p> <note> <p>Amazon EFS requires that each <code>LifecyclePolicy</code> object have only have a single transition, so the <code>LifecyclePolicies</code> array needs to be structured with separate <code>LifecyclePolicy</code> objects. See the example requests in the following section for more information.</p> </note> </li> </ul> <p>This operation requires permissions for the <code>elasticfilesystem:PutLifecycleConfiguration</code> operation.</p> <p>To apply a <code>LifecycleConfiguration</code> object to an encrypted file system, you need the same Key Management Service permissions as when you created the encrypted file system.</p>"
+      "documentation":"<p>Use this action to manage storage for your file system. A <code>LifecycleConfiguration</code> consists of one or more <code>LifecyclePolicy</code> objects that define the following:</p> <ul> <li> <p> <b> <code>TransitionToIA</code> </b> – When to move files in the file system from primary storage (Standard storage class) into the Infrequent Access (IA) storage.</p> </li> <li> <p> <b> <code>TransitionToArchive</code> </b> – When to move files in the file system from their current storage class (either IA or Standard storage) into the Archive storage.</p> <p>File systems cannot transition into Archive storage before transitioning into IA storage. Therefore, TransitionToArchive must either not be set or must be later than TransitionToIA.</p> <note> <p> The Archive storage class is available only for file systems that use the Elastic throughput mode and the General Purpose performance mode. </p> </note> </li> </ul> <ul> <li> <p> <b> <code>TransitionToPrimaryStorageClass</code> </b> – Whether to move files in the file system back to primary storage (Standard storage class) after they are accessed in IA or Archive storage.</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/lifecycle-management-efs.html\"> Managing file system storage</a>.</p> <p>Each Amazon EFS file system supports one lifecycle configuration, which applies to all files in the file system. If a <code>LifecycleConfiguration</code> object already exists for the specified file system, a <code>PutLifecycleConfiguration</code> call modifies the existing configuration. A <code>PutLifecycleConfiguration</code> call with an empty <code>LifecyclePolicies</code> array in the request body deletes any existing <code>LifecycleConfiguration</code>. In the request, specify the following: </p> <ul> <li> <p>The ID for the file system for which you are enabling, disabling, or modifying lifecycle management.</p> </li> <li> <p>A <code>LifecyclePolicies</code> array of <code>LifecyclePolicy</code> objects that define when to move files to IA storage, to Archive storage, and back to primary storage.</p> <note> <p>Amazon EFS requires that each <code>LifecyclePolicy</code> object have only have a single transition, so the <code>LifecyclePolicies</code> array needs to be structured with separate <code>LifecyclePolicy</code> objects. See the example requests in the following section for more information.</p> </note> </li> </ul> <p>This operation requires permissions for the <code>elasticfilesystem:PutLifecycleConfiguration</code> operation.</p> <p>To apply a <code>LifecycleConfiguration</code> object to an encrypted file system, you need the same Key Management Service permissions as when you created the encrypted file system.</p>"
     },
     "TagResource":{
       "name":"TagResource",
@@ -771,7 +773,7 @@
         },
         "PerformanceMode":{
           "shape":"PerformanceMode",
-          "documentation":"<p>The Performance mode of the file system. We recommend <code>generalPurpose</code> performance mode for all file systems. File systems using the <code>maxIO</code> performance mode can scale to higher levels of aggregate throughput and operations per second with a tradeoff of slightly higher latencies for most file operations. The performance mode can't be changed after the file system has been created. The <code>maxIO</code> mode is not supported on One Zone file systems.</p> <important> <p>Due to the higher per-operation latencies with Max I/O, we recommend using General Purpose performance mode for all file systems.</p> </important> <p>Default is <code>generalPurpose</code>.</p>"
+          "documentation":"<p>The performance mode of the file system. We recommend <code>generalPurpose</code> performance mode for all file systems. File systems using the <code>maxIO</code> performance mode can scale to higher levels of aggregate throughput and operations per second with a tradeoff of slightly higher latencies for most file operations. The performance mode can't be changed after the file system has been created. The <code>maxIO</code> mode is not supported on One Zone file systems.</p> <important> <p>Due to the higher per-operation latencies with Max I/O, we recommend using General Purpose performance mode for all file systems.</p> </important> <p>Default is <code>generalPurpose</code>.</p>"
         },
         "Encrypted":{
           "shape":"Encrypted",
@@ -787,11 +789,11 @@
         },
         "ProvisionedThroughputInMibps":{
           "shape":"ProvisionedThroughputInMibps",
-          "documentation":"<p>The throughput, measured in mebibytes per second (MiBps), that you want to provision for a file system that you're creating. Required if <code>ThroughputMode</code> is set to <code>provisioned</code>. Valid values are 1-3414 MiBps, with the upper limit depending on Region. To increase this limit, contact Amazon Web Services Support. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/limits.html#soft-limits\">Amazon EFS quotas that you can increase</a> in the <i>Amazon EFS User Guide</i>.</p>"
+          "documentation":"<p>The throughput, measured in mebibytes per second (MiBps), that you want to provision for a file system that you're creating. Required if <code>ThroughputMode</code> is set to <code>provisioned</code>. Valid values are 1-3414 MiBps, with the upper limit depending on Region. To increase this limit, contact Amazon Web ServicesSupport. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/limits.html#soft-limits\">Amazon EFS quotas that you can increase</a> in the <i>Amazon EFS User Guide</i>.</p>"
         },
         "AvailabilityZoneName":{
           "shape":"AvailabilityZoneName",
-          "documentation":"<p>Used to create a One Zone file system. It specifies the Amazon Web Services Availability Zone in which to create the file system. Use the format <code>us-east-1a</code> to specify the Availability Zone. For more information about One Zone file systems, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/storage-classes.html\">Using EFS storage classes</a> in the <i>Amazon EFS User Guide</i>.</p> <note> <p>One Zone file systems are not available in all Availability Zones in Amazon Web Services Regions where Amazon EFS is available.</p> </note>"
+          "documentation":"<p>For One Zone file systems, specify the Amazon Web Services Availability Zone in which to create the file system. Use the format <code>us-east-1a</code> to specify the Availability Zone. For more information about One Zone file systems, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/availability-durability.html#file-system-type\">EFS file system types</a> in the <i>Amazon EFS User Guide</i>.</p> <note> <p>One Zone file systems are not available in all Availability Zones in Amazon Web Services Regions where Amazon EFS is available.</p> </note>"
         },
         "Backup":{
           "shape":"Backup",
@@ -820,11 +822,19 @@
         },
         "IpAddress":{
           "shape":"IpAddress",
-          "documentation":"<p>Valid IPv4 address within the address range of the specified subnet.</p>"
+          "documentation":"<p>If the IP address type for the mount target is IPv4, then specify the IPv4 address within the address range of the specified subnet.</p>"
+        },
+        "Ipv6Address":{
+          "shape":"Ipv6Address",
+          "documentation":"<p>If the IP address type for the mount target is IPv6, then specify the IPv6 address within the address range of the specified subnet.</p>"
+        },
+        "IpAddressType":{
+          "shape":"IpAddressType",
+          "documentation":"<p>Specify the type of IP address of the mount target you are creating. Options are IPv4, dual stack, or IPv6. If you don’t specify an IpAddressType, then IPv4 is used.</p> <ul> <li> <p>IPV4_ONLY – Create mount target with IPv4 only subnet or dual-stack subnet.</p> </li> <li> <p>DUAL_STACK – Create mount target with dual-stack subnet.</p> </li> <li> <p>IPV6_ONLY – Create mount target with IPv6 only subnet.</p> </li> </ul> <note> <p>Creating IPv6 mount target only ENI in dual-stack subnet is not supported.</p> </note>"
         },
         "SecurityGroups":{
           "shape":"SecurityGroups",
-          "documentation":"<p>Up to five VPC security group IDs, of the form <code>sg-xxxxxxxx</code>. These must be for the same VPC as subnet specified.</p>"
+          "documentation":"<p>VPC security group IDs, of the form <code>sg-xxxxxxxx</code>. These must be for the same VPC as the subnet specified. The maximum number of security groups depends on account quota. For more information, see <a href=\"https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html\">Amazon VPC Quotas</a> in the <i>Amazon VPC User Guide</i> (see the <b>Security Groups</b> table). </p>"
         }
       },
       "documentation":"<p/>"
@@ -956,6 +966,12 @@
           "documentation":"<p>The ID of the source file system in the replication configuration.</p>",
           "location":"uri",
           "locationName":"SourceFileSystemId"
+        },
+        "DeletionMode":{
+          "shape":"DeletionMode",
+          "documentation":"<p>When replicating across Amazon Web Services accounts or across Amazon Web Services Regions, Amazon EFS deletes the replication configuration from both the source and destination account or Region (<code>ALL_CONFIGURATIONS</code>) by default. If there's a configuration or permissions issue that prevents Amazon EFS from deleting the replication configuration from both sides, you can use the <code>LOCAL_CONFIGURATION_ONLY</code> mode to delete the replication configuration from only the local side (the account or Region from which the delete is performed). </p> <note> <p>Only use the <code>LOCAL_CONFIGURATION_ONLY</code> mode in the case that Amazon EFS is unable to delete the replication configuration in both the source and destination account or Region. Deleting the local configuration leaves the configuration in the other account or Region unrecoverable.</p> <p>Additionally, do not use this mode for same-account, same-region replication as doing so results in a BadRequest exception error.</p> </note>",
+          "location":"querystring",
+          "locationName":"deletionMode"
         }
       }
     },
@@ -978,6 +994,13 @@
         }
       },
       "documentation":"<p/>"
+    },
+    "DeletionMode":{
+      "type":"string",
+      "enum":[
+        "ALL_CONFIGURATIONS",
+        "LOCAL_CONFIGURATION_ONLY"
+      ]
     },
     "DependencyTimeout":{
       "type":"structure",
@@ -1223,7 +1246,7 @@
       "members":{
         "FileSystemId":{
           "shape":"FileSystemId",
-          "documentation":"<p>You can retrieve the replication configuration for a specific file system by providing its file system ID.</p>",
+          "documentation":"<p>You can retrieve the replication configuration for a specific file system by providing its file system ID. For cross-account,cross-region replication, an account can only describe the replication configuration for a file system in its own Region.</p>",
           "location":"querystring",
           "locationName":"FileSystemId"
         },
@@ -1308,7 +1331,7 @@
       "members":{
         "Status":{
           "shape":"ReplicationStatus",
-          "documentation":"<p>Describes the status of the destination EFS file system.</p> <ul> <li> <p>The <code>Paused</code> state occurs as a result of opting out of the source or destination Region after the replication configuration was created. To resume replication for the file system, you need to again opt in to the Amazon Web Services Region. For more information, see <a href=\"https://docs.aws.amazon.com/general/latest/gr/rande-manage.html#rande-manage-enable\">Managing Amazon Web Services Regions</a> in the <i>Amazon Web Services General Reference Guide</i>.</p> </li> <li> <p>The <code>Error</code> state occurs when either the source or the destination file system (or both) is in a failed state and is unrecoverable. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/awsbackup.html#restoring-backup-efsmonitoring-replication-status.html\">Monitoring replication status</a> in the <i>Amazon EFS User Guide</i>. You must delete the replication configuration, and then restore the most recent backup of the failed file system (either the source or the destination) to a new file system.</p> </li> </ul>"
+          "documentation":"<p>Describes the status of the replication configuration. For more information about replication status, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/awsbackup.html#restoring-backup-efsmonitoring-replication-status.html\">Viewing replication details</a> in the <i>Amazon EFS User Guide</i>. </p>"
         },
         "FileSystemId":{
           "shape":"FileSystemId",
@@ -1321,6 +1344,18 @@
         "LastReplicatedTimestamp":{
           "shape":"Timestamp",
           "documentation":"<p>The time when the most recent sync was successfully completed on the destination file system. Any changes to data on the source file system that occurred before this time have been successfully replicated to the destination file system. Any changes that occurred after this time might not be fully replicated.</p>"
+        },
+        "OwnerId":{
+          "shape":"AwsAccountId",
+          "documentation":"<p>ID of the Amazon Web Services account in which the destination file system resides.</p>"
+        },
+        "StatusMessage":{
+          "shape":"StatusMessage",
+          "documentation":"<p>Message that provides details about the <code>PAUSED</code> or <code>ERRROR</code> state of the replication destination configuration. For more information about replication status messages, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/awsbackup.html#restoring-backup-efsmonitoring-replication-status.html\">Viewing replication details</a> in the <i>Amazon EFS User Guide</i>. </p>"
+        },
+        "RoleArn":{
+          "shape":"RoleArn",
+          "documentation":"<p>Amazon Resource Name (ARN) of the IAM role in the source account that allows Amazon EFS to perform replication on its behalf. This is optional for same-account replication and required for cross-account replication.</p>"
         }
       },
       "documentation":"<p>Describes the destination file system in the replication configuration.</p>"
@@ -1330,7 +1365,7 @@
       "members":{
         "Region":{
           "shape":"RegionName",
-          "documentation":"<p>To create a file system that uses Regional storage, specify the Amazon Web Services Region in which to create the destination file system.</p>"
+          "documentation":"<p>To create a file system that uses Regional storage, specify the Amazon Web Services Region in which to create the destination file system. The Region must be enabled for the Amazon Web Services account that owns the source file system. For more information, see <a href=\"https://docs.aws.amazon.com/general/latest/gr/rande-manage.html#rande-manage-enable\">Managing Amazon Web Services Regions</a> in the <i>Amazon Web Services General Reference Reference Guide</i>.</p>"
         },
         "AvailabilityZoneName":{
           "shape":"AvailabilityZoneName",
@@ -1338,14 +1373,18 @@
         },
         "KmsKeyId":{
           "shape":"KmsKeyId",
-          "documentation":"<p>Specify the Key Management Service (KMS) key that you want to use to encrypt the destination file system. If you do not specify a KMS key, Amazon EFS uses your default KMS key for Amazon EFS, <code>/aws/elasticfilesystem</code>. This ID can be in one of the following formats:</p> <ul> <li> <p>Key ID - The unique identifier of the key, for example <code>1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>ARN - The Amazon Resource Name (ARN) for the key, for example <code>arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Key alias - A previously created display name for a key, for example <code>alias/projectKey1</code>.</p> </li> <li> <p>Key alias ARN - The ARN for a key alias, for example <code>arn:aws:kms:us-west-2:444455556666:alias/projectKey1</code>.</p> </li> </ul>"
+          "documentation":"<p>Specify the Key Management Service (KMS) key that you want to use to encrypt the destination file system. If you do not specify a KMS key, Amazon EFS uses your default KMS key for Amazon EFS, <code>/aws/elasticfilesystem</code>. This ID can be in one of the following formats:</p> <ul> <li> <p>Key ID - The unique identifier of the key, for example <code>1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>ARN - The ARN for the key, for example <code>arn:aws:kms:us-west-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab</code>.</p> </li> <li> <p>Key alias - A previously created display name for a key, for example <code>alias/projectKey1</code>.</p> </li> <li> <p>Key alias ARN - The ARN for a key alias, for example <code>arn:aws:kms:us-west-2:444455556666:alias/projectKey1</code>.</p> </li> </ul>"
         },
         "FileSystemId":{
           "shape":"FileSystemId",
-          "documentation":"<p>The ID of the file system to use for the destination. The file system's replication overwrite replication must be disabled. If you do not provide an ID, then EFS creates a new file system for the replication destination.</p>"
+          "documentation":"<p>The ID or ARN of the file system to use for the destination. For cross-account replication, this must be an ARN. The file system's replication overwrite replication must be disabled. If no ID or ARN is specified, then a new file system is created. </p> <note> <p>When you initially configure replication to an existing file system, Amazon EFS writes data to or removes existing data from the destination file system to match data in the source file system. If you don't want to change data in the destination file system, then you should replicate to a new file system instead. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/create-replication.html\">https://docs.aws.amazon.com/efs/latest/ug/create-replication.html</a>.</p> </note>"
+        },
+        "RoleArn":{
+          "shape":"RoleArn",
+          "documentation":"<p>Amazon Resource Name (ARN) of the IAM role in the source account that allows Amazon EFS to perform replication on its behalf. This is optional for same-account replication and required for cross-account replication.</p>"
         }
       },
-      "documentation":"<p>Describes the new or existing destination file system for the replication configuration.</p>"
+      "documentation":"<p>Describes the new or existing destination file system for the replication configuration.</p> <ul> <li> <p>If you want to replicate to a new file system, do not specify the File System ID for the destination file system. Amazon EFS creates a new, empty file system. For One Zone storage, specify the Availability Zone to create the file system in. To use an Key Management Service key other than the default KMS key, then specify it. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/create-replication.html\">Configuring replication to new Amazon EFS file system</a> in the <i>Amazon EFS User Guide</i>.</p> <note> <p>After the file system is created, you cannot change the KMS key or the performance mode.</p> </note> </li> <li> <p>If you want to replicate to an existing file system that's in the same account as the source file system, then you need to provide the ID or Amazon Resource Name (ARN) of the file system to which to replicate. The file system's replication overwrite protection must be disabled. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/efs-replication#replicate-existing-destination\">Replicating to an existing file system</a> in the <i>Amazon EFS User Guide</i>.</p> </li> <li> <p>If you are replicating the file system to a file system that's in a different account than the source file system (cross-account replication), you need to provide the ARN for the file system and the IAM role that allows Amazon EFS to perform replication on the destination account. The file system's replication overwrite protection must be disabled. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/cross-account-replication.html\">Replicating across Amazon Web Services accounts</a> in the <i>Amazon EFS User Guide</i>.</p> </li> </ul>"
     },
     "Destinations":{
       "type":"list",
@@ -1433,7 +1472,7 @@
         },
         "PerformanceMode":{
           "shape":"PerformanceMode",
-          "documentation":"<p>The Performance mode of the file system.</p>"
+          "documentation":"<p>The performance mode of the file system.</p>"
         },
         "Encrypted":{
           "shape":"Encrypted",
@@ -1534,7 +1573,7 @@
       "members":{
         "ReplicationOverwriteProtection":{
           "shape":"ReplicationOverwriteProtection",
-          "documentation":"<p>The status of the file system's replication overwrite protection.</p> <ul> <li> <p> <code>ENABLED</code> – The file system cannot be used as the destination file system in a replication configuration. The file system is writeable. Replication overwrite protection is <code>ENABLED</code> by default. </p> </li> <li> <p> <code>DISABLED</code> – The file system can be used as the destination file system in a replication configuration. The file system is read-only and can only be modified by EFS replication.</p> </li> <li> <p> <code>REPLICATING</code> – The file system is being used as the destination file system in a replication configuration. The file system is read-only and is only modified only by EFS replication.</p> </li> </ul> <p>If the replication configuration is deleted, the file system's replication overwrite protection is re-enabled, the file system becomes writeable.</p>"
+          "documentation":"<p>The status of the file system's replication overwrite protection.</p> <ul> <li> <p> <code>ENABLED</code> – The file system cannot be used as the destination file system in a replication configuration. The file system is writeable. Replication overwrite protection is <code>ENABLED</code> by default. </p> </li> <li> <p> <code>DISABLED</code> – The file system can be used as the destination file system in a replication configuration. The file system is read-only and can only be modified by EFS replication.</p> </li> <li> <p> <code>REPLICATING</code> – The file system is being used as the destination file system in a replication configuration. The file system is read-only and is modified only by EFS replication.</p> </li> </ul> <p>If the replication configuration is deleted, the file system's replication overwrite protection is re-enabled, the file system becomes writeable.</p>"
         }
       },
       "documentation":"<p>Describes the protection on a file system. </p>"
@@ -1646,6 +1685,19 @@
       "error":{"httpStatusCode":409},
       "exception":true
     },
+    "IpAddressType":{
+      "type":"string",
+      "enum":[
+        "IPV4_ONLY",
+        "IPV6_ONLY",
+        "DUAL_STACK"
+      ]
+    },
+    "Ipv6Address":{
+      "type":"string",
+      "max":39,
+      "min":3
+    },
     "KmsKeyId":{
       "type":"string",
       "max":2048,
@@ -1689,10 +1741,10 @@
         },
         "TransitionToArchive":{
           "shape":"TransitionToArchiveRules",
-          "documentation":"<p>The number of days after files were last accessed in primary storage (the Standard storage class) files at which to move them to Archive storage. Metadata operations such as listing the contents of a directory don't count as file access events.</p>"
+          "documentation":"<p>The number of days after files were last accessed in primary storage (the Standard storage class) at which to move them to Archive storage. Metadata operations such as listing the contents of a directory don't count as file access events.</p>"
         }
       },
-      "documentation":"<p>Describes a policy used by Lifecycle management that specifies when to transition files into and out of storage classes. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/lifecycle-management-efs.html\">Managing file system storage</a>.</p> <note> <p>When using the <code>put-lifecycle-configuration</code> CLI command or the <code>PutLifecycleConfiguration</code> API action, Amazon EFS requires that each <code>LifecyclePolicy</code> object have only a single transition. This means that in a request body, <code>LifecyclePolicies</code> must be structured as an array of <code>LifecyclePolicy</code> objects, one object for each transition. For more information, see the request examples in <a>PutLifecycleConfiguration</a>.</p> </note>"
+      "documentation":"<p>Describes a policy used by lifecycle management that specifies when to transition files into and out of storage classes. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/lifecycle-management-efs.html\">Managing file system storage</a>.</p> <note> <p>When using the <code>put-lifecycle-configuration</code> CLI command or the <code>PutLifecycleConfiguration</code> API action, Amazon EFS requires that each <code>LifecyclePolicy</code> object have only a single transition. This means that in a request body, <code>LifecyclePolicies</code> must be structured as an array of <code>LifecyclePolicy</code> objects, one object for each transition. For more information, see the request examples in <a>PutLifecycleConfiguration</a>.</p> </note>"
     },
     "ListTagsForResourceRequest":{
       "type":"structure",
@@ -1758,7 +1810,7 @@
         },
         "SecurityGroups":{
           "shape":"SecurityGroups",
-          "documentation":"<p>An array of up to five VPC security group IDs.</p>"
+          "documentation":"<p>An array of VPC security group IDs. </p>"
         }
       },
       "documentation":"<p/>"
@@ -1811,6 +1863,10 @@
           "shape":"IpAddress",
           "documentation":"<p>Address at which the file system can be mounted by using the mount target.</p>"
         },
+        "Ipv6Address":{
+          "shape":"Ipv6Address",
+          "documentation":"<p>The IPv6 address for the mount target.</p>"
+        },
         "NetworkInterfaceId":{
           "shape":"NetworkInterfaceId",
           "documentation":"<p>The ID of the network interface that Amazon EFS created when it created the mount target.</p>"
@@ -1860,7 +1916,7 @@
         "ErrorCode":{"shape":"ErrorCode"},
         "Message":{"shape":"ErrorMessage"}
       },
-      "documentation":"<p>The calling account has reached the limit for elastic network interfaces for the specific Amazon Web Services Region. Either delete some network interfaces or request that the account quota be raised. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Appendix_Limits.html\">Amazon VPC Quotas</a> in the <i>Amazon VPC User Guide</i> (see the <b>Network interfaces per Region</b> entry in the <b>Network interfaces</b> table). </p>",
+      "documentation":"<p>The calling account has reached the limit for elastic network interfaces for the specific Amazon Web Services Region. Either delete some network interfaces or request that the account quota be raised. For more information, see <a href=\"https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html\">Amazon VPC Quotas</a> in the <i>Amazon VPC User Guide</i> (see the <b>Network interfaces per Region</b> entry in the <b>Network interfaces</b> table). </p>",
       "error":{"httpStatusCode":409},
       "exception":true
     },
@@ -1916,7 +1972,7 @@
         "ErrorCode":{"shape":"ErrorCode"},
         "Message":{"shape":"ErrorMessage"}
       },
-      "documentation":"<p>Returned if the default file system policy is in effect for the EFS file system specified.</p>",
+      "documentation":"<p>Returned if <code>no backup</code> is specified for a One Zone EFS file system.</p>",
       "error":{"httpStatusCode":404},
       "exception":true
     },
@@ -1996,7 +2052,7 @@
         },
         "Policy":{
           "shape":"Policy",
-          "documentation":"<p>The <code>FileSystemPolicy</code> that you're creating. Accepts a JSON formatted policy definition. EFS file system policies have a 20,000 character limit. To find out more about the elements that make up a file system policy, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/access-control-overview.html#access-control-manage-access-intro-resource-policies\">EFS Resource-based Policies</a>. </p>"
+          "documentation":"<p>The <code>FileSystemPolicy</code> that you're creating. Accepts a JSON formatted policy definition. EFS file system policies have a 20,000 character limit. To find out more about the elements that make up a file system policy, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/security_iam_service-with-iam.html#security_iam_service-with-iam-resource-based-policies\">Resource-based policies within Amazon EFS</a>. </p>"
         },
         "BypassPolicyLockoutSafetyCheck":{
           "shape":"BypassPolicyLockoutSafetyCheck",
@@ -2019,7 +2075,7 @@
         },
         "LifecyclePolicies":{
           "shape":"LifecyclePolicies",
-          "documentation":"<p>An array of <code>LifecyclePolicy</code> objects that define the file system's <code>LifecycleConfiguration</code> object. A <code>LifecycleConfiguration</code> object informs EFS Lifecycle management of the following:</p> <ul> <li> <p> <b> <code>TransitionToIA</code> </b> – When to move files in the file system from primary storage (Standard storage class) into the Infrequent Access (IA) storage.</p> </li> <li> <p> <b> <code>TransitionToArchive</code> </b> – When to move files in the file system from their current storage class (either IA or Standard storage) into the Archive storage.</p> <p>File systems cannot transition into Archive storage before transitioning into IA storage. Therefore, TransitionToArchive must either not be set or must be later than TransitionToIA.</p> <note> <p> The Archive storage class is available only for file systems that use the Elastic Throughput mode and the General Purpose Performance mode. </p> </note> </li> <li> <p> <b> <code>TransitionToPrimaryStorageClass</code> </b> – Whether to move files in the file system back to primary storage (Standard storage class) after they are accessed in IA or Archive storage.</p> </li> </ul> <note> <p>When using the <code>put-lifecycle-configuration</code> CLI command or the <code>PutLifecycleConfiguration</code> API action, Amazon EFS requires that each <code>LifecyclePolicy</code> object have only a single transition. This means that in a request body, <code>LifecyclePolicies</code> must be structured as an array of <code>LifecyclePolicy</code> objects, one object for each storage transition. See the example requests in the following section for more information.</p> </note>"
+          "documentation":"<p>An array of <code>LifecyclePolicy</code> objects that define the file system's <code>LifecycleConfiguration</code> object. A <code>LifecycleConfiguration</code> object informs lifecycle management of the following:</p> <ul> <li> <p> <b> <code>TransitionToIA</code> </b> – When to move files in the file system from primary storage (Standard storage class) into the Infrequent Access (IA) storage.</p> </li> <li> <p> <b> <code>TransitionToArchive</code> </b> – When to move files in the file system from their current storage class (either IA or Standard storage) into the Archive storage.</p> <p>File systems cannot transition into Archive storage before transitioning into IA storage. Therefore, TransitionToArchive must either not be set or must be later than TransitionToIA.</p> <note> <p>The Archive storage class is available only for file systems that use the Elastic throughput mode and the General Purpose performance mode. </p> </note> </li> <li> <p> <b> <code>TransitionToPrimaryStorageClass</code> </b> – Whether to move files in the file system back to primary storage (Standard storage class) after they are accessed in IA or Archive storage.</p> </li> </ul> <note> <p>When using the <code>put-lifecycle-configuration</code> CLI command or the <code>PutLifecycleConfiguration</code> API action, Amazon EFS requires that each <code>LifecyclePolicy</code> object have only a single transition. This means that in a request body, <code>LifecyclePolicies</code> must be structured as an array of <code>LifecyclePolicy</code> objects, one object for each storage transition. See the example requests in the following section for more information.</p> </note>"
         }
       }
     },
@@ -2073,6 +2129,10 @@
         "Destinations":{
           "shape":"Destinations",
           "documentation":"<p>An array of destination objects. Only one destination object is supported.</p>"
+        },
+        "SourceFileSystemOwnerId":{
+          "shape":"AwsAccountId",
+          "documentation":"<p>ID of the Amazon Web Services account in which the source file system resides.</p>"
         }
       },
       "documentation":"<p>Describes the replication configuration for a specific file system.</p>"
@@ -2153,6 +2213,11 @@
       "member":{"shape":"Resource"},
       "documentation":"EFS resources to which a preference applies to."
     },
+    "RoleArn":{
+      "type":"string",
+      "max":2048,
+      "pattern":"arn:(aws[a-zA-Z-]*)?:iam::\\d{12}:role/?[a-zA-Z_0-9+=,.@\\-_/]+"
+    },
     "RootDirectory":{
       "type":"structure",
       "members":{
@@ -2165,7 +2230,7 @@
           "documentation":"<p>(Optional) Specifies the POSIX IDs and permissions to apply to the access point's <code>RootDirectory</code>. If the <code>RootDirectory</code> &gt; <code>Path</code> specified does not exist, EFS creates the root directory using the <code>CreationInfo</code> settings when a client connects to an access point. When specifying the <code>CreationInfo</code>, you must provide values for all properties. </p> <important> <p>If you do not provide <code>CreationInfo</code> and the specified <code>RootDirectory</code> &gt; <code>Path</code> does not exist, attempts to mount the file system using the access point will fail.</p> </important>"
         }
       },
-      "documentation":"<p>Specifies the directory on the Amazon EFS file system that the access point provides access to. The access point exposes the specified file system path as the root directory of your file system to applications using the access point. NFS clients using the access point can only access data in the access point's <code>RootDirectory</code> and it's subdirectories.</p>"
+      "documentation":"<p>Specifies the directory on the Amazon EFS file system that the access point provides access to. The access point exposes the specified file system path as the root directory of your file system to applications using the access point. NFS clients using the access point can only access data in the access point's <code>RootDirectory</code> and its subdirectories.</p>"
     },
     "SecondaryGids":{
       "type":"list",
@@ -2186,7 +2251,7 @@
         "ErrorCode":{"shape":"ErrorCode"},
         "Message":{"shape":"ErrorMessage"}
       },
-      "documentation":"<p>Returned if the size of <code>SecurityGroups</code> specified in the request is greater than five.</p>",
+      "documentation":"<p>Returned if the number of <code>SecurityGroups</code> specified in the request is greater than the limit, which is based on account quota. Either delete some security groups or request that the account quota be raised. For more information, see <a href=\"https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html\">Amazon VPC Quotas</a> in the <i>Amazon VPC User Guide</i> (see the <b>Security Groups</b> table). </p>",
       "error":{"httpStatusCode":400},
       "exception":true
     },
@@ -2215,6 +2280,7 @@
         "DISABLING"
       ]
     },
+    "StatusMessage":{"type":"string"},
     "SubnetId":{
       "type":"string",
       "max":47,
@@ -2419,7 +2485,7 @@
         },
         "ReplicationOverwriteProtection":{
           "shape":"ReplicationOverwriteProtection",
-          "documentation":"<p>The status of the file system's replication overwrite protection.</p> <ul> <li> <p> <code>ENABLED</code> – The file system cannot be used as the destination file system in a replication configuration. The file system is writeable. Replication overwrite protection is <code>ENABLED</code> by default. </p> </li> <li> <p> <code>DISABLED</code> – The file system can be used as the destination file system in a replication configuration. The file system is read-only and can only be modified by EFS replication.</p> </li> <li> <p> <code>REPLICATING</code> – The file system is being used as the destination file system in a replication configuration. The file system is read-only and is only modified only by EFS replication.</p> </li> </ul> <p>If the replication configuration is deleted, the file system's replication overwrite protection is re-enabled, the file system becomes writeable.</p>"
+          "documentation":"<p>The status of the file system's replication overwrite protection.</p> <ul> <li> <p> <code>ENABLED</code> – The file system cannot be used as the destination file system in a replication configuration. The file system is writeable. Replication overwrite protection is <code>ENABLED</code> by default. </p> </li> <li> <p> <code>DISABLED</code> – The file system can be used as the destination file system in a replication configuration. The file system is read-only and can only be modified by EFS replication.</p> </li> <li> <p> <code>REPLICATING</code> – The file system is being used as the destination file system in a replication configuration. The file system is read-only and is only modified only by EFS replication.</p> </li> </ul> <p>If the replication configuration is deleted, the file system's replication overwrite protection is re-enabled and the file system becomes writeable.</p>"
         }
       }
     },
@@ -2439,7 +2505,7 @@
         },
         "ProvisionedThroughputInMibps":{
           "shape":"ProvisionedThroughputInMibps",
-          "documentation":"<p>(Optional) The throughput, measured in mebibytes per second (MiBps), that you want to provision for a file system that you're creating. Required if <code>ThroughputMode</code> is set to <code>provisioned</code>. Valid values are 1-3414 MiBps, with the upper limit depending on Region. To increase this limit, contact Amazon Web Services Support. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/limits.html#soft-limits\">Amazon EFS quotas that you can increase</a> in the <i>Amazon EFS User Guide</i>.</p>"
+          "documentation":"<p>(Optional) The throughput, measured in mebibytes per second (MiBps), that you want to provision for a file system that you're creating. Required if <code>ThroughputMode</code> is set to <code>provisioned</code>. Valid values are 1-3414 MiBps, with the upper limit depending on Region. To increase this limit, contact Amazon Web ServicesSupport. For more information, see <a href=\"https://docs.aws.amazon.com/efs/latest/ug/limits.html#soft-limits\">Amazon EFS quotas that you can increase</a> in the <i>Amazon EFS User Guide</i>.</p>"
         }
       }
     },

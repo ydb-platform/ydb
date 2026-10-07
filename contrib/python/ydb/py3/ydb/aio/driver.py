@@ -69,6 +69,7 @@ class Driver(pool.ConnectionPool):
             root_certificates,
             credentials,
             config_class=DriverConfig,
+            **kwargs,
         )
 
         super(Driver, self).__init__(config)

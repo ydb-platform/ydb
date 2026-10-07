@@ -30,8 +30,7 @@ void TWritesMonitor::OnFinishWrite(const ui64 dataSize, const ui32 writesCount /
 }
 
 TString TWritesMonitor::DebugString() const {
-    return TStringBuilder() << "{object=write_monitor;count_local=" << WritesInFlightLocal 
-                            << ";size_local=" << WritesSizeInFlightLocal
+    return TStringBuilder() << "{object=write_monitor;count_local=" << WritesInFlightLocal << ";size_local=" << WritesSizeInFlightLocal
                             << ";count_node=" << NOverload::TOverloadManagerServiceOperator::GetShardWritesInFly()
                             << ";size_node=" << NOverload::TOverloadManagerServiceOperator::GetShardWritesSizeInFly() << "}";
 }

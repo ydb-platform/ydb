@@ -24,14 +24,20 @@ struct TSchedulableTask : public std::enable_shared_from_this<TSchedulableTask> 
         return std::make_unique<TResumeEventType>(TAG_WAKEUP_RESUME);
     }
 
+    enum EUsageType {
+        CPU_DEFAULT,
+        CPU_RESUMED,
+        READ_DEFAULT,
+    };
+
     bool TryIncreaseUsage();
     void IncreaseUsage();
-    void DecreaseUsage(const TDuration& burstUsage, bool forcedResume);
+    void DecreaseUsage(TDuration burstUsage, EUsageType usageType);
 
     // Returns parent pool's 'fair-share' minus 'usage'
     size_t GetSpareUsage() const;
 
-    void IncreaseBurstThrottle(const TDuration& burstThrottle);
+    void IncreaseBurstThrottle(TDuration burstThrottle);
     void IncreaseThrottle();
     void DecreaseThrottle();
 

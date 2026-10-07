@@ -10,10 +10,18 @@ namespace NYql::NFmr {
 struct TFmrTableKeysBoundary;
 int CompareKeyRows(const TFmrTableKeysBoundary& lhs, const TFmrTableKeysBoundary& rhs);
 
+// Compares only the first numColumns key columns of two boundaries (a group/prefix comparison),
+// reusing their parsed markups - no re-serialization. Both must be parsed with a key that starts
+// with those numColumns columns.
+int CompareKeyRowPrefix(const TFmrTableKeysBoundary& lhs, const TFmrTableKeysBoundary& rhs, ui64 numColumns);
+
 struct TSortingColumns {
     std::vector<TString> Columns;
     std::vector<ESortOrder> SortOrders;
     bool operator==(const TSortingColumns&) const = default;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
 };
 
 struct TFmrTableKeysBoundary {

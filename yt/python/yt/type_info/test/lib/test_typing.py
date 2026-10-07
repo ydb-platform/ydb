@@ -3,7 +3,6 @@ import yt.type_info.typing as typing
 from yt.type_info import is_valid_type
 
 import pytest
-import six
 
 
 def test_primitive_types():
@@ -63,7 +62,7 @@ def test_compound_types():
         u"ой": typing.Uint64,
     ]
     assert is_valid_type(struct)
-    assert six.ensure_text(str(struct)) == u"Struct<'a': Uint8, 'b': Yson, 'ой': Uint64>"
+    assert str(struct) == u"Struct<'a': Uint8, 'b': Yson, 'ой': Uint64>"
     assert struct.name == "Struct"
     assert struct.items == (("a", typing.Uint8), ("b", typing.Yson), (u"ой", typing.Uint64))
 
@@ -96,7 +95,7 @@ def test_compound_types():
 
     tagged_ru = typing.Tagged[typing.String, u"мой_тэг"]
     assert is_valid_type(tagged_ru)
-    assert six.ensure_text(str(tagged_ru)) == u"Tagged<String, 'мой_тэг'>"
+    assert str(tagged_ru) == u"Tagged<String, 'мой_тэг'>"
     assert tagged_ru.name == "Tagged"
     assert tagged_ru.tag == u"мой_тэг"
     assert tagged_ru.item == typing.String

@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(StoragePool) {
         THiveSharedSettings settings;
         settings.CurrentConfig.SetStorageSelectStrategy(strategy);
         TStoragePoolInfo pool("pool1", &settings);
-        TEvControllerSelectGroupsResult::TGroupParameters group1;
+        TGroupMetrics::TGroupParameters group1;
         group1.MutableAssuredResources()->SetIOPS(1000);
         group1.MutableAssuredResources()->SetReadThroughput(1000);
         group1.MutableAssuredResources()->SetSpace(1000000);
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(StoragePool) {
 
         for (int i = 0; i < TABLETS1 * CHANNELS; ++i) {
             int channel = i % CHANNELS;
-            const TEvControllerSelectGroupsResult::TGroupParameters* found = pool.FindFreeAllocationUnit(checkUnit1);
+            const TGroupMetrics::TGroupParameters* found = pool.FindFreeAllocationUnit(checkUnit1);
             UNIT_ASSERT(found);
             ui32 groupId = found->GetGroupID();
             groupUnits[groupId]++;
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(StoragePool) {
 
             for (int i = 0; i < TABLETS2 * CHANNELS; ++i) {
                 int channel = i % CHANNELS;
-                const TEvControllerSelectGroupsResult::TGroupParameters* found = pool.FindFreeAllocationUnit(checkUnit1);
+                const TGroupMetrics::TGroupParameters* found = pool.FindFreeAllocationUnit(checkUnit1);
                 UNIT_ASSERT(found);
                 ui32 groupId = found->GetGroupID();
                 groupUnits[groupId]++;
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(StoragePool) {
         THiveSharedSettings settings;
         settings.CurrentConfig.SetStorageSelectStrategy(strategy);
         TStoragePoolInfo pool("pool1", &settings);
-        TEvControllerSelectGroupsResult::TGroupParameters group1;
+        TGroupMetrics::TGroupParameters group1;
         group1.MutableAssuredResources()->SetIOPS(1000);
         group1.MutableAssuredResources()->SetReadThroughput(1000);
         group1.MutableAssuredResources()->SetSpace(1000000);
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(StoragePool) {
             return group.IsMatchesParameters(unit1);
         };
         for (int i = 0; i < 5000; ++i) { // overflow
-            const TEvControllerSelectGroupsResult::TGroupParameters* found = pool.FindFreeAllocationUnit(checkUnit1);
+            const TGroupMetrics::TGroupParameters* found = pool.FindFreeAllocationUnit(checkUnit1);
             UNIT_ASSERT(found);
             ui32 groupId = found->GetGroupID();
             groupUnits[groupId]++;

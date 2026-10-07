@@ -137,10 +137,18 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        if (Params.Has("path_id")) {
+        if (Params.Has("path_id") || Params.Has("schemeshard_id")) {
             if (!Viewer->CheckAccessMonitoring(GetRequest())) {
-                // it's dangerous because we don't check access to specific path here
-                ReplyAndPassAway(GETHTTPACCESSDENIED("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
+                // it's dangerous because we don't check access to scoped ids here
+                YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Access denied: `path_id`/`schemeshard_id` require the monitoring access level",
+                    {"logPrefix", GetLogPrefix()},
+                    {"user", GetUserSID()},
+                    {"database", Database},
+                    {"pathId", Params.Get("path_id")},
+                    {"schemeShardId", Params.Get("schemeshard_id")});
+                ReplyAndPassAway(
+                    GETHTTPACCESSDENIED("text/plain", "`path_id` and `schemeshard_id` require monitoring access level"),
+                    "Access denied");
                 return;
             }
         }
@@ -261,6 +269,8 @@ public:
                 return NKikimrSchemeOp::EPathTypeSecret;
             case TNavigate::KindStreamingQuery:
                 return NKikimrSchemeOp::EPathTypeStreamingQuery;
+            case TNavigate::KindTestShardSet:
+                return NKikimrSchemeOp::EPathTypeTestShardSet;
             case TNavigate::KindIndex:
                 return NKikimrSchemeOp::EPathTypeTableIndex;
             case TNavigate::KindUnknown:
@@ -418,11 +428,17 @@ public:
             return;
         }
 
-        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, true, NYql::GetAllExternalDataSourceTypes())};
+        // Do not expose the packed protobuf payload if we cannot decode it.
+        json["PathDescription"]["ExternalTableDescription"].EraseValue("Content");
+
+        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, true, NYql::GetAllExternalDataSourceDatabaseTypes())};
         const auto& sourceType = describe->GetPathDescription().GetExternalTableDescription().GetSourceType();
+        const auto databaseType = NYql::DatabaseTypeFromString(sourceType);
+        if (!databaseType) {
+            return;
+        }
         try {
-            json["PathDescription"]["ExternalTableDescription"].EraseValue("Content");
-            auto source = externalSourceFactory->GetOrCreate(sourceType);
+            auto source = externalSourceFactory->GetOrCreate(*databaseType);
             auto parameters = source->GetParameters(content);
             for (const auto& [key, items]: parameters) {
                 NJson::TJsonValue array{NJson::EJsonValueType::JSON_ARRAY};
@@ -432,7 +448,10 @@ public:
                 json["PathDescription"]["ExternalTableDescription"]["Content"][key] = array;
             }
         } catch (...) {
-            BLOG_CRIT("Сan't unpack content for external table: " << sourceType << ", error: " << CurrentExceptionMessage());
+            YDB_LOG_CRIT_COMP(NKikimrServices::VIEWER, "Сan't unpack content for external table",
+                {"logPrefix", GetLogPrefix()},
+                {"sourceType", sourceType},
+                {"error", CurrentExceptionMessage()});
         }
     }
 

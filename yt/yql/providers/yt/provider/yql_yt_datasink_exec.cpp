@@ -109,7 +109,7 @@ public:
         AddHandler({TYtReduce::CallableName()}, RequireForTransientOp(), Hndl(&TYtDataSinkExecTransformer::HandleReduce));
         AddHandler({TYtOutput::CallableName()}, RequireFirst(), Pass());
         AddHandler({TYtPublish::CallableName()}, RequireAllOf({TYtPublish::idx_World, TYtPublish::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandlePublish));
-        AddHandler({TYtCreateView::CallableName(), TYtDropTable::CallableName(), TYtDropView::CallableName()}, RequireFirst(),
+        AddHandler({TYtCreateSymlink::CallableName(), TYtCreateView::CallableName(), TYtDropTable::CallableName(), TYtDropSymlink::CallableName(), TYtDropView::CallableName()}, RequireFirst(),
             Hndl(&TYtDataSinkExecTransformer::HandleIsolatedOp));
         AddHandler({TCoCommit::CallableName()}, RequireFirst(), Hndl(&TYtDataSinkExecTransformer::HandleCommit));
         AddHandler({TYtEquiJoin::CallableName()}, RequireSequenceOf({TYtEquiJoin::idx_World, TYtEquiJoin::idx_Input}),
@@ -119,6 +119,7 @@ public:
         AddHandler({TYtDqProcessWrite::CallableName()}, RequireFirst(),
             Hndl(&TYtDataSinkExecTransformer::HandleYtDqProcessWrite));
         AddHandler({TYtTryFirst::CallableName()}, RequireFirst(), Hndl(&TYtDataSinkExecTransformer::HandleTryFirst));
+        AddHandler({TYtPersist::CallableName()}, RequireAllOf({TYtPersist::idx_World, TYtPersist::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandleOutputOp<true>));
     }
 
     void Rewind() override {
@@ -372,6 +373,9 @@ private:
                 .SecureParams(secureParams)
                 .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                 .LangVer(State_->Types->LangVer)
+                .RuntimeSettings(State_->Types->RuntimeSettings)
+                .BridgeMode(State_->Types->BridgeMode)
+                .BridgeBinaryPath(State_->Types->UdfBridgeBinaryPath)
                 .AdditionalSecurityTags(addSecTags)
                 .LayersPaths(std::move(finalCypressPaths))
             );
@@ -547,6 +551,12 @@ private:
 
         auto config = State_->Configuration->GetSettingsForNode(*input);
 
+        TExprNode::TListType needCalc = GetNodesToCalculate(input);
+        if (!needCalc.empty()) {
+            YQL_CLOG(DEBUG, ProviderYt) << "Calculating nodes for " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
+            return CalculateNodes(State_, input, cluster, needCalc, ctx);
+        }
+
         const auto mode = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::Mode);
         const bool initial = NYql::HasSetting(publish.Settings().Ref(), EYtSettingType::Initial);
 
@@ -667,7 +677,7 @@ private:
     TStatusCallbackPair HandleYtDqProcessWrite(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         const TYtDqProcessWrite op(input);
         const auto section = op.Output().Cast<TYtOutSection>();
-        Y_ENSURE(section.Size() == 1, "TYtDqProcessWrite expects 1 output table but got " << section.Size());
+        YQL_ENSURE(section.Size() == 1, "YtDqProcessWrite expects 1 output table but got " << section.Size());
         const TYtOutTable tmpTable = section.Item(0);
 
         if (AssignRuntimeCluster(op, output, ctx)) {
@@ -717,7 +727,7 @@ private:
         }
         else {
             // Fourth iteration: everything is done, return ok status.
-            Y_ENSURE(input->GetResult().Type() == TExprNode::World, "Unexpected result type: " << input->GetResult().Type());
+            YQL_ENSURE(input->GetResult().Type() == TExprNode::World, "Unexpected result type: " << input->GetResult().Type());
             return SyncOk();
         }
     }
@@ -819,7 +829,6 @@ private:
             const auto clusterStr = op.DataSink().Cluster().StringValue();
             const auto config = State_->Configuration->GetSettingsForNode(*input);
             const auto tmpFolder = GetTablesTmpFolder(*config, clusterStr, State_->UseSecureTmp, State_->Types->OperationOptions);
-            const ui64 nativeTypeCompat = config->NativeYtTypeCompatibility.Get(clusterStr).GetOrElse(NTCF_LEGACY);
 
             delegatedNode = input->ChildPtr(TYtDqProcessWrite::idx_Input);
 
@@ -841,7 +850,6 @@ private:
                 auto rowSpec = TYqlRowSpecInfo(tmpTable.RowSpec());
                 NYT::TNode spec;
                 rowSpec.FillCodecNode(spec[YqlRowSpecAttribute]);
-                UpdateNativeYtTypeFlags(spec, nativeTypeCompat);
                 outSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(spec));
                 type = NCommon::TypeToYsonNode(rowSpec.GetExtendedType(ctx));
             }

@@ -7,7 +7,7 @@ import yatest.common
 
 
 def test_libc():
-    mrjob_dir = yatest.common.binary_path('yt/yql/tools/mrjob')
+    mrjob_dir = yatest.common.binary_path('yt/yql/tools/mrjob/impl')
     mrjob_path = os.path.join(mrjob_dir, 'mrjob')
     tools_path = os.path.dirname(yatest.common.cxx_compiler_path())
     nm_path = os.path.join(tools_path, 'llvm-nm')

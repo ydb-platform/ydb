@@ -95,7 +95,7 @@ constexpr int MaxColumnGroupLength = 256;
 
 // Only for dynamic tables.
 constexpr int MaxValuesPerRow = 1024;
-constexpr int MaxRowsPerRowset = 5 * 1024 * 1024;
+constexpr int MaxRowsPerRowset = 15 * 1024 * 1024;
 constexpr i64 MaxStringValueLength = 16_MB;
 constexpr i64 MaxAnyValueLength = 16_MB;
 constexpr i64 MaxCompositeValueLength = 16_MB;
@@ -136,6 +136,8 @@ extern const std::string TimestampColumnPrefix;
 extern const std::string CumulativeDataWeightColumnName;
 extern const std::string EmptyValueColumnName;
 extern const std::string SequenceNumberColumnName;
+extern const std::string ShuffleProducerIdColumnName;
+extern const std::string ShuffleRowIdColumnName;
 
 constexpr int TypicalHunkColumnCount = 8;
 
@@ -201,6 +203,7 @@ YT_DEFINE_ERROR_ENUM(
     ((NameTableUpdateFailed)             (327))
     ((InvalidTableChunkFormat)           (328))
     ((UnableToSynchronizeReplicationCard)(329))
+    ((RequiredWriteLockMissing)          (330))
 );
 
 DEFINE_ENUM(EControlAttribute,
@@ -401,6 +404,7 @@ DECLARE_REFCOUNTED_STRUCT(TRetentionConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TTypeConversionConfig)
 DECLARE_REFCOUNTED_STRUCT(TInsertRowsFormatConfig)
+DECLARE_REFCOUNTED_STRUCT(TPushQueueProducerFormatConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TChunkReaderOptions)
 DECLARE_REFCOUNTED_STRUCT(TChunkWriterOptions)
@@ -446,6 +450,7 @@ class TVariantTupleLogicalType;
 class TVariantStructLogicalType;
 class TDictLogicalType;
 class TTaggedLogicalType;
+class TAggregateStateLogicalType;
 
 struct TStructField;
 

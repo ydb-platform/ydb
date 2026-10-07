@@ -6,18 +6,22 @@
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/control/lib/dynamic_control_board_impl.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <util/random/fast.h>
 #include <util/random/shuffle.h>
 #include <util/generic/queue.h>
+#include <util/generic/ymath.h>
 
 #include <algorithm>
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <tuple>
 
 namespace NKikimr {
 
@@ -25,6 +29,20 @@ namespace {
 
 constexpr size_t SimulatedBufferSizeBytes = 128ull << 20; // 128 MiB
 constexpr size_t SimulatedBufferAlignment = 4096;
+
+using TAreaProto = NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea;
+
+TAreaProto::EAreaInit ResolveAreaInitType(bool isReadLoad, const TAreaProto& area) {
+    if (!isReadLoad) {
+        return area.GetInitType();
+    }
+    if (!area.HasInitType() || area.GetInitType() == TAreaProto::INIT_ZEROES_FULL) {
+        return TAreaProto::INIT_ZEROES_FULL;
+    }
+    ythrow TLoadActorException()
+        << "read load requires InitType INIT_ZEROES_FULL (omit InitType to use it); "
+        << "INIT_NONE and INIT_ZEROES_FIRST_BLOCK leave unread slots as in-memory zeros";
+}
 
 class TAlignedPayloadChunk : public IContiguousChunk {
     std::unique_ptr<char, decltype(&free)> Owner;
@@ -144,11 +162,10 @@ private:
 };
 
 class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
-    static constexpr ui32 WriteSizeBytes = 4096;
-
     struct TAreaInfo {
-        // write positions as indices for every WriteSizeBytes
+        // Request positions, with separate queues for measured I/O and background-write sizes.
         TDeque<ui32> IOQueue;
+        TDeque<ui32> BackgroundWriteIOQueue;
         ui32 AreaSizeBytes = 0;
         ui32 Weight = 1;
         bool Sequential = true;
@@ -162,9 +179,14 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
         ui32 InitNextPosition = 0;
     };
     struct TRequestInfo {
+        TActorId Destination;
+        ui64 VChunkIndex = 0;
+        ui32 OffsetInChunk = 0;
         ui32 Size;
+        bool IsWrite = false;
         TInstant StartTime;
         bool IsInit = false;
+        bool IsBackground = false;
     };
 
     struct TRequestStat {
@@ -173,7 +195,12 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
         TDuration Latency;
     };
 
-    THashMap<ui64, TRequestInfo> RequestInfo;
+    absl::flat_hash_map<ui64, TRequestInfo> RequestInfo;
+    using TLocation = std::tuple<TActorId, ui64>;
+    using TRequestCookies = absl::flat_hash_set<ui64>;
+    using TLocationIndex = absl::flat_hash_map<TLocation, TRequestCookies, THash<TLocation>>;
+    TLocationIndex ActiveByLocation;
+    TLocationIndex WritesByLocation;
     ui64 NextRequestIdx = 0;
 
     const TActorId Parent;
@@ -200,6 +227,8 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
     bool Finished = false;
     bool Connected = false;
     bool DisconnectSent = false;
+    bool StopAdmission = false;
+    TString TerminalError;
     bool TestStarted = false;
 
     TVector<TAreaInfo> Areas;
@@ -214,8 +243,12 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
     TRope ZeroData;
     bool AlignSourceData = true;
     bool IsReadLoad = false;
+    bool EnableChecksums = true;
+    ui32 IoSizeBytes = 4096;
+    float BackgroundWriteRatio = 0;
+    ui32 BackgroundWriteSizeBytes = 4096;
 
-    TString IOSizeInfo = ToString(WriteSizeBytes);
+    TString IOSizeInfo = ToString(IoSizeBytes);
     TString SequentialInfo = "unknown";
 
     ui64 ExpectedChunkSizeBytes = 0;
@@ -226,6 +259,8 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
     ui64 RequestsSent = 0;
     ui64 RequestsOK = 0;
     ui64 RequestsError = 0;
+    ui64 MeasuredReadsSent = 0;
+    ui64 BackgroundWritesSent = 0;
 
     // Monitoring
     TIntrusivePtr<::NMonitoring::TDynamicCounters> LoadCounters;
@@ -241,11 +276,13 @@ public:
     }
 
     TDDiskLoadTestActor(const NKikimr::TEvLoadTestRequest::TDDiskLoad& cmd, const TActorId& parent,
-            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 /*index*/, ui64 tag)
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 /*index*/, ui64 tag,
+            bool enableChecksums)
         : Parent(parent)
         , Tag(tag)
         , MaxInFlight(4, 0, 65536)
         , Rng(Now().GetValue())
+        , EnableChecksums(enableChecksums)
         , Report(new TEvLoad::TLoadReport())
     {
         VERIFY_PARAM(DurationSeconds);
@@ -256,6 +293,14 @@ public:
 
         IsReadLoad = cmd.GetIsReadLoad();
         Report->LoadType = IsReadLoad ? TEvLoad::TLoadReport::LOAD_READ : TEvLoad::TLoadReport::LOAD_WRITE;
+        BackgroundWriteRatio = cmd.GetBackgroundWriteRatio();
+        if (!IsValidFloat(BackgroundWriteRatio) || BackgroundWriteRatio < 0 || BackgroundWriteRatio > 1) {
+            ythrow TLoadActorException()
+                << "BackgroundWriteRatio must be a finite value in [0, 1] (writes per measured read)";
+        }
+        if (!IsReadLoad && BackgroundWriteRatio != 0) {
+            ythrow TLoadActorException() << "BackgroundWriteRatio may only be used with IsReadLoad";
+        }
 
         VERIFY_PARAM(InFlight);
         MaxInFlight = cmd.GetInFlight();
@@ -279,12 +324,28 @@ public:
         Credentials.TabletId = Tag ? Tag : 1;
         Credentials.Generation = 1;
 
+        IoSizeBytes = cmd.GetIoSizeBytes();
+        Y_ABORT_UNLESS(IoSizeBytes, "IoSizeBytes must be non-zero");
+        IOSizeInfo = ToString(IoSizeBytes);
+
         VERIFY_PARAM(ExpectedChunkSize);
         ExpectedChunkSizeBytes = cmd.GetExpectedChunkSize();
         Y_ABORT_UNLESS(ExpectedChunkSizeBytes, "ExpectedChunkSize must be non-zero");
         Y_ABORT_UNLESS(ExpectedChunkSizeBytes <= Max<ui32>(), "ExpectedChunkSize must fit into 32-bit offset");
-        Y_ABORT_UNLESS(ExpectedChunkSizeBytes % WriteSizeBytes == 0,
-            "ExpectedChunkSize must be divisible by WriteSizeBytes");
+        Y_ABORT_UNLESS(ExpectedChunkSizeBytes % IoSizeBytes == 0,
+            "ExpectedChunkSize must be divisible by IoSizeBytes");
+        if (BackgroundWriteRatio > 0) {
+            const ui64 backgroundWriteSizeBytes = static_cast<ui64>(cmd.GetBackgroundWriteSizeKiB()) << 10;
+            if (!(backgroundWriteSizeBytes >= 4096 && backgroundWriteSizeBytes <= Max<ui32>()
+                    && (backgroundWriteSizeBytes & (backgroundWriteSizeBytes - 1)) == 0)) {
+                ythrow TLoadActorException()
+                    << "BackgroundWriteSizeKiB must specify a power-of-two size of at least 4 KiB";
+            }
+            BackgroundWriteSizeBytes = static_cast<ui32>(backgroundWriteSizeBytes);
+            if (ExpectedChunkSizeBytes % BackgroundWriteSizeBytes != 0) {
+                ythrow TLoadActorException() << "ExpectedChunkSize must be divisible by background write size";
+            }
+        }
 
         Simulate = cmd.HasSimulate() ? cmd.GetSimulate() : false;
         SimulateActorsCount = cmd.GetSimulateActorsCount();
@@ -299,17 +360,21 @@ public:
             if (!areaSize) {
                 ythrow TLoadActorException() << "area.AreaSize field is missing or zero";
             }
-            if (areaSize % WriteSizeBytes != 0) {
-                ythrow TLoadActorException() << "area.AreaSize must be divisible by WriteSizeBytes";
+            if (areaSize % IoSizeBytes != 0) {
+                ythrow TLoadActorException() << "area.AreaSize must be divisible by IoSizeBytes";
+            }
+            if (BackgroundWriteRatio > 0 && areaSize % BackgroundWriteSizeBytes != 0) {
+                ythrow TLoadActorException() << "area.AreaSize must be divisible by background write size";
             }
             Y_ABORT_UNLESS(area.GetWeight(), "area.Weight must be non-zero");
             const ui32 numChunks = (areaSize + ExpectedChunkSizeBytes - 1) / ExpectedChunkSizeBytes;
             Areas.push_back(TAreaInfo{
                 {},
+                {},
                 areaSize,
                 area.GetWeight(),
                 area.GetSequential(),
-                area.GetInitType(),
+                ResolveAreaInitType(IsReadLoad, area),
                 nextBaseChunk,
                 numChunks,
                 0,
@@ -378,23 +443,28 @@ public:
 
         Connected = true;
         Credentials.DDiskInstanceGuid = msg.GetDDiskInstanceGuid();
+        Credentials.ConnectionToken.emplace(msg.GetConnectionToken());
 
         PrepareDataAndStart(ctx);
     }
 
     void PrepareDataAndStart(const TActorContext& ctx) {
-        if (!IsReadLoad) {
-            RandomData = BuildPayload(false);
+        if (!IsReadLoad || BackgroundWriteRatio > 0) {
+            RandomData = BuildPayload(IsReadLoad ? BackgroundWriteSizeBytes : IoSizeBytes, false);
         }
-        ZeroData = BuildPayload(true);
+        ZeroData = BuildPayload(IoSizeBytes, true);
 
         for (auto& area : Areas) {
-            const ui32 positions = area.AreaSizeBytes / WriteSizeBytes;
-            Y_ABORT_UNLESS(positions, "WriteSizeBytes must be smaller than AreaSizeBytes");
+            const ui32 positions = area.AreaSizeBytes / IoSizeBytes;
+            Y_ABORT_UNLESS(positions, "IoSizeBytes must be smaller than AreaSizeBytes");
             if (area.InitType != NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea::INIT_NONE) {
                 Initializing = true;
             }
             FillPositions(area.IOQueue, positions, area.Sequential);
+            if (BackgroundWriteRatio > 0) {
+                FillPositions(area.BackgroundWriteIOQueue,
+                    area.AreaSizeBytes / BackgroundWriteSizeBytes, area.Sequential);
+            }
         }
         SendRequests(ctx);
     }
@@ -421,8 +491,7 @@ public:
         }
     }
 
-    TRope BuildPayload(bool zeroFill) {
-        const size_t size = WriteSizeBytes;
+    TRope BuildPayload(ui32 size, bool zeroFill) {
         const size_t allocSize = size + SimulatedBufferAlignment;
         auto storage = std::unique_ptr<char, decltype(&free)>(static_cast<char*>(std::malloc(allocSize)), &free);
         Y_ABORT_UNLESS(storage, "Failed to allocate payload buffer");
@@ -453,7 +522,7 @@ public:
                 }
             } else if (area.InitType ==
                     NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea::INIT_ZEROES_FULL) {
-                const ui32 positions = area.AreaSizeBytes / WriteSizeBytes;
+                const ui32 positions = area.AreaSizeBytes / IoSizeBytes;
                 if (area.InitNextPosition < positions) {
                     return true;
                 }
@@ -474,6 +543,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void HandlePoisonPill(const TActorContext& ctx) {
+        StopAdmission = true;
         MaxInFlight = 0;
         CheckDie(ctx);
     }
@@ -483,12 +553,14 @@ public:
             return;
         }
         Finished = true;
+        Report->MeasuredReadsSent = MeasuredReadsSent;
+        Report->BackgroundWritesSent = BackgroundWritesSent;
         ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, status));
         Die(ctx);
     }
 
     void CheckDie(const TActorContext& ctx) {
-        if (!MaxInFlight && !InFlight) {
+        if ((StopAdmission || !MaxInFlight) && !InFlight) {
             if (Simulate) {
                 if (!SimulatedServiceStopped) {
                     SimulatedServiceStopped = true;
@@ -496,22 +568,24 @@ public:
                         ctx.Send(id, new TEvents::TEvPoisonPill);
                     }
                 }
-                FinishAndDie(ctx);
+                FinishAndDie(ctx, TerminalError ? TerminalError : "OK");
                 return;
             }
             if (Connected && !DisconnectSent) {
                 DisconnectSent = true;
                 auto ev = std::make_unique<NDDisk::TEvDisconnect>();
-                Credentials.Serialize(ev->Record.MutableCredentials());
+                Credentials.SerializeForRequest(ev->Record.MutableCredentials());
                 SendRequest(ctx, std::move(ev));
-            } else {
-                FinishAndDie(ctx);
+            } else if (!Connected) {
+                FinishAndDie(ctx, TerminalError ? TerminalError : "OK");
             }
         }
     }
 
     void Handle(NDDisk::TEvDisconnectResult::TPtr& /*ev*/, const TActorContext& ctx) {
-        FinishAndDie(ctx);
+        if (DisconnectSent) {
+            FinishAndDie(ctx, TerminalError ? TerminalError : "OK");
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -543,8 +617,61 @@ public:
     // DDisk I/O
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    TActorId NextIoDestination() const {
+        return Simulate && !SimulatedServiceIds.empty()
+            ? SimulatedServiceIds[NextSimulatedServiceIdx % SimulatedServiceIds.size()]
+            : DDiskServiceId;
+    }
+
+    bool Conflicts(const TActorId& destination, ui64 vChunkIndex, ui32 offset,
+            ui32 size, bool isWrite) const
+    {
+        const auto& index = isWrite ? ActiveByLocation : WritesByLocation;
+        const auto bucket = index.find({destination, vChunkIndex});
+        if (bucket == index.end()) {
+            return false;
+        }
+        const ui64 end = ui64(offset) + size;
+        for (ui64 cookie : bucket->second) {
+            const auto request = RequestInfo.find(cookie);
+            Y_ABORT_UNLESS(request != RequestInfo.end());
+            const auto& range = request->second;
+            if (range.OffsetInChunk < end && ui64(range.OffsetInChunk) + range.Size > offset) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static void RemoveFromIndex(TLocationIndex& index,
+            const TRequestInfo& request, ui64 requestIdx)
+    {
+        const TLocation location{request.Destination, request.VChunkIndex};
+        auto bucket = index.find(location);
+        Y_ABORT_UNLESS(bucket != index.end());
+        Y_ABORT_UNLESS(bucket->second.erase(requestIdx), "missing admitted DDisk range");
+        if (bucket->second.empty()) {
+            index.erase(bucket);
+        }
+    }
+
+    template<typename TRequest>
+    void SendIoRequest(const TActorContext& ctx, const TActorId& destination,
+            std::unique_ptr<TRequest> request, ui64 cookie)
+    {
+        ctx.Send(destination, request.release(), 0, cookie);
+        if (Simulate && !SimulatedServiceIds.empty()) {
+            ++NextSimulatedServiceIdx;
+        }
+    }
+
     void SendRequests(const TActorContext& ctx) {
         if (!Connected) {
+            return;
+        }
+
+        if (StopAdmission) {
+            CheckDie(ctx);
             return;
         }
 
@@ -579,41 +706,83 @@ public:
                     ctx.Schedule(nextRequest - now, new TEvents::TEvWakeup);
                     break;
                 }
-                LastRequest = now;
-                IntervalMs = 0; // To enforce regeneration of new random interval
             }
 
-            TAreaInfo& area = PickAreaByWeight();
-            if (area.IOQueue.empty()) {
-                const ui32 positions = area.AreaSizeBytes / WriteSizeBytes;
-                Y_ABORT_UNLESS(positions, "WriteSizeBytes must be smaller than AreaSizeBytes");
-                FillPositions(area.IOQueue, positions, area.Sequential);
-            }
-            const ui32 ioIndex = area.IOQueue.front();
-            area.IOQueue.pop_front();
-            area.IOQueue.push_back(ioIndex);
+            const bool isBackgroundWrite = IsReadLoad
+                && BackgroundWriteRatio > 0
+                && MeasuredReadsSent > 0
+                && static_cast<double>(BackgroundWritesSent)
+                    < static_cast<double>(MeasuredReadsSent) * BackgroundWriteRatio;
+            const ui32 size = isBackgroundWrite ? BackgroundWriteSizeBytes : IoSizeBytes;
 
-            const ui32 offset = ioIndex * WriteSizeBytes;
-            const ui32 size = WriteSizeBytes;
-            Report->Size = size;
+            const TActorId destination = NextIoDestination();
+            const ui32 startArea = &PickAreaByWeight() - Areas.data();
+            TDeque<ui32>* selectedQueue = nullptr;
+            size_t selectedPosition = 0;
+            ui64 vChunkIndex = 0;
+            ui32 offsetInChunk = 0;
+            // Search each candidate at most once. A fully occupied range waits for a
+            // completion to retry rather than spinning or reusing a submitted interval.
+            for (ui32 areaStep = 0; areaStep < Areas.size() && !selectedQueue; ++areaStep) {
+                auto& area = Areas[(startArea + areaStep) % Areas.size()];
+                auto& queue = isBackgroundWrite ? area.BackgroundWriteIOQueue : area.IOQueue;
+                if (queue.empty()) {
+                    const ui32 positions = area.AreaSizeBytes / size;
+                    Y_ABORT_UNLESS(positions, "request size must be smaller than AreaSizeBytes");
+                    FillPositions(queue, positions, area.Sequential);
+                }
+                for (size_t pos = 0; pos < queue.size(); ++pos) {
+                    const ui32 offset = queue[pos] * size;
+                    const ui64 chunk = area.BaseChunkIndex + offset / ExpectedChunkSizeBytes;
+                    const ui32 chunkOffset = offset % ExpectedChunkSizeBytes;
+                    if (!Conflicts(destination, chunk, chunkOffset, size,
+                            !IsReadLoad || isBackgroundWrite)) {
+                        selectedQueue = &queue;
+                        selectedPosition = pos;
+                        vChunkIndex = chunk;
+                        offsetInChunk = chunkOffset;
+                        break;
+                    }
+                }
+            }
+            if (!selectedQueue) {
+                break;
+            }
+            const ui32 selectedIndex = (*selectedQueue)[selectedPosition];
+            selectedQueue->erase(selectedQueue->begin() + selectedPosition);
+            selectedQueue->push_back(selectedIndex);
+            if (!isBackgroundWrite) {
+                Report->Size = size;
+            }
 
             const TInstant now = TAppData::TimeProvider->Now();
-            const ui64 vChunkIndex = area.BaseChunkIndex + offset / ExpectedChunkSizeBytes;
-            const ui32 offsetInChunk = offset % ExpectedChunkSizeBytes;
+            LastRequest = now;
+            IntervalMs = 0;
+            const ui64 requestIdx = NewTRequestInfo(destination, vChunkIndex,
+                offsetInChunk, size, !IsReadLoad || isBackgroundWrite, now, false, isBackgroundWrite);
 
-            const ui64 requestIdx = NewTRequestInfo(size, now, false);
-
-            if (IsReadLoad) {
+            if (IsReadLoad && !isBackgroundWrite) {
                 auto ev = std::make_unique<NDDisk::TEvRead>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TReadInstruction(false));
-                SendRequest(ctx, std::move(ev), requestIdx);
+                SendIoRequest(ctx, destination, std::move(ev), requestIdx);
             } else {
                 auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
-                ev->AddPayload(TRope(RandomData));
-                SendRequest(ctx, std::move(ev), requestIdx);
+                if (EnableChecksums) {
+                    ev->AddPayloadThenChecksum(TRope(RandomData));
+                } else {
+                    ev->AddPayload(TRope(RandomData));
+                }
+                SendIoRequest(ctx, destination, std::move(ev), requestIdx);
             }
-            ++RequestsSent;
+            if (isBackgroundWrite) {
+                ++BackgroundWritesSent;
+            } else {
+                ++RequestsSent;
+                if (IsReadLoad) {
+                    ++MeasuredReadsSent;
+                }
+            }
             ++InFlight;
         }
 
@@ -621,7 +790,7 @@ public:
     }
 
     void SendInitRequests(const TActorContext& ctx) {
-        while (InFlight < InitInFlightMax) {
+        while (!StopAdmission && InFlight < InitInFlightMax) {
             bool sent = false;
             for (ui32 i = 0; i < Areas.size(); ++i) {
                 const ui32 idx = (CurrentInitArea + i) % Areas.size();
@@ -641,23 +810,33 @@ public:
                     vChunkIndex = area.BaseChunkIndex + area.InitNextChunk;
                     offsetInChunk = 0;
                 } else {
-                    const ui32 positions = area.AreaSizeBytes / WriteSizeBytes;
+                    const ui32 positions = area.AreaSizeBytes / IoSizeBytes;
                     if (area.InitNextPosition >= positions) {
                         continue;
                     }
-                    offset = area.InitNextPosition * WriteSizeBytes;
+                    offset = area.InitNextPosition * IoSizeBytes;
                     vChunkIndex = area.BaseChunkIndex + offset / ExpectedChunkSizeBytes;
                     offsetInChunk = offset % ExpectedChunkSizeBytes;
                 }
 
-                const ui32 size = WriteSizeBytes;
+                const ui32 size = IoSizeBytes;
+
+                const TActorId destination = NextIoDestination();
+                if (Conflicts(destination, vChunkIndex, offsetInChunk, size, true)) {
+                    continue;
+                }
 
                 const TInstant now = TAppData::TimeProvider->Now();
-                const ui64 requestIdx = NewTRequestInfo(size, now, true);
+                const ui64 requestIdx = NewTRequestInfo(destination, vChunkIndex,
+                    offsetInChunk, size, true, now, true);
                 auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
-                ev->AddPayload(TRope(ZeroData));
-                SendRequest(ctx, std::move(ev), requestIdx);
+                if (EnableChecksums) {
+                    ev->AddPayloadThenChecksum(TRope(ZeroData));
+                } else {
+                    ev->AddPayload(TRope(ZeroData));
+                }
+                SendIoRequest(ctx, destination, std::move(ev), requestIdx);
                 ++InFlight;
 
                 if (area.InitType ==
@@ -676,31 +855,71 @@ public:
             }
         }
 
-        if (!HasPendingInit() && InFlight == 0) {
+        if (!StopAdmission && !HasPendingInit() && InFlight == 0) {
             Initializing = false;
             SendRequests(ctx);
         }
     }
 
     void Handle(NDDisk::TEvWriteResult::TPtr& ev, const TActorContext& ctx) {
+        const ui64 requestIdx = ev->Cookie;
+        const auto request = RequestInfo.find(requestIdx);
+        if (request == RequestInfo.end() || !request->second.IsWrite) {
+            return; // duplicate/stale cookie or response for a different I/O kind
+        }
         const auto& msg = ev->Get()->Record;
         const bool ok = msg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
-        const ui64 requestIdx = ev->Cookie;
+        if (!ok) {
+            TStringStream str;
+            str << "TEvWriteResult error, Status# "
+                << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
+                << " ErrorReason# " << msg.GetErrorReason();
+            LOG_ERROR(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
+            if (!TerminalError) {
+                TerminalError = str.Str();
+            }
+            StopAdmission = true;
+            MaxInFlight = 0;
+        }
         FinishRequest(ctx, requestIdx, ok);
         CheckDie(ctx);
     }
 
     void Handle(NDDisk::TEvReadResult::TPtr& ev, const TActorContext& ctx) {
+        const ui64 requestIdx = ev->Cookie;
+        const auto request = RequestInfo.find(requestIdx);
+        if (request == RequestInfo.end() || request->second.IsWrite) {
+            return; // duplicate/stale cookie or response for a different I/O kind
+        }
         const auto& msg = ev->Get()->Record;
         const bool ok = msg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
-        const ui64 requestIdx = ev->Cookie;
+        if (!ok) {
+            TStringStream str;
+            str << "TEvReadResult error, Status# "
+                << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
+                << " ErrorReason# " << msg.GetErrorReason();
+            LOG_ERROR(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
+            if (!TerminalError) {
+                TerminalError = str.Str();
+            }
+            StopAdmission = true;
+            MaxInFlight = 0;
+        }
         FinishRequest(ctx, requestIdx, ok);
         CheckDie(ctx);
     }
 
-    ui64 NewTRequestInfo(ui32 size, TInstant startTime, bool isInit) {
+    ui64 NewTRequestInfo(TActorId destination, ui64 vChunkIndex, ui32 offsetInChunk,
+            ui32 size, bool isWrite, TInstant startTime, bool isInit, bool isBackground = false)
+    {
         const ui64 requestIdx = NextRequestIdx++;
-        RequestInfo.emplace(requestIdx, TRequestInfo{size, startTime, isInit});
+        RequestInfo.emplace(requestIdx, TRequestInfo{destination, vChunkIndex, offsetInChunk,
+            size, isWrite, startTime, isInit, isBackground});
+        const TLocation location{destination, vChunkIndex};
+        ActiveByLocation[location].insert(requestIdx);
+        if (isWrite) {
+            WritesByLocation[location].insert(requestIdx);
+        }
         return requestIdx;
     }
 
@@ -712,7 +931,7 @@ public:
         }
         const TRequestInfo& request = it->second;
 
-        if (!request.IsInit) {
+        if (!request.IsInit && !request.IsBackground) {
             if (ok) {
                 ++RequestsOK;
             } else {
@@ -735,6 +954,10 @@ public:
             TimeSeries.erase(TimeSeries.begin(), pos);
         }
         --InFlight;
+        RemoveFromIndex(ActiveByLocation, request, requestIdx);
+        if (request.IsWrite) {
+            RemoveFromIndex(WritesByLocation, request, requestIdx);
+        }
         RequestInfo.erase(it);
         SendRequests(ctx);
     }
@@ -779,6 +1002,12 @@ public:
                     PARAM("DDiskId", Sprintf("%" PRIu32 ":%" PRIu32 ":%" PRIu32, DDiskNodeId, DDiskPDiskId, DDiskSlotId));
                     PARAM("I/O size", IOSizeInfo);
                     PARAM("Sequential", SequentialInfo);
+                    if (BackgroundWriteRatio > 0) {
+                        PARAM("Background write ratio", BackgroundWriteRatio);
+                        PARAM("Background write size", BackgroundWriteSizeBytes);
+                        PARAM("Measured reads sent", MeasuredReadsSent);
+                        PARAM("Background writes sent", BackgroundWritesSent);
+                    }
 
                     for (ui32 dt : {5, 10, 15, 20, 60}) {
                         TInstant now = TAppData::TimeProvider->Now();
@@ -834,8 +1063,9 @@ public:
 } // namespace
 
 IActor *CreateDDiskLoadTest(const NKikimr::TEvLoadTestRequest::TDDiskLoad& cmd,
-        const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
-    return new TDDiskLoadTestActor(cmd, parent, counters, index, tag);
+        const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag,
+        bool enableChecksums) {
+    return new TDDiskLoadTestActor(cmd, parent, counters, index, tag, enableChecksums);
 }
 
 } // NKikimr

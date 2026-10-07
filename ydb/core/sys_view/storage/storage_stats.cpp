@@ -24,6 +24,8 @@ public:
             {T::CurrentAvailableSize::ColumnId, {E::kCurrentAvailableSizeFieldNumber}},
             {T::AvailableGroupsToCreate::ColumnId, {E::kAvailableGroupsToCreateFieldNumber}},
             {T::AvailableSizeToCreate::ColumnId, {E::kAvailableSizeToCreateFieldNumber}},
+            {T::ImmediateGroupsToCreate::ColumnId, {E::kImmediateGroupsToCreateFieldNumber}},
+            {T::ImmediateSizeToCreate::ColumnId, {E::kImmediateSizeToCreateFieldNumber}},
         };
         return fieldMap;
     }

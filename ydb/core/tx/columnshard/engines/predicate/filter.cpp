@@ -6,6 +6,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap {
 
 NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
@@ -19,9 +21,8 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
 
     auto iteratorAt = [&](const TPredicateContainer& pred, const ui64 atPos) {
         std::vector<std::string> cols = pred.GetColumnNames();
-        auto it = cols.empty()
-            ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false)
-            : NArrow::NMerger::TRWSortableBatchPosition(data, 0, cols, {}, false);
+        auto it = cols.empty() ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false)
+                               : NArrow::NMerger::TRWSortableBatchPosition(data, 0, cols, {}, false);
         AFL_VERIFY(it.InitPosition(static_cast<i64>(atPos)))("atPos", atPos)("recordsCount", recordsCount);
         return it;
     };
@@ -73,19 +74,25 @@ TConclusionStatus TPKRangesFilter::Add(std::optional<NOlap::TPredicate> f, std::
     }
     auto fromContainerConclusion = TPredicateContainer::BuildPredicateFrom(std::move(f));
     if (fromContainerConclusion.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "incorrect from container")(
-            "from", fromContainerConclusion.GetErrorMessage());
+        YDB_LOG_ERROR("",
+            {"event", "add_range_filter"},
+            {"problem", "incorrect from container"},
+            {"from", fromContainerConclusion.GetErrorMessage()});
         return fromContainerConclusion;
     }
     auto toContainerConclusion = TPredicateContainer::BuildPredicateTo(std::move(t));
     if (toContainerConclusion.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "incorrect to container")(
-            "from", toContainerConclusion.GetErrorMessage());
+        YDB_LOG_ERROR("",
+            {"event", "add_range_filter"},
+            {"problem", "incorrect to container"},
+            {"from", toContainerConclusion.GetErrorMessage()});
         return toContainerConclusion;
     }
     if (SortedRanges.size() && !FakeRanges) {
         if (fromContainerConclusion->CrossRanges(SortedRanges.back().GetPredicateTo())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not sorted sequence");
+            YDB_LOG_ERROR("",
+                {"event", "add_range_filter"},
+                {"problem", "not sorted sequence"});
             return TConclusionStatus::Fail("not sorted sequence");
         }
     }
@@ -180,8 +187,7 @@ std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(cons
     return arrow::RecordBatch::Make(fullSchema, SortedRanges.size() * 2, NArrow::Finish(std::move(builders)));
 }
 
-std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchLines(
-    const std::shared_ptr<arrow::RecordBatch>& batch) {
+std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchLines(const std::shared_ptr<arrow::RecordBatch>& batch) {
     std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(TPKRangesFilter(batch));
     for (ui32 i = 0; i < batch->num_rows(); ++i) {
         NArrow::NMerger::TSortableBatchPosition batchRow(batch, i, false);
@@ -213,8 +219,7 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
                 AFL_VERIFY(false);
             }
         }();
-        NOlap::TPredicate pTo = [&]()
-        {
+        NOlap::TPredicate pTo = [&]() {
             auto batchRow = TPredicate::CutNulls(batch, i, pkSchema);
             NKernels::EOperation op = (NKernels::EOperation)cUi32->Value(i);
             if (op == NKernels::EOperation::LessEqual || op == NKernels::EOperation::Less) {

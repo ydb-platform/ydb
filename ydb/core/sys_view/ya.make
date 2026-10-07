@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     scan.h
@@ -13,7 +13,6 @@ PEERDIR(
     ydb/core/sys_view/compile_cache
     ydb/core/sys_view/nodes
     ydb/core/sys_view/partition_stats
-    ydb/core/sys_view/pg_tables
     ydb/core/sys_view/query_stats
     ydb/core/sys_view/resource_pool_classifiers
     ydb/core/sys_view/resource_pools
@@ -23,12 +22,11 @@ PEERDIR(
     ydb/core/sys_view/storage
     ydb/core/sys_view/streaming_queries
     ydb/core/sys_view/tablets
+    ydb/core/sys_view/udf_modules
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
     ydb/core/wrappers
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 
@@ -37,15 +35,16 @@ RECURSE(
     common
     nodes
     partition_stats
-    pg_tables
     processor
     query_stats
     resource_pool_classifiers
     resource_pools
     service
+    show_create
     storage
     streaming_queries
     tablets
+    udf_modules
 )
 
 RECURSE_FOR_TESTS(

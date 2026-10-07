@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/blob.h>
@@ -32,6 +32,7 @@ private:
     YDB_READONLY(bool, Aborted, false);
 
     THashMap<NArrow::NSSA::IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> DataAddrToIndex;
+    THashSet<ui32> DictionaryOnlyFetchColumns;
 
 public:
     bool HasTable() const {
@@ -186,6 +187,18 @@ public:
     void AddFilter(const NArrow::TColumnFilter& filter) {
         MutableTable().AddFilter(filter);
     }
+
+    void MarkDictionaryOnlyFetch(const ui32 columnId) {
+        DictionaryOnlyFetchColumns.insert(columnId);
+    }
+
+    bool IsDictionaryOnlyFetch(const ui32 columnId) const {
+        return DictionaryOnlyFetchColumns.contains(columnId);
+    }
+
+    const THashSet<ui32>& GetDictionaryOnlyFetchColumns() const {
+        return DictionaryOnlyFetchColumns;
+    }
 };
 
 class TSourceChunkToReply {
@@ -212,7 +225,8 @@ public:
     TSourceChunkToReply(const ui32 startIndex, const ui32 recordsCount, const std::shared_ptr<arrow::Table>& table)
         : StartIndex(startIndex)
         , RecordsCount(recordsCount)
-        , Table(table) {
+        , Table(table)
+    {
     }
 };
 
@@ -220,6 +234,7 @@ class TFetchedResult {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
+    THashSet<ui32> DictionaryOnlyFetchColumns;
     std::optional<std::deque<TPortionDataAccessor::TReadPage>> PagesToResult;
     std::optional<TSourceChunkToReply> ChunkToReply;
 
@@ -233,12 +248,28 @@ public:
     TFetchedResult(
         std::unique_ptr<TFetchedData>&& data, const std::optional<std::set<ui32>>& columnIds, const NArrow::NSSA::IColumnResolver& resolver)
         : Batch(data->GetAborted() ? nullptr : data->GetTable().ToGeneralContainer(&resolver, columnIds, false))
-        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter()) {
+        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter())
+        , DictionaryOnlyFetchColumns(data->GetDictionaryOnlyFetchColumns())
+    {
     }
 
     TFetchedResult(std::unique_ptr<TFetchedData>&& data, const NArrow::NSSA::IColumnResolver& resolver)
         : Batch(data->GetAborted() ? nullptr : data->GetTable().ToGeneralContainer(&resolver, {}, false))
-        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter()) {
+        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter())
+        , DictionaryOnlyFetchColumns(data->GetDictionaryOnlyFetchColumns())
+    {
+    }
+
+    bool IsDictionaryOnlyFetch(const ui32 columnId) const {
+        return DictionaryOnlyFetchColumns.contains(columnId);
+    }
+
+    const THashSet<ui32>& GetDictionaryOnlyFetchColumns() const {
+        return DictionaryOnlyFetchColumns;
+    }
+
+    void SetNotAppliedFilter(std::shared_ptr<NArrow::TColumnFilter>&& filter) {
+        NotAppliedFilter = std::move(filter);
     }
 
     TPortionDataAccessor::TReadPage ExtractPageForResult() {
@@ -265,6 +296,12 @@ public:
         AFL_VERIFY(page.GetRecordsCount() == recordsCount)("real", page.GetRecordsCount())("expected", recordsCount);
         AFL_VERIFY(!ChunkToReply);
         ChunkToReply = TSourceChunkToReply(indexStart, recordsCount, std::move(table));
+    }
+
+    void SetEmptyResultChunk(const ui32 indexStart = 0, const ui32 recordsCount = 0) {
+        AFL_VERIFY(!ChunkToReply);
+        AFL_VERIFY(IsFinished());
+        ChunkToReply = TSourceChunkToReply(indexStart, recordsCount, nullptr);
     }
 
     bool IsFinished() const {

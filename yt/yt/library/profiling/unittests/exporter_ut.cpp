@@ -15,7 +15,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-auto GetSensors(const std::string& json)
+auto GetSensors(TStringBuf json)
 {
     auto yson = NYson::TYsonString(NJson2Yson::SerializeJsonValueAsYson(NJson::ReadJsonFastTree(json)));
     auto sensors = NYTree::ConvertToNode(yson)->AsMap()->GetChildOrThrow("sensors");
@@ -149,7 +149,7 @@ TEST(TSolomonExporterTest, SplitRateHistogramIntoGauges)
     EraseIf(sensors, [] (const auto& sensor) {
         return sensor["labels"]["sensor"].GetStringSafe() != "ytyt.foo";
     });
-    THashSet<TString> buckets = {"0.001", "0.002", "0.004", "0.008", "0.016", "0.032", "0.064", "0.125", "0.25", "0.5", "1", "inf"};
+    THashSet<std::string> buckets = {"0.001", "0.002", "0.004", "0.008", "0.016", "0.032", "0.064", "0.125", "0.25", "0.5", "1", "inf"};
     ASSERT_EQ(buckets.size(), sensors.size());
     for (const auto& sensor : sensors) {
         auto bin = sensor["labels"]["bin"].GetStringSafe();
@@ -194,10 +194,10 @@ TEST(TSolomonExporterTest, ReadSensorsFilter)
     auto registry = New<TSolomonRegistry>();
 
     THashMap<std::string, NYT::NProfiling::TShardConfigPtr> shards;
-    auto AddShardConfig = [&shards] (const std::string& shardName) {
+    auto AddShardConfig = [&shards] (TStringBuf shardName) {
         auto shardConfig = New<TShardConfig>();
         shardConfig->GridStep = TDuration::Seconds(1);
-        shardConfig->Filter = {shardName};
+        shardConfig->Filter = {std::string(shardName)};
 
         shards.try_emplace(shardName, shardConfig);
     };
@@ -217,13 +217,13 @@ TEST(TSolomonExporterTest, ReadSensorsFilter)
     TGauge cache_size = TProfiler("/cache/", "", {}, registry).Gauge("size");
     TGauge responses = TProfiler("/requests/", "", {}, registry).Gauge("responses");
 
-    auto isSensorInShard = [&exporter] (const std::string& shardName, const std::string& sensor) -> bool {
-        std::optional<std::string> out = exporter->ReadJson({}, shardName);
+    auto isSensorInShard = [&exporter] (TStringBuf shardName, TStringBuf sensor) -> bool {
+        std::optional<std::string> out = exporter->ReadJson({}, std::string(shardName));
         if (!out) {
             return false;
         }
 
-        const std::string& sensors = out.value();
+        TStringBuf sensors = out.value();
         return sensors.contains(sensor);
     };
 
@@ -261,10 +261,10 @@ TEST(TSolomonExporterTest, ReadSensorsStripSensorsOption)
     auto registry = New<TSolomonRegistry>();
 
     THashMap<std::string, NYT::NProfiling::TShardConfigPtr> shards;
-    auto AddShardConfig = [&shards] (const std::string& shardName) {
+    auto AddShardConfig = [&shards] (TStringBuf shardName) {
         auto shardConfig = New<TShardConfig>();
         shardConfig->GridStep = TDuration::Seconds(1);
-        shardConfig->Filter = {shardName};
+        shardConfig->Filter = {std::string(shardName)};
 
         shards.try_emplace(shardName, shardConfig);
     };

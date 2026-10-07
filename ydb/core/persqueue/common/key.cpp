@@ -1,4 +1,5 @@
 #include "key.h"
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 
@@ -19,7 +20,8 @@ TKey TKey::FromString(const TString& s, const TPartitionId& partition)
                 t.GetPartNo(),
                 t.GetCount(),
                 t.GetInternalPartsCount(),
-                t.GetSuffix());
+                t.GetSuffix(),
+                t.GetOffsetDelta());
 }
 
 TKey TKey::ForBody(EType type,
@@ -27,9 +29,10 @@ TKey TKey::ForBody(EType type,
                    const ui64 offset,
                    const ui16 partNo,
                    const ui32 count,
-                   const ui16 internalPartsCount)
+                   const ui16 internalPartsCount,
+                   const TMaybe<ui32>& offsetDelta)
 {
-    return {type, partition, offset, partNo, count, internalPartsCount, Nothing()};
+    return {type, partition, offset, partNo, count, internalPartsCount, Nothing(), offsetDelta};
 }
 
 TKey TKey::ForHead(EType type,
@@ -37,9 +40,10 @@ TKey TKey::ForHead(EType type,
                    const ui64 offset,
                    const ui16 partNo,
                    const ui32 count,
-                   const ui16 internalPartsCount)
+                   const ui16 internalPartsCount,
+                   const TMaybe<ui32>& offsetDelta)
 {
-    return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::Head};
+    return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::Head, offsetDelta};
 }
 
 TKey TKey::ForFastWrite(EType type,
@@ -47,9 +51,10 @@ TKey TKey::ForFastWrite(EType type,
                         const ui64 offset,
                         const ui16 partNo,
                         const ui32 count,
-                        const ui16 internalPartsCount)
+                        const ui16 internalPartsCount,
+                        const TMaybe<ui32>& offsetDelta)
 {
-    return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::FastWrite};
+    return {type, partition, offset, partNo, count, internalPartsCount, ESuffix::FastWrite, offsetDelta};
 }
 
 bool TKey::IsFastWrite() const
@@ -72,7 +77,7 @@ TKey TKey::FromKey(const TKey& k,
                    const TPartitionId& partition,
                    ui64 offset)
 {
-    return {type, partition, offset, k.GetPartNo(), k.GetCount(), k.GetInternalPartsCount(), k.GetSuffix()};
+    return {type, partition, offset, k.GetPartNo(), k.GetCount(), k.GetInternalPartsCount(), k.GetSuffix(), k.GetOffsetDelta()};
 }
 
 void TKeyPrefix::SetTypeImpl(EType type, bool isServicePartition)
@@ -99,7 +104,7 @@ void TKeyPrefix::SetTypeImpl(EType type, bool isServicePartition)
             c = ServiceTypeTxMeta;
             break;
         default:
-            Y_ABORT();
+            AFL_ENSURE(false)("type", static_cast<int>(type))("type_char", c);
         }
     }
 

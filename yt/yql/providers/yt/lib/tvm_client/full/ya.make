@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     yt/yql/providers/yt/lib/tvm_client/dummy
+    yt/yql/providers/yt/lib/tvm_client/proto
 )
 
 IF (NOT OPENSOURCE)

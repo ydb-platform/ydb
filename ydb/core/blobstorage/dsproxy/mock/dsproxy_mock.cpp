@@ -1,8 +1,12 @@
 #include "dsproxy_mock.h"
 #include "model.h"
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/util/stlog.h>
+#include <util/random/fast.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY
 
 namespace NKikimr {
 
@@ -14,59 +18,92 @@ namespace NKikimr {
             TIntrusivePtr<NFake::TProxyDS> Model;
 
             void Handle(TEvBlobStorage::TEvPut::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM01, "TEvPut", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvPut",
+                    {"marker", "BSPM01"},
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvGet::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM02, "TEvGet", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvGet",
+                    {"marker", "BSPM02"},
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvBlock::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM03, "TEvBlock", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvBlock",
+                    {"marker", "BSPM03"},
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvDiscover::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM04, "TEvDiscover", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvDiscover",
+                    {"marker", "BSPM04"},
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvRange::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM05, "TEvRange", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvRange",
+                    {"marker", "BSPM05"},
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM06, "TEvCollectGarbage", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvCollectGarbage",
+                    {"marker", "BSPM06"},
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvStatus::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM07, "TEvStatus", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvStatus",
+                    {"marker", "BSPM07"},
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), new TEvBlobStorage::TEvStatusResult(NKikimrProto::OK,
                     Model->GetStorageStatusFlags())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvAssimilate::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM09, "TEvAssimilate", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvAssimilate",
+                    {"marker", "BSPM09"},
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), new TEvBlobStorage::TEvAssimilateResult(NKikimrProto::ERROR,
                     "not implemented")), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvPatch::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM10, "TEvPatch", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvPatch",
+                    {"marker", "BSPM10"},
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvGetBlock::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM11, "TEvGetBlock", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvGetBlock",
+                    {"marker", "BSPM11"},
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvCheckIntegrity::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM12, "TEvCheckIntegrity", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvCheckIntegrity",
+                    {"marker", "BSPM12"},
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
@@ -77,7 +114,8 @@ namespace NKikimr {
             }
 
             void HandlePoison(TEvents::TEvPoisonPill::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM08, "TEvPoisonPill");
+                YDB_LOG_DEBUG("TEvPoisonPill",
+                    {"marker", "BSPM08"});
                 Send(ev->Sender, new TEvents::TEvPoisonTaken);
                 PassAway();
             }
@@ -123,6 +161,105 @@ namespace NKikimr {
                 , Model(MakeIntrusive<NFake::TProxyDS>(groupId))
             {}
         };
+
+        ////////////////////////////////////////////////////////////////////////////////
+
+        class TBlobStorageFailureInjectingActor final
+            : public TActor<TBlobStorageFailureInjectingActor>
+        {
+        private:
+            const TActorId RealProxy;
+            const TGroupId GroupId;
+            const double FailureProbability;
+            const ui64 RandomFailureSeed;
+            const NKikimrProto::EReplyStatus ErrorReplyStatus;
+            TFastRng64 Rng;
+            const TString FailureErrorReason;
+
+        public:
+            TBlobStorageFailureInjectingActor(
+                    TActorId realProxy,
+                    TGroupId groupId,
+                    TBSFailureInjectionConfig config)
+                : TActor(&TThis::StateWork)
+                , RealProxy(realProxy)
+                , GroupId(groupId)
+                , FailureProbability(std::clamp(config.GetFailureProbability(), 0.0, 1.0))
+                , RandomFailureSeed(config.HasRandomSeed() ? config.GetRandomSeed() : RandomNumber<ui64>())
+                , ErrorReplyStatus(config.GetErrorReplyStatus())
+                , Rng(RandomFailureSeed)
+                , FailureErrorReason(TStringBuilder()
+                    << "injected by BSProxyInterceptor"
+                    << " group " << GroupId
+                    << " seed " << RandomFailureSeed)
+            {
+            }
+
+        private:
+            bool ShouldInjectFailure()
+            {
+                return Rng.GenRandReal4() < FailureProbability;
+            }
+
+            template <typename TRequest>
+            bool MaybeInjectFailure(
+                TAutoPtr<IEventHandle>& ev,
+                TRequest& request,
+                const TString& eventName)
+            {
+                if (!ShouldInjectFailure()) {
+                    return false;
+                }
+
+                auto response = request.MakeErrorResponse(ErrorReplyStatus, FailureErrorReason, GroupId);
+                response->ExecutionRelay = std::move(request.ExecutionRelay);
+
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
+                    "[BSProxyInterceptor] group " << GroupId
+                    << " injecting " << eventName
+                    << " failure; not forwarding to " << RealProxy.ToString()
+                    << " sender " << ev->Sender.ToString()
+                    << " cookie " << ev->Cookie
+                    << " probability " << FailureProbability
+                    << " seed " << RandomFailureSeed);
+
+                Send(ev->Sender, response.release(), 0, ev->Cookie);
+                return true;
+            }
+
+            STFUNC(StateWork)
+            {
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
+                    "[BSProxyInterceptor] group " << GroupId << " " << ev->GetTypeName() << " " << ev->ToString());
+
+                #define HANDLE_EVENT(evType)                                        \
+                    case evType::EventType: {                                       \
+                        auto* msg = ev->Get<evType>();                              \
+                        if (MaybeInjectFailure(ev, *msg, ev->GetTypeName())) {      \
+                            return;                                                 \
+                        }                                                           \
+                        break;                                                      \
+                    }
+
+                switch (ev->GetTypeRewrite()) {
+                    DSPROXY_ENUM_EVENTS(HANDLE_EVENT)
+                    case TEvents::TEvPoison::EventType: {
+                        TActor::PassAway();
+                        [[fallthrough]];
+                    }
+                    default: {
+                        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
+                            "[BSProxyInterceptor] group " << GroupId
+                            << " skipping event type " << ev->GetTypeName());
+                        break;
+                    }
+                }
+
+                TActivationContext::Forward(ev, RealProxy);
+                #undef HANDLE_EVENT
+            }
+        };
+
     } // anon
 
     IActor *CreateBlobStorageGroupProxyMockActor(TIntrusivePtr<NFake::TProxyDS> model) {
@@ -131,6 +268,10 @@ namespace NKikimr {
 
     IActor *CreateBlobStorageGroupProxyMockActor(TGroupId groupId) {
         return new TBlobStorageGroupProxyMockActor(groupId);
+    }
+
+    IActor *CreateBlobStorageGroupFailureInjectingActor(TActorId actorId, TGroupId groupId, const TBSFailureInjectionConfig& config) {
+        return new TBlobStorageFailureInjectingActor(actorId, groupId, config);
     }
 
 } // NKikimr

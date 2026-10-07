@@ -25,7 +25,7 @@ namespace NYql {
                 : State_(state)
                 , ConfigurationTransformer_(MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{GenericProviderName}))
                 , IODiscoveryTransformer_(CreateGenericIODiscoveryTransformer(State_))
-                , LoadMetaDataTransformer_(CreateGenericLoadTableMetadataTransformer(State_))
+                , LoadMetaDataTransformer_(CreateGenericDescribeTableTransformer(State_))
                 , TypeAnnotationTransformer_(CreateGenericDataSourceTypeAnnotationTransformer(State_))
                 , DqIntegration_(CreateGenericDqIntegration(State_))
             {

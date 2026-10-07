@@ -3,6 +3,7 @@
 
 #include <ydb/core/change_exchange/resolve_partition.h>
 #include <ydb/core/tx/replication/service/base_table_writer.h>
+#include <ydb/library/aclib/user_context.h>
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NBackup::NImpl::TChangeRecord, out, value) {
     return value.Out(out);
@@ -25,6 +26,12 @@ public:
             .WithBody(std::move(body))
             .WithSchema(Schema)
             .Build();
+    }
+
+    ESchemaChangeResult ParseSchemaChange(const NChangeExchange::IChangeRecord&,
+            NKikimrReplication::TSchemaChange&, TString&) const override
+    {
+        return ESchemaChangeResult::NotSchemaChange;
     }
 };
 

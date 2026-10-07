@@ -1,5 +1,6 @@
 #include "delete_message.h"
 #include "actor.h"
+#include "config.h"
 #include "error.h"
 #include "receipt.h"
 #include "request.h"
@@ -34,8 +35,9 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
+#include <ydb/services/sqs_topic/billing.h>
+
 #include <ydb/library/actors/core/log.h>
-#include <ydb/services/sqs_topic/statuses.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -56,7 +58,9 @@ namespace NKikimr::NSqsTopic::V1 {
     }
 
     template <class TDerived, class TServiceRequest>
-    class TDeleteMessageActorBase: public TQueueUrlHolder, public TGrpcActorBase<TDeleteMessageActorBase<TDerived, TServiceRequest>, TServiceRequest> {
+    class TDeleteMessageActorBase:
+        public TQueueUrlHolder,
+        public TGrpcActorBase<TDeleteMessageActorBase<TDerived, TServiceRequest>, TServiceRequest> {
     protected:
         using TBase = TGrpcActorBase<TDeleteMessageActorBase, TServiceRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
@@ -105,8 +109,6 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
-            this->Become(&TDeleteMessageActorBase::StateWork);
-
             if (requestList.empty()) {
                 static_cast<TDerived*>(this)->ReplyAndDie(ctx);
                 return;
@@ -122,21 +124,20 @@ namespace NKikimr::NSqsTopic::V1 {
                         TDerived::Method)
                 });
 
-            NPQ::NMLP::TCommitterSettings committerSettings{
+            CommitterSettings_ = NPQ::NMLP::TCommitterSettings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
-                .Consumer = this->QueueUrl_->Consumer,
+                .Consumer = ResolveConsumerNameFromQueueUrl(this->QueueUrl_->Consumer, ctx),
                 .Messages = std::move(requestList),
                 .UserToken = this->Request_->GetInternalToken(),
             };
 
-            std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreateCommitter(this->SelfId(), std::move(committerSettings))};
-            CommiterActorId_ = ctx.RegisterWithSameMailbox(actorPtr.release());
+            this->DescribeTopic(NACLib::DescribeSchema);
+            this->Become(&TDeleteMessageActorBase::StateWork);
         }
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse); // override for testing
                 HFunc(NPQ::NMLP::TEvChangeResponse, Handle);
                 default:
                     TBase::StateWork(ev);
@@ -169,12 +170,21 @@ namespace NKikimr::NSqsTopic::V1 {
                     this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, std::format("Message id not found")));
                     return;
                 }
-                if (message.Success) {
-                    Success_.insert(*id);
-                    ++successCount;
-                } else {
-                    Failed_[*id] = MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, {});
-                    ++failedCount;
+                switch (message.Status) {
+                    case NPQ::NMLP::EOperationResult::Success:
+                        Success_.insert(*id);
+                        ++successCount;
+                        break;
+                    case NPQ::NMLP::EOperationResult::NotFound:
+                        // Ignore missing/already-deleted handle, like AWS SQS and native YMQ do.
+                        Success_.insert(*id);
+                        ++successCount;
+                        break;
+                    case NPQ::NMLP::EOperationResult::NotInFlight:
+                    case NPQ::NMLP::EOperationResult::Failed:
+                        Failed_[*id] = MakeError(NSQS::NErrors::INTERNAL_FAILURE, {});
+                        ++failedCount;
+                        break;
                 }
             }
 
@@ -209,8 +219,20 @@ namespace NKikimr::NSqsTopic::V1 {
             this->TBase::Die(ctx);
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            Y_UNUSED(ev);
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo&) {
+            this->ChargeRequestUnits(TlsActivationContext->AsActorContext());
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0);
+        }
+
+        void OnRequestUnitsCharged(const NActors::TActorContext&) {
+            CreateCommitter();
+        }
+
+        void CreateCommitter() {
+            CommiterActorId_ = this->ActorContext().RegisterWithSameMailbox(NKikimr::NPQ::NMLP::CreateCommitter(this->SelfId(), std::move(*CommitterSettings_)));
         }
 
     protected:
@@ -223,6 +245,7 @@ namespace NKikimr::NSqsTopic::V1 {
         THashMap<TString, NSQS::TError> Failed_;
         THashSet<TString> Success_;
         TMap<NPQ::NMLP::TMessageId, TString, TMessageIdLess> PositionToIdMap_;
+        TMaybe<NPQ::NMLP::TCommitterSettings> CommitterSettings_;
     };
 
     class TDeleteMessageActor: public TDeleteMessageActorBase<TDeleteMessageActor, TEvSqsTopicDeleteMessageRequest> {

@@ -1,12 +1,4 @@
-LIBRARY()
-
-SRCS(
-    named_span.cpp
-    retro_tracing.cpp
+RECURSE(
+    distributed_collector
+    spans
 )
-
-PEERDIR(
-    ydb/library/actors/retro_tracing
-)
-
-END()

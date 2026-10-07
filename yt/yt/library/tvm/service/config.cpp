@@ -7,18 +7,19 @@ namespace NYT::NAuth {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTvmId TTvmServiceConfig::GetClientSelfId() const
+std::optional<TTvmId> TTvmServiceConfig::GetClientSelfId() const
 {
     if (ClientSelfId.has_value()) {
         return *ClientSelfId;
     } else if (ClientSelfIdEnv.has_value()) {
         try {
-            return FromString<TTvmId>(GetEnv(TString(*ClientSelfIdEnv)));
+            return TTvmId(FromString<TTvmId::TUnderlying>(GetEnv(TString(*ClientSelfIdEnv))));
         } catch (const std::exception& ex) {
-            THROW_ERROR_EXCEPTION("Can not parse client self id from env %Qv", *ClientSelfIdEnv) << TError(ex);
+            THROW_ERROR_EXCEPTION("Can not parse client self id from env %Qv", *ClientSelfIdEnv)
+                .With(ex);
         }
     } else {
-        return 0;
+        return std::nullopt;
     }
 }
 
@@ -92,6 +93,24 @@ void TTvmServiceConfig::Register(TRegistrar registrar)
                 "cannot be used together");
         }
     });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TUserTicketAuthenticationConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("check_service_tickets", &TThis::CheckServiceTickets)
+        .Default(false);
+    registrar.Parameter("allowed_service_tvm_ids", &TThis::AllowedServiceTvmIds)
+        .Optional();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TTvmServiceDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("user_ticket_authentication", &TThis::UserTicketAuthentication)
+        .DefaultNew();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

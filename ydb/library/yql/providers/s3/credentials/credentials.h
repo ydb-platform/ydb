@@ -20,7 +20,7 @@ struct TS3Credentials {
     };
 
     TS3Credentials() = default;
-    TS3Credentials(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson, bool addBearerToToken = false);
+    TS3Credentials(IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const TString& structuredTokenJson, bool addBearerToToken = false);
 
     TAuthInfo GetAuthInfo() const;
 
@@ -33,6 +33,6 @@ private:
     TS3Credentials::TAuthInfo AuthInfo;
 };
 
-TS3Credentials::TAuthInfo GetAuthInfo(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson);
+TS3Credentials::TAuthInfo GetAuthInfo(IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const TString& structuredTokenJson);
 
 }

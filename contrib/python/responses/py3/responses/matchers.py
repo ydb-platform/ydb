@@ -21,6 +21,13 @@ from urllib3.util.url import parse_url
 def _filter_dict_recursively(
     dict1: Mapping[Any, Any], dict2: Mapping[Any, Any]
 ) -> Mapping[Any, Any]:
+    """
+    Make a new dictionary using only keys that exist in both
+    dictionary arguments. It will also work with deeply nested keys.
+    :param dict1: dictionary to filter
+    :param dict2: dictionary to filter
+    :return: new dictionary based on `dict1` and `dict2`
+    """
     filtered_dict = {}
     for k, val in dict1.items():
         if k in dict2:
@@ -47,29 +54,53 @@ def body_matcher(params: str, *, allow_blank: bool = False) -> Callable[..., Any
 
 
 def urlencoded_params_matcher(
-    params: Optional[Mapping[str, str]], *, allow_blank: bool = False
+    params: Optional[Mapping[str, str]],
+    *,
+    allow_blank: bool = False,
+    strict_match: bool = True,
 ) -> Callable[..., Any]:
     """
     Matches URL encoded data
 
     :param params: (dict) data provided to 'data' arg of request
+    :param allow_blank If true, blank values are accounted as empty strings
+    :param strict_match If true, all keys must match;
+        otherwise, partial matches allowed
     :return: (func) matcher
     """
 
     def match(request: PreparedRequest) -> Tuple[bool, str]:
         reason = ""
         request_body = request.body
-        qsl_body = (
+        qsl_body: Mapping[Any, Any] = (
             dict(parse_qsl(request_body, keep_blank_values=allow_blank))  # type: ignore[type-var]
             if request_body
             else {}
         )
-        params_dict = params or {}
-        valid = params is None if request_body is None else params_dict == qsl_body
+        request_params = qsl_body
+        match_params = params or {}
+
+        if not strict_match:
+            request_params = _filter_dict_recursively(qsl_body, match_params)
+
+        valid = (
+            params is None if request_body is None else match_params == request_params
+        )
+
+        # Prevents non-strict match of empty params with non-empty
+        # request body (due to dictionary filtering)
+        if not params and request_body:
+            valid = False
+
         if not valid:
             reason = (
-                f"request.body doesn't match: {qsl_body} doesn't match {params_dict}"
+                f"request.body doesn't match: {qsl_body} doesn't match {match_params}"
             )
+            if strict_match:
+                reason += (
+                    "\nNote: You're using strict parameter check. "
+                    "To try a partial match, use strict_match=False"
+                )
 
         return valid, reason
 
@@ -145,9 +176,16 @@ def fragment_identifier_matcher(identifier: Optional[str]) -> Callable[..., Any]
         reason = ""
         url_fragment = urlparse(request.url).fragment
         if identifier:
-            url_fragment_qsl = sorted(parse_qsl(url_fragment))  # type: ignore[type-var]
-            identifier_qsl = sorted(parse_qsl(identifier))
-            valid = identifier_qsl == url_fragment_qsl
+            if "=" in identifier:
+                # Query-string-style fragment: compare order-insensitively.
+                url_fragment_qsl = sorted(parse_qsl(url_fragment))  # type: ignore[type-var]
+                identifier_qsl = sorted(parse_qsl(identifier))
+                valid = identifier_qsl == url_fragment_qsl
+            else:
+                # Opaque fragment (e.g. "/users/5"): parse_qsl() yields no
+                # pairs, so any two opaque fragments would compare equal.
+                # Compare them verbatim instead.
+                valid = identifier == url_fragment
         else:
             valid = not url_fragment
 
@@ -184,7 +222,7 @@ def query_param_matcher(
 
     """
 
-    params_dict = params or {}
+    params_dict = dict(params) if params else {}
 
     for k, v in params_dict.items():
         if isinstance(v, (int, float)):
@@ -228,8 +266,12 @@ def query_string_matcher(query: Optional[str]) -> Callable[..., Any]:
         data = parse_url(request.url or "")
         request_query = data.query
 
-        request_qsl = sorted(parse_qsl(request_query)) if request_query else {}
-        matcher_qsl = sorted(parse_qsl(query)) if query else {}
+        request_qsl = (
+            sorted(parse_qsl(request_query, keep_blank_values=True))
+            if request_query
+            else {}
+        )
+        matcher_qsl = sorted(parse_qsl(query, keep_blank_values=True)) if query else {}
 
         valid = not query if request_query is None else request_qsl == matcher_qsl
 

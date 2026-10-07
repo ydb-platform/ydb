@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_generic_cluster_config.cpp
@@ -13,7 +13,6 @@ SRCS(
     yql_generic_io_discovery.cpp
     yql_generic_list_splits.cpp
     yql_generic_list_splits.h
-    yql_generic_load_meta.cpp
     yql_generic_logical_opt.cpp
     yql_generic_mkql_compiler.cpp
     yql_generic_physical_opt.cpp
@@ -29,8 +28,6 @@ SRCS(
     yql_generic_utils.cpp
 )
 
-YQL_LAST_ABI_VERSION()
-
 PEERDIR(
     contrib/libs/fmt
     library/cpp/json
@@ -39,6 +36,7 @@ PEERDIR(
     ydb/core/fq/libs/common
     ydb/core/fq/libs/result_formatter
     yql/essentials/ast
+    yql/essentials/types/uuid
     yql/essentials/core
     yql/essentials/core/type_ann
     ydb/library/yql/dq/expr_nodes
@@ -56,6 +54,7 @@ PEERDIR(
     yql/essentials/providers/common/transform
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/providers/dq/mkql
     ydb/library/yql/providers/generic/expr_nodes
     ydb/library/yql/providers/generic/proto
     yql/essentials/providers/common/proto

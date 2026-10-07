@@ -39,9 +39,20 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        LICENSE [1:1]
         LICENSE-MIT [1:1]
-        README.md [474:474]
+        README.md [484:484]
+
+KEEP     MIT                  399584035c417b91040964779555dfac
+BELONGS ya.make
+    License text:
+        MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [1:1]
 
 KEEP     MIT                  9782b85e0d2c0beac76ebaa494a16366
 BELONGS ya.make
@@ -54,4 +65,4 @@ BELONGS ya.make
     Files with this license:
         LICENSE [5:22]
         LICENSE-MIT [5:22]
-        README.md [478:495]
+        README.md [488:505]

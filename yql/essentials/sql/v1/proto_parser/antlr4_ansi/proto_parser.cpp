@@ -10,9 +10,10 @@ namespace {
 
 class TParser: public NSQLTranslation::IParser {
 public:
-    explicit TParser(bool isAmbuguityError, bool isAmbiguityDebugging)
-        : IsAmbiguityError_(isAmbuguityError)
+    TParser(bool isAmbiguityError, bool isAmbiguityDebugging, TMaybe<size_t> maxParseTreeDepth)
+        : IsAmbiguityError_(isAmbiguityError)
         , IsAmbiguityDebugging_(isAmbiguityDebugging)
+        , MaxParseTreeDepth_(maxParseTreeDepth)
     {
     }
 
@@ -23,39 +24,43 @@ public:
         NProtoAST::TProtoASTBuilder4<
             NALPAnsiAntlr4::SQLv1Antlr4Parser,
             NALPAnsiAntlr4::SQLv1Antlr4Lexer>
-            builder(query, queryName, arena, IsAmbiguityError_, IsAmbiguityDebugging_);
+            builder(query, queryName, arena, IsAmbiguityError_, IsAmbiguityDebugging_, MaxParseTreeDepth_);
         return builder.BuildAST(err);
     }
 
 private:
-    bool IsAmbiguityError_;
-    bool IsAmbiguityDebugging_;
+    const bool IsAmbiguityError_;
+    const bool IsAmbiguityDebugging_;
+    const TMaybe<size_t> MaxParseTreeDepth_;
 };
 
 class TFactory: public NSQLTranslation::IParserFactory {
 public:
-    explicit TFactory(bool isAmbuguityError, bool isAmbiguityDebugging)
-        : IsAmbiguityError_(isAmbuguityError)
+    TFactory(bool isAmbiguityError, bool isAmbiguityDebugging, TMaybe<size_t> maxParseTreeDepth)
+        : IsAmbiguityError_(isAmbiguityError)
         , IsAmbiguityDebugging_(isAmbiguityDebugging)
+        , MaxParseTreeDepth_(maxParseTreeDepth)
     {
     }
 
     std::unique_ptr<NSQLTranslation::IParser> MakeParser() const final {
-        return std::make_unique<TParser>(IsAmbiguityError_, IsAmbiguityDebugging_);
+        return std::make_unique<TParser>(IsAmbiguityError_, IsAmbiguityDebugging_, MaxParseTreeDepth_);
     }
 
 private:
-    bool IsAmbiguityError_;
-    bool IsAmbiguityDebugging_;
+    const bool IsAmbiguityError_;
+    const bool IsAmbiguityDebugging_;
+    const TMaybe<size_t> MaxParseTreeDepth_;
 };
 
 } // namespace
 
 NSQLTranslation::TParserFactoryPtr MakeAntlr4AnsiParserFactory(
     bool isAmbiguityError,
-    bool isAmbiguityDebugging)
+    bool isAmbiguityDebugging,
+    TMaybe<size_t> maxParseTreeDepth)
 {
-    return MakeIntrusive<TFactory>(isAmbiguityError, isAmbiguityDebugging);
+    return MakeIntrusive<TFactory>(isAmbiguityError, isAmbiguityDebugging, maxParseTreeDepth);
 }
 
 } // namespace NSQLTranslationV1

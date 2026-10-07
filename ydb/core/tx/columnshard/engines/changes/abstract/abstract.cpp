@@ -1,16 +1,23 @@
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
 
 void TColumnEngineChanges::SetStage(const NChanges::EStage stage) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "new_stage")("stage", ::ToString(stage))("task_id", GetTaskIdentifier());
+    YDB_LOG_DEBUG("",
+        {"event", "new_stage"},
+        {"stage", ::ToString(stage)},
+        {"taskId", GetTaskIdentifier()});
     StateGuard.SetState(stage);
 }
 
@@ -23,7 +30,9 @@ TString TColumnEngineChanges::DebugString() const {
 }
 
 TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& context) noexcept {
-    const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("task_id", GetTaskIdentifier())("task_class", TypeString());
+    YDB_LOG_CREATE_CONTEXT(
+        {"taskId", GetTaskIdentifier()},
+        {"taskClass", TypeString()});
     AFL_VERIFY(StateGuard.GetStage() == NChanges::EStage::ReadyForConstruct || StateGuard.GetStage() == NChanges::EStage::Started)(
                                                                                "actual_stage", StateGuard.GetStage());
 
@@ -51,7 +60,10 @@ void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard* self,
 void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Written || !self);
     SetStage(NChanges::EStage::Finished);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
+    YDB_LOG_DEBUG("",
+        {"event", "WriteIndexComplete"},
+        {"type", TypeString()},
+        {"success", context.FinishedSuccessfully});
     DoWriteIndexOnComplete(self, context);
     if (self) {
         OnFinish(*self, context);
@@ -73,10 +85,11 @@ TColumnEngineChanges::~TColumnEngineChanges() {
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Abort")("reason", context.ErrorMessage);
+    YDB_LOG_WARN("",
+        {"event", "Abort"},
+        {"reason", context.ErrorMessage});
     AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Finished && StateGuard.GetStage() != NChanges::EStage::Created && StateGuard.GetStage() != NChanges::EStage::Aborted)(
-                                              "stage", StateGuard.GetStage())(
-                                                             "reason", context.ErrorMessage)("prev_reason", AbortedReason);
+                                              "stage", StateGuard.GetStage())("reason", context.ErrorMessage)("prev_reason", AbortedReason);
     SetStage(NChanges::EStage::Aborted);
     AbortedReason = context.ErrorMessage;
     OnFinish(self, context);
@@ -87,23 +100,34 @@ void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
     LockGuard = self.DataLocksManager->RegisterLock(BuildDataLock());
     Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Created);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), *this);
+    if (self.HasIndex() && BlobsAction.GetConsumerId() == NBlobOperations::EConsumer::GENERAL_COMPACTION) {
+        // Compaction writes its result with the newest schema, so the opt-in must be read from the last schema,
+        // not from the (possibly older) schema of the source portions. This makes ALTER TABLE ... CACHE_BLOBS_AFTER_WRITE
+        // take effect for the very next compaction of pre-existing data.
+        const bool schemaEnabled = self.GetIndexVerified().GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetCacheBlobsAfterWrite();
+        BlobsAction.SetCacheAfterWrite(NBlobCache::ShouldCacheAfterWrite(schemaEnabled, NBlobOperations::EConsumer::GENERAL_COMPACTION,
+            (ui64)self.Settings.CacheDataAfterIndexing != 0, (ui64)self.Settings.CacheDataAfterCompaction != 0));
+    }
     DoStart(self);
     SetStage(NChanges::EStage::Started);
-//    if (!NeedConstruction()) {
-//        SetStage(NChanges::EStage::Constructed);
-//    }
+    //    if (!NeedConstruction()) {
+    //        SetStage(NChanges::EStage::Constructed);
+    //    }
 }
 
 void TColumnEngineChanges::StartEmergency() {
     Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Created);
     SetStage(NChanges::EStage::Started);
-//    if (!NeedConstruction()) {
-//        SetStage(NChanges::EStage::Constructed);
-//    }
+    //    if (!NeedConstruction()) {
+    //        SetStage(NChanges::EStage::Constructed);
+    //    }
 }
 
 void TColumnEngineChanges::AbortEmergency(const TString& reason) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency")("reason", reason)("prev_reason", AbortedReason);
+    YDB_LOG_WARN("",
+        {"event", "AbortEmergency"},
+        {"reason", reason},
+        {"prevReason", AbortedReason});
     if (StateGuard.GetStage() == NChanges::EStage::Aborted) {
         AbortedReason += "; AnotherReason: " + reason;
     } else {
@@ -127,7 +151,8 @@ TWriteIndexContext::TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrap
     : DB(db)
     , DBWrapper(dbWrapper)
     , EngineLogs(engineLogs)
-    , Snapshot(snapshot) {
+    , Snapshot(snapshot)
+{
 }
 
 }   // namespace NKikimr::NOlap

@@ -10,6 +10,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NIndexes {
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBuildIndexImpl(
@@ -38,8 +40,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
     while (dataOwners.size()) {
         GetDataExtractor()->VisitAll(
             dataOwners.front(),
-            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase)
-            {
+            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
                 for (ui64 i = 0; i < hashesCount; ++i) {
                     if (hashBase) {
                         const auto predWithBase = [&](const ui64 hash, const ui32 /*idx*/) {
@@ -51,7 +52,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
                     }
                 }
             },
-            [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui64 hashBase) {
+            [&](const NArrow::NAccessor::TJsonValueView& data, const ui64 hashBase) {
                 auto view = data.GetScalarOptional();
                 if (!view.has_value()) {
                     return;
@@ -72,8 +73,8 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
+bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category,
+    const std::shared_ptr<arrow::Scalar>& value, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     const ui32 hashesCount = Request.ResolvedHashesCount();
     std::set<ui64> hashes;
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
@@ -97,7 +98,7 @@ bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std
     return true;
 }
 
-std::optional<ui64> TBloomIndexMeta::DoCalcCategory(const TString& subColumnName) const {
+std::optional<ui64> TBloomIndexMeta::DoCalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const {
     ui64 result;
     const NRequest::TOriginalDataAddress addr(GetColumnId(), subColumnName);
     AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, &result));
@@ -125,7 +126,8 @@ bool TBloomIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDe
     {
         auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
         if (conclusion.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
+            YDB_LOG_ERROR("",
+                {"indexParsing", conclusion.GetErrorMessage()});
             return false;
         }
     }
@@ -157,7 +159,8 @@ void TBloomIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription&
 bool TBloomIndexMeta::Initialize() {
     AFL_VERIFY(!ResultSchema);
     if (auto c = ValidateRequest(); c.IsFail()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("index_init", c.GetErrorMessage());
+        YDB_LOG_WARN("",
+            {"indexInit", c.GetErrorMessage()});
         return false;
     }
 

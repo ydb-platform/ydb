@@ -45,8 +45,15 @@
 #include "src/core/lib/uri/uri_parser.h"
 
 #ifdef GRPC_HAVE_UNIX_SOCKET
+#ifdef GPR_WINDOWS
+// clang-format off
+#include <ws2def.h>
+#include <afunix.h>
+// clang-format on
+#else
 #include <sys/un.h>
-#endif
+#endif  // GPR_WINDOWS
+#endif  // GRPC_HAVE_UNIX_SOCKET
 
 #ifdef GRPC_HAVE_UNIX_SOCKET
 static y_absl::StatusOr<TString> grpc_sockaddr_to_uri_unix_if_possible(

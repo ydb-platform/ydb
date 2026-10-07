@@ -17,25 +17,30 @@ namespace NKikimr {
 
 namespace {
 
-struct TSensitivePairedWords {
-    TStringBuf First;
-    TStringBuf Second;
-};
+using TWordSequence = std::vector<TStringBuf>;
 
 static const std::vector<TString> SensitiveWords = {
     "password",
 };
-static const TSensitivePairedWords SensitivePairedWords[] = {
+// Each sequence is a list of keywords that must appear consecutively (only ASCII
+// whitespace allowed between neighboring words, any amount of it, including
+// newlines/tabs/multiple spaces).
+// The first matching sequence is reported as the marker, so the plain verb pairs
+// come first: they never match the variants with keywords in between.
+static const std::vector<TWordSequence> SensitiveWordSequences = {
     {"create", "secret"},
     {"alter", "secret"},
+    {"create", "or", "replace", "secret"},
+    {"create", "if", "not", "exists", "secret"},
+    {"alter", "if", "exists", "secret"},
 };
 
-bool ContainsCaseInsensitive(const TString& text, TStringBuf pattern) {
+bool ContainsCaseInsensitive(TStringBuf text, TStringBuf pattern) {
     return std::search(text.begin(), text.end(), pattern.begin(), pattern.end(),
         [](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); }) != text.end();
 }
 
-bool MatchPrefixIgnoreCase(const TString& text, size_t pos, TStringBuf word) {
+bool MatchPrefixIgnoreCase(TStringBuf text, size_t pos, TStringBuf word) {
     if (pos + word.size() > text.size()) {
         return false;
     }
@@ -48,32 +53,58 @@ bool MatchPrefixIgnoreCase(const TString& text, size_t pos, TStringBuf word) {
     return true;
 }
 
-// Two consecutive keywords; only ASCII whitespace between them; case-insensitive.
-bool ContainsAdjacentWordsIgnoreSpaces(const TString& text, TStringBuf w1, TStringBuf w2) {
-    for (size_t i = 0; i + w1.size() <= text.size(); ++i) {
-        if (!MatchPrefixIgnoreCase(text, i, w1)) {
+// A sequence of consecutive keywords; only ASCII whitespace (any amount) is
+// allowed between neighboring words; case-insensitive.
+bool ContainsWordSequenceIgnoreSpaces(TStringBuf text, const TWordSequence& words) {
+    if (words.empty()) {
+        return false;
+    }
+    const TStringBuf& first = words.front();
+    for (size_t i = 0; i + first.size() <= text.size(); ++i) {
+        if (!MatchPrefixIgnoreCase(text, i, first)) {
             continue;
         }
-        size_t p = i + w1.size();
-        while (p < text.size() && IsAsciiSpace(static_cast<unsigned char>(text[p]))) {
-            ++p;
+        size_t p = i + first.size();
+        bool matched = true;
+        for (size_t w = 1; w < words.size(); ++w) {
+            size_t spaceStart = p;
+            while (p < text.size() && IsAsciiSpace(static_cast<unsigned char>(text[p]))) {
+                ++p;
+            }
+            if (p == spaceStart) {
+                matched = false;
+                break;
+            }
+            const TStringBuf& word = words[w];
+            if (p + word.size() > text.size() || !MatchPrefixIgnoreCase(text, p, word)) {
+                matched = false;
+                break;
+            }
+            p += word.size();
         }
-        if (p + w2.size() <= text.size() && MatchPrefixIgnoreCase(text, p, w2)) {
+        if (matched) {
             return true;
         }
     }
     return false;
 }
 
-TMaybe<TString> FindSensitiveQueryMarker(const TString& text) {
+TMaybe<TString> FindSensitiveQueryMarker(TStringBuf text) {
     for (const TString& word : SensitiveWords) {
         if (ContainsCaseInsensitive(text, word)) {
             return word;
         }
     }
-    for (const auto& pair : SensitivePairedWords) {
-        if (ContainsAdjacentWordsIgnoreSpaces(text, pair.First, pair.Second)) {
-            return TStringBuilder() << pair.First << ' ' << pair.Second;
+    for (const auto& seq : SensitiveWordSequences) {
+        if (ContainsWordSequenceIgnoreSpaces(text, seq)) {
+            TStringBuilder marker;
+            for (size_t i = 0; i < seq.size(); ++i) {
+                if (i > 0) {
+                    marker << ' ';
+                }
+                marker << seq[i];
+            }
+            return TString(marker);
         }
     }
     return Nothing();
@@ -81,15 +112,25 @@ TMaybe<TString> FindSensitiveQueryMarker(const TString& text) {
 
 } // namespace
 
-bool IsQueryWithSensitiveInfo(const TString& text) {
+bool IsQueryWithSensitiveInfo(TStringBuf text) {
     return FindSensitiveQueryMarker(text).Defined();
 }
 
 TString ProtectQueryForLoggingIfSensitive(const TString& text) {
-    if (const auto marker = FindSensitiveQueryMarker(text)) {
-        return TStringBuilder() << "Query text is hidden due to a sensitive marker: " << *marker;
+    TString protectedText;
+    if (ProtectQueryForLoggingIfSensitive(TStringBuf(text), protectedText)) {
+        return protectedText;
     }
     return text;
+}
+
+bool ProtectQueryForLoggingIfSensitive(TStringBuf text, TString& protectedText) {
+    if (const auto marker = FindSensitiveQueryMarker(text)) {
+        protectedText = TStringBuilder() << "Query text is hidden due to a sensitive marker: " << *marker;
+        return true;
+    }
+    protectedText.clear();
+    return false;
 }
 
 TString MaskTicket(TStringBuf token) {
@@ -111,6 +152,15 @@ TString MaskTicket(const TString& token) {
     return MaskTicket(TStringBuf(token));
 }
 
+// Same as the default branch of TTokenRecordBase::GetSanitizedTicket() for opaque tokens.
+TString SanitizeTicket(TStringBuf token) {
+    return MaskTicket(token);
+}
+
+TString SanitizeTicket(const TString& token) {
+    return SanitizeTicket(TStringBuf(token));
+}
+
 TString MaskIAMTicket(const TString& token) {
     static constexpr TStringBuf hiddenValue = "*** hidden ***";
     static constexpr TStringBuf id = "t1";
@@ -122,7 +172,7 @@ TString MaskIAMTicket(const TString& token) {
     TVector<TString> parts;
     StringSplitter(token).Split('.').AddTo(&parts);
     parts.erase(
-        std::remove_if(parts.begin(), parts.end(), 
+        std::remove_if(parts.begin(), parts.end(),
                     [](const TString& value) { return value.empty(); }),
         parts.end()
     );

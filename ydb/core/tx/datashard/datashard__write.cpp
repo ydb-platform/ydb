@@ -5,6 +5,8 @@
 
 #include <ydb/library/wilson_ids/wilson.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr::NDataShard {
@@ -25,7 +27,8 @@ TDataShard::TTxWrite::TTxWrite(TDataShard* self,
 { }
 
 bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxWrite:: execute at tablet# " << Self->TabletID());
+    YDB_LOG_TRACE_CTX(ctx, "TTxWrite:: execute",
+        {"tabletId", Self->TabletID()});
 
     if (Ev) {
         auto* request = Ev->Get();
@@ -49,8 +52,13 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 return false;
 
             if (status != NKikimrTxDataShard::TError::OK) {
-                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
-                    "TTxWrite:: errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID() << " status: " << status << " error: " << errMessage);
+                if (Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute).Kick()) {
+                    YDB_LOG_ERROR_CTX(ctx, "TTxWrite:: errors while proposing transaction",
+                        {"txId", TxId},
+                        {"tabletId", Self->TabletID()},
+                        {"status", status},
+                        {"error", errMessage});
+                }
 
                 auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, errMessage);
 
@@ -82,7 +90,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 LWTRACK(ProposeTransactionParsed, op->Orbit, false);
                 Y_ENSURE(writeOp->GetWriteResult());
                 op->OperationSpan.EndError("Unsuccessful operation parse");
-                ctx.Send(op->GetTarget(), writeOp->ReleaseWriteResult().release());
+                ctx.Send(op->GetTarget(), writeOp->ReleaseWriteResult().release(), 0, op->GetCookie());
                 return true;
             }
             LWTRACK(ProposeTransactionParsed, op->Orbit, true);
@@ -139,7 +147,10 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
         // Commit all side effects
         return true;
     } catch (const TNotReadyTabletException&) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "TX [" << 0 << " : " << TxId << "] can't prepare (tablet's not ready) at tablet " << Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TX can't prepare (tablet's not ready) at tablet",
+            {"step", 0},
+            {"txId", TxId},
+            {"tabletId", Self->TabletID()});
         return false;
     }
 
@@ -147,7 +158,8 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
 }
 
 void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxWrite complete: at tablet# " << Self->TabletID());
+    YDB_LOG_TRACE_CTX(ctx, "TTxWrite complete",
+        {"tabletId", Self->TabletID()});
 
     if (Op) {
         Y_ENSURE(!Op->GetExecutionPlan().empty());
@@ -179,7 +191,8 @@ void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
 
 
 void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Handle TTxWrite: at tablet# " << TabletID());
+    YDB_LOG_TRACE_CTX(ctx, "Handle TTxWrite",
+        {"tabletId", TabletID()});
 
     auto* msg = ev->Get();
     const auto& record = msg->Record;
@@ -203,7 +216,8 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
     }
 
     if (Pipeline.HasProposeDelayers()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvProposeTransaction delayed at " << TabletID() << " until dependency graph is restored");
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvProposeTransaction delayed at tablet until dependency graph is restored",
+            {"tabletId", TabletID()});
         LWTRACK(ProposeTransactionWaitDelayers, msg->GetOrbit());
         DelayedProposeQueue.emplace_back().Reset(ev.Release());
         UpdateProposeQueueSize();
@@ -211,7 +225,8 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
     }
 
     if (CheckTxNeedWait(ev)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvProposeTransaction delayed at " << TabletID() << " until interesting plan step will come");
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvProposeTransaction delayed at tablet until interesting plan step will come",
+            {"tabletId", TabletID()});
         if (Pipeline.AddWaitingTxOp(ev, ctx)) {
             UpdateProposeQueueSize();
             return;
@@ -309,3 +324,7 @@ TOperation::TPtr NEvWrite::TConvertor::MakeOperation(EOperationKind kind, const 
     }
 }
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

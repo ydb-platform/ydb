@@ -6,6 +6,8 @@
 
 #include <yt/yt/client/table_client/row_base.h>
 #include <yt/yt/client/table_client/schema.h>
+#include <yt/yt/client/table_client/unversioned_row.h>
+#include <yt/yt/client/table_client/versioned_row.h>
 
 #include <yt/yt/client/tablet_client/public.h>
 
@@ -17,16 +19,62 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Either a write or delete.
-struct TRowModification
+namespace NRowModifications {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TWriteRow
 {
-    //! Discriminates between writes and deletes.
-    ERowModificationType Type;
-    //! Either a row (for write; versioned or unversioned) or a key (for delete; always unversioned).
+    explicit TWriteRow(NTableClient::TUnversionedRow row)
+        : Row(row)
+    { }
+
+    NTableClient::TUnversionedRow Row;
+};
+
+struct TDeleteRow
+{
+    explicit TDeleteRow(NTableClient::TLegacyKey key)
+        : Key(key)
+    { }
+
+    NTableClient::TLegacyKey Key;
+};
+
+struct TVersionedWriteRow
+{
+    explicit TVersionedWriteRow(NTableClient::TTypeErasedRow row)
+        : Row(row)
+    { }
+
+    // NB: Versioned write to an ordered tablet will contain unversioned rows.
     NTableClient::TTypeErasedRow Row;
-    //! Locks.
+};
+
+struct TWriteAndLockRow
+{
+    TWriteAndLockRow(NTableClient::TUnversionedRow row, NTableClient::TLockMask locks)
+        : Row(row)
+        , Locks(std::move(locks))
+    { }
+
+    NTableClient::TUnversionedRow Row;
     NTableClient::TLockMask Locks;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NRowModifications
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TRowModification = std::variant<
+    NRowModifications::TWriteRow,
+    NRowModifications::TDeleteRow,
+    NRowModifications::TVersionedWriteRow,
+    NRowModifications::TWriteAndLockRow>;
+
+////////////////////////////////////////////////////////////////////////////////
 
 struct TModifyRowsOptions
 {

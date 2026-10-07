@@ -17,15 +17,12 @@ protected:
 public:
     TAccessor(const TString& path, const NColumnShard::TUnifiedOptionalPathId pathId)
         : TBase(path)
-        , PathId(pathId) {
+        , PathId(pathId)
+    {
     }
 
     virtual std::optional<NColumnShard::TUnifiedOptionalPathId> GetPathId() const override {
         return PathId;
-    }
-
-    virtual bool OrderByLimitAllowed() const override {
-        return false;
     }
 
     virtual bool NeedDuplicateFiltering() const override {
@@ -34,6 +31,10 @@ public:
 
     virtual bool NeedStalenessChecker() const override {
         return false;
+    }
+
+    virtual TString GetOverridenScanType(const TString&) const override {
+        return "SIMPLE";
     }
 
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(

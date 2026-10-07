@@ -39,6 +39,8 @@ public:
 
     TFuture<TCommitResult> Commit(TCommitOptions&& options) override;
 
+    TFuture<TUnlockTablesResult> UnlockTables(TUnlockTablesOptions&& options) override;
+
     TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) override;
 
     TFuture<TPathStatResult> PathStat(TPathStatOptions&& options) override;
@@ -50,6 +52,8 @@ public:
     TString GetDefaultClusterName() const override;
 
     TString GetClusterServer(const TString& cluster) const override;
+
+    TString GetClusterYtName(const TString& cluster) const override;
 
     NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const override;
 
@@ -80,6 +84,8 @@ public:
     NThreading::TFuture<TDumpResult> Dump(TDumpOptions&& options) override;
 
     NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) override;
+
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override;
 
     IYtTokenResolver::TPtr GetYtTokenResolver() const override;
 

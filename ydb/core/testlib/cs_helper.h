@@ -57,6 +57,9 @@ public:
 
     void SetForcedCompaction(const TString& storeName = "olapStore");
 
+    static constexpr const char* TILING_NO_COMPACTION_FEATURES_JSON =
+        R"({"accumulator_portion_size_limit":18446744073709551615,"accumulator_trigger_portions":18446744073709551615,"accumulator_trigger_bytes":18446744073709551615,"accumulator_overload_portions":18446744073709551615,"accumulator_overload_bytes":18446744073709551615})";
+
     static constexpr const char * PROTO_SCHEMA = R"(
         Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
         Columns { Name: "resource_id" Type: "Utf8" DataAccessorConstructor{ ClassName: "SPARSED" }}

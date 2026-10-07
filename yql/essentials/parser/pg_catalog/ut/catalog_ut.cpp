@@ -207,3 +207,69 @@ Y_UNIT_TEST(TestOk) {
     UNIT_ASSERT_VALUES_EQUAL(LookupProc(procId).Name, "iso8859_1_to_utf8");
 }
 } // Y_UNIT_TEST_SUITE(TConversionTests)
+
+Y_UNIT_TEST_SUITE(TCollationTests) {
+Y_UNIT_TEST(TestMissing) {
+    UNIT_ASSERT(!HasCollation("_foo_bar_"));
+    UNIT_ASSERT_EXCEPTION(LookupCollation("_foo_bar_"), yexception);
+    UNIT_ASSERT_EXCEPTION(LookupCollation((ui32)123456), yexception);
+}
+
+Y_UNIT_TEST(TestDefault) {
+    UNIT_ASSERT(HasCollation("default"));
+    const auto& ret = LookupCollation("default");
+    UNIT_ASSERT_VALUES_EQUAL(ret.Oid, DefaultCollationOid);
+    UNIT_ASSERT_VALUES_EQUAL(ret.Provider, ECollationProvider::Default);
+    UNIT_ASSERT_VALUES_EQUAL(LookupCollation(ret.Oid).Name, "default");
+}
+
+Y_UNIT_TEST(TestC) {
+    const auto& ret = LookupCollation("C");
+    UNIT_ASSERT_VALUES_EQUAL(ret.Oid, C_CollationOid);
+    UNIT_ASSERT_VALUES_EQUAL(ret.Provider, ECollationProvider::Libc);
+    UNIT_ASSERT_VALUES_EQUAL(ret.Collate, "C");
+    UNIT_ASSERT_VALUES_EQUAL(ret.Ctype, "C");
+}
+
+Y_UNIT_TEST(TestPosix) {
+    const auto& ret = LookupCollation("POSIX");
+    UNIT_ASSERT_VALUES_EQUAL(ret.Oid, PosixCollationOid);
+    UNIT_ASSERT_VALUES_EQUAL(ret.Provider, ECollationProvider::Libc);
+}
+
+Y_UNIT_TEST(TestUnicodeIcu) {
+    const auto& ret = LookupCollation("unicode");
+    UNIT_ASSERT_VALUES_EQUAL(ret.Provider, ECollationProvider::Icu);
+    UNIT_ASSERT_VALUES_EQUAL(ret.IcuLocale, "und");
+}
+
+Y_UNIT_TEST(TestEnum) {
+    size_t count = 0;
+    EnumCollation([&](ui32 oid, const TCollationDesc& desc) {
+        UNIT_ASSERT_VALUES_EQUAL(LookupCollation(desc.Name).Oid, oid);
+        ++count;
+    });
+
+    // 5 statically catalogued (pg_collation.dat) + generated ICU locale collations.
+    UNIT_ASSERT(count > 5);
+}
+
+Y_UNIT_TEST(TestIcuLocale) {
+    const auto& ret = LookupCollation("de-DE-x-icu");
+    UNIT_ASSERT_VALUES_EQUAL(ret.Provider, ECollationProvider::Icu);
+    UNIT_ASSERT_VALUES_EQUAL(ret.IcuLocale, "de-DE");
+    UNIT_ASSERT(ret.Oid >= IcuCollationOidBase);
+    UNIT_ASSERT_VALUES_EQUAL(LookupCollation(ret.Oid).Name, "de-DE-x-icu");
+
+    // The same locale always resolves to the same oid.
+    UNIT_ASSERT_VALUES_EQUAL(ret.Oid, LookupCollation("de-DE-x-icu").Oid);
+
+    // Different locales get different oids.
+    UNIT_ASSERT_UNEQUAL(ret.Oid, LookupCollation("en-US-x-icu").Oid);
+}
+
+Y_UNIT_TEST(TestIcuLocaleMissing) {
+    UNIT_ASSERT(!HasCollation("xx-XX-x-icu"));
+    UNIT_ASSERT_EXCEPTION(LookupCollation("xx-XX-x-icu"), yexception);
+}
+} // Y_UNIT_TEST_SUITE(TCollationTests)

@@ -32,7 +32,7 @@ PDisk {
   ExpectedSlotCount: 16
   PDiskMetrics {
     EnforcedDynamicSlotSize: 400000000000
-    SlotCount: 16
+    ExpectedSlotCount: 16
     SlotSizeInUnits: 2
   }
 }
@@ -46,8 +46,11 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 360000000000
     AllocatedSize: 40000000000
+    State: OK
+    Replicated: true
   }
   Status: "READY"
+  Ready: true
 }
 Group {
   GroupId: 2147483649

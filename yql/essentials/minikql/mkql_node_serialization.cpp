@@ -16,18 +16,18 @@ namespace NKikimr::NMiniKQL {
 using namespace NDetail;
 
 namespace {
-static const char KindMask = 0x0f;
-static const char TypeMask = 0x7f;
+const char KindMask = 0x0f;
+const char TypeMask = 0x7f;
 static_assert(KindMask == char(TType::EKind::ReservedKind), "Kind should be encoded in 4 bit");
-static const char UserMarker1 = 0x10;
-static const char UserMarker2 = 0x20;
-static const char UserMarker3 = 0x40;
-static const char TypeMarker = '\x80';
-static const char SystemMask = KindMask;
-static const char CommandMask = '\xf0';
-static const ui32 NameRefMark = 0x01;
-static const ui32 RequiresNextPass = 0x80000000u;
-static const ui32 AllPassesDone = 0xFFFFFFFFu;
+const char UserMarker1 = 0x10;
+const char UserMarker2 = 0x20;
+const char UserMarker3 = 0x40;
+const char TypeMarker = '\x80';
+const char SystemMask = KindMask;
+const char CommandMask = '\xf0';
+const ui32 NameRefMark = 0x01;
+const ui32 RequiresNextPass = 0x80000000U;
+const ui32 AllPassesDone = 0xFFFFFFFFU;
 
 enum class ESystemCommand {
     Begin = 0x10,
@@ -87,7 +87,6 @@ private:
         ++iter.first->second;
     }
 
-private:
     THashMap<TInternName, ui32> Names_;
     TVector<TInternName> NameOrder_;
 };
@@ -1038,7 +1037,6 @@ private:
         Out_.AppendNoAlias(buf.data(), Pack64(value, buf.data()));
     }
 
-private:
     TString Out_;
     ui32 ReferenceCount_ = 0;
     THashMap<TInternName, ui32> Names_;
@@ -1901,7 +1899,7 @@ private:
         TStackVec<TRuntimeNode> values(valuesCount);
         for (ui32 i = 0; i < valuesCount; ++i) {
             auto item = PopNode();
-            values[i] = TRuntimeNode(item, false);
+            values[i] = TRuntimeNode(item, /*isImmediate=*/false);
         }
 
         const char* immediateFlags = ReadMany(GetBitmapBytes(valuesCount));
@@ -1948,7 +1946,7 @@ private:
         TStackVec<TRuntimeNode> values(valuesCount);
         for (ui32 i = 0; i < valuesCount; ++i) {
             auto item = PopNode();
-            values[i] = TRuntimeNode(item, false);
+            values[i] = TRuntimeNode(item, /*isImmediate=*/false);
         }
 
         const char* immediateFlags = ReadMany(GetBitmapBytes(valuesCount));
@@ -1982,7 +1980,7 @@ private:
         items.reserve(itemsCount);
         for (ui32 i = 0; i < itemsCount; ++i) {
             auto item = PopNode();
-            items.push_back(TRuntimeNode(item, false));
+            items.push_back(TRuntimeNode(item, /*isImmediate=*/false));
         }
 
         const char* immediateFlags = ReadMany(GetBitmapBytes(itemsCount));
@@ -2047,8 +2045,8 @@ private:
         for (ui32 i = 0; i < itemsCount; ++i) {
             auto key = PopNode();
             auto payload = PopNode();
-            items[i].first = TRuntimeNode(key, false);
-            items[i].second = TRuntimeNode(payload, false);
+            items[i].first = TRuntimeNode(key, /*isImmediate=*/false);
+            items[i].second = TRuntimeNode(payload, /*isImmediate=*/false);
         }
 
         const char* immediateFlags = ReadMany(GetBitmapBytes(itemsCount * 2));
@@ -2110,7 +2108,7 @@ private:
             TStackVec<TRuntimeNode> inputs(inputsCount);
             for (ui32 i = 0; i < inputsCount; ++i) {
                 auto input = PopNode();
-                inputs[i] = TRuntimeNode(input, false);
+                inputs[i] = TRuntimeNode(input, /*isImmediate=*/false);
             }
 
             const char* immediateFlags = ReadMany(GetBitmapBytes(inputsCount));
@@ -2216,7 +2214,6 @@ private:
         }
     }
 
-private:
     struct TNodeContext {
         const char* Start;
         ui32 NextPass;
@@ -2241,7 +2238,7 @@ private:
 } // namespace
 
 TString SerializeNode(TNode* node, std::vector<TNode*>& nodeStack) {
-    return SerializeRuntimeNode(TRuntimeNode(node, true), nodeStack);
+    return SerializeRuntimeNode(TRuntimeNode(node, /*isImmediate=*/true), nodeStack);
 }
 
 TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node, std::vector<TNode*>& nodeStack) {

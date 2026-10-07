@@ -3,9 +3,9 @@
 #include "aligned_page_pool.h"
 #include "primes.h"
 
-#include <yql/essentials/public/udf/sanitizer_utils.h>
+#include <yql/essentials/public/udf/sanitizer_utils/sanitizer_utils.h>
 #include <yql/essentials/utils/hash.h>
-#include <yql/essentials/utils/is_pod.h>
+#include <yql/essentials/utils/meta/struct.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>
@@ -39,7 +39,6 @@ public:
     static const size_t MAX_SMALL_LIST_SIZE = 16;
     static const size_t MAX_MEDIUM_LIST_INDEX = 10;
 
-public:
     struct TPageListItem: public TIntrusiveListItem<TPageListItem> {
         template <class T>
         T* As() {
@@ -62,13 +61,13 @@ public:
             : Mark(mark)
             , ListSize(listSize)
             , FreeLists(listCount)
-            , FreeListOffset(0u)
+            , FreeListOffset(0U)
         {
             Y_ASSERT(ListItem.As<TListHeader>() == this);
-            *reinterpret_cast<ui16*>(this + 1) = 0u; // Mark first list for initial usage
+            *reinterpret_cast<ui16*>(this + 1) = 0U; // Mark first list for initial usage
         }
         ~TListHeader() {
-            Mark = 0u; // Reset mark
+            Mark = 0U; // Reset mark
         }
     };
 
@@ -81,12 +80,12 @@ public:
         explicit TLargeListHeader(ui32 capacity)
             : Mark(LARGE_MARK)
             , Capacity(capacity)
-            , Size(0u)
+            , Size(0U)
         {
             Y_ASSERT(ListItem.As<TLargeListHeader>() == this);
         }
         ~TLargeListHeader() {
-            Mark = 0u; // Reset mark
+            Mark = 0U; // Reset mark
         }
         template <typename T>
         T* GetList() {
@@ -118,8 +117,7 @@ public:
     public:
         using TRaw = std::conditional_t<std::is_const<T>::value, const void*, void*>;
 
-        TListIterator() {
-        }
+        TListIterator() = default;
 
         explicit TListIterator(T* list) {
             if (LARGE_MARK == GetMark(list)) {
@@ -190,7 +188,6 @@ public:
         THeader* EndPage_ = nullptr;
     };
 
-public:
     static inline TListHeader* GetListHeader(void* addr) {
         TListHeader* header = reinterpret_cast<TListHeader*>(TAlignedPagePool::GetPageStart(addr));
         Y_ASSERT(SMALL_MARK == header->Mark || MEDIUM_MARK == header->Mark);
@@ -605,13 +602,13 @@ private:
         const size_t byteListSize = AlignUp<size_t>(sizeof(T) * listHeader->ListSize, sizeof(ui16));
         ui16* l = reinterpret_cast<ui16*>(reinterpret_cast<ui8*>(listHeader + 1) + byteListSize * listHeader->FreeListOffset);
         // Distinguish first (0) and repeatedly (0x8000u) used lists
-        if ((*l) & 0x8000u) {
+        if ((*l) & 0x8000U) {
             listHeader->FreeListOffset = ((*l) & 0x7FFF);
         } else {
             ++listHeader->FreeListOffset;
             if (!last) {
                 // Mark next free list as first used
-                *reinterpret_cast<ui16*>(reinterpret_cast<ui8*>(listHeader + 1) + byteListSize * listHeader->FreeListOffset) = 0u;
+                *reinterpret_cast<ui16*>(reinterpret_cast<ui8*>(listHeader + 1) + byteListSize * listHeader->FreeListOffset) = 0U;
             }
         }
         if (last) {
@@ -630,13 +627,13 @@ private:
         const size_t byteListSize = sizeof(T) * listHeader->ListSize + sizeof(ui16);
         ui16* l = reinterpret_cast<ui16*>(reinterpret_cast<ui8*>(listHeader + 1) + byteListSize * listHeader->FreeListOffset);
         // Distinguish first (0) and repeatedly (0x8000u) used lists
-        if ((*l) & 0x8000u) {
+        if ((*l) & 0x8000U) {
             listHeader->FreeListOffset = ((*l) & 0x7FFF);
         } else {
             ++listHeader->FreeListOffset;
             if (!last) {
                 // Mark next free list as first used
-                *reinterpret_cast<ui16*>(reinterpret_cast<ui8*>(listHeader + 1) + byteListSize * listHeader->FreeListOffset) = 0u;
+                *reinterpret_cast<ui16*>(reinterpret_cast<ui8*>(listHeader + 1) + byteListSize * listHeader->FreeListOffset) = 0U;
             }
         }
 
@@ -657,7 +654,7 @@ private:
         Y_ASSERT((reinterpret_cast<ui8*>(list) - reinterpret_cast<ui8*>(listHeader + 1)) % byteListSize == 0);
         const ui64 offset = (reinterpret_cast<ui8*>(list) - reinterpret_cast<ui8*>(listHeader + 1)) / byteListSize;
         Y_ASSERT(offset < TAlignedPagePool::POOL_PAGE_SIZE);
-        *reinterpret_cast<ui16*>(list) = listHeader->FreeListOffset | 0x8000u;
+        *reinterpret_cast<ui16*>(list) = listHeader->FreeListOffset | 0x8000U;
         listHeader->FreeListOffset = offset;
         ++listHeader->FreeLists;
         if (1 == listHeader->FreeLists) {
@@ -676,7 +673,7 @@ private:
         Y_ASSERT((reinterpret_cast<ui8*>(l) - reinterpret_cast<ui8*>(listHeader + 1)) % (listHeader->ListSize * sizeof(T) + sizeof(ui16)) == 0);
         ui64 offset = (reinterpret_cast<ui8*>(l) - reinterpret_cast<ui8*>(listHeader + 1)) / (listHeader->ListSize * sizeof(T) + sizeof(ui16));
         Y_ASSERT(offset < TAlignedPagePool::POOL_PAGE_SIZE);
-        *l = listHeader->FreeListOffset | 0x8000u;
+        *l = listHeader->FreeListOffset | 0x8000U;
         listHeader->FreeListOffset = offset;
         ++listHeader->FreeLists;
         if (1 == listHeader->FreeLists) {
@@ -897,17 +894,10 @@ public:
         }
 
         // Empty iterator
-        TIteratorImpl() {
-        }
+        TIteratorImpl() = default;
 
     public:
-        TIteratorImpl& operator=(const TIteratorImpl& rhs) {
-            Hash_ = rhs.Hash_;
-            Bucket_ = rhs.Bucket_;
-            EndBucket_ = rhs.EndBucket_;
-            Pos_ = rhs.Pos_;
-            return *this;
-        }
+        TIteratorImpl& operator=(const TIteratorImpl& rhs) = default;
 
         bool Ok() const {
             return Bucket_ < EndBucket_ && Pos_.Ok();
@@ -983,8 +973,7 @@ public:
         }
 
         // Empty iterator
-        TIteratorImpl() {
-        }
+        TIteratorImpl() = default;
 
     public:
         bool Ok() const {
@@ -1045,7 +1034,6 @@ public:
             return *this;
         }
 
-    private:
         const TCompactHashBase* Hash_ = nullptr;
         size_t Bucket_ = 0;
         size_t EndBucket_ = 0;
@@ -1053,7 +1041,6 @@ public:
         TValueIter SubPos_;
     };
 
-public:
     using TIterator = TIteratorImpl<TItemType>;
     using TBucketIterator = TListPoolBase::TListIterator<TItemType, TListPoolBase::TLargeListHeader>;
     using TConstBucketIterator = TListPoolBase::TListIterator<const TItemType, const TListPoolBase::TLargeListHeader>;
@@ -1092,12 +1079,12 @@ public:
     }
 
     TCompactHashBase(TCompactHashBase&& other)
-        : Size_(std::move(other.Size_))
-        , UniqSize_(std::move(other.UniqSize_))
-        , MaxLoadFactor_(std::move(other.MaxLoadFactor_))
+        : Size_(other.Size_)
+        , UniqSize_(other.UniqSize_)
+        , MaxLoadFactor_(other.MaxLoadFactor_)
         , Buckets_(std::move(other.Buckets_))
-        , BucketsCount_(std::move(other.BucketsCount_))
-        , BucketsMemory_(std::move(other.BucketsMemory_))
+        , BucketsCount_(other.BucketsCount_)
+        , BucketsMemory_(other.BucketsMemory_)
         , ListPool_(std::move(other.ListPool_))
         , KeyExtractor_(std::move(other.KeyExtractor_))
         , KeyHash_(std::move(other.KeyHash_))
@@ -1108,7 +1095,7 @@ public:
         other.BucketsCount_ = 0;
         other.Size_ = 0;
         other.UniqSize_ = 0;
-        other.MaxLoadFactor_ = 1.f;
+        other.MaxLoadFactor_ = 1.F;
     }
 
     ~TCompactHashBase() {
@@ -1452,10 +1439,9 @@ protected:
         }
     }
 
-protected:
     size_t Size_ = 0;
     size_t UniqSize_ = 0;
-    float MaxLoadFactor_ = 1.f;
+    float MaxLoadFactor_ = 1.F;
     TItemNode* Buckets_ = nullptr;
     size_t BucketsCount_ = 0;
     size_t BucketsMemory_ = 0;

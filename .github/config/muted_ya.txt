@@ -1,75 +1,130 @@
-ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
-ydb/core/blobstorage/ut_blobstorage Decommit3dc.Test
-ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
-ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
-ydb/core/blobstorage/ut_blobstorage SpaceCheckForDiskReassign.Basic
-ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
-ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.block42
-ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.mirror3of4
-ydb/core/blobstorage/ut_blobstorage/ut_osiris unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_block4_2
-ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3dc
-ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_mirror3of4
-ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
-ydb/core/health_check/ut THealthCheckTest.TestStateStorageBlue
-ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestListStreamConsumersWithToken
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithStreamLookupJoin-WithFeatureFlag
-ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.ChunkDetailsMinMax
-ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-QueryService
-ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-SchemeQuery
+ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
+ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
+ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.SyncLogDuplicateFreeChunkRealPDiskWithoutRestart
+ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
+ydb/core/driver_lib/run/ut unittest.[*/*] chunk
+ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
+ydb/core/external_sources/s3/ut unittest.sole chunk
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.RowDispatcherMemoryLimitOnParserCreation
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading+FromCheckpoint
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading-FromCheckpoint
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryRestartsWhenUpsertTableDeletedWhileRunning
+ydb/core/kqp/ut/federated_query/datastreams StreamingHistoryReplay.DeduplicatingPqSinkRequiresForce-CompressedGraph
+ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
-ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
-ydb/core/kqp/ut/tli KqpTli.IgnoredTableRegexes
-ydb/core/kqp/ut/tli KqpTli.ManyUpsertsDeferredLock
-ydb/core/kqp/ut/tli KqpTli.SeparateCommitBreakerInMiddleOfSameShard
-ydb/core/kqp/ut/tli KqpTli.SeparateCommitDataQuery
-ydb/core/load_test/ut GroupWriteTest.SimpleRdma
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.BasicWriteReadDirectPBufferFilling
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.RandomWritesDirectPBufferFilling
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldRestorePartitionAfterRestart
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldWriteAndReadBlocksInDifferentRegionsDirectPBufferFilling
-ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_KllSketchBasedSplit_CheckBoundaries
-ydb/core/persqueue/ut/ut_with_sdk unittest.[*/*] chunk
-ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
-ydb/core/tx/columnshard/ut_schema unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_extsubdomain_reboots unittest.[*/*] chunk
+ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsRetry
+ydb/core/kqp/ut/sysview KqpSystemView.CompileCacheUserIsolation
+ydb/core/persqueue/public/mlp/ut TMLPChangerTests.DeadlineChangerMultiPartitionDifferentDeadlines
+ydb/core/persqueue/public/mlp/ut TMLPChangerTests.UnlockMultiPartition
+ydb/core/persqueue/ut TPQTest.TestMaxTimeLagRewind
+ydb/core/persqueue/ut TPQTest.TestPQPartialRead
+ydb/core/persqueue/ut TPQTest.TestPQReadWithoutReadToBlobEnd
+ydb/core/persqueue/ut TPQTest.TestReadSessions
+ydb/core/persqueue/ut TPQTest.TestSetClientOffset
+ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.SkipMessagesWithObsoleteTimestampWithRetentionInNonEmptyDestinationTopicWithRestart
+ydb/core/statistics/aggregator/ut AnalyzeSampling.CollectAndPersistStatistics+ColumnShard-SmallHistogramBudget
+ydb/core/sys_view/ut SystemView.QuerySessionsRuntimeStats+Enabled
+ydb/core/sys_view/ut_large SystemViewLarge.AuthOwners_DropSubtreeDuringScan
+ydb/core/tablet/ut BootstrapperTest.MultipleBootstrappers
+ydb/core/tablet_flat/ut TFlatTableExecutor_CutTabletHistory.TestDoNotCutHistoryEnabledAfterBoot
+ydb/core/tx/replication/controller/ut_schema_change AttachmentLifecycle.DropCascadeDuringAttachment
+ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithSchemaChangesEnabledAfterCreationReportsError
+ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithoutSchemaChangesReportsError
+ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropSyncIndexWithGlobalConsistency
+ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
+ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactWithIndexCreation[TabletRebootsBucket2]
+ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_index_build_reboots FulltextIndexBuildTestReboots.BaseCase[TabletRebootsBucket0]
+ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCaseWithDataColumns[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_shred TenantShredTest.SendPreviousGenerationUncompleted
-ydb/core/tx/schemeshard/ut_shred unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
-ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
-ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
-ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
-ydb/services/ydb/backup_ut BackupPathTestFs.ParallelBackupWholeDatabase
-ydb/services/ydb/backup_ut unittest.[*/*] chunk
-ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedCert
-ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedPrivatekey
-ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-2_to_prestable-26-2]
-ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_stable-25-4-1_to_stable-26-1-1]
-ydb/tests/compatibility/federated_queries py3test.[test_external_data_source_secret.py */*] chunk
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start2
-ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
-ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
-ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
-ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
-ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
-ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
-ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
-ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
-ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write_then_read
-ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
-ydb/tests/functional/ydb_cli test_ydb_interactive_sql.py.TestInteractiveExitCommands.test_consequence_ctrl_c_without_prompt
-ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
-ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board
-ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
-ydb/tools/stress_tool/ut TDeviceTestTool.AioTestRead
-ydb/tools/stress_tool/ut TDeviceTestTool.AioTestReadWrite
-ydb/tools/stress_tool/ut TDeviceTestTool.AioTestWrite
-ydb/tools/stress_tool/ut TDeviceTestTool.DDiskTestRead
-ydb/tools/stress_tool/ut TDeviceTestTool.DDiskTestWrite
-ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
-ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite
+ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
+ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb py3test.sole chunk
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_A_b_C_d_E]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_COL1]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_asterisk]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col3]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[constant]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[count]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[optional_types]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[primitive_types]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[pushdown]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[unsupported_types]
+ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
+ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedClusterTableFailsGetClustersList
+ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedVersionsTableIsRecreated
+ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestTrackerRecreatesDroppedBalancerTable
+ydb/services/persqueue_v1/ut TPersQueueTest.DirectReadRestartPQRB
+ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_exact_feature_config[rolling_stable-26-3-1_to_prestable-26-4-1]
+ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-3-1_to_prestable-26-4-1]
+ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-1-lax]
+ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-1-strict]
+ydb/tests/compatibility/indexes test_unique_index.py.TestUniqueIndex.test_unique_index[rolling_stable-26-3-1_to_prestable-26-4-1]
+ydb/tests/compatibility/indexes test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-3-1_to_prestable-26-4-1]
+ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_current_proxy_returns_overloaded[mixed_current_and_intermediate]
+ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_old_proxy_handles_limit_response_from_current_tablet[mixed_current_and_intermediate]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-4-1_and_stable-26-3-1-False]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_join[mixed_prestable-26-4-1_and_stable-26-3-1-False]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_join[mixed_prestable-26-4-1_and_stable-26-3-1-True]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_multi_output[mixed_prestable-26-4-1_and_stable-26-3-1-False]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-1-False]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-1-True]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_join[rolling_stable-26-3-1_to_prestable-26-4-1-False]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_join[rolling_stable-26-3-1_to_prestable-26-4-1-True]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_multi_output[rolling_stable-26-3-1_to_prestable-26-4-1-True]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksMixedCluster.test_mixed_cluster[mixed_prestable-26-4-1_and_stable-26-3-1-False]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksMixedCluster.test_mixed_cluster[mixed_prestable-26-4-1_and_stable-26-3-1-True]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-1-False]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-1-True]
+ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-4-1_and_stable-26-3-1]
+ydb/tests/compatibility/workloads test_workload_manager.py.TestWorkloadManagerMixedCluster.test_workload_manager_mixed_cluster[mixed_prestable-26-4-1_and_stable-26-3-1]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_hopping_closed_window[restart]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_hopping_open_window[restart]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_insert_select[restart]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_insert_select[scale_up]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_increase[external]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_increase[local]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_predicate[restart]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_predicate[scale_up]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_skips_deferred_publication[kikimr0]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_twice
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_restart_preserves_max_tasks_per_stage[max_tasks_1]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_restart_preserves_max_tasks_per_stage[max_tasks_30]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_restart_preserves_max_tasks_per_stage[max_tasks_5]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[default-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[max_tasks_per_stage_2-False]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[max_tasks_per_stage_2-True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state[False]
+ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_cascade_hopping_window[2-no_shared-False]
+ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_cascade_hopping_window[2-no_shared-True]
+ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_late_events_policy[ADJUST-expected1-True-2-no_shared]
+ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_watermarks[2-no_shared-False]
+ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_watermarks_kqp_slj[kikimr0-False-2-no_shared]
+ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_wm_after_parsing[False-2-no_shared]
+ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_wm_after_parsing[True-2-no_shared]
+ydb/tests/fq/streaming/logbroker py3test.sole chunk
+ydb/tests/fq/streaming/logbroker test_logbroker.py.TestLogbroker.test_read_write
+ydb/tests/fq/yds test_disposition.py.TestDisposition.test_disposition_from_time[v1-mvp_external_ydb_endpoint0]
+ydb/tests/fq/yt/yt_integration py3test.sole chunk
+ydb/tests/functional/config py3test.[test_distconf.py */*] chunk
+ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_replace_config_unknown_fields[host_config]
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
+ydb/tests/functional/federation_test TFederationWriteReadTest.CreateRemoteMirrorRuleWithGaps
+ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
+ydb/tests/functional/federation_test unittest.[*/*] chunk
+ydb/tests/functional/federation_test unittest.sole chunk
+ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
+ydb/tests/functional/tenants test_system_views.py.TestQueryMetricsOneHourRestart.test_case
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
+ydb/tests/functional/ydb_cli test_ydb_profile.py.TestProfileActivateEdgeCases.test_activate_interactive_exit_without_selection
+ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/oltp_workload/tests py3test.sole chunk
+ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
+ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
+ydb/tools/mnc/viewer/ut py3test.sole chunk
+ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_settings_save_deploy_flags_from_checkboxes

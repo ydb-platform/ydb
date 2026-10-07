@@ -29,6 +29,8 @@
 
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_NODE
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -36,8 +38,9 @@ using namespace NActors;
 
 namespace {
 
-// Min interval between stats send from scan/compute actor to executor
-constexpr TDuration MinStatInterval = TDuration::MilliSeconds(20);
+// Min interval between stats send from scan/compute actor to executor. A report walks all the channels of the task,
+// and a busy compute actor with hundreds of channels paid for it on every 20 ms
+constexpr TDuration MinStatInterval = TDuration::MilliSeconds(200);
 // Max interval in case of no activity
 constexpr TDuration MaxStatInterval = TDuration::Seconds(1);
 
@@ -63,6 +66,8 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
     {
         CaFactory_->AccountDefaultPoolInScheduler.store(config.GetComputeSchedulerSettings().GetAccountDefaultPool());
+        EnableSmallComputeMemoryAllocations = config.GetEnableSmallComputeMemoryAllocations();
+        EnableChannelMemoryTracking = config.GetEnableChannelMemoryTracking();
         if (config.HasIteratorReadsRetrySettings()) {
             SetIteratorReadsRetrySettings(config.GetIteratorReadsRetrySettings());
         }
@@ -75,8 +80,9 @@ public:
     }
 
     void Bootstrap() {
-        STLOG_I("Starting KQP Node service",
-            (node_id, SelfId().NodeId()));
+        YDB_LOG_INFO("Starting KQP Node service",
+            {"marker", "KQPNS"},
+            {"nodeId", SelfId().NodeId()});
 
         State_ = std::make_shared<TNodeState>();
 
@@ -131,21 +137,23 @@ private:
             IgnoreFunc(NConsole::TEvConsole::TEvConfigNotificationRequest);
 
             default: {
-                STLOG_W("Ignoring unexpected event 0x%x (" << ev->GetTypeName()
-                    << ") during graceful shutdown",
-                    (node_id, SelfId().NodeId()),
-                    (sender, ev->Sender));
+                YDB_LOG_WARN("Ignoring unexpected event during graceful shutdown",
+                    {"marker", "KQPNS"},
+                    {"eventType", ev->GetTypeName()},
+                    {"nodeId", SelfId().NodeId()},
+                    {"sender", ev->Sender});
             }
         }
     }
 
     void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr ev) {
-        NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.SendTasks", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "Dispatch tasks", NWilson::EFlags::AUTO_END);
+        sendTasksSpan.Attribute("ydb.actor.type", TString("TKqpNodeService"));
 
         const auto executerId = ev->Sender;
 
         if (!CachedQueryManagerId) {
-            CachedQueryManagerId = Register(CreateKqpQueryManager(Counters, State_, ResourceManager_, CaFactory_));
+            CachedQueryManagerId = Register(CreateKqpQueryManager(Counters, State_, ResourceManager_, CaFactory_, EnableSmallComputeMemoryAllocations, EnableChannelMemoryTracking));
         }
 
         TActorId queryManagerId;
@@ -168,10 +176,11 @@ private:
         const auto executerId = ev->Sender;
         auto& reason = ev->Get()->Record.GetReason();
 
-        STLOG_W("Terminate transaction",
-            (node_id, SelfId().NodeId()),
-            (tx_id, txId),
-            (reason, reason));
+        YDB_LOG_WARN("Terminate transaction",
+            {"marker", "KQPNS"},
+            {"nodeId", SelfId().NodeId()},
+            {"txId", txId},
+            {"reason", reason});
         TerminateTx(txId, executerId, reason);
 
         Counters->NodeServiceProcessCancelTime->Collect(timer.Passed() * SecToUsec);
@@ -181,9 +190,11 @@ private:
         State_->MarkRequestAsCancelled(executerId);
 
         if (auto tasksToAbort = State_->GetTasksByExecuterId(executerId); !tasksToAbort.empty()) {
-            STLOG_E("Node service cancelled the task, because it " << reason,
-                (node_id, SelfId().NodeId()),
-                (tx_id, txId));
+            YDB_LOG_ERROR("Node service cancelled the task, because it",
+                {"marker", "KQPNS"},
+                {"reason", reason},
+                {"nodeId", SelfId().NodeId()},
+                {"txId", txId});
             for (const auto& [taskId, computeActorId]: tasksToAbort) {
                 auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(status, reason);
                 Send(computeActorId, abortEv.release());
@@ -201,12 +212,14 @@ private:
 
     void HandleWork(TEvKqp::TEvInitiateShutdownRequest::TPtr& ev) {
         if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
-            STLOG_I("Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request",
-                (node_id, SelfId().NodeId()));
+            YDB_LOG_INFO("Feature flag EnableShuttingDownNodeState is disabled, ignoring shutdown request",
+                {"marker", "KQPNS"},
+                {"nodeId", SelfId().NodeId()});
             return;
         }
-        STLOG_I("Prepare to shutdown: do not accept any messages from this time",
-            (node_id, SelfId().NodeId()));
+        YDB_LOG_INFO("Prepare to shutdown: do not accept any messages from this time",
+            {"marker", "KQPNS"},
+            {"nodeId", SelfId().NodeId()});
         ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
         Become(&TKqpNodeService::ShuttingDownState);
     }
@@ -216,14 +229,16 @@ private:
         // continue to process tasks that are already started before shutdown
         auto& msg = ev->Get()->Record;
         if (ev->Sender.NodeId() == SelfId().NodeId()) {
-            STLOG_D("Accepting local StartRequest during shutdown",
-                (node_id, SelfId().NodeId()),
-                (tx_id, msg.GetTxId()));
+            YDB_LOG_DEBUG("Accepting local StartRequest during shutdown",
+                {"marker", "KQPNS"},
+                {"nodeId", SelfId().NodeId()},
+                {"txId", msg.GetTxId()});
             HandleWork(ev);
         } else if (msg.HasSupportShuttingDown() && msg.GetSupportShuttingDown()) {
-            STLOG_D("Rejecting remote StartRequest in ShuttingDown State",
-                (node_id, SelfId().NodeId()),
-                (tx_id, msg.GetTxId()));
+            YDB_LOG_DEBUG("Rejecting remote StartRequest in ShuttingDown State",
+                {"marker", "KQPNS"},
+                {"nodeId", SelfId().NodeId()},
+                {"txId", msg.GetTxId()});
             ReplyError(ev->Sender, msg, NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN, ev->Cookie);
         } else {
             HandleWork(ev);
@@ -257,7 +272,8 @@ private:
     }
 private:
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        STLOG_D("Subscribed for config changes");
+        YDB_LOG_DEBUG("Subscribed for config changes",
+            {"marker", "KQPNS"});
     }
 
     void HandleWork(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -282,10 +298,14 @@ private:
             CaFactory_->ApplyConfig(Config);
             CaFactory_->AccountDefaultPoolInScheduler.store(event.GetConfig().GetTableServiceConfig().GetComputeSchedulerSettings().GetAccountDefaultPool());
 
-            STLOG_I("Updated table service RM config",
-                (node_id, SelfId().NodeId()),
-                (config, Config.DebugString()));
+            YDB_LOG_INFO("Updated table service RM config",
+                {"marker", "KQPNS"},
+                {"nodeId", SelfId().NodeId()},
+                {"config", Config.DebugString()});
         }
+
+        EnableSmallComputeMemoryAllocations = event.GetConfig().GetTableServiceConfig().GetEnableSmallComputeMemoryAllocations();
+        EnableChannelMemoryTracking = event.GetConfig().GetTableServiceConfig().GetEnableChannelMemoryTracking();
 
         if (event.GetConfig().GetTableServiceConfig().HasIteratorReadsRetrySettings()) {
             SetIteratorReadsRetrySettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadsRetrySettings());
@@ -312,7 +332,7 @@ private:
         ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartDelayMs());
         ptr->MaxShardAttempts = settings.GetMaxShardRetries();
         ptr->MaxShardResolves = settings.GetMaxShardResolves();
-        ptr->UnsertaintyRatio = settings.GetUnsertaintyRatio();
+        ptr->UncertaintyRatio = settings.GetUnsertaintyRatio();
         ptr->Multiplier = settings.GetMultiplier();
         if (settings.GetMaxTotalRetries()) {
             ptr->MaxTotalRetries = settings.GetMaxTotalRetries();
@@ -325,6 +345,7 @@ private:
         ptr->MaxTotalBytesQuotaStreamLookup = settings.GetMaxTotalBytesQuotaStreamLookup();
         ptr->MaxInFlightReadsStreamLookup = settings.GetMaxInFlightReadsStreamLookup();
         ptr->MaxBytesPerFetchStreamLookup = settings.GetMaxBytesPerFetchStreamLookup();
+        ptr->MaxInFlightLocksStreamLookup = settings.GetMaxInFlightLocksStreamLookup();
         SetReadIteratorBackoffSettings(ptr);
     }
 
@@ -332,6 +353,17 @@ private:
         auto ptr = MakeIntrusive<NKikimr::NKqp::TWriteActorSettings>();
 
         ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
+
+        ui64 configuredMaxOperationBytes = settings.GetColumnShardMaxOperationBytes();
+        if (configuredMaxOperationBytes < 1_MB || configuredMaxOperationBytes > 1_GB) {
+            auto defaultValue = NKikimrConfig::TTableServiceConfig::TWriteActorSettings::default_instance().GetColumnShardMaxOperationBytes();
+            YDB_LOG_ERROR("ColumnShardMaxOperationBytes is outside the allowed range [1 MB, 1 GB]; using the default",
+                {"marker", "KQPNS"},
+                {"configuredBytes", configuredMaxOperationBytes},
+                {"defaultBytes", defaultValue});
+            configuredMaxOperationBytes = defaultValue;
+        }
+        ptr->ColumnShardMaxOperationBytes = configuredMaxOperationBytes;
 
         ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());
@@ -356,19 +388,22 @@ private:
             }
 
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                STLOG_C("Failed to deliver subscription request to config dispatcher",
-                    (node_id, SelfId().NodeId()));
+                YDB_LOG_CRIT("Failed to deliver subscription request to config dispatcher",
+                    {"marker", "KQPNS"},
+                    {"nodeId", SelfId().NodeId()});
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                STLOG_E("Failed to deliver config notification response",
-                    (node_id, SelfId().NodeId()));
+                YDB_LOG_ERROR("Failed to deliver config notification response",
+                    {"marker", "KQPNS"},
+                    {"nodeId", SelfId().NodeId()});
                 break;
 
             default:
-                STLOG_E("Undelivered event with unexpected source type",
-                    (node_id, SelfId().NodeId()),
-                    (source_type, ev->Get()->SourceType));
+                YDB_LOG_ERROR("Undelivered event with unexpected source type",
+                    {"marker", "KQPNS"},
+                    {"nodeId", SelfId().NodeId()},
+                    {"sourceType", ev->Get()->SourceType});
                 break;
         }
     }
@@ -471,6 +506,8 @@ private:
     std::shared_ptr<TNodeState> State_;
     TIntrusivePtr<TKqpShutdownState> ShutdownState_;
     TActorId CachedQueryManagerId;
+    bool EnableSmallComputeMemoryAllocations = false;
+    bool EnableChannelMemoryTracking = false;
 };
 
 

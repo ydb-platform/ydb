@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/library/aclib/protos/aclib.pb.h>
+#include <ydb/library/aclib/protos/identity/user_token.pb.h>
 
 #include <util/generic/hash.h>
 

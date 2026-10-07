@@ -9,7 +9,10 @@ from typing import (
     Iterable,
     Optional,
     TYPE_CHECKING,
+    TypeVar,
     Union,
+    Callable,
+    cast,
     overload,
 )
 
@@ -17,6 +20,7 @@ from .. import (
     _apis,
     issues,
 )
+from ..observability.tracing import SpanName, create_ydb_span, span_finish_callback
 from .._grpc.grpcwrapper import ydb_topic as _ydb_topic
 from .._grpc.grpcwrapper import ydb_query as _ydb_query
 from ..connection import _RpcState as RpcState
@@ -31,6 +35,7 @@ if TYPE_CHECKING:
     from ..aio.driver import Driver as AsyncDriver
 
 logger = logging.getLogger(__name__)
+CallableT = TypeVar("CallableT", bound=Callable[..., Any])
 
 
 class QueryTxStateEnum(enum.Enum):
@@ -76,7 +81,7 @@ class QueryTxStateHelper(abc.ABC):
         return len(cls._VALID_TRANSITIONS[state]) == 0
 
 
-def reset_tx_id_handler(func):
+def reset_tx_id_handler(func: CallableT) -> CallableT:
     @functools.wraps(func)
     def decorator(rpc_state, response_pb, session: "BaseQuerySession", tx_state: "QueryTxState", *args, **kwargs):
         try:
@@ -86,7 +91,7 @@ def reset_tx_id_handler(func):
             tx_state.tx_id = None
             raise
 
-    return decorator
+    return cast(CallableT, decorator)
 
 
 class QueryTxState:
@@ -245,6 +250,10 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
         self._last_query_stats = None
 
     @property
+    def _driver_config(self):
+        return getattr(self._driver, "_driver_config", None)
+
+    @property
     def session_id(self) -> Optional[str]:
         """
         A transaction's session id
@@ -285,14 +294,12 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
     @overload
     def _begin_call(
         self: "BaseQueryTxContext[SyncDriver]", settings: Optional[BaseRequestSettings]
-    ) -> "BaseQueryTxContext[SyncDriver]":
-        ...
+    ) -> "BaseQueryTxContext[SyncDriver]": ...
 
     @overload
     def _begin_call(
         self: "BaseQueryTxContext[AsyncDriver]", settings: Optional[BaseRequestSettings]
-    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]:
-        ...
+    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]: ...
 
     def _begin_call(
         self, settings: Optional[BaseRequestSettings]
@@ -314,14 +321,12 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
     @overload
     def _commit_call(
         self: "BaseQueryTxContext[SyncDriver]", settings: Optional[BaseRequestSettings]
-    ) -> "BaseQueryTxContext[SyncDriver]":
-        ...
+    ) -> "BaseQueryTxContext[SyncDriver]": ...
 
     @overload
     def _commit_call(
         self: "BaseQueryTxContext[AsyncDriver]", settings: Optional[BaseRequestSettings]
-    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]:
-        ...
+    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]: ...
 
     def _commit_call(
         self, settings: Optional[BaseRequestSettings]
@@ -344,14 +349,12 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
     @overload
     def _rollback_call(
         self: "BaseQueryTxContext[SyncDriver]", settings: Optional[BaseRequestSettings]
-    ) -> "BaseQueryTxContext[SyncDriver]":
-        ...
+    ) -> "BaseQueryTxContext[SyncDriver]": ...
 
     @overload
     def _rollback_call(
         self: "BaseQueryTxContext[AsyncDriver]", settings: Optional[BaseRequestSettings]
-    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]:
-        ...
+    ) -> Awaitable["BaseQueryTxContext[AsyncDriver]"]: ...
 
     def _rollback_call(
         self, settings: Optional[BaseRequestSettings]
@@ -385,8 +388,8 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings],
         concurrent_result_sets: Optional[bool],
         settings: Optional[BaseRequestSettings],
-    ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]:
-        ...
+        pool_id: Optional[str],
+    ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]: ...
 
     @overload
     def _execute_call(
@@ -402,8 +405,8 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings],
         concurrent_result_sets: Optional[bool],
         settings: Optional[BaseRequestSettings],
-    ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]:
-        ...
+        pool_id: Optional[str],
+    ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]: ...
 
     def _execute_call(
         self,
@@ -418,6 +421,7 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings],
         concurrent_result_sets: Optional[bool],
         settings: Optional[BaseRequestSettings],
+        pool_id: Optional[str],
     ) -> Union[
         Iterable[_apis.ydb_query.ExecuteQueryResponsePart],
         Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]],
@@ -444,6 +448,7 @@ class BaseQueryTxContext(base.CallbackHandler, Generic[DriverT]):
             result_set_format=result_set_format,
             arrow_format_settings=arrow_format_settings,
             concurrent_result_sets=concurrent_result_sets,
+            pool_id=pool_id,
         )
 
         return self._driver(
@@ -531,7 +536,13 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
 
         :return: Transaction object or exception if begin is failed
         """
-        self._begin_call(settings)
+        with create_ydb_span(
+            SpanName.BEGIN_TRANSACTION,
+            self._driver_config,
+            node_id=self.session.node_id,
+            peer=getattr(self.session, "_peer", None),
+        ).attach_context():
+            self._begin_call(settings)
 
         return self
 
@@ -553,13 +564,19 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
 
         self._ensure_prev_stream_finished()
 
-        try:
-            self._execute_callbacks_sync(base.TxEvent.BEFORE_COMMIT)
-            self._commit_call(settings)
-            self._execute_callbacks_sync(base.TxEvent.AFTER_COMMIT, exc=None)
-        except BaseException as e:  # TODO: probably should be less wide
-            self._execute_callbacks_sync(base.TxEvent.AFTER_COMMIT, exc=e)
-            raise e
+        with create_ydb_span(
+            SpanName.COMMIT,
+            self._driver_config,
+            node_id=self.session.node_id,
+            peer=getattr(self.session, "_peer", None),
+        ).attach_context():
+            try:
+                self._execute_callbacks_sync(base.TxEvent.BEFORE_COMMIT)
+                self._commit_call(settings)
+                self._execute_callbacks_sync(base.TxEvent.AFTER_COMMIT, exc=None)
+            except BaseException as e:  # TODO: probably should be less wide
+                self._execute_callbacks_sync(base.TxEvent.AFTER_COMMIT, exc=e)
+                raise e
 
     def rollback(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """Calls rollback on a transaction if it is open otherwise is no-op. If transaction execution
@@ -579,13 +596,19 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
 
         self._ensure_prev_stream_finished()
 
-        try:
-            self._execute_callbacks_sync(base.TxEvent.BEFORE_ROLLBACK)
-            self._rollback_call(settings)
-            self._execute_callbacks_sync(base.TxEvent.AFTER_ROLLBACK, exc=None)
-        except BaseException as e:  # TODO: probably should be less wide
-            self._execute_callbacks_sync(base.TxEvent.AFTER_ROLLBACK, exc=e)
-            raise e
+        with create_ydb_span(
+            SpanName.ROLLBACK,
+            self._driver_config,
+            node_id=self.session.node_id,
+            peer=getattr(self.session, "_peer", None),
+        ).attach_context():
+            try:
+                self._execute_callbacks_sync(base.TxEvent.BEFORE_ROLLBACK)
+                self._rollback_call(settings)
+                self._execute_callbacks_sync(base.TxEvent.AFTER_ROLLBACK, exc=None)
+            except BaseException as e:  # TODO: probably should be less wide
+                self._execute_callbacks_sync(base.TxEvent.AFTER_ROLLBACK, exc=e)
+                raise e
 
     def execute(
         self,
@@ -601,6 +624,7 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
         schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
         result_set_format: Optional[base.QueryResultSetFormat] = None,
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> base.SyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -629,25 +653,34 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
          1) QueryResultSetFormat.VALUE, which is default;
          2) QueryResultSetFormat.ARROW.
         :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
+        :param pool_id: Optional resource pool ID for routing the query to a specific compute pool.
 
         :return: Iterator with result sets
         """
         self._ensure_prev_stream_finished()
 
-        stream_it = self._execute_call(
-            query=query,
-            commit_tx=commit_tx,
-            syntax=syntax,
-            exec_mode=exec_mode,
-            stats_mode=stats_mode,
-            schema_inclusion_mode=schema_inclusion_mode,
-            result_set_format=result_set_format,
-            arrow_format_settings=arrow_format_settings,
-            parameters=parameters,
-            concurrent_result_sets=concurrent_result_sets,
-            settings=settings,
+        span = create_ydb_span(
+            SpanName.EXECUTE_QUERY,
+            self._driver_config,
+            node_id=self.session.node_id,
+            peer=getattr(self.session, "_peer", None),
         )
 
+        with span.attach_context(end_on_exit=False):
+            stream_it = self._execute_call(
+                query=query,
+                commit_tx=commit_tx,
+                syntax=syntax,
+                exec_mode=exec_mode,
+                stats_mode=stats_mode,
+                schema_inclusion_mode=schema_inclusion_mode,
+                result_set_format=result_set_format,
+                arrow_format_settings=arrow_format_settings,
+                parameters=parameters,
+                concurrent_result_sets=concurrent_result_sets,
+                settings=settings,
+                pool_id=pool_id,
+            )
         self._prev_stream = base.SyncResponseContextIterator(
             stream_it,
             lambda resp: base.wrap_execute_query_response(
@@ -659,5 +692,6 @@ class QueryTxContext(BaseQueryTxContext["SyncDriver"]):
                 settings=self.session._settings,
             ),
             on_error=self.session._on_execute_stream_error,
+            on_finish=span_finish_callback(span),
         )
         return self._prev_stream

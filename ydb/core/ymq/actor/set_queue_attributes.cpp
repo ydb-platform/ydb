@@ -116,7 +116,7 @@ private:
             hFunc(TEvWakeup,      HandleWakeup);
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
             hFunc(TSqsEvents::TEvQueueId,  HandleQueueId);
-            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
         }
     }
 
@@ -170,6 +170,10 @@ private:
         auto* consumer = request.add_alter_consumers();
         consumer->set_name(ConsumerName);
 
+        if (ValidatedAttributes_.ContentBasedDeduplication) {
+            request.set_set_content_based_deduplication(*ValidatedAttributes_.ContentBasedDeduplication);
+        }
+
         auto* type = consumer->mutable_alter_shared_consumer_type();
         if (ValidatedAttributes_.VisibilityTimeout) {
             type->mutable_set_default_processing_timeout()->set_seconds(*ValidatedAttributes_.VisibilityTimeout);
@@ -203,7 +207,7 @@ private:
         Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
     }
 
-    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         const auto& response = *ev->Get();
         if (response.Status == Ydb::StatusIds::SUCCESS) {
             NotifyQueueLeader();

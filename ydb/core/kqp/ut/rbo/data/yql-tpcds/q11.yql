@@ -95,11 +95,11 @@ WHERE
     AND t_w_firstyear.year_total > 0
     AND CASE
         WHEN t_w_firstyear.year_total > 0 THEN t_w_secyear.year_total / t_w_firstyear.year_total
-        ELSE 0.0
+        ELSE cast(0 as decimal(35,2))
     END
     > CASE
         WHEN t_s_firstyear.year_total > 0 THEN t_s_secyear.year_total / t_s_firstyear.year_total
-        ELSE 0.0
+        ELSE cast(0 as decimal(35,2))
     END
 ORDER BY
     t_s_secyear.customer_id,

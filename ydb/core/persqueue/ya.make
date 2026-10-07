@@ -12,12 +12,14 @@ PEERDIR(
     ydb/core/persqueue/pqrb
     ydb/core/persqueue/pqtablet
     ydb/core/persqueue/writer
+    ydb/public/sdk/cpp/src/library/kafka
 )
 
 END()
 
 RECURSE(
     common
+    deferred_publish
     events
     pqrb
     pqtablet
@@ -27,6 +29,7 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    deferred_publish/ut
     dread_cache_service/ut
     ut/slow
     ut/ut_with_sdk

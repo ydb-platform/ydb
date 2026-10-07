@@ -1,5 +1,4 @@
 PRAGMA DisableSimpleColumns;
-/* postgres can not */
 SELECT
     count(i1.key) as count,
     count(distinct i1.key) as uniq_count

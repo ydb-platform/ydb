@@ -173,6 +173,7 @@ void TestDropObjectCommon(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGatew
 void TestCreateExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
     TCreateObjectSettings settings("EXTERNAL_DATA_SOURCE", path, {
         {"source_type", "ObjectStorage"},
+        {"location", "my-bucket"},
         {"auth_method", "NONE"},
         {"installation", "cloud"}
     });
@@ -182,7 +183,7 @@ void TestCreateExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKik
     UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetSourceType(), "ObjectStorage");
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetInstallation(), "cloud");
-    UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetLocation(), "");
+    UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetLocation(), "my-bucket");
     UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetName(), SplitPath(path).back());
     UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().HasNone());
 }
@@ -244,7 +245,7 @@ void TestCreateResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGat
 void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
     TCreateObjectSettings settings("RESOURCE_POOL", poolId, {
         {"concurrent_query_limit", "20"},
-        {"query_memory_limit_percent_per_node", "80.5"}
+        {"total_cpu_limit_percent_per_node", "80.5"}
     }, {
         "queue_size"
     });
@@ -256,7 +257,7 @@ void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGate
     UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
     UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
     UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "-1");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "80.5");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("total_cpu_limit_percent_per_node"), "80.5");
 }
 
 void TestDropResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
@@ -277,7 +278,7 @@ void TestCreateStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrG
     UNIT_ASSERT_GE(properties.size(), 3);
     UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), "false");
     UNIT_ASSERT_VALUES_EQUAL(properties.at("__query_text"), "SELECT 42");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("resource_pool"), NResourcePool::DEFAULT_POOL_ID);
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("resource_pool"), "");
 }
 
 void TestAlterStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
@@ -410,11 +411,62 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto response = responseFuture.GetValue();
         response.Issues().PrintTo(Cerr);
         UNIT_ASSERT(response.Success());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Type, "ObjectStorage");
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.TableLocation, "/");
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.DataSourcePath, externalDataSourceName);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.DataSourceLocation, "my-bucket");
+        UNIT_ASSERT_VALUES_EQUAL(ToStringDatabaseType(response.Metadata->ExternalTable().GetDatabaseType()), "ObjectStorage");
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalTable().GetLocation(), "/");
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalTable().GetDataSourcePath(), externalDataSourceName);
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalTable().GetUnderlyingDataSource().GetLocation(), "my-bucket");
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->Columns.size(), 2);
+    }
+
+    Y_UNIT_TEST(TestLoadYdbDataSourceWithoutExternalPath) {
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
+        TKikimrRunner kikimr{NKqp::TKikimrSettings(appCfg)};
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        const TString path = "/Root/YdbDataSource";
+        TCreateObjectSettings settings("EXTERNAL_DATA_SOURCE", path, {
+            {"source_type", "Ydb"},
+            {"location", kikimr.GetEndpoint()},
+            {"database_name", "/Root"},
+            {"auth_method", "NONE"}
+        });
+        const auto entry = TestCreateObjectCommon(*kikimr.GetTestServer().GetRuntime(), gateway, settings, path);
+        UNIT_ASSERT_VALUES_EQUAL(entry.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
+
+        auto response = gateway->LoadTableMetadata(TestCluster, path,
+            IKikimrGateway::TLoadTableMetadataSettings()).GetValueSync();
+        UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
+        UNIT_ASSERT(response.Metadata->IsExternalDataSource());
+        UNIT_ASSERT(response.Metadata->ExternalDataSource().IsYdb());
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalDataSource().GetDatabaseName(), "/Root");
+    }
+
+    Y_UNIT_TEST(TestLoadYdbDataSourceWithoutLocation) {
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
+        TKikimrRunner kikimr{NKqp::TKikimrSettings(appCfg)};
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        const TString path = "/Root/ExternalDataSourceWithoutLocation";
+        TCreateObjectSettings settings("EXTERNAL_DATA_SOURCE", path, {
+            {"source_type", "Ydb"},
+            {"database_id", "test-database-id"},
+            {"auth_method", "NONE"}
+        });
+        const auto entry = TestCreateObjectCommon(*kikimr.GetTestServer().GetRuntime(), gateway, settings, path);
+        UNIT_ASSERT_VALUES_EQUAL(entry.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
+        UNIT_ASSERT(entry.ExternalDataSourceInfo);
+        UNIT_ASSERT(entry.ExternalDataSourceInfo->Description.GetLocation().empty());
+
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, path,
+            IKikimrGateway::TLoadTableMetadataSettings().WithAuthInfo(false));
+        responseFuture.Wait();
+        auto response = responseFuture.GetValue();
+        UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
+        UNIT_ASSERT(response.Metadata->IsExternalDataSource());
+        UNIT_ASSERT(response.Metadata->ExternalDataSource().GetLocation().empty());
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalDataSource().BuildConnectorProperties().at("database_id"), "test-database-id");
     }
 
     void CreateSecretObject(const TString& secretId, const TString& secretValue, TSession& session) {
@@ -461,7 +513,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="my-bucket",
                 AUTH_METHOD="SERVICE_ACCOUNT",
-                SERVICE_ACCOUNT_ID="",
+                SERVICE_ACCOUNT_ID="mySaId",
                 SERVICE_ACCOUNT_SECRET_NAME=")" << secretId << R"("
             );
             CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
@@ -483,7 +535,9 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretValue);
+        const auto& dataSource = response.Metadata->ExternalTable().GetUnderlyingDataSource();
+        const auto authProperties = dataSource.BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("serviceAccountIdSignature"), secretValue);
     }
 
     Y_UNIT_TEST_TWIN(TestLoadBasicSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
@@ -520,7 +574,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Password, secretValue);
+        const auto authProperties = response.Metadata->ExternalDataSource().BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("password"), secretValue);
     }
 
     Y_UNIT_TEST_TWIN(TestLoadMdbBasicSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
@@ -562,8 +617,9 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Password, secretPasswordValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretSaValue);
+        const auto authProperties = response.Metadata->ExternalDataSource().BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("password"), secretPasswordValue);
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("serviceAccountIdSignature"), secretSaValue);
     }
 
      Y_UNIT_TEST_TWIN(TestLoadAwsSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
@@ -604,9 +660,10 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.AwsAccessKeyId, awsAccessKeyIdSecretValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.AwsSecretAccessKey, awsSecretAccessKeySecretValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.DataSourceAuth.GetAws().GetAwsRegion(), "ru-central-1");
+        const auto authProperties = response.Metadata->ExternalDataSource().BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("awsAccessKeyId"), awsAccessKeyIdSecretValue);
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("awsSecretAccessKey"), awsSecretAccessKeySecretValue);
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("awsRegion"), "ru-central-1");
     }
 
     Y_UNIT_TEST_TWIN(TestLoadDataSourceProperties, UseSchemaSecrets) {
@@ -653,14 +710,14 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Password, secretPasswordValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretSaValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().size(), 5);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("mdb_cluster_id"), "my_id");
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("database_name"), "my_db");
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("protocol"), "native");
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("use_tls"), "true");
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("schema"), "public");
+        const auto authProperties = response.Metadata->ExternalDataSource().BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("password"), secretPasswordValue);
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("serviceAccountIdSignature"), secretSaValue);
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("mdb_cluster_id"), "my_id");
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("database_name"), "my_db");
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("protocol"), "native");
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("use_tls"), "true");
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("schema"), "public");
     }
 
     Y_UNIT_TEST_TWIN(TestLoadTokenSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
@@ -695,8 +752,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Token, secretTokenValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().size(), 0);
+        const auto authProperties = response.Metadata->ExternalDataSource().BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(authProperties.at("token"), secretTokenValue);
     }
 
     Y_UNIT_TEST_TWIN(TestSecretsExistingValidation, UseSchemaSecrets) {

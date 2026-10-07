@@ -9,6 +9,7 @@
 #include <library/cpp/testing/gtest/gtest.h>
 #include <library/cpp/testing/gtest_extensions/assertions.h>
 
+#include <util/generic/size_literals.h>
 #include <util/system/byteorder.h>
 
 using namespace NYT;
@@ -168,7 +169,7 @@ TEST(TWrapSystemErrorTest, ConnectTimeout)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.StartRequest(),
-        TTransportError,
+        TErrorResponse,
         "can not connect to");
 }
 
@@ -184,7 +185,7 @@ TEST(TWrapSystemErrorTest, ConnectAcceptTimeout)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.GetResponseStream()->ReadAll(),
-        TTransportError,
+        TErrorResponse,
         "can not read from socket input stream");
 }
 
@@ -197,11 +198,18 @@ TEST(TWrapSystemErrorTest, WriteTimeout)
     THttpRequest request("0-0-0-0", server->GetAddress(), THttpHeader("POST", "reply"), TDuration::Seconds(1));
     auto requestStream = request.StartRequest();
 
-    auto data = TString(100000, 'x');
+    auto data = TString(1_MB, 'x');
 
+    // Server doesn't read; we need writev to block past SocketTimeout.
+    // In order to make sure that we overrflow system buffer
+    // we send ~ 100mb.
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
-        *requestStream << data,
-        TTransportError,
+        [&] {
+            for (int i = 0; i < 128; ++i) {
+                *requestStream << data;
+            }
+        }(),
+        TErrorResponse,
         "can not writev to socket output stream");
 }
 
@@ -217,7 +225,7 @@ TEST(TWrapSystemErrorTest, FirstLineTimeout)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.GetResponseStream()->ReadAll(),
-        TTransportError,
+        TErrorResponse,
         "can not read from socket input stream");
 }
 
@@ -233,7 +241,7 @@ TEST(TWrapSystemErrorTest, EmptyFirstLine)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.GetResponseStream()->ReadAll(),
-        TTransportError,
+        TErrorResponse,
         "Failed to get first line");
 }
 
@@ -249,7 +257,7 @@ TEST(TWrapSystemErrorTest, HeaderTimeout)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.GetResponseStream()->ReadAll(),
-        TTransportError,
+        TErrorResponse,
         "can not read from socket input stream");
 }
 
@@ -265,7 +273,7 @@ TEST(TWrapSystemErrorTest, InvalidHeader)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.GetResponseStream()->ReadAll(),
-        TTransportError,
+        TErrorResponse,
         "can not parse http header");
 }
 
@@ -281,6 +289,6 @@ TEST(TWrapSystemErrorTest, BodyTimeout)
 
     EXPECT_THROW_MESSAGE_HAS_SUBSTR(
         request.GetResponseStream()->ReadAll(),
-        TTransportError,
+        TErrorResponse,
         "can not read from socket input stream");
 }

@@ -20,7 +20,7 @@ def start_yds_query(kikimr, client, sql, with_checkpoints) -> str:
     if with_checkpoints:
         kikimr.compute_plane.wait_zero_checkpoint(query_id)
     else:
-        kikimr.control_plane.wait_worker_count(1, "DQ_PQ_READ_ACTOR", 1)
+        kikimr.control_plane.wait_worker_count(1, "DQ_MESSAGE_STREAM_READ_ACTOR", 1)
     return query_id
 
 
@@ -119,7 +119,7 @@ class TestPqReadWrite(TestYdsBase):
                 INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
                 SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
                 FROM (
-                    SELECT field1, field2, SystemMetadata("offset") as field3
+                    SELECT field1, field2, __ydb_offset as field3
                     FROM {YDS_CONNECTION}.`{self.input_topic}`
                     WITH (
                         format=json_each_row,

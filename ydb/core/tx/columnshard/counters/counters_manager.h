@@ -48,7 +48,8 @@ public:
         , ColumnTablesCounters(std::make_shared<TColumnTablesCounters>())
         , PortionIndexCounters(std::make_shared<TPortionIndexStats>())
         , RequestsTracingCounters(std::make_shared<TRequestsTracerCounters>())
-        , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>()) {
+        , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>())
+    {
     }
 
     void OnWriteOverloadDisk() const {
@@ -82,6 +83,11 @@ public:
     void OnWriteOverloadRejectProbability(const ui64 size) const {
         TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         CSCounters.OnWriteOverloadRejectProbability(size);
+    }
+
+    void OnWriteOverloadSmallBlobsQuota(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadSmallBlobsQuota(size);
     }
 
     void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {

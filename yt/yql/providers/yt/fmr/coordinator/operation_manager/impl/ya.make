@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_default_stage_operation_manager.cpp
@@ -12,8 +12,13 @@ PEERDIR(
     yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/merge
     yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sorted_merge
     yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/map
+    yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/reduce
     yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sorted_upload
     yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/sort
+    yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/pull
+    yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/fill
+    yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/map_reduce
+    yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/touch
     yql/essentials/utils
 )
 

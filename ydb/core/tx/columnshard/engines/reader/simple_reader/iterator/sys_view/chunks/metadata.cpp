@@ -5,16 +5,17 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 
 TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptionalPathId pathId)
-    : TBase(tablePath, pathId) {
+    : TBase(tablePath, pathId)
+{
 }
 
-std::unique_ptr<NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool isPlain) const {
-    AFL_VERIFY(!isPlain);
+std::unique_ptr<NCommon::ISourcesConstructor> TAccessor::SelectMetadata(
+    const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
+    AFL_VERIFY(readerClass == NReader::EReaderClass::Simple);
     auto pathId = GetPathId();
     AFL_VERIFY(!!pathId);
     return std::make_unique<TConstructor>(context.GetPathIdTranslator(), *pathId, context.GetEngine(), readDescription.GetTabletId(),
-        readDescription.GetSnapshot(), readDescription.PKRangesFilter, readDescription.GetSorting());
+        readDescription.GetSnapshot(), readDescription.PKRangesFilter, readDescription.GetSourcesSorting());
 }
 
 std::shared_ptr<ISnapshotSchema> TAccessor::GetSnapshotSchemaOptional(

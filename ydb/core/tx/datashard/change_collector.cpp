@@ -4,6 +4,8 @@
 #include "datashard_impl.h"
 #include "datashard_user_db.h"
 
+#include <ydb/library/aclib/user_context.h>
+
 #include <util/generic/vector.h>
 
 namespace NKikimr {
@@ -56,7 +58,7 @@ public:
 
     bool OnUpdate(const TTableId& tableId, ui32 localTid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
-        const TRowVersion& writeVersion, NACLib::TUserContext::TPtr userCtx) override
+        const TRowVersion& writeVersion, TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         Y_UNUSED(localTid);
 
@@ -73,7 +75,7 @@ public:
 
     bool OnUpdateTx(const TTableId& tableId, ui32 localTid, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
-        ui64 writeTxId, NACLib::TUserContext::TPtr userCtx) override
+        ui64 writeTxId, TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         Y_UNUSED(localTid);
         WriteTxId = writeTxId;
@@ -117,7 +119,7 @@ public:
         const TPathId& pathId,
         TChangeRecord::EKind kind,
         const TDataChange& body,
-        NACLib::TUserContext::TPtr userCtx) override
+        TIntrusivePtr<NACLib::TUserContext> userCtx) override
     {
         NIceDb::TNiceDb db(Db);
 

@@ -69,14 +69,15 @@ protected:
             }
             Commands.emplace_back(std::move(command));
         });
-    }
 
-    bool AskPermissions() final {
         if (Commands.empty()) {
             PrintFtxuiMessage("", "Listing all YDB CLI commands...", ftxui::Color::Green);
         } else {
             PrintFtxuiMessage("", TStringBuilder() << "Analyzing 'ydb " << JoinSeq(" ", Commands) << "' command description...", ftxui::Color::Green);
         }
+    }
+
+    bool AskPermissions() final {
         return true;
     }
 

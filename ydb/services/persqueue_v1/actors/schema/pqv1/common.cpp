@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
@@ -104,6 +105,42 @@ TResult AddConsumerImpl(
         consumer->SetServiceType(defaultCientServiceType);
     }
 
+    if (auto r = ProcessConsumerType(consumer, rr); !r) {
+        return r;
+    }
+
+    // Per-consumer read quota for a single partition is stored in TPartitionConfig.ReadQuota keyed by consumer name.
+    if (rr.has_read_speed_bytes_per_second()) {
+        if (rr.read_speed_bytes_per_second() < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "read_speed_bytes_per_second can't be negative, provided "
+                << rr.read_speed_bytes_per_second()};
+        }
+        auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);
+        if (rr.read_speed_bytes_per_second() == 0) {
+            readQuota->ClearSpeedInBytesPerSecond();
+            readQuota->ClearBurstSize();
+        } else {
+            readQuota->SetSpeedInBytesPerSecond(rr.read_speed_bytes_per_second());
+            readQuota->SetBurstSize(rr.read_speed_bytes_per_second());
+        }
+    }
+    if (rr.has_read_speed_messages_per_second()) {
+        if (rr.read_speed_messages_per_second() < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "read_speed_messages_per_second can't be negative, provided "
+                << rr.read_speed_messages_per_second()};
+        }
+        auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);
+        if (rr.read_speed_messages_per_second() == 0) {
+            readQuota->ClearSpeedInMessagesPerSecond();
+            readQuota->ClearBurstSizeInMessages();
+        } else {
+            readQuota->SetSpeedInMessagesPerSecond(rr.read_speed_messages_per_second());
+            readQuota->SetBurstSizeInMessages(rr.read_speed_messages_per_second());
+        }
+    }
+
     if (consumersAdvancedMonitoringSettings) {
         consumersAdvancedMonitoringSettings->UpdateConsumerConfig(rr.consumer_name(), *consumer);
     }
@@ -125,7 +162,7 @@ TResult ApplyChangesInt( // create and alter
 
     pqDescr->SetName(name);
 
-    auto minParts = 1;
+    i64 minParts = 1;
     auto* pqTabletConfig = pqDescr->MutablePQTabletConfig();
     auto partConfig = pqTabletConfig->MutablePartitionConfig();
 
@@ -161,14 +198,40 @@ TResult ApplyChangesInt( // create and alter
         minParts = settings.partitions_count();
     } else {
         const auto& autoPartitioningSettings = settings.auto_partitioning_settings();
-        if (autoPartitioningSettings.min_active_partitions() > 0) {
-            minParts = autoPartitioningSettings.min_active_partitions();
+        const auto autoMin = autoPartitioningSettings.min_active_partitions();
+        if (autoMin < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "Partitions count must be positive, provided " << autoMin};
+        }
+        if (autoMin > 0) {
+            minParts = autoMin;
+        } else {
+            minParts = settings.partitions_count();
+        }
+    }
+    if (minParts <= 0) {
+        error = TStringBuilder() << "Partitions count must be positive, provided " << settings.partitions_count();
+        return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
+    }
+    if (auto r = ValidateTopicPartitionCount(minParts, "Partitions count"); !r) {
+        return r;
+    }
+
+    if (settings.has_auto_partitioning_settings()) {
+        const auto& autoPartitioningSettings = settings.auto_partitioning_settings();
+        const auto maxParts = autoPartitioningSettings.max_active_partitions();
+        if (maxParts < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "Max active partitions must be non-negative, provided " << maxParts};
+        }
+        if (auto r = ValidateTopicPartitionCount(maxParts, "Max active partitions"); !r) {
+            return r;
         }
 
         auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
 
         pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
-        pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault<int64_t>(autoPartitioningSettings.max_active_partitions(), 0L, minParts));
+        pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault<int64_t>(maxParts, 0L, minParts));
         pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoPartitioningSettings.partition_write_speed().up_utilization_percent(), 0 ,30));
         pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoPartitioningSettings.partition_write_speed().down_utilization_percent(), 0, 90));
         pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault<int64_t>(autoPartitioningSettings.partition_write_speed().stabilization_window().seconds(), 0L, 300L));
@@ -190,10 +253,6 @@ TResult ApplyChangesInt( // create and alter
             return r;
         }
     }
-    if (minParts <= 0) {
-        error = TStringBuilder() << "Partitions count must be positive, provided " << settings.partitions_count();
-        return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
-    }
     pqDescr->SetTotalGroupCount(minParts);
     pqTabletConfig->SetRequireAuthWrite(true);
     pqTabletConfig->SetRequireAuthRead(true);
@@ -203,7 +262,7 @@ TResult ApplyChangesInt( // create and alter
         return r;
     }
 
-    bool local = !settings.client_write_disabled();
+    const bool local = !settings.client_write_disabled();
 
     if (operation == EOperation::Create && !pqConfig.GetTopicsAreFirstClassCitizen()) {
         auto converter = NPersQueue::TTopicNameConverter::ForFederation(
@@ -294,6 +353,77 @@ TResult ApplyChangesInt( // create and alter
         } else {
             partConfig->SetBurstSize(burstSpeed);
         }
+
+        if (settings.max_partition_write_messages_speed() > 0) {
+            partConfig->SetWriteSpeedInMessagesPerSecond(settings.max_partition_write_messages_speed());
+        } else if (settings.max_partition_write_messages_speed() == 0) {
+            partConfig->SetWriteSpeedInMessagesPerSecond(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+        } else {
+            error = TStringBuilder() << "max_partition_write_messages_speed can't be negative, provided " << settings.max_partition_write_messages_speed();
+            return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
+        }
+
+        if (settings.max_partition_write_messages_burst() > 0) {
+            partConfig->SetBurstSizeInMessages(settings.max_partition_write_messages_burst());
+        } else if (settings.max_partition_write_messages_burst() == 0) {
+            partConfig->SetBurstSizeInMessages(partConfig->GetWriteSpeedInMessagesPerSecond());
+        } else {
+            error = TStringBuilder() << "max_partition_write_messages_burst can't be negative, provided " << settings.max_partition_write_messages_burst();
+            return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
+        }
+    }
+
+    // Total read speed for a single partition (across all consumers).
+     if (settings.partition_total_read_speed_bytes_per_second() > 0) {
+        partConfig->SetReadSpeedInBytesPerSecond(settings.partition_total_read_speed_bytes_per_second());
+        partConfig->SetReadBurstBytes(settings.partition_total_read_speed_bytes_per_second());
+    } else if (settings.partition_total_read_speed_bytes_per_second() == 0) {
+        partConfig->ClearReadSpeedInBytesPerSecond();
+        partConfig->ClearReadBurstBytes();
+    } else {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+            << "partition_total_read_speed_bytes_per_second can't be negative, provided "
+            << settings.partition_total_read_speed_bytes_per_second()};
+    }
+    if (settings.partition_total_read_speed_messages_per_second() > 0) {
+        partConfig->SetReadSpeedInMessagesPerSecond(settings.partition_total_read_speed_messages_per_second());
+        partConfig->SetReadBurstMessages(settings.partition_total_read_speed_messages_per_second());
+    } else if (settings.partition_total_read_speed_messages_per_second() == 0) {
+        partConfig->ClearReadSpeedInMessagesPerSecond();
+        partConfig->ClearReadBurstMessages();
+    } else {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+            << "partition_total_read_speed_messages_per_second can't be negative, provided "
+            << settings.partition_total_read_speed_messages_per_second()};
+    }
+
+
+    // Read speed for reading a single partition without a consumer is stored in
+    // TPartitionConfig.ReadQuota keyed by CLIENTID_WITHOUT_CONSUMER.
+    if (settings.partition_read_without_consumer_speed_bytes_per_second() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_read_without_consumer_speed_bytes_per_second can't be negative, provided " << settings.partition_read_without_consumer_speed_bytes_per_second()};
+    }
+    if (settings.partition_read_without_consumer_speed_messages_per_second() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_read_without_consumer_speed_messages_per_second can't be negative, provided " << settings.partition_read_without_consumer_speed_messages_per_second()};
+    }
+    if (settings.partition_read_without_consumer_speed_bytes_per_second()
+            || settings.partition_read_without_consumer_speed_messages_per_second()) {
+        auto* readQuota = NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER);
+        if (settings.partition_read_without_consumer_speed_bytes_per_second() == 0) {
+            readQuota->ClearSpeedInBytesPerSecond();
+            readQuota->ClearBurstSize();
+        } else if (settings.partition_read_without_consumer_speed_bytes_per_second()) {
+            readQuota->SetSpeedInBytesPerSecond(settings.partition_read_without_consumer_speed_bytes_per_second());
+            readQuota->SetBurstSize(settings.partition_read_without_consumer_speed_bytes_per_second());
+        }
+        if (settings.partition_read_without_consumer_speed_messages_per_second() == 0) {
+            readQuota->ClearSpeedInMessagesPerSecond();
+            readQuota->ClearBurstSizeInMessages();
+        }
+        else if (settings.partition_read_without_consumer_speed_messages_per_second()) {
+            readQuota->SetSpeedInMessagesPerSecond(settings.partition_read_without_consumer_speed_messages_per_second());
+            readQuota->SetBurstSizeInMessages(settings.partition_read_without_consumer_speed_messages_per_second());
+        }
     }
 
     if (!Ydb::PersQueue::V1::TopicSettings::Format_IsValid((int)settings.supported_format()) || settings.supported_format() == 0) {
@@ -301,6 +431,7 @@ TResult ApplyChangesInt( // create and alter
         return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
     }
     pqTabletConfig->SetFormatVersion(settings.supported_format() - 1);
+    pqTabletConfig->SetContentBasedDeduplication(settings.content_based_deduplication());
 
     auto ct = pqTabletConfig->MutableCodecs();
     if (settings.supported_codecs().size() > NPQ::MAX_SUPPORTED_CODECS_COUNT) {
@@ -337,9 +468,7 @@ TResult ApplyChangesInt( // create and alter
 
     if (settings.has_remote_mirror_rule()) {
         auto mirrorFrom = partConfig->MutableMirrorFrom();
-        if (!local) {
-            mirrorFrom->SetSyncWriteTime(true);
-        }
+        // SyncWriteTime removed; runtime always syncs write time when mirroring.
         {
             TString endpoint = settings.remote_mirror_rule().endpoint();
             if (endpoint.StartsWith(GRPCS_ENDPOINT_PREFIX)) {

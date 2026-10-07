@@ -110,7 +110,11 @@ struct TMetadataInfoHolder {
     {
         for (auto& [name, ptr] : TableMetadata) {
             for (auto implTable : ptr->ImplTables) {
-                YQL_ENSURE(implTable);
+                // Local indexes (e.g. column-store bloom / bloom-ngram / min-max) have no impl
+                // tables, so their ImplTables slot is null (see TKikimrTableMetadata ctor).
+                if (!implTable) {
+                    continue;
+                }
                 do {
                     auto nextImplTable = implTable->Next;
                     Indexes.emplace(implTable->Name, std::move(implTable));
@@ -278,11 +282,6 @@ public:
             Config->_KqpTablePathPrefix = ReplayDetails["query_database"].GetStringSafe();
         }
 
-        ui32 syntax = (ReplayDetails["query_syntax"].GetStringSafe() == "1") ? 1 : 0;
-        if (queryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
-            syntax = 1;
-        }
-	Config->_KqpYqlSyntaxVersion = syntax;
         Config->FreezeDefaults();
     }
 
@@ -324,7 +323,7 @@ private:
                     Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected event in CompileState");
             }
         } catch (const yexception& e) {
-            Reply(Ydb::StatusIds::INTERNAL_ERROR, e.what());
+            ReplyInternalError(e.what());
         }
     }
 
@@ -524,6 +523,19 @@ private:
     void Reply(const Ydb::StatusIds::StatusCode& status, const TString& message) {
         NYql::TIssue issue(NYql::TPosition(), message);
         Reply(status, {issue});
+    }
+
+    // Aborts of the replay tool itself (YQL_ENSURE / yexception caught in a STATEFN)
+    // must not be classified as product compile errors. Product failures arrive as a
+    // result status via TEvContinueProcess, never as an exception.
+    void ReplyInternalError(const TString& message) {
+        auto ev = std::make_unique<TQueryReplayEvents::TEvCompileResponse>(false);
+        ev->Status = TQueryReplayEvents::QrInternalError;
+        ev->Message = message;
+        Cerr << "Query replay internal error: " << ev->Message << Endl;
+        WriteJsonData("-repro.txt", ReplayDetails);
+        Send(Owner, ev.release());
+        PassAway();
     }
 
     void Reply(const Ydb::StatusIds::StatusCode& status, const TIssues& issues, const std::optional<TString>& queryPlan = std::nullopt) {

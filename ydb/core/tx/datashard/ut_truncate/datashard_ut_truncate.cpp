@@ -1,6 +1,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
+#include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NDataShard;
@@ -22,7 +23,6 @@ public:
 
         Server = new TServer(serverSettings);
         Runtime = Server->GetRuntime();
-        Runtime->GetAppData(0).FeatureFlags.SetEnableTruncateTable(true);
 
         if (enableDebugLogs) {
             Runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -247,8 +247,17 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
         ui64 truncateTxId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
         WaitTxNotification(server, edgeSender, truncateTxId);
 
-        auto commitResult = KqpSimpleCommit(*runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
-        UNIT_ASSERT_VALUES_EQUAL(commitResult, "ERROR: ABORTED");
+        auto commitFuture = KqpSimpleSendCommit(*runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
+        auto commitResponse = AwaitResponse(*runtime, std::move(commitFuture));
+        UNIT_ASSERT_VALUES_EQUAL(commitResponse.operation().status(), Ydb::StatusIds::ABORTED);
+        {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(commitResponse.operation().issues(), issues);
+            UNIT_ASSERT_C(
+                NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED),
+                "Expected KIKIMR_LOCKS_INVALIDATED (TLI) issue, got: " << issues.ToString()
+            );
+        }
 
         auto afterResult = ReadTable(server, shards, tableId);
         UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
@@ -284,11 +293,97 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
         ui64 truncateTxId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
         WaitTxNotification(server, edgeSender, truncateTxId);
 
-        auto commitResult = KqpSimpleCommit(*runtime, sessionId, txId, Q_(R"(SELECT * FROM `/Root/test_table`;)"));
-        UNIT_ASSERT_VALUES_EQUAL(commitResult, "ERROR: ABORTED");
+        auto commitFuture = KqpSimpleSendCommit(*runtime, sessionId, txId, Q_(R"(SELECT * FROM `/Root/test_table`;)"));
+        auto commitResponse = AwaitResponse(*runtime, std::move(commitFuture));
+        UNIT_ASSERT_VALUES_EQUAL(commitResponse.operation().status(), Ydb::StatusIds::ABORTED);
+        {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(commitResponse.operation().issues(), issues);
+            // TRUNCATE TABLE changes the table schema version (AlterVersion+1), so the commit is
+            // compiled against a version the transaction has not seen and KQP aborts it with
+            // KIKIMR_SCHEME_MISMATCH, rather than the transaction reaching the datashard and
+            // failing there on a broken lock (KIKIMR_LOCKS_INVALIDATED / TLI).
+            UNIT_ASSERT_C(
+                NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH),
+                "Expected KIKIMR_SCHEME_MISMATCH issue, got: " << issues.ToString()
+            );
+        }
 
         auto afterResult = ReadTable(server, shards, tableId);
         UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
+    }
+
+    Y_UNIT_TEST(TruncateBreaksStaleSnapshotSameTable) {
+        auto serverHelper = TServerHelper();
+        auto [server, runtime, edgeSender] = serverHelper.GetObjects();
+
+        CreateShardedTable(server, edgeSender, "/Root", "table_1", 1);
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/table_1` (key, value) VALUES (1, 100), (2, 200), (3, 300);
+        )");
+
+        TString sessionId, txId;
+        auto read1 = KqpSimpleBegin(*runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/table_1` ORDER BY key;
+        )"));
+        UNIT_ASSERT_C(!read1.empty() && !read1.StartsWith("ERROR"), "first read must succeed, got: " << read1);
+
+        ui64 truncateTxId = AsyncTruncateTable(server, edgeSender, "/Root", "table_1");
+        WaitTxNotification(server, edgeSender, truncateTxId);
+
+        auto read2 = KqpSimpleContinue(*runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/table_1` WHERE key >= 0 ORDER BY key;
+        )"));
+        Cerr << "read#2 after truncate: [" << read2 << "]" << Endl;
+
+        auto commitFuture = KqpSimpleSendCommit(*runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
+        auto commitResponse = AwaitResponse(*runtime, std::move(commitFuture));
+        Cerr << "commit status: " << commitResponse.operation().status() << Endl;
+
+        // The stale read must fail; the transaction must not be able to commit successfully.
+        UNIT_ASSERT_C(read2.StartsWith("ERROR"),
+            "stale read must fail after TRUNCATE, got: [" << read2 << "]");
+        UNIT_ASSERT_VALUES_UNEQUAL_C(commitResponse.operation().status(), Ydb::StatusIds::SUCCESS,
+            "transaction must not commit after reading a truncated table");
+    }
+
+    Y_UNIT_TEST(TruncateBreaksStaleSnapshotOtherTable) {
+        auto serverHelper = TServerHelper();
+        auto [server, runtime, edgeSender] = serverHelper.GetObjects();
+
+        CreateShardedTable(server, edgeSender, "/Root", "table_1", 1);
+        CreateShardedTable(server, edgeSender, "/Root", "table_2", 1);
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/table_1` (key, value) VALUES (1, 100), (2, 200), (3, 300);
+        )");
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/table_2` (key, value) VALUES (1, 111), (2, 222);
+        )");
+
+        TString sessionId, txId;
+        auto read1 = KqpSimpleBegin(*runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/table_1` ORDER BY key;
+        )"));
+        UNIT_ASSERT_C(!read1.empty() && !read1.StartsWith("ERROR"), "first read must succeed, got: " << read1);
+
+        ui64 truncate1 = AsyncTruncateTable(server, edgeSender, "/Root", "table_1");
+        WaitTxNotification(server, edgeSender, truncate1);
+        ui64 truncate2 = AsyncTruncateTable(server, edgeSender, "/Root", "table_2");
+        WaitTxNotification(server, edgeSender, truncate2);
+
+        auto read2 = KqpSimpleContinue(*runtime, sessionId, txId, Q_(R"(
+            SELECT key, value FROM `/Root/table_2` WHERE key >= 0 ORDER BY key;
+        )"));
+        Cerr << "read#2 of table_2 after truncate: [" << read2 << "]" << Endl;
+
+        auto commitFuture = KqpSimpleSendCommit(*runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
+        auto commitResponse = AwaitResponse(*runtime, std::move(commitFuture));
+        Cerr << "commit status: " << commitResponse.operation().status() << Endl;
+
+        UNIT_ASSERT_C(read2.StartsWith("ERROR"),
+            "stale read of the other truncated table must fail, got: [" << read2 << "]");
+        UNIT_ASSERT_VALUES_UNEQUAL_C(commitResponse.operation().status(), Ydb::StatusIds::SUCCESS,
+            "transaction must not commit after reading a truncated table");
     }
 
     Y_UNIT_TEST(TruncateTableWithKqpSelects) {

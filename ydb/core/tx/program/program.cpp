@@ -1,9 +1,13 @@
 #include "builder.h"
 #include "program.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/program/execution.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
 
@@ -31,7 +35,9 @@ TConclusionStatus TProgramContainer::Init(
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
         TString out;
         ::google::protobuf::TextFormat::PrintToString(programProto, &out);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "parse_program")("program", out);
+        YDB_LOG_DEBUG("",
+            {"event", "parse_program"},
+            {"program", out});
     }
 
     if (programProto.HasKernels()) {
@@ -40,7 +46,9 @@ TConclusionStatus TProgramContainer::Init(
                 return TConclusionStatus::Fail("Can't parse kernels");
             }
         } catch (...) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed_error")("result", CurrentExceptionMessage());
+            YDB_LOG_ERROR("",
+                {"event", "program_parsed_error"},
+                {"result", CurrentExceptionMessage()});
             return TConclusionStatus::Fail(TStringBuilder() << "Can't initialize program, exception thrown: " << CurrentExceptionMessage());
         }
     }
@@ -49,7 +57,9 @@ TConclusionStatus TProgramContainer::Init(
     if (parseStatus.IsFail()) {
         return parseStatus;
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "program_parsed")("result", DebugString());
+    YDB_LOG_DEBUG("",
+        {"event", "program_parsed"},
+        {"result", DebugString()});
     return TConclusionStatus::Success();
 }
 
@@ -100,7 +110,8 @@ TConclusionStatus TProgramContainer::Init(
 TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program) {
     using TId = NKikimrSSA::TProgram::TCommand;
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("parse_proto_program", program.DebugString());
+    YDB_LOG_DEBUG("",
+        {"parseProtoProgram", program.DebugString()});
     NArrow::NSSA::TProgramBuilder programBuilder(columnResolver, KernelsRegistry);
     bool hasProjection = false;
     for (auto& cmd : program.GetCommand()) {
@@ -134,12 +145,22 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
                 }
                 break;
             }
+            case TId::kDistinct: {
+                auto status = programBuilder.ReadDistinct(cmd.GetDistinct());
+                if (status.IsFail()) {
+                    return status;
+                }
+                break;
+            }
             case TId::LINE_NOT_SET:
                 return TConclusionStatus::Fail("incorrect SSA line case");
         }
     }
     if (!hasProjection) {
         return TConclusionStatus::Fail("program has no projections");
+    }
+    if (HasAppData() && AppData()->FeatureFlags.GetEnableCsIndexReadMemoryTracking()) {
+        programBuilder.EnableIndexMemoryReserve();
     }
     auto programStatus = programBuilder.Finish();
     if (programStatus.IsFail()) {
@@ -160,9 +181,10 @@ const THashSet<ui32>& TProgramContainer::GetProcessingColumns() const {
 }
 
 TConclusion<std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>> TProgramContainer::ApplyProgram(
-    std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& collection, const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const {
+    std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& collection) const {
     if (Program) {
-        return Program->Apply(source, std::move(collection));
+        NArrow::NSSA::TFakeDataSource fakeSource;
+        return Program->Apply(fakeSource, std::move(collection));
     } else if (OverrideProcessingColumnsVector) {
         collection->RemainOnly(*OverrideProcessingColumnsVector, true);
     }
@@ -172,7 +194,7 @@ TConclusion<std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>> TProgramCo
 TConclusion<std::shared_ptr<arrow::RecordBatch>> TProgramContainer::ApplyProgram(
     const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const {
     auto resources = std::make_unique<NArrow::NAccessor::TAccessorsCollection>(batch, resolver);
-    auto status = ApplyProgram(std::move(resources), std::make_shared<NArrow::NSSA::TFakeDataSource>());
+    auto status = ApplyProgram(std::move(resources));
     if (status.IsFail()) {
         return status;
     }

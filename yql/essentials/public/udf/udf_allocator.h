@@ -64,10 +64,10 @@ struct TStdAllocatorForUdf {
     {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
         (void)(n);
-        return UdfFreeWithSize(static_cast<const void*>(p), n * sizeof(value_type));
+        UdfFreeWithSize(static_cast<const void*>(p), n * sizeof(value_type));
 #else
         (void)(n);
-        return UdfFree(static_cast<const void*>(p));
+        UdfFree(static_cast<const void*>(p));
 #endif
     }
 };
@@ -91,19 +91,19 @@ struct TWithUdfAllocator {
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
     void operator delete(void* mem, std::size_t sz) noexcept {
-        return UdfFreeWithSize(mem, sz);
+        UdfFreeWithSize(mem, sz);
     }
 
     void operator delete[](void* mem, std::size_t sz) noexcept {
-        return UdfFreeWithSize(mem, sz);
+        UdfFreeWithSize(mem, sz);
     }
 #else
     void operator delete(void* mem) noexcept {
-        return UdfFree(mem);
+        UdfFree(mem);
     }
 
     void operator delete[](void* mem) noexcept {
-        return UdfFree(mem);
+        UdfFree(mem);
     }
 #endif
 };

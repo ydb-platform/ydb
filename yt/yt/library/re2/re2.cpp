@@ -24,11 +24,11 @@ void Serialize(const TRe2Ptr& re, IYsonConsumer* consumer)
 void Deserialize(TRe2Ptr& re, INodePtr node)
 {
     if (node->GetType() != ENodeType::Entity) {
-        auto pattern = node->GetValue<TString>();
+        auto pattern = node->GetValue<std::string>();
         re = New<TRe2>(pattern);
         if (!re->ok()) {
             THROW_ERROR_EXCEPTION("Error parsing RE2 regex")
-                << TErrorAttribute("error", re->error());
+                .With("error", re->error());
         }
     } else {
         re.Reset();
@@ -48,7 +48,7 @@ void Deserialize(TRe2Ptr& re, TYsonPullParserCursor* cursor)
     cursor->Next();
     if (!re->ok()) {
         THROW_ERROR_EXCEPTION("Error parsing RE2 regex")
-            << TErrorAttribute("error", re->error());
+            .With("error", re->error());
     }
 }
 

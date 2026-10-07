@@ -2,30 +2,53 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
+namespace {
+
+TString GetStorageIdForIndexChunk(
+    const NReader::NCommon::IDataSource& source, const std::shared_ptr<IIndexMeta>& indexMeta, const std::optional<TBlobRange>& blobRange) {
+    if (blobRange && blobRange->BlobId.GetDsGroup() == Max<ui32>()) {
+        return source.GetPortionAccessor().GetPortionInfo().GetMeta().GetTierName();
+    }
+    return source.GetIndexStorageId(indexMeta->GetIndexId());
+}
+
+}   // namespace
+
 void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& context) {
     TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
-    StorageId = context.GetSource()->GetEntityStorageId(GetEntityId());
-    auto indexChunks = context.GetSource()->GetPortionAccessor().GetIndexChunksPointers(IndexMeta->GetIndexId());
+    auto& source = context.GetSource();
+    const auto& portionAccessor = source.GetPortionAccessor();
+    auto indexChunks = portionAccessor.GetIndexChunksPointers(IndexMeta->GetIndexId());
     for (auto&& i : indexChunks) {
         if (i->HasBlobData()) {
             TChunkOriginalData originalData(i->GetBlobDataVerified());
+            const TString storageId = GetStorageIdForIndexChunk(source, IndexMeta, std::nullopt);
+            FetchingStorageIds.emplace_back(storageId);
             Fetching.emplace_back(TIndexChunkFetching(
-                StorageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
+                storageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
         } else {
-            TChunkOriginalData originalData(
-                context.GetSource()->GetPortionAccessor().RestoreBlobRange(i->GetBlobRangeVerified()));
+            const TBlobRange blobRange = portionAccessor.RestoreBlobRange(i->GetBlobRangeVerified());
+            const TString storageId = GetStorageIdForIndexChunk(source, IndexMeta, blobRange);
+            FetchingStorageIds.emplace_back(storageId);
+            TChunkOriginalData originalData(blobRange);
             Fetching.emplace_back(TIndexChunkFetching(
-                StorageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
+                storageId, IndexAddressesVector, originalData, IndexMeta->BuildHeader(originalData).DetachResult(), i->GetRecordsCount()));
         }
     }
-    std::vector<TBlobRange> ranges;
-    for (auto&& i : Fetching) {
-        auto rangesLocal = i.GetResult().GetRangesToFetch();
+    THashMap<TString, std::vector<TBlobRange>> rangesByStorage;
+    AFL_VERIFY(Fetching.size() == FetchingStorageIds.size());
+    for (ui32 idx = 0; idx < Fetching.size(); ++idx) {
+        auto rangesLocal = Fetching[idx].GetResult().GetRangesToFetch();
+        auto& ranges = rangesByStorage[FetchingStorageIds[idx]];
         ranges.insert(ranges.end(), rangesLocal.begin(), rangesLocal.end());
     }
-    ranges.erase(std::unique(ranges.begin(), ranges.end()), ranges.end());
-    if (ranges.size()) {
-        std::shared_ptr<IBlobsReadingAction> reading = blobsAction.GetReading(StorageId);
+    for (auto&& [storageId, ranges] : rangesByStorage) {
+        std::sort(ranges.begin(), ranges.end());
+        ranges.erase(std::unique(ranges.begin(), ranges.end()), ranges.end());
+        if (ranges.empty()) {
+            continue;
+        }
+        std::shared_ptr<IBlobsReadingAction> reading = blobsAction.GetReading(storageId);
         for (auto&& i : ranges) {
             reading->AddRange(i);
         }
@@ -38,19 +61,24 @@ void TIndexFetcherLogic::DoOnDataReceived(TReadActionsCollection& nextRead, NBlo
         return;
     }
     TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
-    std::vector<TBlobRange> ranges;
+    THashMap<TString, std::vector<TBlobRange>> rangesByStorage;
     {
         auto g = blobs.BuildGuard();
-        for (auto&& r : Fetching) {
-            r.FetchFrom(IndexMeta, StorageId, g);
-            auto rangesLocal = r.GetResult().GetRangesToFetch();
+        AFL_VERIFY(Fetching.size() == FetchingStorageIds.size());
+        for (ui32 idx = 0; idx < Fetching.size(); ++idx) {
+            Fetching[idx].FetchFrom(IndexMeta, FetchingStorageIds[idx], g);
+            auto rangesLocal = Fetching[idx].GetResult().GetRangesToFetch();
+            auto& ranges = rangesByStorage[FetchingStorageIds[idx]];
             ranges.insert(ranges.end(), rangesLocal.begin(), rangesLocal.end());
         }
     }
-    std::sort(ranges.begin(), ranges.end());
-    ranges.erase(std::unique(ranges.begin(), ranges.end()), ranges.end());
-    if (ranges.size()) {
-        auto reading = blobsAction.GetReading(StorageId);
+    for (auto&& [storageId, ranges] : rangesByStorage) {
+        std::sort(ranges.begin(), ranges.end());
+        ranges.erase(std::unique(ranges.begin(), ranges.end()), ranges.end());
+        if (ranges.empty()) {
+            continue;
+        }
+        auto reading = blobsAction.GetReading(storageId);
         for (auto&& i : ranges) {
             reading->AddRange(i);
         }
@@ -58,9 +86,9 @@ void TIndexFetcherLogic::DoOnDataReceived(TReadActionsCollection& nextRead, NBlo
     }
 }
 
-void TIndexFetcherLogic::DoOnDataCollected(NReader::NCommon::TFetchingResultContext& context) {
+TConclusionStatus TIndexFetcherLogic::DoOnDataCollected(NReader::NCommon::TFetchingResultContext& context) {
     if (Fetching.empty()) {
-        return;
+        return TConclusionStatus::Success();
     }
     const bool hasIndex = context.GetIndexes().HasIndex(IndexMeta->GetIndexId());
     std::vector<std::vector<TString>> data;
@@ -84,6 +112,7 @@ void TIndexFetcherLogic::DoOnDataCollected(NReader::NCommon::TFetchingResultCont
             context.GetIndexes().AddData(originalDataAddress, IndexAddressesVector[idx], data[idx]);
         }
     }
+    return TConclusionStatus::Success();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

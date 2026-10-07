@@ -45,6 +45,24 @@ TEST(TThreadPoolTest, Configure)
     EXPECT_EQ(N, counter->load());
 }
 
+TEST(TThreadPoolTest, CurrentInvoker)
+{
+    auto threadPool = CreateThreadPool(1, "Test");
+    auto invoker = threadPool->GetInvoker();
+
+    auto future = BIND([&] {
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+        // The invoker must remain current across a context switch.
+        Yield();
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+    })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitUntilSet(future);
+    threadPool->Shutdown();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

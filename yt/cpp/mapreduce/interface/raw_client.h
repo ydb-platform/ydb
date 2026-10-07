@@ -143,7 +143,8 @@ public:
 
     virtual void CommitTransaction(
         TMutationId& mutationId,
-        const TTransactionId& transactionId) = 0;
+        const TTransactionId& transactionId,
+        const TCommitTransactionOptions& options = {}) = 0;
 
     // Operations
 
@@ -219,6 +220,10 @@ public:
         const TTransactionId& transactionId,
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IAbortableInputStream> ReadFilePartition(
+        const TString& cookie,
+        const TFilePartitionReaderOptions& options = {}) = 0;
 
     virtual std::unique_ptr<IOutputStream> WriteFile(
         const TTransactionId& transactionId,
@@ -403,6 +408,14 @@ public:
         const TTransactionId& transactionId,
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options = {}) = 0;
+
+    virtual TFilePartitions GetFilePartitions(
+        const TTransactionId& transactionId,
+        const TYPath& path,
+        const TVector<TFileReadRange>& ranges,
+        const TGetFilePartitionsOptions& options = {}) = 0;
+
+    virtual void CheckClusterLiveness(const TCheckClusterLivenessOptions& options = {}) = 0;
 
     virtual ui64 GenerateTimestamp() = 0;
 

@@ -12,7 +12,7 @@ namespace NKikimr::NSchemeShard {
 
 struct TCondEraseAffectedShard {
     TShardIdx ShardIdx;
-    ui64 PartitionIdx;
+    const TTableShardInfo* Partition;
     TTabletId TabletId;
     TDuration Next;
 };

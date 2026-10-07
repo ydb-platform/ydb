@@ -16,8 +16,8 @@ class TestWithCompressionDisabled(object):
     test_name = "with_olap_compression_disabled"
 
     COMPRESSION_CASES = [
-        ("empty_compression",  ''),
-        ("lz4_compression",  'algorithm=lz4'),
+        ("empty_compression", ''),
+        ("lz4_compression", 'algorithm=lz4'),
         ("zstd_compression", 'algorithm=zstd'),
         ("zstd_0_compression", 'algorithm=zstd,level=0'),
         ("zstd_9_compression", 'algorithm=zstd,level=9')
@@ -39,6 +39,11 @@ class TestWithCompressionDisabled(object):
         cls.ydb_client.wait_connection()
 
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
+
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
 
     def get_table_path(self):
         # avoid using same table in parallel tests

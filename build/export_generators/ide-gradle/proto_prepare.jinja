@@ -46,16 +46,14 @@ val prepareMainProtos = tasks.register<Sync>("prepareMainProtos") {
 
 val prepareMainIncludeProtos = tasks.register<Sync>("prepareMainIncludeProtos") {
     from("$arcadia_root") {
-{%-     for library in libraries -%}
-{%-         set path_and_jar = rsplit(library.jar, '/', 2) %}
-        include("{{ path_and_jar[0] }}/**/*.proto")
+{%-     for library in libraries %}
+        include("{{ dirname(library.jar) }}/**/*.proto")
 {%-     endfor %}
     }
 {%- set ns_libraries = libraries|selectattr('proto_namespace') -%}
 {%- if ns_libraries|length -%}
 {%-     for library in ns_libraries -%}
-{%-         set path_and_jar = rsplit(library.jar, '/', 2) -%}
-{%-         set path = "#R/" + path_and_jar[0] -%}
+{%-         set path = "#R/" + dirname(library.jar) -%}
 {%-         set path = path|replace("#R/" + library.proto_namespace + "/", "")|replace("#R/" + library.proto_namespace, "")|replace("#R/", "") -%}
 {%-         if path != "" -%}
 {%-             set path = path + "/" -%}

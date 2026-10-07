@@ -63,7 +63,6 @@ public:
                                                 description: |
                                                     syntax:
                                                       * `SYNTAX_YQL_V1`
-                                                      * `SYNTAX_PG`
                                                 required: false
                                     exec_mode:
                                         type: string

@@ -380,6 +380,11 @@
             ]
         },
         {
+            "Name": "TYtPersist",
+            "Base": "TYtTransientOpBase",
+            "Match": {"Type": "Callable", "Name": "YtPersist!"}
+        },
+        {
             "Name": "TYtTouch",
             "Base": "TYtOutputOpBase",
             "Match": {"Type": "Callable", "Name": "YtTouch!"}
@@ -397,6 +402,23 @@
             "Name": "TYtDropTable",
             "Base": "TYtIsolatedOpBase",
             "Match": {"Type": "Callable", "Name": "YtDropTable!"},
+            "Children": [
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TYtCreateSymlink",
+            "Base": "TYtIsolatedOpBase",
+            "Match": {"Type": "Callable", "Name": "YtCreateSymlink!"},
+            "Children": [
+                {"Index": 3, "Name": "Target", "Type": "TYtTable"},
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TYtDropSymlink",
+            "Base": "TYtIsolatedOpBase",
+            "Match": {"Type": "Callable", "Name": "YtDropSymlink!"},
             "Children": [
                 {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]

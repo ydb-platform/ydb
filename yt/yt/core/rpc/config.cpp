@@ -1,5 +1,9 @@
 #include "config.h"
 
+#include "backend.h"
+
+#include <yt/yt/core/misc/collection_helpers.h>
+
 namespace NYT::NRpc {
 
 using namespace NBus;
@@ -344,7 +348,7 @@ void TDispatcherConfig::Register(TRegistrar registrar)
         .Default(TDuration::MilliSeconds(10));
     registrar.Parameter("default_request_timeout", &TThis::DefaultRequestTimeout)
         .Default(TDuration::Hours(24));
-    registrar.Parameter("alert_on_missing_request_info", &TThis::AlertOnMissingRequestInfo)
+    registrar.Parameter("alert_on_missing_request_annotation", &TThis::AlertOnMissingRequestAnnotation)
         .Default(false);
     registrar.Parameter("alert_on_unset_request_timeout", &TThis::AlertOnUnsetRequestTimeout)
         .Default(false);
@@ -359,7 +363,7 @@ TDispatcherConfigPtr TDispatcherConfig::ApplyDynamic(const TDispatcherDynamicCon
     UpdateYsonStructField(mergedConfig->CompressionPoolSize, dynamicConfig->CompressionPoolSize);
     UpdateYsonStructField(mergedConfig->HeavyPoolPollingPeriod, dynamicConfig->HeavyPoolPollingPeriod);
     UpdateYsonStructField(mergedConfig->DefaultRequestTimeout, dynamicConfig->DefaultRequestTimeout);
-    UpdateYsonStructField(mergedConfig->AlertOnMissingRequestInfo, dynamicConfig->AlertOnMissingRequestInfo);
+    UpdateYsonStructField(mergedConfig->AlertOnMissingRequestAnnotation, dynamicConfig->AlertOnMissingRequestAnnotation);
     UpdateYsonStructField(mergedConfig->AlertOnUnsetRequestTimeout, dynamicConfig->AlertOnUnsetRequestTimeout);
     UpdateYsonStructField(mergedConfig->SendTracingBaggage, dynamicConfig->SendTracingBaggage);
     mergedConfig->Postprocess();
@@ -378,7 +382,7 @@ void TDispatcherDynamicConfig::Register(TRegistrar registrar)
         .GreaterThan(0);
     registrar.Parameter("heavy_pool_polling_period", &TThis::HeavyPoolPollingPeriod)
         .Optional();
-    registrar.Parameter("alert_on_missing_request_info", &TThis::AlertOnMissingRequestInfo)
+    registrar.Parameter("alert_on_missing_request_annotation", &TThis::AlertOnMissingRequestAnnotation)
         .Optional();
     registrar.Parameter("send_tracing_baggage", &TThis::SendTracingBaggage)
         .Optional();
@@ -446,6 +450,55 @@ void TOverloadControllerConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("load_adjusting_period", &TThis::LoadAdjustingPeriod)
         .Default(TDuration::MilliSeconds(100));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::vector<std::string> TProtocolMapConfigBase::GetConfiguredProtocols() const
+{
+    std::vector<std::string> result;
+    for (const auto& [protocol, entry] : ProtocolToEntry_) {
+        if (!entry.IsNull(entry.CurrentConfig)) {
+            result.push_back(protocol);
+        }
+    }
+    return result;
+}
+
+std::any TProtocolMapConfigBase::GetUntypedConfig(TStringBuf protocol)
+{
+    return GetOrCrash(ProtocolToEntry_, protocol).CurrentConfig;
+}
+
+std::any TProtocolMapConfigBase::FindUntypedConfig(TStringBuf protocol)
+{
+    auto it = ProtocolToEntry_.find(protocol);
+    if (it == ProtocolToEntry_.end()) {
+        return {};
+    }
+    const auto& entry = it->second;
+    if (entry.IsNull(entry.CurrentConfig)) {
+        return {};
+    }
+    return entry.CurrentConfig;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TMultiProtocolClientConfig::Register(TRegistrar registrar)
+{
+    for (auto* backend : TBackendRegistry::GetBackends()) {
+        backend->RegisterClientConfigField(registrar);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TMultiProtocolServerConfig::Register(TRegistrar registrar)
+{
+    for (auto* backend : TBackendRegistry::GetBackends()) {
+        backend->RegisterServerConfigField(registrar);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

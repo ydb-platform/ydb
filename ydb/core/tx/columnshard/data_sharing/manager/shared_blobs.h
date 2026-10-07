@@ -1,11 +1,13 @@
 #pragma once
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/blob.h>
-#include <ydb/core/tx/columnshard/blobs_action/abstract/common.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/common.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 
 #include <ydb/library/accessor/accessor.h>
+
+#include <util/generic/algorithm.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -13,8 +15,8 @@ class TStorageSharedBlobsManager {
 private:
     const TString StorageId;
     const TTabletId SelfTabletId;
-    THashMap<TUnifiedBlobId, TTabletId> BorrowedBlobIds; // blobId -> owned by tabletId
-    TTabletsByBlob SharedBlobIds; // blobId -> shared with tabletIds
+    THashMap<TUnifiedBlobId, TTabletId> BorrowedBlobIds;   // blobId -> owned by tabletId
+    TTabletsByBlob SharedBlobIds;   // blobId -> shared with tabletIds
 
     bool CheckRemoveBlobId(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobsCategories& blobs) const {
         const THashSet<TTabletId>* shared = SharedBlobIds.Find(blobId);
@@ -40,17 +42,27 @@ private:
         }
         return doRemove;
     }
+
 public:
     TStorageSharedBlobsManager(const TString& storageId, const TTabletId tabletId)
         : StorageId(storageId)
         , SelfTabletId(tabletId)
     {
+    }
 
+    bool HasBlobsInRange(const ui32 channel, const ui32 from, const ui32 to) const {
+        const auto matches = [&](const auto& blob) {
+            const auto& id = blob.first.GetLogoBlobId();
+            return id.TabletID() == static_cast<ui64>(SelfTabletId) && id.Channel() == channel && id.Generation() >= from &&
+                   id.Generation() < to;
+        };
+        return AnyOf(BorrowedBlobIds, matches) || AnyOf(SharedBlobIds, matches);
     }
 
     bool IsTrivialLinks() const {
         return BorrowedBlobIds.empty() && SharedBlobIds.IsEmpty();
     }
+
     TTabletId GetSelfTabletId() const {
         return SelfTabletId;
     }
@@ -134,7 +146,8 @@ public:
         }
     }
 
-    void CASBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds);
+    void CASBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletId tabletIdFrom, const TTabletId tabletIdTo,
+        const THashSet<TUnifiedBlobId>& blobIds);
 
     void CASBorrowedBlobs(const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds);
 
@@ -161,11 +174,11 @@ private:
     const TTabletId SelfTabletId;
     THashMap<TString, std::shared_ptr<TStorageSharedBlobsManager>> Storages;
     TAtomicCounter ExternalModificationsCount;
+
 public:
     TSharedBlobsManager(const TTabletId tabletId)
         : SelfTabletId(tabletId)
     {
-
     }
 
     void StartExternalModification() {
@@ -250,4 +263,4 @@ public:
     bool LoadIdempotency(NTable::TDatabase& database);
 };
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing

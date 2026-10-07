@@ -531,9 +531,19 @@ groupby_next(groupbyobject *gbo)
         else if (gbo->tgtkey == NULL)
             break;
         else {
-            int rcmp;
+            /* A user-defined __eq__ can re-enter groupby and advance the iterator,
+               mutating gbo->tgtkey / gbo->currkey while we are comparing them.
+               Take local snapshots and hold strong references so INCREF/DECREF
+               apply to the same objects even under re-entrancy. */
+            PyObject *tgtkey = gbo->tgtkey;
+            PyObject *currkey = gbo->currkey;
 
-            rcmp = PyObject_RichCompareBool(gbo->tgtkey, gbo->currkey, Py_EQ);
+            Py_INCREF(tgtkey);
+            Py_INCREF(currkey);
+            int rcmp = PyObject_RichCompareBool(tgtkey, currkey, Py_EQ);
+            Py_DECREF(tgtkey);
+            Py_DECREF(currkey);
+
             if (rcmp == -1)
                 return NULL;
             else if (rcmp == 0)
@@ -702,7 +712,16 @@ _grouper_next(_grouperobject *igo)
     }
 
     assert(gbo->currkey != NULL);
-    rcmp = PyObject_RichCompareBool(igo->tgtkey, gbo->currkey, Py_EQ);
+    /* A user-defined __eq__ can re-enter the grouper and advance the iterator,
+       mutating gbo->currkey while we are comparing them.
+       Take local snapshots and hold strong references so INCREF/DECREF
+       apply to the same objects even under re-entrancy. */
+    PyObject *tgtkey = Py_NewRef(igo->tgtkey);
+    PyObject *currkey = Py_NewRef(gbo->currkey);
+    rcmp = PyObject_RichCompareBool(tgtkey, currkey, Py_EQ);
+    Py_DECREF(tgtkey);
+    Py_DECREF(currkey);
+
     if (rcmp <= 0)
         /* got any error or current group is end */
         return NULL;
@@ -2210,6 +2229,10 @@ Return a chain object whose .__next__() method returns elements from the\n\
 first iterable until it is exhausted, then elements from the next\n\
 iterable, until all of the iterables are exhausted.");
 
+PyDoc_STRVAR(chain_class_getitem_doc,
+"chain is generic over the type of its contents.\n\
+This is the union of the types of the input iterable contents.");
+
 static PyMethodDef chain_methods[] = {
     ITERTOOLS_CHAIN_FROM_ITERABLE_METHODDEF
     {"__reduce__",      (PyCFunction)chain_reduce,      METH_NOARGS,
@@ -2217,7 +2240,7 @@ static PyMethodDef chain_methods[] = {
     {"__setstate__",    (PyCFunction)chain_setstate,    METH_O,
      setstate_doc},
     {"__class_getitem__",    Py_GenericAlias,
-    METH_O|METH_CLASS,       PyDoc_STR("See PEP 585")},
+    METH_O|METH_CLASS,       chain_class_getitem_doc},
     {NULL,              NULL}           /* sentinel */
 };
 
@@ -3750,13 +3773,13 @@ itertools.compress.__new__
     selectors as seq2: object
 Return data elements corresponding to true selector elements.
 
-Forms a shorter iterator from selected data elements using the selectors to
-choose the data elements.
+Forms a shorter iterator from selected data elements using the selectors
+to choose the data elements.
 [clinic start generated code]*/
 
 static PyObject *
 itertools_compress_impl(PyTypeObject *type, PyObject *seq1, PyObject *seq2)
-/*[clinic end generated code: output=7e67157212ed09e0 input=79596d7cd20c77e5]*/
+/*[clinic end generated code: output=7e67157212ed09e0 input=32ca4347dbc46749]*/
 {
     PyObject *data=NULL, *selectors=NULL;
     compressobject *lz;

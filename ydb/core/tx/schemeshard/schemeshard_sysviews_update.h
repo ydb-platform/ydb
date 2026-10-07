@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/library/actors/core/actor.h>
 

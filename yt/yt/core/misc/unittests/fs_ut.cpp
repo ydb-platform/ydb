@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
+#include <library/cpp/yt/system/proc.h>
 
 #include <yt/yt/core/test_framework/framework.h>
 
@@ -11,7 +12,6 @@
 
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
-
 
 namespace NYT::NFS {
 namespace {
@@ -51,6 +51,60 @@ TEST(TFSTest, TestIsDirEmpty)
     RemoveRecursive(dir);
 }
 
+TEST(TFSTest, TestMakeDirRecursive)
+{
+    auto dir = CombinePaths(NFs::CurrentWorkingDirectory(), "test");
+
+    for (const auto& path : {
+        CombinePaths(dir, ""),
+        CombinePaths(dir, "child"),
+        CombinePaths(dir, "child"),
+        CombinePaths(dir, "a/b/c"),
+        CombinePaths(dir, "child/a/b/c"),
+    }) {
+        EXPECT_NO_THROW(MakeDirRecursive(path));
+        EXPECT_TRUE(Exists(path));
+    }
+
+    RemoveRecursive(dir);
+}
+
+#ifdef _linux_
+TEST(TFSTest, TestMakeDirRecursiveReportsRealError)
+{
+    if (::geteuid() != 0) {
+        auto readOnlyDir = CombinePaths(NFs::CurrentWorkingDirectory(), "read_only");
+        MakeDirRecursive(readOnlyDir);
+        Chmod(readOnlyDir, 0500);
+
+        for (const auto& path : {
+            CombinePaths(readOnlyDir, "child"),
+            CombinePaths(readOnlyDir, "a/b/c"),
+        }) {
+            EXPECT_THROW_WITH_ERROR_CODE(MakeDirRecursive(path), ELinuxErrorCode::ACCESS);
+        }
+
+        Chmod(readOnlyDir, 0700);
+        RemoveRecursive(readOnlyDir);
+    }
+
+    const auto danglingLink = CombinePaths(NFs::CurrentWorkingDirectory(), "dangling");
+    MakeSymbolicLink("missing_target", danglingLink);
+
+    // TODO(dann239): Introduce ELinuxErrorCode::EXIST and use it here.
+    constexpr auto expectedCode = TErrorCode(LinuxErrorCodeBase + EEXIST);
+
+    for (const auto& path : {
+        danglingLink,
+        CombinePaths(danglingLink, "a/b/c"),
+    }) {
+        EXPECT_THROW_WITH_ERROR_CODE(MakeDirRecursive(path), expectedCode);
+    }
+
+    Remove(danglingLink);
+}
+#endif
+
 TEST(TFSTest, TestIsPathRelativeAndInvolvesNoTraversal)
 {
     EXPECT_TRUE(NFS::IsPathRelativeAndInvolvesNoTraversal(""));
@@ -79,6 +133,11 @@ TEST(TFSTest, TestIsPathRelativeAndInvolvesNoTraversal)
 
 TEST(TFSTest, TestGetRelativePath)
 {
+    EXPECT_EQ(GetRelativePath("/", "/"), ".");
+    EXPECT_EQ(GetRelativePath("/a", "/"), "..");
+    EXPECT_EQ(GetRelativePath("/a/b", "/"), NormalizePathSeparators("../.."));
+    EXPECT_EQ(GetRelativePath("/", "/a"), "a");
+    EXPECT_EQ(GetRelativePath("/", "/a/b"), NormalizePathSeparators("a/b"));
     EXPECT_EQ(GetRelativePath("/a", "/a/b"), "b");
     EXPECT_EQ(GetRelativePath("/a/b", "/a"), "..");
     EXPECT_EQ(GetRelativePath("/a/b/c", "/d/e"), NormalizePathSeparators("../../../d/e"));
@@ -91,7 +150,7 @@ TEST(TFSTest, TestGetRelativePath)
 }
 
 #ifdef _unix_
-TEST(TFSTest, TestCombinePathsWithBackslashUnix)
+TEST(TFSTest, CombinePathsWithBackslashUnix)
 {
     EXPECT_EQ(CombinePaths("/", "path/with/back\\slashed/file"), "/path/with/back\\slashed/file");
 }
@@ -133,15 +192,15 @@ public:
     }
 
 protected:
-    NConcurrency::IPollerPtr Poller_;
-    IInvokerPtr Invoker_;
-    TTempDir Dir_;
+    const NConcurrency::IPollerPtr Poller_;
+    const IInvokerPtr Invoker_;
+    const TTempDir Dir_;
 
-    std::string Filename_;
-    std::string Filename2_;
+    const std::string Filename_;
+    const std::string Filename2_;
 
-    std::string PipeFilename_;
-    std::string PipeFilename2_;
+    const std::string PipeFilename_;
+    const std::string PipeFilename2_;
 
     static constexpr i64 DataSize = 1_MB;
 
@@ -170,7 +229,7 @@ protected:
     {
         ui8 actual = {};
         auto count = file.Read(&actual, 1);
-        EXPECT_EQ(count, size_t{1});
+        EXPECT_EQ(count, 1u);
         EXPECT_EQ(actual, expected);
     }
 
@@ -179,7 +238,7 @@ protected:
         auto file = TFile(filename.c_str(), RdOnly);
         auto result = std::vector<ui8>(expected.size());
         EXPECT_EQ(file.Read(result.data(), result.size()), expected.size());
-        EXPECT_EQ(file.Read(result.data(), result.size()), size_t{0});
+        EXPECT_EQ(file.Read(result.data(), result.size()), 0u);
         EXPECT_EQ(result, expected);
     }
 
@@ -192,7 +251,7 @@ protected:
     }
 };
 
-TEST_F(TSpliceAsyncTest, TestReadFileSimple)
+TEST_F(TSpliceAsyncTest, ReadFileSimple)
 {
     auto data = MakeRandomData();
     WriteToFile(Filename_, data);
@@ -202,7 +261,6 @@ TEST_F(TSpliceAsyncTest, TestReadFileSimple)
     auto future = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename_, O_WRONLY),
-        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
@@ -213,10 +271,10 @@ TEST_F(TSpliceAsyncTest, TestReadFileSimple)
     WaitForSplice(future);
 
     ui8 readElem = 0;
-    EXPECT_EQ(pipe.Read(&readElem, 1), size_t{0});
+    EXPECT_EQ(pipe.Read(&readElem, 1), 0u);
 }
 
-TEST_F(TSpliceAsyncTest, TestReadFileConcurrent)
+TEST_F(TSpliceAsyncTest, ReadFileConcurrent)
 {
     auto data = MakeRandomData();
     WriteToFile(Filename_, data);
@@ -227,14 +285,12 @@ TEST_F(TSpliceAsyncTest, TestReadFileConcurrent)
     auto future = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename_, O_WRONLY),
-        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
     auto future2 = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename2_, O_WRONLY),
-        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
@@ -256,11 +312,11 @@ TEST_F(TSpliceAsyncTest, TestReadFileConcurrent)
     WaitForSplice(future2);
 
     ui8 readElem = 0;
-    EXPECT_EQ(pipe.Read(&readElem, 1), size_t{0});
-    EXPECT_EQ(pipe2.Read(&readElem, 1), size_t{0});
+    EXPECT_EQ(pipe.Read(&readElem, 1), 0u);
+    EXPECT_EQ(pipe2.Read(&readElem, 1), 0u);
 }
 
-TEST_F(TSpliceAsyncTest, TestReadFileBrokenPipe)
+TEST_F(TSpliceAsyncTest, ReadFileBrokenPipe)
 {
     auto data = MakeRandomData();
     WriteToFile(Filename_, data);
@@ -270,7 +326,6 @@ TEST_F(TSpliceAsyncTest, TestReadFileBrokenPipe)
     auto future = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename_, O_WRONLY),
-        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
@@ -288,7 +343,7 @@ TEST_F(TSpliceAsyncTest, TestReadFileBrokenPipe)
     EXPECT_THROW_WITH_SUBSTRING(result.Error.ThrowOnError(), "Broken pipe");
 }
 
-TEST_F(TSpliceAsyncTest, TestWriteFileSimple)
+TEST_F(TSpliceAsyncTest, WriteFileSimple)
 {
     auto data = MakeRandomData();
     auto pipeRead = OpenPipe(PipeFilename_, O_RDONLY);
@@ -297,7 +352,6 @@ TEST_F(TSpliceAsyncTest, TestWriteFileSimple)
     auto future = SpliceAsync(
         pipeRead,
         TFile(Filename_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
@@ -315,7 +369,7 @@ TEST_F(TSpliceAsyncTest, TestWriteFileSimple)
     ReadExpectedFile(Filename_, data);
 }
 
-TEST_F(TSpliceAsyncTest, TestWriteFileConcurrent)
+TEST_F(TSpliceAsyncTest, WriteFileConcurrent)
 {
     auto data = MakeRandomData();
     auto pipeRead = OpenPipe(PipeFilename_, O_RDONLY);
@@ -328,14 +382,12 @@ TEST_F(TSpliceAsyncTest, TestWriteFileConcurrent)
     auto future = SpliceAsync(
         pipeRead,
         TFile(Filename_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
     auto future2 = SpliceAsync(
         pipeRead2,
         TFile(Filename2_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
@@ -365,8 +417,7 @@ TEST_F(TSpliceAsyncTest, TestWriteFileConcurrent)
     ReadExpectedFile(Filename2_, data2);
 }
 
-
-TEST_F(TSpliceAsyncTest, TestWriteFileCancelFuture)
+TEST_F(TSpliceAsyncTest, WriteFileCancelFuture)
 {
     auto data = MakeRandomData();
     auto pipeRead = OpenPipe(PipeFilename_, O_RDONLY);
@@ -375,7 +426,6 @@ TEST_F(TSpliceAsyncTest, TestWriteFileCancelFuture)
     auto future = SpliceAsync(
         pipeRead,
         TFile(Filename_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 

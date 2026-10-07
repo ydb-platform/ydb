@@ -187,7 +187,7 @@ void CheckPathForInit(
     const TString& path) noexcept
 {
     auto connectionConfigCopy = connectionConfig;
-    TDriver driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
+    auto driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
 
     CheckPathExistOrCreate(driver, connectionConfig.Database, path);
     CheckNoTablesExist(driver, path, "Already inited or forgot to clean?");
@@ -198,7 +198,7 @@ void CheckPathForImport(
     const TString& path) noexcept
 {
     auto connectionConfigCopy = connectionConfig;
-    TDriver driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
+    auto driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
 
     // 1. Check tables exist
 
@@ -225,7 +225,7 @@ void CheckPathForRun(
     int expectedWhCount) noexcept
 {
     auto connectionConfigCopy = connectionConfig;
-    TDriver driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
+    auto driver = NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy);
 
     // 1. Check tables exist
 

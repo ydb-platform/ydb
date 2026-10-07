@@ -2,6 +2,7 @@
 #include "mkql_engine_flat_impl.h"
 #include "mkql_keys.h"
 #include <ydb/core/kqp/common/kqp_types.h>
+#include <ydb/library/aclib/user_context.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
@@ -241,7 +242,7 @@ namespace {
             const NUdf::TUnboxedValue Row;
         };
 
-        TEraseRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row, NACLib::TUserContext::TPtr userCtx)
+        TEraseRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row, TIntrusivePtr<NACLib::TUserContext> userCtx)
             : TBaseComputation(mutables)
             , TableId(tableId)
             , RowType(rowType)
@@ -262,7 +263,7 @@ namespace {
         const TTableId TableId;
         TTupleType* const RowType;
         IComputationNode* const Row;
-        NACLib::TUserContext::TPtr UserCtx;
+        TIntrusivePtr<NACLib::TUserContext> UserCtx;
     };
 
     class TUpdateRowWrapper : public TMutableComputationNode<TUpdateRowWrapper> {
@@ -326,7 +327,7 @@ namespace {
         };
 
         TUpdateRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row,
-            TStructLiteral* updateStruct, IComputationNode* update, NACLib::TUserContext::TPtr userCtx)
+            TStructLiteral* updateStruct, IComputationNode* update, TIntrusivePtr<NACLib::TUserContext> userCtx)
             : TBaseComputation(mutables)
             , TableId(tableId)
             , RowType(rowType)
@@ -352,7 +353,7 @@ namespace {
         IComputationNode* const Row;
         TStructLiteral* const UpdateStruct;
         IComputationNode* const Update;
-        NACLib::TUserContext::TPtr UserCtx;
+        TIntrusivePtr<NACLib::TUserContext> UserCtx;
     };
 
     IComputationNode* WrapAsDummy(TComputationMutables& mutables) {
@@ -742,7 +743,7 @@ namespace {
         return ctx.NodeFactory.CreateImmutableNode(std::move(result));
     }
 
-    IComputationNode* WrapEraseRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, NACLib::TUserContext::TPtr userCtx) {
+    IComputationNode* WrapEraseRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, TIntrusivePtr<NACLib::TUserContext> userCtx) {
         MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arg");
 
         auto tableNode = callable.GetInput(0);
@@ -753,7 +754,7 @@ namespace {
             LocateNode(ctx.NodeLocator, callable, 1), userCtx);
     }
 
-    IComputationNode* WrapUpdateRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, IEngineFlatHost* host, NACLib::TUserContext::TPtr userCtx) {
+    IComputationNode* WrapUpdateRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, IEngineFlatHost* host, TIntrusivePtr<NACLib::TUserContext> userCtx) {
         MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arg");
 
         auto tableNode = callable.GetInput(0);
@@ -836,7 +837,7 @@ namespace {
     }
 }
 
-TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly, NACLib::TUserContext::TPtr userCtx) {
+TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly, TIntrusivePtr<NACLib::TUserContext> userCtx) {
     auto builtins = GetBuiltinFactory();
     return [builtins, &execData, validateOnly, userCtx]
         (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {

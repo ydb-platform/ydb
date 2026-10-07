@@ -3,6 +3,8 @@
 #include "kqp_scan_common.h"
 #include "kqp_compute_actor_impl.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_task_rendering.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
@@ -13,6 +15,8 @@
 #include <ydb/core/protos/kqp_stats.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
 
 namespace NKikimr::NKqp::NScanPrivate {
 
@@ -25,19 +29,25 @@ static constexpr TDuration RL_MAX_BATCH_DELAY = TDuration::Seconds(50);
 
 } // anonymous namespace
 
-TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableActorOptions schedulableOptions, const TActorId& executerId, ui64 txId,
+TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableOptions schedulableOptions, const TActorId& executerId, ui64 txId,
     NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
-    TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode)
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database)
     : TBase(std::move(schedulableOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings,
         memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /* taskCounters = */ nullptr, std::move(traceId), std::move(arena))
     , ComputeCtx(settings.StatsMode)
     , BlockTrackingMode(mode)
 {
+    ComputeCtx.SetQueryContext(database, std::move(userToken));
+    ComputeCtx.SetCheckpointContext(CheckpointContext);
     InitializeTask();
     YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
     YQL_ENSURE(!Meta.GetReads().empty());
     YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
+
+    TTaskTraceDescription::Annotate(ComputeActorSpan, *GetTask().GetTask());
+    ComputeActorSpan.Attribute("ydb.actor.type", TString("TKqpScanComputeActor"));
 }
 
 TKqpScanComputeActor::~TKqpScanComputeActor() {
@@ -47,7 +57,8 @@ TKqpScanComputeActor::~TKqpScanComputeActor() {
 void TKqpScanComputeActor::ProcessRlNoResourceAndDie() {
     const NYql::TIssue issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED,
         "Throughput limit exceeded for query");
-    CA_LOG_E("Throughput limit exceeded stream will be terminated");
+    YDB_LOG_ERROR("Throughput limit exceeded, stream will be terminated",
+        {"logPrefix", this->LogPrefix});
 
     State = NDqProto::COMPUTE_STATE_FAILURE;
     ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::OVERLOADED, TIssues({ issue }));
@@ -82,11 +93,16 @@ void TKqpScanComputeActor::AcquireRateQuota() {
         rlFullPath, 0, RL_MAX_BATCH_DELAY,
         std::move(onSendAllowed), std::move(onSendTimeout), TActivationContext::AsActorContext());
 
-    CA_LOG_D("Launch rate limiter actor: " << rlActor);
+    YDB_LOG_DEBUG("Launching rate limiter",
+        {"logPrefix", this->LogPrefix},
+        {"actor", rlActor});
 }
 
 void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
-    Y_UNUSED(last);
+    if (last) {
+        AddKqpTaskTraceAttributes(ComputeActorSpan, *dst,
+            RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL);
+    }
 
     if (ScanData && dst->TasksSize() > 0) {
         YQL_ENSURE(dst->TasksSize() == 1);
@@ -156,7 +172,9 @@ TMaybe<google::protobuf::Any> TKqpScanComputeActor::ExtraData() {
 }
 
 void TKqpScanComputeActor::HandleEvWakeup(EEvWakeupTag tag) {
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "HandleEvWakeup")("self_id", SelfId());
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Handling wakeup event",
+        {"event", "HandleEvWakeup"},
+        {"selfId", SelfId()});
     switch (tag) {
         case RlSendAllowedTag:
             DoExecute();
@@ -174,7 +192,9 @@ void TKqpScanComputeActor::HandleEvWakeup(EEvWakeupTag tag) {
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr& ev) {
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvTerminateFromFetcher: " << ev->Sender << "/" << SelfId();
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Received TEvTerminateFromFetcher",
+        {"sender", ev->Sender},
+        {"selfId", SelfId()});
     TBase::InternalError(ev->Get()->GetStatusCode(), ev->Get()->GetIssues());
     State = ev->Get()->GetState();
 }
@@ -182,7 +202,9 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     ScanDataInFlight = false;
     ++SendDataReceived;
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvSendData: " << ev->Sender << "/" << SelfId();
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Received TEvSendData",
+        {"sender", ev->Sender},
+        {"selfId", SelfId()});
     auto& msg = *ev->Get();
 
     for (const auto& lock : msg.GetLocksInfo().Locks) {
@@ -208,7 +230,8 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev) {
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvRegisterFetcher: " << ev->Sender;
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Received TEvRegisterFetcher",
+        {"sender", ev->Sender});
     Y_ABORT_UNLESS(Fetchers.emplace(ev->Sender).second);
     Send(ev->Sender, new TEvScanExchange::TEvAckData(CalculateFreeSpace()));
     ++AcksSent;
@@ -216,7 +239,8 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev)
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvFetcherFinished::TPtr& ev) {
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvFetcherFinished: " << ev->Sender;
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Received TEvFetcherFinished",
+        {"sender", ev->Sender});
     Y_ABORT_UNLESS(Fetchers.erase(ev->Sender) == 1);
     if (Fetchers.size() == 0) {
         ScanData->Finish();
@@ -239,17 +263,41 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
         return;
     }
     const ui64 freeSpace = CalculateFreeSpace();
-    CA_LOG_D("POLL_SOURCES:START:" << Fetchers.size() << ";fs=" << freeSpace);
+    YDB_LOG_DEBUG("Polling scan sources",
+        {"logPrefix", this->LogPrefix},
+        {"fetchersCount", Fetchers.size()},
+        {"freeSpace", freeSpace});
     for (auto&& i : Fetchers) {
         Send(i, new TEvScanExchange::TEvAckData(freeSpace));
     }
     ++AcksSent;
     ScanDataInFlight = true;
-    CA_LOG_D("POLL_SOURCES:FINISH");
+    YDB_LOG_DEBUG("Finished polling scan sources",
+        {"logPrefix", this->LogPrefix});
 }
 
 void TKqpScanComputeActor::DoBootstrap() {
-    CA_LOG_D("EVLOGKQP START");
+    YDB_LOG_DEBUG("Starting KQP scan compute actor bootstrap",
+        {"logPrefix", this->LogPrefix});
+
+    const auto& taskParams = GetTask().GetTaskParams();
+    if (const auto it = taskParams.find(TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)); it != taskParams.end()) {
+        try {
+            WasmQueryCompartment_.emplace(
+                NUdfStore::NWasm::ParseWasmUdfModulesTaskParam(it->second),
+                GetAllocatorPtr());
+        } catch (const std::exception& e) {
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, NYql::TIssuesIds::DEFAULT_ERROR,
+                TStringBuilder() << "Failed to acquire WASM query compartment: " << e.what());
+            return;
+        }
+    }
+
+    std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
+    if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
+        wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
+    }
+
     NDq::TDqTaskRunnerContext execCtx;
     execCtx.FuncRegistry = TBase::FunctionRegistry;
     execCtx.ComputeCtx = &ComputeCtx;
@@ -283,8 +331,10 @@ void TKqpScanComputeActor::DoBootstrap() {
     NDq::TLogFunc logger;
     if (IsDebugLogEnabled(actorSystem, NKikimrServices::KQP_TASKS_RUNNER)) {
         logger = [actorSystem, txId = TxId, taskId = GetTask().GetId()](const TString& message) {
-            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId
-                << ", task: " << taskId << ": " << message);
+            YDB_LOG_DEBUG_CTX_COMP(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "Task runner debug message",
+                {"txId", txId},
+                {"task", taskId},
+                {"message", message});
         };
     }
 
@@ -295,6 +345,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     auto wakeupCallback = [actorSystem, selfId]() {
         actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     };
+    ComputeCtx.SetWakeupCallback(wakeupCallback);
     auto errorCallback = [actorSystem, selfId](const TString& error) {
         actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
     };

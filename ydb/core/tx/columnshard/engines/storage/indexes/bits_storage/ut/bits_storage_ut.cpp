@@ -58,8 +58,6 @@ void TestSerializeRestoreDynBitMap(IBitsStorageConstructor& constructor) {
     CheckInsertedValues(inserted, size, *restored);
 }
 
-
-
 Y_UNIT_TEST_SUITE(TBitsStorageTests) {
     Y_UNIT_TEST(TestSerializeRestoreArrayStorageToFixString) {
         TFixStringBitsStorageConstructor constructor;
@@ -70,7 +68,6 @@ Y_UNIT_TEST_SUITE(TBitsStorageTests) {
         TBitSetStorageConstructor constructor;
         TestSerializeRestoreArrayStorage(constructor);
     }
-
 
     Y_UNIT_TEST(TestSerializeRestoreDynBitMapToFixString) {
         TFixStringBitsStorageConstructor constructor;

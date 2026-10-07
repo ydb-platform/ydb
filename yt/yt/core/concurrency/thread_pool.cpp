@@ -2,7 +2,7 @@
 #include "notify_manager.h"
 #include "single_queue_scheduler_thread.h"
 #include "private.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "thread_pool_detail.h"
 
 #include <yt/yt/core/actions/invoker_detail.h>
@@ -26,7 +26,7 @@ class TInvokerQueueAdapter
 {
 public:
     TInvokerQueueAdapter(
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         const TTagSet& counterTagSet,
         TDuration pollingPeriod)
         : TMpmcInvokerQueue(callbackEventCount, counterTagSet)
@@ -34,7 +34,7 @@ public:
     { }
 
     template <class TIsStoppingPredicate>
-    bool OnExecute(TEnqueuedAction* action, bool fetchNext, TIsStoppingPredicate isStopping)
+    bool OnExecute(TEnqueuedAction* action, bool fetchNext, TMpmcQueueImpl::TConsumerToken* token, TIsStoppingPredicate isStopping)
     {
         while (true) {
             int activeThreadDelta = !action->Finished ? -1 : 0;
@@ -44,7 +44,7 @@ public:
             auto minEnqueuedAt = ResetMinEnqueuedAt();
 
             bool result = false;
-            if (fetchNext && TMpmcInvokerQueue::BeginExecute(action)) {
+            if (fetchNext && TMpmcInvokerQueue::BeginExecute(action, token)) {
                 YT_ASSERT(action->EnqueuedAt > 0);
                 minEnqueuedAt = action->EnqueuedAt;
                 activeThreadDelta += 1;
@@ -94,7 +94,7 @@ class TThreadPoolThread
 public:
     TThreadPoolThread(
         TIntrusivePtr<TInvokerQueueAdapter> queue,
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         const std::string& threadGroupName,
         const std::string& threadName,
         const TThreadPoolOptions& options)
@@ -108,11 +108,13 @@ public:
             })
         , Queue_(std::move(queue))
         , Options_(options)
+        , Token_(Queue_->MakeConsumerToken())
     { }
 
 protected:
     const TIntrusivePtr<TInvokerQueueAdapter> Queue_;
     const TThreadPoolOptions Options_;
+    TMpmcQueueImpl::TConsumerToken Token_;
 
     TEnqueuedAction CurrentAction_;
 
@@ -120,7 +122,7 @@ protected:
     {
         bool fetchNext = !TSchedulerThread::IsStopping() || TSchedulerThread::GracefulStop_;
 
-        bool dequeued = Queue_->OnExecute(&CurrentAction_, fetchNext, [&] {
+        bool dequeued = Queue_->OnExecute(&CurrentAction_, fetchNext, &Token_, [&] {
             return TSchedulerThread::IsStopping();
         });
         return BeginExecuteImpl(dequeued, &CurrentAction_);
@@ -190,7 +192,7 @@ public:
 
 private:
     const TThreadPoolOptions Options_;
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
+    const TIntrusivePtr<TEventCount> CallbackEventCount_ = New<TEventCount>();
     const TIntrusivePtr<TInvokerQueueAdapter> Queue_;
     const IInvokerPtr Invoker_;
 

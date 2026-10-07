@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,10 +23,13 @@ namespace configuration
 class ViewStreamConfiguration
 {
 public:
+  // 0 is a sentinel: inherit cardinality limit from the metric reader (schema exclusiveMinimum: 0)
+  static constexpr std::size_t kInheritFromReader = 0;
+
   std::string name;
   std::string description;
   std::unique_ptr<AggregationConfiguration> aggregation;
-  std::size_t aggregation_cardinality_limit;
+  std::size_t aggregation_cardinality_limit{kInheritFromReader};
   std::unique_ptr<IncludeExcludeConfiguration> attribute_keys;
 };
 

@@ -10,9 +10,8 @@ namespace NKikimr::NSQS {
 class IEventsWriterWrapper : public TAtomicRefCount<IEventsWriterWrapper> {
 public:
     virtual void Write(const TString& data) = 0;
-    virtual ~IEventsWriterWrapper() {
-        Close();
-    };
+    // Do not call Close() here: CloseImpl() is virtual and derived members are already gone.
+    virtual ~IEventsWriterWrapper() = default;
 
     void Close();
 

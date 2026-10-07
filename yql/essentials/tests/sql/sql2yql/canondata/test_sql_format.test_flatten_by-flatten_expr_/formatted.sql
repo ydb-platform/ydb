@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 $data = (
     SELECT
         'a,b,c,d' AS a,

@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include <stddef.h>
-#include <functional>
+#include <cstddef>
 #include <initializer_list>
 #include <limits>
 #include <map>

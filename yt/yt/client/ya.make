@@ -8,7 +8,7 @@ PROTO_NAMESPACE(yt)
 
 SRCS(
     api/config.cpp
-    api/chaos_lease_base.cpp
+    api/chaos_lease.cpp
     api/client.cpp
     api/client_common.cpp
     api/client_cache.cpp
@@ -19,7 +19,9 @@ SRCS(
     api/distributed_file_session.cpp
     api/distributed_file_client.cpp
     api/etc_client.cpp
+    api/file_client.cpp
     api/journal_client.cpp
+    api/not_implemented_client.cpp
     api/operation_client.cpp
     api/security_client.cpp
     api/table_client.cpp
@@ -37,10 +39,10 @@ SRCS(
     api/options.cpp
     api/shuffle_client.cpp
     api/table_partition_reader.cpp
+    api/table_reader.cpp
     api/private.cpp
 
     api/rpc_proxy/address_helpers.cpp
-    api/rpc_proxy/chaos_lease.cpp
     api/rpc_proxy/client_base.cpp
     api/rpc_proxy/client_impl.cpp
     api/rpc_proxy/cluster_directory.cpp
@@ -53,6 +55,7 @@ SRCS(
     api/rpc_proxy/journal_reader.cpp
     api/rpc_proxy/journal_writer.cpp
     api/rpc_proxy/public.cpp
+    api/rpc_proxy/request_tags.cpp
     api/rpc_proxy/row_batch_reader.cpp
     api/rpc_proxy/row_batch_writer.cpp
     api/rpc_proxy/row_stream.cpp
@@ -70,6 +73,7 @@ SRCS(
 
     election/public.cpp
 
+    hive/cluster_directory.cpp
     hive/config.cpp
     hive/timestamp_map.cpp
 
@@ -88,11 +92,13 @@ SRCS(
     chunk_client/public.cpp
     chunk_client/read_limit.cpp
     chunk_client/ready_event_reader_base.cpp
+    chunk_client/timing_statistics.cpp
 
     file_client/config.cpp
 
     journal_client/public.cpp
     journal_client/config.cpp
+    journal_client/helpers.cpp
 
     cypress_client/public.cpp
 
@@ -165,6 +171,7 @@ SRCS(
     table_client/record_helpers.cpp
 
     tablet_client/config.cpp
+    tablet_client/index_info.cpp
     tablet_client/watermark_runtime_data.cpp
     tablet_client/table_mount_cache_detail.cpp
     tablet_client/table_mount_cache.cpp
@@ -199,6 +206,7 @@ SRCS(
 
     query_client/query_builder.cpp
     query_client/query_statistics.cpp
+    query_client/table_hint.cpp
 
     complex_types/check_yson_token.cpp
     complex_types/check_type_compatibility.cpp

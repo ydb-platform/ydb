@@ -12,9 +12,19 @@
                 "ColumnType": "Bool"
             },
             {
+                "ColumnId": 30,
+                "ColumnName": "DatabaseSpaceBlockColor",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 31,
+                "ColumnName": "DatabaseSpaceUnblockColor",
+                "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 2,
@@ -147,7 +157,9 @@
             "0": {
                 "Columns": [
                     29,
+                    30,
                     1,
+                    31,
                     2,
                     4,
                     5,
@@ -346,6 +358,11 @@
                 "ColumnId": 20,
                 "ColumnName": "MaintenanceStatus",
                 "ColumnType": "Byte"
+            },
+            {
+                "ColumnId": 23,
+                "ColumnName": "DiskScope",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -369,7 +386,8 @@
                     17,
                     18,
                     19,
-                    20
+                    20,
+                    23
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -431,11 +449,6 @@
                 "ColumnId": 5,
                 "ColumnName": "DesiredPDiskCategory",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 122,
-                "ColumnName": "AppliedGroupGeneration",
-                "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 6,
@@ -549,7 +562,6 @@
                     4,
                     121,
                     5,
-                    122,
                     6,
                     7,
                     8,
@@ -598,6 +610,11 @@
             2
         ],
         "ColumnsAdded": [
+            {
+                "ColumnId": 29,
+                "ColumnName": "VDiskHeapAllocatorNumLeadingDisks",
+                "ColumnType": "Uint32"
+            },
             {
                 "ColumnId": 1,
                 "ColumnName": "BoxId",
@@ -743,6 +760,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    29,
                     1,
                     2,
                     3,
@@ -1920,11 +1938,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "PDiskConfig",
-                "ColumnType": "String"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "HostConfigId",
                 "ColumnType": "Uint64"
@@ -1953,19 +1966,80 @@
                 "ColumnId": 6,
                 "ColumnName": "Kind",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "PDiskConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "DiskScope",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    10
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 133,
+        "TableName": "DirectBlockGroupTabletState",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "TabletId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Revision",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "LastChangedAt",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2087,6 +2161,51 @@
                     3,
                     4,
                     5
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 135,
+        "TableName": "DatabaseSpaceExhaustedPool",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "BoxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "StoragePoolId",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2
                 ],
                 "RoomID": 0,
                 "Codec": 0,

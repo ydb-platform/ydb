@@ -1,6 +1,9 @@
 #include "background_controller.h"
+
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/counters/general.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -23,11 +26,14 @@ void TBackgroundController::FinishCompaction(const TInternalPathId pathId, const
 void TBackgroundController::CheckDeadlines() {
     for (auto&& i : ActiveCompactionInfo) {
         if (TMonotonic::Now() - i.second.GetStartTime() > NOlap::TCompactionLimits::CompactionTimeout) {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction")("path_id", i.first.first)("task_id", i.second.GetTaskId());
+            YDB_LOG_CRIT("",
+                {"event", "deadline_compaction"},
+                {"pathId", i.first.first},
+                {"taskId", i.second.GetTaskId()});
             // uncomment it for debug purpose
             // AFL_VERIFY_DEBUG(false);
         }
     }
 }
 
-}
+}   // namespace NKikimr::NColumnShard

@@ -28,9 +28,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
     if (!path.Ranges().Maybe<TCoVoid>()) {
         return node;
     }
-    if (!path.QLFilter().Maybe<TCoVoid>()) {
-        return node;
-    }
     auto maybeInnerReduce = path.Table().Maybe<TYtOutput>().Operation().Maybe<TYtReduce>();
     if (!maybeInnerReduce) {
         return node;
@@ -141,7 +138,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
     };
 
     // adds _yql_sys_tablekeyswitch column which is required for outer lambda
-    // _yql_sys_tableswitch equals "true" when reduce key is changed
+    // _yql_sys_tablekeyswitch equals "true" when reduce key is changed
     TExprNode::TPtr keySwitchLambda = ctx.Builder(node.Pos())
         .Lambda()
             .Param("stream")
@@ -295,11 +292,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduceWithTrivialMa
         newPaths.reserve(section.Paths().Size());
         for (const auto& path : section.Paths()) {
             if (fusedMap.Defined() || !path.Ranges().Maybe<TCoVoid>()) {
-                newPaths.push_back(path);
-                continue;
-            }
-
-            if (fusedMap.Defined() || !path.QLFilter().Maybe<TCoVoid>()) {
                 newPaths.push_back(path);
                 continue;
             }
@@ -572,8 +564,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduceWithTrivialMa
         .Reducer(newReduceLambda)
         .Settings(newSettings)
         .Done();
-
-    return node;
 }
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseInnerMap(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
@@ -613,9 +603,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseInnerMap(TExprBase 
         return node;
     }
     if (!path.Ranges().Maybe<TCoVoid>()) {
-        return node;
-    }
-    if (!path.QLFilter().Maybe<TCoVoid>()) {
         return node;
     }
 
@@ -762,9 +749,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
     if (!path.Ranges().Maybe<TCoVoid>()) {
         return node;
     }
-    if (!path.QLFilter().Maybe<TCoVoid>()) {
-        return node;
-    }
     if (inner.Maybe<TYtMapReduce>()) {
         for (auto out: outerMap.Output()) {
             if (TYqlRowSpecInfo(out.RowSpec()).IsSorted()) {
@@ -872,4 +856,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseMapToMapReduce(TExp
     return NYql::FuseMapToMapReduce(node, ctx, getParents, State_);
 }
 
-}  // namespace NYql
+} // namespace NYql

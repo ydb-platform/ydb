@@ -7,8 +7,11 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -68,9 +71,9 @@ private:
     }
 
 public:
-    TCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, 
+    TCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
         const TIntrusivePtr<TTxProxyMon>& mon,
-        NACLib::TUserContext::TPtr userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx)
         : Services(services)
         , TxId(txid)
         , Sender(ev->Sender)
@@ -218,7 +221,8 @@ private:
                 const TString explanation = TStringBuilder()
                     << "Cannot commit writes to system tableId# "
                     << entry.KeyDescription->TableId;
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation);
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, explanation));
                 UnresolvedKeys.push_back(explanation);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
@@ -237,7 +241,8 @@ private:
                     << " with access " << NACLib::AccessRightsToString(access)
                     << " to tableId# " << entry.KeyDescription->TableId;
 
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation.Str());
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation.Str()});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str()));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx);
                 return Die(ctx);
@@ -409,12 +414,11 @@ private:
 
                     TxProxyMon->TxResultAborted->Inc();
 
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
-                        "HANDLE Prepare TEvProposeTransactionResult TCommitWritesReq "
-                        << explanation
-                        << ", actorId: " << ctx.SelfID.ToString()
-                        << ", coordinator selected at resolve keys state: " << SelectedCoordinator
-                        << ", coordinator selected at propose result state: " << privateCoordinator);
+                    YDB_LOG_ERROR_CTX(ctx, "Handle Prepare TEvProposeTransactionResult TCommitWritesReq",
+                        {"error", explanation},
+                        {"selfId", ctx.SelfID},
+                        {"selectedCoordinator", SelectedCoordinator},
+                        {"privateCoordinator", privateCoordinator});
 
                     return Die(ctx);
                 }
@@ -444,7 +448,8 @@ private:
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, explanation));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError,
                         NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx);
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation);
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation});
                 TxProxyMon->TxResultComplete->Inc();
                 return Die(ctx);
             }
@@ -856,11 +861,9 @@ private:
 
         // no tablets keys are found in requests keys
         // it take place when a transaction have only checks locks
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                    "Actor# " << ctx.SelfID.ToString() <<
-                    " txid# " << TxId <<
-                    " SelectCoordinator unable to choose coordinator from resolved keys," <<
-                    " will try to pick it from TEvProposeTransactionResult from datashard");
+        YDB_LOG_DEBUG_CTX(ctx, "SelectCoordinator unable to choose coordinator from resolved keys, will try to pick it from TEvProposeTransactionResult from datashard",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId});
         return 0;
     }
 
@@ -991,7 +994,7 @@ private:
     const TIntrusivePtr<TTxProxyMon> TxProxyMon;
 
     TControlWrapper DefaultTimeoutMs;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     TInstant WallClockAccepted;
     TInstant WallClockResolveStarted;
@@ -1032,8 +1035,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, 
-    const TIntrusivePtr<TTxProxyMon>& mon, NACLib::TUserContext::TPtr userCtx)
+IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices& services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
+    const TIntrusivePtr<TTxProxyMon>& mon, TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     const auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.HasTransaction());

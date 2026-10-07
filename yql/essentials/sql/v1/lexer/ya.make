@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/sql/settings
 )
 

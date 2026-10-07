@@ -6,6 +6,8 @@
 
 #include <algorithm>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_PROXY
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -40,8 +42,7 @@ private:
     {
         Y_UNUSED(ctx);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_PROXY,
-                    "tests -- TFakeMetering got TEvMetering::TEvWriteMeteringJson");
+        YDB_LOG_DEBUG_CTX(ctx, "Tests -- TFakeMetering got TEvMetering::TEvWriteMeteringJson");
 
         const auto* msg = ev->Get();
 
@@ -50,10 +51,9 @@ private:
 
     void HandleUnexpectedEvent(STFUNC_SIG)
     {
-        ALOG_DEBUG(NKikimrServices::KESUS_PROXY,
-                    "TFakeMetering:"
-                        << " unhandled event type: " << ev->GetTypeRewrite()
-                        << " event: " << ev->ToString());
+        YDB_LOG_DEBUG("TFakeMetering: unhandled event",
+            {"type", ev->GetTypeRewrite()},
+            {"ev", ev->ToString()});
     }
 };
 
@@ -855,6 +855,19 @@ void TTestContext::UpdateConsumptionState(const TActorId& client, const TActorId
 
 void TTestContext::UpdateConsumptionState(const TActorId& client, const TActorId& edge, ui64 id, bool consume, double amount, Ydb::StatusIds::StatusCode status) {
     UpdateConsumptionState(client, edge, {TResourceConsumingInfo(id, consume, amount, status)});
+}
+
+void TTestContext::CloseQuoterSession(const TActorId& client, const TActorId& edge, ui64 id) {
+    const ui64 cookie = RandomNumber<ui64>();
+    auto req = MakeHolder<TEvKesus::TEvUpdateConsumptionState>();
+    ActorIdToProto(client, req->Record.MutableActorID());
+    auto* reqRes = req->Record.AddResourcesInfo();
+    reqRes->SetResourceId(id);
+    reqRes->SetConsumeResource(false);
+    reqRes->SetCloseSession(true);
+
+    SendFromEdge(edge, std::move(req), cookie);
+    ExpectEdgeEvent<TEvKesus::TEvUpdateConsumptionStateAck>(edge, cookie);
 }
 
 void TTestContext::AccountResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceAccountInfo>& info) {

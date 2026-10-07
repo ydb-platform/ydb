@@ -30,7 +30,7 @@ public:
     TContext(const TInitializer& initializer);
     TContext(const NHttp::THttpIncomingRequestPtr& request);
 
-    TString GetState(const TString& key) const;
+    TString GetState(const TString& key, bool includeRequestedAddress = true) const;
     bool IsNavigationRequest() const;
     TString GetRequestedAddress() const;
 

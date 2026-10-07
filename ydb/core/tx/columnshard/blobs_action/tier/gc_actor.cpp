@@ -1,5 +1,9 @@
 #include "gc_actor.h"
+#include "object_key.h"
+
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
@@ -24,8 +28,12 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
             // Do nothing
         } else {
             auto delay = NextRetryDelay(error, key).value_or(TDuration::Seconds(30));
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "error")(
-                "exception", error.GetExceptionName())("message", error.GetMessage())("key", key);
+            YDB_LOG_WARN("",
+                {"actor", "TGarbageCollectionActor"},
+                {"event", "error"},
+                {"exception", error.GetExceptionName()},
+                {"message", error.GetMessage()},
+                {"key", key});
             Schedule(delay, new NWrappers::NExternalStorage::TEvDeleteObjectRequest(Aws::S3::Model::DeleteObjectRequest().WithKey(key)));
             return;
         }
@@ -34,7 +42,7 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
     TLogoBlobID logoBlobId;
     TString errorMessage;
     Y_ABORT_UNLESS(ev->Get()->Key);
-    AFL_VERIFY(TLogoBlobID::Parse(logoBlobId, *ev->Get()->Key, errorMessage))("error", errorMessage);
+    AFL_VERIFY(TObjectKey(GCTask->GetStorageId()).Parse(*ev->Get()->Key, logoBlobId, errorMessage))("error", errorMessage);
     BlobIdsToRemove.erase(logoBlobId);
     CheckFinished();
 }
@@ -48,13 +56,20 @@ void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
     for (auto i = GCTask->GetBlobsToRemove().GetDirect().GetIterator(); i.IsValid(); ++i) {
         BlobIdsToRemove.emplace(i.GetBlobId().GetLogoBlobId());
     }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "starting")("storage_id", GCTask->GetStorageId())("drafts", GCTask->GetDraftBlobIds().size())("to_delete", BlobIdsToRemove.size());
+    YDB_LOG_INFO("",
+        {"actor", "TGarbageCollectionActor"},
+        {"event", "starting"},
+        {"storageId", GCTask->GetStorageId()},
+        {"drafts", GCTask->GetDraftBlobIds().size()},
+        {"toDelete", BlobIdsToRemove.size()});
     for (auto&& i : GCTask->GetDraftBlobIds()) {
         BlobIdsToRemove.emplace(i.GetLogoBlobId());
     }
+
     for (auto&& i : BlobIdsToRemove) {
-        StartDeletingObject(i.ToString());
+        StartDeletingObject(TObjectKey(GCTask->GetStorageId()).Make(i));
     }
+
     TBase::Bootstrap(ctx);
     Become(&TGarbageCollectionActor::StateWork);
 }
@@ -62,7 +77,9 @@ void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
 void TGarbageCollectionActor::CheckFinished() {
     if (SharedRemovingFinished && BlobIdsToRemove.empty()) {
         auto g = PassAwayGuard();
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "finished");
+        YDB_LOG_INFO("",
+            {"actor", "TGarbageCollectionActor"},
+            {"event", "finished"});
         TActorContext::AsActorContext().Send(TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask));
     }
 }
@@ -90,4 +107,4 @@ std::optional<TDuration> TGarbageCollectionActor::NextRetryDelay(const Aws::S3::
     return std::nullopt;
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NTier

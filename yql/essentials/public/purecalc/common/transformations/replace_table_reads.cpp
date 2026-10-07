@@ -36,7 +36,6 @@ public:
 
     TTableReadsReplacer(TVector<const TStructExprType*>&&, TString, TString) = delete;
 
-public:
     TStatus DoTransform(const TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
         if (Complete_) {
@@ -72,6 +71,10 @@ public:
 
                 if (!EnsureMinArgsCount(*node, 1, ctx)) {
                     return nullptr;
+                }
+
+                if (node->Child(0)->IsCallable(NNodes::TCoCons::CallableName())) {
+                    return node;
                 }
 
                 if (!node->Child(0)->IsCallable(NNodes::TCoRead::CallableName())) {

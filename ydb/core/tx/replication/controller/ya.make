@@ -1,15 +1,16 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/core/base
     ydb/core/discovery
     ydb/core/engine/minikql
     ydb/core/kqp/common/events
-    ydb/core/kqp/federated_query/actors
+    ydb/services/scheme_secret
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/replication/common
+    ydb/core/tx/replication/controller/protos
     ydb/core/tx/replication/ydb_proxy
     ydb/core/tx/replication/ydb_proxy/local_proxy
     ydb/core/tx/scheme_board
@@ -33,6 +34,7 @@ SRCS(
     private_events.cpp
     replication.cpp
     resource_id_resolver.cpp
+    dst_schema_changer.cpp
     secret_resolver.cpp
     session_info.cpp
     stream_consumer_remover.cpp
@@ -58,17 +60,18 @@ SRCS(
     tx_drop_replication.cpp
     tx_drop_stream_result.cpp
     tx_heartbeat.cpp
+    tx_index_build.cpp
     tx_init.cpp
+    tx_schema_change.cpp
     tx_init_schema.cpp
     tx_resolve_database_result.cpp
     tx_resolve_resource_id_result.cpp
     tx_resolve_secret_result.cpp
+    tx_run_worker.cpp
     tx_worker_error.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(replication.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()
 
@@ -76,6 +79,7 @@ RECURSE_FOR_TESTS(
     ut_assign_tx_id
     ut_dst_creator
     ut_replication
+    ut_schema_change
     ut_stream_creator
     ut_target_discoverer
 )

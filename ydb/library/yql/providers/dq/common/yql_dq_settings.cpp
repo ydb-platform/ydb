@@ -1,9 +1,14 @@
 #include "yql_dq_settings.h"
+
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+
 #include <util/string/split.h>
 
 namespace NYql {
 
-TDqConfiguration::TDqConfiguration() {
+TDqConfiguration::TDqConfiguration(bool strictConfigValidation)
+    : NCommon::TSettingDispatcher(DqProviderName, TQContext(), strictConfigValidation)
+{
     REGISTER_SETTING(*this, DataSizePerJob);
     REGISTER_SETTING(*this, MaxDataSizePerJob);
     REGISTER_SETTING(*this, MaxTasksPerStage);
@@ -124,6 +129,13 @@ TDqConfiguration::TDqConfiguration() {
         });
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, Scheduler);
+    REGISTER_SETTING(*this, Clique)
+        .Validator([this](const TString&, const TString& value) {
+            if (CliqueValidator) {
+                CliqueValidator(value);
+            }
+        });
+    REGISTER_SETTING(*this, _EnableSortConstraintProcessing);
 }
 
 } // namespace NYql

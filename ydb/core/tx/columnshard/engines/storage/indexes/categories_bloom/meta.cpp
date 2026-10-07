@@ -12,6 +12,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 
 class TCategoryBuilder {
@@ -21,7 +23,8 @@ private:
 
 public:
     TCategoryBuilder(std::set<ui64>&& categories, const ui32 count, const ui32 hashesCount)
-        : Categories(categories) {
+        : Categories(categories)
+    {
         AFL_VERIFY(count);
         const ui32 bitsCount = hashesCount * std::max<ui32>(count, 10) / std::log(2);
         AFL_VERIFY(bitsCount);
@@ -118,7 +121,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
                         NArrow::NHash::TXX64::CalcForAll(arr, i, pred);
                     }
                 },
-                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui64 hashBase) {
+                [&](const NArrow::NAccessor::TJsonValueView& data, const ui64 hashBase) {
                     auto view = data.GetScalarOptional();
                     if (!view.has_value()) {
                         return;
@@ -177,8 +180,8 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
     return std::make_shared<TCompositeBloomHeader>(std::move(proto), IIndexHeader::ReadHeaderSize(data.GetDataVerified(), true).DetachResult());
 }
 
-bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category,
+    const std::shared_ptr<arrow::Scalar>& value, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     AFL_VERIFY(!!category);
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
     AFL_VERIFY(op.GetCaseSensitive());
@@ -195,7 +198,7 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
     return true;
 }
 
-std::optional<ui64> TIndexMeta::DoCalcCategory(const TString& subColumnName) const {
+std::optional<ui64> TIndexMeta::DoCalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const {
     ui64 result;
     const NRequest::TOriginalDataAddress addr(GetColumnId(), subColumnName);
     AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, &result));
@@ -209,12 +212,13 @@ bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescrip
     {
         auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
         if (conclusion.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
+            YDB_LOG_ERROR("",
+                {"indexParsing", conclusion.GetErrorMessage()});
             return false;
         }
     }
-    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
-                                                                     : NDefaults::FalsePositiveProbability;
+    FalsePositiveProbability =
+        bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability() : NDefaults::FalsePositiveProbability;
     for (auto&& i : bFilter.GetColumnIds()) {
         AddColumnId(i);
     }

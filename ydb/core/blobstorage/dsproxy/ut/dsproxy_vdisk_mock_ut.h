@@ -97,6 +97,16 @@ public:
         SpecialStatuses[blobID] = status;
     }
 
+    bool CorruptData(const TLogoBlobID& id) {
+        auto it = Blobs.find(id);
+        if (it == Blobs.end() || it->second.empty()) {
+            return false;
+        }
+        TString& data = it->second;
+        data = TString(data.size(), 'X');
+        return true;
+    }
+
     void OnVGet(const TEvBlobStorage::TEvVGet &vGet, TEvBlobStorage::TEvVGetResult &outVGetResult) {
         auto &request = vGet.Record;
         if (IsError) {
@@ -523,25 +533,61 @@ public:
         }
     }
 
+    TVDiskMock& GetVDiskInSubgroup(const TLogoBlobID& blobId, ui32 subgroupIdx) {
+        TBlobStorageGroupInfo::TVDiskIds vDisksId;
+        Info->PickSubgroup(blobId.Hash(), &vDisksId, nullptr);
+        Y_ABORT_UNLESS(subgroupIdx < vDisksId.size());
+        return GetVDisk(vDisksId[subgroupIdx]);
+    }
+
+    void PrepareDataParts(const TLogoBlobID& id, const TString& data, TDataPartSet& partSet) {
+        Y_ABORT_UNLESS(id.BlobSize() == data.size());
+        const ui32 totalParts = Info->Type.TotalPartCount();
+
+        TString encryptedData = data;
+        char* dataBytes = encryptedData.Detach();
+        Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), id, *Info);
+
+        partSet.Parts.resize(totalParts);
+        Info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), encryptedData, partSet);
+    }
+
+    void PutPartAtSlot(const TLogoBlobID& blobId, ui32 subgroupIdx, ui32 partId,
+        const TString& data)
+    {
+        Y_ABORT_UNLESS(partId >= 1 && partId <= Info->Type.TotalPartCount());
+
+        TDataPartSet partSet;
+        PrepareDataParts(blobId, data, partSet);
+
+        TLogoBlobID pId(blobId, partId);
+        TString pData = partSet.Parts[partId - 1].OwnedString.ConvertToString();
+        GetVDiskInSubgroup(blobId, subgroupIdx).Put(pId, pData);
+    }
+
+    void CorruptPart(const TLogoBlobID& blobId, ui32 subgroupIdx, ui32 partId) {
+        TVDiskMock& vdisk = GetVDiskInSubgroup(blobId, subgroupIdx);
+        TLogoBlobID partBlobId(blobId, partId);
+        Y_ABORT_UNLESS(vdisk.CorruptData(partBlobId), "Part is not stored on the selected disk");
+    }
+
+    void MarkPartNotYet(const TLogoBlobID& blobId, ui32 subgroupIdx, ui32 partId) {
+        GetVDiskInSubgroup(blobId, subgroupIdx).SetNotYet(TLogoBlobID(blobId, partId));
+    }
+
     void Put(const TLogoBlobID id, const TString &data, ui32 handoffsToUse = 0,
         const THashSet<ui32>* selectedParts = nullptr)
     {
         const ui32 hash = id.Hash();
         const ui32 totalvd = Info->Type.BlobSubgroupSize();
         const ui32 totalParts = Info->Type.TotalPartCount();
-        Y_ABORT_UNLESS(id.BlobSize() == data.size());
         Y_ABORT_UNLESS(totalvd >= totalParts);
         TBlobStorageGroupInfo::TServiceIds vDisksSvc;
         TBlobStorageGroupInfo::TVDiskIds vDisksId;
         Info->PickSubgroup(hash, &vDisksId, &vDisksSvc);
 
-        TString encryptedData = data;
-        char *dataBytes = encryptedData.Detach();
-        Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), id, *Info);
-
         TDataPartSet partSet;
-        partSet.Parts.resize(totalParts);
-        Info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), encryptedData, partSet);
+        PrepareDataParts(id, data, partSet);
 
         if (Info->Type.GetErasure() == TErasureType::ErasureMirror3of4) {
             auto part1 = partSet.Parts[0].OwnedString.ConvertToString();

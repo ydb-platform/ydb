@@ -376,10 +376,10 @@ WHERE ApplicationName = 'my_analytics_app'
 | `LastAccessedAt` | Время последнего обращения к результату компиляции запроса в кэше.<br/>Тип: `Timestamp`. |
 | `CompilationDurationMs` | Длительность компиляции запроса в миллисекундах.<br/>Тип: `Uint64`. |
 | `Warnings` | Предупреждения, возникшие при компиляции запроса.<br/>Тип: `Utf8`. |
-| `Metadata` | Типы параметров запроса в формате JSON. Содержит ключ `parameters` с именами параметров и их типами (base64-encoded protobuf). Пустым, если у запроса нет параметров.<br/>Тип: `Utf8`. |
+| `Metadata` | Типы параметров запроса в формате JSON. Содержит ключ `parameters` с именами параметров и их типами.<br/>Тип: `Utf8`. |
 | `IsTruncated` | Флаг, указывающий, был ли текст запроса обрезан из-за превышения лимита в 10 КБ.<br/>Тип: `Bool`. |
 | `QueryType` | Тип запроса, значение одно из:<br/>`QUERY_TYPE_SQL_DML` — Table Service<br/>`QUERY_TYPE_SQL_GENERIC_QUERY` — Query Service<br/>`QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY` — Query Service в конкурентном режиме<br/>Для старых записей может быть пустым.<br/>Тип: `Utf8`. |
-| `Syntax` | Синтаксис запроса, значение одно из:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_PG` — PostgreSQL-совместимый синтаксис<br/>`SYNTAX_UNSPECIFIED` — для старых записей без информации о синтаксисе<br/>Тип: `Utf8`. |
+| `Syntax` | Синтаксис запроса, значение одно из:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_UNSPECIFIED` — для старых записей без информации о синтаксисе<br/>`SYNTAX_PG` — устаревшее значение для записей, скомпилированных до удаления экспериментальной PostgreSQL-совместимости; новые запросы с этим синтаксисом не принимаются<br/>Тип: `Utf8`. |
 
 ### Примеры запросов {#compile-cache-queries-examples}
 
@@ -555,10 +555,7 @@ ORDER BY IntervalEnd desc, LocksBroken desc
 | `ConcurrentQueryLimit` | Максимальное количество параллельно выполняющихся запросов в пуле ресурсов.<br/>Тип: `Int32`. |
 | `QueueSize` | Максимальный размер очереди ожидания.<br/>Тип: `Int32`. |
 | `DatabaseLoadCpuThreshold` | Порог загрузки CPU всей базы данных, в процентах, после которого запросы не отправляются на выполнение и остаются в очереди.<br/>Тип: `Double`. |
-| `ResourceWeight` | [Веса](../dev/resource-consumption-management.md#resources_weight) для распределения ресурсов между пулами.<br/>Тип: `Double`. |
 | `TotalCpuLimitPercentPerNode` | Процент доступного CPU, который могут использовать все запросы на узле в данном пуле ресурсов.<br/>Тип: `Double`. |
-| `QueryCpuLimitPercentPerNode` | Процент доступного CPU на узле для одного запроса в пуле ресурсов.<br/>Тип: `Double`. |
-| `QueryMemoryLimitPercentPerNode` | Процент доступной памяти на узле, который может использовать запрос в данном пуле ресурсов.<br/>Тип: `Double`. |
 
 ### Пример {#resource_pools-examples}
 
@@ -570,10 +567,7 @@ SELECT
     ConcurrentQueryLimit,
     QueueSize,
     DatabaseLoadCpuThreshold,
-    ResourceWeight,
-    TotalCpuLimitPercentPerNode,
-    QueryCpuLimitPercentPerNode,
-    QueryMemoryLimitPercentPerNode
+    TotalCpuLimitPercentPerNode
 FROM `.sys/resource_pools`
 WHERE Name = "default";
 ```
@@ -721,16 +715,16 @@ WHERE Sid = "user3"
 
 ### Просмотр информации о потоковых запросах {#streaming_queries}
 
-Системное представление `streaming_queries` содержит информацию о всех созданных [потоковых запросах](../concepts/streaming-query.md).
+Системное представление `streaming_queries` содержит информацию о всех созданных [потоковых запросах](../concepts/streaming-query/streaming-query.md).
 
-Пользователю в данном представлении отображаются только те [потоковые запросы](../concepts/streaming-query.md), на которые ему предоставлено право `ydb.granular.describe_schema`.
+Пользователю в данном представлении отображаются только те [потоковые запросы](../concepts/streaming-query/streaming-query.md), на которые ему предоставлено право `ydb.granular.describe_schema`.
 
 Структура таблицы:
 
 | Колонка           | Описание |
 |-------------------|----------|
 | `Path`            | Полный путь к запросу.<br />Тип: `Utf8`.<br />Ключ: `0`. |
-| `Status`          | Статус выполнения запроса, значение одно из:<br />`CREATING` - запрос создается <br />`CREATED` - запрос создан, но не запущен<br />`STARTING` - запрос запускается<br />`RUNNING` - запрос запущен<br />`STOPPING` - запрос останавливается<br />`STOPPED` - запрос остановлен<br />`SUSPENDED` - запрос завершился с ошибкой и ожидает backoff для ретрая<br />Тип: `Utf8`|
+| `Status`          | Статус выполнения запроса, значение одно из:<br />`CREATING` - запрос создается <br />`CREATED` - запрос создан, но не запущен<br />`STARTING` - запрос запускается<br />`RUNNING` - запрос запущен<br />`STOPPING` - запрос останавливается<br />`STOPPED` - запрос остановлен<br />`DELETING` - запрос удаляется<br />`SUSPENDED` - запрос завершился с ошибкой и ожидает backoff для ретрая<br />`COMPLETED` - запрос успешно завершил выполнение<br />`FAILED` - запуск потокового запроса завершился с ошибкой<br />Тип: `Utf8`|
 | `Issues`          | Ошибки выполнения запроса в формате JSON<br />Тип: `Utf8`|
 | `Plan`            | План запроса в формате JSON<br />Тип: `Utf8`|
 | `Ast`             | AST запроса<br />Тип: `Utf8`|

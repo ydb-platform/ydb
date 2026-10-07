@@ -3,6 +3,10 @@
 #include <ydb/core/tx/schemeshard/schemeshard_audit_log.h>
 #include <ydb/core/persqueue/public/cloud_events/cloud_events.h>
 
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 TPath DatabasePathFromModifySchemeOperation(
@@ -15,9 +19,11 @@ namespace {
 
 bool BuildTopicCloudEventInfo(
     const NKikimrSchemeOp::TModifyScheme& operation,
-    TOperationContext& context,
+    TSchemeShard* ss,
     NKikimrScheme::EStatus status,
     const TString& reason,
+    const TString& userSID,
+    const TString& peerName,
     NPQ::NCloudEvents::TCloudEventInfo& info)
 {
     const TString workingDir = operation.GetWorkingDir();
@@ -33,9 +39,13 @@ bool BuildTopicCloudEventInfo(
     }
 
     info.TopicPath = workingDir.empty() ? name : workingDir + "/" + name;
+    const auto parentPath = TPath::Resolve(workingDir, ss);
+    if (parentPath.IsResolved() && parentPath.Base()->IsCdcStream()) {
+        info.TopicPath = workingDir;
+    }
 
     // Cloud / folder / database
-    TPath dbPath = DatabasePathFromModifySchemeOperation(context.SS, operation);
+    TPath dbPath = DatabasePathFromModifySchemeOperation(ss, operation);
     if (!dbPath.IsEmpty()) {
         auto [cloudId, folderId, databaseId] = GetDatabaseCloudIds(dbPath);
         info.CloudId = cloudId;
@@ -43,8 +53,8 @@ bool BuildTopicCloudEventInfo(
         info.DatabaseId = databaseId;
     }
 
-    info.RemoteAddress = context.PeerName;
-    info.UserSID = context.UserToken ? context.UserToken->GetUserSID() : TString();
+    info.RemoteAddress = peerName;
+    info.UserSID = userSID;
     info.Issue = reason;
     info.CreatedAt = TInstant::Now();
     info.ModifyScheme = operation;
@@ -55,81 +65,78 @@ bool BuildTopicCloudEventInfo(
 
 } // anonymous namespace
 
-void FinishWithError(
-    TProposeResponse* result,
+void SendTopicCloudEvent(
     const NKikimrSchemeOp::TModifyScheme& operation,
+    TSchemeShard* ss,
+    const TActorContext& ctx,
     NKikimrScheme::EStatus status,
-    const TString& errStr,
-    TOperationContext& context)
+    const TString& reason,
+    const TString& userSID,
+    const TString& peerName)
 {
-    result->SetError(status, errStr);
-
     NPQ::NCloudEvents::TCloudEventInfo info;
-    if (!BuildTopicCloudEventInfo(operation, context, status, errStr, info)) {
+    if (!BuildTopicCloudEventInfo(operation, ss, status, reason, userSID, peerName, info)) {
+        YDB_LOG_ERROR_CTX_COMP(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, "Failed to build topic cloud event info for operation",
+            {"operationType", NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType())},
+        );
         return;
     }
 
-    auto* sys = NActors::TActivationContext::ActorSystem();
-    // FinishWithError is used for early Propose-time rejects of topic requests.
-    // The operation does not proceed to the normal completion path in these cases,
-    // so the error cloud event is sent immediately instead of via context.OnComplete.
-    auto actorId = sys->Register(NPQ::NCloudEvents::CreateCloudEventActor());
-    sys->Send(actorId, new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
+    auto actorId = ctx.Register(NPQ::NCloudEvents::CreateCloudEventActor());
+
+    ctx.Send(actorId, new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
 }
 
-void ScheduleSendTopicCloudEvent(
-    const NKikimrSchemeOp::TModifyScheme& operation,
-    TOperationContext& context,
-    NKikimrScheme::EStatus status,
-    const TString& reason)
+void SendTopicCloudEventIfNeeded(
+    const NKikimrScheme::TEvModifySchemeTransaction& record,
+    const NKikimrScheme::TEvModifySchemeTransactionResult& response,
+    TSchemeShard* ss,
+    const TString& peerName,
+    const TString& userSID)
 {
-    NPQ::NCloudEvents::TCloudEventInfo info;
-    if (!BuildTopicCloudEventInfo(operation, context, status, reason, info)) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
-            "Failed to build topic cloud event info for operation: "
-                << NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType()));
+    const auto status = response.GetStatus();
+    const bool isSuccess = status == NKikimrScheme::StatusSuccess || status == NKikimrScheme::StatusAccepted;
+    const auto eventStatus = isSuccess ? NKikimrScheme::StatusSuccess : status;
+    const TString reason = !isSuccess && response.HasReason() ? response.GetReason() : TString();
+
+    const auto& ctx = NActors::TlsActivationContext->AsActorContext();
+    const auto sendTopicCloudEvent = [ss, &ctx, eventStatus, &reason, &peerName, &userSID](const auto& transaction) {
+        switch (transaction.GetOperationType()) {
+            case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
+            case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
+            case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
+                break;
+            default:
+                return;
+        }
+
+        YDB_LOG_DEBUG_CTX(ctx, "Sending topic cloud event for operation",
+            {"operationType", NKikimrSchemeOp::EOperationType_Name(transaction.GetOperationType())},
+        );
+
+        SendTopicCloudEvent(
+            transaction,
+            ss,
+            ctx,
+            eventStatus,
+            reason,
+            userSID,
+            peerName);
+    };
+
+    const auto txId = TTxId(record.GetTxId());
+    if (ss->Operations.contains(txId)) {
+        for (const auto& part : ss->Operations.at(txId)->Parts) {
+            sendTopicCloudEvent(part->GetModifyScheme());
+        }
         return;
     }
 
-    auto* sys = NActors::TActivationContext::ActorSystem();
-    auto actorId = sys->Register(NPQ::NCloudEvents::CreateCloudEventActor());
-
-    context.OnComplete.Send(
-        actorId,
-        new NPQ::NCloudEvents::TCloudEvent(std::move(info)));
-}
-
-TPQDoneWithCloudEvents::TPQDoneWithCloudEvents(const TOperationId& id, const TTxTransaction& tx)
-    : TDone(id)
-    , Transaction(tx)
-{
-    auto events = AllIncomingEvents();
-    events.erase(TEvPrivate::TEvCompleteBarrier::EventType);
-    IgnoreMessages(DebugHint(), events);
-}
-
-bool TPQDoneWithCloudEvents::ProgressState(TOperationContext& context)
-{
-    switch (Transaction.GetOperationType()) {
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
-        case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
-        case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
-            break;
-        default:
-            return TDone::ProgressState(context);
+    for (const auto& transaction : record.GetTransaction()) {
+        sendTopicCloudEvent(transaction);
     }
-
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
-        "Scheduling send topic cloud event for operation: "
-            << NKikimrSchemeOp::EOperationType_Name(Transaction.GetOperationType()));
-
-    ScheduleSendTopicCloudEvent(
-        Transaction,
-        context,
-        NKikimrScheme::StatusSuccess,
-        TString());
-
-    return TDone::ProgressState(context);
 }
 
 } // NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

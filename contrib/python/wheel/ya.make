@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.46.3)
+VERSION(0.47.0)
 
 LICENSE(MIT)
 
@@ -12,6 +12,11 @@ PEERDIR(
 
 NO_LINT()
 
+NO_CHECK_IMPORTS(
+    wheel._bdist_wheel
+    wheel.bdist_wheel
+)
+
 PY_SRCS(
     TOP_LEVEL
     wheel/__init__.py
@@ -19,6 +24,7 @@ PY_SRCS(
     wheel/_bdist_wheel.py
     wheel/_commands/__init__.py
     wheel/_commands/convert.py
+    wheel/_commands/info.py
     wheel/_commands/pack.py
     wheel/_commands/tags.py
     wheel/_commands/unpack.py

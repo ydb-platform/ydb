@@ -11,6 +11,9 @@
 #include <ydb/core/security/sasl/scram_auth_actor.h>
 #include <ydb/library/login/sasl/scram.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 
 namespace NKafka {
@@ -29,8 +32,8 @@ void AuditLogLogin(const NRawSocket::TNetworkConfig::TSocketAddressType& address
 
 const TDuration TKafkaSaslAuthActor::Timeout = TDuration::MilliSeconds(60000);
 
-NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const NRawSocket::TSocketDescriptor::TSocketAddressType address) {
-    return new TKafkaSaslAuthActor(context, address);
+NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const NRawSocket::TSocketDescriptor::TSocketAddressType address, TString requestId) {
+    return new TKafkaSaslAuthActor(context, address, std::move(requestId));
 }
 
 void TKafkaSaslAuthActor::Bootstrap() {
@@ -198,13 +201,15 @@ void TKafkaSaslAuthActor::HandleLoginResult(TEvSasl::TEvSaslScramFinalServerResp
 
 void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx) {
     if (ev->Get()->HasError()) {
-        if (Context->SaslMechanism == "SCRAM-SHA-256") {
-            AuthResponse = NLogin::NSasl::BuildErrorMsg(NLogin::NSasl::EScramServerError::OtherError);
-        }
+        if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+            if (Context->SaslMechanism == "SCRAM-SHA-256") {
+                AuthResponse = NLogin::NSasl::BuildErrorMsg(NLogin::NSasl::EScramServerError::OtherError);
+            }
 
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::UNAUTHORIZED,
-                            "", TString{ev->Get()->Error.Message}, ctx);
-        return;
+            SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::UNAUTHORIZED,
+                                "", TString{ev->Get()->Error.Message}, ctx);
+            return;
+        }
     }
 
     UserToken = ev->Get()->Token;
@@ -220,7 +225,7 @@ void TKafkaSaslAuthActor::SendTicketParserRequest() {
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = Ticket,
         .Database = AuthDatabasePath,
-        .PeerName = TStringBuilder() << Address,
+        .TraceContext = {TStringBuilder() << Address, RequestId},
         .Entries = TicketParserEntries,
     }));
 
@@ -239,11 +244,12 @@ void TKafkaSaslAuthActor::SendResponse() {
     auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
     responseToClient->ErrorCode = EKafkaErrors::NONE_ERROR;
     responseToClient->AuthBytesStr = AuthResponse;
-    responseToClient->AuthBytes = ToRawBytes(responseToClient->AuthBytesStr);
+    responseToClient->AuthBytes = TKafkaRawBytes(responseToClient->AuthBytesStr.data(), responseToClient->AuthBytesStr.size());
     responseToClient->ErrorMessage = "";
 
-    KAFKA_LOG_D("Authentication first step finished."
-                    << " FirstServerMessage='" << AuthResponse << "'");
+    YDB_LOG_DEBUG("Authentication first step finished. FirstServerMessage='",
+        {LogPrefix()},
+        {"authResponse", AuthResponse});
 
     auto evResponse = std::make_unique<TEvKafka::TEvResponse>(CorrelationId, responseToClient, EKafkaErrors::NONE_ERROR);
     Send(Context->ConnectionId, evResponse.release());
@@ -257,13 +263,15 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
     auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
     responseToClient->ErrorCode = errorCode;
     responseToClient->AuthBytesStr = AuthResponse;
-    responseToClient->AuthBytes = ToRawBytes(responseToClient->AuthBytesStr);
+    responseToClient->AuthBytes = TKafkaRawBytes(responseToClient->AuthBytesStr.data(), responseToClient->AuthBytesStr.size());
 
     if (isFailed) {
         TStringBuilder authenticationFailureReason;
         authenticationFailureReason << (errorMessage ? " " + errorMessage : "")
             << (details ? " " + details : "");
-        KAFKA_LOG_ERROR("Authentication failure." << authenticationFailureReason);
+        YDB_LOG_ERROR("Authentication failure",
+            {LogPrefix()},
+            {"authenticationFailureReason", authenticationFailureReason});
         const auto& securityConfig = AppData()->DomainsConfig.GetSecurityConfig();
         TStringBuilder responseErrorMessage;
         responseErrorMessage << "Authentication failure.";
@@ -276,18 +284,22 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
         auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::FAILED, evResponse, errorMessage);
         Send(Context->ConnectionId, authResult);
     } else {
-        KAFKA_LOG_D("Authentication success. Database='" << DatabasePath << "', "
-                                      << "FolderId='" << FolderId << "', "
-                                      << "ServiceAccountId='" << ServiceAccountId << "', "
-                                      << "DatabaseId='" << DatabaseId << "', "
-                                      << "Coordinator='" << Coordinator << "', "
-                                      << "ResourcePath='" << ResourcePath << "'");
+        YDB_LOG_DEBUG("Authentication success. Database=' FolderId=' ServiceAccountId=' DatabaseId=' Coordinator=' ResourcePath='",
+            {LogPrefix()},
+            {"databasePath", DatabasePath},
+            {"folderId", FolderId},
+            {"serviceAccountId", ServiceAccountId},
+            {"databaseId", DatabaseId},
+            {"coordinator", Coordinator},
+            {"resourcePath", ResourcePath});
         responseToClient->ErrorMessage = "";
 
         auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient, errorCode);
         auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, UserToken, DatabasePath,
                                                         DatabaseId, FolderId, CloudId, ServiceAccountId, Coordinator,
-                                                        ResourcePath, IsServerless, errorMessage, ResourseDatabasePath);
+                                                        ResourcePath, IsServerless, errorMessage, ResourseDatabasePath,
+                                                        Ticket, TicketParserEntries, AuthDatabasePath,
+                                                        TStringBuilder() << Address);
         Send(Context->ConnectionId, authResult);
     }
 
@@ -354,9 +366,11 @@ void TKafkaSaslAuthActor::SendScramLoginRequest(const NActors::TActorContext& ct
 }
 
 void TKafkaSaslAuthActor::SendMtlsAuthRequest(const NActors::TActorContext&) {
-    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = ClientCert,
-                                                                                                     .Database = DatabasePath,
-                                                                                                     .PeerName = TStringBuilder() << Address}));
+    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+        .Ticket = ClientCert,
+        .Database = DatabasePath,
+        .TraceContext = {TStringBuilder() << Address, RequestId},
+    }));
     Become(&TKafkaSaslAuthActor::StateTicketResolve);
 }
 
@@ -406,7 +420,7 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
     }
 
     if (CurrentStateFunc() == &TThis::StateResolveDatabase) {
-        Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
+        AFL_ENSURE(navigate->ResultSet.size() == 1)("result_set_size", navigate->ResultSet.size())("database", DatabasePath);
         IsServerless = navigate->ResultSet.front().DomainInfo->IsServerless();
 
         for (const auto& attr : navigate->ResultSet.front().Attributes) {

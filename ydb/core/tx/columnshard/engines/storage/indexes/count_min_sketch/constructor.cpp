@@ -3,9 +3,12 @@
 
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
-std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor::DoCreateIndexMeta(const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
+std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor::DoCreateIndexMeta(
+    const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     std::set<ui32> columnIds;
     if (ColumnNames.empty()) {
         for (const auto& [id, _] : currentSchema.GetColumns().GetColumns()) {
@@ -35,13 +38,13 @@ NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromJson(con
     }
     for (auto&& i : *columnNamesArray) {
         if (!i.IsString()) {
-            return TConclusionStatus::Fail("column_names have to be in count min sketch features as array of strings ['column_name_1', ... , 'column_name_N']");
+            return TConclusionStatus::Fail(
+                "column_names have to be in count min sketch features as array of strings ['column_name_1', ... , 'column_name_N']");
         }
         ColumnNames.emplace(i.GetString());
     }
     if (ColumnNames.size() > 1) {
-        return TConclusionStatus::Fail(
-            "column_names elements count have to be equal to 1 temporary");
+        return TConclusionStatus::Fail("column_names elements count have to be equal to 1 temporary");
     }
     return TConclusionStatus::Success();
 }
@@ -49,7 +52,8 @@ NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromJson(con
 NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) {
     if (!proto.HasCountMinSketch()) {
         const TString errorMessage = "not found CountMinSketch section in proto: \"" + proto.DebugString() + "\"";
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
+        YDB_LOG_ERROR("",
+            {"problem", errorMessage});
         return TConclusionStatus::Fail(errorMessage);
     }
     auto& sketch = proto.GetCountMinSketch();
@@ -66,4 +70,4 @@ void TCountMinSketchConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexR
     }
 }
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NCountMinSketch

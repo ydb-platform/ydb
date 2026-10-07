@@ -2,6 +2,7 @@
 #include "yql_simple_udf_resolver.h"
 #include "yql_files_box.h"
 
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/proto/udf_resolver.pb.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/core/yql_type_annotation.h>
@@ -40,8 +41,13 @@ void RunResolver(
     TShellCommandOptions shellOptions;
     shellOptions
         .SetUseShell(false)
-        .SetDetachSession(false)
-        .SetInputStream(input); // input can be nullptr
+        .SetDetachSession(true)
+        .SetInputStream(input) // input can be nullptr
+        .SetFuncAfterFork([]() {
+#ifdef _unix_
+            signal(SIGUSR1, SIG_IGN);
+#endif
+        });
 
     if (ldLibraryPath) {
         YQL_LOG(DEBUG) << "Using LD_LIBRARY_PATH = " << ldLibraryPath << " for Udf resolver";
@@ -226,6 +232,7 @@ public:
             }
 
             udfRequest->SetLangVer(udf->LangVer);
+            *udfRequest->MutableRuntimeSettings() = SerializeRuntimeSettingsToProto(*udf->RuntimeSettings);
         }
 
         TResolveResult response;
@@ -385,7 +392,6 @@ private:
         return !hasErrors;
     }
 
-private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
     TFileStoragePtr FileStorage_;
@@ -401,7 +407,7 @@ void LoadSystemModulePaths(
     TUdfModulePathsMap* paths)
 {
     const TList<TString> args = {TString("--list"), dir};
-    RunResolver(resolverPath, args, nullptr, [&](const TString& output) {
+    RunResolver(resolverPath, args, /*input=*/nullptr, [&](const TString& output) {
         // output format is:
         // {{module_name}}\t{{module_path}}\n
 

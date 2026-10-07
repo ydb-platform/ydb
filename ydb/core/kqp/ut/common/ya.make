@@ -5,7 +5,6 @@ SRCS(
     kqp_ut_common.cpp
     kqp_ut_common.h
     columnshard.cpp
-    kqp_benches.cpp
 )
 
 PEERDIR(
@@ -21,6 +20,7 @@ PEERDIR(
     yql/essentials/udfs/common/math
     yql/essentials/udfs/common/re2
     yql/essentials/udfs/common/string
+    ydb/core/formats/arrow/program/olap_kernels
     yql/essentials/udfs/common/unicode_base
     yql/essentials/utils/backtrace
     ydb/public/lib/yson_value
@@ -35,5 +35,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(olap_indexes_enums.h)
 
 END()

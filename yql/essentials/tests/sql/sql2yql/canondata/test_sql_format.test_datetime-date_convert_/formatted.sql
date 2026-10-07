@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     Yql::Convert(Yql::Date(AsAtom('1')), AsAtom('Uint8'))
 ;

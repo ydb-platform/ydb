@@ -2,12 +2,16 @@
 
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 #include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
+#include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
 #include <yt/yql/providers/yt/lib/secret_masker/secret_masker.h>
+#include <yt/yql/providers/yt/lib/access_provider/proto/access_provider.pb.h>
+#include <yt/yql/providers/yt/lib/tvm_client/proto/tvm_client.pb.h>
 
 #include <yql/essentials/tools/yql_facade_run/yql_facade_run.h>
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/core/dq_integration/yql_dq_helper.h>
 
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 
@@ -28,17 +32,23 @@ protected:
     virtual ISecretMasker::TPtr CreateSecretMasker();
 
 protected:
-    TString MrJobBin_;
-    TString MrJobUdfsDir_;
+    TMaybe<TString> MrJobBin_;
+    TMaybe<TString> MrJobUdfsDir_;
     size_t NumYtThreads_ = 1;
     bool KeepTemp_ = false;
-    TString DefYtServer_;
+    TConfigClusters::TPtr YtClusters_;
     NFmr::IFmrWorker::TPtr FmrWorker_;
     bool DisableLocalFmrWorker_ = false;
     TString FmrOperationSpecFilePath_;
     TString TableDataServiceDiscoveryFilePath_;
     TString FmrJobBin_;
     TString FmrPoolName_;
+    TString FmrCoordinatorUrl_;
+    TString CoordinatorYsonPath_;
+    TString WorkerYsonPath_;
+    TString FmrYtServerForUpload_;
+    TYtTvmConfig TvmConfig_;
+    TYtAccessProviderConfig AccessProviderConfig_;
 };
 
 } // NYql

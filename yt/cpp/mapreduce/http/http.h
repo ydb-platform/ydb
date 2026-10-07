@@ -78,10 +78,16 @@ public:
     void SetRequestCompression(const TString& compression);
     void SetResponseCompression(const TString& compression);
 
+    void SetTraceparent(const TString& traceparent);
+    const TString& GetTraceparent() const;
+
     TString GetCommand() const;
     TString GetUrl(bool needProxy = false) const;
     TString GetHeaderAsString(const TString& hostName, const TString& requestId, bool includeParameters = true) const;
+
     NHttp::THeadersPtrWrapper GetHeader(const TString& hostName, const TString& requestId, bool includeParameters) const;
+
+    TMaybe<TString> GetRequestCompression() const;
 
     const TString& GetMethod() const;
 
@@ -106,6 +112,8 @@ private:
 
     TString RequestCompression_ = "identity";
     TString ResponseCompression_ = "identity";
+
+    TString Traceparent_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -253,7 +261,6 @@ private:
     const TDuration SocketTimeout_;
 
     TInstant StartTime_;
-    TString LoggedAttributes_;
 
     TConnectionPtr Connection_;
 
@@ -262,6 +269,7 @@ private:
     std::unique_ptr<TSocketInput> SocketInput_;
     std::unique_ptr<THttpResponse> Input_;
 
+    bool IncludeParameters_ = false;
     bool LogResponse_ = false;
 };
 

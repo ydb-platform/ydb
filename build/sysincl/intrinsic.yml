@@ -11,19 +11,32 @@
   - arm64_neon.h
   - armintr.h
   - avx2intrin.h
+  - avx512bitalgintrin.h
+  - avx512fp16intrin.h
   - avx512fintrin.h
   - avx512dqintrin.h
   - avx512cdintrin.h
   - avx512bwintrin.h
-  - avx512vlintrin.h
-  - avx512vbmiintrin.h
   - avx512vbmi2intrin.h
+  - avx512vbmiintrin.h
+  - avx512vbmivlintrin.h
+  - avx512vlbitalgintrin.h
+  - avx512vlbwintrin.h
+  - avx512vlcdintrin.h
+  - avx512vldqintrin.h
+  - avx512vlfp16intrin.h
+  - avx512vlintrin.h
+  - avx512vlvbmi2intrin.h
+  - avx512vlvnniintrin.h
+  - avx512vnniintrin.h
+  - avx512vpopcntdqvlintrin.h
   - avx512vpopcntdqintrin.h
   - avxintrin.h
   - bmi2intrin.h
   - bmiintrin.h
   - cmnintrin.h
   - cuda_wrappers/new
+  - gfniintrin.h
   - e2kbuiltin.h
   - emmintrin.h
   - f16cintrin.h
@@ -54,8 +67,10 @@
   - smmintrin.h
   - tbmintrin.h
   - tmmintrin.h
+  - vaesintrin.h
   - varargs.h
   - vecintrin.h
+  - vpclmulqdqintrin.h
   - wasm_simd128.h
   - wmmintrin.h
   - x86intrin.h

@@ -4,15 +4,13 @@
 #include <contrib/restricted/google/boringssl/include/openssl/asm_base.h>
 
 #if !defined(OPENSSL_NO_ASM) && defined(OPENSSL_AARCH64) && defined(__APPLE__)
-#include <contrib/restricted/google/boringssl/include/openssl/arm_arch.h>
-
 .text
 
-.globl	_bn_mul_mont
-.private_extern	_bn_mul_mont
+.globl	_bn_mul_mont_words
+.private_extern	_bn_mul_mont_words
 
 .align	5
-_bn_mul_mont:
+_bn_mul_mont_words:
 	AARCH64_SIGN_LINK_REGISTER
 	tst	x5,#7
 	b.eq	__bn_sqr8x_mont
@@ -40,6 +38,9 @@ Lmul_mont:
 	umulh	x11,x8,x9
 
 	mul	x15,x6,x4		// "tp[0]"*n0
+	// This can allocate at most 8 * BN_MONTGOMERY_MAX_WORDS on the stack,
+	// or 2 KiB. This fits well within a page, so it is not necessary to
+	// fault pages in the correct order.
 	mov	sp,x22			// alloca
 
 	// (*)	mul	x12,x13,x15	// np[0]*m1
@@ -208,7 +209,7 @@ Lcond_copy:
 	ldp	x19,x20,[x29,#16]
 	mov	sp,x29
 	ldp	x21,x22,[x29,#32]
-	mov	x0,#1
+	// No return value
 	ldp	x23,x24,[x29,#48]
 	ldr	x29,[sp],#64
 	AARCH64_VALIDATE_LINK_REGISTER
@@ -218,7 +219,7 @@ Lcond_copy:
 .align	5
 __bn_sqr8x_mont:
 	// Not adding AARCH64_SIGN_LINK_REGISTER here because __bn_sqr8x_mont is jumped to
-	// only from bn_mul_mont which has already signed the return address.
+	// only from bn_mul_mont_words which has already signed the return address.
 	cmp	x1,x2
 	b.ne	__bn_mul4x_mont
 Lsqr8x_mont:
@@ -236,6 +237,19 @@ Lsqr8x_mont:
 	ldp	x10,x11,[x1,#8*4]
 	ldp	x12,x13,[x1,#8*6]
 
+	// This can allocate at most 16 * BN_MONTGOMERY_MAX_WORDS on the stack,
+	// or 4 KiB. The fixed allocation above pushes to just above a page. On
+	// Windows, we must ensure new pages are first accessed in order. See
+	// https://learn.microsoft.com/en-us/cpp/build/arm64-windows-abi-conventions?view=msvc-170#stack
+	//
+	// The order is correct, but precariously so: the code above access as
+	// low as [sp,#16]. This leaves a jump of 16 + 4096 = 4112 bytes. If
+	// [sp,#16] were at page boundary, those 4112 bytes would span two
+	// pages. If [x2] were the next access, we would skip a guard page.
+	//
+	// Fortunately, the first access is [x2,#8*8], at .Lsqr8x_zero_start.
+	// We jump at most 4112 - 64 = 4048 bytes, less than a page. If any of
+	// this changes, we must insert a no-op access or call __chkstk.
 	sub	x2,sp,x5,lsl#4
 	lsl	x5,x5,#3
 	ldr	x4,[x4]		// *n0
@@ -430,7 +444,7 @@ Lsqr8x_outer_loop:
 	adc	x24,x24,x15
 
 	adds	x24,x24,x16
-	sub	x14,x3,x5	// rewinded ap
+	sub	x14,x3,x5	// rewound ap
 	adc	x25,xzr,xzr		// t[14]
 	add	x25,x25,x17
 
@@ -777,7 +791,7 @@ Lsqr8x_tail:
 					// to be zero at this point
 	ldp	x6,x7,[x2,#8*0]
 	sub	x27,x3,x1	// done yet?
-	sub	x16,x3,x5	// rewinded np
+	sub	x16,x3,x5	// rewound np
 	ldp	x8,x9,[x2,#8*2]
 	ldp	x10,x11,[x2,#8*4]
 	ldp	x12,x13,[x2,#8*6]
@@ -967,7 +981,7 @@ Lsqr8x_done:
 	ldp	x19,x20,[x29,#16]
 	mov	sp,x29
 	ldp	x21,x22,[x29,#32]
-	mov	x0,#1
+	// No return value
 	ldp	x23,x24,[x29,#48]
 	ldp	x25,x26,[x29,#64]
 	ldp	x27,x28,[x29,#80]
@@ -980,7 +994,7 @@ Lsqr8x_done:
 .align	5
 __bn_mul4x_mont:
 	// Not adding AARCH64_SIGN_LINK_REGISTER here because __bn_mul4x_mont is jumped to
-	// only from bn_mul_mont or __bn_mul8x_mont which have already signed the
+	// only from bn_mul_mont_words or __bn_mul8x_mont which have already signed the
 	// return address.
 	stp	x29,x30,[sp,#-128]!
 	add	x29,sp,#0
@@ -990,6 +1004,9 @@ __bn_mul4x_mont:
 	stp	x25,x26,[sp,#64]
 	stp	x27,x28,[sp,#80]
 
+	// This can allocate at most 8 * BN_MONTGOMERY_MAX_WORDS on the stack,
+	// or 2 KiB. This fits well within a page, so it is not necessary to
+	// fault pages in the correct order.
 	sub	x26,sp,x5,lsl#3
 	lsl	x5,x5,#3
 	ldr	x4,[x4]		// *n0
@@ -1117,7 +1134,7 @@ Loop_mul4x_1st_tail:
 	//adc	x0,x0,xzr
 	cbnz	x28,Loop_mul4x_1st_tail
 
-	sub	x11,x27,x5	// rewinded x1
+	sub	x11,x27,x5	// rewound x1
 	cbz	x10,Lmul4x_proceed
 
 	ldp	x6,x7,[x1,#8*0]
@@ -1259,7 +1276,7 @@ Loop_mul4x_tail:
 	//adc	x0,x0,xzr
 	cbnz	x28,Loop_mul4x_tail
 
-	sub	x11,x3,x5		// rewinded np?
+	sub	x11,x3,x5		// rewound np?
 	adc	x0,x0,xzr
 	cbz	x10,Loop_mul4x_break
 
@@ -1410,7 +1427,7 @@ Lmul4x_done:
 	ldp	x19,x20,[x29,#16]
 	mov	sp,x29
 	ldp	x21,x22,[x29,#32]
-	mov	x0,#1
+	// No return value
 	ldp	x23,x24,[x29,#48]
 	ldp	x25,x26,[x29,#64]
 	ldp	x27,x28,[x29,#80]

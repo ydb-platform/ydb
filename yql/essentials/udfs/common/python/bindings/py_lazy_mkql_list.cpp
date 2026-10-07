@@ -18,7 +18,7 @@ using namespace NKikimr;
 namespace NPython {
 namespace {
 
-static ui64 CalculateIteratorLength(PyObject* iter, const TPyCastContext::TPtr& castCtx)
+ui64 CalculateIteratorLength(PyObject* iter, const TPyCastContext::TPtr& castCtx)
 {
     PyObject* item;
 
@@ -35,7 +35,7 @@ static ui64 CalculateIteratorLength(PyObject* iter, const TPyCastContext::TPtr& 
     return length;
 }
 
-static bool IsIteratorHasItems(PyObject* iter, const TPyCastContext::TPtr& castCtx)
+bool IsIteratorHasItems(PyObject* iter, const TPyCastContext::TPtr& castCtx)
 {
     if (const TPyObjectPtr item = PyIter_Next(iter)) {
         return true;
@@ -103,7 +103,6 @@ class TBaseLazyList: public NUdf::TBoxedValue {
             UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
-    private:
         const TPyCastContext::TPtr CastCtx_;
         TPyObjectPtr PyIter_;
         const NUdf::TType* ItemType_;
@@ -338,7 +337,7 @@ public:
     }
 
     TPyObjectPtr GetIteratorImpl() const {
-        TPyObjectPtr generator = PyObject_CallObject(PyObject_.Get(), nullptr);
+        TPyObjectPtr generator = PyObject_CallObject(PyObject_.Get(), /*args=*/nullptr);
         if (!generator || !PyGen_Check(generator.Get())) {
             UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Expected generator as a result of function call").c_str());
         }

@@ -8,13 +8,15 @@ namespace NYql::NWindow {
 namespace {
 
 TExprNode::TPtr MakeAtomNode(TExprContext& ctx, const TString& value) {
+    // clang-format off
     return ctx.Builder(TPositionHandle())
         .Atom(value)
         .Build();
+    // clang-format on
 }
 
 TWindowFrameSettingWithOffset MakeOffset(TExprNode::TPtr node, TMaybe<TNodeTransform> caster = Nothing(), TMaybe<ui32> procId = Nothing()) {
-    return TWindowFrameSettingWithOffset(std::move(node), std::move(caster), Nothing(), std::move(procId));
+    return TWindowFrameSettingWithOffset(std::move(node), std::move(caster), Nothing(), procId);
 }
 
 } // namespace
@@ -524,7 +526,7 @@ Y_UNIT_TEST(DedupEnabledDifferentProcIdDifferentHandles) {
     auto node = MakeAtomNode(ctx, "10");
 
     TRangeFrameCollectorBounds::TRangeBound bound1(MakeOffset(node), EDirection::Preceding);
-    TRangeFrameCollectorBounds::TRangeBound bound2(MakeOffset(node, Nothing(), 42u), EDirection::Preceding);
+    TRangeFrameCollectorBounds::TRangeBound bound2(MakeOffset(node, Nothing(), 42U), EDirection::Preceding);
 
     TRangeFrameCollectorBounds::TRangeFrame frame1(bound1, bound1);
     TRangeFrameCollectorBounds::TRangeFrame frame2(bound2, bound2);

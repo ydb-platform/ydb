@@ -44,7 +44,7 @@ std::optional<TValue> TSyncExpiringCache<TKey, TValue>::Find(const THeterogenous
 }
 
 template <class TKey, class TValue>
-template <class THeterogenousKey, CInvocable<TValue()> TValueCtor>
+template <class THeterogenousKey, NMpl::CInvocable<TValue()> TValueCtor>
 TValue TSyncExpiringCache<TKey, TValue>::GetOrPut(
     const THeterogenousKey& key,
     const TValueCtor& valueCtor)
@@ -82,7 +82,7 @@ TValue TSyncExpiringCache<TKey, TValue>::GetOrPut(
 }
 
 template <class TKey, class TValue>
-template <class THeterogenousKey, CInvocable<TValue(int index)> TValueCtor>
+template <class THeterogenousKey, NMpl::CInvocable<TValue(int index)> TValueCtor>
 std::vector<TValue> TSyncExpiringCache<TKey, TValue>::GetOrPutMany(
     TRange<THeterogenousKey> keys,
     const TValueCtor& valueCtor)

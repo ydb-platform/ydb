@@ -1,6 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
-
 -- Null handling
 SELECT
     JSON_EXISTS(NULL, "strict $.key"),

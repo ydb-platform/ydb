@@ -410,9 +410,9 @@ public:
 
         if (count > 0) {
             const bool finish = IsAtTheEnd();
-            result[0] = Context.HolderFactory.CreateArrowBlock(builders[0]->Build(finish));
-            result[1] = Context.HolderFactory.CreateArrowBlock(builders[1]->Build(finish));
-            result[2] = Context.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(count)));
+            result[0] = Context.HolderFactory.CreateArrowBlock(builders[0]->Build(finish), Context.RuntimeSettings.DatumValidation.Get());
+            result[1] = Context.HolderFactory.CreateArrowBlock(builders[1]->Build(finish), Context.RuntimeSettings.DatumValidation.Get());
+            result[2] = Context.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(count)), Context.RuntimeSettings.DatumValidation.Get());
 
             return NUdf::EFetchStatus::Ok;
         } else {

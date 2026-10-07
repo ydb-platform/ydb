@@ -30,11 +30,11 @@
 
 Сетевая конфигурация должна разрешать TCP-соединения по следующим портам (значения по умолчанию):
 
-Источник | Приёмник | Порт | Протокол | Назначение
---- | --- | --- | --- | ---
-Пользователь | Gateway | 8789 | HTTP/HTTPS | Веб-интерфейс и API
-Gateway, Agent | Control Plane | 8787 | gRPC | Управляющие команды
-Gateway, Control Plane | {{ ydb-short-name }} | 2135 | gRPC | Подключение к базе данных YDB EM DB
+| Источник | Приёмник | Порт | Протокол | Назначение |
+| --- | --- | --- | --- | --- |
+| Пользователь | Gateway | 8789 | HTTP/HTTPS | Веб-интерфейс и API |
+| Gateway, Agent | Control Plane | 8787 | gRPC | Управляющие команды |
+| Gateway, Control Plane | {{ ydb-short-name }} | 2135 | gRPC | Подключение к базе данных YDB EM DB |
 
 ## Загрузка пакета {#download}
 
@@ -42,9 +42,9 @@ Gateway, Control Plane | {{ ydb-short-name }} | 2135 | gRPC | Подключен
 
 Скачайте пакет YDB EM на управляющую машину (с которой будет выполняться установка через Ansible). Актуальный номер версии и ссылку на архив уточняйте в информации о последнем релизе:
 
-Версия | Ссылка
---- | ---
-`<VERSION>` | `https://binaries.ydbem.website.yandexcloud.net/builds/<VERSION>/ydb-em-<VERSION>-stable-linux-amd64.tar.xz`
+| Версия | Ссылка |
+| --- | --- |
+| `<VERSION>` | [Скачать архив](https://binaries.ydbem.website.yandexcloud.net/builds/<VERSION>/ydb-em-<VERSION>-stable-linux-amd64.tar.xz) |
 
 Распакуйте скачанный архив в рабочую директорию (замените `<VERSION>` на актуальную версию):
 
@@ -54,15 +54,15 @@ tar -xf ydb-em-<VERSION>-stable-linux-amd64.tar.xz
 
 Содержимое пакета:
 
-Файл | Описание
---- | ---
-`bin/ydb-em-gateway` | Бинарный файл Gateway
-`bin/ydb-em-cp` | Бинарный файл Control Plane
-`bin/ydb-em-agent` | Бинарный файл Agent
-`collections/ydb_platform-ydb-*.tar.gz` | Ansible-коллекция для {{ ydb-short-name }}
-`collections/ydb_platform-ydb_em-*.tar.gz` | Ansible-коллекция для YDB EM
-`examples.tar.gz` | Шаблоны конфигурации Ansible (инвентарь и плейбуки)
-`install.sh` | Скрипт автоматической установки
+| Файл | Описание |
+| --- | --- |
+| `bin/ydb-em-gateway` | Бинарный файл Gateway |
+| `bin/ydb-em-cp` | Бинарный файл Control Plane |
+| `bin/ydb-em-agent` | Бинарный файл Agent |
+| `collections/ydb_platform-ydb-*.tar.gz` | Ansible-коллекция для {{ ydb-short-name }} |
+| `collections/ydb_platform-ydb_em-*.tar.gz` | Ansible-коллекция для YDB EM |
+| `examples.tar.gz` | Шаблоны конфигурации Ansible (инвентарь и плейбуки) |
+| `install.sh` | Скрипт автоматической установки |
 
 ## Установка Ansible-коллекций {#install-collections}
 
@@ -154,12 +154,12 @@ ydb:
 
 Для каждого хоста в группе `ydbd_dynamic` можно указать дополнительные параметры. Если параметры не указаны, будут использованы значения по умолчанию. Уточнить настройки ресурсов можно позже через веб-интерфейс YDB EM.
 
-Параметр | Описание
---- | ---
-`ydb_em_agent_cpu` | Количество CPU, доступных для узлов на хосте
-`ydb_em_agent_memory` | Объём RAM (в гигабайтах), доступный для узлов на хосте
-`ydb_em_agent_name` | Имя хоста, используемое агентом
-`location` | Расположение хоста (зона доступности)
+| Параметр | Описание |
+| --- | --- |
+| `ydb_em_agent_cpu` | Количество CPU, доступных для узлов на хосте |
+| `ydb_em_agent_memory` | Объём RAM (в гигабайтах), доступный для узлов на хосте |
+| `ydb_em_agent_name` | Имя хоста, используемое агентом |
+| `location` | Расположение хоста (зона доступности) |
 
 {% note warning %}
 

@@ -97,7 +97,7 @@ private:
     const Aws::Auth::AWSCredentials Credentials;
     const TString Bucket;
     const Aws::S3::Model::StorageClass StorageClass = Aws::S3::Model::StorageClass::STANDARD;
-    bool Verbose = true;
+    bool Verbose = false;
     TS3CountersRoot Counters;
 
     mutable std::mutex RunningQueriesMutex;
@@ -138,25 +138,25 @@ private:
             };
 
             if (Verbose) {
-                LOG_NOTICE_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
-                    << ": uuid# " << ctx->GetUUID()
-                    << ", response# " << outcome);
+                YDB_LOG_NOTICE_CTX_COMP(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response",
+                    {"uuid", ctx->GetUUID()},
+                    {"response", outcome});
             } else {
-                LOG_INFO_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
-                    << ": uuid# " << ctx->GetUUID()
-                    << ", response# " << outcome);
+                YDB_LOG_INFO_CTX_COMP(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response",
+                    {"uuid", ctx->GetUUID()},
+                    {"response", outcome});
             }
             ctx->Reply(request, outcome);
         };
 
         if (Verbose) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER, "Request"
-                << ": uuid# " << ctx->GetUUID()
-                << ", request# " << ev->Get()->GetRequest());
+            YDB_LOG_NOTICE_COMP(NKikimrServices::S3_WRAPPER, "Request",
+                {"uuid", ctx->GetUUID()},
+                {"request", ev->Get()->GetRequest()});
         } else {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER, "Request"
-                << ": uuid# " << ctx->GetUUID()
-                << ", request# " << ev->Get()->GetRequest());
+            YDB_LOG_INFO_COMP(NKikimrServices::S3_WRAPPER, "Request",
+                {"uuid", ctx->GetUUID()},
+                {"request", ev->Get()->GetRequest()});
         }
         func(Client.Get(), ctx->PrepareRequest(ev), callback, ctx);
 
@@ -171,13 +171,13 @@ public:
             const TString& bucket,
             NMonitoring::TDynamicCounterPtr counters,
             const Aws::S3::Model::StorageClass storageClass,
-            bool verbose = true,
-            bool useVirtualAdressing = true)
+            bool verbose = false,
+            bool useVirtualAddressing = true)
         : Client(new Aws::S3::S3Client(
             credentials,
             config,
             Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
-            useVirtualAdressing))
+            useVirtualAddressing))
         , Config(config)
         , Credentials(credentials)
         , Bucket(bucket)

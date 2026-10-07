@@ -5,7 +5,6 @@
 
 namespace NKikimr::NReplication::NController {
 
-
 TTargetTableBase::TTargetTableBase(TReplication* replication, ETargetKind finalKind,
         ui64 id, const IConfig::TPtr& config)
     : TTargetWithStream(replication, finalKind, id, config)

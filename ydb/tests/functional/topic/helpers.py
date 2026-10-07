@@ -69,6 +69,20 @@ def _parse_protobuf_event(blob):
     return None
 
 
+def _parse_json_event(blob):
+    """Parse a single JSON cloud event blob. Returns dict or None."""
+    try:
+        event = json.loads(blob.decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(event, dict):
+        return None
+    meta = event.get('event_metadata') or {}
+    if meta.get('event_type') not in TOPIC_CLOUD_EVENT_TYPES:
+        return None
+    return event
+
+
 def make_test_file_with_content(human_readable_file_name, content):
     file_path = os.path.join(yatest.common.output_path(), human_readable_file_name)
 
@@ -103,7 +117,7 @@ class CanonicalCaptureCloudEventOutput:
     Captures topic cloud events from file (audit log or topic_cloud_events.json),
     normalizes variable fields, outputs one JSON line per event.
     Use with yatest.common.canonical_file via canonize().
-    Supports: length-delimited protobuf from TFileEventsWriter, and audit log (cloud_event_json).
+    Supports: length-delimited protobuf/JSON from TFileEventsWriter, and audit log (cloud_event_json).
     """
 
     def __init__(self, filename, database_path):
@@ -264,7 +278,7 @@ class CanonicalCaptureCloudEventOutput:
                 messages = _parse_length_delimited_messages(chunk)
                 if messages:
                     for blob in messages:
-                        event = _parse_protobuf_event(blob)
+                        event = _parse_protobuf_event(blob) or _parse_json_event(blob)
                         if event:
                             event = self._canonize_event(event)
                             self.captured += json.dumps(event, sort_keys=True) + '\n'

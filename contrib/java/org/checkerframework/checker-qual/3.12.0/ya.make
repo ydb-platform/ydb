@@ -8,4 +8,6 @@ JAR_RESOURCE(2217197026)
 
 SRC_RESOURCE(2217196829)
 
+ORIGINAL_SOURCE(https://github.com/typetools/checker-framework.git)
+
 END()

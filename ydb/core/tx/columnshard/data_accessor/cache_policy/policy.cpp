@@ -31,14 +31,16 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
             THashSet<TAddress>&& requestedAddresses)
             : OwnerActorId(ownerActorId)
             , Callback(callback)
-            , RequestedAddresses(std::move(requestedAddresses)) {
+            , RequestedAddresses(std::move(requestedAddresses))
+        {
         }
 
         ~TAccessorsCallback() override {
             if (RequestedAddresses) {
                 THashMap<TAddress, TString> errorAddresses;
-                for (const auto& addr: RequestedAddresses) {
-                    errorAddresses[addr] = TStringBuilder{} << "Unprocessed address " << addr.Debug() << ". The main reason is the relocation of the tablet.";
+                for (const auto& addr : RequestedAddresses) {
+                    errorAddresses[addr] = TStringBuilder{} << "Unprocessed address " << addr.Debug()
+                                                            << ". The main reason is the relocation of the tablet.";
                 }
                 Callback->OnReceiveData(OwnerActorId, {}, {}, std::move(errorAddresses));
             }
@@ -69,6 +71,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
             THashMap<TInternalPathId, NDataAccessorControl::TPortionsByConsumer> ExtractRequest() {
                 return std::move(Data);
             }
+
             THashSet<TAddress> ExtractRequestedAddresses() {
                 return std::move(Requested);
             }
@@ -83,14 +86,14 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 }
             }
             for (auto&& i : requests) {
-                NActors::TActivationContext::Send(i.first,
-                    std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(
-                        i.second.ExtractRequest(), std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())),
-                    0, cookie);
+                NActors::TActivationContext::Send(
+                    i.first, std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(i.second.ExtractRequest(),
+                                 std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())), 0, cookie);
             }
         }
-        virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
-            THashMap<TAddress, TString>&& errors) const override {
+
+        virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses,
+            THashSet<TAddress>&& removedAddresses, THashMap<TAddress, TString>&& errors) const override {
             if (NActors::TActorSystem::IsStopped()) {
                 return;
             }
@@ -101,7 +104,8 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
 
     public:
         TObjectsProcessor(const NActors::TActorId& serviceActorId)
-            : ServiceActorId(serviceActorId) {
+            : ServiceActorId(serviceActorId)
+        {
         }
     };
 
@@ -120,13 +124,14 @@ TInternalPathId TGlobalPortionAddress::GetPathId() const {
     return InternalPortionAddress.GetPathId();
 }
 
-TGlobalPortionAddress::TGlobalPortionAddress(
-    const NActors::TActorId &actorId, const TPortionAddress &internalAddress)
-    : TabletActorId(actorId), InternalPortionAddress(internalAddress) {}
+TGlobalPortionAddress::TGlobalPortionAddress(const NActors::TActorId& actorId, const TPortionAddress& internalAddress)
+    : TabletActorId(actorId)
+    , InternalPortionAddress(internalAddress)
+{
+}
 
-bool TGlobalPortionAddress::operator==(const TGlobalPortionAddress &item) const {
-    return TabletActorId == item.TabletActorId &&
-         InternalPortionAddress == item.InternalPortionAddress;
+bool TGlobalPortionAddress::operator==(const TGlobalPortionAddress& item) const {
+    return TabletActorId == item.TabletActorId && InternalPortionAddress == item.InternalPortionAddress;
 }
 
 TGlobalPortionAddress::operator size_t() const {
@@ -134,12 +139,10 @@ TGlobalPortionAddress::operator size_t() const {
 }
 
 const TString TGlobalPortionAddress::Debug() const {
-    return TStringBuilder{} << "TabletActorId: " << TabletActorId
-                          << ", InternalPortionAddress: {"
-                          << InternalPortionAddress.Debug() << "}";
+    return TStringBuilder{} << "TabletActorId: " << TabletActorId << ", InternalPortionAddress: {" << InternalPortionAddress.Debug() << "}";
 }
 
-TPortionsMetadataCachePolicy::TSourceId TPortionsMetadataCachePolicy::GetSourceId(const TAddress &address) {
+TPortionsMetadataCachePolicy::TSourceId TPortionsMetadataCachePolicy::GetSourceId(const TAddress& address) {
     return address.GetTabletActorId();
 }
 
@@ -147,7 +150,7 @@ TPortionsMetadataCachePolicy::EConsumer TPortionsMetadataCachePolicy::DefaultCon
     return EConsumer::UNDEFINED;
 }
 
-size_t TPortionsMetadataCachePolicy::TSizeCalcer::operator()(const TObject &data) {
+size_t TPortionsMetadataCachePolicy::TSizeCalcer::operator()(const TObject& data) {
     AFL_VERIFY(data);
     return sizeof(TAddress) + data->GetMetadataSize();
 }
@@ -164,4 +167,4 @@ NMemory::EMemoryConsumerKind TPortionsMetadataCachePolicy::GetConsumerKind() {
     return NMemory::EMemoryConsumerKind::ColumnTablesDataAccessorCache;
 }
 
-} // namespace NKikimr::NOlap::NGeneralCache
+}   // namespace NKikimr::NOlap::NGeneralCache

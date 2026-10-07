@@ -7,6 +7,7 @@ namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 class TCompositeBloomHeader: public IIndexHeader {
 private:
     THashMap<ui64, TBlobRangeLink16> Ranges;
+
     virtual std::optional<TBlobRangeLink16> DoGetAddressForCategory(const std::optional<ui64> cat) const override {
         AFL_VERIFY(!!cat);
         auto it = Ranges.find(*cat);

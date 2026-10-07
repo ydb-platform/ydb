@@ -21,7 +21,7 @@ public:
     using TPtr = TIntrusivePtr<TUrlPreprocessing>;
 
     explicit TUrlPreprocessing(const TGatewaysConfig& cfg) {
-        Configure(false, cfg);
+        Configure(/*restrictedUser=*/false, cfg);
     }
     TUrlPreprocessing() = default;
     ~TUrlPreprocessing() override = default;

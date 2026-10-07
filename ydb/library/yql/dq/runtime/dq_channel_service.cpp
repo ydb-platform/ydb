@@ -1,15 +1,22 @@
+#include <algorithm>
 #include <queue>
 #include <mutex>
 
 #include "dq_arrow_helpers.h"
 #include "dq_channel_service_impl.h"
+#include "dq_output.h"
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 
 #include <util/random/random.h>
 
+#if defined(NDEBUG)
+#define LOG_T(stream)
+#else
 #define LOG_T(stream) LOG_TRACE_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
+#endif
+
 #define LOG_D(stream) LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
 #define LOG_I(stream) LOG_INFO_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
 #define LOG_N(stream) LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
@@ -46,9 +53,22 @@ void BufferToData(TDataChunk& data, TBuffer&& buffer) {
     data.Rows = ReadNumber<ui32>(source);
     data.TransportVersion = static_cast<NDqProto::EDataTransportVersion>(ReadNumber<ui32>(source));
     data.PackerVersion = static_cast<NKikimr::NMiniKQL::EValuePackerVersion>(ReadNumber<ui32>(source));
-    data.Leading = ReadNumber<bool>(source);
     data.Finished = ReadNumber<bool>(source);
+    data.ConfirmFinish = ReadNumber<bool>(source);
     data.Timestamp = TInstant::MicroSeconds(ReadNumber<ui64>(source));
+
+    bool hasCheckpoint = ReadNumber<bool>(source);
+    if (hasCheckpoint) {
+        data.Checkpoint = NDqProto::TCheckpoint{};
+        data.Checkpoint->SetId(ReadNumber<ui64>(source));
+        data.Checkpoint->SetGeneration(ReadNumber<ui64>(source));
+        data.Checkpoint->SetType(static_cast<NYql::NDqProto::ECheckpointType>(ReadNumber<ui8>(source)));
+    }
+    bool hasWatermark = ReadNumber<bool>(source);
+    if (hasWatermark) {
+        data.Watermark = NDqProto::TWatermark{};
+        data.Watermark->SetTimestampUs(ReadNumber<ui64>(source));
+    }
 
     ui64 size = ReadNumber<ui64>(source);
     YQL_ENSURE(size == source.size(), "Spilled data is corrupted");
@@ -62,9 +82,19 @@ TChunkedBuffer DataToBuffer(TDataChunk&& data) {
     AppendNumber<ui32>(result, data.Rows);
     AppendNumber<ui32>(result, static_cast<ui32>(data.TransportVersion));
     AppendNumber<ui32>(result, static_cast<ui32>(data.PackerVersion));
-    AppendNumber<bool>(result, data.Leading);
     AppendNumber<bool>(result, data.Finished);
+    AppendNumber<bool>(result, data.ConfirmFinish);
     AppendNumber<ui64>(result, data.Timestamp.MicroSeconds());
+    AppendNumber<bool>(result, !data.Checkpoint.Empty());
+    if (data.Checkpoint) {
+        AppendNumber<ui64>(result, data.Checkpoint->GetId());
+        AppendNumber<ui64>(result, data.Checkpoint->GetGeneration());
+        AppendNumber<ui8>(result, data.Checkpoint->GetType());
+    }
+    AppendNumber<bool>(result, !data.Watermark.Empty());
+    if (data.Watermark) {
+        AppendNumber<ui64>(result, data.Watermark->GetTimestampUs());
+    }
 
     AppendNumber<ui64>(result, data.Buffer.Size());
     result.Append(std::move(data.Buffer));
@@ -72,22 +102,52 @@ TChunkedBuffer DataToBuffer(TDataChunk&& data) {
     return result;
 }
 
-bool IChannelBuffer::GetLeading() {
-    auto result = Leading;
-    Leading = false;
-    return result;
+// quotaManager may be null: a bind is aborted before the descriptor is assigned one
+THolder<NYql::NDq::TEvDq::TEvAbortExecution> BuildMemoryLimitError(TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, ui64 bytes) {
+    TStringBuilder message;
+    message << "Channel: " << info.ChannelId
+        << ", SrcStageId: " << info.SrcStageId << ", DstStageId: " << info.DstStageId
+        << ", Channel memory limit exceeded, allocated: ";
+    if (quotaManager) {
+        message << quotaManager->GetCurrentQuota();
+    } else {
+        message << "unknown";
+    }
+    message << " bytes, Needed: " << bytes << " bytes";
+    return NYql::NDq::TEvDq::TEvAbortExecution::Build(
+            NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, message);
+}
+
+// Both actors of the channel: the one whose quota ran out and the one which would wait for it for good
+void AbortChannelByMemoryLimit(NActors::TActorSystem* actorSystem, TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, ui64 bytes) {
+    actorSystem->Send(info.OutputActorId, BuildMemoryLimitError(info, quotaManager, bytes).Release());
+    actorSystem->Send(info.InputActorId, BuildMemoryLimitError(info, quotaManager, bytes).Release());
+}
+
+THolder<NYql::NDq::TEvDq::TEvAbortExecution> BuildTempUnavailableError(TChannelFullInfo& info, const TString& message) {
+    return NYql::NDq::TEvDq::TEvAbortExecution::Build(
+            NYql::NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+            TStringBuilder() << "Channel: " << info.ChannelId
+            << ", SrcStageId: " << info.SrcStageId << ", DstStageId: " << info.DstStageId
+            << ", " << message
+        );
 }
 
 void IChannelBuffer::SendFinish() {
-    Push(TDataChunk(GetLeading(), true));
+    Push(TDataChunk(true));
 }
 
 EDqFillLevel TLocalBuffer::GetFillLevel() const {
+    std::lock_guard lock(Mutex);
     return FillLevel;
 }
 
 TLocalBuffer::~TLocalBuffer() {
-    *Registry->LocalBufferInflightBytes -= InflightBytes;
+    if (QuotaManager) {
+        // InflightBytes are always allocated in the QuotaManager, release quota for the chunks which were never popped
+        QuotaManager->FreeQuota(InflightBytes.load());
+    }
+    *Registry->LocalBufferInflightBytes -= InflightBytes.load();
     Registry->DeleteLocalBufferInfo(Info);
 }
 
@@ -98,7 +158,9 @@ void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregat
 }
 
 void TLocalBuffer::Push(TDataChunk&& data) {
-    if (!FinishPushed && !Finished.load()) {
+    if ((!FinishPushed && !Finished.load()) ||
+        data.Checkpoint // Checkpoints may be generated after channel finish
+    ) {
         if (data.Finished) {
             FinishPushed = true;
         }
@@ -121,8 +183,11 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
 
     EDqFillLevel fillLevel = FillLevel;
 
+    RefreshMemoryPressure();
+    auto maxInflightBytes = GetMaxInflightBytes();
+
     if (Storage) {
-        if ((SpilledBytes.load() > 0) || InflightBytes.load() >= MaxInflightBytes) {
+        if ((SpilledBytes.load() > 0) || InflightBytes.load() >= maxInflightBytes) {
             // if there is something spilled and not loaded yet, continue to spill to avoid reordering
             SpilledChunkBytes.push(data.Bytes);
             SpilledBytes += data.Bytes;
@@ -130,16 +195,25 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
             // and always report soft/hard limit even if we have small inflight
             fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
         } else {
+            // allocate quota before the chunk is counted as inflight to keep InflightBytes always allocated
+            if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes, /* isOptional = */ false)) {
+                AbortChannelByMemoryLimit(data.Bytes);
+                return;
+            }
             InflightBytes += data.Bytes;
             *Registry->LocalBufferInflightBytes += data.Bytes;
             Queue.push(std::move(data));
-            fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::SoftLimit : EDqFillLevel::NoLimit;
+            fillLevel = InflightBytes.load() >= maxInflightBytes ? EDqFillLevel::SoftLimit : EDqFillLevel::NoLimit;
         }
     } else {
+        if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes, /* isOptional = */ false)) {
+            AbortChannelByMemoryLimit(data.Bytes);
+            return;
+        }
         InflightBytes += data.Bytes;
         *Registry->LocalBufferInflightBytes += data.Bytes;
         Queue.push(std::move(data));
-        fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
+        fillLevel = InflightBytes.load() >= maxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
     }
 
     if (FillLevel != fillLevel) {
@@ -153,14 +227,20 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         NeedToNotifyOutput.store(true);
     }
 
-    NotifyInput(false);
+    ReadyHook.Mark();
+    NotifyInput(Finished.load());
 }
 
 bool TLocalBuffer::IsFinished() {
     auto result = Finished.load();
     if (!result) {
-        NeedToNotifyInput.store(true);
-        NeedToNotifyOutput.store(true);
+        // loaded first: this is called for every row pushed, and the flags are set most of the time
+        if (!NeedToNotifyInput.load()) {
+            NeedToNotifyInput.store(true);
+        }
+        if (!NeedToNotifyOutput.load()) {
+            NeedToNotifyOutput.store(true);
+        }
     }
     return result;
 }
@@ -190,6 +270,10 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     data = std::move(Queue.front());
     Queue.pop();
 
+    if (QuotaManager) {
+        QuotaManager->FreeQuota(data.Bytes);
+    }
+
     if (PopStats.CollectBasic()) {
         PopStats.Chunks++;
         PopStats.Rows += data.Rows;
@@ -204,14 +288,25 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     InflightBytes -= data.Bytes;
     *Registry->LocalBufferInflightBytes -= data.Bytes;
 
+    RefreshMemoryPressure();
+
     if (data.Finished) {
         if (!Finished.exchange(true)) {
             FinishTime = TInstant::Now();
+            if (FinishEpoch) {
+                (*FinishEpoch)++;
+            }
         }
         fillLevel = EDqFillLevel::NoLimit;
     } else {
-        while (InflightBytes.load() < MinInflightBytes && !SpilledChunkBytes.empty()) {
+        while (InflightBytes.load() < GetMinInflightBytes() && !SpilledChunkBytes.empty()) {
             auto bytes = SpilledChunkBytes.front();
+            // quota for a spilled chunk is allocated as soon as it is counted as inflight (and released on pop),
+            // no matter whether it is loaded right here or via LoadingQueue
+            if (QuotaManager && !QuotaManager->AllocateQuota(bytes, /* isOptional = */ false)) {
+                AbortChannelByMemoryLimit(bytes);
+                break;
+            }
             SpilledChunkBytes.pop();
             InflightBytes += bytes;
             *Registry->LocalBufferInflightBytes += bytes;
@@ -229,11 +324,11 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
             }
         }
 
-        if (SpilledBytes.load() == 0 && InflightBytes.load() < MinInflightBytes) {
+        if (SpilledBytes.load() == 0 && InflightBytes.load() < GetMinInflightBytes()) {
             fillLevel = EDqFillLevel::NoLimit;
         } else if (Storage) {
             fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
-        } else if (InflightBytes.load() >= MaxInflightBytes) {
+        } else if (InflightBytes.load() >= GetMaxInflightBytes()) {
             fillLevel = EDqFillLevel::HardLimit;
         }
     }
@@ -255,6 +350,13 @@ void TLocalBuffer::EarlyFinish() {
     if (!EarlyFinished.exchange(true)) {
         if (OutputBound.load()) {
             if (!Finished.exchange(true)) {
+                {
+                    std::lock_guard lock(Mutex);
+                    ReadyHook.Mark();
+                    if (FinishEpoch) {
+                        (*FinishEpoch)++;
+                    }
+                }
                 NotifyInput(true);
                 NotifyOutput(true);
                 FinishTime = TInstant::Now();
@@ -296,6 +398,7 @@ void TLocalBuffer::StorageWakeupHandler() {
 
         TDataChunk data;
         BufferToData(data, std::move(info.Buffer));
+        // quota is already allocated for this chunk in TLocalBuffer::Pop
         Queue.emplace(std::move(data));
         SpilledBytes -= info.Bytes;
 
@@ -304,6 +407,7 @@ void TLocalBuffer::StorageWakeupHandler() {
     }
 
     if (chunksLoaded) {
+        ReadyHook.Mark();
         NotifyInput(false);
     }
 }
@@ -318,6 +422,13 @@ void TLocalBuffer::BindOutput() {
     if (!OutputBound.exchange(true)) {
         if (EarlyFinished.load()) {
             if (!Finished.exchange(true)) {
+                {
+                    std::lock_guard lock(Mutex);
+                    ReadyHook.Mark();
+                    if (FinishEpoch) {
+                        (*FinishEpoch)++;
+                    }
+                }
                 NotifyInput(true);
                 NotifyOutput(true);
                 FinishTime = TInstant::Now();
@@ -340,7 +451,7 @@ void TLocalBuffer::NotifyInput(bool force) {
         NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
             new NActors::IEventHandle(Info.InputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
         );
-        LastInputNotificationTime = TInstant::Now();
+        LastInputNotificationTime.store(TInstant::Now());
     }
 }
 
@@ -349,8 +460,18 @@ void TLocalBuffer::NotifyOutput(bool force) {
         NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
             new NActors::IEventHandle(Info.OutputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
         );
-        LastOutputNotificationTime = TInstant::Now();
+        LastOutputNotificationTime.store(TInstant::Now());
     }
+}
+
+void TLocalBuffer::SetReadyHook(const TDqInputReadyHook& hook) {
+    std::lock_guard lock(Mutex);
+    ReadyHook = hook;
+}
+
+void TLocalBuffer::SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) {
+    std::lock_guard lock(Mutex);
+    FinishEpoch = epoch;
 }
 
 void TLocalBuffer::ExportPushStats(TDqAsyncStats& stats) {
@@ -359,6 +480,23 @@ void TLocalBuffer::ExportPushStats(TDqAsyncStats& stats) {
 
 void TLocalBuffer::ExportPopStats(TDqAsyncStats& stats) {
     PopStats.Export(stats);
+}
+
+void TLocalBuffer::AbortChannelByMemoryLimit(ui64 bytes) {
+    if (!Aborted.exchange(true)) {
+        NDq::AbortChannelByMemoryLimit(ActorSystem, Info, QuotaManager, bytes);
+    }
+}
+
+TOutputDescriptor::~TOutputDescriptor() {
+    if (PeerMemoryPressure.load()) {
+        (*OutputBufferThrottledCount)--;
+    }
+    if (IsQuotaAssigned()) {
+        // no concurrency here, all TOutputItems hold a reference to the descriptor and are already destroyed
+        auto waitQueueBytes = WaitQueueBytes.load();
+        FreeQuota(waitQueueBytes - std::min(waitQueueBytes, UnquotedWaitBytes));
+    }
 }
 
 void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
@@ -370,58 +508,174 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         PushStats.Resume();
     }
 
-    const ui64 chunkBytes = data.Bytes;
-
-    std::lock_guard lock(FlowControlMutex);
-
-    if (FinishPushed.load()) {
+    auto finished = data.Finished;
+    if (FinishPushed.load() && !data.ConfirmFinish &&
+        !data.Checkpoint // Checkpoint traffic should be handled after finish
+    ) {
         return;
     }
 
-    if (data.Finished) {
-        FinishPushed.store(true);
-    }
-
-    auto fillLevel = FillLevel;
-
     bool spilled = false;
+    const ui64 chunkBytes = data.Bytes;
 
-    if (Storage) {
-        if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes)) {
-            if (SpilledChunkBytes.empty()) {
-                LOG_D("NodeId=" << nodeState->NodeId << ", ChannelId=" << Info.ChannelId << ", START SPILLING, PushBytes=" << PushBytes.load()
-                    << ", PopBytes=" << RemotePopBytes.load() << ", MaxInflightBytes=" << MaxInflightBytes
-                    << ", SpilledBytes=" << SpilledBytes.load() << ", data.Bytes=" << data.Bytes
-                );
+    {
+        std::lock_guard lock(FlowControlMutex);
+
+        auto fillLevel = FillLevel;
+        auto maxInflightBytes = GetMaxInflightBytes();
+
+        if (Storage) {
+            // A confirmation of the finish carries no bytes, the window does not hold it back. It must not pass
+            // the checkpoints still in the storage, the peer lets the channel go on it; after an early finish
+            // they are not wanted and it goes at once
+            bool spill = data.ConfirmFinish
+                ? !EarlyFinished.load() && (!SpilledChunks.empty() || !LoadingQueue.empty())
+                : (SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes);
+            if (spill) {
+                if (SpilledChunks.empty()) {
+                    LOG_D("START SPILLING, ChannelId=" << Info.ChannelId << ", PushBytes=" << PushBytes.load()
+                        << ", PopBytes=" << RemotePopBytes.load() << ", SpilledBytes=" << SpilledBytes.load() << ", data.Bytes=" << data.Bytes
+                    );
+                }
+                SpilledChunks.push_back({static_cast<ui32>(data.Bytes), finished || data.ConfirmFinish || data.Checkpoint.Defined()});
+                SpilledBytes += data.Bytes;
+                Storage->Put(++HeadBlobId, DataToBuffer(std::move(data)));
+                spilled = true;
+                fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
+                if (EarlyFinished.load() || ConfirmFinishSent.load()) {
+                    // nothing opens the window any more, see ReloadSpilled
+                    ReloadSpilled(nodeState, self);
+                }
+            } else {
+                PushBytes += data.Bytes;
             }
-            SpilledChunkBytes.push(data.Bytes);
-            SpilledBytes += data.Bytes;
-            Storage->Put(++HeadBlobId, DataToBuffer(std::move(data)));
-            spilled = true;
-            fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
         } else {
             PushBytes += data.Bytes;
+            if (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes) {
+                fillLevel = EDqFillLevel::HardLimit;
+            }
         }
-    } else {
-        PushBytes += data.Bytes;
-        if (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes) {
-            fillLevel = EDqFillLevel::HardLimit;
-        }
-    }
 
-    if (FillLevel != fillLevel) {
-        if (Aggregator) {
-            Aggregator->UpdateCount(FillLevel, fillLevel);
+        if (FillLevel != fillLevel) {
+            if (Aggregator) {
+                Aggregator->UpdateCount(FillLevel, fillLevel);
+            }
+            FillLevel = fillLevel;
+            NeedToNotifyOutput.store(true);
         }
-        FillLevel = fillLevel;
-        NeedToNotifyOutput.store(true);
+
+        if (finished) {
+            FinishPushed.store(true);
+        }
     }
 
     (*OutputBufferChunks)++;
     *OutputBufferBytes += chunkBytes;
 
     if (!spilled) {
+        auto confirmFinish = data.ConfirmFinish;
         nodeState->PushDataChunk(std::move(data), self);
+        if (confirmFinish) {
+            std::lock_guard lock(FlowControlMutex);
+            OnFinishConfirmed();
+        }
+    }
+}
+
+// The confirmation of the finish is with the session: the channel is complete. Under FlowControlMutex
+void TOutputDescriptor::OnFinishConfirmed() {
+    Finished.store(true);
+    if (FinishEpoch) {
+        (*FinishEpoch)++;
+    }
+    ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+}
+
+bool TOutputDescriptor::IsStorageEmpty() const {
+    return !Storage || (SpilledChunks.empty() && LoadingQueue.empty());
+}
+
+// The peer reads no more: the data in the storage is never wanted and must not hold back the control
+// chunks behind it - the checkpoints, and the finish the peer waits for to let the channel go. The flag
+// and the drop go together under FlowControlMutex: ReloadSpilled reads the flag as leave to pass the
+// window, and a wake-up of the storage in between would reload the whole backlog
+void TOutputDescriptor::HandleEarlyFinish(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+    std::lock_guard lock(FlowControlMutex);
+    EarlyFinished.store(true);
+    if (Storage) {
+        DropSpilledData();
+        DrainLoadingQueue(nodeState, self);
+        ReloadSpilled(nodeState, self);
+    }
+}
+
+void TOutputDescriptor::DropSpilledData() {
+    ui64 dropped = 0;
+    for (auto& chunk : SpilledChunks) {
+        if (!chunk.Control && !chunk.Dropped) {
+            chunk.Dropped = true;
+            SpilledBytes -= chunk.Bytes;
+            dropped += chunk.Bytes;
+        }
+    }
+    if (dropped) {
+        LOG_D("DROP SPILLED, ChannelId=" << Info.ChannelId << ", DroppedBytes=" << dropped << ", SpilledBytes=" << SpilledBytes.load()
+            << ", SpilledChunks=" << SpilledChunks.size() << ", Loading=" << LoadingQueue.size());
+    }
+}
+
+void TOutputDescriptor::DrainLoadingQueue(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+    while (!LoadingQueue.empty()) {
+        auto& info = LoadingQueue.front();
+
+        if (!info.Loaded) {
+            info.Loaded = Storage->Get(info.BlobId, info.Buffer);
+        }
+        if (!info.Loaded) {
+            break;
+        }
+
+        TDataChunk data;
+        BufferToData(data, std::move(info.Buffer));
+        auto confirmFinish = data.ConfirmFinish;
+        nodeState->PushDataChunk(std::move(data), self);
+        SpilledBytes -= info.Bytes;
+
+        LoadingQueue.pop();
+        if (confirmFinish) {
+            OnFinishConfirmed();
+        }
+    }
+}
+
+// The storage is read as far as the window allows - or all the way after an early finish or once the peer has
+// popped the finish: what is left to read is the control chunks, and the window may not open any more
+void TOutputDescriptor::ReloadSpilled(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+    while (!SpilledChunks.empty() && (EarlyFinished.load() || ConfirmFinishSent.load()
+        || PushBytes.load() < RemotePopBytes.load() + GetMaxInflightBytes())) {
+        auto chunk = SpilledChunks.front();
+        SpilledChunks.pop_front();
+        Y_ENSURE(TailBlobId < HeadBlobId);
+        ++TailBlobId;
+        if (chunk.Dropped) {
+            continue;
+        }
+
+        PushBytes += chunk.Bytes;
+        TLoadingInfo info(TailBlobId, chunk.Bytes);
+        info.Loaded = Storage->Get(info.BlobId, info.Buffer);
+        if (LoadingQueue.empty() && info.Loaded) {
+            TDataChunk data;
+            BufferToData(data, std::move(info.Buffer));
+            auto confirmFinish = data.ConfirmFinish;
+            nodeState->PushDataChunk(std::move(data), self);
+            SpilledBytes -= chunk.Bytes;
+            if (confirmFinish) {
+                OnFinishConfirmed();
+            }
+        } else {
+            LoadingQueue.emplace(std::move(info));
+        }
     }
 }
 
@@ -431,10 +685,40 @@ void TOutputDescriptor::AddPopChunk(ui64 bytes, ui64 rows) {
     PopStats.Rows += rows;
 }
 
+bool TOutputDescriptor::RecalcFillLevel() {
+    EDqFillLevel fillLevel = FillLevel;
+
+    if (SpilledBytes.load() == 0 && PushBytes.load() < RemotePopBytes.load() + GetMinInflightBytes()) {
+        fillLevel = EDqFillLevel::NoLimit;
+    } else if (Storage) {
+        fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
+    } else if (PushBytes.load() >= RemotePopBytes.load() + GetMaxInflightBytes()) {
+        fillLevel = EDqFillLevel::HardLimit;
+    }
+
+    if (FillLevel == fillLevel) {
+        return false;
+    }
+
+    if (Aggregator) {
+        Aggregator->UpdateCount(FillLevel, fillLevel);
+    }
+    FillLevel = fillLevel;
+    return true;
+}
+
 void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+    LOG_T(nodeState->LogPrefix << "OD UPDATE POP, ChannelId=" << Info.ChannelId
+        << ", OA=" << Info.OutputActorId << ", IA=" << Info.InputActorId
+        << ", FinishPushed=" << FinishPushed.load()
+        << ", RemotePopBytes=" << bytes
+        << ", PushBytes=" << PushBytes.load());
+
     if (bytes <= RemotePopBytes.load()) {
         return;
     }
+
+    bool flushed = false;
 
     {
         std::lock_guard lock(FlowControlMutex);
@@ -443,50 +727,26 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
         }
         RemotePopBytes.store(bytes);
 
-        while (PushBytes.load() < RemotePopBytes.load() + MaxInflightBytes && !SpilledChunkBytes.empty()) {
-            auto bytes = SpilledChunkBytes.front();
-            SpilledChunkBytes.pop();
-            Y_ENSURE(TailBlobId < HeadBlobId);
-
-            PushBytes += bytes;
-            TLoadingInfo info(++TailBlobId, bytes);
-            info.Loaded = Storage->Get(info.BlobId, info.Buffer);
-            if (LoadingQueue.empty() && info.Loaded) {
-                TDataChunk data;
-                BufferToData(data, std::move(info.Buffer));
-                nodeState->PushDataChunk(std::move(data), self);
-                SpilledBytes -= bytes;
-            } else {
-                LoadingQueue.emplace(std::move(info));
-            }
+        if (Storage) {
+            ReloadSpilled(nodeState, self);
         }
 
-        EDqFillLevel fillLevel = FillLevel;
-
-        if (SpilledBytes.load() == 0 && PushBytes.load() < RemotePopBytes.load() + MinInflightBytes) {
-            fillLevel = EDqFillLevel::NoLimit;
-        } else if (Storage) {
-            fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
-        } else if (PushBytes.load() >= RemotePopBytes.load() + MaxInflightBytes) {
-            fillLevel = EDqFillLevel::HardLimit;
+        if (!RecalcFillLevel() && PushBytes.load() > RemotePopBytes.load()) {
+            return;
         }
 
-        if (FillLevel == fillLevel) {
-            if (PushBytes.load() > RemotePopBytes.load()) {
-                return;
+        flushed = PushBytes.load() == RemotePopBytes.load();
+        // what is still in the storage is a checkpoint after the finish, or the confirmation of the finish
+        if (flushed && FinishPushed.load() && IsStorageEmpty()) {
+            LOG_T(nodeState->LogPrefix << "OD FINISH, ChannelId=" << Info.ChannelId
+                << ", OA=" << Info.OutputActorId << ", IA=" << Info.InputActorId
+                << ", RemotePopBytes=" << bytes
+                << ", PushBytes=" << PushBytes.load());
+            Finished.store(true);
+            if (FinishEpoch) {
+                (*FinishEpoch)++;
             }
-        } else {
-            if (Aggregator) {
-                Aggregator->UpdateCount(FillLevel, fillLevel);
-            }
-            FillLevel = fillLevel;
         }
-    }
-
-    auto flushed = PushBytes.load() == RemotePopBytes.load();
-
-    if (flushed && FinishPushed.load()) {
-        Finished.store(true);
     }
 
     if (NeedToNotifyOutput.exchange(false) || flushed) {
@@ -494,24 +754,16 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
     }
 }
 
-bool TOutputDescriptor::CheckGenMajor(ui64 genMajor, const TString& errorMessage) {
-    auto prevGenMajor = GenMajor.exchange(genMajor);
-    if (Aborted.load()) {
-        return false;
-    } else if (prevGenMajor && prevGenMajor != genMajor) {
-        TStringBuilder builder;
-        builder << "Descriptor.GenMajor=" << prevGenMajor << ", expected GenMajor=" << genMajor << ' ' << errorMessage;
-        TString message = builder;
-        LOG_W(message);
-        AbortChannel(message);
-        return false;
-    }
-    return true;
+void TOutputDescriptor::AbortOnGenMajor(ui64 prevGenMajor, ui64 genMajor, TStringBuf message) {
+    TString text = TStringBuilder() << "OD.G=" << prevGenMajor << " vs G=" << genMajor << ' ' << message;
+    LOG_W(text);
+    AbortChannel(text);
 }
 
 bool TOutputDescriptor::IsFinished() {
     auto result = Finished.load();
-    if (!result) {
+    // loaded first: this is called for every row pushed, and the flag is set most of the time
+    if (!result && !NeedToNotifyOutput.load()) {
         NeedToNotifyOutput.store(true);
     }
     return result;
@@ -531,27 +783,98 @@ bool TOutputDescriptor::IsTerminatedOrAborted() {
 
 void TOutputDescriptor::AbortChannel(const TString& message) {
     if (!Aborted.exchange(true)) {
-        ActorSystem->Send(Info.InputActorId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(
-            TStringBuilder() << "Channel: " << Info.ChannelId
-            << ", SrcStageId: " << Info.SrcStageId << ", DstStageId: " << Info.DstStageId
-            << ", " << message
-        ).Release());
+        ActorSystem->Send(Info.OutputActorId, BuildTempUnavailableError(Info, message).Release());
     }
 }
 
-void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
-    if (!IsTerminatedOrAborted()) {
-        if (earlyFinish) {
-            EarlyFinished.store(true);
-            PushDataChunk(TDataChunk(false, true), nodeState, self);
-        }
-        if (popBytes) {
-            UpdatePopBytes(popBytes, nodeState, self);
+void TOutputDescriptor::AbortChannelByMemoryLimit(ui64 bytes) {
+    if (!Aborted.exchange(true)) {
+        NDq::AbortChannelByMemoryLimit(ActorSystem, Info, GetQuotaManager(), bytes);
+    }
+}
+
+void TOutputDescriptor::UpdateMemoryPressure(bool memoryPressure, TNodeState* nodeState) {
+    // a peer with the feature enabled must not throttle this node while it is disabled here,
+    // PeerMemoryPressure stays false and the inflight window is the pre-feature one
+    if (!nodeState->Limits.EnableSpillingChannelBackpressure) {
+        return;
+    }
+
+    if (PeerMemoryPressure.exchange(memoryPressure) == memoryPressure) {
+        return;
+    }
+
+    LOG_D(nodeState->LogPrefix << "OD PRESSURE " << (memoryPressure ? "ON" : "OFF") << ", ChannelId=" << Info.ChannelId
+        << ", OA=" << Info.OutputActorId << ", IA=" << Info.InputActorId
+        << ", PushBytes=" << PushBytes.load() << ", RemotePopBytes=" << RemotePopBytes.load());
+
+    if (memoryPressure) {
+        (*OutputBufferThrottledCount)++;
+    } else {
+        (*OutputBufferThrottledCount)--;
+    }
+
+    bool wakeup = false;
+
+    {
+        std::lock_guard lock(FlowControlMutex);
+        if (RecalcFillLevel()) {
+            if (FillLevel == EDqFillLevel::NoLimit) {
+                // the window has just reopened, always wake the output up - it may be parked without
+                // NeedToNotifyOutput set. The flag is set under this mutex by PushDataChunk, so it is
+                // cleared under it too: clearing it after the unlock would swallow a concurrent request
+                NeedToNotifyOutput.store(false);
+                wakeup = true;
+            } else {
+                NeedToNotifyOutput.store(true);
+            }
         }
     }
+
+    if (wakeup) {
+        ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+    }
+}
+
+void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, bool memoryPressure, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+    bool active = !IsTerminatedOrAborted();
+    if (active) {
+        // before UpdatePopBytes, so that the fill level is recomputed with the new inflight window
+        UpdateMemoryPressure(memoryPressure, nodeState);
+        // before the confirmation of the finish, which completes the channel: an early finish is seen with it
+        if (earlyFinish) {
+            HandleEarlyFinish(nodeState, self);
+            PushDataChunk(TDataChunk(true), nodeState, self);
+        }
+    }
+    // The receiver reports Finishing with every pop after the finish chunk, the confirmation goes once - and
+    // the channel is finished only once the confirmation is with the session, see OnFinishConfirmed: the
+    // output actor it wakes up sees the channel complete, the confirmation counted with the rest. Before the
+    // flush of UpdatePopBytes, which may finish the channel as well
+    if (finishing && !ConfirmFinishSent.exchange(true)) {
+        TDataChunk data;
+        data.ConfirmFinish = true;
+        // the age of the chunk orders it among the waiters, a zero one would be served first
+        data.Timestamp = TInstant::Now();
+        PushDataChunk(std::move(data), nodeState, self);
+        LOG_T(nodeState->LogPrefix << "SEND CONFIRM, ChannelId=" << Info.ChannelId
+            << ", OA=" << Info.OutputActorId << ", IA=" << Info.InputActorId
+            << ", EarlyFinished=" << EarlyFinished.load());
+    }
+    if (active && popBytes) {
+        UpdatePopBytes(popBytes, nodeState, self);
+    }
+}
+
+void TOutputDescriptor::SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) {
+    std::lock_guard lock(FlowControlMutex);
+    FinishEpoch = epoch;
 }
 
 void TOutputDescriptor::BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage) {
+    // Storage is read under FlowControlMutex, and the session thread may already push into a descriptor
+    // created by an early finish of the peer. SetWakeUpCallback only sends an event, it is safe under the lock
+    std::lock_guard lock(FlowControlMutex);
     storage->SetWakeUpCallback([weakSelf=std::weak_ptr<TOutputDescriptor>(self), weakNodeState=std::weak_ptr<TNodeState>(nodeState)]() {
         if (auto sharedSelf = weakSelf.lock(); sharedSelf) {
             if (auto sharedNodeState = weakNodeState.lock(); sharedNodeState) {
@@ -575,22 +898,15 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
         }
     }
 
-    while (!LoadingQueue.empty()) {
-        auto& info = LoadingQueue.front();
+    DrainLoadingQueue(nodeState, self);
+    if (EarlyFinished.load() || ConfirmFinishSent.load()) {
+        ReloadSpilled(nodeState, self);
+    }
+}
 
-        if (!info.Loaded) {
-            info.Loaded = Storage->Get(info.BlobId, info.Buffer);
-        }
-        if (!info.Loaded) {
-            break;
-        }
-
-        TDataChunk data;
-        BufferToData(data, std::move(info.Buffer));
-        nodeState->PushDataChunk(std::move(data), self);
-        SpilledBytes -= info.Bytes;
-
-        LoadingQueue.pop();
+TOutputItem::~TOutputItem() {
+    if (IsQuoted && Data.Bytes) {
+        Descriptor->FreeQuota(Data.Bytes);
     }
 }
 
@@ -610,7 +926,9 @@ void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggrega
 }
 
 void TOutputBuffer::Push(TDataChunk&& data) {
-    if (!Descriptor->IsTerminatedOrAborted() && !Descriptor->IsFinished()) {
+    if (!Descriptor->IsTerminatedOrAborted() && (!Descriptor->IsFinished() ||
+        data.Checkpoint // Checkpoints may be generated after channel finish
+    )) {
         Descriptor->PushDataChunk(std::move(data), NodeState.get(), Descriptor);
     }
 }
@@ -645,10 +963,31 @@ void TOutputBuffer::ExportPopStats(TDqAsyncStats& stats) {
 }
 
 TInputDescriptor::~TInputDescriptor() {
-    *InputBufferInflightBytes -= InflightBytes;
+    if (QuotaManager) {
+        // QueueBytes are always allocated in the QuotaManager, release quota for the chunks which were never popped
+        QuotaManager->FreeQuota(QueueBytes.load());
+    }
+    *InputBufferInflightBytes -= InflightBytes.load();
+}
+
+// The consumer polls its inputs far more often than chunks arrive: an empty queue is told without QueueMutex,
+// whose line the session thread writes on every chunk. The flag is armed before the 2nd look at QueueSize, and
+// PushDataChunk increments QueueSize before it takes the flag, both seq_cst: either the 2nd look sees the chunk,
+// or the push sees the flag and wakes the consumer up
+bool TInputDescriptor::IsEmptyFast() {
+    if (QueueSize.load()) {
+        return false;
+    }
+    if (!NeedToNotifyInput.load()) {
+        NeedToNotifyInput.store(true);
+    }
+    return QueueSize.load() == 0;
 }
 
 bool TInputDescriptor::IsEmpty() {
+    if (IsEmptyFast()) {
+        return true;
+    }
     std::lock_guard lock(QueueMutex);
     auto result = Queue.empty();
     if (result) {
@@ -664,15 +1003,35 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     PushStats.Rows += data.Rows;
 
     (*InputBufferChunks)++;
-    InflightBytes += data.Bytes;
     *InputBufferBytes += data.Bytes;
-    *InputBufferInflightBytes += data.Bytes;
+
+    if (FinishPushed.load()) {
+        if (data.ConfirmFinish) {
+            Finished.store(true);
+            {
+                std::lock_guard lock(QueueMutex);
+                ReadyHook.Mark();
+            }
+            ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        }
+
+        // Checkpoints may be generated after channel finish
+        if (!data.Checkpoint) {
+            return false;
+        }
+    }
 
     std::lock_guard lock(QueueMutex);
 
-    if (FinishPushed.load()) {
+    RefreshMemoryPressure();
+
+    if (QuotaManager && !QuotaManager->AllocateQuota(data.Bytes, /* isOptional = */ false)) {
+        AbortChannelByMemoryLimit(data.Bytes);
         return false;
     }
+
+    InflightBytes += data.Bytes;
+    *InputBufferInflightBytes += data.Bytes;
 
     if (data.Finished) {
         FinishPushed.store(true);
@@ -680,9 +1039,16 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
             std::queue<TInputItem> tmpQueue;
             Queue.swap(tmpQueue);
             QueueSize.store(0);
-            PopStats.Bytes += QueueBytes.exchange(0) + data.Bytes;
-            Finished.store(true);
-            ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+            auto queueBytes = QueueBytes.exchange(0) + data.Bytes;
+
+            PopStats.Bytes += queueBytes;
+            if (QuotaManager) {
+                QuotaManager->FreeQuota(queueBytes);
+            }
+            InflightBytes -= queueBytes;
+            *InputBufferInflightBytes -= queueBytes;
+
+            Finishing.store(true);
             return true;
         }
     }
@@ -690,6 +1056,7 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     QueueBytes += data.Bytes;
     QueueSize++;
     Queue.emplace(std::move(data));
+    ReadyHook.Mark();
     if (NeedToNotifyInput.exchange(false)) {
         ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     }
@@ -697,8 +1064,17 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     return false;
 }
 
+void TInputDescriptor::SetReadyHook(const TDqInputReadyHook& hook) {
+    std::lock_guard lock(QueueMutex);
+    ReadyHook = hook;
+}
+
 bool TInputDescriptor::IsFinished() {
-    return Finished.load();
+    auto result = Finished.load();
+    if (!result && !NeedToNotifyInput.load()) {
+        NeedToNotifyInput.store(true);
+    }
+    return result;
 }
 
 bool TInputDescriptor::IsEarlyFinished() {
@@ -706,7 +1082,13 @@ bool TInputDescriptor::IsEarlyFinished() {
 }
 
 bool TInputDescriptor::PopDataChunk(TDataChunk& data) {
+    // no RefreshMemoryPressure for an empty queue: pushes and pops refresh it, and a flip while nothing is queued
+    // holds no sender back
+    if (IsEmptyFast()) {
+        return false;
+    }
     std::lock_guard lock(QueueMutex);
+    RefreshMemoryPressure();
     if (Queue.empty()) {
         NeedToNotifyInput.store(true);
         return false;
@@ -719,10 +1101,13 @@ bool TInputDescriptor::PopDataChunk(TDataChunk& data) {
         QueueSize--;
         QueueBytes -= data.Bytes;
         if (data.Finished) {
-            Finished.store(true);
+            Finishing.store(true);
         }
         InflightBytes -= data.Bytes;
         *InputBufferInflightBytes -= data.Bytes;
+        if (QuotaManager) {
+            QuotaManager->FreeQuota(data.Bytes);
+        }
         return true;
     }
 }
@@ -734,10 +1119,15 @@ bool TInputDescriptor::EarlyFinish() {
             std::queue<TInputItem> tmpQueue;
             Queue.swap(tmpQueue);
             QueueSize.store(0);
-            PopStats.Bytes += QueueBytes.exchange(0);
+            auto queueBytes = QueueBytes.exchange(0);
+            PopStats.Bytes += queueBytes;
+            if (QuotaManager) {
+                QuotaManager->FreeQuota(queueBytes);
+            }
+            InflightBytes -= queueBytes;
+            *InputBufferInflightBytes -= queueBytes;
             if (FinishPushed.load()) {
-                Finished.store(true);
-                ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+                Finishing.store(true);
             }
         }
         return true;
@@ -750,18 +1140,23 @@ void TInputDescriptor::Terminate() {
 
 void TInputDescriptor::AbortChannel(const TString& message) {
     if (!Aborted.exchange(true)) {
-        ActorSystem->Send(Info.OutputActorId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(
-            TStringBuilder() << "Channel: " << Info.ChannelId
-            << ", SrcStageId: " << Info.SrcStageId << ", DstStageId: " << Info.DstStageId
+        ActorSystem->Send(Info.InputActorId, BuildTempUnavailableError(Info,
+            TStringBuilder() << "Push-Pop: " << PushStats.Bytes.load() << '-' << PopStats.Bytes.load() << '=' << (PushStats.Bytes.load() - PopStats.Bytes.load())
+            << ", Q: " << QueueBytes.load() << ", FP: " << FinishPushed.load() << ", F: " << Finished.load() << ", EF: " << EarlyFinished.load()
             << ", " << message
         ).Release());
-        Terminate();
+    }
+}
+
+void TInputDescriptor::AbortChannelByMemoryLimit(ui64 bytes, IMemoryQuotaManager::TPtr quotaManager) {
+    if (!Aborted.exchange(true)) {
+        NDq::AbortChannelByMemoryLimit(ActorSystem, Info, quotaManager ? quotaManager : QuotaManager, bytes);
     }
 }
 
 ui32 TInputDescriptor::GetQueueSize() {
     std::lock_guard lock(QueueMutex);
-    return  Queue.size();
+    return Queue.size();
 }
 
 TInputBuffer::~TInputBuffer() {
@@ -786,7 +1181,8 @@ bool TInputBuffer::IsEarlyFinished() {
 
 bool TInputBuffer::Pop(TDataChunk& data) {
     auto result = Descriptor->PopDataChunk(data);
-    if (result) {
+    // a flip of MemoryPressure refreshed by a push is reported by the next pop, empty or not
+    if (result || !Descriptor->IsMemoryPressureReported()) {
         NodeState->UpdateProgress(Descriptor);
     }
     return result;
@@ -811,25 +1207,36 @@ TLocalBufferRegistry::~TLocalBufferRegistry() {
     *LocalBufferCount -= LocalBuffers.size();
 }
 
-std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info) {
+std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) {
     std::lock_guard lock(Mutex);
 
     auto it = LocalBuffers.find(info);
     if (it != LocalBuffers.end()) {
         auto result = it->second.lock();
         if (result) {
+            std::lock_guard lock(result->Mutex);
             if (info.SrcStageId) {
                 result->Info.SrcStageId = info.SrcStageId;
             }
             if (info.DstStageId) {
                 result->Info.DstStageId = info.DstStageId;
             }
+            // Normally we pass the same quota manager to every call, the only violation is reading result from KqpExecuter
+            // QuotaManager is not populated to KqpExecuter now, so it can create TLocalBuffer with empty QuotaManager
+            // when ComputeActor is bound later to TLocalBuffer, it may provide valid QuotaManager instance
+            // KqpExecuter never writes to TLocalBuffer, so all calls to QuotaManager are possible only after reassignment
+            // and synchronization on TLocalBuffer::Mutex, so no data race or any other error is possible now
+            // TODO: Better fix may include passing QuotaManager to KqpExecuter as well and make TLocalBuffer::QuotaManager
+            if (!result->QuotaManager && quotaManager) {
+                result->QuotaManager = quotaManager;
+            }
             return result;
         } else {
             LocalBuffers.erase(it);
         }
     }
-    auto result = std::make_shared<TLocalBuffer>(registry, info, ActorSystem, MaxInflightBytes, MinInflightBytes);
+    auto result = std::make_shared<TLocalBuffer>(registry, info, quotaManager, ActorSystem, MaxInflightBytes, MinInflightBytes, ColdInflightBytes,
+        EnableSpillingBackpressure);
     LocalBuffers.emplace(info, result);
     (*LocalBufferCount)++;
 
@@ -839,31 +1246,64 @@ std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const
 void TLocalBufferRegistry::DeleteLocalBufferInfo(const TChannelInfo& info) {
     (*LocalBufferCount)--;
     std::lock_guard lock(Mutex);
-    LocalBuffers.erase(info);
+    // called from ~TLocalBuffer, whose entry is expired by now: a live one is a buffer created for the same
+    // channel after this one expired, see GetOrCreateLocalBuffer, and it keeps the entry
+    if (auto it = LocalBuffers.find(info); it != LocalBuffers.end() && it->second.expired()) {
+        LocalBuffers.erase(it);
+    }
 }
 
 TNodeState::~TNodeState() {
-    {
-        std::lock_guard lock(Mutex);
-        FailInputs(NActors::TActorId{}, 0);
+    std::lock_guard lock(Mutex);
+    if (InputDescriptors.empty() && OutputDescriptors.empty()) {
+        LOG_D(LogPrefix << "DESTROYED, NodeActorId=" << NodeActorId);
+    } else {
+        LOG_E(LogPrefix << "DESTROYED, NodeActorId=" << NodeActorId << ", ID=" << InputDescriptors.size() << ", OD=" << OutputDescriptors.size());
+        FailDescriptors("Node session destroyed with the channel still open");
     }
     *OutputBufferCount -= OutputDescriptors.size();
     *InputBufferCount -= InputDescriptors.size();
-    *OutputBufferInflightBytes -= InflightBytes;
+    *OutputBufferInflightBytes -= InflightBytes.load();
     *OutputBufferInflightMessages -= Queue.size();
     *OutputBufferWaiterCount -= WaitersQueue.size();
     *OutputBufferWaiterBytes -= WaiterBytes.load();
     *OutputBufferWaiterMessages -= WaiterMessages.load();
 }
 
+void TNodeState::FailDescriptors(const TString& reason) {
+    FailInputs(NActors::TActorId{}, 0, reason);
+    FailOutputs(reason);
+}
+
 void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor) {
     auto bytes = data.Bytes;
     auto rows = data.Rows;
 
+    // hot path is lock free, the chunk is not tracked by the quota if QuotaManager is not assigned yet
+    bool quoted = descriptor->IsQuotaAssigned();
+    if (quoted && !descriptor->AllocateQuota(bytes)) {
+        descriptor->AbortChannelByMemoryLimit(bytes);
+        return;
+    }
+
+    // WaitQueueSize counts a chunk SendFromWaiters has taken off the WaitQueue until the chunk has its SeqNo,
+    // so that the lock free check below never lets a push of the channel overtake an older chunk
     if (descriptor->WaitQueueSize.load()) {
         // we are not allowed to reorder messages
         std::lock_guard lock(descriptor->WaitQueueMutex);
+        if (descriptor->Aborted.load()) {
+            // never to be sent, see DrainAbortedWaiter
+            if (quoted) {
+                descriptor->FreeQuota(bytes);
+            }
+            return;
+        }
         if (!descriptor->WaitQueue.empty()) {
+
+            if (!descriptor->PrepareWaitQuota(quoted, bytes)) {
+                descriptor->AbortChannelByMemoryLimit(bytes);
+                return;
+            }
 
             descriptor->WaitQueue.push(std::move(data));
             descriptor->WaitQueueBytes += bytes;
@@ -878,27 +1318,61 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         }
     }
 
-    if (Reconciliation.load() == 0) {
-        // in Reconciliation state we do not send new messages
-        std::lock_guard lock(Mutex);
-        if (InflightBytes < Limits.NodeSessionIcInflightBytes && Queue.size() < MaxInflightMessages) {
-            if (descriptor->CheckGenMajor(GenMajor, "Inconsistent Send GenMajor")) {
-                descriptor->AddPopChunk(bytes, rows);
-                auto item = std::make_shared<TOutputItem>(std::move(data), descriptor);
+    // A lock free guess at the admission below: the message is built before the lock when it is likely to go,
+    // and the chunk goes straight to the WaitQueue when it is not. The admission is decided under Mutex as
+    // before, and a wrong guess costs a wasted build, or a turn as a waiter which the next ack or
+    // TEvSendWaiters ends
+    if (Reconciliation.load() == 0 && InflightBytes.load() < Limits.RemoteSessionInflightBytes) {
+        // declared before the lock: one which is not sent is destroyed after it
+        auto ev = BuildDataEvent(data, *descriptor);
+        bool sent = false;
+        {
+            // in Reconciliation state we do not send new messages
+            std::lock_guard lock(Mutex);
+            if (Reconciliation.load() == 0 && InflightBytes.load() < Limits.RemoteSessionInflightBytes && Queue.size() < MaxInflightMessages
+                && descriptor->CheckGenMajor(GenMajor, "Inconsistent Send GenMajor")) {
+                auto item = std::make_shared<TOutputItem>(std::move(data), descriptor, quoted);
                 item->SeqNo = ++SeqNo;
+                item->ChannelSeqNo = descriptor->SeqNo.fetch_add(1) + 1;
+                item->Leading = descriptor->Leading.exchange(false);
+                if (Queue.empty()) {
+                    LastQueueProgress.store(TInstant::Now());
+                }
                 Queue.push_back(item);
-                SendMessage(item);
+                SendDataEvent(std::move(ev), *item);
                 InflightBytes += bytes;
-                *OutputBufferInflightBytes += bytes;
-                (*OutputBufferInflightMessages)++;
-                return;
+                sent = true;
             }
         }
+        if (sent) {
+            descriptor->AddPopChunk(bytes, rows);
+            SendCount++;
+            (*SessionMessagesSent)++;
+            *OutputBufferInflightBytes += bytes;
+            (*OutputBufferInflightMessages)++;
+            return;
+        }
+        PrebuildMisses++;
     }
 
     bool result = false;
 
     std::lock_guard lock(descriptor->WaitQueueMutex);
+
+    // A chunk of an aborted channel is never sent, and nothing would take it off the WaitQueue: the channel
+    // left WaitersQueue for good in SendFromWaiters, or will do so there, see DrainAbortedWaiter
+    if (descriptor->Aborted.load()) {
+        if (quoted) {
+            descriptor->FreeQuota(bytes);
+        }
+        return;
+    }
+
+    if (!descriptor->PrepareWaitQuota(quoted, bytes)) {
+        descriptor->AbortChannelByMemoryLimit(bytes);
+        return;
+    }
+
     if (descriptor->WaitQueue.empty()) {
         descriptor->WaitTimestamp = data.Timestamp;
         result = true;
@@ -925,57 +1399,82 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     }
 }
 
-void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
-    Y_ENSURE(PeerActorId);
+THolder<TEvDqCompute::TEvChannelDataV2> TNodeState::BuildDataEvent(const TDataChunk& data, const TOutputDescriptor& descriptor) {
     auto ev = MakeHolder<TEvDqCompute::TEvChannelDataV2>();
+
+    // the channel id and the actor ids of Info never change, unlike the stage ids, see GetOrCreateOutputDescriptor
+    NActors::ActorIdToProto(descriptor.Info.OutputActorId, ev->Record.MutableSrcActorId());
+    NActors::ActorIdToProto(descriptor.Info.InputActorId, ev->Record.MutableDstActorId());
+    ev->Record.SetChannelId(descriptor.Info.ChannelId);
+
+    if (!data.Buffer.Empty()) {
+        ev->Record.SetPayloadId(ev->AddPayload(MakeReadOnlyRope(data.Buffer)));
+        ev->Record.SetTransportVersion(data.TransportVersion);
+        ev->Record.SetValuePackerVersion(ToProto(data.PackerVersion));
+    }
+    ev->Record.SetRows(data.Rows);
+    ev->Record.SetBytes(data.Bytes);
+    if (data.Finished) {
+        ev->Record.SetFinished(true);
+    }
+    if (data.ConfirmFinish) {
+        ev->Record.SetConfirmFinish(true);
+    }
+
+    if (data.Checkpoint) {
+        *ev->Record.MutableCheckpoint() = data.Checkpoint.GetRef();
+    }
+
+    if (data.Watermark) {
+        *ev->Record.MutableWatermark() = data.Watermark.GetRef();
+    }
+
+    return ev;
+}
+
+void TNodeState::SendDataEvent(THolder<TEvDqCompute::TEvChannelDataV2> ev, const TOutputItem& item) {
+    Y_ENSURE(InputNodeActorId);
 
     ev->Record.SetGenMajor(GenMajor);
     ev->Record.SetGenMinor(GenMinor);
-    ev->Record.SetSeqNo(item->SeqNo);
-    // ev->Record.SetConfirmedSeqNo(???);
-
-    NActors::ActorIdToProto(item->Descriptor->Info.OutputActorId, ev->Record.MutableSrcActorId());
-    NActors::ActorIdToProto(item->Descriptor->Info.InputActorId, ev->Record.MutableDstActorId());
-    ev->Record.SetChannelId(item->Descriptor->Info.ChannelId);
-
-    if (!item->Data.Buffer.Empty()) {
-        ev->Record.SetPayloadId(ev->AddPayload(MakeReadOnlyRope(item->Data.Buffer)));
-        ev->Record.SetTransportVersion(item->Data.TransportVersion);
-        ev->Record.SetValuePackerVersion(ToProto(item->Data.PackerVersion));
-    }
-    ev->Record.SetRows(item->Data.Rows);
-    ev->Record.SetBytes(item->Data.Bytes);
-    if (item->Data.Leading) {
+    ev->Record.SetSeqNo(item.SeqNo);
+    ev->Record.SetChannelSeqNo(item.ChannelSeqNo);
+    if (item.Leading) {
         ev->Record.SetLeading(true);
     }
-    if (item->Data.Finished) {
-        ev->Record.SetFinished(true);
-    }
-    ev->Record.SetConfirmedPopBytes(item->Descriptor->RemotePopBytes.load());
+    Y_ABORT_UNLESS(!item.Descriptor->Leading.load());
 
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-    if (!Subscribed.exchange(true)) {
-        flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
-    }
+    ui32 flags = SendFlags(DqIcChannelData);
 #if !defined(NDEBUG)
     if (auto failCount = FailureLossSend.load(); failCount > 0) {
         FailureLossSend.store(failCount - 1);
+        if (flags & NActors::IEventHandle::FlagSubscribeOnSession) {
+            Subscribed.store(false); // the lost send has not subscribed
+        }
     } else {
         if (auto failCount = FailureDoubleSend.load(); failCount > 0) {
             FailureDoubleSend.store(failCount - 1);
             auto ev2 = MakeHolder<TEvDqCompute::TEvChannelDataV2>();
             ev2->Record = ev->Record;
-            ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, ev2.Release(), flags, item->SeqNo));
+            // one subscription per flag: two dropped ones would bring two TEvNodeDisconnected
+            ActorSystem->Send(new NActors::IEventHandle(InputNodeActorId, NodeActorId, ev2.Release(),
+                flags & ~NActors::IEventHandle::FlagSubscribeOnSession, item.SeqNo));
         }
 #endif
-        ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, ev.Release(), flags, item->SeqNo));
+        LOG_T(LogPrefix << "SEND DATA, G=" << GenMajor << '.' << GenMinor << ", SeqNo=" << item.SeqNo
+            << ", ChannelSeqNo=" << item.ChannelSeqNo << ", ChannelId=" << item.Descriptor->Info.ChannelId
+            << ", Leading=" << item.Leading << ", Finished=" << item.Data.Finished << ", Bytes=" << item.Data.Bytes);
+        ActorSystem->Send(new NActors::IEventHandle(InputNodeActorId, NodeActorId, ev.Release(), flags, item.SeqNo));
 #if !defined(NDEBUG)
     }
 #endif
-    item->State.store(TOutputItem::EState::Sent);
 }
 
-void TNodeState::FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor) {
+void TNodeState::SendMessage(const TOutputItem& item) {
+    SendDataEvent(BuildDataEvent(item.Data, *item.Descriptor), item);
+}
+
+void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason) {
     if (InputDescriptors.empty()) {
         return;
     }
@@ -983,14 +1482,41 @@ void TNodeState::FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMa
     std::vector<TChannelInfo> failedBuffers;
 
     for (auto& [info, descriptor] : InputDescriptors) {
-        if (descriptor->PeerGenMajor) {
-            if (descriptor->PeerActorId != peerActorId || descriptor->PeerGenMajor != peerGenMajor) {
-                descriptor->AbortChannel("Fail by Input");
+        if (!descriptor->IsFinished()) {
+            // a descriptor which has not heard from any peer yet is fine with the peer which comes; it is
+            // as bound to a session which goes as the others
+            bool mismatch = descriptor->OutputNodeGenMajor
+                && (descriptor->OutputNodeActorId != outputNodeActorId || descriptor->OutputNodeGenMajor != outputNodeGenMajor);
+            if (!outputNodeActorId || mismatch) {
+                TStringBuilder message;
+                if (outputNodeActorId) {
+                    // the same actor at a higher generation has reconciled, not restarted
+                    message << (descriptor->OutputNodeActorId != outputNodeActorId
+                            ? "Peer node session has been replaced"
+                            : "Peer node session has advanced its generation")
+                        << ", OutputNodeActorId=" << descriptor->OutputNodeActorId
+                        << ", OutputNodeGenMajor=" << descriptor->OutputNodeGenMajor
+                        << " DO NOT MATCH outputNodeActorId=" << outputNodeActorId
+                        << ", outputNodeGenMajor=" << outputNodeGenMajor;
+                } else {
+                    // no peer to name here, and an empty id would read as a mismatch which never happened
+                    message << reason
+                        << ", OutputNodeActorId=" << descriptor->OutputNodeActorId
+                        << ", OutputNodeGenMajor=" << descriptor->OutputNodeGenMajor;
+                }
+                message << ", Session=" << LogPrefix << ", Log=" << GetReconciliationLog();
+                descriptor->AbortChannel(message);
                 failedBuffers.push_back(info);
+                LOG_T(LogPrefix << "ID ERASE/FAIL, ChannelId=" << descriptor->Info.ChannelId
+                    << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
+                    << ", EarlyFinished=" << descriptor->EarlyFinished.load() << ", PopBytes=" << descriptor->PopStats.Bytes.load()
+                    << ", Finishing=" << descriptor->Finishing.load() << ", Finished=" << descriptor->Finished.load()
+                );
             }
         }
     }
 
+    *InputBufferCount -= failedBuffers.size();
     if (failedBuffers.size() == InputDescriptors.size()) {
         InputDescriptors.clear();
     } else {
@@ -1000,22 +1526,40 @@ void TNodeState::FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMa
     }
 }
 
-void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie) {
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-    if (!Subscribed.exchange(true)) {
-        flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
+void TNodeState::FailOutputs(const TString& reason) {
+    if (OutputDescriptors.empty()) {
+        return;
     }
 
-    ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evAck.Release(), flags, cookie));
+    for (auto& [info, descriptor] : OutputDescriptors) {
+        descriptor->AbortChannel(
+            TStringBuilder() << reason
+            << ", EF=" << descriptor->EarlyFinished.load()
+            << ", FP=" << descriptor->FinishPushed.load()
+            << ", F=" << descriptor->Finished.load()
+            << ", T=" << descriptor->Terminated.load()
+            << ", A=" << descriptor->Aborted.load()
+            << ", Session=" << LogPrefix << ", Log=" << GetReconciliationLog()
+        );
+    }
+
+    *OutputBufferCount -= OutputDescriptors.size();
+    OutputDescriptors.clear();
+}
+
+void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie) {
+    ui32 flags = SendFlags(DqIcChannelControl);
+
+    ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, cookie));
 }
 
 void TNodeState::SendAckWithError(ui64 cookie, const TString& message) {
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
-    evAck->Record.SetGenMajor(PeerGenMajor.load());
-    evAck->Record.SetGenMinor(PeerGenMinor.load());
+    evAck->Record.SetGenMajor(OutputNodeGenMajor.load());
+    evAck->Record.SetGenMinor(OutputNodeGenMinor.load());
     evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::ERROR);
-    evAck->Record.SetSeqNo(ConfirmedSeqNo);
+    evAck->Record.SetSeqNo(ConfirmedSeqNo.load(std::memory_order_relaxed));
     evAck->Record.SetMessage(message);
 
     SendAck(evAck, cookie);
@@ -1029,263 +1573,355 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
-    auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
+    auto descriptor = GetOrCreateInputDescriptor(info, nullptr, false, record.GetLeading());
     if (!descriptor) {
-        // do not auto create if not leading and fail sender
-        SendAckWithError(ev->Cookie,
-            TStringBuilder() << "Can't find peer for Info: {ChannelId: " << info.ChannelId
-            << ", OutputActorId: " << info.OutputActorId
-            << ", InputActorId: " << info.InputActorId << "} Leading:" << record.GetLeading()
-        );
+        // do not auto create if not leading and fail sender except finish confirmation
+        TString errorMessage = TStringBuilder() << "NOT FOUND ID, ChannelId=" << info.ChannelId
+        << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+        << ", Bytes=" << record.GetBytes() << ", L=" << record.GetLeading()
+        << ", F=" << record.GetFinished() << ", CF=" << record.GetConfirmFinish()
+        << ", Log=" << GetReconciliationLog();
+        LOG_W(LogPrefix << errorMessage);
+        if (record.GetConfirmFinish()) {
+            // the consumer has let go of the channel already, nobody waits for the confirmation; it is
+            // still confirmed, or the sender holds it in its queue
+            SendAckOk(info, ev->Cookie);
+        } else {
+            SendAckWithError(ev->Cookie, errorMessage);
+        }
         return;
     }
 
-    if (descriptor->PeerGenMajor) {
-        if (descriptor->PeerActorId != PeerActorId || descriptor->PeerGenMajor != PeerGenMajor.load()) {
+    if (descriptor->OutputNodeGenMajor) {
+        if (descriptor->OutputNodeActorId != OutputNodeActorId || descriptor->OutputNodeGenMajor != OutputNodeGenMajor.load()) {
             descriptor->Terminate();
-            InputDescriptors.erase(info);
-            SendAckWithError(ev->Cookie,
-                TStringBuilder() << "Generation mismatch: " << descriptor->PeerActorId << " vs "
-                << PeerActorId << " (actual), " << descriptor->PeerGenMajor << " vs " << PeerGenMajor.load() << " (actual)"
-            );
+            TString errorMessage = TStringBuilder() << "MISMATCH ID G=" << descriptor->OutputNodeGenMajor
+                << ", Peer=" << descriptor->OutputNodeGenMajor << " vs G=" << OutputNodeGenMajor.load()
+                << ", Peer=" << OutputNodeActorId
+                << ", ChannelId=" << info.ChannelId
+                << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+                << ", Bytes=" << record.GetBytes() << ", L=" << record.GetLeading()
+                << ", F=" << record.GetFinished() << ", CF=" << record.GetConfirmFinish()
+                << ", Log=" << GetReconciliationLog();
+
+            LOG_T(LogPrefix << "ID ERASE/GEN " << errorMessage);
+            {
+                std::lock_guard lock(Mutex);
+                // by identity, as TerminateInputDescriptor does: a Leading resend may have replaced it already
+                if (auto it = InputDescriptors.find(info); it != InputDescriptors.end() && it->second == descriptor) {
+                    InputDescriptors.erase(it);
+                    (*InputBufferCount)--;
+                }
+            }
+            SendAckWithError(ev->Cookie, errorMessage);
             return;
         }
     } else {
-        descriptor->PeerActorId = PeerActorId;
-        descriptor->PeerGenMajor = PeerGenMajor.load();
+        descriptor->OutputNodeActorId = OutputNodeActorId;
+        descriptor->OutputNodeGenMajor = OutputNodeGenMajor.load();
     }
 
     TDataChunk data(TChunkedBuffer(), record.GetRows(), record.GetTransportVersion(),
-      FromProto(record.GetValuePackerVersion()), record.GetLeading(), record.GetFinished());
+      FromProto(record.GetValuePackerVersion()), record.GetFinished());
+
     if (ev->Get()->GetPayloadCount() > 0) {
         data.Buffer = MakeChunkedBuffer(ev->Get()->GetPayload(record.GetPayloadId()));
         // data.Timestamp = TInstant::MicroSeconds(record.GetSendTime());
     }
     data.Bytes = record.GetBytes();
-    Y_ENSURE(data.Bytes > data.Buffer.Size()); // record.GetBytes() == data.Buffer.Size() + const
-    if (descriptor->PushDataChunk(std::move(data))) {
+    if (!record.GetConfirmFinish()) {
+        Y_ENSURE(data.Bytes > data.Buffer.Size(), "data.Bytes " << data.Bytes << " data.Buffer.Size() " << data.Buffer.Size()); // record.GetBytes() == data.Buffer.Size() + const
+    }
+
+    if (record.HasWatermark()) {
+        data.Watermark = record.GetWatermark();
+    }
+    if (record.HasCheckpoint()) {
+        data.Checkpoint = record.GetCheckpoint();
+    }
+    if (record.GetConfirmFinish()) {
+        data.ConfirmFinish = true;
+        LOG_T(LogPrefix << "CONFIRM FINISH, ChannelId=" << info.ChannelId
+            << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId);
+    }
+    auto correctSeqNo = true;
+    if (auto channelSeqNo = record.GetChannelSeqNo()) {
+        auto descriptorSeqNo = descriptor->SeqNo.load();
+        if (channelSeqNo <= descriptorSeqNo) {
+            LOG_W(LogPrefix << "IGNORE CHANNEL SEQNO ID.SeqNo=" << descriptorSeqNo
+                << ", record.ChannelSeqNo=" << channelSeqNo
+                << ", ChannelId=" << info.ChannelId
+                << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+                << ", Log=" << GetReconciliationLog());
+            correctSeqNo = false;
+        } else if (channelSeqNo == descriptorSeqNo + 1) {
+            descriptor->SeqNo++;
+        } else {
+            TString errorMessage = TStringBuilder() << "CHANNEL SEQNO ID.SeqNo=" << descriptorSeqNo
+                << ", record.ChannelSeqNo=" << channelSeqNo
+                << ", ChannelId=" << info.ChannelId
+                << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+                << ", Bytes=" << record.GetBytes() << ", L=" << record.GetLeading()
+                << ", F=" << record.GetFinished() << ", CF=" << record.GetConfirmFinish()
+                << ", Log=" << GetReconciliationLog();
+            LOG_E(LogPrefix << "INCORRECT " << errorMessage);
+            descriptor->AbortChannel(errorMessage);
+            correctSeqNo = false;
+        }
+    }
+    if (correctSeqNo && descriptor->PushDataChunk(std::move(data))) {
         UpdateProgress(descriptor);
     }
 
+    SendAckOk(info, ev->Cookie);
+}
+
+void TNodeState::SendAckOk(const TChannelInfo& info, ui64 cookie) {
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
-    evAck->Record.SetGenMajor(PeerGenMajor.load());
-    evAck->Record.SetGenMinor(PeerGenMinor.load());
+    evAck->Record.SetGenMajor(OutputNodeGenMajor.load());
+    evAck->Record.SetGenMinor(OutputNodeGenMinor.load());
     evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::OK);
-    evAck->Record.SetSeqNo(ConfirmedSeqNo);
+    evAck->Record.SetSeqNo(ConfirmedSeqNo.load(std::memory_order_relaxed));
 
     NActors::ActorIdToProto(info.OutputActorId, evAck->Record.MutableSrcActorId());
     NActors::ActorIdToProto(info.InputActorId, evAck->Record.MutableDstActorId());
     evAck->Record.SetChannelId(info.ChannelId);
 
-    // evAck->Record.SetEarlyFinished(descriptor->IsEarlyFinished());
-    // evAck->Record.SetPopBytes(descriptor->GetPopBytes());
+    // no EarlyFinished and PopBytes here, see HandleAck: progress goes with TEvChannelUpdateV2
+    SendAck(evAck, cookie);
+}
 
-    SendAck(evAck, ev->Cookie);
+void TNodeState::HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr&) {
+    LOG_W(LogPrefix << "DISCONNECTED");
+    std::lock_guard lock(Mutex);
+    Subscribed.store(false);
+    StartReconciliation(false, 'D');
 }
 
 void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
-    if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
-        if (Reconciliation.load() == 0) {
-            // ignore errors in recovery
-            LOG_W("DATA UNDELIVERED, UNKNOWN ActorId to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId << ", PeerActorId=" << PeerActorId << ", Sender=" << ev->Sender);
-        }
-        std::lock_guard lock(Mutex);
-        PeerActorId = NActors::TActorId{};
-        StartReconciliation(true);
-        return;
-    }
-
     switch (ev->Get()->SourceType) {
         case TEvDqCompute::TEvChannelDataV2::EventType: {
-            LOG_W("DATA UNDELIVERED, OTHER to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId << ", PeerActorId=" << PeerActorId);
+            TReleaseGuard release{*this};
             std::lock_guard lock(Mutex);
-            StartReconciliation(false);
+            if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
+                if (Reconciliation.load() == 0) { // ignore errors in recovery
+                    // The bounce names the actor the message was addressed to. InputNodeActorId changes
+                    // only with a major reconciliation, which resends the queue to the actor replacing it,
+                    // so a bounce naming anyone else is the echo of a superseded copy: acting on it would
+                    // advance the generation under a live peer, which then fails the unfinished channels
+                    // bound to the previous one.
+                    if (ev->Sender != InputNodeActorId) {
+                        LOG_D(LogPrefix << "UNDELIVERED/STALE, InputNodeActorId " << InputNodeActorId << ", Sender=" << ev->Sender);
+                    } else {
+                        LOG_W(LogPrefix << "UNDELIVERED/UNKNOWN, InputNodeActorId " << InputNodeActorId << ", Sender=" << ev->Sender);
+                        StartReconciliation(true, 'U');
+                    }
+                }
+            } else {
+                LOG_W(LogPrefix << "UNDELIVERED/OTHER");
+                StartReconciliation(false, 'O');
+            }
+            break;
+        }
+        case TEvDqCompute::TEvChannelDiscoveryV2::EventType: {
+            // No reconciliation on purpose: DoReconciliation sends every discovery, so one is always in
+            // progress here and owns the retry. The bounce returns at once, so retrying on it would spend
+            // every attempt in microseconds and destroy the session with all of its channels.
+            std::lock_guard lock(Mutex);
+            if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
+                LOG_W(LogPrefix << "UNDELIVERED DISCOVERY/UNKNOWN, no channel service on the peer node, G="
+                    << GenMajor << '.' << GenMinor << ", Log=" << GetReconciliationLog());
+            } else {
+                // Subscribed mirrors the interconnect session: a dropped event carrying
+                // FlagSubscribeOnSession is answered with TEvNodeDisconnected, which clears the flag.
+                LOG_W(LogPrefix << "UNDELIVERED DISCOVERY/DISCONNECTED, G=" << GenMajor << '.' << GenMinor
+                    << ", Log=" << GetReconciliationLog());
+            }
             break;
         }
         case TEvDqCompute::TEvChannelAckV2::EventType: {
-            // ACKs are to be repeated periodically
+            // Ack will be requested by peer with next reconciliation
+            LOG_W(LogPrefix << "UNDELIVERED ACK");
             break;
         }
         case TEvDqCompute::TEvChannelUpdateV2::EventType: {
-            // TBD: repeat Update from empty Input by schedule
+            // Updates will be resend after next reconciliation
+            LOG_W(LogPrefix << "UNDELIVERED UPDATE");
             break;
         }
     }
 }
 
-void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor, ui64 seqNo) {
-    std::lock_guard lock(Mutex);
-    if (!Connected) {
-        PeerActorId = sender;
-        PeerGenMajor.store(genMajor);
-        PeerGenMinor.store(genMinor);
-        ConfirmedSeqNo = seqNo;
-        Connected = true;
-        LOG_D("NODE CONNECTED, PeerGenMajor=" << PeerGenMajor.load() << ", " << NodeActorId << " to " << PeerActorId);
-    } else if (PeerActorId != sender || PeerGenMajor.load() != genMajor) {
-        PeerActorId = sender;
-        PeerGenMajor.store(genMajor);
-        PeerGenMinor.store(genMinor);
-        ConfirmedSeqNo = seqNo;
-        FailInputs(PeerActorId, PeerGenMajor.load());
-        LOG_W("NODE RECONNECTED, PeerGenMajor=" << PeerGenMajor.load() << ", " << NodeActorId << " to " << PeerActorId);
+void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor) {
+    if (OutputNodeActorId == sender && OutputNodeGenMajor.load() == genMajor) {
+        LOG_T(LogPrefix << "RECONNECTED, OutputNodeActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
+    } else {
+        OutputNodeActorId = sender;
+        OutputNodeGenMajor.store(genMajor);
+        ConfirmedSeqNo.store(0, std::memory_order_relaxed);
+        LOG_D(LogPrefix << "RECONNECTED, OutputNodeActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
+    }
+    OutputNodeGenMinor.store(genMinor);
+    PublishPeer();
+    FailInputs(OutputNodeActorId, OutputNodeGenMajor.load());
+}
+
+void TNodeState::PublishPeer() {
+    auto seq = PeerSeq.load(std::memory_order_relaxed);
+    PeerSeq.store(seq + 1, std::memory_order_relaxed);
+    std::atomic_thread_fence(std::memory_order_release);
+    PeerActorIdX1.store(OutputNodeActorId.RawX1(), std::memory_order_relaxed);
+    PeerActorIdX2.store(OutputNodeActorId.RawX2(), std::memory_order_relaxed);
+    PeerGenMajor.store(OutputNodeGenMajor.load(), std::memory_order_relaxed);
+    PeerGenMinor.store(OutputNodeGenMinor.load(), std::memory_order_relaxed);
+    PeerSeq.store(seq + 2, std::memory_order_release);
+}
+
+TNodeState::TPeer TNodeState::ReadPeer() const {
+    while (true) {
+        auto seq = PeerSeq.load(std::memory_order_acquire);
+        if (seq & 1) {
+            continue; // the writer is in the middle, for a few stores
+        }
+        TPeer peer{
+            NActors::TActorId(PeerActorIdX1.load(std::memory_order_relaxed), PeerActorIdX2.load(std::memory_order_relaxed)),
+            PeerGenMajor.load(std::memory_order_relaxed),
+            PeerGenMinor.load(std::memory_order_relaxed)};
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (PeerSeq.load(std::memory_order_relaxed) == seq) {
+            return peer;
+        }
     }
 }
 
 void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
 
+    LastPeerActivity.store(TInstant::Now());
     auto& record = ev->Get()->Record;
-    ConnectSession(ev->Sender, record.GetGenMajor(), record.GetGenMinor(), record.GetSeqNo());
+
+    std::lock_guard lock(Mutex);
+    ConnectSession(ev->Sender, record.GetGenMajor(), record.GetGenMinor());
 
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
-    evAck->Record.SetGenMajor(PeerGenMajor.load());
-    evAck->Record.SetGenMinor(PeerGenMinor.load());
-    evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::OK);
-    evAck->Record.SetSeqNo(ConfirmedSeqNo);
+    evAck->Record.SetGenMajor(OutputNodeGenMajor.load());
+    evAck->Record.SetGenMinor(OutputNodeGenMinor.load());
+    auto confirmedSeqNo = ConfirmedSeqNo.load(std::memory_order_relaxed);
+    evAck->Record.SetStatus(record.GetSeqNo() <= confirmedSeqNo ? NYql::NDqProto::TEvChannelAckV2::OK : NYql::NDqProto::TEvChannelAckV2::RESEND);
+    evAck->Record.SetSeqNo(confirmedSeqNo);
 
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-    if (!Subscribed.exchange(true)) {
-        flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
+    ui32 flags = SendFlags(DqIcChannelControl);
+
+    ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
+
+    ResendUpdates();
+}
+
+void TNodeState::ResendUpdates() {
+    if (!OutputNodeActorId) {
+        return;
     }
-
-    ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
+    // pairs with the fence in SendUpdateProgress, for a consumer which found no peer
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+    // after ConnectSession has published the peer: an update a consumer sends meanwhile to the previous one is
+    // either before this resend under UpdateMutex, or reads the new peer itself
+    for (auto& [_, descriptor] : InputDescriptors) {
+        if (descriptor->EarlyFinished.load() || descriptor->PushStats.Bytes.load()) {
+            UpdateProgress(descriptor);
+        }
+    }
 }
 
 void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
+    // Data is proof the peer is alive, obsolete data as much as any: without this a session whose channels
+    // are all inbound looks idle to HandleCleanup however much the peer streams to it.
+    LastPeerActivity.store(TInstant::Now());
+
     auto& record = ev->Get()->Record;
-
-    if (PeerActorId != ev->Sender || PeerGenMajor.load() != record.GetGenMajor()) {
-        auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
-
-        evAck->Record.SetGenMajor(record.GetGenMajor());
-        evAck->Record.SetGenMinor(record.GetGenMinor());
-        evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::FAIL);
-        evAck->Record.SetSeqNo(ConfirmedSeqNo);
-
-        ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-        if (!Subscribed.exchange(true)) {
-            flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
-        }
-
-        ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
-        return;
-    }
-
-    PeerGenMinor.store(std::max<ui64>(record.GetGenMinor(), PeerGenMinor.load()));
-
+    auto genMajor = record.GetGenMajor();
+    auto genMinor = record.GetGenMinor();
     auto seqNo = record.GetSeqNo();
 
-    if (seqNo <= ConfirmedSeqNo) {
-        LOG_W("DATA IGNORED, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << ", " << NodeActorId << " from " << PeerActorId);
+    if (OutputNodeActorId != ev->Sender || OutputNodeGenMajor.load() != genMajor || OutputNodeGenMinor.load() != genMinor) {
+        LOG_D(LogPrefix << "OBSOLETE DATA, OutputNodeActorId=" << OutputNodeActorId << ", G=" << OutputNodeGenMajor.load() << '.' << OutputNodeGenMinor.load()
+            << " vs Sender=" << ev->Sender << ", G=" << genMajor << '.' << genMinor
+            << ", SeqNo=" << seqNo);
+        return;
+    } else {
+        LOG_T(LogPrefix << "RECV DATA, G=" << genMajor << '.' << genMinor << ", SeqNo=" << seqNo
+            << ", ChannelSeqNo=" << record.GetChannelSeqNo() << ", ChannelId=" << record.GetChannelId()
+            << ", Leading=" << record.GetLeading() << ", Finished=" << record.GetFinished()
+            << ", Bytes=" << record.GetBytes());
+    }
+
+    auto confirmedSeqNo = ConfirmedSeqNo.load(std::memory_order_relaxed);
+
+    if (seqNo <= confirmedSeqNo) {
+        LOG_W(LogPrefix << "DATA/IGNORED, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << confirmedSeqNo);
         return;
     }
 
-    switch (seqNo - ConfirmedSeqNo) {
-        case 1: {
-            break;
-        }
-        case 2: {
-            // allow 1 out of order message
-            LOG_W("DATA OUT OF ORDER, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << ", " << NodeActorId << " from " << PeerActorId);
-            OutOfOrderMessage = ev.Release();
-            return;
-        }
-        default: {
-            LOG_W("DATA ASK RESEND, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << "(+1), " << NodeActorId << " from " << PeerActorId);
+    if (seqNo - confirmedSeqNo > 1) {
+        if (!ResendAsked.exchange(true)) {
+            LOG_W(LogPrefix << "DATA/RESEND, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << confirmedSeqNo);
+
             auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
-            evAck->Record.SetGenMajor(PeerGenMajor.load());
-            evAck->Record.SetGenMinor(PeerGenMinor.load());
+            evAck->Record.SetGenMajor(OutputNodeGenMajor.load());
+            evAck->Record.SetGenMinor(OutputNodeGenMinor.load());
             evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::RESEND);
-            evAck->Record.SetSeqNo(ConfirmedSeqNo + 1);
+            evAck->Record.SetSeqNo(confirmedSeqNo + 1);
 
-            ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-            if (!Subscribed.exchange(true)) {
-                flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
-            }
+            ui32 flags = SendFlags(DqIcChannelControl);
 
-            ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
-            return;
+            ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
         }
+        return;
     }
 
     // happy path
-
-    ConfirmedSeqNo++;
+    ResendAsked.store(false);
+    ConfirmedSeqNo.store(confirmedSeqNo + 1, std::memory_order_relaxed);
     HandleChannelData(ev);
-
-    if (OutOfOrderMessage) {
-        auto& record = OutOfOrderMessage->Get()->Record;
-
-        if (record.GetSeqNo() == ConfirmedSeqNo + 1) {
-            ConfirmedSeqNo++;
-            HandleChannelData(OutOfOrderMessage);
-        }
-
-        OutOfOrderMessage.Reset();
-    }
 }
 
-void TNodeState::SendFromWaiters(ui64 deltaBytes) {
+std::shared_ptr<TOutputDescriptor> TNodeState::PopWaiterLocked() {
+    // Re-checked for every waiter message: PushDataChunk adds from the producer threads, and a snapshot would drain
+    // waiters well past the window. Checked before the bytes are added, so exceeded by at most one message.
+    if (Reconciliation.load() > 0 || InflightBytes.load() >= Limits.RemoteSessionInflightBytes
+        || Queue.size() >= MaxInflightMessages || WaitersQueue.empty()) {
+        return {};
+    }
+    auto waiter = WaitersQueue.top();
+    WaitersQueue.pop();
+    WaitersQueueSize--;
+    (*OutputBufferWaiterCount)--;
+    return waiter;
+}
 
-    ui64 inflightBytes = 0;
-    {
-        std::lock_guard lock(Mutex); // ???
-        if (Reconciliation.load() > 0) {
+// The HandleAck pop sites release the bytes under Mutex before any early return, so InflightBytes matches
+// the Queue here.
+void TNodeState::SendFromWaiters(std::shared_ptr<TOutputDescriptor> waiter) {
+
+    if (!waiter) {
+        // Lock free: a waiter which registers after this load either finds the Queue empty and sends
+        // TEvSendWaiters, or is picked up after the ack of a queued message, see PushDataChunk
+        if (Reconciliation.load() > 0 || WaitersQueueSize.load() == 0) {
             return;
         }
-        inflightBytes = InflightBytes;
+        std::lock_guard lock(Mutex);
+        waiter = PopWaiterLocked();
     }
 
-    Y_ENSURE(inflightBytes >= deltaBytes);
-
-    while (inflightBytes - deltaBytes < Limits.NodeSessionIcInflightBytes) {
-        std::shared_ptr<TOutputDescriptor> waiter;
-
-        {
-            std::lock_guard lock(Mutex);
-            if (Queue.size() >= MaxInflightMessages) {
-                break;
-            }
-
-            while (!WaitersQueue.empty()) {
-
-                (*OutputBufferWaiterCount)--;
-
-                if (WaitersQueue.top()->IsTerminatedOrAborted()) {
-
-                    auto waitQueueBytes = WaitersQueue.top()->WaitQueueBytes.load();
-                    auto waitQueueSize = WaitersQueue.top()->WaitQueueSize.load();
-                    WaiterBytes -= waitQueueBytes;
-                    WaiterMessages -= waitQueueSize;
-                    *OutputBufferWaiterBytes -= waitQueueBytes;
-                    *OutputBufferWaiterMessages -= waitQueueSize;
-
-                    WaitersQueue.pop();
-                    WaitersQueueSize--;
-                    continue;
-                }
-
-                waiter = WaitersQueue.top();
-                WaitersQueue.pop();
-                WaitersQueueSize--;
-                break;
-            }
-        }
-
-        if (!waiter) {
-            break;
-        }
+    while (waiter) {
+        std::shared_ptr<TOutputDescriptor> next;
 
         // TODO: Handle delayed (spilled) data
 
         if (waiter->CheckGenMajor(GenMajor, "Inconsistent Waiter Gen")) {
-            std::shared_ptr<TOutputItem> item;
-
             ui64 bytes = 0;
 
             {
@@ -1295,14 +1931,26 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
                 auto& data = waiter->WaitQueue.front();
                 bytes = data.Bytes;
 
+                // unquoted chunks always precede quoted ones in the WaitQueue, see TOutputDescriptor::PrepareWaitQuota
+                bool quoted = true;
+                if (waiter->UnquotedWaitBytes) {
+                    quoted = false;
+                    Y_DEBUG_ABORT_UNLESS(waiter->UnquotedWaitBytes >= bytes,
+                        "UnquotedWaitBytes underflow: %" PRIu64 " < %" PRIu64, waiter->UnquotedWaitBytes, bytes);
+                    // clamped on purpose: an underflow here would make UnquotedWaitBytes wrap and every
+                    // subsequent chunk of the descriptor would be treated as unquoted, leaking the quota
+                    waiter->UnquotedWaitBytes -= std::min(waiter->UnquotedWaitBytes, bytes);
+                }
+
                 waiter->AddPopChunk(data.Bytes, data.Rows);
-                item = std::make_shared<TOutputItem>(std::move(data), waiter);
+                // built off Mutex, the WaitQueueMutex held keeps the rest of the channel behind this chunk meanwhile
+                auto ev = BuildDataEvent(data, *waiter);
+                auto item = std::make_shared<TOutputItem>(std::move(data), waiter, quoted);
                 waiter->WaitQueue.pop();
                 waiter->WaitQueueBytes -= bytes;
-                waiter->WaitQueueSize--;
+                OnWaiterDequeued();
 
                 std::lock_guard lock1(Mutex);
-
 
                 if (!waiter->WaitQueue.empty()) {
                     waiter->WaitTimestamp = waiter->WaitQueue.front().Timestamp;
@@ -1312,74 +1960,136 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
                 }
 
                 item->SeqNo = ++SeqNo;
-                inflightBytes += bytes;
-                InflightBytes += bytes;
-                *OutputBufferInflightBytes += bytes;
-                (*OutputBufferInflightMessages)++;
+                item->ChannelSeqNo = waiter->SeqNo.fetch_add(1) + 1;
+                item->Leading = waiter->Leading.exchange(false);
+                if (Queue.empty()) {
+                    LastQueueProgress.store(TInstant::Now());
+                }
                 Queue.push_back(item);
-                SendMessage(item);
+                SendDataEvent(std::move(ev), *item);
+                InflightBytes += bytes;
+                // Only now, when the chunk has its SeqNo: until then a push of the channel must not skip the
+                // WaitQueue, see TNodeState::PushDataChunk, or it would overtake this chunk
+                waiter->WaitQueueSize--;
+                next = PopWaiterLocked();
             }
 
+            SendCount++;
+            (*SessionMessagesSent)++;
+            *OutputBufferInflightBytes += bytes;
+            (*OutputBufferInflightMessages)++;
             WaiterBytes -= bytes;
             WaiterMessages--;
             *OutputBufferWaiterBytes -= bytes;
             (*OutputBufferWaiterMessages)--;
         } else {
-            auto waitQueueBytes = waiter->WaitQueueBytes.load();
-            auto waitQueueSize = waiter->WaitQueueSize.load();
-            WaiterBytes -= waitQueueBytes;
-            WaiterMessages -= waitQueueSize;
-            *OutputBufferWaiterBytes -= waitQueueBytes;
-            *OutputBufferWaiterMessages -= waitQueueSize;
+            DrainAbortedWaiter(waiter);
+            std::lock_guard lock(Mutex);
+            next = PopWaiterLocked();
         }
-    }
 
-    {
-        std::lock_guard lock(Mutex); // ???
-        InflightBytes -= deltaBytes;
+        waiter = std::move(next);
     }
+}
+
+void TNodeState::DrainAbortedWaiter(const std::shared_ptr<TOutputDescriptor>& descriptor) {
+    // CheckGenMajor has failed, so the channel is aborted: nothing enters the WaitQueue once the lock below is
+    // released, see PushDataChunk, and the chunks are destroyed after it
+    std::queue<TDataChunk> drained;
+    ui64 bytes = 0;
+    ui64 size = 0;
+    ui64 quotedBytes = 0;
+    {
+        std::lock_guard lock(descriptor->WaitQueueMutex);
+        drained.swap(descriptor->WaitQueue);
+        bytes = descriptor->WaitQueueBytes.exchange(0);
+        size = descriptor->WaitQueueSize.exchange(0);
+        quotedBytes = bytes - std::min(bytes, descriptor->UnquotedWaitBytes);
+        descriptor->UnquotedWaitBytes = 0;
+    }
+    // a quoted chunk means the QuotaManager is assigned, see TOutputDescriptor::PrepareWaitQuota
+    if (quotedBytes) {
+        descriptor->FreeQuota(quotedBytes);
+    }
+    WaiterBytes -= bytes;
+    WaiterMessages -= size;
+    *OutputBufferWaiterBytes -= bytes;
+    *OutputBufferWaiterMessages -= size;
+}
+
+void TNodeState::FreeReleasedItems() {
+    ReleasedItems.clear();
+    // a whole window may leave at once, e.g. with the ack of a reconciliation, the capacity is not kept for it
+    if (ReleasedItems.capacity() > 256) {
+        ReleasedItems.shrink_to_fit();
+    }
+}
+
+ui64 TNodeState::ReleaseInflight(const TOutputItem& item) {
+    // Unsigned: releasing more than it holds would wrap it and the session would stop sending for good.
+    // The sensor loses the same amount, or it goes negative where the counter is clamped.
+    Y_DEBUG_ABORT_UNLESS(InflightBytes.load() >= item.Data.Bytes,
+        "%s, InflightBytes=%" PRIu64 ", item.Bytes=%" PRIu64 ", item.SeqNo=%" PRIu64,
+        LogPrefix.c_str(), InflightBytes.load(), item.Data.Bytes, item.SeqNo);
+    auto released = std::min<ui64>(InflightBytes.load(), item.Data.Bytes);
+    if (released != item.Data.Bytes) {
+        LOG_E(LogPrefix << "INFLIGHT UNDERFLOW, InflightBytes=" << InflightBytes.load()
+            << ", item.Bytes=" << item.Data.Bytes << ", item.SeqNo=" << item.SeqNo);
+    }
+    InflightBytes -= released;
+    *OutputBufferInflightBytes -= released;
+    (*OutputBufferInflightMessages)--;
+    return released;
 }
 
 void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
+    auto now = TInstant::Now();
+    LastPeerActivity.store(now);
 #if !defined(NDEBUG)
     if (auto failCount = FailureReconciliation.load(); failCount > 0) {
+        TReleaseGuard release{*this};
+        std::lock_guard lock(Mutex);
         FailureReconciliation.store(failCount - 1);
-        StartReconciliation(true);
+        StartReconciliation(true, 'J');
         return;
     }
 #endif
 
     auto& record = ev->Get()->Record;
-
-    if (record.GetGenMajor() != GenMajor) {
-        LOG_W("ACK IGNORED GenMajor=" << GenMajor << ", ack.GenMajor=" << record.GetGenMajor() << ", NodeActorId=" << NodeActorId << " from peer " << ev->Sender);
-        return;
-    }
-
-    TChannelInfo info(record.GetChannelId(), NActors::ActorIdFromProto(record.GetSrcActorId()), NActors::ActorIdFromProto(record.GetDstActorId()));
     ui64 deltaBytes = 0;
+    std::shared_ptr<TOutputDescriptor> waiter;
 
     {
+        // before the lock: the items popped below are destroyed after it is released, and before the waiters
+        // are sent to, so that their quota is back by then
+        TReleaseGuard release{*this};
         std::lock_guard lock(Mutex);
+
+        auto genMajor = record.GetGenMajor();
+        auto genMinor = record.GetGenMinor();
+        if (GenMajor != genMajor || GenMinor != genMinor) {
+            LOG_W(LogPrefix << "ACK/IGNORED, G=" << GenMajor << '.' << GenMinor << ", ack.G=" << genMajor << '.' << genMinor << ", Sender=" << ev->Sender);
+            return;
+        }
 
         auto seqNo = record.GetSeqNo();
         auto status = record.GetStatus();
 
         if (status == NYql::NDqProto::TEvChannelAckV2::FAIL) {
-            LOG_W("FAILED, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
-            StartReconciliation(true);
+            LOG_E(LogPrefix << "FAILED, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", Msg=" << record.GetMessage());
+            StartReconciliation(true, 'F');
             return;
         }
 
-        if (PeerActorId == NActors::TActorId{}) {
-            PeerActorId = ev->Sender;
-            LOG_D("NODE PEER SET BY ACK, " << NodeActorId << " to " << PeerActorId);
+        if (InputNodeActorId == NActors::TActorId{}) {
+            InputNodeActorId = ev->Sender;
+            LOG_D(LogPrefix << "PEER/ACK, InputNodeActorId=" << ev->Sender);
         }
 
         if (seqNo > SeqNo) {
-            LOG_W("LARGE SEQ_NO, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", NodeActorId=" << NodeActorId << " from peer " << ev->Sender);
-            StartReconciliation(true);
+            LOG_W(LogPrefix << "SEQ/LARGE, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo);
+            StartReconciliation(true, 'L');
             return;
         }
 
@@ -1391,82 +2101,90 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             if (item->Descriptor->GenMajor.load() != GenMajor) {
                 item->Descriptor->AbortChannel(TStringBuilder() << "By Outdated GenMajor " << item->Descriptor->GenMajor.load() << " vs " << GenMajor);
             }
-            deltaBytes += item->Data.Bytes;
-            *OutputBufferInflightBytes -= item->Data.Bytes;
-            (*OutputBufferInflightMessages)--;
+            deltaBytes += ReleaseInflight(*item);
+            ReleasedItems.push_back(std::move(item));
             Queue.pop_front();
+            LastQueueProgress.store(now);
         }
 
         if (Queue.empty()) {
             if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
-                LOG_W("CAN'T RESEND, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
-                StartReconciliation(true);
+                LOG_W(LogPrefix << "SEQ/CANTRESEND, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo);
+                StartReconciliation(true, 'N');
                 return;
             }
         } else {
             auto& item = Queue.front();
 
-            if (item->SeqNo != seqNo) {
-                // allow outdates/old acks
-                if (seqNo > item->SeqNo) {
-                    LOG_W("SEQ_NO DESYNC, SeqNo=" << seqNo << ", item.SeqNo=" << item->SeqNo << ", " << NodeActorId << " from peer " << ev->Sender);
-                    StartReconciliation(true);
-                    return;
-                }
-            } else {
+            // An ack behind the front is the discovery reply of a major reconciliation, which renumbered the
+            // queue from 1 while the peer still reports its own ConfirmedSeqNo: the block below resends it.
+            if (item->SeqNo == seqNo) {
                 if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
-                    // if we're reconcilating, ignore next RESENDs
-                    if (record.GetGenMinor() == GenMinor) {
-                        LOG_W("RESEND DATA, SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << PeerActorId);
-                        StartReconciliation(false);
+                    // The 2 senders of a RESEND are told apart by the cookie they echo: a gap answer echoes
+                    // the SeqNo of the data it answers, never 0, and asks to resend from this item; a
+                    // discovery reply echoes the 0 of SendDiscovery and reports this item as the last one
+                    // confirmed.
+                    if (ev->Cookie != 0) {
+                        LOG_W(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo);
+                        StartReconciliation(false, 'R');
+                        return;
                     }
-                    return;
-                }
-
-                if (!item->Descriptor->IsTerminatedOrAborted()) {
-                    if (item->Descriptor->CheckGenMajor(GenMajor, "by Ack")) {
-                        if (status == NYql::NDqProto::TEvChannelAckV2::ERROR) {
-                            item->Descriptor->AbortChannel("(Peer) " + record.GetMessage());
-                        } else {
-                            auto earlyFinished = record.GetEarlyFinished();
-                            auto popBytes = record.GetPopBytes();
-                            if (earlyFinished || popBytes) {
-                                item->Descriptor->HandleUpdate(earlyFinished, popBytes, this, item->Descriptor);
-                            }
-                        }
+                    // a retried discovery is answered twice, the 2nd reply may come after the reconciliation
+                    if (Reconciliation.load()) {
+                        LOG_D(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo << " confirmed by discovery");
+                    } else {
+                        LOG_W(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo << " confirmed by a late discovery reply");
                     }
                 }
 
-                deltaBytes += item->Data.Bytes;
-                *OutputBufferInflightBytes -= item->Data.Bytes;
-                (*OutputBufferInflightMessages)--;
+                // The progress of a channel comes with TEvChannelUpdateV2 only, EarlyFinished and PopBytes of the
+                // ack are ignored: TOutputDescriptor::HandleUpdate may not run here, under Mutex, as it pushes
+                // through TNodeState::PushDataChunk, which takes Mutex again
+                if (item->Descriptor->CheckGenMajor(GenMajor, "by Ack") && status == NYql::NDqProto::TEvChannelAckV2::ERROR
+                    && !item->Descriptor->EarlyFinished) {
+                    item->Descriptor->AbortChannel("(Peer) " + record.GetMessage());
+                }
+
+                deltaBytes += ReleaseInflight(*item);
+                ReleasedItems.push_back(std::move(item));
                 Queue.pop_front();
+                LastQueueProgress.store(now);
             }
         }
 
         if (Reconciliation.exchange(0) > 0) {
             ReconciliationCount = 0;
-            ReconciliationDelay = TDuration::Zero();
-            LOG_W("RECONCILED, SeqNo=" << SeqNo << ", Queue.size()=" << Queue.size() << ", deltaBytes=" << deltaBytes << ", InflightBytes=" << InflightBytes << ", " << NodeActorId << " from peer " << PeerActorId);
+            ReconSent.store(TInstant::Zero());
+            LastQueueProgress.store(now);
+            LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo << ", WQ=" << WaitersQueueSize.load() << ", InflightBytes=" << InflightBytes.load() << ", Released=" << deltaBytes);
             if (!Queue.empty()) {
-                LOG_D("DATA REPEAT, SeqNo=" << Queue.front()->SeqNo << '/' << Queue.back()->SeqNo << ", " << NodeActorId << " from peer " << PeerActorId);
-                for (auto item : Queue) {
-                    SendMessage(item);
-                    item->Descriptor->CheckGenMajor(GenMajor, TStringBuilder() << "Abort by Repeat from SeqNo=" << Queue.front()->SeqNo << ", item->SeqNo=" << item->SeqNo);
+                for (auto& item : Queue) {
+                    SendMessage(*item);
+                    ResendCount++;
+                    (*SessionMessagesResent)++;
+                    item->Descriptor->CheckGenMajor(GenMajor, [&]() {
+                        return TString(TStringBuilder() << "Abort by Repeat from SeqNo=" << Queue.front()->SeqNo << ", item->SeqNo=" << item->SeqNo);
+                    });
                 }
             }
         }
+
+        // with the window as the pops above left it: none picked means none could be sent now
+        waiter = PopWaiterLocked();
     }
 
-    SendFromWaiters(deltaBytes);
+    if (waiter) {
+        SendFromWaiters(std::move(waiter));
+    }
 }
 
 void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 
+    LastPeerActivity.store(TInstant::Now());
     auto& record = ev->Get()->Record;
 
     if (record.GetGenMajor() != GenMajor) {
-        LOG_W("UPDATE IGNORED (by Gen) GenMajor=" << GenMajor << ", update.GenMajor=" << record.GetGenMajor() << ", " << NodeActorId << " from peer " << ev->Sender);
+        LOG_W(LogPrefix << "UPDATE IGNORED/GEN, G=" << GenMajor << '.' << GenMinor << ", update.GenMajor=" << record.GetGenMajor());
         return;
     }
 
@@ -1475,8 +2193,15 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 
     auto earlyFinished = record.GetEarlyFinished();
     auto popBytes = record.GetPopBytes();
-    if (!earlyFinished && popBytes == 0) {
-        LOG_W("UPDATE IGNORED EarlyFinished=False, PopBytes=0, " << NodeActorId << " from peer " << ev->Sender);
+    auto finishing = record.GetFinishing();
+    auto memoryPressure = record.GetMemoryPressure();
+
+    // an update carrying only a memory pressure request is meaningful, do not drop it as void.
+    // The mirror case - pressure released with no progress at all - is still dropped here, which is
+    // harmless: with popBytes == 0 the channel is at the cold window anyway (see IsCold), and the
+    // release is delivered by the first update that does carry progress.
+    if (!earlyFinished && popBytes == 0 && !record.HasMemoryPressure()) {
+        LOG_W(LogPrefix << "UPDATE IGNORED/VOID, EarlyFinished=false, PopBytes=0");
         return;
     }
 
@@ -1484,26 +2209,74 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
-    auto descriptor = GetOrCreateOutputDescriptor(info, false, popBytes == 0);
+    // an update which only reports memory pressure must not create a descriptor on its own
+    auto descriptor = GetOrCreateOutputDescriptor(info, nullptr, false, popBytes == 0 && earlyFinished);
     if (!descriptor) {
-        LOG_W("UPDATE IGNORED EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes << ", " << NodeActorId << " from peer " << ev->Sender);
+        if (!finishing && (earlyFinished || popBytes)) // it's OK to miss update to confirm or to throttle
+        {
+            if (LastLostInfo != info) {
+                LOG_W(LogPrefix << "UPDATE IGNORED/LOST, ChannelId=" << info.ChannelId
+                    << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+                    << ", EF=" << earlyFinished << ", Pop=" << popBytes
+                    << ", Fi=" << finishing << ", Log=" << GetReconciliationLog());
+                LastLostInfo = info;
+            }
+        }
         return;
     }
 
-    if (!descriptor->IsTerminatedOrAborted() && descriptor->CheckGenMajor(GenMajor, "Inconsistent GenMajor in HandleUpdate")) {
-        descriptor->HandleUpdate(earlyFinished, popBytes, this, descriptor);
+    LOG_T(LogPrefix << "RECV UPDATE, ChannelId=" << info.ChannelId
+        << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+        << ", EF=" << earlyFinished << ", Pop=" << popBytes << ", Fi=" << finishing << ", MP=" << memoryPressure
+        << ", T:A=" << descriptor->Terminated.load() << ':' << descriptor->Aborted.load()
+        << ", G=" << descriptor->GenMajor.load() << ", update.G=" << GenMajor << ", Log=" << GetReconciliationLog()
+    );
+    if (!descriptor->IsTerminatedOrAborted() && descriptor->CheckGenMajor(GenMajor, [&]() {
+            return TString(TStringBuilder() << LogPrefix << "Inconsistent GenMajor in HandleUpdate " << TInstant::Now());
+        })) {
+        descriptor->HandleUpdate(earlyFinished, popBytes, finishing, memoryPressure, this, descriptor);
     }
 }
 
 void TNodeState::HandleSendWaiters(TEvPrivate::TEvSendWaiters::TPtr&) {
-   SendFromWaiters(0);
+   SendFromWaiters();
 }
 
 void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
+    std::lock_guard lock(descriptor->UpdateMutex);
+    SendUpdateProgress(descriptor);
+}
+
+void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
+
+    auto memoryPressure = descriptor->MemoryPressure.load();
+
+    // a flip of the memory pressure flag is worth an update on its own, even without any progress
+    if (!descriptor->EarlyFinished.load() && descriptor->PopStats.Bytes.load() == 0
+        && memoryPressure == descriptor->LastSentMemoryPressure) {
+        return; // noop
+    }
+
+    auto peer = ReadPeer();
+    if (!peer.ActorId) {
+        // pairs with the fence in ResendUpdates: either this sees the peer or the resend sees the update
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        peer = ReadPeer();
+    }
+    if (!peer.ActorId) {
+        // sent after the discovery, by ResendUpdates or the next pop; a send to nobody would spend FlagSubscribeOnSession
+        return;
+    }
+
+    descriptor->LastSentMemoryPressure = memoryPressure;
+    if (memoryPressure) {
+        (*InputBufferPressureReports)++;
+    }
+
     auto evUpdate = MakeHolder<TEvDqCompute::TEvChannelUpdateV2>();
 
-    evUpdate->Record.SetGenMajor(PeerGenMajor.load());
-    evUpdate->Record.SetGenMinor(PeerGenMinor.load());
+    evUpdate->Record.SetGenMajor(peer.GenMajor);
+    evUpdate->Record.SetGenMinor(peer.GenMinor);
     // evUpdate->Record.SetSeqNo(ConfirmedSeqNo);
 
     NActors::ActorIdToProto(descriptor->Info.OutputActorId, evUpdate->Record.MutableSrcActorId());
@@ -1512,89 +2285,165 @@ void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
 
     evUpdate->Record.SetEarlyFinished(descriptor->EarlyFinished.load());
     evUpdate->Record.SetPopBytes(descriptor->PopStats.Bytes.load());
-
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-    if (!Subscribed.exchange(true)) {
-        flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
+    evUpdate->Record.SetFinishing(descriptor->Finishing.load());
+    // set only when there is pressure, so that HasMemoryPressure() on the sender means exactly
+    // "the peer asks to throttle" - an absent field is "no pressure", same as from an old peer
+    if (memoryPressure) {
+        evUpdate->Record.SetMemoryPressure(true);
     }
 
-    ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evUpdate.Release(), flags));
+    // it may subscribe only under SubscribeMutex: a consumer runs it off the session thread and Mutex, see HandlePoison
+    std::unique_lock subscribeLock(SubscribeMutex, std::defer_lock);
+    if (!Subscribed.load()) {
+        subscribeLock.lock();
+    }
+    ui32 flags = subscribeLock.owns_lock() ? SendFlags(DqIcChannelControl) : TrackFlags(DqIcChannelControl);
+
+    LOG_T(LogPrefix << "SEND UPDATE, ChannelId=" << descriptor->Info.ChannelId
+        << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
+        << ", EarlyFinished=" << descriptor->EarlyFinished.load() << ", PopBytes=" << descriptor->PopStats.Bytes.load()
+        << ", Finishing=" << descriptor->Finishing.load() << ", MemoryPressure=" << memoryPressure);
+
+    ActorSystem->Send(new NActors::IEventHandle(peer.ActorId, NodeActorId, evUpdate.Release(), flags));
 }
 
-std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const TChannelFullInfo& info, bool bound, bool leading) {
+std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading) {
     std::lock_guard lock(Mutex);
     auto it = OutputDescriptors.find(info);
     if (it != OutputDescriptors.end()) {
         auto result = it->second;
         if (bound) {
+            std::lock_guard lock(result->FlowControlMutex);
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
+            result->SetQuotaManager(std::move(quotaManager));
             ActorSystem->Send(result->Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
         return result;
     }
 
     if (!bound && !leading) {
+        LOG_T(LogPrefix << "OD NOT FOUND, ChannelId=" << info.ChannelId
+            << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+            << ", OD=" << OutputDescriptors.size());
         return {};
     }
 
-    auto result = std::make_shared<TOutputDescriptor>(info, ActorSystem, OutputBufferBytes, OutputBufferChunks, Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10);
+    auto result = std::make_shared<TOutputDescriptor>(info, quotaManager, ActorSystem, OutputBufferBytes, OutputBufferChunks, OutputBufferThrottledCount,
+        Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10, Limits.RemoteChannelColdInflightBytes);
     OutputDescriptors.emplace(info, result);
     (*OutputBufferCount)++;
     if (bound) {
         result->IsBound = true;
     } else {
-        UnboundOutputs.emplace(info, TInstant::Now() + UnboundWaitPeriod);
+        UnboundOutputs.emplace(info, TInstant::Now() + Limits.UnboundWaitPeriod);
     }
+    LOG_T(LogPrefix << "OD CREATE, ChannelId=" << result->Info.ChannelId
+        << ", OA=" << result->Info.OutputActorId << ", IA=" << result->Info.InputActorId
+    );
     return result;
 }
 
-std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const TChannelFullInfo& info, bool bound, bool leading) {
+std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading) {
     std::lock_guard lock(Mutex);
     auto it = InputDescriptors.find(info);
     if (it != InputDescriptors.end()) {
         auto result = it->second;
         if (bound) {
+            std::lock_guard lock(result->QueueMutex);
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
+            if (result->QuotaManager) {
+                result->QuotaManager->FreeQuota(result->QueueBytes);
+            }
+            if (quotaManager && !quotaManager->AllocateQuota(result->QueueBytes, /* isOptional = */ false)) {
+                result->AbortChannelByMemoryLimit(result->QueueBytes, quotaManager);
+                quotaManager = nullptr;
+            }
+            result->QuotaManager = quotaManager;
+            result->RefreshMemoryPressure();
             ActorSystem->Send(result->Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
         return result;
     }
 
     if (!bound && !leading) {
+        LOG_T(LogPrefix << "ID NOT FOUND, ChannelId=" << info.ChannelId
+            << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+        );
         return {};
     }
 
-    auto result = std::make_shared<TInputDescriptor>(info, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes);
+    auto result = std::make_shared<TInputDescriptor>(info, quotaManager, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes,
+        Limits.EnableSpillingChannelBackpressure);
     InputDescriptors.emplace(info, result);
     (*InputBufferCount)++;
     if (bound) {
         result->IsBound = true;
     } else {
-        UnboundInputs.emplace(info, TInstant::Now() + UnboundWaitPeriod);
+        UnboundInputs.emplace(info, TInstant::Now() + Limits.UnboundWaitPeriod);
     }
+    LOG_T(LogPrefix << "ID CREATE, ChannelId=" << result->Info.ChannelId
+        << ", OA=" << result->Info.OutputActorId << ", IA=" << result->Info.InputActorId
+    );
     return result;
 }
 
 void TNodeState::TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor) {
     descriptor->Terminate();
     std::lock_guard lock(Mutex);
-    OutputDescriptors.erase(descriptor->Info);
-    (*OutputBufferCount)--;
+    LOG_T(LogPrefix << "OD ERASE/TERM, ChannelId=" << descriptor->Info.ChannelId
+        << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
+        << ", EF=" << descriptor->EarlyFinished.load()
+        << ", FP=" << descriptor->FinishPushed.load() << ", F=" << descriptor->Finished.load()
+        << ", Push=" << descriptor->PushBytes.load()
+        << ", RPop=" << descriptor->RemotePopBytes.load()
+    );
+    // FailOutputs erases the descriptor of an aborted channel while its buffer lives on, and an update of
+    // the peer reporting an early finish creates another under the same Info (HandleUpdate): erasing by
+    // key would drop that live one and take the sensor down for a descriptor this call does not own.
+    if (auto it = OutputDescriptors.find(descriptor->Info); it != OutputDescriptors.end() && it->second == descriptor) {
+        OutputDescriptors.erase(it);
+        (*OutputBufferCount)--;
+    }
+    if (Limits.IdleDestroyPeriod == TDuration::Zero() && InputDescriptors.empty() && OutputDescriptors.empty()) {
+        Terminating.store(true);
+        ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
+            new TEvPrivate::TEvFreeNodeSession(NodeId)));
+    }
 }
 
 void TNodeState::TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor) {
     std::lock_guard lock(Mutex);
-    InputDescriptors.erase(descriptor->Info);
-    (*InputBufferCount)--;
+    LOG_T(LogPrefix << "ID ERASE/TERM, ChannelId=" << descriptor->Info.ChannelId
+        << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
+        << ", EarlyFinished=" << descriptor->EarlyFinished.load() << ", PopBytes=" << descriptor->PopStats.Bytes.load()
+        << ", Finishing=" << descriptor->Finishing.load() << ", Finished=" << descriptor->Finished.load()
+    );
+    // Erased by FailInputs or by the ID ERASE/GEN path, and matched by identity as for outputs above; here
+    // it is the peer resending the leading message of the channel which creates another under the Info.
+    if (auto it = InputDescriptors.find(descriptor->Info); it != InputDescriptors.end() && it->second == descriptor) {
+        InputDescriptors.erase(it);
+        (*InputBufferCount)--;
+    }
+    if (Limits.IdleDestroyPeriod == TDuration::Zero() && InputDescriptors.empty() && OutputDescriptors.empty()) {
+        Terminating.store(true);
+        ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
+            new TEvPrivate::TEvFreeNodeSession(NodeId)));
+    }
 }
 
-void TNodeState::CleanupUnbound() {
-    std::lock_guard lock(Mutex);
+void TNodeState::HandleCleanup() {
     auto now = TInstant::Now();
+
+    if ((now - LastCleanup) < Limits.CleanupPeriod || Reconciliation.load()) {
+        return;
+    }
+    LastCleanup = now;
+
+    std::lock_guard lock(Mutex);
     while (!UnboundInputs.empty()) {
         auto& front = UnboundInputs.front();
         if (front.second > now) {
@@ -1602,7 +2451,13 @@ void TNodeState::CleanupUnbound() {
         }
         if (auto it = InputDescriptors.find(front.first); it != InputDescriptors.end()) {
             if (!it->second->IsBound) {
+                LOG_T(LogPrefix << "ID ERASE/UNBOUND, ChannelId=" << it->second->Info.ChannelId
+                    << ", OA=" << it->second->Info.OutputActorId << ", IA=" << it->second->Info.InputActorId
+                    << ", EarlyFinished=" << it->second->EarlyFinished.load() << ", PopBytes=" << it->second->PopStats.Bytes.load()
+                    << ", Finishing=" << it->second->Finishing.load() << ", Finished=" << it->second->Finished.load()
+                );
                 InputDescriptors.erase(it);
+                (*InputBufferCount)--;
             }
         }
         UnboundInputs.pop();
@@ -1615,170 +2470,197 @@ void TNodeState::CleanupUnbound() {
         if (auto it = OutputDescriptors.find(front.first); it != OutputDescriptors.end()) {
             if (!it->second->IsBound) {
                 OutputDescriptors.erase(it);
+                (*OutputBufferCount)--;
             }
         }
         UnboundOutputs.pop();
     }
+
+    auto idlePeriod = now - LastPeerActivity.load();
+    // One session covers both directions, so the traffic of the peer does not say whether our own sending
+    // has stalled, and nothing else notices a stuck queue: the receiver drops stale data silently and every
+    // other trigger needs an ack, a bounce or a dropped link. The last message of a channel may still be
+    // queued after the channel is gone, so this is asked with or without descriptors.
+    const bool queueStuck = !Queue.empty() && now - LastQueueProgress.load() > Limits.IdlePingPeriod;
+
+    if (OutputDescriptors.empty() && InputDescriptors.empty() && Queue.empty()) {
+        // is the session still in use: a question about the peer, which its traffic answers
+        if (idlePeriod > Limits.IdleDestroyPeriod) {
+            Terminating.store(true);
+            ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
+                new TEvPrivate::TEvFreeNodeSession(NodeId)));
+        }
+    } else if (queueStuck || idlePeriod > Limits.IdlePingPeriod) {
+        // With nothing stuck it is the 1st question again: a peer which freed its session with the link up
+        // sends no disconnect, and the discovery makes it announce itself for ConnectSession to fail those
+        // channels rather than leave them hanging.
+        StartReconciliation(false, 'I');
+        // A quiet peer may be a sender blocked by an update it never got: the ping of this side carries
+        // the updates too, as the answer to its ping does. The pings of the two sides refresh each other's
+        // activity, so whichever asks first may be the only one to ask.
+        ResendUpdates();
+    }
+
 }
 
 void TNodeState::HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&) {
     // NOOP
 }
 
-void TNodeState::HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev) {
-    if (ev->Get()->GenMajor == Reconciliation.load() /* GenMajor */ && ev->Get()->GenMinor == GenMinor) {
-        std::lock_guard lock(Mutex);
+// All reconciliation activity is processed from NodeStateActor event loop, thus it is single threaded and need
+// no additional synchronization. Other (sender actor's) threads look for Reconciliation atomic only and wait
+// for reconciliation to finish. But common use fields like Queue are still used from sender thread and require
+// some kind of synchronization
 
-        if (ReconciliationDelay >= MaxReconciliationDelay && !ReReconciliation) {
-            ReReconciliation = true;
-            PeerActorId = NActors::TActorId{};
-            GenMajor++;
-            GenMinor = 1;
-            SeqNo = 0;
-        }
-        UpdateReconciliationDelay();
-        DoReconciliation();
-        ScheduleReconciliation();
+void TNodeState::HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev) {
+    auto& msg = *ev->Get();
+    if (msg.GenMajor == Reconciliation.load() /* GenMajor */ && msg.GenMinor == GenMinor  && msg.Count == ReconciliationCount) {
+        TReleaseGuard release{*this};
+        std::lock_guard lock(Mutex);
+        DoReconciliation('T');
     }
 }
 
-void TNodeState::StartReconciliation(bool major) {
-    if (Reconciliation.load() == 0) {
+void TNodeState::StartReconciliation(bool major, char logSymbol) {
+    if (Reconciliation.load() == 0 || (major && (GenMinor > 1))) {
+        ReconCount++;
+        (*SessionReconciliations)++;
         if (major) {
             GenMajor++;
             GenMinor = 1;
             SeqNo = 0;
+            InputNodeActorId = NActors::TActorId{};
         } else {
             GenMinor++;
         }
-
-        ReReconciliation = false;
         Reconciliation.store(GenMajor);
-
-        if (!UpdateReconciliationDelay()) {
-            DoReconciliation();
-        }
-        ScheduleReconciliation();
-    }
-}
-
-bool TNodeState::UpdateReconciliationDelay() {
-    if (ReconciliationDelay) {
-        if (ReconciliationDelay < MaxReconciliationDelay) {
-            ReconciliationDelay *= 2;
-        }
-        return true;
+        ReconciliationCount = 0;
+        DoReconciliation(logSymbol);
     } else {
-        ReconciliationDelay = MinReconciliationDelay;
-        return false;
+        AddReconciliationLog('-');
+        AddReconciliationLog(logSymbol);
     }
 }
 
-void TNodeState::ScheduleReconciliation() {
-    ActorSystem->Schedule(ReconciliationDelay, new NActors::IEventHandle(NodeActorId, NodeActorId, new TEvPrivate::TEvReconciliation(GenMajor, GenMinor)));
+void TNodeState::AddReconciliationLog(char logSymbol) {
+    if (ReconciliationLog.size() >= ReconciliationLogSize) {
+        ReconciliationLog.pop_front();
+    }
+    ReconciliationLog.push_back(logSymbol);
 }
 
-void TNodeState::DoReconciliation() {
-
-    ReconciliationCount++;
-    if (ReconciliationCount > 1) {
-        LOG_W("NODE RECONCILIATION x" << ReconciliationCount << ", to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId
-            << ", Gen=" << GenMajor << '.' << GenMinor << ", Next Delay=" << ReconciliationDelay);
-    } else {
-        LOG_I("NODE RECONCILIATION, to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId
-            << ", Queue" << (Queue.empty() ? " IS EMPTY" : ".front().SeqNo=" + ToString(Queue.front()->SeqNo))
-            << ", Gen=" << GenMajor << '.' << GenMinor << ", Next Delay=" << ReconciliationDelay);
+TString TNodeState::GetReconciliationLog() {
+    TStringBuilder builder;
+    for (auto s : ReconciliationLog) {
+        builder << s;
     }
+    return builder;
+}
 
-    ui32 delta = 0;
-
-    std::deque<std::shared_ptr<TOutputItem>> RebuildedQueue;
-
-    auto seqNo = SeqNo;
-
-    while (!Queue.empty()) {
-
-        auto& item = Queue.front();
-
-        if (item->Data.Leading) {
-            item->Descriptor->GenMajor.store(GenMajor);
-            LOG_W("CHANGE GenMajor to " << GenMajor << " for OutputDescriptor "
-                << "Channel: " << item->Descriptor->Info.ChannelId
-                << ", SrcStageId: " << item->Descriptor->Info.SrcStageId
-                << ", DstStageId: " << item->Descriptor->Info.DstStageId);
-        }
-
-        if (Queue.front()->Descriptor->CheckGenMajor(GenMajor, "Abort by Reconciliation")) {
-            item->SeqNo = ++SeqNo;
-            RebuildedQueue.push_back(std::move(item));
+void TNodeState::DoReconciliation(char logSymbol) {
+    AddReconciliationLog(logSymbol);
+    if (ReconciliationCount >= Limits.ReconciliationCount) {
+        // nothing to deliver: a push during a reconciliation waits in its descriptor, not in the queue
+        if (Queue.empty() && WaitersQueueSize.load() == 0 && LastPeerActivity.load() > ReconSent.load()) {
+            // The peer heard from since the last discovery is alive, only slow to answer. Giving up
+            // would fail its channels to this node for nothing, the probe goes on instead, its timeout
+            // doubling as before up to MaxReconciliationTimeout.
+            AddReconciliationLog('K');
+            LOG_W(LogPrefix << "RECONCILIATION x" << ReconciliationCount << " unanswered by a peer which is heard from, G="
+                << GenMajor << '.' << GenMinor << ", Log=" << GetReconciliationLog());
         } else {
-            delta += Queue.front()->Data.Bytes;
+            // give up and request destroy
+            AddReconciliationLog('X');
+            LOG_E(LogPrefix << "RECONCILIATION FAILURE x" << ReconciliationCount);
+            Terminating.store(true);
+            FailDescriptors(TStringBuilder() << "Node session terminated, the peer has not answered "
+                << ReconciliationCount << " discoveries in a row");
+            ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
+                new TEvPrivate::TEvFreeNodeSession(NodeId)));
+            return;
         }
-
-        Queue.pop_front();
     }
-    Queue.swap(RebuildedQueue);
+    ReconciliationCount++;
 
-    InflightBytes -= delta;
+    auto reconciliationTimeout = std::min(ReconciliationTimeout * (1ULL << std::min<ui64>(ReconciliationCount - 1, 20)), MaxReconciliationTimeout);
+    auto reconciliationLog = GetReconciliationLog();
+    if (ReconciliationCount > 1) {
+        LOG_W(LogPrefix << "RECONCILIATION x" << ReconciliationCount << ", G=" << GenMajor << '.' << GenMinor
+            << ", Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo
+            << ", WQ=" << WaitersQueueSize.load() << ", Log=" << reconciliationLog);
+    } else {
+        LOG_D(LogPrefix << "RECONCILIATION, G=" << GenMajor << '.' << GenMinor
+            << ", Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo
+            << ", WQ=" << WaitersQueueSize.load() << ", Log=" << reconciliationLog);
+    }
 
-    SendDiscovery(PeerActorId ? PeerActorId : MakeChannelServiceActorID(NodeId), seqNo);
+    // rebuilt on the 1st attempt of a major reconciliation only: the queue is frozen between the attempts,
+    // and renumbering it again would count past what the peer, back at ConfirmedSeqNo 0, can ask for
+    if (GenMinor == 1 && ReconciliationCount == 1) {
+        std::deque<std::shared_ptr<TOutputItem>> RebuiltQueue;
+        while (!Queue.empty()) {
+
+            auto& item = Queue.front();
+
+            if (item->Leading) {
+                auto prevGenMajor = item->Descriptor->GenMajor.exchange(GenMajor);
+                if (prevGenMajor != GenMajor) {
+                    LOG_W(LogPrefix << "CHANGE OD G=" << prevGenMajor << " to " << GenMajor << " by RECONCILIATION"
+                        << " Channel: " << item->Descriptor->Info.ChannelId
+                        << ", SrcStageId: " << item->Descriptor->Info.SrcStageId
+                        << ", DstStageId: " << item->Descriptor->Info.DstStageId
+                        << ", Log=" << reconciliationLog);
+                }
+            }
+
+            if (item->Descriptor->CheckGenMajor(GenMajor, [&]() { return TString(TStringBuilder() << "Abort by Reconciliation, Log=" << reconciliationLog); })) {
+                item->SeqNo = ++SeqNo;
+                RebuiltQueue.push_back(std::move(item));
+            } else {
+                ReleaseInflight(*item);
+                ReleasedItems.push_back(std::move(item));
+            }
+
+            Queue.pop_front();
+        }
+        Queue.swap(RebuiltQueue);
+    }
+
+    SendDiscovery();
+    ReconSent.store(TInstant::Now());
+    ActorSystem->Schedule(reconciliationTimeout,
+        new NActors::IEventHandle(NodeActorId, NodeActorId, new TEvPrivate::TEvReconciliation(GenMajor, GenMinor, ReconciliationCount)));
 }
 
-void TNodeState::SendDiscovery(NActors::TActorId actorId, ui64 seqNo) {
+void TNodeState::SendDiscovery() {
     auto evDiscovery = MakeHolder<TEvDqCompute::TEvChannelDiscoveryV2>();
 
     evDiscovery->Record.SetGenMajor(GenMajor);
     evDiscovery->Record.SetGenMinor(GenMinor);
-    evDiscovery->Record.SetSeqNo(seqNo);
+    evDiscovery->Record.SetSeqNo(SeqNo);
 
-    ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
-    if (!Subscribed.exchange(true)) {
-        flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
-    }
+    ui32 flags = SendFlags(DqIcChannelData);
 
-    ActorSystem->Send(new NActors::IEventHandle(actorId, NodeActorId, evDiscovery.Release(), flags));
-}
-
-TString TNodeState::GetDebugInfo() {
-    std::lock_guard lock(Mutex);
-    TStringBuilder builder;
-
-    builder << "TNodeState, NodeId=" << NodeActorId.NodeId() << ", Peer NodeId=" << PeerActorId.NodeId()
-        << ", SeqNo=" << SeqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << ", InflightBytes=" << InflightBytes
-        << ", Reconciliation=" << Reconciliation.load()
-        << Endl;
-
-    for (auto& [info, descriptor] : OutputDescriptors) {
-        builder << "  Output " << info.ChannelId << ", FL=" << (ui32)descriptor->FillLevel
-            << ", IF:" << descriptor->IsFinished() << ", TA=" << descriptor->IsTerminatedOrAborted()
-            << ", EF: " << descriptor->EarlyFinished.load()
-            << ", PP:" << descriptor->PushBytes.load() << ':' << descriptor->RemotePopBytes.load() << Endl;
-    }
-    for (auto& [info, descriptor] : InputDescriptors) {
-        builder << "  Input " << info.ChannelId << ", Empty=" << descriptor->IsEmpty()
-            << ", Queue.size()=" << descriptor->GetQueueSize() << Endl;
-    }
-
-    std::unordered_map<TChannelInfo, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
-
-    return builder;
+    // the cookie 0 is what the reply echoes, and how HandleAck tells it from a gap RESEND
+    ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeId), NodeActorId, evDiscovery.Release(), flags, 0));
 }
 
 void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     auto& record = ev->Get()->Record;
 
-    PeerGenMinor.store(std::max<ui64>(record.GetGenMinor(), PeerGenMinor.load()));
+    OutputNodeGenMinor.store(record.GetGenMinor());
+    PublishPeer();
 
     auto seqNo = record.GetSeqNo();
 
-    ConfirmedSeqNo = seqNo;
+    ConfirmedSeqNo.store(seqNo, std::memory_order_relaxed);
 
     TChannelFullInfo info(record.GetChannelId(),
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
-    auto descriptor = GetOrCreateInputDescriptor(info, false, record.GetLeading());
+    auto descriptor = GetOrCreateInputDescriptor(info, nullptr, false, record.GetLeading());
     if (!descriptor) {
         // do not auto create if not leading and fail sender
         SendAckWithError(ev->Cookie, "[TDebugNodeState] Can't find peer for not leading message");
@@ -1789,19 +2671,34 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
-    evAck->Record.SetGenMajor(PeerGenMajor.load());
-    evAck->Record.SetGenMinor(PeerGenMinor.load());
+    evAck->Record.SetGenMajor(OutputNodeGenMajor.load());
+    evAck->Record.SetGenMinor(OutputNodeGenMinor.load());
     evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::OK);
-    evAck->Record.SetSeqNo(ConfirmedSeqNo);
+    evAck->Record.SetSeqNo(seqNo);
 
     NActors::ActorIdToProto(info.OutputActorId, evAck->Record.MutableSrcActorId());
     NActors::ActorIdToProto(info.InputActorId, evAck->Record.MutableDstActorId());
     evAck->Record.SetChannelId(info.ChannelId);
 
-    // evAck->Record.SetEarlyFinished(descriptor->IsEarlyFinished());
-    evAck->Record.SetPopBytes(descriptor->PopStats.Bytes.load());
-
     SendAck(evAck, ev->Cookie);
+    // an ack carries no progress, see HandleAck
+    UpdateProgress(descriptor);
+}
+
+void TDebugNodeState::OnWaiterDequeued() {
+    if (!HoldWaiterDequeue.load()) {
+        return;
+    }
+    WaiterDequeueHeld.store(true);
+    auto deadline = TInstant::Now() + TDuration::Seconds(10);
+    while (HoldWaiterDequeue.load() && TInstant::Now() < deadline) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
+}
+
+void TDebugNodeState::StartSession() {
+    ActorSystem->Send(new NActors::IEventHandle(NodeActorId, NodeActorId,
+        new TEvPrivate::TEvReconciliation(GenMajor, GenMinor, ReconciliationCount)));
 }
 
 void TDebugNodeState::PauseChannelData() {
@@ -1819,6 +2716,15 @@ void TDebugNodeState::PauseChannelAck() {
 
 void TDebugNodeState::ResumeChannelAck() {
     ChannelAckPaused.store(false);
+    ActorSystem->Send(new NActors::IEventHandle(NodeActorId, NodeActorId, new TEvPrivate::TEvProcessPending(0)));
+}
+
+void TDebugNodeState::PauseChannelUpdate() {
+    ChannelUpdatePaused.store(true);
+}
+
+void TDebugNodeState::ResumeChannelUpdate() {
+    ChannelUpdatePaused.store(false);
     ActorSystem->Send(new NActors::IEventHandle(NodeActorId, NodeActorId, new TEvPrivate::TEvProcessPending(0)));
 }
 
@@ -1866,19 +2772,26 @@ bool TDebugNodeState::IsNullMode() {
 }
 
 std::shared_ptr<TNodeState> TDqChannelService::GetOrCreateNodeState(ui32 nodeId) {
-    std::lock_guard lock(Mutex);
     auto it = NodeStates.find(nodeId);
     if (it != NodeStates.end()) {
-        return it->second;
-    } else {
-        auto nodeState = std::make_shared<TNodeState>(ActorSystem, nodeId, Counters, Limits);
-        nodeState->NodeActorId = ActorSystem->Register(new TNodeSessionActor(nodeState), NActors::TMailboxType::HTSwap, PoolId);
-        nodeState->Self = nodeState;
-        NodeStates.emplace(nodeId, nodeState);
-        LOG_N("NODE SESSION CREATED, to NodeId=" << nodeId << ", NodeActorId=" << nodeState->NodeActorId << ", MaxInflight=" << Limits.NodeSessionIcInflightBytes << " bytes");
-        nodeState->StartReconciliation(true);
-        return nodeState;
+        if (it->second->Terminating.load()) {
+            DropNodeSession(it, "Node session replaced with the channel still open");
+        } else {
+            return it->second;
+        }
     }
+
+    auto nodeState = std::make_shared<TNodeState>(ActorSystem, nodeId, Counters, Limits);
+    nodeState->NodeActorId = ActorSystem->Register(new TNodeSessionActor(nodeState), NActors::TMailboxType::HTSwap, PoolId);
+    nodeState->Self = nodeState;
+    nodeState->LogPrefix = TStringBuilder() << '[' << nodeState->NodeActorId.NodeId() << "=>" << nodeId << "] ";
+    NodeStates.emplace(nodeId, nodeState);
+    LOG_D(nodeState->LogPrefix << "CREATED, NodeActorId=" << nodeState->NodeActorId);
+    ActorSystem->Send(new NActors::IEventHandle(nodeState->NodeActorId, nodeState->NodeActorId, new TEvPrivate::TEvReconciliation(nodeState->GenMajor, nodeState->GenMinor, nodeState->ReconciliationCount)));
+    if (!CleanupScheduled.exchange(true)) { // we need no cleanup until very first node session
+        ActorSystem->Schedule(Limits.CleanupPeriod, new NActors::IEventHandle(ServiceActorId, ServiceActorId, new TEvPrivate::TEvCleanup()));
+    }
+    return nodeState;
 }
 
 std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 nodeId) {
@@ -1888,55 +2801,104 @@ std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 no
     auto nodeState = std::make_shared<TDebugNodeState>(ActorSystem, nodeId, Counters, Limits);
     nodeState->NodeActorId = ActorSystem->Register(new TDebugNodeSessionActor(nodeState));
     nodeState->Self = nodeState;
+    nodeState->LogPrefix = TStringBuilder() << '[' << nodeState->NodeActorId.NodeId() << "=>" << nodeId << "] ";
     NodeStates.emplace(nodeId, nodeState);
-    LOG_N("DEBUG NODE SESSION CREATED, to NodeId=" << nodeId << ", NodeActorId=" << nodeState->NodeActorId << ", MaxInflight=" << Limits.NodeSessionIcInflightBytes << " bytes");
-    nodeState->StartReconciliation(true);
+    LOG_N(nodeState->LogPrefix << "CREATED/DEBUG, NodeActorId=" << nodeState->NodeActorId);
+    // Discovering here would make the service of the peer create a session of its own, failing the
+    // Y_ENSURE above for a test which means to register a debug session there too.
+    if (!CleanupScheduled.exchange(true)) { // as GetOrCreateNodeState does, or this session gets no cleanup
+        ActorSystem->Schedule(Limits.CleanupPeriod, new NActors::IEventHandle(ServiceActorId, ServiceActorId, new TEvPrivate::TEvCleanup()));
+    }
     return nodeState;
+}
+
+void TDqChannelService::FreeNodeSession(ui32 nodeId, NActors::TActorId sender) {
+    std::lock_guard lock(Mutex);
+    if (auto it = NodeStates.find(nodeId); it != NodeStates.end()) {
+        auto& nodeState = it->second;
+        if (nodeState->NodeActorId == sender && nodeState->Terminating.load()) {
+            DropNodeSession(it, "Node session freed with the channel still open");
+        }
+    }
+}
+
+// A buffer bound to the session keeps it alive after this, but nothing reaches it any more: the peer
+// talks to the session which takes its place. Whatever is still bound is failed, see HandlePoison.
+void TDqChannelService::DropNodeSession(std::unordered_map<ui32, std::shared_ptr<TNodeState>>::iterator it, const TString& reason) {
+    auto& nodeState = it->second;
+    {
+        std::lock_guard lock(nodeState->Mutex);
+        nodeState->DropReason = reason;
+    }
+    ActorSystem->Send(nodeState->NodeActorId, new NActors::TEvents::TEvPoison());
+    NodeStates.erase(it);
+}
+
+// The receiving half of the session is the actor's alone, HandleChannelData writes it without Mutex: the
+// descriptors are failed by the actor itself, behind whatever its mailbox still holds
+void TNodeState::HandlePoison() {
+    std::lock_guard lock(Mutex);
+    FailDescriptors(DropReason ? DropReason : "Node session poisoned with the channel still open");
+    // a dead subscriber lingers until the hourly liveness check. Subscribed stays set so that later sends do not
+    // resubscribe; an update which has taken the flag holds SubscribeMutex until it is sent
+    std::lock_guard subscribeLock(SubscribeMutex);
+    if (Subscribed.exchange(true)) {
+        ActorSystem->Send(new NActors::IEventHandle(ActorSystem->InterconnectProxy(NodeId), NodeActorId,
+            new NActors::TEvents::TEvUnsubscribe()));
+    }
 }
 
 // unbinded stubs
 
-std::shared_ptr<IChannelBuffer> TDqChannelService::GetUnbindedBuffer(const TChannelFullInfo& info) {
+std::shared_ptr<IChannelBuffer> TDqChannelService::GetUnboundBuffer(const TChannelFullInfo& info) {
     return std::make_shared<TChannelStub>(info);
 }
 
 // binded helpers
 
-std::shared_ptr<IChannelBuffer> TDqChannelService::GetOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) {
+std::shared_ptr<IChannelBuffer> TDqChannelService::GetOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage) {
     Y_ENSURE(info.OutputActorId.NodeId() == NodeId);
-    return (info.InputActorId.NodeId() == NodeId) ? GetLocalBuffer(info, false, storage) : GetRemoteOutputBuffer(info, storage);
+    return (info.InputActorId.NodeId() == NodeId) ? GetLocalBuffer(info, quotaManager, false, storage) : GetRemoteOutputBuffer(info, quotaManager, storage);
 }
 
-std::shared_ptr<IChannelBuffer> TDqChannelService::GetInputBuffer(const TChannelFullInfo& info) {
+std::shared_ptr<IChannelBuffer> TDqChannelService::GetInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) {
     Y_ENSURE(info.InputActorId.NodeId() == NodeId);
-    return (info.OutputActorId.NodeId() == NodeId) ? GetLocalBuffer(info, true, nullptr) : GetRemoteInputBuffer(info);
+    return (info.OutputActorId.NodeId() == NodeId) ? GetLocalBuffer(info, quotaManager, true, nullptr) : GetRemoteInputBuffer(info, quotaManager);
+}
+
+// binding
+
+void TDqChannelService::SetServiceActorId(NActors::TActorId serviceActorId) {
+    ServiceActorId = serviceActorId;
 }
 
 // remote buffers
 
-std::shared_ptr<TOutputBuffer> TDqChannelService::GetRemoteOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) {
+std::shared_ptr<TOutputBuffer> TDqChannelService::GetRemoteOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage) {
     Y_ENSURE(info.InputActorId.NodeId() != NodeId);
+    std::lock_guard lock(Mutex);
     auto nodeState = GetOrCreateNodeState(info.InputActorId.NodeId());
-    auto descriptor = nodeState->GetOrCreateOutputDescriptor(info, true, true);
+    auto descriptor = nodeState->GetOrCreateOutputDescriptor(info, quotaManager, true, true);
     if (storage) {
         descriptor->BindStorage(descriptor, nodeState, storage);
     }
     return std::make_shared<TOutputBuffer>(nodeState, descriptor);
 }
 
-std::shared_ptr<TInputBuffer> TDqChannelService::GetRemoteInputBuffer(const TChannelFullInfo& info) {
+std::shared_ptr<TInputBuffer> TDqChannelService::GetRemoteInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) {
     Y_ENSURE(info.OutputActorId.NodeId() != NodeId);
+    std::lock_guard lock(Mutex);
     auto nodeState = GetOrCreateNodeState(info.OutputActorId.NodeId());
-    return std::make_shared<TInputBuffer>(nodeState, nodeState->GetOrCreateInputDescriptor(info, true, true));
+    return std::make_shared<TInputBuffer>(nodeState, nodeState->GetOrCreateInputDescriptor(info, quotaManager, true, true));
 }
 
 // local buffer
 
-std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannelFullInfo& info, bool bindInput, IDqChannelStorage::TPtr storage) {
+std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bindInput, IDqChannelStorage::TPtr storage) {
     Y_ENSURE(info.OutputActorId.NodeId() == NodeId);
     Y_ENSURE(info.InputActorId.NodeId() == NodeId);
 
-    auto buffer = LocalBufferRegistry->GetOrCreateLocalBuffer(LocalBufferRegistry, info);
+    auto buffer = LocalBufferRegistry->GetOrCreateLocalBuffer(LocalBufferRegistry, info, quotaManager);
     if (bindInput) {
         buffer->BindInput();
     } else {
@@ -1951,56 +2913,69 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannel
 // unbinded channels
 
 IDqOutputChannel::TPtr TDqChannelService::GetOutputChannel(const TDqChannelSettings& settings) {
-    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
+    auto buffer = GetUnboundBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
     return new TFastDqOutputChannel(Self, settings, buffer, false);
 }
 
 IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelSettings& settings) {
-    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
+    auto buffer = GetUnboundBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
     return new TFastDqInputChannel(Self, settings, buffer);
 }
 
-void TDqChannelService::CleanupUnbound() {
+void TDqChannelService::NotifyCleanup() {
+    LOG_T("CLEANUP");
+    ActorSystem->Schedule(Limits.CleanupPeriod, new NActors::IEventHandle(ServiceActorId, ServiceActorId, new TEvPrivate::TEvCleanup()));
     std::lock_guard lock(Mutex);
-
     for (auto& [_, nodeState] : NodeStates) {
-        nodeState->CleanupUnbound();
+        ActorSystem->Send(nodeState->NodeActorId, new TEvPrivate::TEvCleanup());
     }
-}
-
-TString TDqChannelService::GetDebugInfo() {
-    TStringBuilder builder;
-
-    builder << "TDqChannelService NodeId = " << NodeId << Endl;
-
-    for (auto& [nodeId, nodeState] : NodeStates) {
-        builder << nodeState->GetDebugInfo() << Endl;
-    }
-
-    return builder;
 }
 
 // TFastDqOutputChannel::
 
 bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) {
-    Y_UNUSED(watermark);
+    if (PausedByCheckpoint) {
+        return false;
+    }
 
     TDataChunk chunk;
-    auto popResult = Buffer->Pop(chunk) && !chunk.Buffer.Empty();
+    bool popResult = Buffer->Pop(chunk);
+    // a consumer polls its inputs mostly to find them empty: the time is taken for a pop with data and for the 1st
+    // empty one after it, so that PopTime tells since when an input has been dry without a clock read per poll
+    if (popResult || PushStats.PopResult) {
+        PushStats.PopTime = TInstant::Now();
+    }
+    PushStats.PopResult = popResult;
 
-    if (popResult) {
+    if (popResult && chunk.Checkpoint) {
+        if (Callback) {
+            Callback->TakeCheckpoint(*chunk.Checkpoint, GetChannelId());
+        }
+        Y_ENSURE(batch.RowCount() == 0);
+        // false, and the buffer may have more: the union must come back, see IDqInput::BindReadySet
+        ReadyHook.Mark();
+        return false;
+    }
+
+    if (popResult && chunk.Watermark) {
+        watermark = TInstant::MicroSeconds(chunk.Watermark->GetTimestampUs());
+        return true;
+    }
+
+    bool hasData = popResult && !chunk.Buffer.Empty();
+    if (hasData) {
         if (chunk.TransportVersion != Deserializer->TransportVersion || chunk.PackerVersion != Deserializer->PackerVersion) {
-            auto deserializer = CreateDeserializer(Deserializer->RowType, chunk.TransportVersion, chunk.PackerVersion, Nothing(), Deserializer->HolderFactory);
+            auto deserializer = CreateDeserializer(Deserializer->RowType, chunk.TransportVersion, chunk.PackerVersion, Deserializer->DatumValidationMode, Nothing(), Deserializer->HolderFactory);
             Deserializer = std::move(deserializer);
         }
         Deserializer->Deserialize(std::move(chunk.Buffer), batch);
         Y_ENSURE(batch.RowCount() > 0);
+    } else if (popResult) {
+        // a chunk without rows (the finish): false, and the buffer may have more
+        ReadyHook.Mark();
     }
 
-    PushStats.PopTime = TInstant::Now();
-    PushStats.PopResult = popResult;
-
-    return popResult;
+    return hasData;
 }
 
 void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) {
@@ -2013,11 +2988,16 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
     }
     Serializer->Buffer->Info.OutputActorId = outputActorId;
     Serializer->Buffer->Info.InputActorId = inputActorId;
-    auto buffer = service->GetOutputBuffer(Serializer->Buffer->Info, Storage);
+    auto buffer = service->GetOutputBuffer(Serializer->Buffer->Info, ChannelQuotaManager, Storage);
     if (Aggregator) {
         buffer->SetFillAggregator(Aggregator);
     }
     Serializer->Buffer = buffer;
+    if (FinishEpoch) {
+        // the stub never finishes: the bound buffer may have already
+        Serializer->Buffer->SetFinishEpoch(FinishEpoch);
+        (*FinishEpoch)++;
+    }
     Service.reset();
 }
 
@@ -2028,8 +3008,13 @@ void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
 
     Buffer->Info.OutputActorId = outputActorId;
     Buffer->Info.InputActorId = inputActorId;
-    auto buffer = service->GetInputBuffer(Buffer->Info);
+    auto buffer = service->GetInputBuffer(Buffer->Info, ChannelQuotaManager);
     Buffer = buffer;
+    if (ReadyHook) {
+        // the stub held no data: the bound buffer may have some already
+        Buffer->SetReadyHook(ReadyHook);
+        ReadyHook.Mark();
+    }
     Service.reset();
 }
 
@@ -2041,20 +3026,23 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
     if (node) {
         ui32 nodeId;
         if (TryFromString(node, nodeId)) {
-#if !defined(NDEBUG)
             auto failure = cgiParams.Get("fail");
             if (failure) {
                 if (auto it = ChannelService->NodeStates.find(nodeId); it != ChannelService->NodeStates.end()) {
-                    if (failure == "loss") {
+                    if (failure == "destroy") {
+                        it->second->Terminating.store(true);
+                        Send(new NActors::IEventHandle(SelfId(), it->second->NodeActorId, new TEvPrivate::TEvFreeNodeSession(nodeId)));
+#if !defined(NDEBUG)
+                    } else if (failure == "loss") {
                         it->second->FailureLossSend++;
                     } else if (failure == "double") {
                         it->second->FailureDoubleSend++;
                     } else if (failure == "recon") {
                         it->second->FailureReconciliation++;
+#endif
                     }
                 }
             } else
-#endif
             {
                 TStringStream response;
                 response << "HTTP/1.1 307 Temporary Redirect\r\n";
@@ -2087,6 +3075,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH_ATTRS({{"title", "InputBound"}}) {str << "I";}
                         TABLEH_ATTRS({{"title", "IsFinished"}}) {str << "F";}
                         TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
+                        TABLEH_ATTRS({{"title", "This node is under memory pressure"}}) {str << "MP";}
                         TABLEH() {str << "PushBytes";}
                         TABLEH() {str << "PopBytes";}
                         TABLEH() {str << "OutputNotificationTime";}
@@ -2100,11 +3089,39 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                     }
                 }
                 TABLEBODY() {
-                    auto registry = ChannelService->LocalBufferRegistry;
-                    std::lock_guard lock(registry->Mutex);
-                    for (auto& [info, weakBuffer] : registry->LocalBuffers) {
-                        auto sharedBuffer = weakBuffer.lock();
-                        if (sharedBuffer) {
+                    // collected under the registry lock and rendered without it: the page may become the last
+                    // owner of a buffer, and ~TLocalBuffer takes the registry lock
+                    std::vector<std::shared_ptr<TLocalBuffer>> buffers;
+                    {
+                        auto registry = ChannelService->LocalBufferRegistry;
+                        std::lock_guard lock(registry->Mutex);
+                        for (auto& [info, weakBuffer] : registry->LocalBuffers) {
+                            if (auto buffer = weakBuffer.lock()) {
+                                buffers.push_back(std::move(buffer));
+                            }
+                        }
+                    }
+                    for (auto& sharedBuffer : buffers) {
+                        ui32 srcStageId;
+                        ui32 dstStageId;
+                        EDqFillLevel fillLevel;
+                        std::shared_ptr<TDqFillAggregator> aggregator;
+                        size_t queueSize;
+                        size_t loadingQueueSize;
+                        ui64 headBlobId;
+                        ui64 tailBlobId;
+                        {
+                            std::lock_guard lock(sharedBuffer->Mutex);
+                            srcStageId = sharedBuffer->Info.SrcStageId;
+                            dstStageId = sharedBuffer->Info.DstStageId;
+                            fillLevel = sharedBuffer->FillLevel;
+                            aggregator = sharedBuffer->Aggregator;
+                            queueSize = sharedBuffer->Queue.size();
+                            loadingQueueSize = sharedBuffer->LoadingQueue.size();
+                            headBlobId = sharedBuffer->HeadBlobId;
+                            tailBlobId = sharedBuffer->TailBlobId;
+                        }
+                        {
                             TABLER() {
                                 TABLED() {str << sharedBuffer->Info.ChannelId;}
                                 TABLED() {
@@ -2117,28 +3134,29 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                         str << sharedBuffer->Info.InputActorId;
                                     }
                                 }
-                                TABLED() {str << sharedBuffer->Info.SrcStageId;}
-                                TABLED() {str << sharedBuffer->Info.DstStageId;}
+                                TABLED() {str << srcStageId;}
+                                TABLED() {str << dstStageId;}
                                 TABLED() {
-                                    str << FillLevelToString(sharedBuffer->FillLevel);
-                                    if (sharedBuffer->Aggregator) {
-                                        str << " (" << FillLevelToString(sharedBuffer->Aggregator->GetFillLevel()) << ")";
+                                    str << FillLevelToString(fillLevel);
+                                    if (aggregator) {
+                                        str << " (" << FillLevelToString(aggregator->GetFillLevel()) << ")";
                                     }
                                 }
                                 TABLED() {str << sharedBuffer->OutputBound.load();}
                                 TABLED() {str << sharedBuffer->InputBound.load();}
                                 TABLED() {str << sharedBuffer->Finished.load();}
                                 TABLED() {str << sharedBuffer->EarlyFinished.load();}
+                                TABLED() {str << sharedBuffer->MemoryPressure.load();}
                                 TABLED() {str << sharedBuffer->PushStats.Bytes.load();}
                                 TABLED() {str << sharedBuffer->PopStats.Bytes.load();}
-                                TABLED() {str << sharedBuffer->LastOutputNotificationTime;}
-                                TABLED() {str << sharedBuffer->LastInputNotificationTime;}
+                                TABLED() {str << sharedBuffer->LastOutputNotificationTime.load();}
+                                TABLED() {str << sharedBuffer->LastInputNotificationTime.load();}
                                 TABLED() {str << sharedBuffer->InflightBytes.load();}
-                                TABLED() {str << sharedBuffer->Queue.size();}
+                                TABLED() {str << queueSize;}
                                 TABLED() {str << sharedBuffer->SpilledBytes.load();}
-                                TABLED() {str << sharedBuffer->LoadingQueue.size();}
-                                TABLED() {str << sharedBuffer->HeadBlobId;}
-                                TABLED() {str << sharedBuffer->TailBlobId;}
+                                TABLED() {str << loadingQueueSize;}
+                                TABLED() {str << headBlobId;}
+                                TABLED() {str << tailBlobId;}
                             }
                         }
                     }
@@ -2156,18 +3174,26 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH_ATTRS({{"title", "FailureDoubleSend"}}) {str << "Fx";}
                         TABLEH_ATTRS({{"title", "FailureReconciliation"}}) {str << "FR";}
 #endif
-                        TABLEH_ATTRS({{"title", "GenMajor"}}) {str << "GM";}
-                        TABLEH_ATTRS({{"title", "GenMinor"}}) {str << "gm";}
+                        TABLEH_ATTRS({{"title", "FailureDestroy"}}) {str << "F~";}
+                        TABLEH_ATTRS({{"title", "Gen"}}) {str << "G";}
+                        TABLEH_ATTRS({{"title", "Queue.front()->SeqNo"}}) {str << "f/SeqNo";}
                         TABLEH() {str << "SeqNo";}
-                        TABLEH_ATTRS({{"title", "Queue.front()->SeqNo"}}) {str << "front()";}
                         TABLEH_ATTRS({{"title", "InflightBytes"}}) {str << "InflightB";}
+                        TABLEH_ATTRS({{"title", "SendCount"}}) {str << "Send";}
+                        TABLEH_ATTRS({{"title", "ResendCount"}}) {str << "Resend";}
+                        TABLEH_ATTRS({{"title", "PrebuildMisses: messages built off the lock for the window and then not admitted to it"}}) {str << "PMiss";}
+                        TABLEH_ATTRS({{"title", "ReconCount"}}) {str << "Recon";}
+                        TABLEH() {str << "ReconSent";}
+                        TABLEH_ATTRS({{"title", "since the Queue last moved: the watchdog of the outbound half"}}) {str << "Q/Idle";}
+                        TABLEH_ATTRS({{"title", "since the peer was last heard from: the liveness probe"}}) {str << "P/Idle";}
                         TABLEH_ATTRS({{"title", "WaitersQueueSize"}}) {str << "W/Queue";}
                         TABLEH_ATTRS({{"title", "WaitersMessages"}}) {str << "W/Msg";}
-                        TABLEH_ATTRS({{"title", "PeerGenMajor"}}) {str << "PM";}
-                        TABLEH_ATTRS({{"title", "PeerGenMinor"}}) {str << "pm";}
+                        TABLEH_ATTRS({{"title", "OutputNodeGen"}}) {str << "OG";}
                         TABLEH_ATTRS({{"title", "ConfirmedSeqNo"}}) {str << "C/SeqNo";}
-                        TABLEH() {str << "PeerActorId";}
+                        TABLEH() {str << "OutputNodeActorId";}
+                        TABLEH() {str << "InputNodeActorId";}
                         TABLEH() {str << "NodeActorId";}
+                        TABLEH() {str << "ReconciliationLog";}
                     }
                 }
                 TABLEBODY() {
@@ -2192,26 +3218,38 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                             }
                             TABLED() {
                                 HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "recon"}})) {
-                                    str << state->FailureDoubleSend.load();
+                                    str << state->FailureReconciliation.load();
                                 }
                             }
 #endif
-                            TABLED() {str << state->GenMajor;}
-                            TABLED() {str << state->GenMinor;}
-                            TABLED() {str << state->SeqNo;}
+                            TABLED() {
+                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "destroy"}})) {
+                                    str << "X";
+                                }
+                            }
+                            TABLED() {str << state->GenMajor << '.' << state->GenMinor;}
                             TABLED() {
                                 if (!state->Queue.empty()) {
                                     str << state->Queue.front()->SeqNo;
                                 }
                             }
-                            TABLED() {str << state->InflightBytes;}
+                            TABLED() {str << state->SeqNo;}
+                            TABLED() {str << state->InflightBytes.load();}
+                            TABLED() {str << state->SendCount.load();}
+                            TABLED() {str << state->ResendCount.load();}
+                            TABLED() {str << state->PrebuildMisses.load();}
+                            TABLED() {str << state->ReconCount.load();}
+                            TABLED() {str << state->ReconSent.load();}
+                            TABLED() {str << (TInstant::Now() - state->LastQueueProgress.load());}
+                            TABLED() {str << (TInstant::Now() - state->LastPeerActivity.load());}
                             TABLED() {str << state->WaitersQueue.size();}
                             TABLED() {str << state->WaiterMessages.load();}
-                            TABLED() {str << state->PeerGenMajor.load();}
-                            TABLED() {str << state->PeerGenMinor.load();}
-                            TABLED() {str << state->ConfirmedSeqNo;}
-                            TABLED() {str << state->PeerActorId;}
+                            TABLED() {str << state->OutputNodeGenMajor.load() << '.' << state->OutputNodeGenMinor.load();}
+                            TABLED() {str << state->ConfirmedSeqNo.load();}
+                            TABLED() {str << state->OutputNodeActorId;}
+                            TABLED() {str << state->InputNodeActorId;}
                             TABLED() {str << state->NodeActorId;}
+                            TABLED() {str << state->GetReconciliationLog();}
                         }
                     }
                 }
@@ -2230,14 +3268,15 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH_ATTRS({{"title", "PushBytes w/o Spilling"}}) {str << "PushBytes*";}
                         TABLEH() {str << "PopBytes";}
                         TABLEH_ATTRS({{"title", "RemotePopBytes"}}) {str << "RemotePop";}
+                        TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
                         TABLEH_ATTRS({{"title", "FinishPushed"}}) {str << "Fp";}
                         TABLEH_ATTRS({{"title", "Finished"}}) {str << "F";}
-                        TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
                         TABLEH_ATTRS({{"title", "Terminated"}}) {str << "T";}
                         TABLEH_ATTRS({{"title", "Aborted"}}) {str << "A";}
                         TABLEH_ATTRS({{"title", "Bound"}}) {str << "B";}
-                        TABLEH() {str << "MaxInflightBytes";}
-                        TABLEH() {str << "MinInflightBytes";}
+                        TABLEH_ATTRS({{"title", "Peer node reports memory pressure"}}) {str << "MP";}
+                        TABLEH_ATTRS({{"title", "Effective MaxInflightBytes, cold while MP or before the 1st peer pop"}}) {str << "MaxInflightBytes";}
+                        TABLEH_ATTRS({{"title", "Effective MinInflightBytes, cold while MP or before the 1st peer pop"}}) {str << "MinInflightBytes";}
                         TABLEH() {str << "InflightBytes";}
                         TABLEH() {str << "WaitQueueBytes";}
                         TABLEH() {str << "SpilledBytes";}
@@ -2250,37 +3289,62 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                 }
                 TABLEBODY() {
                     for (auto& [nodeId, state] : ChannelService->NodeStates) {
-                        for (auto& [info, descriptor] : state->OutputDescriptors) {
+                        std::vector<std::pair<TChannelInfo, std::shared_ptr<TOutputDescriptor>>> descriptors;
+                        {
+                            std::lock_guard lock(state->Mutex);
+                            descriptors.assign(state->OutputDescriptors.begin(), state->OutputDescriptors.end());
+                        }
+                        for (auto& [info, descriptor] : descriptors) {
                             auto pushBytes = descriptor->PushBytes.load();
                             auto popBytes = descriptor->RemotePopBytes.load();
+                            ui32 srcStageId;
+                            ui32 dstStageId;
+                            EDqFillLevel fillLevel;
+                            std::shared_ptr<TDqFillAggregator> aggregator;
+                            bool isBound;
+                            size_t loadingQueueSize;
+                            ui64 headBlobId;
+                            ui64 tailBlobId;
+                            {
+                                std::lock_guard lock(descriptor->FlowControlMutex);
+                                srcStageId = descriptor->Info.SrcStageId;
+                                dstStageId = descriptor->Info.DstStageId;
+                                fillLevel = descriptor->FillLevel;
+                                aggregator = descriptor->Aggregator;
+                                isBound = descriptor->IsBound;
+                                loadingQueueSize = descriptor->LoadingQueue.size();
+                                headBlobId = descriptor->HeadBlobId;
+                                tailBlobId = descriptor->TailBlobId;
+                            }
                             TABLER() {
                                 TABLED() {str << info.ChannelId;}
                                 TABLED() {str << nodeId;}
-                                TABLED() {str << descriptor->Info.SrcStageId;}
-                                TABLED() {str << descriptor->Info.DstStageId;}
+                                TABLED() {str << srcStageId;}
+                                TABLED() {str << dstStageId;}
                                 TABLED() {
-                                    str << FillLevelToString(descriptor->FillLevel);
-                                    if (descriptor->Aggregator) {
-                                        str << " (" << FillLevelToString(descriptor->Aggregator->GetFillLevel()) << ")";
+                                    str << FillLevelToString(fillLevel);
+                                    if (aggregator) {
+                                        str << " (" << FillLevelToString(aggregator->GetFillLevel()) << ")";
                                     }
                                 }
                                 TABLED() {str << pushBytes;}
                                 TABLED() {str << descriptor->PopStats.Bytes.load();}
                                 TABLED() {str << popBytes;}
+                                TABLED() {str << descriptor->EarlyFinished.load();}
                                 TABLED() {str << descriptor->FinishPushed.load();}
                                 TABLED() {str << descriptor->Finished.load();}
-                                TABLED() {str << descriptor->EarlyFinished.load();}
                                 TABLED() {str << descriptor->Terminated.load();}
                                 TABLED() {str << descriptor->Aborted.load();}
-                                TABLED() {str << descriptor->IsBound;}
-                                TABLED() {str << descriptor->MaxInflightBytes;}
-                                TABLED() {str << descriptor->MinInflightBytes;}
+                                TABLED() {str << isBound;}
+                                TABLED() {str << descriptor->PeerMemoryPressure.load();}
+                                TABLED() {str << descriptor->GetMaxInflightBytes();}
+                                TABLED() {str << descriptor->GetMinInflightBytes();}
                                 TABLED() {str << (pushBytes - popBytes);}
                                 TABLED() {str << descriptor->WaitQueueBytes.load();}
                                 TABLED() {str << descriptor->SpilledBytes.load();}
-                                TABLED() {str << descriptor->LoadingQueue.size();}
-                                TABLED() {str << descriptor->HeadBlobId;}
-                                TABLED() {str << descriptor->TailBlobId;}
+                                TABLED() {str << loadingQueueSize;}
+                                TABLED() {str << headBlobId;}
+                                TABLED() {str << tailBlobId;}
                                 TABLED() {
                                     HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.OutputActorId)}}))  {
                                         str << info.OutputActorId;
@@ -2310,30 +3374,48 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH() {str << "QueueSize";}
                         TABLEH() {str << "QueueBytes";}
                         TABLEH() {str << "PopBytes";}
-                        TABLEH_ATTRS({{"title", "FinishPushed"}}) {str << "Fp";}
                         TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
+                        TABLEH_ATTRS({{"title", "FinishPushed"}}) {str << "Fp";}
+                        TABLEH_ATTRS({{"title", "Finishing"}}) {str << "Fi";}
                         TABLEH_ATTRS({{"title", "Finished"}}) {str << "F";}
                         TABLEH_ATTRS({{"title", "Bound"}}) {str << "B";}
+                        TABLEH_ATTRS({{"title", "This node reports memory pressure to the sender"}}) {str << "MP";}
                         TABLEH() {str << "OutputActorId";}
                         TABLEH() {str << "InputActorId";}
                     }
                 }
                 TABLEBODY() {
                     for (auto& [nodeId, state] : ChannelService->NodeStates) {
-                        for (auto& [info, descriptor] : state->InputDescriptors) {
+                        std::vector<std::pair<TChannelInfo, std::shared_ptr<TInputDescriptor>>> descriptors;
+                        {
+                            std::lock_guard lock(state->Mutex);
+                            descriptors.assign(state->InputDescriptors.begin(), state->InputDescriptors.end());
+                        }
+                        for (auto& [info, descriptor] : descriptors) {
+                            ui32 srcStageId;
+                            ui32 dstStageId;
+                            bool isBound;
+                            {
+                                std::lock_guard lock(descriptor->QueueMutex);
+                                srcStageId = descriptor->Info.SrcStageId;
+                                dstStageId = descriptor->Info.DstStageId;
+                                isBound = descriptor->IsBound;
+                            }
                             TABLER() {
                                 TABLED() {str << info.ChannelId;}
                                 TABLED() {str << nodeId;}
-                                TABLED() {str << descriptor->Info.SrcStageId;}
-                                TABLED() {str << descriptor->Info.DstStageId;}
+                                TABLED() {str << srcStageId;}
+                                TABLED() {str << dstStageId;}
                                 TABLED() {str << descriptor->PushStats.Bytes.load();}
                                 TABLED() {str << descriptor->QueueSize.load();}
                                 TABLED() {str << descriptor->QueueBytes.load();}
                                 TABLED() {str << descriptor->PopStats.Bytes.load();}
-                                TABLED() {str << descriptor->FinishPushed.load();}
                                 TABLED() {str << descriptor->EarlyFinished.load();}
+                                TABLED() {str << descriptor->FinishPushed.load();}
+                                TABLED() {str << descriptor->Finishing.load();}
                                 TABLED() {str << descriptor->Finished.load();}
-                                TABLED() {str << descriptor->IsBound;}
+                                TABLED() {str << isBound;}
+                                TABLED() {str << descriptor->MemoryPressure.load();}
                                 TABLED() {
                                     HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.OutputActorId)}}))  {
                                         str << info.OutputActorId;
@@ -2352,6 +3434,18 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
         }
     }
     Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(str.Str()));
+}
+
+void TNodeSessionActor::Handle(NActors::TEvents::TEvPoison::TPtr&) {
+    LOGA_D(NodeState->LogPrefix << "PASS AWAY");
+    NodeState->HandlePoison();
+    PassAway();
+}
+
+void TDebugNodeSessionActor::Handle(NActors::TEvents::TEvPoison::TPtr&) {
+    LOGA_D(NodeState->LogPrefix << "PASS AWAY/DEBUG");
+    NodeState->HandlePoison();
+    PassAway();
 }
 
 NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId,

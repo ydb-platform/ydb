@@ -59,7 +59,38 @@ def test_package_name_matching():
     assert not finder.should_instrument("spam_eggs")
 
 
-@pytest.mark.skipif(sys.version_info < (3, 9), reason="Requires ast.unparse()")
+def test_package_name_matching_with_ignored():
+    """
+    The path finder excludes modules matching the ignore list.
+    """
+    packages = ["ham", "spam.eggs"]
+    ignore_packages = ["ham.ignoreme", "spam.eggs.ignoretoo"]
+    dummy_original_pathfinder = None
+    finder = TypeguardFinder(packages, dummy_original_pathfinder, ignore_packages)
+
+    assert finder.should_instrument("ham")
+    assert finder.should_instrument("ham.eggs")
+    assert not finder.should_instrument("ham.ignoreme")
+    assert not finder.should_instrument("ham.ignoreme.sub")
+    assert finder.should_instrument("spam.eggs")
+    assert not finder.should_instrument("spam.eggs.ignoretoo")
+    assert not finder.should_instrument("spam.eggs.ignoretoo.sub")
+    assert not finder.should_instrument("spam")
+
+
+def test_ignore_packages_with_blanket_import():
+    """
+    When instrumenting all packages, ignored packages are still excluded.
+    """
+    dummy_original_pathfinder = None
+    finder = TypeguardFinder(None, dummy_original_pathfinder, ["ham.ignoreme"])
+
+    assert finder.should_instrument("foo.ham.ignoreme")
+    assert finder.should_instrument("ham")
+    assert not finder.should_instrument("ham.ignoreme")
+    assert not finder.should_instrument("ham.ignoreme.sub")
+
+
 def test_debug_instrumentation(monkeypatch, capsys):
     monkeypatch.setattr("typeguard.config.debug_instrumentation", True)
     import_dummymodule()

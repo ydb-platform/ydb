@@ -16,6 +16,8 @@
 #include <util/generic/strbuf.h>
 #include <util/string/builder.h>
 
+#include <type_traits>
+
 namespace NYql::NUdf {
 
 template <class T>
@@ -24,11 +26,18 @@ concept CUDF = requires(const TStringRef& name, TType* userType, IFunctionTypeIn
     { T::DeclareSignature(name, userType, builder, typesOnly) } -> std::convertible_to<bool>;
 };
 
+// Y_HAS_MEMBER derives from the class under test, which is ill-formed when that class is final.
+#define Y_HAS_ADDRESSABLE_MEMBER(name)     \
+    template <class T, class = void>       \
+    struct THas##name: std::false_type {}; \
+    template <class T>                     \
+    struct THas##name<T, std::void_t<decltype(&T::name)>>: std::true_type {}
+
 template <ui32 V, CUDF TLegacyUDF, CUDF TActualUDF>
 class TLangVerForked {
 private:
     Y_HAS_SUBTYPE(TBlockType);
-    Y_HAS_MEMBER(BuildPolyArgsWithVersion);
+    Y_HAS_ADDRESSABLE_MEMBER(BuildPolyArgsWithVersion);
 
 public:
     using TTypeAwareMarker = bool;
@@ -56,8 +65,9 @@ public:
             Y_ENSURE(THasBuildPolyArgsWithVersion<TLegacyUDF>::value);
             TStringBuilder builder;
             builder << "[";
-            builder << TActualUDF::BuildPolyArgsWithVersion(V, false);
-            builder << TLegacyUDF::BuildPolyArgsWithVersion(0, true);
+            builder << TActualUDF::BuildPolyArgsWithVersion(V);
+            builder << ";";
+            builder << TLegacyUDF::BuildPolyArgsWithVersion(0);
             builder << "]";
             return builder;
         } else {
@@ -309,7 +319,6 @@ class TUserDataTypeFuncFactory: public ::NYql::NUdf::TBoxedValue {
 public:
     using TTypeAwareMarker = bool;
 
-public:
     static const ::NYql::NUdf::TStringRef& Name() {
         static auto Name = ::NYql::NUdf::TStringRef(TFuncName, std::strlen(TFuncName));
         return Name;
@@ -417,32 +426,47 @@ public:
     static TString BuildPolyArgs() {
         TStringBuilder sb;
         sb << "[";
-        AppendPolyArgsItem<TUserTypes...>(sb, true);
+        AppendPolyArgsItem<TUserTypes...>(sb);
+        sb << "[{cmd=error;message=\"Expected types: ";
+        AppendTypeNames<TUserTypes...>(sb, /*first=*/true);
+        sb << "\"};{}]";
         sb << "]";
         return sb;
     }
 
 private:
     template <typename THead, typename... TTail>
-    static void AppendPolyArgsItem(TStringBuilder& sb, bool isFirst) {
+    static void AppendTypeNames(TStringBuilder& sb, bool first) {
         const auto typeName = ::NYql::NUdf::GetDataTypeInfo(
                                   ::NYql::NUdf::GetDataSlot(::NYql::NUdf::TDataType<THead>::Id))
                                   .Name;
-        if (!isFirst) {
-            sb << ";";
+        if (!first) {
+            sb << ", ";
         }
-        if constexpr (sizeof...(TTail) > 0) {
-            if constexpr (CheckOptional) {
-                sb << "[{cmd=or;value=[{arg=T0;cmd=type;value=[DataType;" << typeName
-                   << "]};{arg=T0;cmd=type;value=[OptionalType;[DataType;" << typeName
-                   << "]]}]};{args=[[DataType;" << typeName << "]]}]";
-            } else {
-                sb << "[{arg=T0;cmd=type;value=[DataType;" << typeName
-                   << "]};{args=[[DataType;" << typeName << "]]}]";
-            }
-            AppendPolyArgsItem<TTail...>(sb, false);
+
+        sb << typeName;
+        if constexpr (sizeof...(TTail)) {
+            AppendTypeNames<TTail...>(sb, /*first=*/false);
+        }
+    }
+
+    template <typename THead, typename... TTail>
+    static void AppendPolyArgsItem(TStringBuilder& sb) {
+        const auto typeName = ::NYql::NUdf::GetDataTypeInfo(
+                                  ::NYql::NUdf::GetDataSlot(::NYql::NUdf::TDataType<THead>::Id))
+                                  .Name;
+        if constexpr (CheckOptional) {
+            sb << "[{cmd=or;value=[{arg=T0;cmd=type;value=[DataType;" << typeName
+               << "]};{arg=T0;cmd=type;value=[OptionalType;[DataType;" << typeName
+               << "]]}]};{args=[[DataType;" << typeName << "]]}]";
         } else {
-            sb << "[[];{args=[[DataType;" << typeName << "]]}]";
+            sb << "[{arg=T0;cmd=type;value=[DataType;" << typeName
+               << "]};{args=[[DataType;" << typeName << "]]}]";
+        }
+
+        sb << ";";
+        if constexpr (sizeof...(TTail)) {
+            AppendPolyArgsItem<TTail...>(sb);
         }
     }
 };
@@ -451,7 +475,7 @@ template <CUDF... TUdfs>
 class TSimpleUdfModuleHelper: public IUdfModule {
     Y_HAS_SUBTYPE(TTypeAwareMarker);
     Y_HAS_SUBTYPE(TBlockType);
-    Y_HAS_MEMBER(BuildPolyArgs);
+    Y_HAS_ADDRESSABLE_MEMBER(BuildPolyArgs);
 
 public:
     void CleanupOnTerminate() const override {

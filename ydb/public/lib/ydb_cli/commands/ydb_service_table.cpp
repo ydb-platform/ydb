@@ -86,8 +86,8 @@ void TTableCommand::Config(TConfig& config) {
     // TODO: Session options?
 }
 
-NTable::TSession TTableCommand::GetSession(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+NTable::TSession TTableCommand::GetSession(const TDriver& driver) {
+    NTable::TTableClient client(driver);
     NTable::TCreateSessionResult result = client.GetSession(NTable::TCreateSessionSettings()).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return result.GetSession();
@@ -210,6 +210,7 @@ void TCommandCreateTable::Validate(TConfig& config) {
 }
 
 int TCommandCreateTable::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
     NTable::TTableBuilder builder;
     for (const TString& column : Columns) {
         TVector<TString> parts = StringSplitter(column).Split(':');
@@ -306,7 +307,7 @@ int TCommandCreateTable::Run(TConfig& config) {
     }
 
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).CreateTable(
+        GetSession(driver).CreateTable(
             Path,
             builder.Build(),
             std::move(tableSettings)
@@ -333,8 +334,9 @@ void TCommandDropTable::ExtractParams(TConfig& config) {
 }
 
 int TCommandDropTable::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).DropTable(
+        GetSession(driver).DropTable(
             Path,
             FillSettings(NTable::TDropTableSettings())
         ).GetValueSync()
@@ -378,7 +380,7 @@ void TCommandExecuteQuery::Config(TConfig& config) {
             .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
     config.Opts->AddCharOption('s', "Collect statistics in basic mode").StoreTrue(&BasicStats);
     // Transaction modes description with color highlighting
-    TVector<TString> txModes = {"serializable-rw", "online-ro", "stale-ro", "snapshot-ro", "snapshot-rw", "no-tx"};
+    TVector<TString> txModes = {"serializable-rw", "online-ro", "stale-ro", "snapshot-ro", "snapshot-rw", "read-committed-rw", "no-tx"};
     TStringStream txDescription;
     txDescription << "Transaction mode (for generic & data queries). Available options: ";
     NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
@@ -495,7 +497,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
         }
     }
 
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NTable::TTableClient client(driver);
     NTable::TAsyncDataQueryResult asyncResult;
 
@@ -606,8 +608,9 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
 }
 
 int TCommandExecuteQuery::ExecuteSchemeQuery(TConfig& config) {
+    auto driver = CreateDriver(config);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
-        GetSession(config).ExecuteSchemeQuery(
+        GetSession(driver).ExecuteSchemeQuery(
             Query,
             FillSettings(NTable::TExecSchemeQuerySettings())
         ).GetValueSync()
@@ -677,6 +680,8 @@ namespace {
             txSettings = NQuery::TTxSettings::SnapshotRO();
         } else if (TxMode == "snapshot-rw") {
             txSettings = NQuery::TTxSettings::SnapshotRW();
+        } else if (TxMode == "read-committed-rw") {
+            txSettings = NQuery::TTxSettings::ReadCommittedRW();
         } else if (!TxMode.empty()) {
             throw TMisuseException() << "Unknown transaction mode.";
         }
@@ -766,7 +771,7 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
 
 template <typename TClient>
 int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     TClient client(driver);
     std::optional<TDuration> optTimeout;
     if (OperationTimeout) {
@@ -992,7 +997,8 @@ int TCommandExplain::Run(TConfig& config) {
     }
 
     if (QueryType == "scan") {
-        NTable::TTableClient client(CreateDriver(config));
+        auto driver = CreateDriver(config);
+        NTable::TTableClient client(driver);
         NTable::TStreamExecScanQuerySettings settings;
         settings.ClientTimeout(timeout.value_or(TDuration()));
 
@@ -1035,15 +1041,17 @@ int TCommandExplain::Run(TConfig& config) {
             Cerr << "<INTERRUPTED>" << Endl;
         }
     } else if (QueryType == "generic") {
-        TExplainGenericQuery runner(CreateDriver(config));
+        auto driver = CreateDriver(config);
+        TExplainGenericQuery runner(driver);
         const auto& result = runner.Explain(Query, timeout, Analyze);
         planJson = result.PlanJson;
         ast = result.Ast;
     } else if (QueryType == "data" && (Analyze || FlameGraphPath)) {
+        auto driver = CreateDriver(config);
         NTable::TExecDataQuerySettings settings;
         settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
 
-        auto result = GetSession(config).ExecuteDataQuery(
+        auto result = GetSession(driver).ExecuteDataQuery(
             Query,
             NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
             FillSettings(settings)
@@ -1055,12 +1063,13 @@ int TCommandExplain::Run(TConfig& config) {
             ast = proto.query_ast();
         }
     } else if (QueryType == "data" && !Analyze) {
+        auto driver = CreateDriver(config);
         NTable::TExplainDataQuerySettings settings(FillSettings(NTable::TExplainDataQuerySettings()));
         if (CollectFullDiagnostics) {
             settings.WithCollectFullDiagnostics(true);
         }
 
-        NTable::TExplainQueryResult result = GetSession(config).ExplainDataQuery(
+        NTable::TExplainQueryResult result = GetSession(driver).ExplainDataQuery(
             Query,
             settings
         ).GetValueSync();
@@ -1194,7 +1203,8 @@ namespace {
 } // anonymous namespace
 
 int TCommandReadTable::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     NTable::TReadTableSettings readTableSettings;
     if (RowLimit) {
@@ -1307,7 +1317,8 @@ void TCommandIndexAddGlobal::ExtractParams(TConfig& config) {
 }
 
 int TCommandIndexAddGlobal::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
     auto columns = StringSplitter(Columns).Split(',').ToList<std::string>();
     std::vector<std::string> dataColumns;
     if (DataColumns) {
@@ -1354,7 +1365,8 @@ void TCommandIndexDrop::ExtractParams(TConfig& config) {
 }
 
 int TCommandIndexDrop::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     auto settings = NTable::TAlterTableSettings()
         .AppendDropIndexes({IndexName});
@@ -1393,7 +1405,8 @@ void TCommandIndexRename::ExtractParams(TConfig& config) {
 }
 
 int TCommandIndexRename::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     auto settings = NTable::TAlterTableSettings()
         .AppendRenameIndexes({IndexName, NewIndexName, Replace});
@@ -1429,7 +1442,8 @@ void TCommandAttributeAdd::ExtractParams(TConfig& config) {
 }
 
 int TCommandAttributeAdd::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     auto settings = NTable::TAlterTableSettings()
         .AlterAttributes(Attributes);
@@ -1463,7 +1477,8 @@ void TCommandAttributeDrop::ExtractParams(TConfig& config) {
 }
 
 int TCommandAttributeDrop::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     auto settings = NTable::TAlterTableSettings();
     auto alterAttrs = settings.BeginAlterAttributes();
@@ -1526,7 +1541,8 @@ void TCommandTtlSet::ExtractParams(TConfig& config) {
 }
 
 int TCommandTtlSet::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     TMaybe<NTable::TTtlSettings> ttl;
     if (ColumnUnit) {
@@ -1568,7 +1584,8 @@ void TCommandTtlReset::ExtractParams(TConfig& config) {
 }
 
 int TCommandTtlReset::Run(TConfig& config) {
-    NTable::TTableClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NTable::TTableClient client(driver);
 
     auto settings = NTable::TAlterTableSettings()
         .BeginAlterTtlSettings()

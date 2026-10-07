@@ -117,11 +117,7 @@ ADD INDEX idx_vector
 GLOBAL USING vector_kmeans_tree
 ON (embedding)
 WITH (
-  distance=cosine,
-  vector_type="float",
-  vector_dimension=768,
-  levels=1,
-  clusters=200);
+  distance=cosine);
 ```
 
 This creates a `vector_kmeans_tree` index. For more on this index type, see [here](../../dev/vector-indexes.md#kmeans-tree-type).
@@ -133,6 +129,8 @@ For general information on vector indexes, creation parameters, and current limi
 This step runs exact search for the 3 nearest neighbors of a given vector **without** using the index. The query vector is assumed to be produced from the search text by an encoder model (e.g. [Embed from cohere.com](https://cohere.com/embed)).
 
 First, the target vector is encoded to binary with [`Knn::ToBinaryStringFloat`](../../yql/reference/udf/list/knn.md#functions-convert).
+
+Here the search vector is a YQL literal. When passing it as a C++ SDK query parameter, serialize it on the client with `NYdb::NValueHelpers::Embedding` (C++ SDK v3.24.0 or later) and declare the parameter as `Bytes`; see the [SDK recipe](../ydb-sdk/vector-search.md#search-by-vector).
 
 Then cosine distance is computed from each row’s `embedding` to the target vector.
 

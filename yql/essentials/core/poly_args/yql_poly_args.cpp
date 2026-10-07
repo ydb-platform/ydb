@@ -22,12 +22,14 @@ namespace {
 
 constexpr TStringBuf PredicateCmdAttribute = "cmd";
 constexpr TStringBuf VerCmd = "ver";
+constexpr TStringBuf ErrorCmd = "error";
 constexpr TStringBuf TypeCmd = "type";
 constexpr TStringBuf KindCmd = "kind";
 constexpr TStringBuf OrCmd = "or";
 
 constexpr TStringBuf ArgAttribute = "arg";
 constexpr TStringBuf ValueAttribute = "value";
+constexpr TStringBuf MessageAttribute = "message";
 
 constexpr TStringBuf VerAction = "ver";
 constexpr TStringBuf ArgsAction = "args";
@@ -47,6 +49,10 @@ public:
 
     TMaybe<TUnresolvedInput> GetUnresolvedInput(ui32 index) const final {
         Y_ENSURE(index < Parsed_.size());
+        if (HasErrorPredicate(Parsed_[index].first)) {
+            return Nothing();
+        }
+
         const auto& action = Parsed_[index].second;
         if (action.Type) {
             return Nothing();
@@ -60,10 +66,13 @@ public:
     TMatchResult Match(const TArgs& args, TLangVersion version) const final {
         for (ui32 i = 0; i < Parsed_.size(); ++i) {
             TMatchResult ret;
-            if (MatchPredicate(Parsed_[i].first, args, version)) {
+            if (MatchPredicate(Parsed_[i].first, args, version, ret.Error)) {
                 ret.Index = i;
-                ret.CallableType = Parsed_[i].second.Type;
-                ret.RunConfigType = Parsed_[i].second.RunConfig;
+                if (!ret.Error) {
+                    ret.CallableType = Parsed_[i].second.Type;
+                    ret.RunConfigType = Parsed_[i].second.RunConfig;
+                }
+
                 return ret;
             }
         }
@@ -82,6 +91,10 @@ private:
         TVector<TPredicatePtr> Children;
     };
 
+    struct TErrorPredicate {
+        TString Message;
+    };
+
     struct TTypePredicate {
         TString Arg;
         NYT::TNode Value;
@@ -97,7 +110,9 @@ private:
     };
 
     struct TPredicate {
-        std::variant<TTypePredicate, TKindPredicate, TVerPredicate, TAndPredicate, TOrPredicate> Value;
+        std::variant<TErrorPredicate, TTypePredicate, TKindPredicate,
+                     TVerPredicate, TAndPredicate, TOrPredicate>
+            Value;
     };
 
     struct TAction {
@@ -120,7 +135,8 @@ private:
         }
 
         const auto& lastPredicate = config.AsList().back().AsList()[0];
-        CHECK_CONFIG(lastPredicate.IsList() && lastPredicate.AsList().empty());
+        CHECK_CONFIG(lastPredicate.IsList() && lastPredicate.AsList().empty() ||
+                     lastPredicate.IsMap() && *lastPredicate.AsMap().FindPtr(PredicateCmdAttribute) == ErrorCmd);
         return ret;
     }
 
@@ -134,6 +150,10 @@ private:
         auto it = map.find(PredicateCmdAttribute);
         CHECK_CONFIG(it != map.end());
         CHECK_CONFIG(it->second.IsString());
+        if (it->second.AsString() == ErrorCmd) {
+            return ParseErrorPredicate(predicate);
+        }
+
         if (it->second.AsString() == TypeCmd) {
             return ParseTypePredicate(predicate);
         }
@@ -173,6 +193,17 @@ private:
         }
 
         return TPredicate{.Value = ret};
+    }
+
+    static TPredicate ParseErrorPredicate(const NYT::TNode& predicate) {
+        TErrorPredicate ret;
+        const auto& map = predicate.AsMap();
+        auto itMessage = map.find(MessageAttribute);
+        CHECK_CONFIG(itMessage != map.end());
+        CHECK_CONFIG(itMessage->second.IsString());
+        ret.Message = itMessage->second.AsString();
+        return TPredicate{
+            .Value = ret};
     }
 
     static TPredicate ParseTypePredicate(const NYT::TNode& predicate) {
@@ -259,6 +290,11 @@ private:
         return value.AsList();
     }
 
+    static bool MatchErrorPredicate(const TErrorPredicate& predicate, TMaybe<TString>& error) {
+        error = predicate.Message;
+        return true;
+    }
+
     static bool MatchTypePredicate(const TTypePredicate& predicate, const TArgs& args) {
         auto it = args.find(predicate.Arg);
         if (it == args.end()) {
@@ -284,19 +320,25 @@ private:
         return version >= predicate.LangVer;
     }
 
-    static bool MatchAndPredicate(const TAndPredicate& predicate, const TArgs& args, TLangVersion version) {
+    static bool MatchAndPredicate(const TAndPredicate& predicate, const TArgs& args, TLangVersion version,
+                                  TMaybe<TString>& error) {
         for (const auto& child : predicate.Children) {
-            if (!MatchPredicate(*child, args, version)) {
+            if (!MatchPredicate(*child, args, version, error)) {
                 return false;
+            }
+
+            if (error) {
+                break;
             }
         }
 
         return true;
     }
 
-    static bool MatchOrPredicate(const TOrPredicate& predicate, const TArgs& args, TLangVersion version) {
+    static bool MatchOrPredicate(const TOrPredicate& predicate, const TArgs& args, TLangVersion version,
+                                 TMaybe<TString>& error) {
         for (const auto& child : predicate.Children) {
-            if (MatchPredicate(*child, args, version)) {
+            if (MatchPredicate(*child, args, version, error) || error) {
                 return true;
             }
         }
@@ -304,14 +346,27 @@ private:
         return false;
     }
 
-    static bool MatchPredicate(const TPredicate& predicate, const TArgs& args, TLangVersion version) {
+    static bool MatchPredicate(const TPredicate& predicate, const TArgs& args, TLangVersion version, TMaybe<TString>& error) {
         return std::visit(
             TOverloaded{
+                [&](const TErrorPredicate& p) { return MatchErrorPredicate(p, error); },
                 [&](const TTypePredicate& p) { return MatchTypePredicate(p, args); },
                 [&](const TKindPredicate& p) { return MatchKindPredicate(p, args); },
                 [&](const TVerPredicate& p) { return MatchVerPredicate(p, version); },
-                [&](const TAndPredicate& p) { return MatchAndPredicate(p, args, version); },
-                [&](const TOrPredicate& p) { return MatchOrPredicate(p, args, version); }},
+                [&](const TAndPredicate& p) { return MatchAndPredicate(p, args, version, error); },
+                [&](const TOrPredicate& p) { return MatchOrPredicate(p, args, version, error); }},
+            predicate.Value);
+    }
+
+    static bool HasErrorPredicate(const TPredicate& predicate) {
+        return std::visit(
+            TOverloaded{
+                [&](const TErrorPredicate&) { return true; },
+                [&](const TTypePredicate&) { return false; },
+                [&](const TKindPredicate&) { return false; },
+                [&](const TVerPredicate&) { return false; },
+                [&](const TAndPredicate& p) { return AnyOf(p.Children, [](auto p) { return HasErrorPredicate(*p); }); },
+                [&](const TOrPredicate& p) { return AnyOf(p.Children, [](auto p) { return HasErrorPredicate(*p); }); }},
             predicate.Value);
     }
 };

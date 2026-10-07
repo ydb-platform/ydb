@@ -25,7 +25,8 @@ public:
         , SkipGraphNode(TBase::GetDeriviative("Skips/Count"))
         , SkipGraphNodeRecords(TBase::GetDeriviative("Skips/Records/Count"))
         , ExecuteGraphNode(TBase::GetDeriviative("Executions/Count"))
-        , ExecuteGraphNodeRecords(TBase::GetDeriviative("Executions/Records/Count")) {
+        , ExecuteGraphNodeRecords(TBase::GetDeriviative("Executions/Records/Count"))
+    {
     }
 
     void OnSkipGraphNode(const ui32 recordsCount) {
@@ -56,6 +57,7 @@ private:
     using TBase = NColumnShard::TCommonCountersOwner;
     TMutex Mutex;
     THashMap<TString, std::shared_ptr<TFetchingStepSignals>> Collection;
+
     std::shared_ptr<TFetchingStepSignals> GetSignalsImpl(const TString& name) {
         TGuard<TMutex> g(Mutex);
         auto it = Collection.find(name);
@@ -67,7 +69,8 @@ private:
 
 public:
     TFetchingStepsSignalsCollection()
-        : TBase("ScanSteps") {
+        : TBase("ScanSteps")
+    {
     }
 
     static std::shared_ptr<TFetchingStepSignals> GetSignals(const TString& name) {

@@ -1,5 +1,3 @@
-/* postgres can not */
-
 select Yql::Sort(
 AsList(3,2,1),
 AsTuple(),

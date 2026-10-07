@@ -16,6 +16,7 @@ namespace NYT::NChunkClient {
 namespace NProto {
 
 class TChunkInfo;
+class TChunkReplicaSpec;
 class TChunkSpec;
 class TChunkMeta;
 class TBlocksExt;
@@ -92,6 +93,7 @@ YT_DEFINE_ERROR_ENUM(
     ((ForbiddenErasureCodec)                 (762))
     ((ReadMetaTimeout)                       (763))
     ((ReaderRetryCountLimitExceeded)         (764))
+    ((NotEnoughAvailableNodes)               (765))
 );
 
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EUpdateMode, i8,
@@ -187,6 +189,7 @@ DECLARE_REFCOUNTED_STRUCT(TChunkFragmentReaderConfig)
 
 struct TCodecDuration;
 class TCodecStatistics;
+struct TTimingStatistics;
 
 class TLegacyReadLimit;
 class TLegacyReadRange;

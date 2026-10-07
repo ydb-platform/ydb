@@ -22,3 +22,11 @@ def test_simple():
     assert len(sv.commit_id()) > 0
     assert isinstance(sv.hash(), str)
     assert isinstance(sv.patch_number(), int)
+
+
+def test_custom_version():
+    assert isinstance(sv.custom_version(), str)
+
+
+def test_release_version():
+    assert isinstance(sv.release_version(), str)

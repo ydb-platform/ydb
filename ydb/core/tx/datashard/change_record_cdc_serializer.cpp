@@ -8,6 +8,7 @@
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_type_info.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -40,7 +41,11 @@ class TBaseSerializer: public IChangeRecordSerializer {
     void SerializeSchemaChange(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
-        cmd.SetData(data.SerializeAsString());
+
+        auto& schemaChange = *cmd.MutableSchemaChange();
+        schemaChange.SetStep(record.GetStep());
+        schemaChange.SetTxId(record.GetTxId());
+        schemaChange.SetData(data.SerializeAsString());
     }
 
     void SerializeHeartbeat(TCmdWrite& cmd, const TChangeRecord& record) {
@@ -359,14 +364,70 @@ protected:
         Y_ENSURE(record.GetSchema());
         auto schema = record.GetSchema();
 
+        NKikimrSchemeOp::TTableDescription fullSchema;
+        schema->GetSchema(fullSchema);
+
         for (const auto tag : schema->KeyColumnIds) {
             auto it = schema->Columns.find(tag);
             Y_ENSURE(it != schema->Columns.end());
-            table["primaryKeyColumnNames"] = it->second.Name;
+            table["primaryKeyColumnNames"].AppendValue(it->second.Name);
         }
 
         for (const auto& [tag, column] : schema->Columns) {
-            table["columns"][column.Name] = NScheme::TypeName(column.Type, column.TypeMod);
+            table["columns"][column.Name]["type"] = NScheme::TypeName(column.Type, column.TypeMod);
+            if (const auto family = schema->Families.find(column.Family); family != schema->Families.end()) {
+                table["columns"][column.Name]["family"] = family->second.GetName();
+            } else {
+                Y_ENSURE(column.Family == 0, "Unknown column family: " << column.Family);
+                table["columns"][column.Name]["family"] = "default";
+            }
+        }
+
+        auto& families = table["columnFamilies"];
+        families.SetType(NJson::JSON_MAP);
+        if (!schema->Families.contains(0)) {
+            families["default"]["compression"] = "off";
+            families["default"]["cacheMode"] = "regular";
+        }
+        for (const auto& [id, family] : schema->Families) {
+            const auto name = family.GetName();
+            Y_ENSURE(id == 0 || name != "default",
+                "Cannot serialize unnamed non-default column family: " << id);
+            auto& definition = families[name];
+            const auto& data = family.StorageConfig.GetData();
+            if (!data.GetAllowOtherKinds() && data.GetPreferredPoolKind()) {
+                definition["data"]["media"] = data.GetPreferredPoolKind();
+            }
+            definition["compression"] = family.Codec == NTable::NPage::ECodec::Plain ? "off" : "lz4";
+            definition["cacheMode"] = family.CacheMode == NTable::NPage::ECacheMode::Regular
+                ? "regular" : "in_memory";
+        }
+
+        auto& indexes = table["indexes"];
+        indexes.SetType(NJson::JSON_MAP);
+        for (const auto& index : fullSchema.GetTableIndexes()) {
+            if (index.GetState() != NKikimrSchemeOp::EIndexStateReady) {
+                continue;
+            }
+
+            auto& value = indexes[index.GetName()];
+            const auto type = index.GetType();
+            const TString typeName = NKikimrSchemeOp::EIndexType_Name(type);
+            TStringBuf typeSuffix(typeName);
+            Y_ENSURE(type != NKikimrSchemeOp::EIndexTypeInvalid && typeSuffix.SkipPrefix("EIndexType"),
+                "Unknown index type: " << type);
+            value["type"] = type == NKikimrSchemeOp::EIndexTypeGlobal
+                ? "GlobalSync" : TString(typeSuffix);
+            auto& indexColumns = value["indexColumns"];
+            indexColumns.SetType(NJson::JSON_ARRAY);
+            for (const auto& column : index.GetKeyColumnNames()) {
+                indexColumns.AppendValue(column);
+            }
+            auto& dataColumns = value["dataColumns"];
+            dataColumns.SetType(NJson::JSON_ARRAY);
+            for (const auto& column : index.GetDataColumnNames()) {
+                dataColumns.AppendValue(column);
+            }
         }
 
         SerializeVirtualTimestamp(json["ts"], {record.GetStep(), record.GetTxId()});

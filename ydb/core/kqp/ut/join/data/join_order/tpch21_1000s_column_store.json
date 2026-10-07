@@ -3,15 +3,15 @@
   "args":
     [
       {
-        "op_name":"LeftOnlyJoin (BlockHash)",
+        "op_name":"LeftSemiJoin (BlockHash)",
         "args":
           [
             {
-              "op_name":"LeftSemiJoin (BlockHash)",
+              "op_name":"HashShuffle",
               "args":
                 [
                   {
-                    "op_name":"HashShuffle",
+                    "op_name":"LeftOnlyJoin (BlockHash)",
                     "args":
                       [
                         {
@@ -59,22 +59,6 @@
                                   ]
                               }
                             ]
-                        }
-                      ]
-                  },
-                  {
-                    "op_name":"InnerJoin (BlockHash)",
-                    "args":
-                      [
-                        {
-                          "op_name":"HashShuffle",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"lineitem"
-                              }
-                            ]
                         },
                         {
                           "op_name":"HashShuffle",
@@ -95,16 +79,38 @@
                                         ]
                                     },
                                     {
-                                      "op_name":"InnerJoin (Map)",
+                                      "op_name":"HashShuffle",
                                       "args":
                                         [
                                           {
-                                            "op_name":"TableFullScan",
-                                            "table":"supplier"
-                                          },
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"nation"
+                                            "op_name":"InnerJoin (BlockHash)",
+                                            "args":
+                                              [
+                                                {
+                                                  "op_name":"HashShuffle",
+                                                  "args":
+                                                    [
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"lineitem"
+                                                      }
+                                                    ]
+                                                },
+                                                {
+                                                  "op_name":"InnerJoin (Map)",
+                                                  "args":
+                                                    [
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"supplier"
+                                                      },
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"nation"
+                                                      }
+                                                    ]
+                                                }
+                                              ]
                                           }
                                         ]
                                     }
@@ -117,54 +123,48 @@
                 ]
             },
             {
-              "op_name":"HashShuffle",
+              "op_name":"InnerJoin (BlockHash)",
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (BlockHash)",
+                    "op_name":"HashShuffle",
                     "args":
                       [
                         {
-                          "op_name":"HashShuffle",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"lineitem"
-                              }
-                            ]
-                        },
+                          "op_name":"TableFullScan",
+                          "table":"lineitem"
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"HashShuffle",
+                    "args":
+                      [
                         {
-                          "op_name":"HashShuffle",
+                          "op_name":"InnerJoin (BlockHash)",
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (BlockHash)",
+                                "op_name":"HashShuffle",
                                 "args":
                                   [
                                     {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"lineitem"
-                                          }
-                                        ]
+                                      "op_name":"TableFullScan",
+                                      "table":"lineitem"
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"InnerJoin (Map)",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"supplier"
                                     },
                                     {
-                                      "op_name":"InnerJoin (Map)",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"supplier"
-                                          },
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"nation"
-                                          }
-                                        ]
+                                      "op_name":"TableFullScan",
+                                      "table":"nation"
                                     }
                                   ]
                               }

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "opentelemetry/logs/severity.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -28,6 +29,29 @@ public:
   bool IsEnabled() const noexcept;
 
   /**
+   * Returns the configured minimum severity for the Logger.
+   * @return the minimum severity. Defaults to Severity::kInvalid.
+   */
+  opentelemetry::logs::Severity GetMinimumSeverity() const noexcept;
+
+  /**
+   * Returns if trace-based filtering is enabled for the Logger.
+   * @return a boolean indicating if trace-based filtering is enabled. Defaults to false.
+   */
+  bool IsTraceBased() const noexcept;
+
+  /**
+   * Returns a LoggerConfig with the provided settings.
+   * @param enabled if false, the Logger behaves like a no-op logger.
+   * @param minimum_severity the minimum severity required for filtering.
+   * @param trace_based if true, trace-based filtering is enabled.
+   * @return a LoggerConfig with the provided settings.
+   */
+  static LoggerConfig Create(bool enabled,
+                             opentelemetry::logs::Severity minimum_severity,
+                             bool trace_based) noexcept;
+
+  /**
    * Returns a LoggerConfig that represents an enabled Logger.
    * @return a static constant LoggerConfig that represents an enabled logger.
    */
@@ -49,9 +73,16 @@ public:
   static LoggerConfig Default();
 
 private:
-  explicit LoggerConfig(const bool enabled = true) : enabled_(enabled) {}
+  explicit LoggerConfig(
+      bool enabled                                   = true,
+      opentelemetry::logs::Severity minimum_severity = opentelemetry::logs::Severity::kInvalid,
+      bool trace_based                               = false) noexcept
+      : enabled_(enabled), minimum_severity_(minimum_severity), trace_based_(trace_based)
+  {}
 
   bool enabled_;
+  opentelemetry::logs::Severity minimum_severity_;
+  bool trace_based_;
 };
 }  // namespace logs
 }  // namespace sdk

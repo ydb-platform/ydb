@@ -9,7 +9,7 @@ from yql_utils import execute, get_tables, get_files, get_http_files, \
     KSV_ATTR, yql_binary_path, is_xfail, is_xsqlfail, is_canonize_peephole, is_peephole_use_blocks, is_canonize_lineage, \
     is_skip_forceblocks, get_param, normalize_source_code_path, replace_vals, get_gateway_cfg_suffix, \
     do_custom_query_check, stable_result_file, stable_table_file, is_with_final_result_issues, \
-    normalize_result, get_langver
+    normalize_result, get_langver, get_gateway_cfg_patch
 from yqlrun import YQLRun
 
 from test_utils import get_config, get_parameters_json, get_case_file
@@ -59,12 +59,15 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
 
+    patch_name = get_gateway_cfg_patch(config)
+    patch_cfg_file = os.path.join(DATA_PATH, suite, patch_name) if patch_name else None
+
     extra_final_args = []
     if is_with_final_result_issues(config):
         extra_final_args += ['--with-final-issues']
     (res, tables_res) = run_file('pure', suite, case, cfg, config, yql_http_file_server, MINIRUN_PATH,
                                  extra_args=extra_final_args, allow_llvm=False, data_path=DATA_PATH,
-                                 langver=langver, fuzz_universal=True)
+                                 langver=langver, fuzz_universal=True, patch_cfg_file=patch_cfg_file)
 
     to_canonize = []
     assert xfail or os.path.exists(res.results_file)
@@ -124,7 +127,8 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'),
             binary=MINIRUN_PATH,
             langver=langver,
-            extra_args=["--compile-only","--test-partial-typecheck"] if is_typecheck else []
+            extra_args=["--compile-only","--test-partial-typecheck"] if is_typecheck else [],
+            patch_cfg_file=patch_cfg_file,
         )
 
         opt_res, opt_tables_res = execute(

@@ -495,12 +495,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             result);
     }
 
+    // Re-enabled after Slice 5 retired ESchemeOpRestoreMultipleIncrementalBackups.
+    // Now drives the Path A orchestrator via the standard RESTORE SQL entry point;
+    // the incremental scan is dispatched via TEvIncrementalRestoreSrcCreateRequest.
     Y_UNIT_TEST(SimpleRestore) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -508,40 +512,50 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
-        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
 
         ExecSQL(server, edgeActor, R"(
-            UPSERT INTO `/Root/Table` (key, value) VALUES
-            (2, 2),
-            (3, 3);
+            CREATE BACKUP COLLECTION `MyCollection`
+              ( TABLE `/Root/Table`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = 'true'
+              );
+            )", false);
+
+        // Pre-populate the full backup with the source rows the original test
+        // implicitly assumed (key=2 and key=3 already present, plus the rows the
+        // incremental will overwrite/delete).
+        CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000001Z_full", "Table", SimpleTable());
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000001Z_full/Table` (key, value) VALUES
+              (2, 2),
+              (3, 3);
         )");
 
-        CreateShardedTable(
-            server,
-            edgeActor,
-            "/Root",
-            "IncrBackupImpl",
-            SimpleTable()
-                .AllowSystemColumnNames(true)
-                .Columns({
-                    {"key", "Uint32", true, false},
-                    {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}}));
+        // Pre-populate the incremental backup with the same change-metadata rows
+        // the legacy test wrote directly to /Root/IncrBackupImpl.
+        auto incrOpts = SimpleTable()
+            .AllowSystemColumnNames(true)
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+                {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}});
+        CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000002Z_incremental", "Table", incrOpts);
 
         auto normalMetadata = SerializeChangeMetadata(false); // Not deleted
         auto deletedMetadata = SerializeChangeMetadata(true);  // Deleted
 
         ExecSQL(server, edgeActor, TStringBuilder() << R"(
-            UPSERT INTO `/Root/IncrBackupImpl` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
-            (1, 10, ')" << normalMetadata << R"('),
-            (2, NULL, ')" << deletedMetadata << R"('),
-            (3, 30, ')" << normalMetadata << R"('),
-            (5, NULL, ')" << deletedMetadata << R"(');
+            UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+              (1, 10, ')" << normalMetadata << R"('),
+              (2, NULL, ')" << deletedMetadata << R"('),
+              (3, 30, ')" << normalMetadata << R"('),
+              (5, NULL, ')" << deletedMetadata << R"(');
         )");
 
-        WaitTxNotification(server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "/Root/IncrBackupImpl", "/Root/Table"));
-
-        SimulateSleep(server, TDuration::Seconds(1));
+        ExecSQL(server, edgeActor, R"(RESTORE `MyCollection`;)", false);
+        runtime.SimulateSleep(TDuration::Seconds(10));
 
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleExec(runtime, R"(
@@ -795,12 +809,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
     // TODO(innokentii): test actual state of MultiRestore and probably rename it back to just restore
 
+    // Re-enabled after Slice 5 retired ESchemeOpRestoreMultipleIncrementalBackups.
+    // Drives the full BACKUP + INCREMENTAL + RESTORE cycle through the standard
+    // backup-collection orchestrator (Path A request dispatch).
     Y_UNIT_TEST(BackupRestore) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -809,7 +827,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
         CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
-        CreateShardedTable(server, edgeActor, "/Root", "RestoreTable", SimpleTable());
 
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
@@ -819,13 +836,17 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         )");
 
         ExecSQL(server, edgeActor, R"(
-            UPSERT INTO `/Root/RestoreTable` (key, value) VALUES
-            (1, 10),
-            (2, 20),
-            (3, 30);
-        )");
+            CREATE BACKUP COLLECTION `MyCollection`
+              ( TABLE `/Root/Table`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = 'true'
+              );
+            )", false);
 
-        WaitTxNotification(server, edgeActor, AsyncCreateContinuousBackup(server, "/Root", "Table", "0_continuousBackupImpl"));
+        ExecSQL(server, edgeActor, R"(BACKUP `MyCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
 
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
@@ -838,22 +859,23 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         SimulateSleep(server, TDuration::Seconds(1));
 
-        WaitTxNotification(server, edgeActor,
-            AsyncAlterTakeIncrementalBackup(server, "/Root", "Table", "IncrBackupImpl", "1_continuousBackupImpl"));
+        ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
 
-        SimulateSleep(server, TDuration::Seconds(1));
+        // Capture the post-incremental-backup table state so we can assert restore
+        // reproduces it exactly.
+        auto expectedState = KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/Table` ORDER BY key
+        )");
 
-        WaitTxNotification(server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "/Root/IncrBackupImpl", "/Root/RestoreTable"));
-
-        SimulateSleep(server, TDuration::Seconds(5)); // wait longer until schema will be applied
+        ExecSQL(server, edgeActor, R"(DROP TABLE `/Root/Table`;)", false);
+        ExecSQL(server, edgeActor, R"(RESTORE `MyCollection`;)", false);
+        runtime.SimulateSleep(TDuration::Seconds(10));
 
         UNIT_ASSERT_VALUES_EQUAL(
+            expectedState,
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/Table`
-                ORDER BY key
-                )"),
-            KqpSimpleExec(runtime, R"(
-                SELECT key, value FROM `/Root/RestoreTable`
                 ORDER BY key
                 )"));
     }

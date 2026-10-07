@@ -4,6 +4,7 @@
 #include <yt/yql/providers/yt/fmr/coordinator/partitioner/yql_yt_fmr_partitioner.h>
 #include <yt/yql/providers/yt/fmr/coordinator/partitioner/yql_yt_ordered_partitioner.h>
 #include <yt/yql/providers/yt/fmr/coordinator/partitioner/yql_yt_sorted_partitioner.h>
+#include <yt/yql/providers/yt/fmr/coordinator/partitioner/yql_yt_reduce_partitioner.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NFmr {
@@ -52,6 +53,14 @@ inline TOrderedPartitionSettings GetSortedUploadPartitionerSettings(const NYT::T
 inline TSortedPartitionSettings GetSortedPartitionerSettings(const NYT::TNode& fmrOperationSpec) {
     TSortedPartitionSettings settings;
     settings.FmrPartitionSettings = GetFmrPartitionerSettings(fmrOperationSpec);
+    return settings;
+}
+
+inline TReducePartitionSettings GetReducePartitionSettings(const NYT::TNode& fmrOperationSpec) {
+    TReducePartitionSettings settings;
+    settings.FmrPartitionSettings.MaxDataWeightPerPart = fmrOperationSpec["reduce"]["max_data_weight_per_part"].AsInt64();
+    settings.FmrPartitionSettings.MaxParts = fmrOperationSpec["reduce"]["max_parts"].AsInt64();
+    settings.MaxKeySizePerPart = fmrOperationSpec["reduce"]["max_key_size_per_part"].AsInt64();
     return settings;
 }
 

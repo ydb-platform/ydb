@@ -113,6 +113,11 @@ public:
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options) override;
 
+    TFilePartitions GetFilePartitions(
+        const TYPath& path,
+        const TVector<TFileReadRange>& ranges,
+        const TGetFilePartitionsOptions& options) override;
+
     TMaybe<TYPath> GetFileFromCache(
         const TString& md5Signature,
         const TYPath& cachePath,
@@ -127,6 +132,10 @@ public:
     IFileReaderPtr CreateFileReader(
         const TRichYPath& path,
         const TFileReaderOptions& options) override;
+
+    IFileReaderPtr CreateFilePartitionReader(
+        const TString& cookie,
+        const TFilePartitionReaderOptions& options) override;
 
     IFileWriterPtr CreateFileWriter(
         const TRichYPath& path,
@@ -367,7 +376,7 @@ public:
         const TYPath& path,
         const TUnlockOptions& options) override;
 
-    void Commit() override;
+    void Commit(const TCommitTransactionOptions& options = {}) override;
 
     void Abort() override;
 
@@ -465,6 +474,9 @@ public:
     void AlterTableReplica(
         const TReplicaId& replicaId,
         const TAlterTableReplicaOptions& alterTableReplicaOptions) override;
+
+    void CheckClusterLiveness(
+        const TCheckClusterLivenessOptions& options = TCheckClusterLivenessOptions()) override;
 
     ui64 GenerateTimestamp() override;
 

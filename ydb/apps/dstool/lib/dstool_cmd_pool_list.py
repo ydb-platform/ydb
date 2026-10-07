@@ -1,4 +1,4 @@
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 import math
@@ -26,6 +26,7 @@ def calculate_estimated_usage(pdisk_map, vslot_map, groups):
     max_used_size = 0
     min_fair_size = 0
     vslot_fair_usages = []
+    total_size_in_units = 0
     for group in groups:
         vslot_fair_sizes = []
         vslot_used_sizes = []
@@ -37,9 +38,7 @@ def calculate_estimated_usage(pdisk_map, vslot_map, groups):
 
             pdisk = pdisk_map[pdisk_id]
             vslot_used_sizes.append(vslot.VDiskMetrics.AllocatedSize)
-            _, pdisk_slot_size_in_units = common.get_pdisk_inferred_settings(pdisk)
-            weight = common.get_vslot_owner_weight(group.GroupSizeInUnits, pdisk_slot_size_in_units)
-            vslot_fair_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
+            vslot_fair_size = common.get_vslot_quota_from_pdisk(group.GroupSizeInUnits, pdisk)
             vslot_fair_sizes.append(vslot_fair_size)
 
         min_vslot_fair_size = apply_func(min, vslot_fair_sizes)
@@ -55,11 +54,13 @@ def calculate_estimated_usage(pdisk_map, vslot_map, groups):
         else:
             vslot_fair_usages.append(0.0)
 
+        total_size_in_units += group.GroupSizeInUnits or 1
+
     estimated_usage = max_used_size / min_fair_size if min_fair_size else 0.0
     max_vslot_fair_usage = apply_func(max, vslot_fair_usages)
     mean_vslot_fair_usage = apply_func(sum, vslot_fair_usages) / len(vslot_fair_usages) if len(vslot_fair_usages) > 0 else 0.0
     std_dev_vslot_fair_usage = math.sqrt(sum((x - mean_vslot_fair_usage)**2 for x in vslot_fair_usages) / len(vslot_fair_usages)) if len(vslot_fair_usages) > 0 else 0.0
-    groups_fair_count = math.ceil(len(vslot_fair_usages) * estimated_usage / 0.85)
+    groups_fair_count = math.ceil(total_size_in_units * estimated_usage / 0.85)
 
     res = {}
     res['EstimatedUsage'] = estimated_usage
@@ -103,6 +104,7 @@ def do(args):
         'MeanVDiskEstimatedUsage',
         'StdDevVDiskEstimatedUsage',
         'ItemConfigGeneration',
+        'VDiskHeapAllocatorNumLeadingDisks',
     ]
     visible_columns = [
         'BoxId:PoolId',
@@ -152,7 +154,7 @@ def do(args):
             pool['groups'] = defaultdict(int)
         groups = pool['groups']
 
-        for key in ['Groups_TOTAL', 'Groups_' + kikimr_bsconfig.TGroupStatus.E.Name(group.OperatingStatus)]:
+        for key in ['Groups_TOTAL', 'Groups_' + kikimr_bs3.TGroupStatus.E.Name(group.OperatingStatus)]:
             groups[key] += 1
         groups['TotalSizeInUnits'] += group.GroupSizeInUnits or 1
 
@@ -181,9 +183,7 @@ def do(args):
         pdisk = pdisk_map.get(common.get_pdisk_id(vslot.VSlotId))
         vdisk_slot_size = None
         if pdisk is not None:
-            _, pdisk_slot_size_in_units = common.get_pdisk_inferred_settings(pdisk)
-            weight = common.get_vslot_owner_weight(group.GroupSizeInUnits, pdisk_slot_size_in_units)
-            vdisk_slot_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
+            vdisk_slot_size = common.get_vslot_quota_from_pdisk(group.GroupSizeInUnits, pdisk)
 
         if vdisk_slot_size is not None:
             vslots['Limit'] = vslots.get('Limit', 0) + vdisk_slot_size
@@ -203,6 +203,10 @@ def do(args):
         row['DefaultGroupSizeInUnits'] = sp.DefaultGroupSizeInUnits
         row['VDiskKind'] = sp.VDiskKind
         row['ItemConfigGeneration'] = sp.ItemConfigGeneration
+        # a string, so that sorting by this column does not mix types
+        settings = sp.Settings
+        row['VDiskHeapAllocatorNumLeadingDisks'] = (str(settings.VDiskHeapAllocatorNumLeadingDisks)
+                                                    if settings.HasField('VDiskHeapAllocatorNumLeadingDisks') else 'inherit')
 
         pool = box_pool_map[sp.BoxId, sp.StoragePoolId]
 

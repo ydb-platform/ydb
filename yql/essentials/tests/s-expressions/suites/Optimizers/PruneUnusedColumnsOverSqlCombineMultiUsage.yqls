@@ -1,0 +1,39 @@
+(
+(let config (DataSource 'config))
+
+(let leftStr1 (AsStruct '('key (Uint32 '1)) '('la (String 'x1)) '('lb (Uint32 '10)) '('lc (Bool 'true))))
+(let leftStr2 (AsStruct '('key (Uint32 '2)) '('la (String 'x2)) '('lb (Uint32 '20)) '('lc (Bool 'false))))
+(let leftList (AsList leftStr1 leftStr2))
+
+(let rightStr1 (AsStruct '('key (Uint32 '1)) '('ra (String 'y1)) '('rb (Uint32 '11)) '('rc (Bool 'false))))
+(let rightStr2 (AsStruct '('key (Uint32 '3)) '('ra (String 'y2)) '('rb (Uint32 '21)) '('rc (Bool 'true))))
+(let rightList (AsList rightStr1 rightStr2))
+
+(let keyExtract (lambda '(row) (Member row 'key)))
+
+(let presortKeySelector (Void))
+(let presortDirection (Void))
+
+(let lArgMap (lambda '(row) (AsStruct '('La (Member row 'la)) '('Lb (Member row 'lb)))))
+(let rArgMap (lambda '(row) (AsStruct '('Ra (Member row 'ra)) '('Rb (Member row 'rb)))))
+
+(let leftInput (SqlCombineInput leftList (Void) presortKeySelector presortDirection (Void) keyExtract (Void) lArgMap))
+(let rightInput (SqlCombineInput rightList (Void) presortKeySelector presortDirection (Void) keyExtract (Void) rArgMap))
+
+(let usingLambda (lambda '(key leftRows rightRows) (AsStruct
+    '('key key)
+    '('extra (Uint32 '0))
+    '('leftAs (Map leftRows (lambda '(r) (Member r 'La))))
+    '('rightBs (Map rightRows (lambda '(r) (Member r 'Rb))))
+)))
+
+(let combined (SqlCombine leftInput rightInput usingLambda))
+(let onlyLeft (ExtractMembers combined '('leftAs)))
+(let onlyRight (ExtractMembers combined '('rightBs)))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) onlyLeft '('('type))))
+(let world (Write! world res_sink (Key) onlyRight '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

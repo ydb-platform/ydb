@@ -1,77 +1,17 @@
 #pragma once
 
 #include "kqp_info_unit.h"
+#include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NKikimr {
 namespace NKqp {
 
 using namespace NYql;
 
-struct TPhysicalOpProps;
-
-struct TColumnLineageEntry {
-    TColumnLineageEntry(TString alias, TString tableName, TString columnName) : SourceAlias(alias), 
-        TableName(tableName),
-        ColumnName(columnName) {}
-
-    TColumnLineageEntry(TString alias, TString tableName, TString columnName, int duplicateNo) : SourceAlias(alias), 
-        TableName(tableName),
-        ColumnName(columnName),
-        DuplicateNo(duplicateNo) {}
-
-    TString GetCannonicalAlias() const {
-        TStringBuilder res;
-
-        if (SourceAlias != "") {
-            res << SourceAlias;
-        }
-        else {
-            res << TableName;
-        }
-
-        if (DuplicateNo != 0) {
-            res << "_#" << DuplicateNo;
-        }
-
-        return res;
-    }
-
-    TString GetSourceAlias() const {
-        if (SourceAlias != "") {
-            return GetCannonicalAlias();
-        }
-        else {
-            return "";
-        }
-    }
-
-    TString GetRawAlias() const {
-        if (SourceAlias != "") {
-            return SourceAlias;
-        } else {
-            return TableName;
-        }
-    }
-
-    TInfoUnit GetInfoUnit() const {
-        return TInfoUnit(GetCannonicalAlias(), ColumnName);
-    }
-
-    TString SourceAlias;
-    TString TableName;
-    TString ColumnName;
-    int DuplicateNo{0};
-};
-
-struct TColumnLineage {
-    void AddMapping(const TInfoUnit& unit, const TColumnLineageEntry& entry);
-    int AddAlias(const TString& alias, const TString& tableName);
-    void Merge(const TColumnLineage& other);
-
-    THashMap<TInfoUnit, TColumnLineageEntry, TInfoUnit::THashFunction> Mapping;
-    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> ReverseMapping;
-    THashMap<TString, int, TInfoUnit::THashFunction> MaxDuplicateId;
-};
+class IOperator;
+class TColumnLineage;
+struct TColumnLineageEntry;
 
 enum ELogicalCardinality: ui32 {
     ZeroOrMore,
@@ -87,17 +27,21 @@ public:
     EStorageType StorageType = EStorageType::NA;
     ELogicalCardinality LogicalCard = ELogicalCardinality::ZeroOrMore;
 
-    TColumnLineage ColumnLineage;
-    TVector<TInfoUnit> KeyColumns;
+    // Keep source-key order for ordered consumers; membership uses Unordered().
+    TOrderedIUs<> KeyColumns;
+    // Output columns allowed to reuse source-table column statistics.
+    TUnorderedIUs SourceStatsColumns;
+    // Hint relation at this boundary. Aggregate replaces the relation even for
+    // grouping keys whose ID and global value provenance remain unchanged.
+    TMappedIUs<ui32> HintRelations;
     ui32 ColumnsCount = 0;
-    TVector<TInfoUnit> ShuffledByColumns;
-    TVector<std::pair<TInfoUnit,bool>> SortColumns;
+    // This is a descriptive fact: "this node's rows are physically partitioned by these columns".
+    // The per-side *requirement* ("shuffle this input by these keys for the parent join") is
+    // NOT stored here — it lives on TJoinOptimizerNode. It is propagated through renames, projections,
+    // joins and such. When it reaches leafs of a CBO Tree it's used to set the initial orderings.
+    TOrderedIUs<> ShuffledByColumns;
 
-    std::optional<std::int64_t> SortingOrderingIdx;
-    std::optional<std::int64_t> ShufflingOrderingIdx;
-
-    TInfoUnit MapColumn(const TInfoUnit& col);
-    TString ToString(ui32 printOptions);
+    TString ToString(ui32 printOptions, const TInfoUnitRegistry& registry);
 };
 
 class TRBOStatistics {
@@ -109,8 +53,8 @@ public:
     TString ToString(ui32 printOptions);
 };
 
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts);
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, const TVector<TInfoUnit>& keyColumns);
+TOptimizerStatistics BuildOptimizerStatistics(IOperator& op, const TColumnLineage& lineage, bool withStatsAndCosts, const NYql::TTypeAnnotationContext& typeCtx);
+const TColumnLineageEntry* FindSourceStatistics(const IOperator& op, TInfoUnitId id, const TColumnLineage& lineage);
 
 }
 }

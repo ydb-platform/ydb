@@ -13,6 +13,6 @@ namespace NYql {
 NKikimr::NMiniKQL::IComputationNode* WrapYtBlockTableContent(
     NYql::NCommon::TCodecContext& codecCtx,
     NKikimr::NMiniKQL::TComputationMutables& mutables,
-    NKikimr::NMiniKQL::TCallable& callable, TStringBuf pathPrefix);
+    NKikimr::NMiniKQL::TCallable& callable, TStringBuf pathPrefix, EDatumValidationMode validationMode);
 
 } // NYql

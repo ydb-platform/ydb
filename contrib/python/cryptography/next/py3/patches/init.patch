@@ -1,0 +1,28 @@
+--- .src/ya.make	(c6fe4ea2c036b04d62fb4d40136bade80df24dd6)
++++ .src/ya.make	(index)
+@@ -21,6 +21,7 @@ NO_LINT()
+
+ PY_SRCS(
+     TOP_LEVEL
++    cryptography/hazmat/bindings/_rust/__init__.py
+     cryptography/__about__.py
+     cryptography/__init__.py
+     cryptography/exceptions.py
+--- .src/cryptography/utils.py	(c6fe4ea2c036b04d62fb4d40136bade80df24dd6)
++++ .src/cryptography/utils.py	(index)
+@@ -25,6 +25,11 @@ DeprecatedIn37 = CryptographyDeprecationWarning
+ DeprecatedIn40 = CryptographyDeprecationWarning
+ DeprecatedIn41 = CryptographyDeprecationWarning
+
++def register_interface(iface):
++    def register_decorator(klass):
++        return klass
++    return register_decorator
++
+
+ def _check_bytes(name: str, value: bytes) -> None:
+     if not isinstance(value, bytes):
+--- .src/cryptography/hazmat/bindings/_rust/__init__.py	(c6fe4ea2c036b04d62fb4d40136bade80df24dd6)
++++ .src/cryptography/hazmat/bindings/_rust/__init__.py	(index)
+@@ -0,0 +1 @@
++from _rust import *

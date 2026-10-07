@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "9.3.1";
+  version = "9.4.3";
 
   src = fetchFromGitHub {
     owner = "nodejs";
     repo = "llhttp";
     rev = "release/v${version}";
-    hash = "sha256-eHy8sjmfLA+q1WWuo4bkZ0wRI4q9fkNaW8c2OgKv/MM=";
+    hash = "sha256-wz87FgdZn0vtdlTWOZL5/Ujhs/uzSwFMHzQ6D9S7dH8=";
   };
 
   patches = [];

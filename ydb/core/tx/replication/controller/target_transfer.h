@@ -2,11 +2,9 @@
 
 #include "target_with_stream.h"
 
-#include <ydb/core/base/appdata.h>
-
 namespace NKikimrProto::NMetricsConfig {
     class TMetricsConfig;
-} // namespace NKikimrProto::NMetricsConfig
+}
 
 namespace NKikimr::NReplication::NController {
 
@@ -57,5 +55,7 @@ private:
 
     TActorId StreamConsumerRemover;
     THolder<NKikimrProto::NMetricsConfig::TMetricsConfig> MetricsConfig;
-};
+
+}; // TTargetTransfer
+
 }

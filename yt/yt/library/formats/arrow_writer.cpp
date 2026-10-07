@@ -24,6 +24,8 @@
 
 #include <library/cpp/yt/memory/range.h>
 
+#include <util/stream/mem.h>
+
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h>
 
 #include <contrib/libs/apache/arrow_next/cpp/src/generated/Message.fbs.h>
@@ -89,7 +91,7 @@ flatbuffers::Offset<flatbuf::Field> CreateRegularField(
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr i64 ArrowAlignment = 8;
-const TString AlignmentString(ArrowAlignment, 0);
+const std::string AlignmentString(ArrowAlignment, 0);
 
 flatbuffers::Offset<flatbuffers::String> SerializeString(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
@@ -100,8 +102,7 @@ flatbuffers::Offset<flatbuffers::String> SerializeString(
 
 TArrowSchemaType SerializeTzType(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    ESimpleLogicalValueType type,
-    const TArrowFormatConfigPtr& arrowConfig)
+    ESimpleLogicalValueType type)
 {
     std::vector<flatbuffers::Offset<flatbuf::Field>> childrenOffset;
 
@@ -121,34 +122,20 @@ TArrowSchemaType SerializeTzType(
 
     childrenOffset.push_back(timestampField);
 
-    if (arrowConfig->EnableTzIndex) {
-        // Make tz index field.
-        auto tzIndexOffset = flatbuf::CreateInt(
-            *flatbufBuilder,
-            /*bitWidth*/ 16,
-            /*is_signed*/ false).Union();
+    // Make tz index field.
+    auto tzIndexOffset = flatbuf::CreateInt(
+        *flatbufBuilder,
+        /*bitWidth*/ 16,
+        /*is_signed*/ false).Union();
 
-        auto tzIndexField = flatbuf::CreateField(
-            *flatbufBuilder,
-            SerializeString(flatbufBuilder, "TzIndex"),
-            /*nullable*/ false,
-            flatbuf::Type_Int,
-            tzIndexOffset);
+    auto tzIndexField = flatbuf::CreateField(
+        *flatbufBuilder,
+        SerializeString(flatbufBuilder, "TzIndex"),
+        /*nullable*/ false,
+        flatbuf::Type_Int,
+        tzIndexOffset);
 
-        childrenOffset.push_back(std::move(tzIndexField));
-    } else {
-        // Make tz name field.
-        auto tzNameOffset = flatbuf::CreateBinary(*flatbufBuilder).Union();
-
-        auto tzNameField = flatbuf::CreateField(
-            *flatbufBuilder,
-            SerializeString(flatbufBuilder, "TzName"),
-            /*nullable*/ false,
-            flatbuf::Type_Binary,
-            tzNameOffset);
-
-        childrenOffset.push_back(std::move(tzNameField));
-    }
+    childrenOffset.push_back(std::move(tzIndexField));
 
     return TArrowSchemaType{
         .Type = flatbuf::Type_Struct_,
@@ -159,8 +146,7 @@ TArrowSchemaType SerializeTzType(
 
 TArrowSchemaType SerializeLeafColumnType(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    ESimpleLogicalValueType simpleType,
-    const TArrowFormatConfigPtr& arrowConfig)
+    ESimpleLogicalValueType simpleType)
 {
     switch (simpleType) {
         case ESimpleLogicalValueType::Null:
@@ -265,7 +251,7 @@ TArrowSchemaType SerializeLeafColumnType(
         case ESimpleLogicalValueType::TzDate32:
         case ESimpleLogicalValueType::TzDatetime64:
         case ESimpleLogicalValueType::TzTimestamp64:
-            return SerializeTzType(flatbufBuilder, simpleType, arrowConfig);
+            return SerializeTzType(flatbufBuilder, simpleType);
 
         case ESimpleLogicalValueType::Utf8:
         case ESimpleLogicalValueType::Json:
@@ -432,7 +418,7 @@ TArrowSchemaType SerializeColumnType(
 {
     if (!arrowConfig->EnableComplexTypes) {
         auto simpleType = CastToV1Type(type).first;
-        return SerializeLeafColumnType(flatbufBuilder, simpleType, arrowConfig);
+        return SerializeLeafColumnType(flatbufBuilder, simpleType);
     }
 
     auto denullifiedType = DenullifyLogicalType(type);
@@ -440,7 +426,7 @@ TArrowSchemaType SerializeColumnType(
     switch (denullifiedType->GetMetatype()) {
         case ELogicalMetatype::Simple: {
             auto simpleType = CastToV1Type(type).first;
-            return SerializeLeafColumnType(flatbufBuilder, simpleType, arrowConfig);
+            return SerializeLeafColumnType(flatbufBuilder, simpleType);
         }
 
         case ELogicalMetatype::Struct:
@@ -457,7 +443,8 @@ TArrowSchemaType SerializeColumnType(
             return SerializeDictColumnType(flatbufBuilder, denullifiedType->AsDictTypeRef(), arrowConfig);
 
         case ELogicalMetatype::Tagged:
-            // Denullified type should not contain tagged type.
+        case ELogicalMetatype::AggregateState:
+            // Denullified type should not contain tagged types.
             YT_ABORT();
 
         default:
@@ -577,9 +564,9 @@ struct TRecordBatchSerializationContext final
 
     void AddBuffer(i64 size, TBodyWriter writer)
     {
-        YT_LOG_DEBUG("Buffer registered (Offset: %v, Size: %v)",
-            CurrentBodyOffset,
-            size);
+        YT_TLOG_DEBUG("Buffer registered")
+            .With("Offset", CurrentBodyOffset)
+            .With("Size", size);
 
         Buffers.emplace_back(CurrentBodyOffset, size);
         CurrentBodyOffset += AlignUp<i64>(size, ArrowAlignment);
@@ -672,10 +659,10 @@ void SerializeRleButNotDictionaryEncodedStringLikeColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding RLE but not dictionary-encoded string-like column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount);
+    YT_TLOG_DEBUG("Adding RLE but not dictionary-encoded string-like column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount);
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -703,11 +690,11 @@ void SerializeDictionaryColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding dictionary column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding dictionary column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     auto relevantDictionaryIndexes = column->GetRelevantTypedValues<ui32>();
 
@@ -746,11 +733,11 @@ void SerializeRleDictionaryColumn(
     YT_VERIFY(column->Rle->ValueColumn->Values->BaseValue == 0);
     YT_VERIFY(!column->Rle->ValueColumn->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding dictionary column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding dictionary column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     auto dictionaryIndexes = column->Rle->ValueColumn->GetTypedValues<ui32>();
     auto rleIndexes = column->GetTypedValues<ui64>();
@@ -794,11 +781,11 @@ void SerializeIntegerColumn(
     const auto* column = typedColumn.Column;
     YT_VERIFY(column->Values);
 
-    YT_LOG_DEBUG("Adding integer column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding integer column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -870,11 +857,11 @@ void SerializeDateColumn(
     const auto* column = typedColumn.Column;
     YT_VERIFY(column->Values);
 
-    YT_LOG_DEBUG("Adding data column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding data column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -912,7 +899,9 @@ void SerializeDateColumn(
                 },
                 [&] (auto value) {
                     if (value > std::numeric_limits<i32>::max()) {
-                        THROW_ERROR_EXCEPTION("Date value cannot be represented in arrow (Value: %v, MaxAllowedValue: %v)", value, std::numeric_limits<i32>::max());
+                        THROW_ERROR_EXCEPTION("Date value %v cannot be represented in arrow: maximum allowed value is %v",
+                            value,
+                            std::numeric_limits<i32>::max());
                     }
                     *currentOutput++ = value;
                 });
@@ -926,11 +915,11 @@ void SerializeDatetimeColumn(
     const auto* column = typedColumn.Column;
     YT_VERIFY(column->Values);
 
-    YT_LOG_DEBUG("Adding datetime column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding datetime column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -979,11 +968,11 @@ void SerializeTimestampColumn(
     const auto* column = typedColumn.Column;
     YT_VERIFY(column->Values);
 
-    YT_LOG_DEBUG("Adding timestamp column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding timestamp column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -1021,7 +1010,7 @@ void SerializeTimestampColumn(
                 },
                 [&] (auto value) {
                     if (value > std::numeric_limits<i64>::max()) {
-                        THROW_ERROR_EXCEPTION("Timestamp value cannot be represented in arrow (Value: %v, MaxAllowedValue: %v)", value, std::numeric_limits<i64>::max());
+                        THROW_ERROR_EXCEPTION("Timestamp value %v cannot be represented in arrow: maximum allowed value is %v", value, std::numeric_limits<i64>::max());
                     }
                     *currentOutput++ = value;
                 });
@@ -1038,12 +1027,11 @@ void SerializeDoubleColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG(
-        "Adding double column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding double column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -1068,12 +1056,11 @@ void SerializeFloatColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG(
-        "Adding float column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        column->Rle.has_value());
+    YT_TLOG_DEBUG("Adding float column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("Rle", column->Rle.has_value());
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -1143,13 +1130,13 @@ void SerializeStringLikeColumn(
     auto endOffset = DecodeStringOffset(offsets, avgLength, endIndex);
     auto stringsSize = endOffset - startOffset;
 
-    YT_LOG_DEBUG("Adding string-like column (ColumnId: %v, StartIndex: %v, ValueCount: %v, StartOffset: %v, EndOffset: %v, StringsSize: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        startOffset,
-        endOffset,
-        stringsSize);
+    YT_TLOG_DEBUG("Adding string-like column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("StartOffset", startOffset)
+        .With("EndOffset", endOffset)
+        .With("StringsSize", stringsSize);
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -1177,8 +1164,7 @@ void SerializeStringLikeColumn(
 template <ESimpleLogicalValueType type>
 void SerializeTzColumnImpl(
     const TTypedBatchColumn& typedColumn,
-    TRecordBatchSerializationContext* context,
-    const TArrowFormatConfigPtr& config)
+    TRecordBatchSerializationContext* context)
 {
     const auto* column = typedColumn.Column;
     YT_VERIFY(column->Values);
@@ -1200,13 +1186,13 @@ void SerializeTzColumnImpl(
     auto stringsSize = endOffset - startOffset;
     std::vector<ui32> tzOffsets(column->ValueCount + 1);
 
-    YT_LOG_DEBUG("Adding tz-type column (ColumnId: %v, StartIndex: %v, ValueCount: %v, StartOffset: %v, EndOffset: %v, StringsSize: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount,
-        startOffset,
-        endOffset,
-        stringsSize);
+    YT_TLOG_DEBUG("Adding tz-type column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount)
+        .With("StartOffset", startOffset)
+        .With("EndOffset", endOffset)
+        .With("StringsSize", stringsSize);
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -1254,75 +1240,35 @@ void SerializeTzColumnImpl(
 
     addEmptyBitmap();
 
-    if (config->EnableTzIndex) {
-        // Writing timezone indexes
-        context->AddBuffer(
-            sizeof(ui16) * column->ValueCount,
-            [=] (TMutableRef dstRef) {
-                auto currentStringData = stringData.Data();
-                auto dstValues = GetTypedValues<ui16>(dstRef);
+    // Writing timezone indexes
+    context->AddBuffer(
+        sizeof(ui16) * column->ValueCount,
+        [=] (TMutableRef dstRef) {
+            auto currentStringData = stringData.Data();
+            auto dstValues = GetTypedValues<ui16>(dstRef);
 
-                auto* currentOutput = dstValues.Begin();
-                for (int rowOffset = 0; rowOffset < column->ValueCount; ++rowOffset) {
-                    if (tzOffsets[rowOffset] != tzOffsets[rowOffset + 1]) {
-                        auto tzItem = ParseTzValue<TInt>(std::string_view(
-                            currentStringData + tzOffsets[rowOffset],
-                            currentStringData + tzOffsets[rowOffset + 1]));
-                        *currentOutput = GetTzIndex(tzItem.second);
-                    }
-                    ++currentOutput;
+            auto* currentOutput = dstValues.Begin();
+            for (int rowOffset = 0; rowOffset < column->ValueCount; ++rowOffset) {
+                if (tzOffsets[rowOffset] != tzOffsets[rowOffset + 1]) {
+                    auto tzItem = ParseTzValue<TInt>(std::string_view(
+                        currentStringData + tzOffsets[rowOffset],
+                        currentStringData + tzOffsets[rowOffset + 1]));
+                    *currentOutput = tzItem.second;
                 }
-            });
-    } else {
-        // Writing timezone names.
-        TStringBuilder builder;
-        std::vector<i32> nameOffsets;
-        nameOffsets.reserve(column->ValueCount);
-        i32 tzStringsSize = 0;
-        auto currentStringData = stringData.Data();
-        for (int rowOffset = 0; rowOffset < column->ValueCount; ++rowOffset) {
-            nameOffsets.push_back(tzStringsSize);
-            if (tzOffsets[rowOffset] != tzOffsets[rowOffset + 1]) {
-                auto tzItem = ParseTzValue<TInt>(std::string_view(
-                    currentStringData + tzOffsets[rowOffset],
-                    currentStringData + tzOffsets[rowOffset + 1]));
-                tzStringsSize += tzItem.second.size();
-                builder.AppendString(tzItem.second);
+                ++currentOutput;
             }
-        }
-        nameOffsets.push_back(tzStringsSize);
-        auto tzStringsBuffer = builder.Flush();
-
-        context->AddBuffer(
-            sizeof(i32) * (column->ValueCount + 1),
-            [=] (TMutableRef dstRef) {
-                ::memcpy(
-                    dstRef.Begin(),
-                    nameOffsets.data(),
-                    nameOffsets.size() * sizeof(i32));
-            });
-
-        context->AddBuffer(
-            tzStringsSize,
-            [=] (TMutableRef dstRef) {
-                ::memcpy(
-                    dstRef.Begin(),
-                    tzStringsBuffer.data(),
-                    tzStringsSize);
-            });
-    }
+        });
 }
 
 void SerializeTzColumn(
     const TTypedBatchColumn& typedColumn,
     ESimpleLogicalValueType simpleType,
-    TRecordBatchSerializationContext* context,
-    const TArrowFormatConfigPtr& config)
+    TRecordBatchSerializationContext* context)
 {
     switch (simpleType) {
 #define XX(ytType)                                                                                      \
     case ESimpleLogicalValueType::ytType: {                                                             \
-        return SerializeTzColumnImpl<ESimpleLogicalValueType::ytType>(typedColumn, context, config);    \
+        return SerializeTzColumnImpl<ESimpleLogicalValueType::ytType>(typedColumn, context);    \
     }
     XX(TzDate)
     XX(TzDatetime)
@@ -1347,10 +1293,10 @@ void SerializeBooleanColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(column->Values->BitWidth == 1);
 
-    YT_LOG_DEBUG("Adding boolean column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
-        column->Id,
-        column->StartIndex,
-        column->ValueCount);
+    YT_TLOG_DEBUG("Adding boolean column")
+        .With("ColumnId", column->Id)
+        .With("StartIndex", column->StartIndex)
+        .With("ValueCount", column->ValueCount);
 
     SerializeColumnPrologue(typedColumn, context);
 
@@ -1414,7 +1360,6 @@ using TArrowWriterBuffer = std::variant<TTypedBlob, TBitmapOutput>;
 
 void CreateBuffersForSimpleType(
     const TLogicalTypePtr& type,
-    const TArrowFormatConfigPtr& config,
     std::vector<TArrowWriterBuffer>& buffers)
 {
     auto simpleType = CastToV1Type(type).first;
@@ -1434,17 +1379,8 @@ void CreateBuffersForSimpleType(
     if (IsTzType(type)) {
         // Buffer for timestamp data.
         buffers.emplace_back(TTypedBlob());
-        if (config->EnableTzIndex) {
-            // Buffer for timezone indices.
-            buffers.emplace_back(TTypedBlob());
-        } else {
-            // Buffer for timezone name offsets.
-            buffers.emplace_back(TTypedBlob());
-            auto& offsetsBuffer = std::get<TTypedBlob>(buffers.back());
-            offsetsBuffer.AppendValue<ui32>(0);
-            // Buffer for timezone name binary data.
-            buffers.emplace_back(TTypedBlob());
-        }
+        // Buffer for timezone indices.
+        buffers.emplace_back(TTypedBlob());
         return;
     }
 
@@ -1470,7 +1406,7 @@ void CreateBuffersForComplexType(
 {
     switch (type->GetMetatype()) {
         case ELogicalMetatype::Simple:
-            CreateBuffersForSimpleType(type, config, buffers);
+            CreateBuffersForSimpleType(type, buffers);
             break;
 
         case ELogicalMetatype::Optional:
@@ -1520,8 +1456,7 @@ void CreateBuffersForComplexType(
 }
 
 int CalculateSimpleTypeBufferIndexIncrement(
-    const TLogicalTypePtr& type,
-    const TArrowFormatConfigPtr& config)
+    const TLogicalTypePtr& type)
 {
     auto simpleType = CastToV1Type(type).first;
 
@@ -1531,13 +1466,8 @@ int CalculateSimpleTypeBufferIndexIncrement(
     }
 
     if (IsTzType(type)) {
-        if (config->EnableTzIndex) {
-            // Timestamp values and timezone indices.
-            return 2;
-        } else {
-            // Timestamp values, timezone names offsets and timezone names binary data.
-            return 3;
-        }
+        // Timestamp values and timezone indices.
+        return 2;
     }
 
     switch (simpleType) {
@@ -1552,26 +1482,24 @@ int CalculateSimpleTypeBufferIndexIncrement(
     }
 }
 
-int CalculateBufferIndexIncrement(
-    const TLogicalTypePtr& type,
-    const TArrowFormatConfigPtr& config)
+int CalculateBufferIndexIncrement(const TLogicalTypePtr& type)
 {
     switch (type->GetMetatype()) {
         case ELogicalMetatype::Simple:
-            return CalculateSimpleTypeBufferIndexIncrement(type, config);
+            return CalculateSimpleTypeBufferIndexIncrement(type);
 
         case ELogicalMetatype::Optional:
             // Validity bitmap.
-            return 1 + CalculateBufferIndexIncrement(type->GetElement(), config);
+            return 1 + CalculateBufferIndexIncrement(type->GetElement());
 
         case ELogicalMetatype::List:
             // Offsets buffer.
-            return 1 + CalculateBufferIndexIncrement(type->GetElement(), config);
+            return 1 + CalculateBufferIndexIncrement(type->GetElement());
 
         case ELogicalMetatype::Struct: {
             int total = 0;
             for (const auto& field : type->GetFields()) {
-                total += CalculateBufferIndexIncrement(field.Type, config);
+                total += CalculateBufferIndexIncrement(field.Type);
             }
             return total;
         }
@@ -1579,13 +1507,13 @@ int CalculateBufferIndexIncrement(
         case ELogicalMetatype::Dict: {
             // Offsets buffer for list of pairs.
             int total = 1;
-            total += CalculateBufferIndexIncrement(type->AsDictTypeRef().GetKey(), config);
-            total += CalculateBufferIndexIncrement(type->AsDictTypeRef().GetValue(), config);
+            total += CalculateBufferIndexIncrement(type->AsDictTypeRef().GetKey());
+            total += CalculateBufferIndexIncrement(type->AsDictTypeRef().GetValue());
             return total;
         }
 
         case ELogicalMetatype::Tagged:
-            return CalculateBufferIndexIncrement(type->GetElement(), config);
+            return CalculateBufferIndexIncrement(type->GetElement());
 
         default:
             THROW_ERROR_EXCEPTION("Complex type %Qlv is not yet supported with Arrow complex types enabled",
@@ -1595,7 +1523,6 @@ int CalculateBufferIndexIncrement(
 
 void AppendSimpleTypeToBuffer(
     const TLogicalTypePtr& logicalType,
-    const TArrowFormatConfigPtr& config,
     std::vector<TArrowWriterBuffer>& buffers,
     int& currentBufferIndex,
     TYsonPullParserCursor& cursor)
@@ -1621,23 +1548,14 @@ void AppendSimpleTypeToBuffer(
             constexpr ESimpleLogicalValueType UnderlyingDateType = GetUnderlyingDateType<TzType>();
             using TInt = TUnderlyingTimestampIntegerType<UnderlyingDateType>;
 
-            auto [timestampValue, tzName] = ParseTzValue<TInt>(stringData);
+            auto [timestampValue, tzId] = ParseTzValue<TInt>(stringData);
 
             auto& timestampValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
 
             timestampValueBuffer.AppendValue<TInt>(timestampValue);
 
-            if (config->EnableTzIndex) {
-                auto& tzIndexValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
-
-                tzIndexValueBuffer.AppendValue<ui16>(GetTzIndex(tzName));
-            } else {
-                auto& tzNameOffsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
-                auto& tzNameValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
-
-                tzNameValueBuffer.Append(tzName.data(), tzName.size());
-                tzNameOffsetsBuffer.AppendValue<ui32>(tzNameValueBuffer.Size());
-            }
+            auto& tzIndexValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+            tzIndexValueBuffer.AppendValue<ui16>(tzId);
         };
 
         switch (simpleType) {
@@ -1722,7 +1640,6 @@ void AppendSimpleTypeToBuffer(
 
 void AppendNullSimpleTypeToBuffer(
     const TLogicalTypePtr& logicalType,
-    const TArrowFormatConfigPtr& config,
     std::vector<TArrowWriterBuffer>& buffers,
     int& currentBufferIndex)
 {
@@ -1746,16 +1663,9 @@ void AppendNullSimpleTypeToBuffer(
 
             timestampValueBuffer.AppendValue<TInt>(0);
 
-            if (config->EnableTzIndex) {
-                auto& tzIndexValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+            auto& tzIndexValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
 
-                tzIndexValueBuffer.AppendValue<ui16>(0);
-            } else {
-                auto& tzNameOffsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
-                auto& tzNameValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
-
-                tzNameOffsetsBuffer.AppendValue<ui32>(tzNameValueBuffer.Size());
-            }
+            tzIndexValueBuffer.AppendValue<ui16>(0);
         };
 
         switch (simpleType) {
@@ -1823,13 +1733,12 @@ void AppendNullSimpleTypeToBuffer(
 
 void FillBuffersForComplexTypeWithNulls(
     const TLogicalTypePtr& type,
-    const TArrowFormatConfigPtr& config,
     std::vector<TArrowWriterBuffer>& buffers,
     int& currentBufferIndex)
 {
     switch (type->GetMetatype()) {
         case ELogicalMetatype::Simple:
-            AppendNullSimpleTypeToBuffer(type, config, buffers, currentBufferIndex);
+            AppendNullSimpleTypeToBuffer(type, buffers, currentBufferIndex);
             break;
 
         case ELogicalMetatype::Optional: {
@@ -1839,7 +1748,6 @@ void FillBuffersForComplexTypeWithNulls(
 
             FillBuffersForComplexTypeWithNulls(
                 type->GetElement(),
-                config,
                 buffers,
                 currentBufferIndex);
             break;
@@ -1852,7 +1760,7 @@ void FillBuffersForComplexTypeWithNulls(
             ui32 previousOffset = offsetsBuffer.GetLastValue<ui32>();
             offsetsBuffer.AppendValue<ui32>(previousOffset);
 
-            currentBufferIndex += CalculateBufferIndexIncrement(type, config) - 1;
+            currentBufferIndex += CalculateBufferIndexIncrement(type) - 1;
             break;
         }
 
@@ -1860,7 +1768,6 @@ void FillBuffersForComplexTypeWithNulls(
             for (const auto& field : type->GetFields()) {
                 FillBuffersForComplexTypeWithNulls(
                     field.Type,
-                    config,
                     buffers,
                     currentBufferIndex);
             }
@@ -1869,7 +1776,6 @@ void FillBuffersForComplexTypeWithNulls(
         case ELogicalMetatype::Tagged:
             FillBuffersForComplexTypeWithNulls(
                 type->GetElement(),
-                config,
                 buffers,
                 currentBufferIndex);
             break;
@@ -1889,7 +1795,7 @@ void FillBuffersForComplexType(
 {
     switch (type->GetMetatype()) {
         case ELogicalMetatype::Simple: {
-            AppendSimpleTypeToBuffer(type, config, buffers, currentBufferIndex, cursor);
+            AppendSimpleTypeToBuffer(type, buffers, currentBufferIndex, cursor);
             cursor.Next();
 
             break;
@@ -1909,7 +1815,6 @@ void FillBuffersForComplexType(
                 cursor.Next();
                 FillBuffersForComplexTypeWithNulls(
                     subtype,
-                    config,
                     buffers,
                     currentBufferIndex);
             } else if (subtype->IsNullable()) {
@@ -1990,7 +1895,7 @@ void FillBuffersForComplexType(
 
             if (elementCount == 0) {
                 // |currentBufferIndex| is unchanged, manually advance it.
-                currentBufferIndex += CalculateBufferIndexIncrement(type, config) - 1;
+                currentBufferIndex += CalculateBufferIndexIncrement(type) - 1;
             }
 
             ui32 previousOffset = offsetsBuffer.GetLastValue<ui32>();
@@ -2167,15 +2072,8 @@ void WriteBuffersForComplexType(
 
                 WriteEmptyValidityBitmap(context, elementCount);
 
-                if (config->EnableTzIndex) {
-                    // Write timezone indices buffer.
-                    WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
-                } else {
-                    // Write timezone name offsets buffer.
-                    WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
-                    // Write timezone name binary data buffer.
-                    WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
-                }
+                // Write timezone indices buffer.
+                WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
 
                 break;
             }
@@ -2336,11 +2234,11 @@ void SerializeComplexTypeColumn(
         int currentBufferIndex = initialBufferIndex;
 
         if (offsets[rowOffset] != offsets[rowOffset + 1]) {
-            TString ysonString(
+            std::string ysonString(
                 currentStringData + offsets[rowOffset],
                 currentStringData + offsets[rowOffset + 1]);
 
-            TStringInput input(ysonString);
+            TMemoryInput input(ysonString);
             TYsonPullParser parser(&input, EYsonType::Node);
             TYsonPullParserCursor cursor = &parser;
 
@@ -2353,7 +2251,6 @@ void SerializeComplexTypeColumn(
         } else {
             FillBuffersForComplexTypeWithNulls(
                 typedColumn.Type,
-                config,
                 buffers,
                 currentBufferIndex);
         }
@@ -2433,7 +2330,7 @@ void SerializeColumn(
     } else if (IsIntegralType(simpleType)) {
         SerializeIntegerColumn(typedColumn, simpleType, context);
     } else if (IsTzType(typedColumn.Type)) {
-        SerializeTzColumn(typedColumn, simpleType, context, config);
+        SerializeTzColumn(typedColumn, simpleType, context);
     } else if (simpleType == ESimpleLogicalValueType::Interval) {
         SerializeIntegerColumn(typedColumn, simpleType, context);
     }  else if (simpleType == ESimpleLogicalValueType::Date) {
@@ -2528,7 +2425,7 @@ public:
         TableCount_ = tableSchemas.size();
         ColumnSchemas_.resize(tableSchemas.size());
         TableIdToIndex_.resize(tableSchemas.size());
-        IsFirstBatchForSpecificTable_.assign(tableSchemas.size(), false);
+        IsTableInitialized_.assign(tableSchemas.size(), false);
 
         for (int tableIndex = 0; tableIndex < std::ssize(tableSchemas); ++tableIndex) {
             THashSet<std::string> columnNames;
@@ -2558,6 +2455,20 @@ public:
                 ColumnSchemas_[tableIndex][GetTabletIndexColumnId()] = GetSystemColumnSchema(NameTable_->GetName(GetTabletIndexColumnId()), GetTabletIndexColumnId());
             }
         }
+    }
+
+    TFuture<void> Close() override
+    {
+        try {
+            for (int tableIndex = 0; tableIndex < TableCount_; ++tableIndex) {
+                if (!IsTableInitialized_[tableIndex]) {
+                    WriteRowsForSingleTable(TRange<TUnversionedRow>(), tableIndex);
+                }
+            }
+        } catch (const std::exception& ex) {
+            SetError(TError(ex));
+        }
+        return TSchemalessFormatWriterBase::Close();
     }
 
 private:
@@ -2697,7 +2608,7 @@ private:
     std::vector<IUnversionedColumnarRowBatch::TDictionaryId> ArrowDictionaryIds_;
     std::vector<TColumnConverters> ColumnConverters_;
     std::vector<THashMap<int, int>> TableIdToIndex_;
-    std::vector<bool> IsFirstBatchForSpecificTable_;
+    std::vector<bool> IsTableInitialized_;
     TConvertedColumnRange MissingColumns_;
 
     std::vector<TArrowWriterBuffer> Buffers_;
@@ -2738,7 +2649,7 @@ private:
 
     void PrepareColumns(const TRange<const TBatchColumn*>& batchColumns, int tableIndex)
     {
-        if (!IsFirstBatchForSpecificTable_[tableIndex]) {
+        if (!IsTableInitialized_[tableIndex]) {
             int currentIndex = 0;
             for (const auto& columnSchema : ColumnSchemas_[tableIndex]) {
                 auto columnId = columnSchema.first;
@@ -2748,7 +2659,7 @@ private:
                 }
             }
 
-            IsFirstBatchForSpecificTable_[tableIndex] = true;
+            IsTableInitialized_[tableIndex] = true;
         }
 
         TypedColumns_.resize(TableIdToIndex_[tableIndex].size());
@@ -2823,7 +2734,7 @@ private:
 
     void RegisterEosMarker()
     {
-        YT_LOG_DEBUG("EOS marker registered");
+        YT_TLOG_DEBUG("EOS marker registered");
 
         Messages_.push_back(TMessage{
                 std::nullopt,
@@ -2837,10 +2748,10 @@ private:
         i64 bodySize = 0,
         std::function<void(TMutableRef)> bodyWriter = nullptr)
     {
-        YT_LOG_DEBUG("Message registered (Type: %v, MessageSize: %v, BodySize: %v)",
-            flatbuf::EnumNameMessageHeader(type),
-            flatbufBuilder.GetSize(),
-            bodySize);
+        YT_TLOG_DEBUG("Message registered")
+            .With("Type", flatbuf::EnumNameMessageHeader(type))
+            .With("MessageSize", flatbufBuilder.GetSize())
+            .With("BodySize", bodySize);
 
         YT_VERIFY((bodySize % ArrowAlignment) == 0);
         Messages_.push_back(TMessage{
@@ -2937,15 +2848,15 @@ private:
             const auto& typedColumn = TypedColumns_[columnIndex];
             auto previousYTDictionaryId = ArrowDictionaryIds_[columnIndex];
             if (ytDictionaryId == previousYTDictionaryId) {
-                YT_LOG_DEBUG("Reusing previous dictionary (ColumnId: %v, YTDictionaryId: %v, ArrowDictionaryId: %v)",
-                    typedColumn.Column->Id,
-                    ytDictionaryId,
-                    arrowDictionaryId);
+                YT_TLOG_DEBUG("Reusing previous dictionary")
+                    .With("ColumnId", typedColumn.Column->Id)
+                    .With("YTDictionaryId", ytDictionaryId)
+                    .With("ArrowDictionaryId", arrowDictionaryId);
             } else {
-                YT_LOG_DEBUG("Sending new dictionary (ColumnId: %v, YTDictionaryId: %v, ArrowDictionaryId: %v)",
-                    typedColumn.Column->Id,
-                    ytDictionaryId,
-                    arrowDictionaryId);
+                YT_TLOG_DEBUG("Sending new dictionary")
+                    .With("ColumnId", typedColumn.Column->Id)
+                    .With("YTDictionaryId", ytDictionaryId)
+                    .With("ArrowDictionaryId", arrowDictionaryId);
                 PrepareDictionaryBatch(
                     TTypedBatchColumn{dictionaryColumn, typedColumn.Type},
                     arrowDictionaryId);
@@ -2956,8 +2867,8 @@ private:
         for (int columnIndex = 0; columnIndex < std::ssize(TypedColumns_); ++columnIndex) {
             const auto& typedColumn = TypedColumns_[columnIndex];
             if (typedColumn.Column->Dictionary) {
-                YT_LOG_DEBUG("Adding dictionary batch for dictionary-encoded column (ColumnId: %v)",
-                    typedColumn.Column->Id);
+                YT_TLOG_DEBUG("Adding dictionary batch for dictionary-encoded column")
+                    .With("ColumnId", typedColumn.Column->Id);
                 prepareDictionaryBatch(
                     columnIndex,
                     typedColumn.Column->Dictionary->DictionaryId,
@@ -2965,15 +2876,15 @@ private:
             } else if (IsRleButNotDictionaryEncodedStringLikeColumn(*typedColumn.Column) ||
                 IsRleButNotDictionaryEncodedTzColumn(*typedColumn.Column))
             {
-                YT_LOG_DEBUG("Adding dictionary batch for RLE but not dictionary-encoded string-like column (ColumnId: %v)",
-                    typedColumn.Column->Id);
+                YT_TLOG_DEBUG("Adding dictionary batch for RLE but not dictionary-encoded string-like column")
+                    .With("ColumnId", typedColumn.Column->Id);
                 prepareDictionaryBatch(
                     columnIndex,
                     IUnversionedColumnarRowBatch::GenerateDictionaryId(), // any unique one will do
                     typedColumn.Column->Rle->ValueColumn);
             } else if (IsRleAndDictionaryEncodedColumn(*typedColumn.Column)) {
-                YT_LOG_DEBUG("Adding dictionary batch for RLE and dictionary-encoded column (ColumnId: %v)",
-                    typedColumn.Column->Id);
+                YT_TLOG_DEBUG("Adding dictionary batch for RLE and dictionary-encoded column")
+                    .With("ColumnId", typedColumn.Column->Id);
                 prepareDictionaryBatch(
                     columnIndex,
                     typedColumn.Column->Rle->ValueColumn->Dictionary->DictionaryId,
@@ -3059,7 +2970,7 @@ private:
 
     void WritePayload(TBlobOutput* output)
     {
-        YT_LOG_DEBUG("Started writing payload");
+        YT_TLOG_DEBUG("Started writing payload");
         for (const auto& message : Messages_) {
             // Continuation indicator
             ui32 constMax = 0xFFFFFFFF;
@@ -3094,7 +3005,7 @@ private:
 
         Buffers_.clear();
 
-        YT_LOG_DEBUG("Finished writing payload");
+        YT_TLOG_DEBUG("Finished writing payload");
     }
 };
 
@@ -3135,7 +3046,7 @@ ISchemalessFormatWriterPtr CreateWriterForArrow(
     try {
         arrowConfig = ConvertTo<TArrowFormatConfigPtr>(attributes);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for arrow format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for arrow format").With(ex);
     }
     return CreateWriterForArrow(
         std::move(arrowConfig),

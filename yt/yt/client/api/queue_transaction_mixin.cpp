@@ -28,7 +28,7 @@ void TQueueTransactionMixin::AdvanceConsumer(
     }
 
     // TODO(achulkov2): Support consumers from any cluster.
-    auto subConsumerClient = CreateSubConsumerClient(GetClient(), /*queueClient*/ nullptr, consumerPath.GetPath(), queuePhysicalPath);
+    auto subConsumerClient = CreateSubConsumerClient(GetClient(), /*queueClient*/ nullptr, consumerPath, queuePhysicalPath);
     return subConsumerClient->Advance(this, partitionIndex, oldOffset, newOffset);
 }
 

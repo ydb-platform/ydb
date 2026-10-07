@@ -1,5 +1,9 @@
 #pragma once
 
+#include "page_pool_constants.h"
+#include "system_mmap.h"
+#include "tracked_mmap.h"
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/yexception.h>
@@ -8,6 +12,7 @@
 #include <util/system/defaults.h>
 #include <util/system/yassert.h>
 
+#include <functional>
 #include <stack>
 #include <queue>
 
@@ -49,25 +54,10 @@ public:
     virtual ~TMemoryLimitExceededException() = default;
 };
 
-class TSystemMmap {
-public:
-    static void* Mmap(size_t size);
-    static int Munmap(void* addr, size_t size) noexcept;
-};
-
-class TFakeMmap {
-public:
-    static std::function<void*(size_t size)> OnMmap;
-    static std::function<void(void* addr, size_t size)> OnMunmap;
-
-    static void* Mmap(size_t size);
-    static int Munmap(void* addr, size_t size) noexcept;
-};
-
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 class TAlignedPagePoolImpl {
 public:
-    static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k
+    static constexpr ui64 POOL_PAGE_SIZE = PoolPageSize;
     static constexpr ui64 PAGE_ADDR_MASK = ~(POOL_PAGE_SIZE - 1);
     static constexpr ui64 ALLOC_AHEAD_PAGES = 31;
 
@@ -262,7 +252,6 @@ protected:
 
     void* GetPageImpl();
 
-protected:
     std::stack<void*, std::vector<void*>> FreePages_;
     std::unordered_set<void*> AllPages_;
     std::unordered_map<void*, size_t> ActiveBlocks_;
@@ -310,23 +299,21 @@ protected:
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 void* GetAlignedPage(ui64 size);
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 void* GetAlignedPage();
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 void ReleaseAlignedPage(void* mem, ui64 size);
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 void ReleaseAlignedPage(void* mem);
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 i64 GetTotalMmapedBytes();
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 i64 GetTotalFreeListBytes();
-
-size_t GetMemoryMapsCount();
 
 } // namespace NKikimr

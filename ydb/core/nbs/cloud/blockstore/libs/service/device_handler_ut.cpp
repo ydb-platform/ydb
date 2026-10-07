@@ -1008,6 +1008,172 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             ctx3->Time(EProcessingStage::Postponed) > TDuration::Seconds(11));
     }
 
+    Y_UNIT_TEST(ShouldHandleFioStyleUnalignedWrites)
+    {
+        // Simulates the user-reported fio command which used to fail with EIO:
+        //   sudo fio --name=unaligned --filename=/dev/<device> --direct=1 \
+        //            --rw=write --ioengine=libaio --bs=4k --offset=1024 \
+        //            --size=8k
+        // The command issues two 4KiB writes at byte offsets 1024 and 5120.
+        // Both writes are unaligned with respect to the 4KiB block size of
+        // the device. The device handler must execute the read-modify-write
+        // sequence and complete the writes successfully, preserving the
+        // bytes outside the modified ranges.
+        const auto diskId = "disk1";
+        const auto clientId = "testClientId";
+        const ui32 blockSize = DefaultBlockSize;
+        const ui64 deviceBlocksCount = 4;
+        const ui64 deviceSize = deviceBlocksCount * blockSize;
+
+        const char initialByte = char(0xCD);
+        TString device(deviceSize, initialByte);
+
+        auto storage = std::make_shared<TTestStorage>();
+
+        storage->ReadBlocksLocalHandler =
+            [&](TCallContextPtr callContext,
+                std::shared_ptr<TReadBlocksLocalRequest> request)
+        {
+            Y_UNUSED(callContext);
+
+            UNIT_ASSERT_VALUES_EQUAL(clientId, request->Headers.ClientId);
+            UNIT_ASSERT(
+                request->Headers.Range.Start + request->Headers.Range.Size() <=
+                deviceBlocksCount);
+
+            TBlockDataRef src(
+                device.data() + request->Headers.Range.Start * blockSize,
+                request->Headers.Range.Size() * blockSize);
+
+            {
+                auto guard = request->Sglist.Acquire();
+                UNIT_ASSERT(guard);
+
+                auto bytesCount = SgListCopy(src, guard.Get());
+                UNIT_ASSERT_VALUES_EQUAL(src.Size(), bytesCount);
+            }
+
+            // Mirror the real partition's read executor, which closes the
+            // request's Sglist after handling the read. The unaligned device
+            // handler must keep the user's Sglist usable for the follow-up
+            // modify-and-write step regardless of this.
+            request->Sglist.Close();
+
+            return MakeFuture(TReadBlocksLocalResponse());
+        };
+
+        storage->WriteBlocksLocalHandler =
+            [&](TCallContextPtr callContext,
+                std::shared_ptr<TWriteBlocksLocalRequest> request)
+        {
+            Y_UNUSED(callContext);
+
+            UNIT_ASSERT_VALUES_EQUAL(clientId, request->Headers.ClientId);
+            UNIT_ASSERT(
+                request->Headers.Range.Start + request->Headers.Range.Size() <=
+                deviceBlocksCount);
+
+            TBlockDataRef dst(
+                device.data() + request->Headers.Range.Start * blockSize,
+                request->Headers.Range.Size() * blockSize);
+
+            {
+                auto guard = request->Sglist.Acquire();
+                UNIT_ASSERT(guard);
+
+                // The aligned backend must only ever receive sglists whose
+                // buffers are a multiple of the block size.
+                for (const auto& buffer: guard.Get()) {
+                    UNIT_ASSERT_VALUES_EQUAL(0u, buffer.Size() % blockSize);
+                }
+
+                auto bytesCount = SgListCopy(guard.Get(), dst);
+                UNIT_ASSERT_VALUES_EQUAL(dst.Size(), bytesCount);
+            }
+
+            // Mirror the real partition's write executor, which closes the
+            // request's Sglist after handling the write.
+            request->Sglist.Close();
+
+            return MakeFuture(TWriteBlocksLocalResponse());
+        };
+
+        auto deviceHandler =
+            CreateDefaultDeviceHandlerFactory()->CreateDeviceHandler(
+                TDeviceHandlerParams{
+                    .Storage = storage,
+                    .DiskId = diskId,
+                    .ClientId = clientId,
+                    .BlockSize = blockSize,
+                    .MaxZeroBlocksSubRequestSize = 0,
+                    .UnalignedRequestsDisabled = false,
+                    .StorageMediaKind =
+                        NProto::STORAGE_MEDIA_SSD_NONREPLICATED});
+
+        auto doWrite = [&](ui64 offset, ui64 length, char data)
+        {
+            // Use a single contiguous buffer as fio does with direct IO.
+            TString buffer(length, data);
+            TSgList sgList{{buffer.data(), buffer.size()}};
+
+            auto future = deviceHandler->Write(
+                MakeIntrusive<TCallContext>(),
+                offset,
+                length,
+                TGuardedSgList(std::move(sgList)));
+
+            const auto& response = future.GetValue(TDuration::Seconds(5));
+            UNIT_ASSERT_C(
+                !HasError(response.Error),
+                FormatError(response.Error));
+        };
+
+        // Two 4KiB writes at byte offsets 1024 and 5120.
+        const ui64 firstOffset = 1024;
+        const ui64 secondOffset = firstOffset + blockSize;
+        doWrite(firstOffset, blockSize, 'a');
+        doWrite(secondOffset, blockSize, 'b');
+
+        // Verify the resulting on-device contents:
+        //   bytes [0, 1024)              -> untouched (initialByte)
+        //   bytes [1024, 5120)           -> 'a'
+        //   bytes [5120, 9216)           -> 'b'
+        //   bytes [9216, deviceSize)     -> untouched (initialByte)
+        for (ui64 i = 0; i < deviceSize; ++i) {
+            char expected = initialByte;
+            if (i >= firstOffset && i < firstOffset + blockSize) {
+                expected = 'a';
+            } else if (i >= secondOffset && i < secondOffset + blockSize) {
+                expected = 'b';
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(expected, device[i], i);
+        }
+
+        // Read the previously written region back via the device handler to
+        // confirm that an unaligned read returns the same bytes that were
+        // written.
+        TString readBuffer(2 * blockSize, char(0));
+        TSgList readSgList{{readBuffer.data(), readBuffer.size()}};
+        auto readFuture = deviceHandler->Read(
+            MakeIntrusive<TCallContext>(),
+            firstOffset,
+            2 * blockSize,
+            TGuardedSgList(std::move(readSgList)),
+            {});
+
+        const auto& readResponse = readFuture.GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(
+            !HasError(readResponse.Error),
+            FormatError(readResponse.Error));
+
+        for (ui64 i = 0; i < blockSize; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C('a', readBuffer[i], i);
+        }
+        for (ui64 i = blockSize; i < 2 * blockSize; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C('b', readBuffer[i], i);
+        }
+    }
+
     Y_UNIT_TEST(ShouldNotOverflowStack)
     {
         // We are running a very long series of overlapping queries. If the

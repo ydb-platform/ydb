@@ -203,7 +203,8 @@ void TNodeTableReader::Next()
     try {
         NextImpl();
     } catch (const std::exception& ex) {
-        YT_LOG_ERROR("TNodeTableReader::Next failed: %v", ex.what());
+        YT_TLOG_ERROR("Failed to read next row")
+            .With("Error", ex.what());
         throw;
     }
 }
@@ -363,7 +364,10 @@ void TNodeTableReader::PrepareParsing()
 
 void TNodeTableReader::OnStreamError(std::exception_ptr exception, TString error)
 {
-    YT_LOG_ERROR("Read error (RangeIndex: %v, RowIndex: %v, Error: %v)", RangeIndex_, RowIndex_, error);
+    YT_TLOG_ERROR("Read error")
+        .With("RangeIndex", RangeIndex_)
+        .With("RowIndex", RowIndex_)
+        .With("Error", error);
     Exception_ = exception;
     if (Input_.Retry(RangeIndex_, RowIndex_, exception)) {
         if (RangeIndex_) {

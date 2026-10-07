@@ -23,8 +23,9 @@ struct TRequestStat {
     ui64 Writes;
     ui64 GetStatuses;
     ui64 EnqueuedAs;
-    TDeque<ui64> GetLatencies;
-    TDeque<ui64> PutLatencies;
+    // channel -> latencyMs
+    TDeque<std::pair<ui8, ui64>> GetLatencies;
+    TDeque<std::pair<ui8, ui64>> PutLatencies;
     TDeque<ui64> GetStatusLatencies;
     TInstant KeyvalueStorageRequestSentAt;
     TInstant LocalBaseTxCreatedAt;

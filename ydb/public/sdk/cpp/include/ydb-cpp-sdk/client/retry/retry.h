@@ -3,6 +3,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <util/datetime/base.h>
 
+#include <optional>
+#include <stop_token>
+
 namespace NYdb::inline Dev::NRetry {
 
 struct TBackoffSettings {
@@ -22,9 +25,19 @@ struct TRetryOperationSettings {
     FLUENT_SETTING_DEFAULT(TDuration, MaxTimeout, TDuration::Max());
     FLUENT_SETTING_DEFAULT(TBackoffSettings, FastBackoffSettings, DefaultFastBackoffSettings());
     FLUENT_SETTING_DEFAULT(TBackoffSettings, SlowBackoffSettings, DefaultSlowBackoffSettings());
-    FLUENT_SETTING_FLAG(Idempotent);
+    bool Idempotent_ = false;
+    bool IdempotentWasSet_ = false;
+    TSelf& Idempotent(bool value = true) {
+        Idempotent_ = value;
+        IdempotentWasSet_ = true;
+        return static_cast<TSelf&>(*this);
+    }
     FLUENT_SETTING_FLAG(Verbose);
     FLUENT_SETTING_FLAG(RetryUndefined);
+
+    // Checked before attempts, after backoff, and after attempts complete.
+    // Does not interrupt backoff or cancel an active RPC.
+    FLUENT_SETTING_OPTIONAL(std::stop_token, StopToken);
 
     static TBackoffSettings DefaultFastBackoffSettings() {
         return TBackoffSettings()

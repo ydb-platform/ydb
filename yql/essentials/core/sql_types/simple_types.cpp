@@ -18,7 +18,7 @@ struct TSimpleType {
 
 // NOLINTBEGIN(modernize-use-designated-initializers)
 
-static const std::unordered_map<std::string_view, TSimpleType> SimpleTypes = {
+const std::unordered_map<std::string_view, TSimpleType> SimpleTypes = {
     {"void", {"Void", "Void", "Void"}},
     {"unit", {"Unit", "Unit", "Unit"}},
     {"generic", {"Generic", "Generic", "Generic"}},
@@ -78,7 +78,7 @@ static const std::unordered_map<std::string_view, TSimpleType> SimpleTypes = {
     {"tztimestamp64", {"TzTimestamp64", "TzTimestamp64", "Data"}}};
 
 // new types (or aliases) should be added here
-static const std::unordered_map<std::string_view, TSimpleType> NewSimpleTypes = {
+const std::unordered_map<std::string_view, TSimpleType> NewSimpleTypes = {
     {"text", {"", "Utf8", ""}},
     {"bytes", {"", "String", ""}}};
 } // namespace

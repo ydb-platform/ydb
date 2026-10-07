@@ -479,13 +479,13 @@ class Class(ClassOrFunc):
         Returns the `arglist` node that defines the super classes. It returns
         None if there are no arguments.
         """
-        if self.children[2] != '(':  # Has no parentheses
-            return None
-        else:
-            if self.children[3] == ')':  # Empty parentheses
-                return None
-            else:
-                return self.children[3]
+        for i, child in enumerate(self.children):
+            if child == '(':
+                next_child = self.children[i + 1]
+                if next_child == ')':
+                    return None
+                return next_child
+        return None
 
 
 def _create_params(parent, argslist_list):
@@ -552,15 +552,21 @@ class Function(ClassOrFunc):
 
     def __init__(self, children):
         super().__init__(children)
-        parameters = self.children[2]  # After `def foo`
+        parameters = self._find_parameters()
         parameters_children = parameters.children[1:-1]
-        # If input parameters list already has Param objects, keep it as is;
-        # otherwise, convert it to a list of Param objects.
         if not any(isinstance(child, Param) for child in parameters_children):
-            parameters.children[1:-1] = _create_params(parameters, parameters_children)
+            parameters.children[1:-1] = _create_params(
+                parameters, parameters_children
+            )
+
+    def _find_parameters(self):
+        for child in self.children:
+            if child.type == 'parameters':
+                return child
+        raise Exception("A function should always have parameters")
 
     def _get_param_nodes(self):
-        return self.children[2].children
+        return self._find_parameters().children
 
     def get_params(self):
         """
@@ -633,13 +639,10 @@ class Function(ClassOrFunc):
         """
         Returns the test node after `->` or `None` if there is no annotation.
         """
-        try:
-            if self.children[3] == "->":
-                return self.children[4]
-            assert self.children[3] == ":"
-            return None
-        except IndexError:
-            return None
+        for i, child in enumerate(self.children):
+            if child == '->':
+                return self.children[i + 1]
+        return None
 
 
 class Lambda(Function):

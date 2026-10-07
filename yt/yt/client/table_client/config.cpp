@@ -399,6 +399,15 @@ void TInsertRowsFormatConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TPushQueueProducerFormatConfig::Register(TRegistrar registrar)
+{
+    registrar.Preprocessor([] (TThis* config) {
+        config->EnableNullToYsonEntityConversion = false;
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TChunkReaderOptionsPtr TChunkReaderOptions::GetDefault()
 {
     return LeakyRefCountedSingleton<TChunkReaderOptions>();
@@ -545,11 +554,18 @@ void TChunkWriterOptions::EnableValidationOptions(bool validateAnyIsValidYson)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+i64 TMinHashDigestConfig::GetTotalTimestampCount() const
+{
+    return static_cast<i64>(WriteTimestampCount) + DeleteTimestampCount;
+}
+
 void TMinHashDigestConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("write_timestamp_count", &TThis::WriteTimestampCount)
+        .GreaterThan(0)
         .Default(100);
     registrar.Parameter("delete_timestamp_count", &TThis::DeleteTimestampCount)
+        .GreaterThan(0)
         .Default(100);
 }
 

@@ -7,7 +7,6 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 
 #include <memory>
@@ -31,7 +30,7 @@ public:
         Done,
         Removing,
         Paused,
-        Error = 255
+        Error = Max<ui8>()
     };
 
     enum class ETargetKind: ui8 {
@@ -47,7 +46,8 @@ public:
         Done,
         Removing,
         Paused,
-        Error = 255
+        Attaching,
+        Error = Max<ui8>()
     };
 
     enum class EStreamState: ui8 {
@@ -55,13 +55,14 @@ public:
         Ready,
         Removing,
         Removed,
-        Error = 255
+        Error = Max<ui8>()
     };
 
     class ITargetStats {
     public:
-        virtual void Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const = 0;
         virtual ~ITargetStats() = default;
+
+        virtual void Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const = 0;
     };
 
     class ITarget {
@@ -80,6 +81,8 @@ public:
 
         virtual ui64 GetId() const = 0;
         virtual ETargetKind GetKind() const = 0;
+        virtual bool IsIndexBuild() const = 0;
+        virtual void SetIndexBuild(bool value) = 0;
 
         virtual const IConfig::TPtr& GetConfig() const = 0;
         virtual const TString& GetSrcPath() const = 0;
@@ -90,6 +93,8 @@ public:
 
         virtual const TPathId& GetDstPathId() const = 0;
         virtual void SetDstPathId(const TPathId& value) = 0;
+        virtual const TPathId& GetPendingDstPathId() const = 0;
+        virtual void SetPendingDstPathId(const TPathId& value) = 0;
 
         virtual const TString& GetStreamName() const = 0;
         virtual void SetStreamName(const TString& value) = 0;
@@ -100,6 +105,9 @@ public:
         virtual EStreamState GetStreamState() const = 0;
         virtual void SetStreamState(EStreamState value) = 0;
 
+        virtual std::optional<bool> GetStreamSchemaChanges() const = 0;
+        virtual void SetStreamSchemaChanges(bool value) = 0;
+
         virtual const TString& GetIssue() const = 0;
         virtual void SetIssue(const TString& value) = 0;
 
@@ -107,7 +115,7 @@ public:
         virtual void RemoveWorker(ui64 id) = 0;
         virtual TVector<ui64> GetWorkers() const = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
-        virtual const TMaybe<TDuration> GetLag() const = 0;
+        virtual const std::optional<TDuration> GetLag() const = 0;
 
         virtual bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
         virtual void WorkerStatusChanged(ui64 workerId, ui64 status) = 0;
@@ -141,8 +149,10 @@ public:
     ITarget* AddTarget(ui64 id, ETargetKind kind, const ITarget::IConfig::TPtr& config);
     const ITarget* FindTarget(ui64 id) const;
     ITarget* FindTarget(ui64 id);
+    const ITarget* FindBaseTableTarget(const ITarget& indexTarget) const;
     void RemoveTarget(ui64 id);
-    const TVector<TString>& GetTargetTablePaths() const;
+    TVector<ITarget*> GetTargets() const;
+    TVector<TString> GetTargetTablePaths() const;
 
     void Progress(const TActorContext& ctx);
     void Shutdown(const TActorContext& ctx);
@@ -160,7 +170,7 @@ public:
     EState GetDesiredState() const;
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
-    const TMaybe<TDuration> GetLag() const;
+    const std::optional<TDuration> GetLag() const;
     const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
     void SetNextTargetId(ui64 value);

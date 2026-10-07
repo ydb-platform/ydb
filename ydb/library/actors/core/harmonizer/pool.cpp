@@ -11,35 +11,41 @@ namespace NActors {
 
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
+namespace {
+    constexpr ui8 LegacyCpuWindowSeconds = 8;
+}
+
 TPoolInfo::TPoolInfo()
 {}
 
 double TPoolInfo::GetCpu(i16 threadIdx) const {
+    return GetCpuForLastSeconds(threadIdx, LegacyCpuWindowSeconds);
+}
+
+double TPoolInfo::GetCpuForLastSeconds(i16 threadIdx, ui8 seconds) const {
     if ((size_t)threadIdx < ThreadInfo.size()) {
-        return ThreadInfo[threadIdx].UsedCpu.GetAvgPart();
+        return ThreadInfo[threadIdx].UsedCpu.GetAvgPartForLastSeconds<true>(seconds);
     }
     return 0.0;
 }
 
 double TPoolInfo::GetSharedCpu(i16 sharedThreadIdx) const {
+    return GetSharedCpuForLastSeconds(sharedThreadIdx, LegacyCpuWindowSeconds);
+}
+
+double TPoolInfo::GetSharedCpuForLastSeconds(i16 sharedThreadIdx, ui8 seconds) const {
     if ((size_t)sharedThreadIdx < SharedInfo.size()) {
-        return SharedInfo[sharedThreadIdx].UsedCpu.GetAvgPart();
+        return SharedInfo[sharedThreadIdx].UsedCpu.GetAvgPartForLastSeconds<true>(seconds);
     }
     return 0.0;
 }
 
 double TPoolInfo::GetLastSecondCpu(i16 threadIdx) const {
-    if ((size_t)threadIdx < ThreadInfo.size()) {
-        return ThreadInfo[threadIdx].UsedCpu.GetAvgPartForLastSeconds<true>(1);
-    }
-    return 0.0;
+    return GetCpuForLastSeconds(threadIdx, 1);
 }
 
 double TPoolInfo::GetLastSecondSharedCpu(i16 sharedThreadIdx) const {
-    if ((size_t)sharedThreadIdx < SharedInfo.size()) {
-        return SharedInfo[sharedThreadIdx].UsedCpu.GetAvgPartForLastSeconds<true>(1);
-    }
-    return 0.0;
+    return GetSharedCpuForLastSeconds(sharedThreadIdx, 1);
 }
 
 double TPoolInfo::GetElapsed(i16 threadIdx) const {

@@ -2,6 +2,8 @@ UNITTEST_FOR(ydb/core/persqueue/public/cloud_events)
 
 YQL_LAST_ABI_VERSION()
 
+SIZE(MEDIUM)
+
 PEERDIR(
     ydb/core/audit
     ydb/core/persqueue/public/cloud_events

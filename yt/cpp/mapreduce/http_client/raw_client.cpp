@@ -50,15 +50,15 @@ void CheckError(const TString& requestId, NHttp::IResponsePtr response)
         }
 
         if (TExpectedErrorGuard::IsErrorExpected(errorResponse)) {
-            YT_LOG_INFO("Received expected error, RSP %v - HTTP %v - %v",
-                requestId,
-                response->GetStatusCode(),
-                errorResponse.AsStrBuf());
+            YT_TLOG_INFO("Response carries an expected HTTP error")
+                .With("RequestId", requestId)
+                .With("HttpCode", response->GetStatusCode())
+                .With("Error", errorResponse.AsStrBuf());
         } else {
-            YT_LOG_ERROR("RSP %v - HTTP %v - %v",
-                requestId,
-                response->GetStatusCode(),
-                errorResponse.AsStrBuf());
+            YT_TLOG_ERROR("Response carries an HTTP error")
+                .With("RequestId", requestId)
+                .With("HttpCode", response->GetStatusCode())
+                .With("Error", errorResponse.AsStrBuf());
         }
 
         ythrow errorResponse;
@@ -308,6 +308,11 @@ TTransactionId THttpRawClient::StartTransaction(
 
 void THttpRawClient::PingTransaction(const TTransactionId& transactionId)
 {
+    auto traceContext = Context_.Config->EnableClientTracing
+        ? NTracing::CreateTraceContextFromCurrent("ping_tx")
+        : nullptr;
+    NTracing::TCurrentTraceContextGuard traceContextGuard(traceContext);
+
     std::call_once(PingClientInitOnceFlag_, [this] () {
         InitPingClient();
     });
@@ -332,24 +337,30 @@ void THttpRawClient::PingTransaction(const TTransactionId& transactionId)
     headers->Add("Content-Encoding", "identity");
     headers->Add("Accept-Encoding", "identity");
 
+    if (traceContext) {
+        auto traceparent = FormatTraceParentHeader(traceContext->GetTraceId(), traceContext->GetSpanId());
+        headers->Add("traceparent", traceparent);
+    }
+
     TNode node;
     node["transaction_id"] = GetGuidAsString(transactionId);
     auto strParams = NodeToYsonString(node);
 
-    YT_LOG_DEBUG("REQ %v - sending request (HostName: %v; Method POST %v; X-YT-Parameters (sent in body): %v)",
-        requestId,
-        Context_.ServerName,
-        url,
-        strParams);
+    YT_TLOG_DEBUG("Sending request")
+        .With("RequestId", requestId)
+        .With("HostName", Context_.ServerName)
+        .With("Method", "POST")
+        .With("Url", url)
+        .With("Parameters", strParams);
 
     auto response = NConcurrency::WaitFor(PingHttpClient_->Post(url, TSharedRef::FromString(strParams), headers))
         .ValueOrThrow();
     CheckError(requestId, response);
 
-    YT_LOG_DEBUG("RSP %v - received response %v bytes. (%v)",
-        requestId,
-        response->ReadAll().size(),
-        strParams);
+    YT_TLOG_DEBUG("Response received")
+        .With("RequestId", requestId)
+        .With("Size", response->ReadAll().size())
+        .With("Parameters", strParams);
 }
 
 void THttpRawClient::AbortTransaction(
@@ -364,11 +375,12 @@ void THttpRawClient::AbortTransaction(
 
 void THttpRawClient::CommitTransaction(
     TMutationId& mutationId,
-    const TTransactionId& transactionId)
+    const TTransactionId& transactionId,
+    const TCommitTransactionOptions& options)
 {
     THttpHeader header("POST", "commit_tx");
     header.AddMutationId();
-    header.MergeParameters(NRawClient::SerializeParamsForCommitTransaction(transactionId));
+    header.MergeParameters(NRawClient::SerializeParamsForCommitTransaction(transactionId, options));
     RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
@@ -643,6 +655,22 @@ std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadFile(
     header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
     header.MergeParameters(NRawClient::SerializeParamsForReadFile(transactionId, options));
     header.MergeParameters(FormIORequestParameters(path, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
+}
+
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadFilePartition(
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "api/v4/read_file_partition", /*isApi*/ false);
+    header.SetOutputFormat(TMaybe<TFormat>()); // Binary format
+    header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
+    header.MergeParameters(NRawClient::SerializeParamsForReadFilePartition(cookie, options));
 
     TRequestConfig config;
     config.IsHeavy = true;
@@ -1222,6 +1250,32 @@ TMultiTablePartitions THttpRawClient::GetTablePartitions(
     return result;
 }
 
+TFilePartitions THttpRawClient::GetFilePartitions(
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    const TVector<TFileReadRange>& ranges,
+    const TGetFilePartitionsOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "partition_file");
+    header.MergeParameters(NRawClient::SerializeParamsForGetFilePartitions(transactionId, path, ranges, options));
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    TFilePartitions result;
+    Deserialize(result, NodeFromYsonString(responseInfo->GetResponse()));
+    return result;
+}
+
+void THttpRawClient::CheckClusterLiveness(
+    const TCheckClusterLivenessOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "check_cluster_liveness");
+    header.MergeParameters(NRawClient::SerializeParamsForCheckClusterLiveness(options));
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
+}
+
 ui64 THttpRawClient::GenerateTimestamp()
 {
     TMutationId mutationId;
@@ -1255,10 +1309,12 @@ void THttpRawClient::InitPingClient() {
     if (Context_.UseTLS) {
         auto httpsClientConfig = NYT::New<NHttps::TClientConfig>();
         httpsClientConfig->MaxIdleConnections = 16;
+        httpsClientConfig->DnsResolveOptions = GetDnsResolveOptions(Context_.Config);
         PingHttpClient_ = NHttps::CreateClient(std::move(httpsClientConfig), std::move(httpPoller));
     } else {
         auto httpClientConfig = NYT::New<NHttp::TClientConfig>();
         httpClientConfig->MaxIdleConnections = 16;
+        httpClientConfig->DnsResolveOptions = GetDnsResolveOptions(Context_.Config);
         PingHttpClient_ = NHttp::CreateClient(std::move(httpClientConfig), std::move(httpPoller));
     }
 }

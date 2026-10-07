@@ -1,6 +1,7 @@
 #include "write_quoter.h"
 
 #include <ydb/core/persqueue/public/config.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ  {
 
@@ -18,13 +19,14 @@ TWriteQuoter::TWriteQuoter(
             tabletId, counters, 1
     )
     , QuotingEnabled(pqConfig.GetQuotingConfig().GetEnableQuoting())
-    , PartitionDeduplicationIdQuotaTracker(config.GetPartitionConfig().GetWriteMessageDeduplicationIdPerSecond(),
-        config.GetPartitionConfig().GetWriteMessageDeduplicationIdPerSecond(), TAppData::TimeProvider->Now()) // TODO MLP config
+    , IncomingMessagesQuotaTracker(config.GetPartitionConfig().GetBurstSizeInMessages(),
+        config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond(), TAppData::TimeProvider->Now()) // TODO MLP config
 {
 }
 
-TString TWriteQuoter::BuildLogPrefix() const {
-    return TStringBuilder() << "[WriteQuoter][" << Partition << "] ";
+TStructuredMessage TWriteQuoter::BuildLogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"partition", Partition.ToString()});
 }
 
 void TWriteQuoter::Bootstrap(const TActorContext& ctx) {
@@ -37,7 +39,7 @@ void TWriteQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
 }
 
 bool TWriteQuoter::CanExaust(TInstant now) {
-    return TPartitionQuoterBase::CanExaust(now) && PartitionDeduplicationIdQuotaTracker.CanExaust(now);
+    return TPartitionQuoterBase::CanExaust(now) && IncomingMessagesQuotaTracker.CanExaust(now);
 }
 
 void TWriteQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
@@ -52,7 +54,7 @@ void TWriteQuoter::HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr& ev) {
         );
     }
 
-    PartitionDeduplicationIdQuotaTracker.Exaust(ev->Get()->ConsumedDeduplicationIds, ActorContext().Now());
+    IncomingMessagesQuotaTracker.Exaust(ev->Get()->ConsumedMessages, ActorContext().Now());
 }
 
 bool TWriteQuoter::GetAccountQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig) const {
@@ -60,7 +62,7 @@ bool TWriteQuoter::GetAccountQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig
 }
 
 void TWriteQuoter::HandleWakeUpImpl() {
-    PartitionDeduplicationIdQuotaTracker.Update(ActorContext().Now());
+    IncomingMessagesQuotaTracker.Update(ActorContext().Now());
 }
 
 void TWriteQuoter::UpdateQuotaConfigImpl(bool, const TActorContext&) {

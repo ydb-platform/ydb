@@ -7,6 +7,8 @@
 #include "syncer_job_task.h"
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
+
 using namespace NKikimrServices;
 using namespace NKikimr::NSync;
 using namespace NKikimr::NSyncer;
@@ -47,55 +49,30 @@ namespace NKikimr {
         TActorId TargetActorId;
 
         void Bootstrap(const TActorContext &ctx) {
-            LOG_DEBUG(ctx, BS_SYNCER,
-                      VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "TSyncerRLDFullSyncProxyActor(%s): START",
-                            TargetVDiskId.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): START", TargetVDiskId.ToString().data()));
             CreateAndRunTask(ctx);
         }
 
         void CreateAndRunTask(const TActorContext &ctx) {
-            TActorId sstWriterId;
-#ifdef USE_NEW_FULL_SYNC_SCHEME
-            auto* sstWriterActor = new TIndexSstWriterActor(
-                SyncerCtx->VCtx,
-                SyncerCtx->PDiskCtx,
-                SyncerCtx->LevelIndexLogoBlob,
-                SyncerCtx->LevelIndexBlock,
-                SyncerCtx->LevelIndexBarrier);
-            sstWriterId = ctx.Register(sstWriterActor);
-            ActiveActors.Insert(sstWriterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-#endif
             // create task
             auto task = std::make_unique<TSyncerJobTask>(
                 TSyncerJobTask::EFullRecover,
                 TargetVDiskId,
                 TargetActorId,
-                sstWriterId,
+                TActorId(),
                 PeerSyncState,
                 JobCtx);
             // run task
             const TActorId jobActorId = ctx.Register(CreateSyncerJob(SyncerCtx, std::move(task), ctx.SelfID));
             ActiveActors.Insert(jobActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-#ifdef USE_NEW_FULL_SYNC_SCHEME
-            sstWriterActor->SetSyncerJobActorId(jobActorId);
-#endif
             // state func
             Become(&TThis::WaitForSyncStateFunc);
         }
 
         void Handle(TEvSyncerJobDone::TPtr &ev, const TActorContext &ctx) {
-            LOG_DEBUG(ctx, BS_SYNCER,
-                      VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "TSyncerRLDFullSyncProxyActor(%s): TEvSyncerJobDone; Task# %s",
-                            TargetVDiskId.ToString().data(), ev->Get()->Task->ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): TEvSyncerJobDone; Task# %s", TargetVDiskId.ToString().data(), ev->Get()->Task->ToString().data()));
             ActiveActors.Erase(ev->Sender);
             auto* msg = ev->Get();
-#ifdef USE_NEW_FULL_SYNC_SCHEME
-            if (msg->Task->SstWriterId) {
-                ActiveActors.Erase(msg->Task->SstWriterId);
-            }
-#endif
             std::unique_ptr<TSyncerJobTask> task = std::move(msg->Task);
             auto syncStatus = task->GetCurrent().LastSyncStatus;
             if (!TPeerSyncState::Good(syncStatus)) {
@@ -115,10 +92,7 @@ namespace NKikimr {
         // WAIT FOR TIMEOUT
         ////////////////////////////////////////////////////////////////////////
         void RerunTaskAfterTimeout(const TActorContext &ctx) {
-            LOG_DEBUG(ctx, BS_SYNCER,
-                      VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "TSyncerRLDFullSyncProxyActor(%s): RerunTaskAfterTimeout",
-                            TargetVDiskId.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): RerunTaskAfterTimeout", TargetVDiskId.ToString().data()));
             auto timeout = SyncerCtx->Config->SyncerRLDRetryTimeout;
             ctx.Schedule(timeout, new TEvSyncerRLDWakeup(nullptr));
             // state func
@@ -141,10 +115,7 @@ namespace NKikimr {
         // COMMIT
         ////////////////////////////////////////////////////////////////////////
         void Commit(const TActorContext &ctx, std::unique_ptr<TSyncerJobTask> task) {
-            LOG_DEBUG(ctx, BS_SYNCER,
-                      VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "TSyncerRLDFullSyncProxyActor(%s): Commit",
-                            TargetVDiskId.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): Commit", TargetVDiskId.ToString().data()));
             auto msg = TEvSyncerCommit::Remote(task->VDiskId, task->GetCurrent());
             ctx.Send(CommitterId, msg.release());
             Become(&TThis::WaitForCommitStateFunc);
@@ -152,10 +123,7 @@ namespace NKikimr {
 
         void Handle(TEvSyncerCommitDone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
-            LOG_DEBUG(ctx, BS_SYNCER,
-                     VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "TSyncerRLDFullSyncProxyActor(%s): FINISH",
-                           TargetVDiskId.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): FINISH", TargetVDiskId.ToString().data()));
             ctx.Send(NotifyId, new TEvSyncerFullSyncedWithPeer(TargetVDiskId));
             Die(ctx);
         }
@@ -170,10 +138,7 @@ namespace NKikimr {
         // HandlePoison
         ////////////////////////////////////////////////////////////////////////
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            LOG_DEBUG(ctx, BS_SYNCER,
-                     VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "TSyncerRLDFullSyncProxyActor(%s): PoisonPill",
-                           TargetVDiskId.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): PoisonPill", TargetVDiskId.ToString().data()));
             Y_UNUSED(ev);
             ActiveActors.KillAndClear(ctx);
             Die(ctx);

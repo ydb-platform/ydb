@@ -5,38 +5,53 @@ from yarl import URL
 # with_*
 
 
-def test_with_scheme():
+def test_with_scheme() -> None:
     url = URL("http://example.com")
     assert str(url.with_scheme("https")) == "https://example.com"
 
 
-def test_with_scheme_uppercased():
+def test_with_scheme_uppercased() -> None:
     url = URL("http://example.com")
     assert str(url.with_scheme("HTTPS")) == "https://example.com"
 
 
-def test_with_scheme_for_relative_url():
+@pytest.mark.parametrize(
+    ("scheme"),
+    [
+        ("http"),
+        ("https"),
+        ("HTTP"),
+    ],
+)
+def test_with_scheme_for_relative_url(scheme: str) -> None:
     """Test scheme can be set for relative URL."""
-    msg = "scheme replacement is not allowed for " "relative URLs for the http scheme"
+    lower_scheme = scheme.lower()
+    msg = (
+        "scheme replacement is not allowed for "
+        f"relative URLs for the {lower_scheme} scheme"
+    )
     with pytest.raises(ValueError, match=msg):
-        assert URL("path/to").with_scheme("http")
+        assert URL("path/to").with_scheme(scheme)
 
+
+def test_with_scheme_for_relative_file_url() -> None:
+    """Test scheme can be set for relative file URL."""
     expected = URL("file:///absolute/path")
     assert expected.with_scheme("file") == expected
 
 
-def test_with_scheme_invalid_type():
+def test_with_scheme_invalid_type() -> None:
     url = URL("http://example.com")
     with pytest.raises(TypeError):
-        assert str(url.with_scheme(123))
+        assert str(url.with_scheme(123))  # type: ignore[arg-type]
 
 
-def test_with_user():
+def test_with_user() -> None:
     url = URL("http://example.com")
     assert str(url.with_user("john")) == "http://john@example.com"
 
 
-def test_with_user_non_ascii():
+def test_with_user_non_ascii() -> None:
     url = URL("http://example.com")
     url2 = url.with_user("бажан")
     assert url2.raw_user == "%D0%B1%D0%B0%D0%B6%D0%B0%D0%BD"
@@ -45,7 +60,7 @@ def test_with_user_non_ascii():
     assert url2.authority == "бажан@example.com:80"
 
 
-def test_with_user_percent_encoded():
+def test_with_user_percent_encoded() -> None:
     url = URL("http://example.com")
     url2 = url.with_user("%cf%80")
     assert url2.raw_user == "%25cf%2580"
@@ -54,43 +69,43 @@ def test_with_user_percent_encoded():
     assert url2.authority == "%cf%80@example.com:80"
 
 
-def test_with_user_for_relative_url():
+def test_with_user_for_relative_url() -> None:
     with pytest.raises(ValueError):
         URL("path/to").with_user("user")
 
 
-def test_with_user_invalid_type():
+def test_with_user_invalid_type() -> None:
     url = URL("http://example.com:123")
     with pytest.raises(TypeError):
-        url.with_user(123)
+        url.with_user(123)  # type: ignore[arg-type]
 
 
-def test_with_user_None():
+def test_with_user_None() -> None:
     url = URL("http://john@example.com")
     assert str(url.with_user(None)) == "http://example.com"
 
 
-def test_with_user_ipv6():
+def test_with_user_ipv6() -> None:
     url = URL("http://john:pass@[::1]:8080/")
     assert str(url.with_user(None)) == "http://[::1]:8080/"
 
 
-def test_with_user_None_when_password_present():
+def test_with_user_None_when_password_present() -> None:
     url = URL("http://john:pass@example.com")
     assert str(url.with_user(None)) == "http://example.com"
 
 
-def test_with_password():
+def test_with_password() -> None:
     url = URL("http://john@example.com")
     assert str(url.with_password("pass")) == "http://john:pass@example.com"
 
 
-def test_with_password_ipv6():
+def test_with_password_ipv6() -> None:
     url = URL("http://john:pass@[::1]:8080/")
     assert str(url.with_password(None)) == "http://john@[::1]:8080/"
 
 
-def test_with_password_non_ascii():
+def test_with_password_non_ascii() -> None:
     url = URL("http://john@example.com")
     url2 = url.with_password("пароль")
     assert url2.raw_password == "%D0%BF%D0%B0%D1%80%D0%BE%D0%BB%D1%8C"
@@ -99,7 +114,7 @@ def test_with_password_non_ascii():
     assert url2.authority == "john:пароль@example.com:80"
 
 
-def test_with_password_percent_encoded():
+def test_with_password_percent_encoded() -> None:
     url = URL("http://john@example.com")
     url2 = url.with_password("%cf%80")
     assert url2.raw_password == "%25cf%2580"
@@ -108,30 +123,30 @@ def test_with_password_percent_encoded():
     assert url2.authority == "john:%cf%80@example.com:80"
 
 
-def test_with_password_non_ascii_with_colon():
+def test_with_password_non_ascii_with_colon() -> None:
     url = URL("http://john@example.com")
     url2 = url.with_password("п:а")
     assert url2.raw_password == "%D0%BF%3A%D0%B0"
     assert url2.password == "п:а"
 
 
-def test_with_password_for_relative_url():
+def test_with_password_for_relative_url() -> None:
     with pytest.raises(ValueError):
         URL("path/to").with_password("pass")
 
 
-def test_with_password_None():
+def test_with_password_None() -> None:
     url = URL("http://john:pass@example.com")
     assert str(url.with_password(None)) == "http://john@example.com"
 
 
-def test_with_password_invalid_type():
+def test_with_password_invalid_type() -> None:
     url = URL("http://example.com:123")
     with pytest.raises(TypeError):
-        url.with_password(123)
+        url.with_password(123)  # type: ignore[arg-type]
 
 
-def test_with_password_and_empty_user():
+def test_with_password_and_empty_user() -> None:
     url = URL("http://example.com")
     url2 = url.with_password("pass")
     assert url2.password == "pass"
@@ -139,30 +154,38 @@ def test_with_password_and_empty_user():
     assert str(url2) == "http://:pass@example.com"
 
 
-def test_from_str_with_host_ipv4():
+def test_from_str_with_host_ipv4() -> None:
     url = URL("http://host:80")
     url = url.with_host("192.168.1.1")
     assert url.raw_host == "192.168.1.1"
 
 
-def test_from_str_with_host_ipv6():
+def test_from_str_with_host_ipv6() -> None:
     url = URL("http://host:80")
     url = url.with_host("::1")
     assert url.raw_host == "::1"
 
 
-def test_with_host():
+def test_with_host() -> None:
     url = URL("http://example.com:123")
     assert str(url.with_host("example.org")) == "http://example.org:123"
 
 
-def test_with_host_empty():
+def test_with_host_ipv6_zone_id_bare_percent() -> None:
+    """RFC 4007 scoped literals with a bare ``%`` work in with_host()."""
+    url = URL("http://example.com/x")
+    url2 = url.with_host("fe80::1%1")
+    assert str(url2) == "http://[fe80::1%1]/x"
+    assert url2.host == "fe80::1%1"
+
+
+def test_with_host_empty() -> None:
     url = URL("http://example.com:123")
     with pytest.raises(ValueError):
         url.with_host("")
 
 
-def test_with_host_non_ascii():
+def test_with_host_non_ascii() -> None:
     url = URL("http://example.com:123")
     url2 = url.with_host("оун-упа.укр")
     assert url2.raw_host == "xn----8sb1bdhvc.xn--j1amh"
@@ -171,7 +194,58 @@ def test_with_host_non_ascii():
     assert url2.authority == "оун-упа.укр:123"
 
 
-def test_with_host_percent_encoded():
+@pytest.mark.parametrize(
+    ("host", "is_authority"),
+    [
+        ("user:pass@host.com", True),
+        ("user@host.com", True),
+        ("host:com", False),
+        ("not_percent_encoded%Zf", False),
+        ("still_not_percent_encoded%fZ", False),
+        *(("other_gen_delim_" + c, False) for c in "/?#[]"),
+    ],
+)
+def test_with_invalid_host(host: str, is_authority: bool) -> None:
+    url = URL("http://example.com:123")
+    match = r"Host '[^']+' cannot contain '[^']+' \(at position \d+\)"
+    if is_authority:
+        match += ", if .* use 'authority' instead of 'host'"
+    with pytest.raises(ValueError, match=f"{match}$"):
+        url.with_host(host=host)
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "127.0.0.1／allowed.example",
+        "127.0.0.1？allowed.example",
+        "127.0.0.1＃allowed.example",
+    ],
+    ids=["fullwidth-solidus", "fullwidth-question", "fullwidth-number-sign"],
+)
+def test_with_host_delimiter_from_normalization(host: str) -> None:
+    # A non-ascii character that expands to a URL delimiter under IDNA/NFKC
+    # normalization must be rejected, matching the parser's _check_netloc.
+    url = URL("http://example.com:123")
+    match = r"cannot contain '[/?#]' after IDNA normalization to "
+    with pytest.raises(ValueError, match=match):
+        url.with_host(host)
+
+
+@pytest.mark.parametrize(
+    "ignorable",
+    ["\u00ad", "\u200b", "\u2060", "\ufeff"],
+    ids=["soft-hyphen", "zwsp", "word-joiner", "bom"],
+)
+def test_with_host_default_ignorable(ignorable: str) -> None:
+    # IDNA strips default-ignorable code points, so with_host must reject a
+    # host containing one instead of collapsing it to a different host.
+    url = URL("http://example.com:123")
+    with pytest.raises(ValueError, match="cannot contain"):
+        url.with_host(f"e{ignorable}vil.com")
+
+
+def test_with_host_percent_encoded() -> None:
     url = URL("http://%25cf%2580%cf%80:%25cf%2580%cf%80@example.com:123")
     url2 = url.with_host("%cf%80.org")
     assert url2.raw_host == "%cf%80.org"
@@ -180,23 +254,22 @@ def test_with_host_percent_encoded():
     assert url2.authority == "%cf%80π:%cf%80π@%cf%80.org:123"
 
 
-def test_with_host_for_relative_url():
+def test_with_host_for_relative_url() -> None:
     with pytest.raises(ValueError):
         URL("path/to").with_host("example.com")
 
 
-def test_with_host_invalid_type():
+def test_with_host_invalid_type() -> None:
     url = URL("http://example.com:123")
     with pytest.raises(TypeError):
-        url.with_host(None)
+        url.with_host(None)  # type: ignore[arg-type]
 
 
-def test_with_port():
+def test_with_port() -> None:
     url = URL("http://example.com")
     assert str(url.with_port(8888)) == "http://example.com:8888"
 
 
-@pytest.mark.skip
 def test_with_default_port_normalization() -> None:
     url = URL("http://example.com")
     assert str(url.with_scheme("https")) == "https://example.com"
@@ -204,7 +277,6 @@ def test_with_default_port_normalization() -> None:
     assert str(url.with_port(443).with_scheme("https")) == "https://example.com"
 
 
-@pytest.mark.skip
 def test_with_custom_port_normalization() -> None:
     url = URL("http://example.com")
     u88 = url.with_port(88)
@@ -213,7 +285,6 @@ def test_with_custom_port_normalization() -> None:
     assert str(u88.with_scheme("https")) == "https://example.com:88"
 
 
-@pytest.mark.skip
 def test_with_explicit_port_normalization() -> None:
     url = URL("http://example.com")
     u80 = url.with_port(80)
@@ -222,38 +293,38 @@ def test_with_explicit_port_normalization() -> None:
     assert str(u80.with_scheme("https")) == "https://example.com:80"
 
 
-def test_with_port_with_no_port():
+def test_with_port_with_no_port() -> None:
     url = URL("http://example.com")
     assert str(url.with_port(None)) == "http://example.com"
 
 
-def test_with_port_ipv6():
+def test_with_port_ipv6() -> None:
     url = URL("http://[::1]:8080/")
     assert str(url.with_port(81)) == "http://[::1]:81/"
 
 
-def test_with_port_keeps_query_and_fragment():
+def test_with_port_keeps_query_and_fragment() -> None:
     url = URL("http://example.com/?a=1#frag")
     assert str(url.with_port(8888)) == "http://example.com:8888/?a=1#frag"
 
 
-def test_with_port_percent_encoded():
+def test_with_port_percent_encoded() -> None:
     url = URL("http://user%name:pass%word@example.com/")
     assert str(url.with_port(808)) == "http://user%25name:pass%25word@example.com:808/"
 
 
-def test_with_port_for_relative_url():
+def test_with_port_for_relative_url() -> None:
     with pytest.raises(ValueError):
         URL("path/to").with_port(1234)
 
 
-def test_with_port_invalid_type():
+def test_with_port_invalid_type() -> None:
     with pytest.raises(TypeError):
-        URL("http://example.com").with_port("123")
+        URL("http://example.com").with_port("123")  # type: ignore[arg-type]
     with pytest.raises(TypeError):
         URL("http://example.com").with_port(True)
 
 
-def test_with_port_invalid_range():
+def test_with_port_invalid_range() -> None:
     with pytest.raises(ValueError):
         URL("http://example.com").with_port(-1)

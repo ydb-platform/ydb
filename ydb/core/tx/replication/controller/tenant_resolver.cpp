@@ -4,9 +4,10 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -30,22 +31,23 @@ class TTenantResolver: public TActorBootstrapped<TTenantResolver> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_T("Handle " << ev->Get()->ToString()
-            << ": entry# " << entry.ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"entry", entry});
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_W("Unexpected status"
-                << ": entry# " << entry.ToString());
+            YDB_LOG_WARN("Unexpected status",
+                {"entry", entry});
             return Reply(false);
         }
 
         if (!DomainKey) {
             if (!entry.DomainInfo) {
-                LOG_E("Empty domain info"
-                    << ": entry# " << entry.ToString());
+                YDB_LOG_ERROR("Empty domain info",
+                    {"entry", entry});
                 return Reply(false);
             }
 
@@ -71,16 +73,19 @@ public:
         : Parent(parent)
         , ReplicationId(rid)
         , PathId(pathId)
-        , LogPrefix("TenantResolver", ReplicationId)
+        , LogPrefix(CreateActorLogPrefix("TenantResolver", ReplicationId))
     {
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         Resolve(PathId);
         Become(&TThis::StateWork);
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
@@ -91,7 +96,7 @@ private:
     const TActorId Parent;
     const ui64 ReplicationId;
     const TPathId PathId;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
 

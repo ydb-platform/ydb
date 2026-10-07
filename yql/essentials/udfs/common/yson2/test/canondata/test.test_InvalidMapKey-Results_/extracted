@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>:1:22: Error: JSON writer: invalid UTF-8
+	select ToBytes(Yson::SerializeJson(Yson::From({"\xff":1})))
+	                     ^

@@ -4,11 +4,18 @@
 #include <util/generic/size_literals.h>
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/common.h>
+#include <yt/cpp/mapreduce/interface/errors.h>
 #include <yt/yql/providers/yt/codec/yt_codec_io.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/public/udf/udf_log.h>
+#include <yql/essentials/public/udf/udf_terminator.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
 
+#include <util/generic/yexception.h>
+
+#include <exception>
 #include <utility>
 
 namespace NYql::NDqs {
@@ -30,31 +37,58 @@ class TYtDqWideWriteWrapper final : public TStatefulFlowCodegeneratorNode<TYtDqW
             TRawTableWriterPtr&& outStream,
             THolder<TMkqlWriterImpl>&& writer,
             size_t width,
-            IComputationWideFlowNode* flow
+            IComputationWideFlowNode* flow,
+            NUdf::TLoggerPtr logger,
+            NUdf::TLogComponentId logComponent
         )
             : TComputationValue<TWriterState>(memInfo)
-            , Client_(std::move(client)), Transaction_(std::move(transaction))
-            , Specs_(std::move(specs)), OutStream_(std::move(outStream)), Writer_(std::move(writer))
-            , Values_(width), Fields_(GetPointers(Values_)), Flow_(flow)
+            , Client_(std::move(client))
+            , Transaction_(std::move(transaction))
+            , Specs_(std::move(specs))
+            , OutStream_(std::move(outStream))
+            , Writer_(std::move(writer))
+            , Values_(width)
+            , Fields_(GetPointers(Values_))
+            , Flow_(flow)
+            , Logger_(std::move(logger))
+            , LogComponent_(logComponent)
         {}
 
         ~TWriterState() override {
             try {
                 Finish();
             } catch (...) {
+                LogDestructorException();
             }
         }
 
         EFetchResult FetchRead(TComputationContext& ctx) {
-            switch(Flow_->FetchValues(ctx, Fields_.data())) {
-            case EFetchResult::One:
-                Writer_->AddFlatRow(Values_.data());
-                return EFetchResult::One;
-            case EFetchResult::Yield:
-                return EFetchResult::Yield;
-            case EFetchResult::Finish:
-                Finish();
-                return EFetchResult::Finish;
+            try {
+                switch(Flow_->FetchValues(ctx, Fields_.data())) {
+                case EFetchResult::One:
+                    Writer_->AddFlatRow(Values_.data());
+                    return EFetchResult::One;
+                case EFetchResult::Yield:
+                    return EFetchResult::Yield;
+                case EFetchResult::Finish:
+                    Finish();
+                    return EFetchResult::Finish;
+                }
+            } catch (const TErrorResponse& error) {
+                UdfTerminate(error.GetError().ShortDescription().c_str());
+            } catch (const std::exception& error) {
+                UdfTerminate(error.what());
+            }
+        }
+
+    private:
+        void LogDestructorException() noexcept {
+            try {
+                if (Logger_) {
+                    Logger_->Log(LogComponent_, NUdf::ELogLevel::Error, TStringBuilder()
+                        << "Failed to finish YT DQ writer in destructor: " << CurrentExceptionMessage());
+                }
+            } catch (...) {
             }
         }
 
@@ -67,7 +101,7 @@ class TYtDqWideWriteWrapper final : public TStatefulFlowCodegeneratorNode<TYtDqW
             }
             Finished_ = true;
         }
-    private:
+
         bool Finished_ = false;
         const IClientPtr Client_;
         const ITransactionPtr Transaction_;
@@ -77,6 +111,8 @@ class TYtDqWideWriteWrapper final : public TStatefulFlowCodegeneratorNode<TYtDqW
         std::vector<NUdf::TUnboxedValue> Values_;
         std::vector<NUdf::TUnboxedValue*> Fields_;
         IComputationWideFlowNode* Flow_;
+        const NUdf::TLoggerPtr Logger_;
+        const NUdf::TLogComponentId LogComponent_;
     };
 
 public:
@@ -88,6 +124,7 @@ public:
         const TRichYPath& path,
         const NYT::TNode& outSpec,
         const NYT::TNode& writerOptions,
+        const std::string_view& optLLVM,
         THolder<NCommon::TCodecContext>&& codecCtx
     )
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded, EValueRepresentation::Boxed)
@@ -98,7 +135,10 @@ public:
         , Path(path)
         , OutSpec(outSpec)
         , WriterOptions(writerOptions)
+        , OptLLVM(optLLVM)
         , CodecCtx(std::move(codecCtx))
+        , Logger(mutables)
+        , LogComponent(mutables)
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
@@ -200,32 +240,61 @@ public:
     }
 #endif
 private:
+    NUdf::TLoggerPtr GetLogger(TComputationContext& ctx) const {
+        if (Logger.Empty(ctx)) {
+            return Logger.GetOrCreate(ctx, ctx.MakeLogger());
+        }
+        return Logger.Get(ctx);
+    }
+
+    NUdf::TLogComponentId GetLogComponent(TComputationContext& ctx) const {
+        if (LogComponent.Empty(ctx)) {
+            return LogComponent.GetOrCreate(ctx, GetLogger(ctx)->RegisterComponent("YtDqWideWrite"));
+        }
+        return LogComponent.Get(ctx);
+    }
+
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-        TString token;
-        if (NUdf::TStringRef tokenRef(Token); ctx.Builder->GetSecureParam(tokenRef, tokenRef)) {
-            token = tokenRef;
+        try {
+            TString token;
+            if (NUdf::TStringRef tokenRef(Token); ctx.Builder->GetSecureParam(tokenRef, tokenRef)) {
+                token = tokenRef;
+            }
+
+            NYT::TCreateClientOptions createOpts;
+            if (token) {
+                createOpts.Token(token);
+            }
+
+            auto client = NYT::CreateClient(ClusterName, createOpts);
+            auto transaction = client->AttachTransaction(Path.TransactionId_.GetRef());
+            auto specs = MakeHolder<TMkqlIOSpecs>();
+            specs->SetUseSkiff(OptLLVM);
+            specs->Init(*CodecCtx, OutSpec);
+            auto path = Path;
+            path.TransactionId_.Clear();
+            NYT::TTableWriterOptions options;
+            options.Config(WriterOptions);
+            auto outStream = transaction->CreateRawWriter(path, specs->MakeOutputFormat(), options);
+
+            auto writer = MakeHolder<TMkqlWriterImpl>(outStream, 4_MB);
+            writer->SetSpecs(*specs);
+
+            state = ctx.HolderFactory.Create<TWriterState>(
+                std::move(client),
+                std::move(transaction),
+                std::move(specs),
+                std::move(outStream),
+                std::move(writer),
+                Representations.size(),
+                Flow,
+                GetLogger(ctx),
+                GetLogComponent(ctx));
+        } catch (const TErrorResponse& error) {
+            UdfTerminate(error.GetError().ShortDescription().c_str());
+        } catch (const std::exception& error) {
+            UdfTerminate(error.what());
         }
-
-        NYT::TCreateClientOptions createOpts;
-        if (token) {
-            createOpts.Token(token);
-        }
-
-        auto client = NYT::CreateClient(ClusterName, createOpts);
-        auto transaction = client->AttachTransaction(Path.TransactionId_.GetRef());
-        auto specs = MakeHolder<TMkqlIOSpecs>();
-        specs->SetUseSkiff("");
-        specs->Init(*CodecCtx, OutSpec);
-        auto path = Path;
-        path.TransactionId_.Clear();
-        NYT::TTableWriterOptions options;
-        options.Config(WriterOptions);
-        auto outStream = transaction->CreateRawWriter(path, specs->MakeOutputFormat(), options);
-
-        auto writer = MakeHolder<TMkqlWriterImpl>(outStream, 4_MB);
-        writer->SetSpecs(*specs);
-
-        state = ctx.HolderFactory.Create<TWriterState>(std::move(client), std::move(transaction), std::move(specs), std::move(outStream), std::move(writer), Representations.size(), Flow);
     }
 
     void RegisterDependencies() const final {
@@ -247,7 +316,10 @@ private:
     const TRichYPath Path;
     const NYT::TNode OutSpec;
     const NYT::TNode WriterOptions;
+    const TString OptLLVM;
     const THolder<NCommon::TCodecContext> CodecCtx;
+    const TMutableDataOnContext<NUdf::TLoggerPtr> Logger;
+    const TMutableDataOnContext<NUdf::TLogComponentId> LogComponent;
 
     std::vector<NUdf::TUnboxedValue> Values;
     const std::vector<NUdf::TUnboxedValue*> Fields;
@@ -256,7 +328,7 @@ private:
 }
 
 IComputationNode* WrapYtDqRowsWideWrite(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    YQL_ENSURE(callable.GetInputsCount() == 6, "Expected six args.");
+    YQL_ENSURE(callable.GetInputsCount() == 7, "Expected seven args.");
 
     const auto& clusterName = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().AsStringRef();
     const auto& token = AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().AsStringRef();
@@ -266,6 +338,7 @@ IComputationNode* WrapYtDqRowsWideWrite(TCallable& callable, const TComputationN
 
     const NYT::TNode outSpec(NYT::NodeFromYsonString((AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().AsStringRef())));
     const NYT::TNode writerOptions(NYT::NodeFromYsonString((AS_VALUE(TDataLiteral, callable.GetInput(5))->AsValue().AsStringRef())));
+    const TString optLLVM(AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().AsStringRef());
     const auto node = LocateNode(ctx.NodeLocator, callable, 0);
 
     std::vector<EValueRepresentation> representations;
@@ -276,7 +349,7 @@ IComputationNode* WrapYtDqRowsWideWrite(TCallable& callable, const TComputationN
     }
 
     auto codecCtx = MakeHolder<NCommon::TCodecContext>(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory);
-    return new TYtDqWideWriteWrapper(ctx.Mutables, static_cast<IComputationWideFlowNode*>(node), std::move(representations), clusterName, token, richYPath, outSpec, writerOptions, std::move(codecCtx));
+    return new TYtDqWideWriteWrapper(ctx.Mutables, static_cast<IComputationWideFlowNode*>(node), std::move(representations), clusterName, token, richYPath, outSpec, writerOptions, optLLVM, std::move(codecCtx));
 }
 
 } // NYql

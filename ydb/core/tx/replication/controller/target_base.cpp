@@ -14,6 +14,15 @@ using ETargetKind = TReplication::ETargetKind;
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
 
+namespace {
+
+bool ShouldWaitForAttachment(const TReplication* replication) {
+    return replication->GetConfig().GetSkipInitialScan()
+        && replication->GetDesiredState() == TReplication::EState::Paused;
+}
+
+} // anonymous namespace
+
 TTargetBase::TConfigBase::TConfigBase(ETargetKind kind, const TString& srcPath, const TString& dstPath)
     : Kind(kind)
     , SrcPath(srcPath)
@@ -33,11 +42,14 @@ const TString& TTargetBase::TConfigBase::GetDstPath() const {
     return DstPath;
 }
 
-TTargetBase::TTargetBase(TReplication* replication, ETargetKind kind,
-        ui64 id, const IConfig::TPtr& config)
+TTargetBase::TTargetBase(
+        TReplication* replication,
+        ETargetKind kind,
+        ui64 id,
+        const IConfig::TPtr& config)
     : Replication(replication)
-    , Id(id)
     , Kind(kind)
+    , Id(id)
     , Config(config)
 {
     Y_ABORT_UNLESS(kind == config->GetKind());
@@ -71,6 +83,7 @@ void TTargetBase::SetDstState(const EDstState value) {
     DstState = value;
     switch (DstState) {
     case EDstState::Alter:
+    case EDstState::Attaching:
         Replication->AddPendingAlterTarget(Id);
         break;
     default:
@@ -78,7 +91,7 @@ void TTargetBase::SetDstState(const EDstState value) {
         break;
     }
 
-    if (DstState != EDstState::Creating) {
+    if (DstState != EDstState::Creating && DstState != EDstState::Attaching) {
         Reset(DstCreator);
     }
     if (DstState != EDstState::Ready) {
@@ -103,6 +116,14 @@ void TTargetBase::SetDstPathId(const TPathId& value) {
     DstPathId = value;
 }
 
+const TPathId& TTargetBase::GetPendingDstPathId() const {
+    return PendingDstPathId;
+}
+
+void TTargetBase::SetPendingDstPathId(const TPathId& value) {
+    PendingDstPathId = value;
+}
+
 const TString& TTargetBase::GetStreamName() const {
     return StreamName;
 }
@@ -125,6 +146,14 @@ EStreamState TTargetBase::GetStreamState() const {
 
 void TTargetBase::SetStreamState(EStreamState value) {
     StreamState = value;
+}
+
+std::optional<bool> TTargetBase::GetStreamSchemaChanges() const {
+    return StreamSchemaChanges;
+}
+
+void TTargetBase::SetStreamSchemaChanges(bool value) {
+    StreamSchemaChanges = value;
 }
 
 const TString& TTargetBase::GetIssue() const {
@@ -181,35 +210,44 @@ void TTargetBase::UpdateLag(ui64 workerId, TDuration lag) {
     }
 
     if (TLagProvider::UpdateLag(it->second, workerId, lag)) {
-        Replication->UpdateLag(GetId(), TLagProvider::GetLag().GetRef());
+        Replication->UpdateLag(GetId(), TLagProvider::GetLag().value());
     }
 }
 
-const TMaybe<TDuration> TTargetBase::GetLag() const {
+const std::optional<TDuration> TTargetBase::GetLag() const {
     return TLagProvider::GetLag();
 }
 
 void TTargetBase::Progress(const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:
+        if (!DstCreator && !ShouldWaitForAttachment(Replication)) {
+            DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
+        }
+        break;
+    case EDstState::Attaching:
         if (!DstCreator) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         }
         break;
     case EDstState::Ready:
-        if (!WorkerRegistar) {
+        if (Replication->GetState() == TReplication::EState::Ready && !WorkerRegistar) {
             WorkerRegistar = ctx.Register(CreateWorkerRegistar(ctx));
         }
         break;
-    case EDstState::Alter:
+    case EDstState::Alter: {
+        const bool needsCreator = !DstCreator && !DstPathId;
+        const bool canAttach = !ShouldWaitForAttachment(Replication)
+            && Replication->GetDesiredState() != TReplication::EState::Done;
         if (Workers) {
             RemoveWorkers(ctx);
-        } else if (!DstCreator && !DstPathId) {
+        } else if (needsCreator && canAttach) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
-        } else if (!DstAlterer) {
+        } else if (!DstCreator && !DstAlterer) {
             DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
         }
         break;
+    }
     case EDstState::Done:
         break;
     case EDstState::Removing:

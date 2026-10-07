@@ -4,6 +4,8 @@
 #include "blocks.h"
 #include "s3.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev) {
@@ -21,7 +23,7 @@ namespace NKikimr::NBlobDepot {
             TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COMMIT_BLOB_SEQ; }
 
             TTxCommitBlobSeq(TBlobDepot *self, TAgent& agent, std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> request)
-                : TTransactionBase(self)
+                : TTransactionBase(self, std::move(request->TraceId))
                 , NodeId(agent.Connection->NodeId)
                 , AgentInstanceId(*agent.AgentInstanceId)
                 , Request(std::move(request))
@@ -35,6 +37,14 @@ namespace NKikimr::NBlobDepot {
                     }
                     if (!item.GetCommitNotify() && item.HasBlobLocator()) {
                         const auto blobSeqId = TBlobSeqId::FromProto(item.GetBlobLocator().GetBlobSeqId());
+                        if (const auto it = agent.ExpiredSteps.find(blobSeqId.Channel);
+                                blobSeqId.Generation == generation && it != agent.ExpiredSteps.end() &&
+                                blobSeqId.Step <= it->second) {
+                            // A commit queued during reconnect can arrive before the agent applies invalidations.
+                            // Its range is already reclaimed, and GC may already have advanced past this id.
+                            FailedBlobSeqIds.insert(blobSeqId);
+                            continue;
+                        }
                         if (Self->Data->CanBeCollected(blobSeqId)) {
                             // check for internal sanity -- we can't issue barriers on given ids without confirmed trimming
                             Y_VERIFY_S(blobSeqId.Generation < generation, "committing trimmed BlobSeqId"
@@ -52,10 +62,15 @@ namespace NKikimr::NBlobDepot {
             }
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                TAgent& agent = Self->GetAgent(NodeId);
-                if (!agent.Connection || agent.AgentInstanceId != AgentInstanceId) { // agent disconnected while transaction was in queue -- drop this request
+                // Checking node and instance id alone is not enough: a transient disconnect and reconnect of the
+                // same agent instance keeps both, while OnAgentDisconnect has already emptied S3WritesInFlight --
+                // the erase below would then trip Y_ABORT_UNLESS(numErased). The pipe server this request arrived
+                // on is also exactly what the response is addressed through, so require it to still be current.
+                TAgent *agentPtr = Self->FindAgent(Request->Recipient);
+                if (!agentPtr || agentPtr->AgentInstanceId != AgentInstanceId) { // agent disconnected while transaction was in queue -- drop this request
                     return true;
                 }
+                TAgent& agent = *agentPtr;
 
                 if (!Self->Data->LoadMissingKeys(Request->Get()->Record, txc)) {
                     return false;
@@ -77,6 +92,7 @@ namespace NKikimr::NBlobDepot {
                             const size_t numErased = agent.S3WritesInFlight.erase(locator);
                             Y_ABORT_UNLESS(numErased);
                             Self->S3Manager->AddTrashToCollect(locator);
+                            Self->S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
                         }
                     };
 
@@ -131,8 +147,13 @@ namespace NKikimr::NBlobDepot {
                         }
                     }
 
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT68, "TTxCommitBlobSeq process key", (Id, Self->GetLogId()),
-                        (Key, key), (Item, item), (CanBeCollected, canBeCollected), (Generation, generation));
+                    YDB_LOG_DEBUG("TTxCommitBlobSeq process key",
+                        {"marker", "BDT68"},
+                        {"id", Self->GetLogId()},
+                        {"key", key},
+                        {"item", item},
+                        {"canBeCollected", canBeCollected},
+                        {"generation", generation});
 
                     if (canBeCollected) {
                         // we can't accept this record, because it is potentially under already issued barrier
@@ -180,6 +201,8 @@ namespace NKikimr::NBlobDepot {
 
                             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_OK] += 1;
                             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_BYTES] += locator.Len;
+
+                            Self->S3Manager->OnS3WriteInFlightRemoved(/*success=*/true);
                         }
                         Self->Data->UpdateKey(key, item, txc, this);
                     }
@@ -214,28 +237,56 @@ namespace NKikimr::NBlobDepot {
         TAgent& agent = GetAgent(ev->Recipient);
         const ui32 generation = Executor()->Generation();
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT57, "TEvDiscardSpoiledBlobSeq", (Id, GetLogId()), (AgentId, agent.Connection->NodeId),
-            (Msg, ev->Get()->Record));
+        YDB_LOG_DEBUG("TEvDiscardSpoiledBlobSeq",
+            {"marker", "BDT57"},
+            {"id", GetLogId()},
+            {"agentId", agent.Connection->NodeId},
+            {"msg", ev->Get()->Record});
 
         // FIXME(alexvru): delete uncertain keys containing this BlobSeqId as they were never written
 
         const auto& record = ev->Get()->Record;
 
+        // Arm S3 put throttling before the spoiled locators get processed so that subsequent prepare-write events
+        // (already serialized after this one on the same agent pipe) see the updated state and get queued.
+        if (record.GetS3SlowDown()) {
+            S3Manager->NotifyPutSlowDown();
+        }
+
         for (const auto& item : record.GetItems()) {
             const auto blobSeqId = TBlobSeqId::FromProto(item);
-            if (blobSeqId.Generation == generation) {
-                Y_ABORT_UNLESS(blobSeqId.Channel < Channels.size());
-                auto& channel = Channels[blobSeqId.Channel];
+            if (blobSeqId.Generation != generation) {
+                continue;
+            } else if (blobSeqId.Channel >= Channels.size()) {
+                YDB_LOG_ERROR("TEvDiscardSpoiledBlobSeq names a channel out of range",
+                    {"marker", "BDT97"},
+                    {"id", GetLogId()},
+                    {"blobSeqId", blobSeqId});
+                continue;
+            }
 
-                const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
+            auto& channel = Channels[blobSeqId.Channel];
+            auto& agentRange = agent.GivenIdRanges[blobSeqId.Channel];
+            const ui64 value = blobSeqId.ToSequentialNumber();
 
-                const ui64 value = blobSeqId.ToSequentialNumber();
-                agent.GivenIdRanges[blobSeqId.Channel].RemovePoint(value);
-                Channels[blobSeqId.Channel].GivenIdRanges.RemovePoint(value);
+            // RemovePoint aborts on a point we do not hold, and these items come off the wire: an id that was
+            // already committed, reclaimed, or simply repeated within this message must not take the tablet down.
+            if (!agentRange.GetPoint(value) || !channel.GivenIdRanges.GetPoint(value)) {
+                YDB_LOG_WARN("TEvDiscardSpoiledBlobSeq names a BlobSeqId we do not hold",
+                    {"marker", "BDT98"},
+                    {"id", GetLogId()},
+                    {"agentId", agent.Connection->NodeId},
+                    {"blobSeqId", blobSeqId});
+                continue;
+            }
 
-                if (channel.GetLeastExpectedBlobId(generation) != leastExpectedBlobIdBefore) {
-                    Data->OnLeastExpectedBlobIdChange(blobSeqId.Channel);
-                }
+            const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
+
+            agentRange.RemovePoint(value);
+            channel.GivenIdRanges.RemovePoint(value);
+
+            if (channel.GetLeastExpectedBlobId(generation) != leastExpectedBlobIdBefore) {
+                Data->OnLeastExpectedBlobIdChange(blobSeqId.Channel);
             }
         }
 
@@ -243,7 +294,10 @@ namespace NKikimr::NBlobDepot {
             const auto& locator = TS3Locator::FromProto(item);
             const size_t numErased = agent.S3WritesInFlight.erase(locator);
             Y_ABORT_UNLESS(numErased == 1);
-            S3Manager->AddTrashToCollect(locator);
+            if (!record.GetS3SlowDown()) { // in case of SlowDown these items never had the chance of being written
+                S3Manager->AddTrashToCollect(locator);
+            }
+            S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
         }
     }
 

@@ -36,13 +36,15 @@ public:
     TIndexDataAddress() = default;
 
     explicit TIndexDataAddress(const ui32 indexId)
-        : IndexId(indexId) {
+        : IndexId(indexId)
+    {
         AFL_VERIFY(IndexId);
     }
 
     explicit TIndexDataAddress(const ui32 indexId, const std::optional<ui64> category)
         : IndexId(indexId)
-        , Category(category) {
+        , Category(category)
+    {
         AFL_VERIFY(IndexId);
     }
 

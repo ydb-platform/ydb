@@ -1063,7 +1063,7 @@ void TTable::RemoveTxStatusRef(ui64 txId)
     }
 }
 
-void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemGlob> apart, ui64 txId)
+void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemGlob> apart, ui64 txId, ui32 savepointSeqNum)
 {
     auto& memTable = MemTable();
     bool hadTxDataRef = memTable.GetTxIdStats().contains(txId);
@@ -1078,7 +1078,7 @@ void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMe
 
     // Use a special row version that marks this update as uncommitted
     TRowVersion rowVersion(Max<ui64>(), txId);
-    MemTable().Update(rop, key, ops, apart, rowVersion, CommittedTransactions);
+    MemTable().Update(rop, key, ops, apart, rowVersion, CommittedTransactions, savepointSeqNum);
 
     if (!hadTxDataRef) {
         Y_DEBUG_ABORT_UNLESS(memTable.GetTxIdStats().contains(txId));
@@ -1655,6 +1655,7 @@ TSelectRowVersionResult TTable::SelectRowVersionByKeyPrefix(
             if (ready != NTable::EReady::Gone) {
                 res.RowVersion = iter->GetRowVersion();
                 res.RowTxId = iter->GetDeltaTxId();
+                res.RowOp = iter->Row().GetRowState();
             }
             return res;
         }
@@ -1664,6 +1665,7 @@ TSelectRowVersionResult TTable::SelectRowVersionByKeyPrefix(
             res.Ready = NTable::EReady::Data;
             res.RowVersion = iter->GetRowVersion();
             res.RowTxId = iter->GetDeltaTxId();
+            res.RowOp = iter->Row().GetRowState();
         }
     }
     if (ready == NTable::EReady::Page) {

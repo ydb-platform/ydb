@@ -124,7 +124,8 @@ public:
             hFunc(NActors::TEvents::TEvWakeup, HandleMain);
             hFunc(TEvInternal::TEvChangeCPUSoftLimit, HandleMain);
             default:
-                ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "unexpected event for task executor: " << ev->GetTypeRewrite();
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_CONVEYOR, "Unexpected event for task executor",
+                    {"eventType", ev->GetTypeRewrite()});
                 break;
         }
     }

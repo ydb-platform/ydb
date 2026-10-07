@@ -39,9 +39,17 @@ namespace client
 {
 namespace curl
 {
-const std::chrono::milliseconds kDefaultHttpConnTimeout(5000);  // ms
-const std::string kHttpStatusRegexp = "HTTP\\/\\d\\.\\d (\\d+)\\ .*";
-const std::string kHttpHeaderRegexp = "(.*)\\: (.*)\\n*";
+constexpr std::chrono::milliseconds kDefaultHttpConnTimeout{5000};  // ms
+constexpr const char *kHttpStatusRegexp = "HTTP\\/\\d\\.\\d (\\d+)\\ .*";
+constexpr const char *kHttpHeaderRegexp = "(.*)\\: (.*)\\n*";
+
+/**
+ * Default max HTTP Response size.
+ * 4MiB
+ * @see
+ * https://github.com/open-telemetry/opentelemetry-proto/blob/main/docs/specification.md#otlphttp-response
+ */
+const size_t kDefaultMaxResponseSize = 4 * 1024 * 1024;
 
 class HttpClient;
 class Session;
@@ -55,14 +63,14 @@ struct HttpCurlEasyResource
       : easy_handle{curl}, headers_chunk{headers}
   {}
 
-  HttpCurlEasyResource(HttpCurlEasyResource &&other)
+  HttpCurlEasyResource(HttpCurlEasyResource &&other) noexcept
       : easy_handle{other.easy_handle}, headers_chunk{other.headers_chunk}
   {
     other.easy_handle   = nullptr;
     other.headers_chunk = nullptr;
   }
 
-  HttpCurlEasyResource &operator=(HttpCurlEasyResource &&other)
+  HttpCurlEasyResource &operator=(HttpCurlEasyResource &&other) noexcept
   {
     using std::swap;
     swap(easy_handle, other.easy_handle);
@@ -106,6 +114,20 @@ private:
   static size_t WriteVectorBodyCallback(void *ptr, size_t size, size_t nmemb, void *userp);
 
   static size_t ReadMemoryCallback(char *buffer, size_t size, size_t nitems, void *userp);
+
+  /**
+   * Reposition the request body for libcurl.
+   *
+   * libcurl calls this when it has to restart an upload it already began, for example after a
+   * connection it had reused was closed before the response arrived. Without it libcurl has no way
+   * to rewind the body and fails the transfer with CURLE_SEND_FAIL_REWIND.
+   *
+   * @param userp The HttpOperation, set through CURLOPT_SEEKDATA
+   * @param offset Byte offset to seek to, interpreted relative to origin
+   * @param origin One of SEEK_SET, SEEK_CUR or SEEK_END
+   * @return CURL_SEEKFUNC_OK on success, CURL_SEEKFUNC_CANTSEEK to tell libcurl to find another way
+   */
+  static int SeekCallback(void *userp, curl_off_t offset, int origin);
 
   static int CurlLoggerCallback(const CURL * /* handle */,
                                 curl_infotype type,
@@ -199,6 +221,12 @@ public:
   std::chrono::system_clock::time_point NextRetryTime();
 
   /**
+   * Limit memory consumption on HTTP response.
+   * Size is @c kDefaultMaxResponseSize by default.
+   */
+  void SetMaxResponseSize(size_t max_size) { max_response_size_ = max_size; }
+
+  /**
    * Setup request
    */
   CURLcode Setup();
@@ -225,17 +253,20 @@ public:
     return static_cast<StatusCode>(response_code_);
   }
 
-  CURLcode GetLastResultCode() { return last_curl_result_; }
+  CURLcode GetLastResultCode() const noexcept { return last_curl_result_; }
 
   /**
    * Get last session state.
    */
-  opentelemetry::ext::http::client::SessionState GetSessionState() { return session_state_; }
+  opentelemetry::ext::http::client::SessionState GetSessionState() const noexcept
+  {
+    return session_state_;
+  }
 
   /**
    * Get whether or not response was programmatically aborted
    */
-  bool WasAborted() { return is_aborted_.load(std::memory_order_acquire); }
+  bool WasAborted() const noexcept { return is_aborted_.load(std::memory_order_acquire); }
 
   /**
    * Return a copy of response headers
@@ -273,12 +304,11 @@ public:
   inline CURL *GetCurlEasyHandle() noexcept { return curl_resource_.easy_handle; }
 
 private:
-  CURLcode SetCurlPtrOption(CURLoption option, void *value);
+  CURLcode SetCurlPtrOption(CURLoption option, const void *value);
 
   CURLcode SetCurlStrOption(CURLoption option, const char *str)
   {
-    void *ptr = const_cast<char *>(str);
-    return SetCurlPtrOption(option, ptr);
+    return SetCurlPtrOption(option, str);
   }
 
   CURLcode SetCurlBlobOption(CURLoption option, struct curl_blob *blob)
@@ -291,6 +321,8 @@ private:
     return SetCurlPtrOption(option, list);
   }
 
+  // Curl parameter must really be a long
+  // NOLINTNEXTLINE(google-runtime-int)
   CURLcode SetCurlLongOption(CURLoption option, long value);
 
   CURLcode SetCurlOffOption(CURLoption option, curl_off_t value);
@@ -300,44 +332,51 @@ private:
   std::atomic<bool> is_aborted_{false};   // Set to 'true' when async callback is aborted
   std::atomic<bool> is_finished_{false};  // Set to 'true' when async callback is finished.
   std::atomic<bool> is_cleaned_{false};   // Set to 'true' when async callback is cleaned.
-  const bool is_raw_response_;            // Do not split response headers from response body
-  const bool reuse_connection_;           // Reuse connection
+  const bool is_raw_response_{false};     // Do not split response headers from response body
+  const bool reuse_connection_{false};    // Reuse connection
   const std::chrono::milliseconds http_conn_timeout_;  // Timeout for connect.  Default: 5000ms
 
-  char curl_error_message_[CURL_ERROR_SIZE];
+  char curl_error_message_[CURL_ERROR_SIZE]{};
   HttpCurlEasyResource curl_resource_;
-  CURLcode last_curl_result_;  // Curl result OR HTTP status code if successful
+  CURLcode last_curl_result_{CURLE_OK};  // Curl result OR HTTP status code if successful
 
-  opentelemetry::ext::http::client::EventHandler *event_handle_;
+  opentelemetry::ext::http::client::EventHandler *event_handle_{nullptr};
 
   // Request values
-  opentelemetry::ext::http::client::Method method_;
+  opentelemetry::ext::http::client::Method method_{opentelemetry::ext::http::client::Method::Get};
   std::string url_;
 
   const opentelemetry::ext::http::client::HttpSslOptions &ssl_options_;
 
   const Headers &request_headers_;
   const opentelemetry::ext::http::client::Body &request_body_;
-  size_t request_nwrite_;
-  opentelemetry::ext::http::client::SessionState session_state_;
+  size_t request_nwrite_{0};
+  opentelemetry::ext::http::client::SessionState session_state_{
+      opentelemetry::ext::http::client::SessionState::Created};
 
   const opentelemetry::ext::http::client::Compression &compression_;
 
-  const bool is_log_enabled_;
+  const bool is_log_enabled_{false};
 
   const RetryPolicy retry_policy_;
   decltype(RetryPolicy::max_attempts) retry_attempts_;
   std::chrono::system_clock::time_point last_attempt_time_;
+  std::chrono::system_clock::time_point retry_after_time_point_{};
 
   // Processed response headers and body
-  long response_code_;
+  // See CURLINFO_RESPONSE_CODE, type is long
+  // NOLINTNEXTLINE(google-runtime-int)
+  long response_code_{0};
   std::vector<uint8_t> response_headers_;
   std::vector<uint8_t> response_body_;
   std::vector<uint8_t> raw_response_;
+  /** Max HTTP response size. */
+  size_t max_response_size_{kDefaultMaxResponseSize};
 
   struct AsyncData
   {
-    Session *session;  // Owner Session
+    // Read by Abort() on whichever thread cancels, cleared by Cleanup() on the IO thread.
+    std::atomic<Session *> session{nullptr};  // Owner Session
 
     std::thread::id callback_thread;
     std::function<void(HttpOperation &)> callback;
@@ -346,6 +385,7 @@ private:
     std::future<CURLcode> result_future;
   };
   friend class HttpOperationAccessor;
+  friend class HttpOperationTestPeer;
   std::unique_ptr<AsyncData> async_data_;
 };
 }  // namespace curl

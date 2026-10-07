@@ -39,13 +39,14 @@ from botocore.config import Config
 from botocore.exceptions import NoCredentialsError
 from botocore.utils import ArnParser, InvalidArnException
 
-from s3transfer.constants import MB
+from s3transfer.constants import FULL_OBJECT_CHECKSUM_ARGS, MB
 from s3transfer.exceptions import TransferNotDoneError
 from s3transfer.futures import BaseTransferFuture, BaseTransferMeta
 from s3transfer.manager import TransferManager
 from s3transfer.utils import (
     CallArgs,
     OSUtils,
+    create_nested_client,
     get_callbacks,
     is_s3express_bucket,
 )
@@ -481,7 +482,7 @@ class BotocoreCRTRequestSerializer(BaseCRTRequestSerializer):
         if client_kwargs is None:
             client_kwargs = {}
         self._resolve_client_config(session, client_kwargs)
-        self._client = session.create_client(**client_kwargs)
+        self._client = create_nested_client(session, **client_kwargs)
         self._client.meta.events.register(
             'request-created.s3.*', self._capture_http_request
         )
@@ -490,6 +491,9 @@ class BotocoreCRTRequestSerializer(BaseCRTRequestSerializer):
         )
         self._client.meta.events.register(
             'before-send.s3.*', self._make_fake_http_response
+        )
+        self._client.meta.events.register(
+            'before-call.s3.*', self._remove_checksum_context
         )
 
     def _resolve_client_config(self, session, client_kwargs):
@@ -619,6 +623,11 @@ class BotocoreCRTRequestSerializer(BaseCRTRequestSerializer):
         error_code = parsed_response.get("Error", {}).get("Code")
         error_class = self._client.exceptions.from_code(error_code)
         return error_class(parsed_response, operation_name=operation_name)
+
+    def _remove_checksum_context(self, params, **kwargs):
+        request_context = params.get("context", {})
+        if "checksum" in request_context:
+            del request_context["checksum"]
 
 
 class FakeRawResponse(BytesIO):
@@ -786,13 +795,18 @@ class S3ClientArgsCreator:
         else:
             call_args.extra_args["Body"] = call_args.fileobj
 
-        checksum_algorithm = call_args.extra_args.pop(
-            'ChecksumAlgorithm', 'CRC32'
-        ).upper()
-        checksum_config = awscrt.s3.S3ChecksumConfig(
-            algorithm=awscrt.s3.S3ChecksumAlgorithm[checksum_algorithm],
-            location=awscrt.s3.S3ChecksumLocation.TRAILER,
-        )
+        checksum_config = None
+        if not any(
+            checksum_arg in call_args.extra_args
+            for checksum_arg in FULL_OBJECT_CHECKSUM_ARGS
+        ):
+            checksum_algorithm = call_args.extra_args.pop(
+                'ChecksumAlgorithm', 'CRC32'
+            ).upper()
+            checksum_config = awscrt.s3.S3ChecksumConfig(
+                algorithm=awscrt.s3.S3ChecksumAlgorithm[checksum_algorithm],
+                location=awscrt.s3.S3ChecksumLocation.TRAILER,
+            )
         # Suppress botocore's automatic MD5 calculation by setting an override
         # value that will get deleted in the BotocoreCRTRequestSerializer.
         # As part of the CRT S3 request, we request the CRT S3 client to
@@ -882,14 +896,22 @@ class S3ClientArgsCreator:
         ) and accesspoint_arn_details['region'] == "":
             # Configure our region to `*` to propogate in `x-amz-region-set`
             # for multi-region support in MRAP accesspoints.
+            # use_double_uri_encode and should_normalize_uri_path are defaulted to be True
+            # But SDK already encoded the URI, and it's for S3, so set both to False
             make_request_args['signing_config'] = AwsSigningConfig(
                 algorithm=AwsSigningAlgorithm.V4_ASYMMETRIC,
                 region="*",
+                use_double_uri_encode=False,
+                should_normalize_uri_path=False,
             )
             call_args.bucket = accesspoint_arn_details['resource_name']
         elif is_s3express_bucket(call_args.bucket):
+            # use_double_uri_encode and should_normalize_uri_path are defaulted to be True
+            # But SDK already encoded the URI, and it's for S3, so set both to False
             make_request_args['signing_config'] = AwsSigningConfig(
-                algorithm=AwsSigningAlgorithm.V4_S3EXPRESS
+                algorithm=AwsSigningAlgorithm.V4_S3EXPRESS,
+                use_double_uri_encode=False,
+                should_normalize_uri_path=False,
             )
         return make_request_args
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eu
 
-VERSION="16.10"
+VERSION="16.14"
 
 errexit() {
     echo $1
@@ -49,6 +49,7 @@ find postgresql -type f -name "*.funcs.c" | sort >> src_files
 find postgresql -type f -name "*.switch.c" | sort >> src_files
 find postgresql -type f -name "regc_*.c" | sort >> src_files
 find postgresql -type f -name "rege_dfa.c" | sort >> src_files
+find postgresql -type f -name "like_match.c" | sort >> src_files
 sort src_files > src_files.s
 mv src_files.s src_files
 

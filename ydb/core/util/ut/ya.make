@@ -17,6 +17,7 @@ SRCS(
     btree_ut.cpp
     cache_ut.cpp
     circular_queue_ut.cpp
+    circular_sparse_queue_ut.cpp
     concurrent_rw_hash_ut.cpp
     event_priority_queue_ut.cpp
     fast_lookup_unique_list_ut.cpp
@@ -32,6 +33,7 @@ SRCS(
     log_priority_mute_checker_ut.cpp
     lz4_data_generator_ut.cpp
     max_tracker_ut.cpp
+    metrics_ut.cpp
     numerical_maybe_ut.cpp
     operation_queue_priority_ut.cpp
     operation_queue_ut.cpp

@@ -37,7 +37,7 @@ inline bool CmpEqual(float left, float right) {
         return false;
     }
     float diff = std::fabs(left - right);
-    float scale = std::max({1.0f, std::fabs(left), std::fabs(right)});
+    float scale = std::max({1.0F, std::fabs(left), std::fabs(right)});
     return diff <= std::numeric_limits<float>::epsilon() * scale;
 }
 template <>

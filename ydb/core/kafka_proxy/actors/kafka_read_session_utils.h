@@ -1,6 +1,7 @@
 #pragma once
 
 #include "actors.h"
+#include <ydb/core/kafka_proxy/kafka_consumer_protocol.h>
 
 namespace NKafka {
 

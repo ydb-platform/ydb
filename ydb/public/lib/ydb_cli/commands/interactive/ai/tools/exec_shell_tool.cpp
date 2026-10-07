@@ -79,7 +79,6 @@ public:
     explicit TExecShellTool(const TExecShellToolSettings& settings)
         : TBase(CreateParametersSchema(), DESCRIPTION)
         , Prompt(settings.Prompt)
-        , Driver(settings.Driver)
     {}
 
 protected:
@@ -87,13 +86,12 @@ protected:
         TJsonParser parser(parameters);
         Command = Strip(parser.GetKey(COMMAND_PROPERTY).GetString());
         UserMessage = "";
+
+        PrintFtxuiMessage(Command, "Agent wants to execute shell command", ftxui::Color::Green);
     }
 
     bool AskPermissions() final {
-        PrintFtxuiMessage(Command, "Agent wants to execute shell command", ftxui::Color::Green);
-
         const auto action = RunFtxuiActionDialog();
-
         if (action == EAction::Abort) {
             Cout << Endl << Colors.Yellow() << "<Interrupted by user>" << Colors.OldColor() << Endl;
             throw yexception() << "Interrupted by user";
@@ -150,9 +148,10 @@ protected:
 private:
     bool RequestCommandText() {
         const auto lineReader = CreateLineReader({
-            .Driver = Driver,
+            .LazyDriver = nullptr,
             .Database = "",
             .Prompt = TStringBuilder() << Prompt << Colors.Yellow() << "shell" << Colors.OldColor() << "> ",
+            .EnableYqlCompletion = false,
             .EnableSwitchMode = false,
             .ContinueAfterCancel = false,
         });
@@ -188,7 +187,6 @@ private:
 
 private:
     const TString Prompt;
-    const TDriver Driver;
 
     TString UserMessage;
     TString Command;

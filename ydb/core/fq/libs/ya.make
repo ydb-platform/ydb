@@ -1,9 +1,9 @@
 RECURSE(
     actors
     audit
+    checkpoint_storage
     checkpointing
     checkpointing_common
-    checkpoint_storage
     cloud_audit
     common
     compute
@@ -11,6 +11,7 @@ RECURSE(
     control_plane_config
     control_plane_proxy
     control_plane_storage
+    credentials
     db_id_async_resolver_impl
     db_schema
     events
@@ -23,7 +24,6 @@ RECURSE(
     logs
     metrics
     mock
-    pretty_printers
     private_client
     quota_manager
     rate_limiter
@@ -32,6 +32,7 @@ RECURSE(
     row_dispatcher
     shared_resources
     signer
+    state
     tasks_packer
     test_connection
     ydb

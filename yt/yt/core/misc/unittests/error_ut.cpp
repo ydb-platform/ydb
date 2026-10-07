@@ -18,6 +18,8 @@
 #include <util/string/join.h>
 #include <util/string/split.h>
 
+#include <thread>
+
 namespace NYT {
 namespace {
 
@@ -31,7 +33,7 @@ TEST(TErrorTest, SerializationDepthLimit)
     constexpr int Depth = 1000;
     auto error = TError(TErrorCode(Depth), "error");
     for (int i = Depth - 1; i >= 0; --i) {
-        error = TError(TErrorCode(i), "error") << std::move(error);
+        error = TError(TErrorCode(i), "error").With(std::move(error));
     }
 
     // Use intermediate conversion to test YSON parser depth limit simultaneously.
@@ -40,7 +42,7 @@ TEST(TErrorTest, SerializationDepthLimit)
 
     for (int i = 0; i < ErrorSerializationDepthLimit - 1; ++i) {
         ASSERT_EQ(errorNode->GetChildValueOrThrow<i64>("code"), i);
-        ASSERT_EQ(errorNode->GetChildValueOrThrow<TString>("message"), "error");
+        ASSERT_EQ(errorNode->GetChildValueOrThrow<std::string>("message"), "error");
         ASSERT_FALSE(errorNode->GetChildOrThrow("attributes")->AsMap()->FindChild("original_error_depth"));
         auto innerErrors = errorNode->GetChildOrThrow("inner_errors")->AsList()->GetChildren();
         ASSERT_EQ(innerErrors.size(), 1u);
@@ -52,7 +54,7 @@ TEST(TErrorTest, SerializationDepthLimit)
     for (int i = 0; i < std::ssize(children); ++i) {
         auto child = children[i]->AsMap();
         ASSERT_EQ(child->GetChildValueOrThrow<i64>("code"), i + ErrorSerializationDepthLimit);
-        ASSERT_EQ(child->GetChildValueOrThrow<TString>("message"), "error");
+        ASSERT_EQ(child->GetChildValueOrThrow<std::string>("message"), "error");
         auto originalErrorDepth = child->GetChildOrThrow("attributes")->AsMap()->FindChild("original_error_depth");
         if (i > 0) {
             ASSERT_TRUE(originalErrorDepth);
@@ -70,7 +72,7 @@ TEST(TErrorTest, DoNotDuplicateOriginalErrorDepth)
 
     auto error = TError(TErrorCode(Depth), "error");
     for (int i = Depth; i >= 2; --i) {
-        error = TError(TErrorCode(i), "error") << std::move(error);
+        error = TError(TErrorCode(i), "error").With(std::move(error));
     }
 
     auto errorYson = ConvertToYsonString(error);
@@ -78,7 +80,7 @@ TEST(TErrorTest, DoNotDuplicateOriginalErrorDepth)
 
     // Due to reserialization, error already contains "original_error_depth" attribute.
     // It should not be duplicated after the next serialization.
-    error = TError(TErrorCode(1), "error") << std::move(error);
+    error = TError(TErrorCode(1), "error").With(std::move(error));
 
     // Use intermediate conversion to test YSON parser depth limit simultaneously.
     errorYson = ConvertToYsonString(error);
@@ -115,7 +117,7 @@ TEST(TErrorTest, ErrorSanitizer)
 
         EXPECT_EQ("<host-override>", GetHost(error));
         EXPECT_EQ(0, error.GetPid());
-        EXPECT_EQ(NThreading::InvalidThreadId, error.GetTid());
+        EXPECT_EQ(InvalidThreadId, error.GetTid());
         EXPECT_EQ(NConcurrency::InvalidFiberId, GetFid(error));
         EXPECT_EQ(NTracing::InvalidTraceId, GetTraceId(error));
         EXPECT_EQ(NTracing::InvalidSpanId, GetSpanId(error));
@@ -138,7 +140,7 @@ TEST(TErrorTest, ErrorSanitizer)
         auto instant1 = TInstant::Days(123);
         TErrorSanitizerGuard guard1(
             instant1,
-            /*localHostNameOverride*/ TSharedRef::FromString("<host-override>"));
+            /*localHostNameOverride*/ "<host-override>");
 
         auto error2 = TError("error2");
         checkSantizied(error2);
@@ -148,8 +150,7 @@ TEST(TErrorTest, ErrorSanitizer)
             auto instant2 = TInstant::Days(234);
             TErrorSanitizerGuard guard2(
                 instant2,
-                /*localHostNameOverride*/
-                TSharedRef::FromString("<host-override>"));
+                /*localHostNameOverride*/ "<host-override>");
 
             auto error3 = TError("error3");
             checkSantizied(error3);
@@ -212,6 +213,33 @@ TEST(TErrorTest, NativeHostName)
 
     EXPECT_TRUE(HasHost(error));
     EXPECT_EQ(GetHost(error), TStringBuf(hostName));
+}
+
+TEST(TErrorTest, FormattedCopyEqualsOriginal)
+{
+    auto error = TError("FormattedCopyTest");
+    auto copy = error;
+    Y_UNUSED(ToString(copy));
+    EXPECT_EQ(error, copy);
+}
+
+TEST(TErrorTest, ConcurrentCopyAndFormat)
+{
+    auto error = TError("ConcurrentCopyAndFormatTest");
+
+    std::vector<std::thread> threads;
+    for (int threadIndex = 0; threadIndex < 4; ++threadIndex) {
+        threads.emplace_back([&] {
+            for (int iteration = 0; iteration < 1000; ++iteration) {
+                auto copy = error;
+                Y_UNUSED(ToString(error));
+                EXPECT_EQ(GetHost(copy), GetHost(error));
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
 }
 
 TEST(TErrorTest, NativeFiberId)

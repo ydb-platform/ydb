@@ -5,6 +5,8 @@ src_c/stem_ISO_8859_1_basque.c
 src_c/stem_UTF_8_basque.c
 src_c/stem_ISO_8859_1_catalan.c
 src_c/stem_UTF_8_catalan.c
+src_c/stem_ISO_8859_2_czech.c
+src_c/stem_UTF_8_czech.c
 src_c/stem_ISO_8859_1_danish.c
 src_c/stem_UTF_8_danish.c
 src_c/stem_ISO_8859_1_dutch.c
@@ -35,6 +37,9 @@ src_c/stem_UTF_8_lithuanian.c
 src_c/stem_UTF_8_nepali.c
 src_c/stem_ISO_8859_1_norwegian.c
 src_c/stem_UTF_8_norwegian.c
+src_c/stem_UTF_8_persian.c
+src_c/stem_ISO_8859_2_polish.c
+src_c/stem_UTF_8_polish.c
 src_c/stem_ISO_8859_1_porter.c
 src_c/stem_UTF_8_porter.c
 src_c/stem_ISO_8859_1_portuguese.c
@@ -43,6 +48,7 @@ src_c/stem_UTF_8_romanian.c
 src_c/stem_KOI8_R_russian.c
 src_c/stem_UTF_8_russian.c
 src_c/stem_UTF_8_serbian.c
+src_c/stem_UTF_8_sesotho.c
 src_c/stem_ISO_8859_1_spanish.c
 src_c/stem_UTF_8_spanish.c
 src_c/stem_ISO_8859_1_swedish.c

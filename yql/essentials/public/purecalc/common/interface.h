@@ -53,7 +53,6 @@ public:
     {
     }
 
-public:
     /**
      * Get the sql query which caused the error (if there is one available).
      */
@@ -79,7 +78,6 @@ class IStream {
 public:
     virtual ~IStream() = default;
 
-public:
     /**
      * Pops and returns a next value in the stream. If the stream is finished, should return some sentinel object.
      *
@@ -137,7 +135,6 @@ class IConsumer {
 public:
     virtual ~IConsumer() = default;
 
-public:
     /**
      * Feed an object to consumer.
      *
@@ -214,7 +211,6 @@ public:
     /// Where to write log messages.
     IOutputStream* LogDestination;
 
-public:
     TLoggingOptions();
     /**
      * Set a new logging level.
@@ -289,10 +285,11 @@ public:
     /// Issue report target
     TString IssueReportTarget;
 
-public:
+    /// Remove unsupported pragmas. Temporal flag. Should be removed after COFE-1080 implementation
+    bool RemoveUnsupportedPragmas;
+
     TProgramFactoryOptions();
 
-public:
     /**
      * Set language version for queries
      *
@@ -417,6 +414,13 @@ public:
      * @return reference to self, to allow method chaining.
      */
     TProgramFactoryOptions& SetIssueReportTarget(const TString& reportTarget);
+
+    /**
+     * Set RemoveUnsupportedPragmas flag.
+     *
+     * @return reference to self, to allow method chaining.
+     */
+    TProgramFactoryOptions& SetRemoveUnsupportedPragmas(bool removeUnsupportedPragmas);
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -612,7 +616,6 @@ protected:
 public:
     virtual ~IWorker() = default;
 
-public:
     /**
      * Number of inputs for this program.
      */
@@ -826,7 +829,6 @@ protected:
 public:
     virtual ~TInputSpecBase() = default;
 
-public:
     /**
      * Get input data schemas in YQL format (NB: not a YT format). Each item of the returned vector must
      * describe a structure.
@@ -876,7 +878,6 @@ private:
 public:
     virtual ~TOutputSpecBase() = default;
 
-public:
     /**
      * Get output data schema in YQL format (NB: not a YT format). The returned value must describe a structure
      * or a variant made of structures for fulti-table outputs (note: not all specs support multi-table output).
@@ -1034,7 +1035,6 @@ class IProgram {
 public:
     virtual ~IProgram() = default;
 
-public:
     virtual const TInputSpecBase& GetInputSpecBase() const = 0;
     virtual const TOutputSpecBase& GetOutputSpecBase() const = 0;
     virtual const THashSet<TString>& GetUsedColumns(ui32) const = 0;
@@ -1080,7 +1080,6 @@ public:
     {
     }
 
-public:
     const TInputSpec& GetInputSpec() const {
         return InputSpec_;
     }
@@ -1147,7 +1146,6 @@ class TPullStreamProgram final: public TProgramCommon<TInputSpec, TOutputSpec, I
 public:
     using TProgramCommon<TInputSpec, TOutputSpec, IPullStreamWorkerFactory>::TProgramCommon;
 
-public:
     template <typename... T>
     typename TOutputSpecTraits<TOutputSpec>::TPullStreamReturnType Apply(T&&... t) {
         static_assert(!TInputSpecTraits<TInputSpec>::IsPartial, PARTIAL_SPEC_MSG("input"));
@@ -1170,7 +1168,6 @@ class TPullListProgram final: public TProgramCommon<TInputSpec, TOutputSpec, IPu
 public:
     using TProgramCommon<TInputSpec, TOutputSpec, IPullListWorkerFactory>::TProgramCommon;
 
-public:
     template <typename... T>
     typename TOutputSpecTraits<TOutputSpec>::TPullListReturnType Apply(T&&... t) {
         static_assert(!TInputSpecTraits<TInputSpec>::IsPartial, PARTIAL_SPEC_MSG("input"));
@@ -1193,7 +1190,6 @@ class TPushStreamProgram final: public TProgramCommon<TInputSpec, TOutputSpec, I
 public:
     using TProgramCommon<TInputSpec, TOutputSpec, IPushStreamWorkerFactory>::TProgramCommon;
 
-public:
     template <typename... T>
     typename TInputSpecTraits<TInputSpec>::TConsumerType Apply(T&&... t) {
         static_assert(!TInputSpecTraits<TInputSpec>::IsPartial, PARTIAL_SPEC_MSG("input"));

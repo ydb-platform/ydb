@@ -8,7 +8,11 @@
 
 namespace NYql {
 
-TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode, bool useYtflowEngine) {
+TSolomonState::TSolomonState(bool strictConfigValidation)
+    : Configuration(MakeIntrusive<TSolomonConfiguration>(strictConfigValidation))
+{}
+
+TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode, bool useYtflowEngine) {
     return [gateway, credentialsFactory, supportRtmrMode, useYtflowEngine] (
         const TString& userName,
         const TString& sessionId,
@@ -30,7 +34,7 @@ TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr
         Y_UNUSED(hiddenAborter);
         Y_UNUSED(qContext);
 
-        auto solomonState = MakeIntrusive<TSolomonState>();
+        auto solomonState = MakeIntrusive<TSolomonState>(typeCtx->StrictConfigValidation);
 
         solomonState->SupportRtmrMode = supportRtmrMode;
         solomonState->Types = typeCtx.Get();

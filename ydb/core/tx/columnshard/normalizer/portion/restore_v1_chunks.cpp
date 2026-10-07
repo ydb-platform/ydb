@@ -21,6 +21,7 @@ public:
         AFL_VERIFY(it != IndexByBlob.end());
         return it->second;
     }
+
     const std::vector<TUnifiedBlobId>& GetBlobIds() const {
         return BlobIds;
     }
@@ -35,7 +36,8 @@ public:
 
     TPatchItemAddV1(const TPortionLoadContext& portionInfo, std::map<TFullChunkAddress, TColumnChunkLoadContext>&& chunksInfo)
         : PortionInfo(portionInfo)
-        , ChunksInfo(std::move(chunksInfo)) {
+        , ChunksInfo(std::move(chunksInfo))
+    {
         for (auto&& i : ChunksInfo) {
             auto it = IndexByBlob.find(i.second.GetBlobRange().GetBlobId());
             if (it == IndexByBlob.end()) {
@@ -52,8 +54,10 @@ private:
 
 public:
     TChangesAddV1(std::vector<TPatchItemAddV1>&& patches)
-        : Patches(std::move(patches)) {
+        : Patches(std::move(patches))
+    {
     }
+
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -102,7 +106,8 @@ public:
     }
 
     TPatchItemRemoveV1(const TColumnChunkLoadContextV1& chunkInfo)
-        : ChunkInfo(chunkInfo) {
+        : ChunkInfo(chunkInfo)
+    {
     }
 };
 
@@ -112,8 +117,10 @@ private:
 
 public:
     TChangesRemoveV1(std::vector<TPatchItemRemoveV1>&& patches)
-        : Patches(std::move(patches)) {
+        : Patches(std::move(patches))
+    {
     }
+
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);

@@ -1,6 +1,5 @@
 PRAGMA DisableSimpleColumns;
 
-/* postgres can not */
 $i = (
     SELECT
         AsList('foo') AS x

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: argcomplete
-Version: 3.6.3
+Version: 3.7.2
 Summary: Bash tab completion for argparse
 Project-URL: Homepage, https://github.com/kislyuk/argcomplete
 Project-URL: Documentation, https://kislyuk.github.io/argcomplete
@@ -22,19 +22,18 @@ Classifier: Operating System :: MacOS :: MacOS X
 Classifier: Operating System :: POSIX
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Software Development
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Topic :: System :: Shells
 Classifier: Topic :: Terminals
-Requires-Python: >=3.8
+Requires-Python: >=3.10
 Provides-Extra: test
 Requires-Dist: coverage; extra == 'test'
 Requires-Dist: mypy; extra == 'test'
@@ -298,7 +297,7 @@ work for zsh as well.
 
 Python Support
 --------------
-Argcomplete requires Python 3.9+.
+Argcomplete requires Python 3.10+.
 
 Support for other shells
 ------------------------

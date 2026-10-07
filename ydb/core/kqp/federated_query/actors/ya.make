@@ -2,27 +2,37 @@ LIBRARY()
 
 SRCS(
     kqp_federated_query_actors.cpp
+    streaming_query_nodes_manager.cpp
 )
 
 PEERDIR(
-    library/cpp/retry
     library/cpp/threading/future
+    ydb/core/base
+    ydb/core/fq/libs/checkpointing/events
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
+    ydb/core/mind    
     ydb/core/protos
-    ydb/core/tx/scheme_board
-    ydb/core/tx/scheme_cache
-    ydb/core/tx/schemeshard
-    ydb/core/tx/tx_proxy
+    ydb/core/util
     ydb/library/aclib
     ydb/library/actors/core
-    ydb/services/metadata/secret
+    ydb/library/ycloud/api
+    ydb/library/ycloud/impl
+    ydb/library/yql/dq/actors/compute
+    ydb/library/yql/dq/common
+    ydb/library/yql/dq/proto
+    ydb/library/yql/providers/pq/common
+    ydb/library/yql/providers/pq/proto
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/library/grpc/client
+    ydb/services/scheme_secret
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE_FOR_TESTS(
-    ut_service
+RECURSE(
+    lookup_actor
+    pq_checkpoint_provider_integration
 )

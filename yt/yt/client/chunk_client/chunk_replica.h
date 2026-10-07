@@ -36,7 +36,9 @@ public:
     TChunkReplica ToChunkReplica() const;
     static TChunkReplicaList ToChunkReplicas(TRange<TChunkReplicaWithMedium> replicasWithMedia);
 
+    friend void ToProto(NProto::TChunkReplicaSpec* value, TChunkReplicaWithMedium replica);
     friend void ToProto(ui64* value, TChunkReplicaWithMedium replica);
+    friend void FromProto(TChunkReplicaWithMedium* replica, NProto::TChunkReplicaSpec value);
     friend void ToProto(ui32* value, TChunkReplicaWithMedium replica);
     friend void FromProto(TChunkReplicaWithMedium* replica, ui64 value);
     friend void ToProto(NProto::TConfirmChunkReplicaInfo* value, TChunkReplicaWithLocation replica);

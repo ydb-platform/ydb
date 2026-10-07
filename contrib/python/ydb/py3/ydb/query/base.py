@@ -10,7 +10,9 @@ from typing import (
     Callable,
     List,
     DefaultDict,
+    TypeVar,
     Union,
+    cast,
 )
 
 from .._grpc.grpcwrapper import ydb_query
@@ -27,10 +29,11 @@ from .. import _apis
 from ydb._topic_common.common import CallFromSyncToAsync, _get_shared_event_loop
 from ydb._grpc.grpcwrapper.common_utils import to_thread
 
-
 if typing.TYPE_CHECKING:
     from .transaction import BaseQueryTxContext
     from .session import BaseQuerySession
+
+CallableT = TypeVar("CallableT", bound=Callable[..., Any])
 
 
 class QuerySyntax(enum.IntEnum):
@@ -73,25 +76,62 @@ class QueryResultSetFormat(enum.IntEnum):
 
 
 class SyncResponseContextIterator(_utilities.SyncResponseIterator):
-    def __init__(self, it, wrapper, on_error=None):
+    """Streams ExecuteQuery results."""
+
+    def __init__(self, it, wrapper, on_error=None, on_finish=None):
         super().__init__(it, wrapper)
         self._on_error = on_error
+        self._on_finish = on_finish
 
     def __enter__(self) -> "SyncResponseContextIterator":
         return self
 
+    def cancel(self):
+        error = issues.Cancelled("Query stream was cancelled by client")
+        if self._on_error:
+            self._on_error(error)
+        self._call_on_finish(error)
+        return super().cancel()
+
     def _next(self):
         try:
             return super()._next()
-        except Exception as e:
+        except StopIteration:
+            # Normal stream termination is not an error and must not invalidate
+            # the session.
+            self._call_on_finish()
+            raise
+        except BaseException as e:
+            # BaseException (not Exception) for parity with the async iterator:
+            # KeyboardInterrupt / SystemExit should still invalidate the session
+            # before they propagate, otherwise the next caller that reuses the
+            # session races the undrained stream and the server can reply with
+            # SessionBusy.
             if self._on_error:
                 self._on_error(e)
-            raise e
+            self._call_on_finish(e)
+            raise
+
+    def _call_on_finish(self, exception=None):
+        if self._on_finish is not None:
+            self._on_finish(exception)
+            self._on_finish = None
+        self._on_error = None
+
+    def __del__(self):
+        self._call_on_finish()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        #  To close stream on YDB it is necessary to scroll through it to the end
-        for _ in self:
+        #  To close stream on YDB it is necessary to scroll through it to the end.
+        # Errors during the cleanup drain have already been reported to _on_error
+        # inside _next; swallow them here so __exit__ does not mask a primary
+        # exception and the caller's own cleanup (e.g. tx rollback) can still run.
+        try:
+            for _ in self:
+                pass
+        except BaseException:
             pass
+        self._call_on_finish()
 
 
 class QueryClientSettings:
@@ -137,6 +177,7 @@ def create_execute_query_request(
     arrow_format_settings: Optional[ArrowFormatSettings],
     parameters: Optional[dict],
     concurrent_result_sets: Optional[bool],
+    pool_id: Optional[str],
 ) -> ydb_query.ExecuteQueryRequest:
     try:
         syntax = QuerySyntax.YQL_V1 if not syntax else syntax
@@ -179,26 +220,27 @@ def create_execute_query_request(
             schema_inclusion_mode=schema_inclusion_mode,
             result_set_format=result_set_format,
             arrow_format_settings=arrow_format_settings,
+            pool_id=pool_id,
         )
     except BaseException as e:
         raise issues.ClientInternalError("Unable to prepare execute request") from e
 
 
-def bad_session_handler(func):
+def bad_session_handler(func: CallableT) -> CallableT:
     @functools.wraps(func)
     def decorator(rpc_state, response_pb, session: "BaseQuerySession", *args, **kwargs):
         try:
             return func(rpc_state, response_pb, session, *args, **kwargs)
-        except issues.BadSession:
-            session._invalidate()
+        except (issues.BadSession, issues.SessionExpired):
+            session._close_session(invalidate=True, reason="bad_session")
             raise
 
-    return decorator
+    return cast(CallableT, decorator)
 
 
 @bad_session_handler
 def wrap_execute_query_response(
-    rpc_state: RpcState,
+    rpc_state: Optional[RpcState],
     response_pb: _apis.ydb_query.ExecuteQueryResponsePart,
     session: "BaseQuerySession",
     tx: Optional["BaseQueryTxContext"] = None,

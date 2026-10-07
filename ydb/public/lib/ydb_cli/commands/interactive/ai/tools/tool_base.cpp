@@ -13,6 +13,10 @@ TToolBase::TToolBase(const NJson::TJsonValue& parametersSchema, const TString& d
     , Description(description)
 {}
 
+void TToolBase::SetAutoAction(TInteractiveConfigurationManager::EToolAutoAction autoAction) {
+    AutoAction = autoAction;
+}
+
 const NJson::TJsonValue& TToolBase::GetParametersSchema() const {
     return ParametersSchema;
 }
@@ -22,14 +26,20 @@ const TString& TToolBase::GetDescription() const {
 }
 
 TToolBase::TResponse TToolBase::Execute(const NJson::TJsonValue& parameters) {
+    YDB_CLI_LOG(Debug, "Execution tool with params:\n" << FormatJsonValue(parameters));
+
     try {
         ParseParameters(parameters);
     } catch (const std::exception& e) {
-        YDB_CLI_LOG(Warning, "Failed to parse parameters of tool: " << e.what());
-        return TResponse::Error(TStringBuilder() << "Failed to parse parameters of tool: " << e.what() << "\n" << "Parameters schema: " << FormatJsonValue(ParametersSchema));
+        YDB_CLI_LOG(Warning, "Failed to parse parameters of tool: " << e.what() << "\nParameters:\n" << FormatJsonValue(parameters));
+        return TResponse::Error(TStringBuilder() << "Failed to parse parameters of tool: " << e.what());
     }
 
-    if (!AskPermissions()) {
+    if (AutoAction == TInteractiveConfigurationManager::EToolAutoAction::Reject) {
+        return TResponse::Error(TString("Tool execution is not allowed, try to use other tools"));
+    }
+
+    if (AutoAction != TInteractiveConfigurationManager::EToolAutoAction::Execute && !AskPermissions()) {
         YDB_CLI_LOG(Notice, "Tool execution cancelled by user");
         return TResponse::Error(TString("Tool execution cancelled by user"));
     }

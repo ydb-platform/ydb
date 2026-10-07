@@ -46,20 +46,25 @@ public:
     bool DeserializeFromProto(const TProto& proto) {
         Name = proto.GetName();
         if (!Name) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot parse proto selector constructor")("reason", "empty name");
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "cannot parse proto selector constructor"},
+                {"reason", "empty name"});
             return false;
         }
         return DoDeserializeFromProto(proto);
     }
+
     void SerializeToProto(NKikimrSchemeOp::TCompactionSelectorConstructorContainer& proto) const {
         proto.SetName(Name);
         return DoSerializeToProto(proto);
     }
+
     NKikimrSchemeOp::TCompactionSelectorConstructorContainer SerializeToProto() const {
         NKikimrSchemeOp::TCompactionSelectorConstructorContainer result;
         SerializeToProto(result);
         return result;
     }
+
     virtual TString GetClassName() const = 0;
 };
 

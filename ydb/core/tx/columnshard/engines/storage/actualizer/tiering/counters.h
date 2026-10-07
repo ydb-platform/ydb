@@ -1,9 +1,10 @@
 #pragma once
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
-#include <ydb/library/formats/arrow/replace_key.h>
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/columnshard/splitter/settings.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
+
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -19,6 +20,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForLimit;
     NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForTooEarly;
     NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForNoLongerNeeded;
+
 public:
     TTieringGlobalCounters()
         : TBase("TieringActualizer")
@@ -64,7 +66,6 @@ public:
     static std::shared_ptr<NColumnShard::TValueAggregationClient> BuildDifferenceWaitToDelete() {
         return Singleton<TTieringGlobalCounters>()->DifferenceWaitToDelete->GetClient();
     }
-
 };
 
 class TTieringCounters {
@@ -86,9 +87,9 @@ public:
         , SkipEvictionForCompaction(TTieringGlobalCounters::GetSkipEvictionForCompaction())
         , SkipEvictionForLimit(TTieringGlobalCounters::GetSkipEvictionForLimit())
         , SkipEvictionForTooEarly(TTieringGlobalCounters::GetSkipEvictionForTooEarly())
-        , SkipEvictionForNoLongerNeeded(TTieringGlobalCounters::GetSkipEvictionForNoLongerNeeded()) {
+        , SkipEvictionForNoLongerNeeded(TTieringGlobalCounters::GetSkipEvictionForNoLongerNeeded())
+    {
     }
-
 };
 
-}
+}   // namespace NKikimr::NOlap::NActualizer

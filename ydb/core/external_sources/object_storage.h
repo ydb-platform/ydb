@@ -13,7 +13,7 @@ namespace NKikimr::NExternalSource {
 IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns,
                                                         NActors::TActorSystem* actorSystem,
                                                         size_t pathsLimit,
-                                                        std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
+                                                        std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory,
                                                         bool enableInfer,
                                                         bool allowLocalFiles);
 

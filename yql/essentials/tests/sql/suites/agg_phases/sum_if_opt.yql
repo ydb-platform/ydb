@@ -1,6 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
-
 $t = SELECT * FROM AS_TABLE([<|key: 1, value: just(2)|>,<|key: 1, value: just(3)|>]);
 
 $p =

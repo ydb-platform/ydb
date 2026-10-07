@@ -1,8 +1,8 @@
-#include "versioned_index.h"
 #include "snapshot_scheme.h"
+#include "versioned_index.h"
 
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 namespace NKikimr::NOlap {
 
@@ -48,4 +48,4 @@ std::optional<NKikimr::NOlap::TGranuleShardingInfo> TVersionedIndex::GetSharding
     }
 }
 
-}
+}   // namespace NKikimr::NOlap

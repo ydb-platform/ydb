@@ -861,7 +861,6 @@ private:
         }
     }
 
-private:
     const bool SingleLine_;
     TStringStream Out_;
     ui32 Indent_;
@@ -878,8 +877,8 @@ TString PrintNode(const TNode* node, bool singleLine) {
 
 template <>
 void Out<NKikimr::NMiniKQL::TType>(
-    IOutputStream& os,
-    TTypeTraits<NKikimr::NMiniKQL::TType>::TFuncParam t)
+    IOutputStream& out,
+    TTypeTraits<NKikimr::NMiniKQL::TType>::TFuncParam value)
 {
-    os << PrintNode(&t, true);
+    out << PrintNode(&value, /*singleLine=*/true);
 }

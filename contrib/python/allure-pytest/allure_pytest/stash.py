@@ -1,7 +1,7 @@
 import pytest
 from functools import wraps
 
-HAS_STASH = hasattr(pytest, 'StashKey')
+HAS_STASH = hasattr(pytest, "StashKey")
 
 
 def create_stashkey_safe():

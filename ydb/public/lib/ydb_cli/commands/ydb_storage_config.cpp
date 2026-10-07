@@ -61,8 +61,8 @@ void TCommandStorageConfigFetch::Parse(TConfig& config) {
 }
 
 int TCommandStorageConfigFetch::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NConfig::TConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NConfig::TConfigClient(driver);
 
     NYdb::NConfig::TFetchAllConfigsSettings settings;
 
@@ -116,7 +116,7 @@ TCommandStorageConfigReplace::TCommandStorageConfigReplace()
 
 void TCommandStorageConfigReplace::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption('f', "filename", "Filename of the file containing whole configuration in single-config mode")
+    config.Opts->AddLongOption('f', "filename", "Path to the file containing whole configuration in single-config mode")
         .RequiredArgument("[config.yaml]").StoreResult(&Filename);
     config.Opts->AddLongOption("dedicated-cluster-yaml", "Path to dedicated cluster section of configuration")
         .RequiredArgument("[cluster.yaml]").StoreResult(&ClusterYamlPath);
@@ -158,8 +158,8 @@ void TCommandStorageConfigReplace::Parse(TConfig& config) {
 }
 
 int TCommandStorageConfigReplace::Run(TConfig& config) {
-    std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NConfig::TConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NConfig::TConfigClient(driver);
 
     auto status = [&]() {
         if (SwitchDedicatedStorageSection && !*SwitchDedicatedStorageSection) {

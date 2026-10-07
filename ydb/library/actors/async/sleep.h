@@ -40,7 +40,10 @@ namespace NActors::NDetail {
             auto selfId = actor.SelfId();
             if (IsImmediate()) {
                 // Use a simple Send, everything is synchronized to the mailbox
-                bool ok = selfId.Send(selfId, (Event = new TEvents::TEvResumeRunnable(this)));
+                bool ok = selfId.Send(
+                    selfId,
+                    (Event = new TEvents::TEvResumeRunnable(this)),
+                    TEvents::TEvResumeRunnable::EventFlags);
                 if (!ok) [[unlikely]] {
                     throw std::runtime_error("unexpected failure to send an event to SelfId");
                 }
@@ -50,7 +53,13 @@ namespace NActors::NDetail {
                 Bridge.Reset(new TBridge(this));
                 // Extra reference will be used by the event
                 Bridge->Ref();
-                selfId.Schedule(When, new TEvents::TEvResumeRunnable(Bridge.Get()));
+                TActivationContext::Schedule(
+                    When,
+                    new IEventHandle(
+                        selfId,
+                        {},
+                        new TEvents::TEvResumeRunnable(Bridge.Get()),
+                        TEvents::TEvResumeRunnable::EventFlags));
             }
         }
 

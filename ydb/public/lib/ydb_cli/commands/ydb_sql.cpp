@@ -53,7 +53,17 @@ void TCommandSql::Config(TConfig& config) {
         .RequiredArgument("[String]").Hidden().DefaultValue("none").StoreResult(&Progress);
     config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
         .RequiredArgument("[String]").StoreResult(&ExecSettings.DiagnosticsFile);
-    config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
+    if (config.HelpCommandVerbosityLevel >= 2) {
+        config.Opts->AddLongOption("resource-pool", "Explicit resource pool for workload manager")
+            .RequiredArgument("[String]")
+            .StoreResult(&ResourcePool);
+    } else {
+        config.Opts->AddLongOption("resource-pool")
+            .RequiredArgument("[String]")
+            .Hidden()
+            .StoreResult(&ResourcePool);
+    }
+    config.Opts->AddLongOption("syntax", "Query syntax [yql]")
         .RequiredArgument("[String]")
         .Hidden()
         .GetOpt().Handler1T<TString>("yql", [this](const TString& arg) {
@@ -69,6 +79,7 @@ void TCommandSql::Config(TConfig& config) {
         EDataFormat::Csv,
         EDataFormat::Tsv,
         EDataFormat::Parquet,
+        EDataFormat::Svg,
     });
 
     AddParametersOption(config);
@@ -87,8 +98,8 @@ void TCommandSql::Parse(TConfig& config) {
     ParseInputFormats();
     ParseOutputFormats();
     if (Query && QueryFile) {
-        throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
-            << "and \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
+        throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
+            << "and \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
     }
     if (ExecSettings.ExplainMode && ExecSettings.ExplainAnalyzeMode) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
@@ -101,6 +112,9 @@ void TCommandSql::Parse(TConfig& config) {
     if (ExecSettings.ExplainAst && ExecSettings.ExplainAnalyzeMode) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain-AST mode\" (\"--explain-ast\") "
             << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
+    }
+    if (OutputFormat == EDataFormat::Svg && !ExecSettings.ExplainMode && !ExecSettings.ExplainAnalyzeMode && !ExecSettings.ExplainAst) {
+        throw TMisuseException() << "SVG output format is only available with --explain or --explain-analyze options";
     }
     if (ExecSettings.ExplainAnalyzeMode && !CollectStatsMode.empty()) {
         throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain-analyze mode. "
@@ -143,7 +157,7 @@ int TCommandSql::Run(TConfig& config) {
 }
 
 int TCommandSql::RunCommand(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     TExecuteGenericQuery executor(driver);
     SetInterruptHandlers();
 
@@ -169,6 +183,10 @@ int TCommandSql::RunCommand(TConfig& config) {
     }
 
     ExecSettings.Settings.Syntax(SyntaxType);
+
+    if (!ResourcePool.empty()) {
+        ExecSettings.Settings.ResourcePool(std::string(ResourcePool));
+    }
 
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
@@ -198,8 +216,6 @@ void TCommandSql::SetCollectStatsMode(TString&& collectStatsMode) {
 void TCommandSql::SetSyntax(const TString& syntax) {
     if (syntax == "yql") {
         SyntaxType = NYdb::NQuery::ESyntax::YqlV1;
-    } else if (syntax == "pg") {
-        SyntaxType = NYdb::NQuery::ESyntax::Pg;
     } else {
         throw TMisuseException() << "Unknown syntax option \"" << syntax << "\"";
     }

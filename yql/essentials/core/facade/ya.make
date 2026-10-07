@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_facade.cpp
@@ -22,11 +22,11 @@ PEERDIR(
     yql/essentials/core/qplayer/udf_resolver
     yql/essentials/core/qplayer/url_lister
     yql/essentials/sql
-    yql/essentials/sql/v1
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
+    yql/essentials/sql/v1/translation
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils/log
     yql/essentials/core
@@ -42,7 +42,5 @@ PEERDIR(
     yql/essentials/providers/config
     yql/essentials/providers/result/provider
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

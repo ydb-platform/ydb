@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
-from collections.abc import Generator, Sequence
+from collections.abc import Generator, Iterator, Sequence
 from email.parser import Parser
 from optparse import Values
 from typing import TYPE_CHECKING, cast
@@ -15,8 +16,8 @@ from pip._internal.cli.index_command import IndexGroupCommand
 from pip._internal.cli.status_codes import SUCCESS
 from pip._internal.exceptions import CommandError
 from pip._internal.metadata import BaseDistribution, get_environment
+from pip._internal.metadata.base import stdlib_pkgs
 from pip._internal.models.selection_prefs import SelectionPreferences
-from pip._internal.utils.compat import stdlib_pkgs
 from pip._internal.utils.misc import tabulate, write_output
 
 if TYPE_CHECKING:
@@ -135,9 +136,13 @@ class ListCommand(IndexGroupCommand):
         self.parser.insert_option_group(0, selection_opts)
         self.parser.insert_option_group(0, self.cmd_opts)
 
-    def handle_pip_version_check(self, options: Values) -> None:
-        if options.outdated or options.uptodate:
-            super().handle_pip_version_check(options)
+    @contextlib.contextmanager
+    def pip_version_check(self, options: Values, args: list[str]) -> Iterator[None]:
+        if not (options.outdated or options.uptodate):
+            yield
+            return
+        with super().pip_version_check(options, args):
+            yield
 
     def _build_package_finder(
         self, options: Values, session: PipSession
@@ -155,11 +160,14 @@ class ListCommand(IndexGroupCommand):
         selection_prefs = SelectionPreferences(
             allow_yanked=False,
             release_control=options.release_control,
+            format_control=options.format_control,
+            prefer_binary=options.prefer_binary,
         )
 
         return PackageFinder.create(
             link_collector=link_collector,
             selection_prefs=selection_prefs,
+            uploaded_prior_to=options.uploaded_prior_to,
         )
 
     def run(self, options: Values, args: list[str]) -> int:
@@ -175,10 +183,6 @@ class ListCommand(IndexGroupCommand):
 
         cmdoptions.check_list_path_option(options)
 
-        skip = set(stdlib_pkgs)
-        if options.excludes:
-            skip.update(canonicalize_name(n) for n in options.excludes)
-
         packages: _ProcessedDists = [
             cast("_DistWithLatestInfo", d)
             for d in get_environment(options.path).iter_installed_distributions(
@@ -186,7 +190,7 @@ class ListCommand(IndexGroupCommand):
                 user_only=options.user,
                 editables_only=options.editable,
                 include_editables=options.include_editable,
-                skip=skip,
+                skip=set(stdlib_pkgs),
             )
         ]
 
@@ -196,6 +200,12 @@ class ListCommand(IndexGroupCommand):
         # could be filtered out before.
         if options.not_required:
             packages = self.get_not_required(packages, options)
+
+        if options.excludes:
+            excluded_names = {canonicalize_name(n) for n in options.excludes}
+            packages = [
+                dist for dist in packages if dist.canonical_name not in excluded_names
+            ]
 
         if options.outdated:
             packages = self.get_outdated(packages, options)

@@ -169,7 +169,7 @@ struct TypeToTypeName<TJson> {
 
 } // namespace NHelper
 
-static const ui64 TAKE_UNLIM = -1;
+const ui64 TAKE_UNLIM = -1;
 
 bool SkipElements(IBoxedValue& iter, ui64 skip) {
     for (; skip > 0; --skip) {
@@ -465,7 +465,6 @@ private:
             return true;
         }
 
-    private:
         const ui32 IndexP_;
         const ui32 IndexT_;
         const ui32 IndexA_;
@@ -527,7 +526,6 @@ private:
             return *HasItems_;
         }
 
-    protected:
         const ui32 IndexP_;
         const ui32 IndexT_;
         const ui32 IndexA_;

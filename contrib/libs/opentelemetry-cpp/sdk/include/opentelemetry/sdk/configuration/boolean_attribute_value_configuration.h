@@ -23,7 +23,7 @@ public:
     visitor->VisitBoolean(this);
   }
 
-  bool value;
+  bool value{false};
 };
 
 }  // namespace configuration

@@ -15,9 +15,11 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
+
     TTxType GetTxType() const override {
         return TXTYPE_WRITE_INDEX;
     }
+
     virtual void Describe(IOutputStream& out) const noexcept override;
 
 private:
@@ -25,14 +27,6 @@ private:
     const ui32 TabletTxNo;
     const NOlap::TSnapshot CurrentSnapshot;
     bool CompleteReady = false;
-
-    TStringBuilder TxPrefix() const {
-        return TStringBuilder() << "TxWriteIndex[" << ToString(TabletTxNo) << "] ";
-    }
-
-    TString TxSuffix() const {
-        return TStringBuilder() << " at tablet " << Self->TabletID();
-    }
 };
 
 }   // namespace NKikimr::NColumnShard

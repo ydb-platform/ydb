@@ -27,7 +27,7 @@ Core concepts for organizing, scaling, and managing data.
 
 ### Batch Ingestion
 
-  - [Apache Spark Connector](../../integrations/ingestion/spark.md): Read and write data for ETL/ELT tasks.
+  - [Apache Spark Connector](../../integrations/query-engines/spark.md): Read and write data for ETL/ELT tasks.
   - [BulkUpsert API](../../recipes/ydb-sdk/bulk-upsert.md): High-performance bulk inserts via SDK.
 
 ### Integration with External Systems
@@ -78,12 +78,12 @@ Administration, monitoring, security, and optimization.
 
 ### Performance Management
 
-  - [Query Plan Analysis (EXPLAIN)](../../dev/query-plans-optimization.md): How to understand query execution plans and identify bottlenecks.
+  - [Query Plan Analysis (EXPLAIN)](../../dev/optimization/plans.md): How to understand query execution plans and identify bottlenecks.
   - [Cost-Based Optimizer](../query_execution/optimizer.md): Overview of how the query planner works.
 
 ### Monitoring and Diagnostics
 
-  - [Embedded UI](../../reference/embedded-ui/index.md): Web interface for cluster monitoring and diagnostics.
+  - [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md): Web interface for cluster monitoring and diagnostics.
   - [Metrics Reference](../../reference/observability/metrics/index.md): Full list of metrics for monitoring systems.
   - [Ready-to-use Grafana Dashboards](../../reference/observability/metrics/grafana-dashboards.md): Templates for quick monitoring setup.
 

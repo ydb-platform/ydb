@@ -31,7 +31,7 @@ public:
     void Bootstrap(const TActorContext &ctx) override;
     THolder<TAccountQuoterHolder> CreateAccountQuotaTracker() const;
 
-    TString BuildLogPrefix() const override;
+    TStructuredMessage BuildLogPrefix() const override;
 
 protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;
@@ -56,7 +56,7 @@ private:
     bool QuotingEnabled;
     THolder<TAccountQuoterHolder> AccountQuotaTracker;
 
-    TQuotaTracker PartitionDeduplicationIdQuotaTracker;
+    TQuotaTracker IncomingMessagesQuotaTracker;
 };
 
 

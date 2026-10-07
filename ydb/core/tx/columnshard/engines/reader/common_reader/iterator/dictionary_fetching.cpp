@@ -1,7 +1,7 @@
 #include "dictionary_fetching.h"
 
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
-#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 
@@ -29,10 +29,11 @@ const std::shared_ptr<arrow::Array>& TDictionaryChunkRestoreInfo::GetDictionaryA
     return DictionaryArray;
 }
 
-TDictionaryChunkRestoreInfo::TDictionaryChunkRestoreInfo(const TBlobRange& fullChunkRange,
-    const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo)
+TDictionaryChunkRestoreInfo::TDictionaryChunkRestoreInfo(
+    const TBlobRange& fullChunkRange, const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo)
     : ChunkExternalInfo(chunkExternalInfo)
-    , FullChunkRange(fullChunkRange) {
+    , FullChunkRange(fullChunkRange)
+{
     const auto* dictData = dynamic_cast<const NArrow::NAccessor::TDictionaryAccessorData*>(ChunkExternalInfo.GetAdditionalAccessorData().get());
     if (dictData && dictData->DictionaryBlobSize > 0 && fullChunkRange.GetSize() > 0) {
         DictionaryBlobRange = fullChunkRange.BuildSubset(0, dictData->DictionaryBlobSize);
@@ -45,7 +46,7 @@ TDictionaryChunkRestoreInfo TDictionaryChunkRestoreInfo::BuildEmpty(const NArrow
     return TDictionaryChunkRestoreInfo(TBlobRange(), chunkExternalInfo);
 }
 
-void TDictionaryFetchLogic::DoOnDataCollected(TFetchingResultContext& context) {
+TConclusionStatus TDictionaryFetchLogic::DoOnDataCollected(TFetchingResultContext& context) {
     NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
     for (auto&& i : ColumnChunks) {
         const auto& dictArray = i.GetDictionaryArray();
@@ -53,6 +54,10 @@ void TDictionaryFetchLogic::DoOnDataCollected(TFetchingResultContext& context) {
         compositeBuilder.AddChunk(std::make_shared<NArrow::NAccessor::TTrivialArray>(dictArray));
     }
     context.GetAccessors().AddVerified(GetEntityId(), compositeBuilder.Finish(), true);
+    const NArrow::TColumnFilter& filter = context.GetAccessors().GetFilter();
+    AFL_VERIFY(NCommon::IsDictionaryOnlyFetchCompatible(filter))("filter", filter.DebugString());
+    context.GetSource().MutableStageData().MarkDictionaryOnlyFetch(GetEntityId());
+    return TConclusionStatus::Success();
 }
 
 void TDictionaryFetchLogic::DoOnDataReceived(TReadActionsCollection& /*nextRead*/, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
@@ -65,10 +70,10 @@ void TDictionaryFetchLogic::DoOnDataReceived(TReadActionsCollection& /*nextRead*
 }
 
 void TDictionaryFetchLogic::DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) {
-    auto source = context.GetSource();
-    auto columnChunks = source->GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
+    auto& source = context.GetSource();
+    auto columnChunks = source.GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
     AFL_VERIFY(columnChunks.size());
-    StorageId = source->GetColumnStorageId(GetEntityId());
+    StorageId = source.GetColumnStorageId(GetEntityId());
     TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
     auto reading = blobsAction.GetReading(*StorageId);
     reading->SetIsBackgroundProcess(false);
@@ -80,9 +85,8 @@ void TDictionaryFetchLogic::DoStart(TReadActionsCollection& nextRead, TFetchingR
         auto& meta = columnChunks[chunkIdx]->GetMeta();
         AFL_VERIFY(!itFinished);
         if (!itFilter.IsBatchForSkip(meta.GetRecordsCount())) {
-            const TBlobRange range = source->RestoreBlobRange(columnChunks[chunkIdx]->BlobRange);
-            auto chunkInfo = ChunkExternalInfo.GetSubset(meta.GetRecordsCount())
-                .WithAdditionalAccessorData(meta.GetAdditionalAccessorData());
+            const TBlobRange range = source.RestoreBlobRange(columnChunks[chunkIdx]->BlobRange);
+            auto chunkInfo = ChunkExternalInfo.GetSubset(meta.GetRecordsCount()).WithAdditionalAccessorData(meta.GetAdditionalAccessorData());
             ColumnChunks.emplace_back(range, chunkInfo);
             const auto dictBlobRange = ColumnChunks.back().GetDictionaryBlobRangeOptional();
             AFL_VERIFY(dictBlobRange.has_value());
@@ -98,10 +102,11 @@ void TDictionaryFetchLogic::DoStart(TReadActionsCollection& nextRead, TFetchingR
     }
 }
 
-TDictionaryFetchLogic::TDictionaryFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source)
-    : TBase(columnId, source->GetContext()->GetCommonContext()->GetStoragesManager())
-    , ChunkExternalInfo(source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(source->GetRecordsCount())) {
-    const auto loader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
+TDictionaryFetchLogic::TDictionaryFetchLogic(const ui32 columnId, const IDataSource& source)
+    : TBase(columnId, source.GetContext()->GetCommonContext()->GetStoragesManager())
+    , ChunkExternalInfo(source.GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(source.GetRecordsCount()))
+{
+    const auto loader = source.GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
     AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::Dictionary)(
         "type", loader->GetAccessorConstructor()->GetType());
 }
@@ -109,7 +114,8 @@ TDictionaryFetchLogic::TDictionaryFetchLogic(const ui32 columnId, const std::sha
 TDictionaryFetchLogic::TDictionaryFetchLogic(const ui32 columnId, const std::shared_ptr<ISnapshotSchema>& sourceSchema,
     const std::shared_ptr<IStoragesManager>& storages, const ui32 recordsCount)
     : TBase(columnId, storages)
-    , ChunkExternalInfo(sourceSchema->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(recordsCount)) {
+    , ChunkExternalInfo(sourceSchema->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(recordsCount))
+{
     const auto loader = sourceSchema->GetColumnLoaderVerified(GetEntityId());
     AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::Dictionary)(
         "type", loader->GetAccessorConstructor()->GetType());

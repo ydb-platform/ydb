@@ -52,8 +52,6 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     case TWorkloadParams::ECommandType::Import:
         ConfigureCommonOpts(opts);
         ConfigureIndexOpts(opts);
-        opts.AddLongOption("index-type", "Type of index. Possible values: 'None', 'KmeansTree'")
-            .DefaultValue(IndexType).StoreResult(&IndexType);
         opts.AddLongOption("kmeans-tree-covering", "Index is covering")
             .DefaultValue(0).StoreResult(&KmeansTreeCovering);
         opts.AddLongOption("kmeans-tree-prefixed", "Index is prefixed")
@@ -85,13 +83,15 @@ void TVectorWorkloadParams::ConfigureCommonOpts(NLastGetopt::TOpts& opts) {
 
 void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
     NVector::ConfigureVectorOpts(opts, &VectorOpts);
+    opts.AddLongOption("index-type", "Type of index. Possible values: 'None', 'KmeansTree'")
+        .DefaultValue(IndexType).StoreResult(&IndexType);
     opts.AddLongOption("distance", "Distance/similarity function. "
-            "Possible values: 'inner_product', 'cosine_similarity', 'cosine_distance', 'cosine', 'euclidean', 'manhattan'")
+            "Possible values: 'inner_product', 'cosine', 'euclidean', 'manhattan'")
         .DefaultValue("inner_product").StoreResult(&Distance);
-    opts.AddLongOption("kmeans-tree-levels", "Number of levels in the kmeans tree. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
-        .DefaultValue(KmeansTreeLevels).StoreResult(&KmeansTreeLevels);
-    opts.AddLongOption("kmeans-tree-clusters", "Number of clusters in kmeans. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
-        .DefaultValue(KmeansTreeClusters).StoreResult(&KmeansTreeClusters);
+    opts.AddLongOption("kmeans-tree-levels", "Number of levels in the kmeans tree. If not set, auto-detected by server. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
+        .StoreResult(&KmeansTreeLevels);
+    opts.AddLongOption("kmeans-tree-clusters", "Number of clusters in kmeans. If not set, auto-detected by server. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
+        .StoreResult(&KmeansTreeClusters);
 }
 
 TString TVectorWorkloadParams::GetDistanceDDL() const {

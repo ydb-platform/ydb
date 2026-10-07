@@ -92,7 +92,7 @@ TLinks ParseLinks(const NJson::TJsonValue& json) {
     for (const auto& [keyString, value] : json.GetMapSafe()) {
         TLinkKey key = ParseLinkKey(keyString);
         TLinkTarget target = TLinkTarget::Parse(value.GetStringSafe());
-        links[std::move(key)] = std::move(target);
+        links[key] = std::move(target);
     }
     return links;
 }
@@ -111,9 +111,9 @@ TLinks Merge(TLinks&& lhs, TLinks&& rhs) {
 } // namespace NYql::NDocs
 
 template <>
-void Out<NYql::NDocs::TLinkTarget>(IOutputStream& out, const NYql::NDocs::TLinkTarget& target) {
-    out << target.RelativePath;
-    if (target.Anchor) {
-        out << "#" << *target.Anchor;
+void Out<NYql::NDocs::TLinkTarget>(IOutputStream& out, const NYql::NDocs::TLinkTarget& value) {
+    out << value.RelativePath;
+    if (value.Anchor) {
+        out << "#" << *value.Anchor;
     }
 }

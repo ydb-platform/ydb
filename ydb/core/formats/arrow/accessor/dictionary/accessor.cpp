@@ -1,51 +1,34 @@
 #include "accessor.h"
 #include "constructor.h"
 
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <library/cpp/json/writer/json_value.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
 IChunkedArray::TLocalDataAddress TDictionaryArray::DoGetLocalData(
     const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
-    std::unique_ptr<arrow::ArrayBuilder> builderDictionary = NArrow::MakeBuilder(ArrayDictionary->type());
-    AFL_VERIFY(SwitchType(ArrayDictionary->type()->id(), [&](const auto typeVariant) {
-        const auto* arrDictionaryImpl = typeVariant.CastArray(ArrayDictionary.get());
-        auto* builder = typeVariant.CastBuilder(builderDictionary.get());
-        if constexpr (typeVariant.IsAppropriate) {
-            AFL_VERIFY(SwitchType(ArrayPositions->type()->id(), [&](const auto type) {
-                const auto* arrPositionsImpl = type.CastArray(ArrayPositions.get());
-                if constexpr (type.IsIndexType()) {
-                    for (ui32 i = 0; i < arrPositionsImpl->length(); ++i) {
-                        if (arrPositionsImpl->IsNull(i)) {
-                            TStatusValidator::Validate(builder->AppendNull());
-                        } else {
-                            const ui32 dictIdx = arrPositionsImpl->Value(i);
-                            if (arrDictionaryImpl->IsNull(dictIdx)) {
-                                TStatusValidator::Validate(builder->AppendNull());
-                            } else {
-                                TStatusValidator::Validate(builder->Append(typeVariant.GetValue(*arrDictionaryImpl, dictIdx)));
-                            }
-                        }
-                    }
-                    return true;
-                }
-                return false;
-            }));
-            return true;
-        }
-        return false;
-    }));
-    return TLocalDataAddress(NArrow::FinishBuilder(std::move(builderDictionary)), 0, 0);
+    auto result = TStatusValidator::GetValid(arrow::compute::Take(*ArrayDictionary, *ArrayPositions));
+    if (!result->null_count()) {
+        // Take always creates validity buffer, even for arrays with no nulls.
+        // This breaks trivial -> dictionary -> trivial byte-for-byte equality check, so unset it.
+        result->data()->buffers[0] = nullptr;
+        result = arrow::MakeArray(result->data());
+    }
+    return TLocalDataAddress(std::move(result), 0, 0);
 }
 
 std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, const ui32 count) const {
@@ -90,24 +73,33 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
         }
         dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate(parts));
     }
-    // Remap positions to indices into the filtered dictionary.
-    std::unique_ptr<arrow::ArrayBuilder> positionsBuilder = NArrow::MakeBuilder(positionsNew->type());
+    // Remap positions to indices into the filtered dictionary and choose their width based on new dictionary size.
+    AFL_VERIFY(dictArray->length() <= Max<ui32>())("dictionary_length", dictArray->length());
+    const ui32 dictionaryLength = dictArray->length();
+    const auto positionsTargetType = NDictionary::TConstructor::GetTypeByVariantsCount(dictionaryLength);
+    std::unique_ptr<arrow::ArrayBuilder> positionsBuilder = NArrow::MakeBuilder(positionsTargetType);
     AFL_VERIFY(SwitchType(positionsNew->type()->id(), [&](const auto& type) {
         using TRecordsWrap = std::decay_t<decltype(type)>;
         using TRecordsArray = typename arrow::TypeTraits<typename TRecordsWrap::T>::ArrayType;
         if constexpr (TRecordsWrap::IsIndexType()) {
             const auto* arrPositionsImpl = static_cast<const TRecordsArray*>(positionsNew.get());
-            auto* builder = type.CastBuilder(positionsBuilder.get());
-            using CType = typename TRecordsWrap::ValueType;
-            for (int64_t i = 0; i < arrPositionsImpl->length(); ++i) {
-                if (arrPositionsImpl->IsNull(i)) {
-                    TStatusValidator::Validate(builder->AppendNull());
-                } else {
-                    const ui32 oldIdx = arrPositionsImpl->Value(i);
-                    TStatusValidator::Validate(builder->Append(static_cast<CType>(oldToNew[oldIdx])));
+            return SwitchType(positionsTargetType->id(), [&](const auto& targetType) {
+                using TTargetWrap = std::decay_t<decltype(targetType)>;
+                if constexpr (TTargetWrap::IsIndexType()) {
+                    auto* builder = targetType.CastBuilder(positionsBuilder.get());
+                    using CType = typename TTargetWrap::ValueType;
+                    for (int64_t i = 0; i < arrPositionsImpl->length(); ++i) {
+                        if (arrPositionsImpl->IsNull(i)) {
+                            TStatusValidator::Validate(builder->AppendNull());
+                        } else {
+                            const ui32 oldIdx = arrPositionsImpl->Value(i);
+                            TStatusValidator::Validate(builder->Append(static_cast<CType>(oldToNew[oldIdx])));
+                        }
+                    }
+                    return true;
                 }
-            }
-            return true;
+                return false;
+            });
         }
         return false;
     }));
@@ -149,6 +141,9 @@ ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {
     return *result;
 }
 
+TJsonValueView TDictionaryArray::GetJsonValueView(const ui32 index, const NSubColumns::EValueType valueType) const {
+    return NSubColumns::ArrayElementToJsonValueView(*ArrayDictionary, GetIndexImpl(index), valueType);
+}
 
 TMinMax TDictionaryArray::DoGetMinMaxScalars() const {
     return TMinMax::Compute(ArrayDictionary);

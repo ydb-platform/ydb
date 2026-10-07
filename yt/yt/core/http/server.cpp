@@ -1,4 +1,6 @@
 #include "server.h"
+
+#include "compression.h"
 #include "http.h"
 #include "config.h"
 #include "stream.h"
@@ -9,6 +11,7 @@
 #include <yt/yt/core/net/connection.h>
 
 #include <yt/yt/core/concurrency/poller.h>
+#include <yt/yt/core/concurrency/thread_pool.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <yt/yt/core/misc/finally.h>
@@ -61,10 +64,11 @@ public:
         IPollerPtr poller,
         IPollerPtr acceptor,
         IInvokerPtr invoker,
+        IInvokerPtr compressionInvoker,
         IRequestPathMatcherPtr requestPathMatcher,
         bool ownPoller = false)
         : Config_(std::move(config))
-        , Logger(HttpLogger().WithTag("ServerName: %v", Config_->ServerName))
+        , Logger(HttpLogger().WithTag("ServerName", Config_->ServerName))
         , Listener_(std::move(listener))
         , Poller_(std::move(poller))
         , Acceptor_(std::move(acceptor))
@@ -73,7 +77,13 @@ public:
         , Address_(Listener_ ? Listener_->GetAddress() : TNetworkAddress::CreateIPv6Any(Config_->Port))
         , Profiling_(HttpProfiler.WithTag("server", Config_->ServerName), Config_->EnablePerPathRequestProfiling)
         , RequestPathMatcher_(std::move(requestPathMatcher))
-    { }
+        , CompressionInvoker_(std::move(compressionInvoker))
+    {
+        if (Config_->EnableContentEncoding && !CompressionInvoker_) {
+            CompressionThreadPool_ = CreateThreadPool(Config_->CompressionThreadCount, Config_->ServerName + "Compress");
+            CompressionInvoker_ = CompressionThreadPool_->GetInvoker();
+        }
+    }
 
     void AddHandler(const std::string& path, const IHttpHandlerPtr& handler) override
     {
@@ -100,14 +110,15 @@ public:
                     if (i + 1 == Config_->BindRetryCount) {
                         throw;
                     } else {
-                        YT_LOG_ERROR(ex, "HTTP server bind failed");
+                        YT_TLOG_ERROR("HTTP server bind failed")
+                            .With(ex);
                         Sleep(Config_->BindRetryBackoff);
                     }
                 }
             }
         }
 
-        YT_LOG_INFO("Server started");
+        YT_TLOG_INFO("Server started");
 
         AsyncAcceptConnection();
     }
@@ -120,14 +131,18 @@ public:
             Poller_->Shutdown();
         }
 
-        YT_LOG_INFO("Server stopped");
+        if (CompressionThreadPool_) {
+            CompressionThreadPool_->Shutdown();
+        }
+
+        YT_TLOG_INFO("Server stopped");
     }
 
     void SetPathMatcher(const IRequestPathMatcherPtr& matcher) override
     {
         YT_VERIFY(RequestPathMatcher_->IsEmpty());
         RequestPathMatcher_ = matcher;
-        YT_LOG_INFO("Request path matcher changed");
+        YT_TLOG_INFO("Request path matcher changed");
     }
 
     IRequestPathMatcherPtr GetPathMatcher() override
@@ -227,6 +242,8 @@ private:
 
     TProfiling Profiling_;
     IRequestPathMatcherPtr RequestPathMatcher_;
+    IInvokerPtr CompressionInvoker_;
+    IThreadPoolPtr CompressionThreadPool_;
     bool Started_ = false;
     std::atomic<bool> Stopped_ = false;
 
@@ -249,7 +266,8 @@ private:
         AsyncAcceptConnection();
 
         if (!connectionOrError.IsOK()) {
-            YT_LOG_INFO(connectionOrError, "Error accepting connection");
+            YT_TLOG_INFO("Error accepting connection")
+                .With(connectionOrError);
             return;
         }
 
@@ -259,17 +277,17 @@ private:
         if (count >= Config_->MaxSimultaneousConnections) {
             Profiling_.ConnectionsDropped.Increment();
             ActiveConnections_--;
-            YT_LOG_WARNING("Server is over max active connection limit (RemoteAddress: %v)",
-                connection->GetRemoteAddress());
+            YT_TLOG_WARNING("Server is over max active connection limit")
+                .With("RemoteAddress", connection->GetRemoteAddress());
             return;
         }
         Profiling_.ConnectionsActive.Update(count);
         Profiling_.ConnectionsAccepted.Increment();
 
-        YT_LOG_DEBUG("Connection accepted (ConnectionId: %v, RemoteAddress: %v, LocalAddress: %v)",
-            connection->GetId(),
-            connection->GetRemoteAddress(),
-            connection->GetLocalAddress());
+        YT_TLOG_DEBUG("Connection accepted")
+            .With("ConnectionId", connection->GetId())
+            .With("RemoteAddress", connection->GetRemoteAddress())
+            .With("LocalAddress", connection->GetLocalAddress());
 
         Invoker_->Invoke(
             BIND(&TServer::HandleConnection, MakeStrong(this), std::move(connection)));
@@ -295,25 +313,22 @@ private:
 
             NProfiling::TWallTimer timer;
 
-            YT_LOG_DEBUG("Received HTTP request ("
-                "ConnectionId: %v, "
-                "RequestId: %v, "
-                "Method: %v, "
-                "Path: %v, "
-                "L7RequestId: %v, "
-                "L7RealIP: %v, "
-                "UserAgent: %v)",
-                request->GetConnectionId(),
-                request->GetRequestId(),
-                request->GetMethod(),
-                path,
-                FindBalancerRequestId(request),
-                FindBalancerRealIP(request),
-                FindUserAgent(request));
+            YT_TLOG_DEBUG("Received HTTP request")
+                .With("ConnectionId", request->GetConnectionId())
+                .With("RequestId", request->GetRequestId())
+                .With("Method", request->GetMethod())
+                .With("Path", path)
+                .With("L7RequestId", FindBalancerRequestId(request))
+                .With("L7RealIP", FindBalancerRealIP(request))
+                .With("UserAgent", FindUserAgent(request));
 
             auto handler = RequestPathMatcher_->Match(path);
             if (handler) {
                 closeResponse = false;
+
+                if (Config_->EnableContentEncoding) {
+                    handler = CreateContentEncodingHttpHandler(std::move(handler), CompressionInvoker_);
+                }
 
                 if (request->IsExpecting100Continue()) {
                     response->Flush100Continue();
@@ -331,21 +346,22 @@ private:
 
                 requestProfiling->TotalTimeCounter.Add(timer.GetElapsedTime());
 
-                YT_LOG_DEBUG("Finished handling HTTP request (RequestId: %v, WallTime: %v, CpuTime: %v)",
-                    request->GetRequestId(),
-                    timer.GetElapsedTime(),
-                    traceContext->GetElapsedTime());
+                YT_TLOG_DEBUG("Finished handling HTTP request")
+                    .With("RequestId", request->GetRequestId())
+                    .With("WallTime", timer.GetElapsedTime())
+                    .With("CpuTime", traceContext->GetElapsedTime());
             } else {
-                YT_LOG_INFO("Missing HTTP handler for given URL (RequestId: %v, Path: %v)",
-                    request->GetRequestId(),
-                    path);
+                YT_TLOG_INFO("Missing HTTP handler for given URL")
+                    .With("RequestId", request->GetRequestId())
+                    .With("Path", path);
 
                 response->SetStatus(EStatusCode::NotFound);
             }
         } catch (const std::exception& ex) {
             closeResponse = true;
-            YT_LOG_INFO(ex, "Error handling HTTP request (RequestId: %v)",
-                request->GetRequestId());
+            YT_TLOG_INFO("Error handling HTTP request")
+                .With("RequestId", request->GetRequestId())
+                .With(ex);
 
             if (!response->AreHeadersFlushed()) {
                 response->SetStatus(EStatusCode::InternalServerError);
@@ -358,8 +374,9 @@ private:
                     .ThrowOnError();
             }
         } catch (const std::exception& ex) {
-            YT_LOG_INFO(ex, "Error flushing HTTP response stream (RequestId: %v)",
-                request->GetRequestId());
+            YT_TLOG_INFO("Error flushing HTTP response stream")
+                .With("RequestId", request->GetRequestId())
+                .With(ex);
         }
 
         return true;
@@ -369,7 +386,8 @@ private:
     {
         try {
             connection->SubscribePeerDisconnect(BIND([Logger = Logger, config = Config_, canceler = GetCurrentFiberCanceler(), connectionId = connection->GetId()] {
-                YT_LOG_DEBUG("Client closed TCP socket (ConnectionId: %v)", connectionId);
+                YT_TLOG_DEBUG("Client closed TCP socket")
+                    .With("ConnectionId", connectionId);
 
                 if (config->CancelFiberOnConnectionClose.value_or(false)) {
                     canceler(TError("Client closed TCP socket; HTTP connection closed"));
@@ -387,7 +405,9 @@ private:
 
             DoHandleConnection(connection);
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Unhandled exception (ConnectionId: %v)", connection->GetId());
+            YT_TLOG_ERROR("Unhandled exception")
+                .With("ConnectionId", connection->GetId())
+                .With(ex);
         }
     }
 
@@ -426,9 +446,9 @@ private:
             }
 
             auto logDrop = [&] (auto reason) {
-                YT_LOG_DEBUG("Dropping HTTP connection (ConnectionId: %v, Reason: %v)",
-                    connection->GetId(),
-                    reason);
+                YT_TLOG_DEBUG("Dropping HTTP connection")
+                    .With("ConnectionId", connection->GetId())
+                    .With("Reason", reason);
             };
 
             if (!Config_->EnableKeepAlive) {
@@ -481,11 +501,12 @@ private:
 
         auto connectionResult = WaitFor(connection->Close());
         if (connectionResult.IsOK()) {
-            YT_LOG_DEBUG("HTTP connection closed (ConnectionId: %v)",
-                connection->GetId());
+            YT_TLOG_DEBUG("HTTP connection closed")
+                .With("ConnectionId", connection->GetId());
         } else {
-            YT_LOG_DEBUG(connectionResult, "Error closing HTTP connection (ConnectionId: %v)",
-                connection->GetId());
+            YT_TLOG_DEBUG("Error closing HTTP connection")
+                .With("ConnectionId", connection->GetId())
+                .With(connectionResult);
         }
     }
 };
@@ -498,6 +519,7 @@ IServerPtr CreateServer(
     IPollerPtr poller,
     IPollerPtr acceptor,
     IInvokerPtr invoker,
+    IInvokerPtr compressionInvoker,
     bool ownPoller)
 {
     auto handlers = New<TRequestPathMatcher>();
@@ -507,6 +529,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        std::move(compressionInvoker),
         std::move(handlers),
         ownPoller);
 }
@@ -516,6 +539,7 @@ IServerPtr CreateServer(
     IPollerPtr poller,
     IPollerPtr acceptor,
     IInvokerPtr invoker,
+    IInvokerPtr compressionInvoker,
     bool ownPoller)
 {
     return CreateServer(
@@ -524,6 +548,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        std::move(compressionInvoker),
         ownPoller);
 }
 
@@ -544,6 +569,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        /*compressionInvoker*/ nullptr,
         /*ownPoller*/ false);
 }
 
@@ -551,7 +577,8 @@ IServerPtr CreateServer(
     TServerConfigPtr config,
     IListenerPtr listener,
     IPollerPtr poller,
-    IPollerPtr acceptor)
+    IPollerPtr acceptor,
+    IInvokerPtr compressionInvoker)
 {
     auto invoker = poller->GetInvoker();
     return CreateServer(
@@ -560,6 +587,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        std::move(compressionInvoker),
         /*ownPoller*/ false);
 }
 
@@ -574,6 +602,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        /*compressionInvoker*/ nullptr,
         /*ownPoller*/ false);
 }
 
@@ -603,13 +632,15 @@ IServerPtr CreateServer(TServerConfigPtr config, int pollerThreadCount)
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        /*compressionInvoker*/ nullptr,
         /*ownPoller*/ true);
 }
 
 IServerPtr CreateServer(
     TServerConfigPtr config,
     NConcurrency::IPollerPtr poller,
-    IInvokerPtr invoker)
+    IInvokerPtr invoker,
+    IInvokerPtr compressionInvoker)
 {
     auto acceptor = poller;
     return CreateServer(
@@ -617,6 +648,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        std::move(compressionInvoker),
         /*ownPoller*/ false);
 }
 

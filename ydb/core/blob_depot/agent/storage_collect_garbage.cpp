@@ -13,6 +13,11 @@ namespace NKikimr::NBlobDepot {
             bool IsLast;
             bool QueryInFlight = false;
 
+            bool IsCompleteDeletion() const {
+                return Request.RecordGeneration == Max<ui32>() && Request.PerGenerationCounter == Max<ui32>() &&
+                       Request.CollectGeneration == Max<ui32>() && Request.CollectStep == Max<ui32>();
+            }
+
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
@@ -20,8 +25,7 @@ namespace NKikimr::NBlobDepot {
                 NumKeep = Request.Keep ? Request.Keep->size() : 0;
                 NumDoNotKeep = Request.DoNotKeep ? Request.DoNotKeep->size() : 0;
 
-                if (Request.IgnoreBlock || CheckBlockForTablet(Request.TabletId,
-                        Request.RecordGeneration) == NKikimrProto::OK) {
+                if (Request.IgnoreBlock || IsCompleteDeletion() || CheckBlockForTablet(Request.TabletId, Request.RecordGeneration) == NKikimrProto::OK) {
                     IssueCollectGarbage();
                 }
             }
@@ -33,12 +37,24 @@ namespace NKikimr::NBlobDepot {
 
                 for (; KeepIndex < NumKeep && numItemsIssued < MaxCollectGarbageFlagsPerMessage; ++KeepIndex) {
                     LogoBlobIDFromLogoBlobID((*Request.Keep)[KeepIndex], record.AddKeep());
-                    BDEV_QUERY(BDEV05, "TEvCollectGarbage_keep", (U.BlobId, (*Request.Keep)[KeepIndex]));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_keep",
+                        {"marker", "BDEV05"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"U.BlobId", (*Request.Keep)[KeepIndex]});
                     ++numItemsIssued;
                 }
                 for (; DoNotKeepIndex < NumDoNotKeep && numItemsIssued < MaxCollectGarbageFlagsPerMessage; ++DoNotKeepIndex) {
                     LogoBlobIDFromLogoBlobID((*Request.DoNotKeep)[DoNotKeepIndex], record.AddDoNotKeep());
-                    BDEV_QUERY(BDEV06, "TEvCollectGarbage_doNotKeep", (U.BlobId, (*Request.DoNotKeep)[DoNotKeepIndex]));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_doNotKeep",
+                        {"marker", "BDEV06"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"U.BlobId", (*Request.DoNotKeep)[DoNotKeepIndex]});
                     ++numItemsIssued;
                 }
 
@@ -57,10 +73,19 @@ namespace NKikimr::NBlobDepot {
                         record.SetIgnoreBlock(true);
                     }
 
-                    BDEV_QUERY(BDEV04, "TEvCollectGarbage_barrier", (U.TabletId, Request.TabletId),
-                        (U.Generation, Request.RecordGeneration), (U.PerGenerationCounter, Request.PerGenerationCounter),
-                        (U.Channel, Request.Channel), (U.Hard, Request.Hard),
-                        (U.CollectGeneration, Request.CollectGeneration), (U.CollectStep, Request.CollectStep));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_barrier",
+                        {"marker", "BDEV04"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"U.TabletId", Request.TabletId},
+                        {"U.Generation", Request.RecordGeneration},
+                        {"U.PerGenerationCounter", Request.PerGenerationCounter},
+                        {"U.Channel", Request.Channel},
+                        {"U.Hard", Request.Hard},
+                        {"U.CollectGeneration", Request.CollectGeneration},
+                        {"U.CollectStep", Request.CollectStep});
                 }
 
                 Agent.Issue(std::move(record), this, nullptr);
@@ -99,12 +124,25 @@ namespace NKikimr::NBlobDepot {
             }
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
-                BDEV_QUERY(BDEV07, "TEvCollectGarbage_end", (Status, status), (ErrorReason, errorReason));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_end",
+                    {"marker", "BDEV07"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"status", status},
+                    {"errorReason", errorReason});
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
 
             void EndWithSuccess() {
-                BDEV_QUERY(BDEV08, "TEvCollectGarbage_end", (Status, NKikimrProto::OK));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvCollectGarbage_end",
+                    {"marker", "BDEV08"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"status", NKikimrProto::OK});
                 TBlobStorageQuery::EndWithSuccess(std::make_unique<TEvBlobStorage::TEvCollectGarbageResult>(
                     NKikimrProto::OK, Request.TabletId, Request.RecordGeneration, Request.PerGenerationCounter,
                     Request.Channel));

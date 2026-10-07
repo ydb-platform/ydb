@@ -243,7 +243,7 @@ int TCommandLatency::Run(TConfig& config) {
     const size_t cpuCount = NSystemInfo::CachedNumberOfCpus();
     const size_t driverCount = std::min(MaxInflight, int(cpuCount));
 
-    std::vector<TDriver> drivers;
+    std::vector<TScopedDriver> drivers;
     for (size_t i = 0; i < driverCount; ++i) {
         drivers.emplace_back(CreateDriver(config));
     }

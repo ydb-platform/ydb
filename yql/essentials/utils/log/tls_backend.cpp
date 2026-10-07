@@ -5,6 +5,7 @@
 namespace NYql::NLog {
 namespace {
 
+// NOLINTNEXTLINE(readability-static-definition-in-anonymous-namespace)
 Y_POD_STATIC_THREAD(TLogBackend*) CurrentBackend;
 
 } // namespace

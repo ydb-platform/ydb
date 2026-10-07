@@ -8,11 +8,12 @@
 #include <util/generic/set.h>
 
 namespace NKikimr {
+class IImmutableSnapshotRegistry;
+
 namespace NLongTxService {
 
 struct TLocalSnapshotInfo {
     TRowVersion Snapshot;
-    TInstant CreationTime;
     NActors::TActorId SessionActorId;
     TVector<NKikimr::TTableId> TableIds;
     std::shared_ptr<std::atomic<bool>> AliveFlag = nullptr;
@@ -22,18 +23,16 @@ struct TLocalSnapshotInfo {
     TLocalSnapshotInfo(
         const TRowVersion& snapshot,
         const NActors::TActorId& sessionActorId,
-        TVector<NKikimr::TTableId> tableIds,
-        const TInstant creationTime)
+        TVector<NKikimr::TTableId> tableIds)
         : Snapshot(snapshot)
-        , CreationTime(creationTime)
         , SessionActorId(sessionActorId)
         , TableIds(std::move(tableIds))
         , AliveFlag(std::make_shared<std::atomic<bool>>(true))
     {}
 
-    struct TComparatorByCreateTimeFirst {
+    struct TComparatorBySnapshotAndSessionId {
         bool operator()(const TLocalSnapshotInfo& lhs, const TLocalSnapshotInfo& rhs) const {
-            return std::tie(lhs.CreationTime, lhs.Snapshot, lhs.SessionActorId) < std::tie(rhs.CreationTime, rhs.Snapshot, rhs.SessionActorId);
+            return std::tie(lhs.Snapshot, lhs.SessionActorId) < std::tie(rhs.Snapshot, rhs.SessionActorId);
         }
     };
 };
@@ -70,28 +69,30 @@ public:
         friend class TInputRangeAdaptor<TView>;
         friend class TLocalSnapshotsStorage;
 
-        using TConstIter = TSet<TLocalSnapshotInfo, TLocalSnapshotInfo::TComparatorByCreateTimeFirst>::const_iterator;
+        using TConstIter = TSet<TLocalSnapshotInfo, TLocalSnapshotInfo::TComparatorBySnapshotAndSessionId>::const_iterator;
 
         TView(
                 TConstIter begin,
                 TConstIter end,
-                TInstant maxCreationTime)
+                ui64 maxSnapshotStep)
             : Iter(begin)
             , End(end)
-            , MaxCreationTime(maxCreationTime)
+            , MaxSnapshotStep(maxSnapshotStep)
         {}
 
         const TLocalSnapshotInfo* Next();
 
         TConstIter Iter;
         const TConstIter End;
-        const TInstant MaxCreationTime;
+        const ui64 MaxSnapshotStep;
     };
 
     TView View() const;
+    TView View(TInstant now) const;
+    TView ViewPromotedUpToStep(ui64 maxSnapshotStep) const;
 
 private:
-    TSet<TLocalSnapshotInfo, TLocalSnapshotInfo::TComparatorByCreateTimeFirst> LocalSnapshots;
+    TSet<TLocalSnapshotInfo, TLocalSnapshotInfo::TComparatorBySnapshotAndSessionId> LocalSnapshots;
 };
 
 using TLocalSnapshotsStoragePtr = TIntrusivePtr<TLocalSnapshotsStorage>;
@@ -104,6 +105,7 @@ class TRemoteSnapshotsStorage : public TThrRefBase {
     };
 
 public:
+    void Init(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& nodeIdToCollectionTime);
     void UpdateAndCleanExpired(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& updatedNodeIdToCollectionTime);
     void UpdateBorder(const TRowVersion& border);
     void Clear();
@@ -130,6 +132,14 @@ public:
     TView View() const;
     TRowVersion GetBorder() const;
 
+    // Oldest collection time across all contributing nodes, including the local node (counted
+    // as now since its snapshots are collected right now). With no remote nodes this is now.
+    TInstant GetOldestCollectionTime() const;
+    TInstant GetOldestCollectionTime(TInstant now) const;
+
+    // Per-node collection times, used to seed a peer's registry freshness during prefill.
+    THashMap<ui32, TInstant> GetNodeIdToCollectionTime() const;
+
     bool IsReady() const;
 
 private:
@@ -137,8 +147,25 @@ private:
     TRowVersion SnapshotBorder = TRowVersion::Max();
     bool Ready = false;
 };
-
 using TRemoteSnapshotsStoragePtr = TIntrusivePtr<TRemoteSnapshotsStorage>;
 
-}
-}
+// Renders a human-readable state of local/remote snapshot storages for the long tx
+// service mon page: summaries (border, collection times), local snapshots (promoted
+// and alive, i.e. those eligible for the registry), remote snapshots per node, the
+// calculated registry input for the next maintenance (promoted local snapshots plus
+// all remote snapshots strictly below the border, same filter as
+// IImmutableSnapshotRegistryBuilder::AddSnapshot) and the current registry (if
+// already built). Any zero `lastRegistryBuildTime` is displayed as "registry has
+// not been built"; the caller (TLongTxServiceActor) keeps it zero until the first
+// successful build and resets it to zero when snapshots locking is disabled and
+// the registry is cleared. `currentRegistry` may be nullptr.
+TString RenderSnapshotsMonPage(
+    const TLocalSnapshotsStorage& localSnapshots,
+    TDuration localPromotionTime,
+    const TRemoteSnapshotsStorage& remoteSnapshots,
+    TInstant now,
+    TInstant lastRegistryBuildTime,
+    const IImmutableSnapshotRegistry* currentRegistry);
+
+} // namespace NLongTxService
+} // namespace NKikimr

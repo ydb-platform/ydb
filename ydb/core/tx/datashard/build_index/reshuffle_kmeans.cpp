@@ -19,6 +19,8 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
@@ -64,7 +66,7 @@ protected:
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
-    ui64 InvalidEmbeddingRows = 0;
+    TString InvalidEmbeddingError;
 
     TVector<NScheme::TTypeInfo> KeyTypes;
     TSerializedCellVec LastProcessedKey;
@@ -99,6 +101,7 @@ protected:
 
     std::unique_ptr<IClusters> Clusters;
     std::vector<std::pair<ui32, double>> TmpClusters;
+    std::vector<bool> EmptyClusters;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -138,7 +141,8 @@ public:
 
         NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
 
-        LOG_I("Create " << Debug());
+        YDB_LOG_INFO("Scan actor created",
+            {"debug", Debug()});
 
         const bool toBuild = (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
             || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD);
@@ -151,12 +155,15 @@ public:
         ScanTags = MakeScanTags(table, embedding, data, toBuild, EmbeddingPos, DataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
         OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data, {}, OutForeign));
+
+        EmptyClusters.resize(Clusters->GetClusters().size(), true);
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_I("Prepare " << Debug());
+        YDB_LOG_INFO("Scan actor prepared",
+            {"debug", Debug()});
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
@@ -183,17 +190,26 @@ public:
 
         Uploader.Finish(record, status);
 
-        if (InvalidEmbeddingRows > 0) {
+        if (InvalidEmbeddingError) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
             auto* issue = record.AddIssues();
-            issue->set_severity(NYql::TSeverityIds::S_WARNING);
-            issue->set_message(TStringBuilder()
-                << InvalidEmbeddingRows << " row(s) with invalid vector format were skipped during index build");
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message(InvalidEmbeddingError);
         }
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+            YDB_LOG_NOTICE("Scan completed successfully",
+                {"debug", Debug()},
+                {"responseRecord", Response->Record.ShortDebugString()});
+            for (ui32 pos = 0; pos < EmptyClusters.size(); pos++) {
+                if (EmptyClusters[pos]) {
+                    record.AddEmptyClusters(pos);
+                }
+            }
         } else {
-            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+            YDB_LOG_ERROR("Scan failed",
+                {"debug", Debug()},
+                {"responseRecord", Response->Record.ShortDebugString()});
         }
         Send(ResponseActorId, Response.Release());
 
@@ -218,13 +234,16 @@ public:
 
     EScan PageFault() final
     {
-        LOG_T("PageFault " << Debug());
+        YDB_LOG_TRACE("Page fault",
+            {"debug", Debug()});
         return EScan::Feed;
     }
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        LOG_T("Seek " << seq << " " << Debug());
+        YDB_LOG_TRACE("Seek",
+            {"seekSequence", seq},
+            {"debug", Debug()});
 
         if (IsExhausted) {
             return Uploader.CanFinish()
@@ -239,8 +258,6 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        // LOG_T("Feed " << Debug());
-
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
@@ -248,12 +265,17 @@ public:
 
         Feed(key, *row);
 
+        if (InvalidEmbeddingError) {
+            return EScan::Final;
+        }
+
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }
 
     EScan Exhausted() final
     {
-        LOG_T("Exhausted " << Debug());
+        YDB_LOG_TRACE("Scan range exhausted",
+            {"debug", Debug()});
 
         IsExhausted = true;
 
@@ -268,22 +290,26 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
-                    << " event: " << ev->ToString() << " " << Debug());
+                YDB_LOG_ERROR("Unexpected event in scan actor",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"eventDetails", ev->ToString()},
+                    {"debug", Debug()});
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        LOG_D("Retry upload " << Debug());
+        YDB_LOG_DEBUG("Retrying row upload",
+            {"debug", Debug()});
 
         Uploader.RetryUpload();
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        LOG_D("Handle TEvUploadRowsResponse " << Debug()
-            << " ev->Sender: " << ev->Sender.ToString());
+        YDB_LOG_DEBUG("Received row upload response",
+            {"debug", Debug()},
+            {"senderActorId", ev->Sender});
 
         if (!Driver) {
             return;
@@ -306,6 +332,11 @@ protected:
                 record.SetRequestSeqNoRound(Response->Record.GetRequestSeqNoRound());
                 record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
                 record.SetLastKeyAck(LastAckedKey.GetBuffer());
+                for (ui32 pos = 0; pos < EmptyClusters.size(); pos++) {
+                    if (EmptyClusters[pos]) {
+                        record.AddEmptyClusters(pos);
+                    }
+                }
                 Send(ResponseActorId, progress.Release());
             }
             Driver->Touch(EScan::Feed);
@@ -313,12 +344,16 @@ protected:
         }
 
         if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
-            LOG_N("Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+            YDB_LOG_NOTICE("Row upload failed with retriable error",
+                {"debug", Debug()},
+                {"uploadStatus", Uploader.GetUploadStatus()});
             ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+        YDB_LOG_NOTICE("Row upload failed, aborting scan",
+            {"debug", Debug()},
+            {"uploadStatus", Uploader.GetUploadStatus()});
 
         Driver->Touch(EScan::Final);
     }
@@ -355,8 +390,14 @@ protected:
     void FeedRow(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
         TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
     {
-        if (!Clusters->IsExpectedFormat(row.at(EmbeddingPos).AsRef())) {
-            ++InvalidEmbeddingRows;
+        if (row.at(EmbeddingPos).IsNull() || row.at(EmbeddingPos).Size() == 0) {
+            return;
+        }
+        const auto embedding = row.at(EmbeddingPos).AsRef();
+        if (!Clusters->IsExpectedFormat(embedding)) {
+            if (!embedding.empty()) {
+                InvalidEmbeddingError = Clusters->FormatError(embedding);
+            }
             return;
         }
         Clusters->FindClusters(row.at(EmbeddingPos).AsBuf(), TmpClusters, OverlapClusters, OverlapRatio);
@@ -366,11 +407,13 @@ protected:
                 foreign = row.at(IsForeignPos).AsValue<bool>();
             }
             for (auto& [pos, distance]: TmpClusters) {
+                EmptyClusters[pos] = false;
                 AddRowToDataWithForeign(*OutputBuf, Child + pos, sourcePk, dataColumns, origKey, foreign, distance, isPostingLevel);
                 foreign = true;
             }
         } else {
             for (auto& [pos, _]: TmpClusters) {
+                EmptyClusters[pos] = false;
                 AddRowToData(*OutputBuf, Child + pos, sourcePk, dataColumns, origKey, isPostingLevel);
             }
         }
@@ -437,9 +480,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         auto response = MakeHolder<TEvDataShard::TEvReshuffleKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TReshuffleKMeansScan TabletId: " << TabletID()
-            << " " << ToShortDebugString(request)
-            << " row version " << rowVersion);
+        YDB_LOG_NOTICE("Starting K-means reshuffle scan",
+            {"tabletId", TabletID()},
+            {"request", ToShortDebugString(request)},
+            {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -455,9 +499,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_E("Rejecting TReshuffleKMeansScan bad request TabletId: " << TabletID()
-                    << " " << ToShortDebugString(request)
-                    << " with response " << response->Record.ShortDebugString());
+                YDB_LOG_ERROR("Rejecting invalid K-means reshuffle scan request",
+                    {"tabletId", TabletID()},
+                    {"request", ToShortDebugString(request)},
+                    {"responseRecord", response->Record.ShortDebugString()});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {
@@ -561,3 +606,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -4,62 +4,63 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TIterableWrapper: public TMutableComputationNode<TIterableWrapper> {
-    typedef TMutableComputationNode<TIterableWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TIterableWrapper>;
 
 public:
     class TValue: public TCustomListValue {
     public:
         class TIterator: public TComputationValue<TIterator> {
         public:
-            TIterator(TMemoryUsageInfo* memInfo, const NUdf::TUnboxedValue& stream)
+            TIterator(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue stream)
                 : TComputationValue<TIterator>(memInfo)
-                , Stream(stream)
+                , Stream_(std::move(stream))
             {
             }
 
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
-                auto status = Stream.Fetch(value);
+                auto status = Stream_.Fetch(value);
                 MKQL_ENSURE(status != NUdf::EFetchStatus::Yield, "Yield is not supported");
                 return status != NUdf::EFetchStatus::Finish;
             }
 
             bool Skip() override {
                 NUdf::TUnboxedValue value;
-                auto status = Stream.Fetch(value);
+                auto status = Stream_.Fetch(value);
                 MKQL_ENSURE(status != NUdf::EFetchStatus::Yield, "Yield is not supported");
                 return status != NUdf::EFetchStatus::Finish;
             }
 
-            NUdf::TUnboxedValue Stream;
+            NUdf::TUnboxedValue Stream_;
         };
 
         TValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, IComputationNode* stream, IComputationExternalNode* arg)
             : TCustomListValue(memInfo)
-            , Ctx(ctx)
-            , Stream(stream)
-            , Arg(arg)
+            , Ctx_(ctx)
+            , Stream_(stream)
+            , Arg_(arg)
         {
         }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const override {
             auto stream = NewStream();
-            return Ctx.HolderFactory.Create<TIterator>(stream);
+            return Ctx_.HolderFactory.Create<TIterator>(stream);
         }
 
         bool HasFastListLength() const override {
-            return Length.Defined();
+            return Length_.Defined();
         }
 
         ui64 GetListLength() const override {
-            if (!Length) {
+            if (!Length_) {
                 auto stream = NewStream();
                 NUdf::TUnboxedValue item;
                 ui64 n = 0;
@@ -73,10 +74,10 @@ public:
                     ++n;
                 }
 
-                Length = n;
+                Length_ = n;
             }
 
-            return *Length;
+            return *Length_;
         }
 
         ui64 GetEstimatedListLength() const override {
@@ -84,52 +85,52 @@ public:
         }
 
         bool HasListItems() const override {
-            if (!HasItems) {
-                if (Length) {
-                    HasItems = *Length > 0;
+            if (!HasItems_) {
+                if (Length_) {
+                    HasItems_ = *Length_ > 0;
                 } else {
                     auto stream = NewStream();
                     NUdf::TUnboxedValue item;
                     auto status = stream.Fetch(item);
                     MKQL_ENSURE(status != NUdf::EFetchStatus::Yield, "Yield is not supported");
-                    HasItems = (status != NUdf::EFetchStatus::Finish);
+                    HasItems_ = (status != NUdf::EFetchStatus::Finish);
                 }
             }
 
-            return *HasItems;
+            return *HasItems_;
         }
 
         NUdf::TUnboxedValue NewStream() const {
-            Arg->SetValue(Ctx, NUdf::TUnboxedValue());
-            return Stream->GetValue(Ctx);
+            Arg_->SetValue(Ctx_, NUdf::TUnboxedValue());
+            return Stream_->GetValue(Ctx_);
         }
 
-        TComputationContext& Ctx;
-        IComputationNode* const Stream;
-        IComputationExternalNode* const Arg;
-        mutable TMaybe<ui64> Length;
-        mutable TMaybe<bool> HasItems;
+        TComputationContext& Ctx_;
+        IComputationNode* const Stream_;
+        IComputationExternalNode* const Arg_;
+        mutable TMaybe<ui64> Length_;
+        mutable TMaybe<bool> HasItems_;
     };
 
     TIterableWrapper(TComputationMutables& mutables, IComputationNode* stream, IComputationExternalNode* arg)
         : TBaseComputation(mutables)
-        , Stream(stream)
-        , Arg(arg)
+        , Stream_(stream)
+        , Arg_(arg)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TValue>(ctx, Stream, Arg);
+        return ctx.HolderFactory.Create<TValue>(ctx, Stream_, Arg_);
     }
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Stream);
-        Own(Arg);
+        DependsOn(Stream_);
+        Own(Arg_);
     }
 
-    IComputationNode* const Stream;
-    IComputationExternalNode* const Arg;
+    IComputationNode* const Stream_;
+    IComputationExternalNode* const Arg_;
 };
 
 } // namespace
@@ -142,5 +143,4 @@ IComputationNode* WrapIterable(TCallable& callable, const TComputationNodeFactor
     return new TIterableWrapper(ctx.Mutables, stream, arg);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

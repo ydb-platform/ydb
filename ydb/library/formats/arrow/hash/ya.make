@@ -1,12 +1,7 @@
 LIBRARY(library-formats-arrow-hash)
 
 PEERDIR(
-    contrib/libs/apache/arrow
-    ydb/library/formats/arrow/simple_builder
-    ydb/library/formats/arrow/switch
-    ydb/library/actors/core
-    ydb/library/services
-    ydb/library/actors/protos
+    contrib/libs/xxhash
 )
 
 SRCS(

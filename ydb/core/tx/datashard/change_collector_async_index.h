@@ -6,6 +6,10 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -50,7 +54,7 @@ public:
     bool NeedToReadKeys() const override;
 
     bool Collect(const TTableId& tableId, NTable::ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates, NACLib::TUserContext::TPtr userCtx) override;
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates, TIntrusivePtr<NACLib::TUserContext> userCtx) override;
 
 private:
     mutable THashMap<TTableId, TCachedTags> CachedTags;

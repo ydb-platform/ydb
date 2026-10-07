@@ -38,6 +38,7 @@ NActors::IActor* CreatePartitionActor(ui64 tabletId,
                                       bool SubDomainOutOfSpace,
                                       ui32 numChannels,
                                       const NActors::TActorId& writeQuoterActorId,
+                                      const NActors::TActorId& batchProcessorActorId,
                                       TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
                                       bool newPartition = false);
 

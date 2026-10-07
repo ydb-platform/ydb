@@ -9,7 +9,7 @@
 #include <util/random/random.h>
 #include <util/datetime/base.h>
 
-namespace NYql {
+namespace NYql::NCommon {
 
 namespace NPrivate {
 
@@ -143,8 +143,6 @@ YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DEFINE_CONTAINER_SETTING_SERIALIZER)
 
 } // namespace NPrivate
 
-namespace NCommon {
-
 bool TSettingDispatcher::IsRuntime(const TString& name) {
     auto normalizedName = NormalizeName(name);
     if (auto handler = Handlers_.Value(normalizedName, TSettingHandler::TPtr())) {
@@ -197,7 +195,7 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
         return handler->Handle(cluster, value, validateOnly, errorCallback);
     } else {
         // ignore unknown names in config
-        if (stage == EStage::CONFIG) {
+        if (stage == EStage::CONFIG && !StrictConfigValidation_) {
             return true;
         }
 
@@ -232,9 +230,21 @@ void TSettingDispatcher::Enumerate(std::function<void(std::string_view)> callbac
     }
 }
 
+ui64 TSettingDispatcher::CountSerializableStaticSettings() const {
+    ui64 count = 0;
+    for (const auto& [name, handler] : Handlers_) {
+        if (handler->HasSerializableValue()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 void TSettingDispatcher::SerializeStaticSettings(const std::function<void(const TString&, const TString&)>& callback) const {
     for (const auto& [name, handler] : Handlers_) {
-        handler->Serialize(callback);
+        if (handler->HasSerializableValue()) {
+            handler->Serialize(callback);
+        }
     }
 }
 
@@ -264,5 +274,4 @@ TSettingDispatcher::TErrorCallback TSettingDispatcher::GetErrorCallback(TPositio
     };
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

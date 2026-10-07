@@ -120,9 +120,7 @@ class ClientDocumenter:
         section.style.start_codeblock()
         section.style.new_line()
         section.write(
-            'client = session.create_client(\'{service}\')'.format(
-                service=self._service_name
-            )
+            f'client = session.create_client(\'{self._service_name}\')'
         )
         section.style.end_codeblock()
 
@@ -177,14 +175,14 @@ class ClientDocumenter:
             class_name = (
                 f'{self._client_class_name}.Client.exceptions.{error.name}'
             )
-            error_section.style.li(':py:class:`%s`' % class_name)
+            error_section.style.li(f':py:class:`{class_name}`')
 
     def _add_model_driven_method(self, section, method_name):
         service_model = self._client.meta.service_model
         operation_name = self._client.meta.method_to_api_mapping[method_name]
         operation_model = service_model.operation_model(operation_name)
 
-        example_prefix = 'response = client.%s' % method_name
+        example_prefix = f'response = client.{method_name}'
         full_method_name = (
             f"{section.context.get('qualifier', '')}{method_name}"
         )
@@ -344,7 +342,7 @@ class ClientExceptionsDocumenter:
         section.write('...')
         section.style.dedent()
         section.style.new_line()
-        section.write('except client.exceptions.%s as e:' % shape.name)
+        section.write(f'except client.exceptions.{shape.name} as e:')
         section.style.indent()
         section.style.new_line()
         section.write('print(e.response)')

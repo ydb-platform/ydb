@@ -4,6 +4,7 @@
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/core/util/intrusive_heap.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/services/services.pb.h>
@@ -473,6 +474,7 @@ namespace NLongTxService {
                 hFunc(TEvPrivate::TEvReconnect, Handle);
                 hFunc(TEvPrivate::TEvSnapshotMaintenance, Handle);
                 hFunc(TEvents::TEvUndelivered, Handle);
+                hFunc(NMon::TEvHttpInfo, Handle);
             }
         }
 
@@ -555,6 +557,11 @@ namespace NLongTxService {
         void ScheduleDeadlockDetection(TLockIsland&, TDuration delay);
 
     private:
+        void Handle(NMon::TEvHttpInfo::TPtr& ev);
+        TString RenderLocksMonPage();
+        TString RenderSnapshotsMonPage();
+
+    private:
         const TLongTxServiceSettings Settings;
         TString LogPrefix;
         TSessionSubscribeActor* SessionSubscribeActor = nullptr;
@@ -570,6 +577,7 @@ namespace NLongTxService {
         TActorId SnapshotsExchangeActorId;
         TLocalSnapshotsStoragePtr LocalSnapshotsStorage = MakeIntrusive<TLocalSnapshotsStorage>();
         TRemoteSnapshotsStoragePtr RemoteSnapshotsStorage = MakeIntrusive<TRemoteSnapshotsStorage>();
+        TInstant LastRegistryBuildTime;
 
         ui64 NextLockIslandId = 1;
         THashMap<ui64, TLockIsland> LockIslands;

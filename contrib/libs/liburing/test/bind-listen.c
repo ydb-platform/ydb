@@ -270,7 +270,14 @@ static int test_good_server(unsigned int ring_flags)
 	sqe->flags |= IOSQE_FIXED_FILE;
 
 	io_uring_submit(&ring);
-	io_uring_wait_cqe_timeout(&ring, &cqe, &ts);
+
+	ts.tv_sec = 1;
+	ts.tv_nsec = 0;
+	ret = io_uring_wait_cqe_timeout(&ring, &cqe, &ts);
+	if (ret) {
+		fprintf(stderr, "timeout waiting on recv: %d\n", ret);
+		return T_EXIT_FAIL;
+	}
 
 	if (cqe->res < 0) {
 		fprintf(stderr, "bad receive cqe. %d\n", cqe->res);

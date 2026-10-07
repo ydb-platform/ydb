@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     k,
     SUM(k) OVER w1 AS s1,

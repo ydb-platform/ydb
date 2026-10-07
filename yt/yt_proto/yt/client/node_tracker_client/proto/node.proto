@@ -97,6 +97,7 @@ message TNetworkStatistics
 {
     required string network = 1;
     required bool throttling_reads = 2 [default = false];
+    optional bool throttling_writes = 3 [default = false];
 }
 
 // Describes the current state of the whole node.

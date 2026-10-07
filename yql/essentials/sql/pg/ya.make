@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PROVIDES(
     yql_pg_sql_translator
@@ -6,6 +6,7 @@ PROVIDES(
 
 PEERDIR(
     yql/essentials/ast
+    yql/essentials/core/langver
     yql/essentials/core/sql_types
     yql/essentials/parser/pg_catalog
     yql/essentials/minikql
@@ -34,8 +35,6 @@ CFLAGS(
    -Dstat=microsoft_native_stat
 )
 ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

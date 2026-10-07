@@ -298,3 +298,6 @@ SELECT
     PgNot(PgBool(true)), -- PgBool(false)
 ;
 ```
+## Функции {#functions}
+
+{% include [pg_functions](../../_includes/pg_functions.md) %}

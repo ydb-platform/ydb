@@ -1,9 +1,11 @@
 #include "cleanup_tables.h"
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/subscriber/events/tables_erased/event.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -41,4 +43,4 @@ NColumnShard::ECumulativeCounters TCleanupTablesColumnEngineChanges::GetCounterI
     return isSuccess ? NColumnShard::COUNTER_CLEANUP_SUCCESS : NColumnShard::COUNTER_CLEANUP_FAIL;
 }
 
-}
+}   // namespace NKikimr::NOlap

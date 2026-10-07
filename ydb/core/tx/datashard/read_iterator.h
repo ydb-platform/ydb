@@ -1,16 +1,17 @@
 #pragma once
 
 #include "datashard.h"
-#include <ydb/core/tx/locks/locks.h>
 
 #include <ydb/core/base/row_version.h>
+#include <ydb/core/kqp/runtime/scheduler/fwd.h>
+#include <ydb/core/tablet_flat/flat_part_slice.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tx/locks/locks.h>
 
 #include <util/digest/multi.h>
 
 #include <memory>
-#include <unordered_map>
-#include <unordered_set>
+#include <optional>
 #include <vector>
 
 namespace NKikimr::NDataShard {
@@ -127,12 +128,13 @@ public:
     TReadIteratorState(
             const TReadIteratorId& readId, ui64 localReadId, const TPathId& pathId,
             const TActorId& sessionId, const TRowVersion& readVersion, bool isHeadRead,
-            TMonotonic ts)
+            TMonotonic ts, NKqp::NScheduler::TSchedulableReadPtr schedulableRead)
         : ReadId(readId)
         , LocalReadId(localReadId)
         , PathId(pathId)
         , ReadVersion(readVersion)
         , IsHeadRead(isHeadRead)
+        , SchedulableRead(std::move(schedulableRead))
         , SessionId(sessionId)
         , StartTs(ts)
     {}
@@ -200,6 +202,7 @@ public:
     // State itself //
 
     TQuota Quota;
+    NKqp::NScheduler::TSchedulableReadPtr SchedulableRead;
 
     // Number of rows processed so far
     ui64 TotalRows = 0;
@@ -215,6 +218,7 @@ public:
     ui64 LastAckSeqNo = 0;
     ui64 FirstUnprocessedQuery = 0; // must be unsigned
     TString LastProcessedKey;
+    // Inclusive cursor: erased key for ordinary reads, possibly unread row for sampling.
     bool LastProcessedKeyErased = false;
 
     // used when read is implemented with a scan
@@ -229,6 +233,11 @@ public:
 
     // Vector search pushdown
     std::shared_ptr<TReadIteratorVectorTop> VectorTopK;
+
+    const NKikimrTxDataShard::TReadSampling* Sampling = nullptr;
+    // Retained until fully read, even if the layout changes.
+    std::optional<NTable::TBounds> PendingSelectedUnit;
+    NKikimrTxDataShard::TReadSamplingStats SamplingStats;
 };
 
 using TReadIteratorsMap = THashMap<TReadIteratorId, TReadIteratorState, TReadIteratorId::THash>;

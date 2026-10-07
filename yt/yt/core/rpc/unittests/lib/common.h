@@ -131,9 +131,9 @@ public:
 
         // Make sure local bypass is globally enabled.
         // Individual tests will toggle per-connection flag to actually enable this feature.
-        auto config = New<NYT::NBus::TTcpDispatcherConfig>();
+        auto config = New<NYT::NBus::NTcp::TDispatcherConfig>();
         config->EnableLocalBypass = true;
-        NYT::NBus::TTcpDispatcher::Get()->Configure(config);
+        NYT::NBus::NTcp::TDispatcher::Get()->Configure(config);
     }
 
     void TearDown() final
@@ -268,7 +268,7 @@ public:
         const std::string& /*serverAddress*/,
         THashMap<std::string, NYTree::INodePtr> /*grpcArguments*/)
     {
-        auto config = NYT::NBus::TBusClientConfig::CreateTcp(address);
+        auto config = NYT::NBus::NTcp::TBusClientConfig::CreateTcp(address);
         if (EnableSsl) {
             config->EncryptionMode = NYT::NBus::EEncryptionMode::Required;
             config->VerificationMode = NYT::NBus::EVerificationMode::Full;
@@ -283,7 +283,7 @@ public:
 
     static NYT::NBus::IBusServerPtr CreateBusServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
     {
-        auto config = NYT::NBus::TBusServerConfig::CreateTcp(port);
+        auto config = NYT::NBus::NTcp::TBusServerConfig::CreateTcp(port);
         if (EnableSsl) {
             config->EncryptionMode = NYT::NBus::EEncryptionMode::Required;
             config->VerificationMode = NYT::NBus::EVerificationMode::Full;
@@ -292,9 +292,9 @@ public:
             config->PrivateKey = RpcServerKey;
         }
         config->EnableLocalBypass = EnableLocalBypass;
-        return NYT::NBus::CreateBusServer(
+        return NYT::NBus::NTcp::CreateBusServer(
             std::move(config),
-            NYT::NBus::GetYTPacketTranscoderFactory(),
+            NYT::NBus::NTcp::GetYTPacketTranscoderFactory(),
             std::move(memoryUsageTracker));
     }
 };
@@ -379,10 +379,10 @@ public:
     static NYT::NBus::IBusServerPtr CreateBusServer(ui16 port, IMemoryUsageTrackerPtr memoryUsageTracker)
     {
         SocketPath_ = GetWorkPath() + "/socket_" + ToString(port);
-        auto config = NYT::NBus::TBusServerConfig::CreateUds(SocketPath_);
-        return NYT::NBus::CreateBusServer(
+        auto config = NYT::NBus::NTcp::TBusServerConfig::CreateUds(SocketPath_);
+        return NYT::NBus::NTcp::CreateBusServer(
             config,
-            NYT::NBus::GetYTPacketTranscoderFactory(),
+            NYT::NBus::NTcp::GetYTPacketTranscoderFactory(),
             memoryUsageTracker);
     }
 
@@ -391,7 +391,7 @@ public:
         const std::string& serverAddress,
         THashMap<std::string, NYTree::INodePtr> /*grpcArguments*/)
     {
-        auto config = NYT::NBus::TBusClientConfig::CreateUds(
+        auto config = NYT::NBus::NTcp::TBusClientConfig::CreateUds(
             address == serverAddress ? SocketPath_ : address);
         auto client = CreateBusClient(config);
         return NRpc::NBus::CreateBusChannel(client);

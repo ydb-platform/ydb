@@ -72,7 +72,8 @@ NNodes::TExprBase DqBuildPartitionsStage(
     const TParentsMap& parentsMap,
     bool allowStageMultiUsage = true,
     TTypeAnnotationContext* typeCtx = nullptr,
-    bool enableShuffleElimination = false
+    bool enableShuffleElimination = false,
+    bool useSortForPartitionsByKeys = false
 );
 
 NNodes::TExprBase DqBuildPartitionStage(
@@ -145,7 +146,7 @@ NNodes::TExprBase DqBuildOrderedLMapOverMuxStage(NNodes::TExprBase node, TExprCo
 
 NNodes::TExprBase DqBuildLMapOverMuxStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TParentsMap& parentsMap);
 
-NNodes::TExprBase DqBuildExtendStage(NNodes::TExprBase node, TExprContext& ctx, bool enableParallelUnionAllConnections = false);
+NNodes::TExprBase DqBuildExtendStage(NNodes::TExprBase node, TExprContext& ctx, bool enableParallelUnionAllConnections = false, bool keepMerge = false);
 
 NNodes::TExprBase DqBuildPrecompute(NNodes::TExprBase node, TExprContext& ctx);
 
@@ -180,5 +181,13 @@ NNodes::TMaybeNode<NNodes::TExprBase> DqUnorderedOverStageInput(NNodes::TExprBas
     const TTypeAnnotationContext& typeAnnCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage);
 
 NNodes::TMaybeNode<NNodes::TExprBase> DqRewriteStreamLookupJoin(NNodes::TExprBase node, TExprContext& ctx);
+
+NNodes::TExprBase DqPushWatermarkGeneratorToStage(
+    NNodes::TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage = true
+);
 
 } // namespace NYql::NDq

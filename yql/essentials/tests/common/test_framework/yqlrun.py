@@ -46,7 +46,8 @@ def safe_symlink(src, dst):
 class YQLRun(object):
 
     def __init__(self, udfs_dir=None, prov='yt', use_sql2yql=False, keep_temp=True, binary=None, gateway_config=None,
-                 fs_config=None, extra_args=[], cfg_dir=None, support_udfs=True, langver=None, fuzz_universal=False):
+                 fs_config=None, extra_args=[], cfg_dir=None, support_udfs=True, langver=None, fuzz_universal=False,
+                 patch_cfg_file=None, secure_params={}):
         if binary is None:
             self.yqlrun_binary = yql_utils.yql_binary_path(os.getenv('YQL_YQLRUN_PATH') or 'yql/tools/yqlrun/yqlrun')
         else:
@@ -59,7 +60,13 @@ class YQLRun(object):
             self.sql2yql_binary = None
 
         try:
-            self.udf_resolver_binary = yql_utils.yql_binary_path(os.getenv('YQL_UDFRESOLVER_PATH') or 'yql/essentials/tools/udf_resolver/udf_resolver')
+            udf_resolver_path = os.getenv('YQL_UDFRESOLVER_PATH')
+            if udf_resolver_path:
+                self.udf_resolver_binary = yql_utils.yql_binary_path(udf_resolver_path)
+            else:
+                self.udf_resolver_binary = yql_utils.yql_binary_path_with_impl(
+                    'yql/essentials/tools/udf_resolver/udf_resolver'
+                )
         except Exception:
             self.udf_resolver_binary = None
 
@@ -83,6 +90,7 @@ class YQLRun(object):
             text_format.Merge(gateway_config, self.gateway_config)
 
         yql_utils.merge_default_gateway_cfg(cfg_dir or 'yql/essentials/cfg/tests', self.gateway_config)
+        yql_utils.merge_gateway_cfg_patch(patch_cfg_file, self.gateway_config)
 
         self.fs_config = file_storage_pb2.TFileStorageConfig()
 
@@ -103,6 +111,7 @@ class YQLRun(object):
 
         self.langver = langver
         self.fuzz_universal = fuzz_universal
+        self.secure_params = secure_params
 
     def yql_exec(self, program=None, program_file=None, files=None, urls=None,
                  run_sql=False, verbose=False, check_error=True, tables=None, pretty_plan=True,
@@ -148,6 +157,7 @@ class YQLRun(object):
                 cmd.append('--ansi-lexer')
             env = {
                 'YQL_DETERMINISTIC_MODE': '1',
+                'YQL_LINEAGE_CHECK': os.environ.get('YQL_LINEAGE_CHECK', '1'),
                 # XXX: Using UTC timezone is vital for deterministric
                 # behaviour of ClickHouse datetime machinery.
                 'TZ': 'UTC0'
@@ -215,7 +225,6 @@ class YQLRun(object):
         if self.extra_args:
             cmd += " ".join(self.extra_args) + " "
 
-        cmd += '--mounts=' + yql_utils.get_mount_config_file() + ' '
         cmd += '--validate-result-format '
         cmd += '--fuzz-untyped-lambda '
         if self.fuzz_universal:
@@ -299,6 +308,9 @@ class YQLRun(object):
         if run_sql and not self.use_sql2yql:
             cmd += '--sql '
 
+        for name, value in self.secure_params.items():
+            cmd += '--custom-tokens %s=%s ' % (name, value)
+
         if parameters:
             parameters_file = res_file_path('params.yson')
             with open(parameters_file, 'w') as f:
@@ -310,6 +322,7 @@ class YQLRun(object):
 
         env = {
             'YQL_DETERMINISTIC_MODE': '1',
+            'YQL_LINEAGE_CHECK': os.environ.get('YQL_LINEAGE_CHECK', '1'),
             # XXX: Using UTC timezone is vital for deterministric
             # behaviour of ClickHouse datetime machinery.
             'TZ': 'UTC0'

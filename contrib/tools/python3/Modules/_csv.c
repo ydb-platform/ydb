@@ -302,8 +302,12 @@ _set_char(const char *name, Py_UCS4 *target, PyObject *src, Py_UCS4 dflt)
 static int
 _set_str(const char *name, PyObject **target, PyObject *src, const char *dflt)
 {
-    if (src == NULL)
+    if (src == NULL) {
         *target = PyUnicode_DecodeASCII(dflt, strlen(dflt), NULL);
+        if (*target == NULL) {
+            return -1;
+        }
+    }
     else {
         if (src == Py_None)
             *target = NULL;
@@ -950,6 +954,12 @@ Reader_iternext(ReaderObj *self)
                          "(the file should be opened in text mode)",
                          Py_TYPE(lineobj)->tp_name
                 );
+            Py_DECREF(lineobj);
+            return NULL;
+        }
+        if (self->fields == NULL) {
+            PyErr_SetString(module_state->error_obj,
+                            "iterator has already advanced the reader");
             Py_DECREF(lineobj);
             return NULL;
         }

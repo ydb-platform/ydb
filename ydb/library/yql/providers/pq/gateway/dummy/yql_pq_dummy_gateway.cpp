@@ -106,8 +106,8 @@ void TDummyPqGateway::AddCluster(const NYql::TPqClusterConfig& cluster) {
     Y_UNUSED(cluster);
 }
 
-ITopicClient::TPtr TDummyPqGateway::GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) {
-    return CreateFileTopicClient(Topics, {
+std::shared_ptr<NFq::IMessageStreamClient> TDummyPqGateway::GetTopicClient(const TString& stream, const TDriver& driver, const TTopicClientSettings& settings) {
+    return CreateFileTopicClient(stream, Topics, {
         .Database = settings.Database_.value_or(driver.GetConfig().GetDatabase()),
         .SkipDatabasePrefix = AllowSkipDatabasePrefix,
     });
@@ -118,6 +118,11 @@ IFederatedTopicClient::TPtr TDummyPqGateway::GetFederatedTopicClient(const TDriv
         .Database = settings.Database_.value_or(driver.GetConfig().GetDatabase()),
         .SkipDatabasePrefix = AllowSkipDatabasePrefix,
     });
+}
+
+IDeferredPublishClient::TPtr TDummyPqGateway::GetDeferredPublishClient(const NYdb::TDriver& driver, const NYdb::TCommonClientSettings& settings) {
+    Y_UNUSED(driver, settings);
+    Y_ENSURE(false, "Not implemented");
 }
 
 TTopicClientSettings TDummyPqGateway::GetTopicClientSettings() const {

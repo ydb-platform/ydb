@@ -3,9 +3,12 @@
 // For the sake of sane code completion.
 #include "nonblocking_batcher.h"
 #endif
-#undef NONBLOCKING_BATCHER_INL_H_
 
 #include <yt/yt/core/concurrency/delayed_executor.h>
+
+#include <library/cpp/yt/cpu_clock/clock.h>
+
+#include <algorithm>
 
 namespace NYT::NConcurrency {
 
@@ -106,7 +109,7 @@ template <class T, CBatchLimiter<T> TBatchLimiter>
 void TNonblockingBatcher<T, TBatchLimiter>::UpdateBatchDuration(TDuration batchDuration)
 {
     auto guard = Guard(SpinLock_);
-    BatchDuration_ = batchDuration;
+    SetBatchDuration(guard, batchDuration);
 }
 
 template <class T, CBatchLimiter<T> TBatchLimiter>
@@ -123,6 +126,9 @@ template <class T, CBatchLimiter<T> TBatchLimiter>
 void TNonblockingBatcher<T, TBatchLimiter>::UpdateAllowEmptyBatches(bool allowEmptyBatches)
 {
     auto guard = Guard(SpinLock_);
+    if (CurrentBatch_.empty() && AllowEmptyBatches_ != allowEmptyBatches) {
+        ResetTimer(guard);
+    }
     AllowEmptyBatches_ = allowEmptyBatches;
     StartTimer(guard);
 }
@@ -131,7 +137,12 @@ template <class T, CBatchLimiter<T> TBatchLimiter>
 void TNonblockingBatcher<T, TBatchLimiter>::UpdateSettings(TDuration batchDuration, TBatchLimiter batchLimiter, bool allowEmptyBatches)
 {
     auto guard = Guard(SpinLock_);
-    BatchDuration_ = batchDuration;
+
+    if (CurrentBatch_.empty() && AllowEmptyBatches_ != allowEmptyBatches) {
+        ResetTimer(guard);
+    }
+
+    SetBatchDuration(guard, batchDuration);
     BatchLimiter_ = batchLimiter;
     AllowEmptyBatches_ = allowEmptyBatches;
 
@@ -141,9 +152,25 @@ void TNonblockingBatcher<T, TBatchLimiter>::UpdateSettings(TDuration batchDurati
     StartTimer(guard);
 }
 
+template <class T, CBatchLimiter<T> TBatchLimiter>
+void TNonblockingBatcher<T, TBatchLimiter>::SetBatchDuration(TGuard<TSpinLock>& /*guard*/, TDuration batchDuration)
+{
+    if (BatchDuration_ == batchDuration) {
+        return;
+    }
+
+    BatchDuration_ = batchDuration;
+    if (TimerState_ == ETimerState::Started) {
+        ++FlushGeneration_;
+        TDelayedExecutor::CancelAndClear(BatchFlushCookie_);
+        BatchFlushCookie_ = TDelayedExecutor::Submit(
+            BIND(&TNonblockingBatcher::OnBatchTimeout, MakeWeak(this), FlushGeneration_),
+            std::max(TimerStartTime_ + BatchDuration_, GetInstant()));
+    }
+}
 
 template <class T, CBatchLimiter<T> TBatchLimiter>
-void TNonblockingBatcher<T, TBatchLimiter>::ResetTimer(TGuard<NThreading::TSpinLock>& /*guard*/)
+void TNonblockingBatcher<T, TBatchLimiter>::ResetTimer(TGuard<TSpinLock>& /*guard*/)
 {
     if (TimerState_ == ETimerState::Started) {
         ++FlushGeneration_;
@@ -153,18 +180,19 @@ void TNonblockingBatcher<T, TBatchLimiter>::ResetTimer(TGuard<NThreading::TSpinL
 }
 
 template <class T, CBatchLimiter<T> TBatchLimiter>
-void TNonblockingBatcher<T, TBatchLimiter>::StartTimer(TGuard<NThreading::TSpinLock>& /*guard*/)
+void TNonblockingBatcher<T, TBatchLimiter>::StartTimer(TGuard<TSpinLock>& /*guard*/)
 {
     if (TimerState_ == ETimerState::Initial && !Promises_.empty() && (AllowEmptyBatches_ || !CurrentBatch_.empty())) {
+        TimerStartTime_ = GetInstant();
         TimerState_ = ETimerState::Started;
         BatchFlushCookie_ = TDelayedExecutor::Submit(
             BIND(&TNonblockingBatcher::OnBatchTimeout, MakeWeak(this), FlushGeneration_),
-            BatchDuration_);
+            TimerStartTime_ + BatchDuration_);
     }
 }
 
 template <class T, CBatchLimiter<T> TBatchLimiter>
-bool TNonblockingBatcher<T, TBatchLimiter>::IsFlushNeeded(TGuard<NThreading::TSpinLock>& /*guard*/) const
+bool TNonblockingBatcher<T, TBatchLimiter>::IsFlushNeeded(TGuard<TSpinLock>& /*guard*/) const
 {
     return
         CurrentBatchLimiter_.IsFull() ||
@@ -172,7 +200,7 @@ bool TNonblockingBatcher<T, TBatchLimiter>::IsFlushNeeded(TGuard<NThreading::TSp
 }
 
 template <class T, CBatchLimiter<T> TBatchLimiter>
-void TNonblockingBatcher<T, TBatchLimiter>::CheckFlush(TGuard<NThreading::TSpinLock>& guard)
+void TNonblockingBatcher<T, TBatchLimiter>::CheckFlush(TGuard<TSpinLock>& guard)
 {
     if (!IsFlushNeeded(guard)) {
         return;
@@ -185,7 +213,7 @@ void TNonblockingBatcher<T, TBatchLimiter>::CheckFlush(TGuard<NThreading::TSpinL
 }
 
 template <class T, CBatchLimiter<T> TBatchLimiter>
-void TNonblockingBatcher<T, TBatchLimiter>::CheckReturn(TGuard<NThreading::TSpinLock>& guard)
+void TNonblockingBatcher<T, TBatchLimiter>::CheckReturn(TGuard<TSpinLock>& guard)
 {
     if (Promises_.empty() || Batches_.empty()) {
         return;
@@ -197,8 +225,10 @@ void TNonblockingBatcher<T, TBatchLimiter>::CheckReturn(TGuard<NThreading::TSpin
     if (AllowEmptyBatches_ && !Promises_.empty()) {
         StartTimer(guard);
     }
-    guard.Release();
-    promise.Set(std::move(batch));
+    {
+        auto unguard = Unguard(guard);
+        promise.Set(std::move(batch));
+    }
 }
 
 template <class T, CBatchLimiter<T> TBatchLimiter>

@@ -173,7 +173,7 @@ void TForwardingUnknownYsonFieldValueWriter::ThrowUnknownField()
     THROW_ERROR_EXCEPTION("Unknown field %Qv at %v",
         lastElement,
         YPathStack_.GetHumanReadablePath())
-        << TErrorAttribute("ypath", path);
+        .With("ypath", path);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

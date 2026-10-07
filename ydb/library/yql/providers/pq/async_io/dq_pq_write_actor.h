@@ -26,14 +26,23 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     ui64 taskId,
     const THashMap<TString, TString>& secureParams,
     NYdb::TDriver driver,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqStaticGateway::TPtr pqGateway,
     bool enableStreamingQueriesCounters,
     i64 freeSpace = DqPqDefaultFreeSpace,
-    bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag = true);
+    i64 currentExecutionGeneration = 0,
+    bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag = true,
+    bool hasCheckpoints = false);
 
-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(), bool enableStreamingQueriesCounters = true, bool enableDeduplicationFeatureFlag = true);
+void RegisterDqPqWriteActorFactory(
+    TDqAsyncIoFactory& factory,
+    NYdb::TDriver driver,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    const IPqStaticGateway::TPtr& pqGateway,
+    const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
+    bool enableStreamingQueriesCounters = true,
+    bool enableDeduplicationFeatureFlag = true);
 
 } // namespace NYql::NDq

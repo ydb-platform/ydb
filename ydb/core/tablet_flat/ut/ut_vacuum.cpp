@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
+#include <util/generic/scope.h>
 
 namespace NKikimr::NTable {
 
@@ -193,13 +194,56 @@ int BlobStorageValueCountInAllGroups(TMyEnvBase& env, const TString& value) {
 Y_UNIT_TEST_SUITE(Vacuum) {
     ui32 TestTabletFlags = ui32(NFake::TDummy::EFlg::Comp) | ui32(NFake::TDummy::EFlg::Vac);
 
+    Y_UNIT_TEST(CompletionMayStopTablet) {
+        class TContextCheckingTablet : public NFake::TDummy {
+        public:
+            TContextCheckingTablet(const TActorId& tablet, TTabletStorageInfo* info, const TActorId& edge)
+                : TDummy(tablet, info, edge)
+                , Edge(edge)
+            {}
+
+            void VacuumComplete(ui64 generation, const TActorContext& ctx) override {
+                UNIT_ASSERT_VALUES_EQUAL(ctx.SelfID, SelfId());
+                ctx.Send(Edge, new NFake::TEvDataCleaned(generation));
+                HandlePoison(ctx);
+            }
+
+            const TActorId Edge;
+        };
+
+        TMyEnvBase env;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TContextCheckingTablet(tablet, info, env.Edge);
+        });
+        env.WaitFor<NFake::TEvReady>();
+        ui32 snapshots = 0;
+        ui32 finalSnapshotStep = 0;
+        auto commits = env->AddObserver<TEvTablet::TEvCommit>([&](auto& ev) {
+            if (ev->Get()->IsSnapshot && ++snapshots == 3) {
+                finalSnapshotStep = ev->Get()->Step;
+            }
+        });
+        auto results = env->AddObserver<TEvTablet::TEvCommitResult>([&](auto& ev) {
+            if (finalSnapshotStep && ev->Get()->Step == finalSnapshotStep) {
+                ev->Get()->YellowMoveChannels.push_back(1);
+            }
+        });
+        env.SendSync(new NFake::TEvCall{[](auto* executor, const auto& ctx) {
+            executor->StartVacuum(234ull);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->VacuumGeneration, 234);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots, 3);
+    }
+
     Y_UNIT_TEST(StartVacuumNoTables) {
         TMyEnvBase env;
         env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         env.FireDummyTablet(TestTabletFlags);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -213,7 +257,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.FireDummyTablet(TestTabletFlags);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -222,7 +266,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.RestartTablet(TestTabletFlags);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(235);
+            executor->StartVacuum(235ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } }, true);
         auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -253,7 +297,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -284,7 +328,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_VALUES_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -322,7 +366,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_VALUES_EQUAL(readRows, 2);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -356,7 +400,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.WaitFor<NFake::TEvCompacted>();
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(235);
+            executor->StartVacuum(235ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -411,7 +455,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -456,7 +500,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -489,8 +533,8 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
-            executor->StartVacuum(235);
+            executor->StartVacuum(234ull);
+            executor->StartVacuum(235ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -508,12 +552,12 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendAsync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(236);
+            executor->StartVacuum(236ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
         env.SendAsync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(237);
+            executor->StartVacuum(237ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -535,7 +579,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -565,7 +609,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 43) }, true);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -591,7 +635,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.WaitFor<NFake::TEvCompacted>();
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(235);
+            executor->StartVacuum(235ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -629,21 +673,21 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_VALUES_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
         UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->VacuumGeneration, 234);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(115);
+            executor->StartVacuum(115ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
         UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->VacuumGeneration, 234);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev3 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -690,7 +734,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.WaitFor<NFake::TEvCompacted>();
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(235);
+            executor->StartVacuum(235ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -715,6 +759,168 @@ Y_UNIT_TEST_SUITE(Vacuum) {
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value43), 0);
+    }
+
+    Y_UNIT_TEST(EmptyGcRetryResumesVacuum) {
+        struct TStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) override {
+                auto* info = NFake::TStarter::MakeTabletInfo(tablet, channels);
+                // All test blobs belong to the latest entry; the old group is empty.
+                info->Channels[2].History.emplace_back(1, 3);
+                return info;
+            }
+        } starter;
+        struct TTxDropTable : ITransaction {
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                txc.DB.Alter().DropTable(101);
+                return true;
+            }
+            void Complete(const TActorContext& ctx) override {
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            }
+        };
+
+        TMyEnvBase env;
+        auto fire = [&] {
+            // Enable history tracking at boot, then pause cutting until S2.
+            env->GetAppData().FeatureFlags.SetEnableCutHistory(true);
+            auto bootCommits = env->AddObserver<TEvTablet::TEvCommit>([&](auto& ev) {
+                if (ev->Get()->IsSnapshot) {
+                    env->GetAppData().FeatureFlags.SetEnableCutHistory(false);
+                }
+            });
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new NFake::TDummy(tablet, info, env.Edge, TestTabletFlags);
+            }, 0, &starter);
+            env.WaitFor<NFake::TEvReady>();
+            env->GetAppData().FeatureFlags.SetEnableCutHistory(false);
+        };
+        fire();
+        env.SendSync(new NFake::TEvExecute{new TTxInitSchema({101}, true)});
+        env.SendSync(new NFake::TEvExecute{new TTxWriteRow(101, 42, TString(100 * 1024, 'a'), ValueFamily2ColumnId)});
+        env.SendSync(new NFake::TEvCompact(101));
+        env.WaitFor<NFake::TEvCompacted>();
+        env.SendSync(new NFake::TEvExecute{new TTxDropTable});
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        ui32 ordinaryRequests = 0;
+        ui32 hardRequests = 0;
+        auto collections = env->AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](auto& ev) {
+            const auto* gc = ev->Get();
+            if (gc->Channel != 2) {
+                return;
+            }
+            if (gc->Hard) {
+                ++hardRequests;
+                UNIT_ASSERT_VALUES_EQUAL(gc->CollectGeneration, 0);
+                UNIT_ASSERT_VALUES_EQUAL(gc->CollectStep, Max<ui32>());
+                UNIT_ASSERT(!gc->Keep && !gc->DoNotKeep);
+            } else {
+                ++ordinaryRequests;
+                UNIT_ASSERT_VALUES_EQUAL(gc->CollectGeneration, gc->RecordGeneration);
+            }
+        });
+        TBlockEvents<TEvBlobStorage::TEvCollectGarbageResult> ordinaryResults(*env, [](const auto& ev) {
+            return ev->Get()->Channel == 2;
+        });
+        fire();
+        env->WaitFor("ordinary GC after restart", [&] { return !ordinaryResults.empty(); });
+
+        ui32 snapshots = 0;
+        ui32 firstSnapshot = 0;
+        ui32 secondSnapshot = 0;
+        ui32 requestsBeforeFinalSnapshot = 0;
+        auto commits = env->AddObserver<TEvTablet::TEvCommit>([&](auto& ev) {
+            if (ev->Get()->IsSnapshot) {
+                if (++snapshots == 1) {
+                    firstSnapshot = ev->Get()->Step;
+                } else if (snapshots == 2) {
+                    secondSnapshot = ev->Get()->Step;
+                    env->GetAppData().FeatureFlags.SetEnableCutHistory(true);
+                } else if (snapshots == 3) {
+                    requestsBeforeFinalSnapshot = ordinaryRequests + hardRequests;
+                }
+            }
+        });
+        TBlockEvents<TEvTablet::TEvCommitResult> firstCommit(*env, [&](const auto& ev) {
+            return firstSnapshot && ev->Get()->Step == firstSnapshot;
+        });
+        TBlockEvents<TEvTablet::TEvSnapshotConfirmed> confirmations(*env);
+        TBlockEvents<TEvTablet::TEvGcForStepAckResponse> tabletGc(*env);
+        env.SendSync(new NFake::TEvCall{[](auto* executor, const auto& ctx) {
+            executor->StartVacuum(234ull);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        env->WaitFor("first vacuum snapshot", [&] { return !firstCommit.empty(); });
+
+        // S1 was generated with ordinary GC in flight. Finish it before S1 commits,
+        // leaving an empty channel with a committed current-generation barrier.
+        ordinaryResults.Stop().Unblock();
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT(ordinaryRequests > 0);
+        UNIT_ASSERT_VALUES_EQUAL(hardRequests, 0);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots, 1);
+
+        TBlockEvents<TEvBlobStorage::TEvCollectGarbageResult> hardResults(*env, [](const auto& ev) {
+            return ev->Get()->Channel == 2;
+        });
+        firstCommit.Stop().Unblock();
+        env->WaitFor("hard barrier from second snapshot", [&] { return !hardResults.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(snapshots, 2);
+        UNIT_ASSERT_VALUES_EQUAL(hardRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(hardResults.size(), 1);
+        const auto executorId = hardResults.front()->GetRecipientRewrite();
+
+        // Retain the actual timer scheduled by the failed GC response. Its event
+        // type is private to the executor, so select its short self-timer instead.
+        TAutoPtr<IEventHandle> retry;
+        const auto failedAt = env->GetCurrentTime();
+        TTestActorRuntimeBase::TScheduledEventsSelector previousSelector;
+        previousSelector = env->SetScheduledEventsSelectorFunc([&](auto& runtime, auto& scheduled, auto& queue) {
+            if (!retry) {
+                for (auto it = scheduled.begin(); it != scheduled.end(); ++it) {
+                    if (it->Event->GetRecipientRewrite() == executorId &&
+                        it->Deadline > failedAt && it->Deadline < failedAt + TDuration::MilliSeconds(10))
+                    {
+                        if (it->Cookie->Get()) {
+                            UNIT_ASSERT(it->Cookie->Detach());
+                        }
+                        retry = it->Event;
+                        scheduled.erase(it);
+                        return;
+                    }
+                }
+            }
+            previousSelector(runtime, scheduled, queue);
+        });
+        Y_DEFER { env->SetScheduledEventsSelectorFunc(std::move(previousSelector)); };
+        hardResults.front()->Get()->Status = NKikimrProto::ERROR;
+        hardResults.Stop().Unblock();
+        env->WaitFor("GC retry scheduled", [&] { return bool(retry); });
+        env->SetScheduledEventsSelectorFunc(previousSelector);
+        env->WaitFor("second snapshot confirmation", [&] {
+            for (const auto& ev : confirmations) {
+                if (ev->Get()->Step == secondSnapshot) {
+                    return true;
+                }
+            }
+            return false;
+        });
+        env->WaitFor("tablet GC acknowledgement", [&] { return !tabletGc.empty(); });
+        confirmations.Stop().Unblock();
+        tabletGc.Stop().Unblock();
+        UNIT_ASSERT_C(!env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(1)),
+            "vacuum must still wait while the empty channel has a pending retry");
+        const ui32 requestsBeforeRetry = ordinaryRequests + hardRequests;
+
+        // All confirmations, acknowledgements and progress events have drained.
+        // This retry sends no request, but must itself resume vacuum progress.
+        env->Send(retry.Release(), 0, true);
+        auto completed = env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(1));
+        UNIT_ASSERT_C(completed, "an empty GC retry must resume and complete idle vacuum");
+        UNIT_ASSERT_VALUES_EQUAL(completed->Get()->VacuumGeneration, 234);
+        UNIT_ASSERT_VALUES_EQUAL(requestsBeforeFinalSnapshot, requestsBeforeRetry);
+        UNIT_ASSERT_VALUES_EQUAL(snapshots, 3);
     }
 
     Y_UNIT_TEST(StartVacuumWithSysTabletGCErrors) {
@@ -742,7 +948,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 42) });
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(235);
+            executor->StartVacuum(235ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -754,6 +960,48 @@ Y_UNIT_TEST_SUITE(Vacuum) {
 
         auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
         UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->VacuumGeneration, 235);
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
+    }
+
+    Y_UNIT_TEST(NoTag) {
+        TString value42(size_t(100 * 1024), 'a');
+
+        TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env.FireDummyTablet(TestTabletFlags);
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
+
+        env.SendSync(new NFake::TEvCompact(101));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCount(env, value42, 1), 1);
+
+        env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 42) });
+
+        int readRows = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(101, readRows) });
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 0);
+
+        env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
+            executor->StartVacuum(TNoTag());
+            executor->StartVacuum(TVacuumGeneration(555));
+            executor->StartVacuum(TNoTag());
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        } });
+        auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->VacuumGeneration, 555);
+
+
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
+        env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 42) });
+        env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
+            executor->StartVacuum(TNoTag());
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        } });
+        auto ev3 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev3->Get()->VacuumGeneration, 555);
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
     }

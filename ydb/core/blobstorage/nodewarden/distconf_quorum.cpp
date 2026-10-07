@@ -1,5 +1,9 @@
 #include "distconf_quorum.h"
 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
 
     std::optional<bool> HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
@@ -66,12 +70,36 @@ namespace NKikimr::NStorage {
         return res;
     }
 
+    static std::optional<bool> HasBootstrapNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config,
+                                                      const THashSet<TNodeIdentifier>& successfulNodes,
+                                                      TStringStream *out) {
+        if (config.GetGeneration() || !config.HasBlobStorageConfig() || config.GetBlobStorageConfig().HasServiceSet()) {
+            return std::nullopt;
+        }
+
+        size_t numSuccessful = 0;
+        for (const auto& node : config.GetAllNodes()) {
+            numSuccessful += successfulNodes.contains(TNodeIdentifier(node));
+        }
+        const size_t numNodes = config.AllNodesSize();
+        const bool hasQuorum = numSuccessful > numNodes - numSuccessful;
+        if (!hasQuorum && out) {
+            *out << " config:no-node-majority:" << numSuccessful << '/' << numNodes;
+        }
+        return hasQuorum;
+    }
+
     bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TNodeIdentifier> successful,
             const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
             const TNodeWardenConfig& nwConfig, TStringStream *out, bool allowConfigQuorum) {
         if (allowConfigQuorum) {
-            // calculate pseudo-quorum for all drives in static groups in seen nodes
             THashSet<TNodeIdentifier> successfulNodes(successful.begin(), successful.end());
+
+            if (const auto quorum = HasBootstrapNodeQuorum(config, successfulNodes, out)) {
+                return *quorum;
+            }
+
+            // calculate pseudo-quorum for all drives in static groups in seen nodes
             std::vector<TSuccessfulDisk> successfulDisks;
             EnumerateConfigDrives(config, 0, [&](const TNodeIdentifier& node, const NKikimrBlobStorage::THostConfigDrive& drive) {
                 if (successfulNodes.contains(node)) {
@@ -164,7 +192,9 @@ namespace NKikimr::NStorage {
             const THashMap<TString, TBridgePileId>& /*bridgePileNameMap*/, TBridgePileId singleBridgePileId,
             const TNodeWardenConfig& nwConfig, bool allowUnformatted, IOutputStream *out, const char *name) {
         auto makeError = [&](TString error) -> bool {
-            STLOG(PRI_CRIT, BS_NODE, NWDC41, "configuration incorrect", (Error, error));
+            YDB_LOG_CRIT("Configuration incorrect",
+                {"marker", "NWDC41"},
+                {"error", error});
             //Y_DEBUG_ABORT("%s", error.c_str());
             if (out) {
                 *out << ' ' << name << ':' << error;

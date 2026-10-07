@@ -46,7 +46,7 @@ static int init_ffi_lib(PyObject *m)
             return -1;
 
         for (i = 0; all_dlopen_flags[i].name != NULL; i++) {
-            x = PyInt_FromLong(all_dlopen_flags[i].value);
+            x = PyLong_FromLong(all_dlopen_flags[i].value);
             if (x == NULL)
                 return -1;
             res = PyDict_SetItemString(FFI_Type.tp_dict,
@@ -116,7 +116,6 @@ static int make_included_tuples(char *module_name,
 
 static PyObject *_my_Py_InitModule(char *module_name)
 {
-#if PY_MAJOR_VERSION >= 3
     struct PyModuleDef *module_def, local_module_def = {
         PyModuleDef_HEAD_INIT,
         module_name,
@@ -137,9 +136,6 @@ static PyObject *_my_Py_InitModule(char *module_name)
     }
 # endif
     return m;
-#else
-    return Py_InitModule(module_name, NULL);
-#endif
 }
 
 static PyObject *b_init_cffi_1_0_external_module(PyObject *self, PyObject *arg)
@@ -211,12 +207,10 @@ static PyObject *b_init_cffi_1_0_external_module(PyObject *self, PyObject *arg)
                              (PyObject *)lib) < 0)
         return NULL;
 
-#if PY_MAJOR_VERSION >= 3
     /* add manually 'module_name' in sys.modules: it seems that 
        Py_InitModule() is not enough to do that */
     if (PyDict_SetItemString(modules_dict, module_name, m) < 0)
         return NULL;
-#endif
 
     return m;
 }

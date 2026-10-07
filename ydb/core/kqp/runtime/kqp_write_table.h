@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/ptr.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -67,15 +68,38 @@ IDataBatcherPtr CreateColumnDataBatcher(
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr,
     std::vector<ui32> readIndex = {});
 
+IDataBatcherPtr CreateStructOfRowsDataBatcher(
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> columns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns,
+    std::vector<ui32> writeIndex,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr);
+
 class IDataBatchProjection : public TThrRefBase {
 public:
     virtual void AddRow(TConstArrayRef<TCell> row) = 0;
     virtual IDataBatchPtr Flush() = 0;
 };
 
+class IFulltextTokenizeProjection : public IDataBatchProjection {
+public:
+    virtual IDataBatchPtr FlushDocs() = 0;
+    virtual IDataBatchPtr FlushDict() = 0;
+    virtual IDataBatchPtr FlushStats() = 0;
+    virtual void SetGen(NTableIndex::NFulltext::TGen gen) = 0;
+};
+
 using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
 
 IDataBatchProjectionPtr CreateDataBatchProjection(
+    TConstArrayRef<ui32> indexes,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
+
+IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
+    TConstArrayRef<NScheme::TTypeInfo> columnTypes,
+    ui32 dataColumnCount,
+    bool withFreq,
+    bool added,
+    const Ydb::Table::FulltextIndexSettings& settings,
     TConstArrayRef<ui32> indexes,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
@@ -92,7 +116,8 @@ bool IsEqual(
     TConstArrayRef<NScheme::TTypeInfo> types);
 
 std::vector<TConstArrayRef<TCell>> GetRows(
-    const NKikimr::NKqp::IDataBatchPtr& batch);
+    const NKikimr::NKqp::IDataBatchPtr& batch,
+    const size_t offset = 0);
 
 std::vector<TConstArrayRef<TCell>> CutColumns(
     const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);
@@ -145,6 +170,29 @@ public:
     virtual void OnPartitioningChanged(
         const TPartitioning::TCPtr& partitioning) = 0;
 
+    // The partitioning the controller currently holds (the pre-update one while a new
+    // partitioning is being applied). Used by the write actor to compute the covering
+    // targets of shards removed by a split/merge.
+    virtual TPartitioning::TCPtr GetPartitioning() const = 0;
+
+    // Shards present in ShardsInfo but absent from the current partitioning: their
+    // tablet ids were removed by a split/merge, their pending batches (if any) must be
+    // re-routed to the shards now covering their key ranges.
+    virtual TVector<ui64> GetDeletedShards() const = 0;
+
+    // Re-route the pending batches of shards removed by a split/merge to the shards
+    // now covering their key ranges, preserving the original WriteSeqNum and setting
+    // OriginalShard on the batches. Only row-table (DataShard) controllers with
+    // EnableWriteSeqNum or Inconsistent; the caller must gate this.
+    virtual void ReRouteShards(TVector<ui64>&& deletedShards) = 0;
+
+    // Register empty shard records for the given shards so they receive covering
+    // messages (prepare) at commit time. Used for split/merge covering shards that
+    // received neither re-routed rows nor transferred TxManager locks: they still hold
+    // the DataShard-side transferred chain of the removed shard and must join the
+    // commit, or the distributed prepare would wait for them forever.
+    virtual void EnsureShards(const TVector<ui64>& shardIds) = 0;
+
     using TWriteToken = ui64;
 
     // Data ordering invariant:
@@ -158,7 +206,10 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         const ui32 defaultColumnsCount,
-        const i64 priority) = 0;
+        const i64 priority,
+        // MvccSnapshot of the operation that opened this write token. Each write
+        // token belongs to exactly one operation, so the snapshot travels with it.
+        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot) = 0;
     virtual void Write(
         const TWriteToken token,
         IDataBatchPtr&& data) = 0;
@@ -173,6 +224,9 @@ public:
     virtual void SetTokenQuerySpanId(TWriteToken token, ui64 querySpanId) = 0;
     // Get the QuerySpanId of the first pending batch for a shard (0 if none).
     virtual ui64 GetFirstBatchQuerySpanId(ui64 shardId) const = 0;
+    // Get the MvccSnapshot that must be attached to the next message for a shard.
+    // All in-flight batches of the message must share the same snapshot.
+    virtual std::optional<NKikimrDataEvents::TMvccSnapshot> GetMessageMvccSnapshot(ui64 shardId) const = 0;
 
     virtual void Close() = 0;
 
@@ -190,6 +244,8 @@ public:
     virtual ui64 GetShardsCount() const = 0;
     virtual TVector<ui64> GetShardsIds() const = 0;
 
+    virtual bool HasShard(ui64 shardId) const = 0;
+
     struct TMessageMetadata {
         ui64 Cookie = 0;
         ui64 OperationsCount = 0;
@@ -199,19 +255,23 @@ public:
     };
     virtual std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) = 0;
 
+    virtual TMessageMetadata PrepareMessageMetadata(ui64 shardId) = 0;
+
+    virtual ui64 AllocateMessageCookie(ui64 shardId) = 0;
+
     struct TSerializationResult {
         i64 TotalDataSize = 0;
         TVector<ui64> PayloadIndexes;
     };
 
-    virtual TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) = 0;
+    virtual TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) = 0;
 
     struct TMessageAcknowledgedResult {
         ui64 DataSize = 0;
         bool IsShardEmpty = 0;
     };
 
-    virtual std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
+    virtual TMessageAcknowledgedResult OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
     virtual void OnMessageSent(ui64 shardId, ui64 cookie) = 0;
 
     virtual void ResetRetries(ui64 shardId, ui64 cookie) = 0;
@@ -230,8 +290,15 @@ using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;
 
 struct TShardedWriteControllerSettings {
     i64 MemoryLimitTotal = 0;
+    i64 ColumnShardMaxOperationBytes = 0;
     bool Inconsistent = false;
+    bool EnableWriteSeqNum = false;
+    ui64 WriterIndex = 0;
 };
+
+bool IsSupersededWriteResult(ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata);
+
+bool IsIgnorableSupersededStatus(NKikimrDataEvents::TEvWriteResult::EStatus status);
 
 IShardedWriteControllerPtr CreateShardedWriteController(
     const TShardedWriteControllerSettings& settings,

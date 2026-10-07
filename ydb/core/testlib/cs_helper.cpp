@@ -68,7 +68,7 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
 
     Ydb::Table::BulkUpsertRequest request;
     request.mutable_arrow_batch_settings()->set_schema(serializedSchema);
-    request.set_data(data);
+    request.set_data(std::move(data));
     request.set_table(testTable);
 
     std::atomic<size_t> responses = 0;
@@ -184,9 +184,6 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
 }
 
 void THelper::SetForcedCompaction(const TString& storeName) {
-    //In some tests we expect, that a compaction will start immidiately
-    //For now, we use l-bucket optimizer for this purpose
-    //In the future it should be replaced with lc-bucket or more sophisticated compaction optimizer planner
     auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     request->Record.SetExecTimeoutPeriod(Max<ui64>());
     NKikimrSchemeOp::TModifyScheme modyfySchemeOp;
@@ -198,13 +195,12 @@ void THelper::SetForcedCompaction(const TString& storeName) {
     schemaPreset->SetName("default");
     auto schemaOptions = schemaPreset->MutableAlterSchema()->MutableOptions();
     schemaOptions->SetSchemeNeedActualization(false);
-    auto plannerConstructot =schemaOptions->MutableCompactionPlannerConstructor();
-    plannerConstructot->SetClassName("l-buckets");
-    *plannerConstructot->MutableLBuckets() = NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer{};
+    auto* plannerConstructor = schemaOptions->MutableCompactionPlannerConstructor();
+    plannerConstructor->SetClassName("tiling++");
+    plannerConstructor->MutableTiling()->SetJson("{}");
 
     ExecuteModifyScheme(modyfySchemeOp);
 }
-
 
 TString THelper::GetTestTableSchema() const {
     TStringBuilder sb;

@@ -116,6 +116,16 @@ inline TActorId MakeBlobStorageSyncBrokerID() {
     return TActorId(0, TStringBuf(x, 12));
 }
 
+inline TActorId MakeBlobStorageStartupDataSyncBrokerID() {
+    char x[12] = {'b', 's', 's', 't', 'd', 's', 'y', 'n', 'b', 'r', 'k', 'r'};
+    return TActorId(0, TStringBuf(x, 12));
+}
+
+inline TActorId MakeBlobStorageLocalRecoveryBrokerID() {
+    char x[12] = {'b', 's', 'l', 'o', 'c', 'r', 'e', 'c', 'b', 'r', 'k', 'r'};
+    return TActorId(0, TStringBuf(x, 12));
+}
+
 inline TActorId MakeBlobStorageCompBrokerID() {
     char x[12] = {'b', 's', 'c', 'o', 'm', 'p', 'b', 'r', 'o', 'k', 'e', 'r'};
     return TActorId(0, TStringBuf(x, 12));
@@ -124,6 +134,21 @@ inline TActorId MakeBlobStorageCompBrokerID() {
 inline TActorId MakeBlobStorageNodeWardenID(ui32 node) {
     char x[12] = {'b','s','n','o','d','e','c','n','t','r','l','r'};
     return TActorId(node, TStringBuf(x, 12));
+}
+
+// Per-tablet S3 router service id. Strictly local: the router lives on the same node
+// as the BlobDepot tablet / agents that use it, so the node id is not part of the key.
+inline TActorId MakeBlobDepotS3RouterID(ui64 tabletId) {
+    char x[12] = {'b','d','S','3'};
+    x[4] = (char)tabletId;
+    x[5] = (char)(tabletId >> 8);
+    x[6] = (char)(tabletId >> 16);
+    x[7] = (char)(tabletId >> 24);
+    x[8] = (char)(tabletId >> 32);
+    x[9] = (char)(tabletId >> 40);
+    x[10] = (char)(tabletId >> 48);
+    x[11] = (char)(tabletId >> 56);
+    return TActorId(0, TStringBuf(x, 12));
 }
 
 } // namespace NKikimr

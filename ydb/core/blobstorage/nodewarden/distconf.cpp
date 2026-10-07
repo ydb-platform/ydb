@@ -1,11 +1,15 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/mind/dynamic_nameserver.h>
 #include <ydb/core/protos/bridge.pb.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <library/cpp/streams/zstd/zstd.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -25,9 +29,10 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::Bootstrap() {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
+        YDB_LOG_DEBUG("Bootstrap",
+            {"marker", "NWDC00"});
 
-        auto ns = NNodeBroker::BuildNameserverTable(Cfg->NameserviceConfig);
+        auto ns = NNodeBroker::BuildNameserverTable(*Cfg->NameserviceConfig);
         auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
 
         for (const auto& [nodeId, item] : ns->StaticNodeTable) {
@@ -44,7 +49,7 @@ namespace NKikimr::NStorage {
                 pileNames.emplace(bridge.GetPiles(i).GetName(), i);
             }
 
-            for (const auto& item : Cfg->NameserviceConfig.GetNode()) {
+            for (const auto& item : Cfg->NameserviceConfig->GetNode()) {
                 const TNodeLocation location = item.HasLocation() ? TNodeLocation(item.GetLocation())
                     : item.HasWalleLocation() ? TNodeLocation(item.GetWalleLocation())
                     : TNodeLocation();
@@ -68,6 +73,11 @@ namespace NKikimr::NStorage {
             ReadConfig(PrevDrivesToRead);
         } else {
             StorageConfigLoaded = true;
+        }
+
+        if (const TIntrusivePtr<NKikimr::TControlBoard>& icb = AppData()->Icb) {
+            TControlBoard::RegisterSharedControl(RootRetroTraceBatchIntervalSec,
+                    icb->RetroTracingControls.RootBatchIntervalSec);
         }
 
         Become(&TThis::StateWaitForInit);
@@ -292,6 +302,10 @@ namespace NKikimr::NStorage {
                     "Binding# " << Binding->ToString() << " Subscription# " << subs.ToString());
                 okay = true;
             }
+            if (RootProbe && RootProbe->NodeId == nodeId) {
+                Y_ABORT_UNLESS(!RootProbe->SessionId || subs.SessionId == RootProbe->SessionId);
+                okay = true;
+            }
             if (const auto it = DirectBoundNodes.find(nodeId); it != DirectBoundNodes.end()) {
                 Y_VERIFY_S(!subs.SessionId || subs.SessionId == it->second.SessionId, "sessionId# " << subs.SessionId
                     << " node.SessionId# " << it->second.SessionId);
@@ -327,6 +341,9 @@ namespace NKikimr::NStorage {
 
         if (Binding) {
             Y_ABORT_UNLESS(SubscribedSessions.contains(Binding->NodeId));
+        }
+        if (RootProbe) {
+            Y_ABORT_UNLESS(Scepter && !Binding && SubscribedSessions.contains(RootProbe->NodeId));
         }
         for (const auto& [nodeId, info] : DirectBoundNodes) {
             Y_VERIFY_S(SubscribedSessions.contains(nodeId), "NodeId# " << nodeId);
@@ -376,9 +393,12 @@ namespace NKikimr::NStorage {
 #endif
 
     STFUNC(TDistributedConfigKeeper::StateWaitForInit) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC53, "StateWaitForInit event", (Type, ev->GetTypeRewrite()),
-            (StorageConfigLoaded, StorageConfigLoaded), (NodeListObtained, NodeListObtained),
-            (PendingEvents.size, PendingEvents.size()));
+        YDB_LOG_DEBUG("StateWaitForInit event",
+            {"marker", "NWDC53"},
+            {"type", ev->GetTypeRewrite()},
+            {"storageConfigLoaded", StorageConfigLoaded},
+            {"nodeListObtained", NodeListObtained},
+            {"pendingEventsSize", PendingEvents.size()});
 
         auto processPendingEvents = [&] {
             if (PendingEvents.empty()) {
@@ -419,8 +439,7 @@ namespace NKikimr::NStorage {
         if (change && NodeListObtained && StorageConfigLoaded) {
             if (IsSelfStatic) {
                 UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
-                UpdateQuorums();
-                IssueNextBindRequest();
+                ReconcileNodeRole();
             }
             processPendingEvents();
         }
@@ -443,11 +462,18 @@ namespace NKikimr::NStorage {
         THPTimer timer;
         Y_DEFER {
             if (auto duration = TDuration::Seconds(timer.Passed()); duration >= TDuration::MilliSeconds(5)) {
-                STLOG(PRI_WARN, BS_NODE, NWDC01, "StateFunc too long", (Type, type), (Duration, duration));
+                YDB_LOG_WARN("StateFunc too long",
+                    {"marker", "NWDC01"},
+                    {"type", type},
+                    {"duration", duration});
             }
         };
-        STLOG(PRI_DEBUG, BS_NODE, NWDC15, "StateFunc", (Type, ev->GetTypeRewrite()), (Sender, ev->Sender),
-            (SessionId, ev->InterconnectSession), (Cookie, ev->Cookie));
+        YDB_LOG_DEBUG("StateFunc",
+            {"marker", "NWDC15"},
+            {"type", ev->GetTypeRewrite()},
+            {"sender", ev->Sender},
+            {"sessionId", ev->InterconnectSession},
+            {"cookie", ev->Cookie});
         const ui32 senderNodeId = ev->Sender.NodeId();
         if (ev->InterconnectSession && SubscribedSessions.contains(senderNodeId)) {
             // keep session actors intact
@@ -460,7 +486,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeConfigScatter, Handle);
             hFunc(TEvNodeConfigGather, Handle);
             hFunc(TEvNodeConfigInvokeOnRoot, HandleInvokeOnRoot);
-            IgnoreFunc(TEvNodeConfigInvokeOnRootResult);
+            hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -486,21 +512,24 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeWardenUpdateConfigFromPeer, Handle);
             fFunc(TEvPrivate::EvRetryCollectConfigsAndPropose, HandleRetryCollectConfigsAndPropose);
             cFunc(TEvPrivate::EvRetryPersistConfig, HandleRetryPersistConfig);
+            cFunc(TEvPrivate::EvFlushRetroTraceBatch, HandleFlushRetroTraceBatch);
+            fFunc(TEvPrivate::EvRootProbeTimeout, HandleRootProbeTimeout);
+            fFunc(TEvPrivate::EvBindingTimeout, HandleBindingTimeout);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
         }
-        if (IsSelfStatic && StorageConfig && NodeListObtained) {
-            UpdateQuorums();
-            IssueNextBindRequest();
-            CheckRootNodeStatus();
-        }
-        if (StorageConfig && NodeListObtained) {
-            ReportStorageConfigToNodeWarden();
-        }
+
         if (!InvokeOnRootPending.empty() && (!Binding || Binding->RootNodeId)) {
             std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot,
                 this, std::placeholders::_1));
+        }
+
+        if (IsSelfStatic && StorageConfig && NodeListObtained) {
+            ReconcileNodeRole();
+        }
+        if (StorageConfig && NodeListObtained) {
+            ReportStorageConfigToNodeWarden();
         }
         ConsistencyCheck();
     }

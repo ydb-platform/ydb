@@ -19,10 +19,13 @@
 
 #include <contrib/libs/xxhash/xxhash.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
 
+namespace NKikimr::NMiniKQL {
+
+#ifndef MKQL_DISABLE_CODEGEN
 using NYql::EnsureDynamicCast;
+#endif
 using NYql::TChunkedBuffer;
 
 extern TStatKey Combine_FlushesCount;
@@ -35,14 +38,14 @@ bool HasMemoryForProcessing() {
 }
 
 struct TMyValueEqual {
-    TMyValueEqual(const TKeyTypes& types)
+    explicit TMyValueEqual(const TKeyTypes& types)
         : Types(types)
     {
     }
 
     bool operator()(const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right) const {
         for (ui32 i = 0U; i < Types.size(); ++i) {
-            if (CompareValues(Types[i].first, true, Types[i].second, left[i], right[i])) {
+            if (CompareValues(Types[i].first, /*asc=*/true, Types[i].second, left[i], right[i])) {
                 return false;
             }
         }
@@ -53,7 +56,7 @@ struct TMyValueEqual {
 };
 
 struct TMyValueHasher {
-    TMyValueHasher(const TKeyTypes& types)
+    explicit TMyValueHasher(const TKeyTypes& types)
         : Types(types)
     {
     }
@@ -201,7 +204,7 @@ struct TCombinerNodes {
 };
 
 class TState: public TComputationValue<TState> {
-    typedef TComputationValue<TState> TBase;
+    using TBase = TComputationValue<TState>;
 
 private:
     using TStates = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
@@ -210,73 +213,73 @@ private:
 
     class TStorageIterator {
     private:
-        TStorage& Storage;
-        const ui32 RowSize = 0;
-        const ui64 Count = 0;
-        ui64 Ready = 0;
-        TStorage::iterator ItStorage;
-        TRow::iterator ItRow;
+        TStorage& Storage_;
+        const ui32 RowSize_ = 0;
+        const ui64 Count_ = 0;
+        ui64 Ready_ = 0;
+        TStorage::iterator ItStorage_;
+        TRow::iterator ItRow_;
 
     public:
         TStorageIterator(TStorage& storage, const ui32 rowSize, const ui64 count)
-            : Storage(storage)
-            , RowSize(rowSize)
-            , Count(count)
+            : Storage_(storage)
+            , RowSize_(rowSize)
+            , Count_(count)
         {
-            ItStorage = Storage.begin();
-            if (ItStorage != Storage.end()) {
-                ItRow = ItStorage->begin();
+            ItStorage_ = Storage_.begin();
+            if (ItStorage_ != Storage_.end()) {
+                ItRow_ = ItStorage_->begin();
             }
         }
 
         bool IsValid() {
-            return Ready < Count;
+            return Ready_ < Count_;
         }
 
         bool Next() {
-            if (++Ready >= Count) {
+            if (++Ready_ >= Count_) {
                 return false;
             }
-            ItRow += RowSize;
-            if (ItRow == ItStorage->end()) {
-                ++ItStorage;
-                ItRow = ItStorage->begin();
+            ItRow_ += RowSize_;
+            if (ItRow_ == ItStorage_->end()) {
+                ++ItStorage_;
+                ItRow_ = ItStorage_->begin();
             }
 
             return true;
         }
 
         NUdf::TUnboxedValuePod* GetValuePtr() const {
-            return &*ItRow;
+            return &*ItRow_;
         }
     };
 
     static constexpr ui32 CountRowsOnPage = 128;
 
     ui32 RowSize() const {
-        return KeyWidth + StateWidth;
+        return KeyWidth_ + StateWidth_;
     }
 
 public:
     TState(
-        TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal,
+        TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, THashFunc hash, TEqualsFunc equal,
         NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent, bool allowOutOfMemory = true)
         : TBase(memInfo)
-        , KeyWidth(keyWidth)
-        , StateWidth(stateWidth)
-        , AllowOutOfMemory(allowOutOfMemory)
-        , Hash(hash)
-        , Equal(equal)
-        , Logger(logger)
-        , LogComponent(logComponent)
+        , KeyWidth_(keyWidth)
+        , StateWidth_(stateWidth)
+        , AllowOutOfMemory_(allowOutOfMemory)
+        , Hash_(std::move(hash))
+        , Equal_(std::move(equal))
+        , Logger_(std::move(logger))
+        , LogComponent_(logComponent)
     {
-        CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
-        CurrentPosition = 0;
-        Tongue = CurrentPage->data();
-        States = std::make_unique<TStates>(Hash, Equal, CountRowsOnPage);
+        CurrentPage_ = &Storage_.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
+        CurrentPosition_ = 0;
+        Tongue = CurrentPage_->data();
+        States_ = std::make_unique<TStates>(Hash_, Equal_, CountRowsOnPage);
     }
 
-    ~TState() {
+    ~TState() override {
         // Workaround for YQL-16663, consider to rework this class in a safe manner
         while (auto row = Extract()) {
             for (size_t i = 0; i != RowSize(); ++i) {
@@ -284,39 +287,39 @@ public:
             }
         }
 
-        ExtractIt.reset();
-        Storage.clear();
-        States->Clear();
+        ExtractIt_.reset();
+        Storage_.clear();
+        States_->Clear();
 
         CleanupCurrentContext();
     }
 
     bool TasteIt() {
-        Y_ABORT_UNLESS(!ExtractIt);
+        Y_ABORT_UNLESS(!ExtractIt_);
         bool isNew = false;
-        auto itInsert = States->Insert(Tongue, isNew);
+        auto itInsert = States_->Insert(Tongue, isNew);
         if (isNew) {
-            CurrentPosition += RowSize();
-            if (CurrentPosition == CurrentPage->size()) {
-                CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
-                CurrentPosition = 0;
+            CurrentPosition_ += RowSize();
+            if (CurrentPosition_ == CurrentPage_->size()) {
+                CurrentPage_ = &Storage_.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
+                CurrentPosition_ = 0;
             }
-            Tongue = CurrentPage->data() + CurrentPosition;
+            Tongue = CurrentPage_->data() + CurrentPosition_;
         }
-        Throat = States->GetKeyValue(itInsert) + KeyWidth;
+        Throat = States_->GetKeyValue(itInsert) + KeyWidth_;
         if (isNew) {
             GrowStates();
         }
-        IsOutOfMemory = IsOutOfMemory || (!HasMemoryForProcessing() && States->GetSize() > 1000);
+        IsOutOfMemory = IsOutOfMemory || (!HasMemoryForProcessing() && States_->GetSize() > 1000);
         return isNew;
     }
 
     void GrowStates() {
         try {
-            States->CheckGrow();
-        } catch (TMemoryLimitExceededException) {
-            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "State failed to grow");
-            if (IsOutOfMemory || !AllowOutOfMemory) {
+            States_->CheckGrow();
+        } catch (const TMemoryLimitExceededException&) {
+            UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Info, TStringBuilder() << "State failed to grow");
+            if (IsOutOfMemory || !AllowOutOfMemory_) {
                 throw;
             } else {
                 IsOutOfMemory = true;
@@ -332,22 +335,22 @@ public:
             }
         }
 
-        if (!States->Empty()) {
+        if (!States_->Empty()) {
             return false;
         }
 
         {
             TStorage localStorage;
-            std::swap(localStorage, Storage);
+            std::swap(localStorage, Storage_);
         }
 
         if (IsOutOfMemory) {
-            States = std::make_unique<TStates>(Hash, Equal, CountRowsOnPage);
+            States_ = std::make_unique<TStates>(Hash_, Equal_, CountRowsOnPage);
         }
 
-        CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
-        CurrentPosition = 0;
-        Tongue = CurrentPage->data();
+        CurrentPage_ = &Storage_.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
+        CurrentPosition_ = 0;
+        Tongue = CurrentPage_->data();
         StoredDataSize = 0;
         IsOutOfMemory = false;
 
@@ -356,25 +359,25 @@ public:
     }
 
     void PushStat(IStatsRegistry* stats) const {
-        if (!States->Empty()) {
-            MKQL_SET_MAX_STAT(stats, Combine_MaxRowsCount, static_cast<i64>(States->GetSize()));
+        if (!States_->Empty()) {
+            MKQL_SET_MAX_STAT(stats, Combine_MaxRowsCount, static_cast<i64>(States_->GetSize()));
             MKQL_INC_STAT(stats, Combine_FlushesCount);
         }
     }
 
     NUdf::TUnboxedValuePod* Extract() {
-        if (!ExtractIt) {
-            ExtractIt.emplace(Storage, RowSize(), States->GetSize());
+        if (!ExtractIt_) {
+            ExtractIt_.emplace(Storage_, RowSize(), States_->GetSize());
         } else {
-            ExtractIt->Next();
+            ExtractIt_->Next();
         }
-        if (!ExtractIt->IsValid()) {
-            ExtractIt.reset();
-            States->Clear();
+        if (!ExtractIt_->IsValid()) {
+            ExtractIt_.reset();
+            States_->Clear();
             return nullptr;
         }
-        NUdf::TUnboxedValuePod* result = ExtractIt->GetValuePtr();
-        CounterOutputRows_.Inc();
+        NUdf::TUnboxedValuePod* result = ExtractIt_->GetValuePtr();
+        CounterOutputRows.Inc();
         return result;
     }
 
@@ -383,26 +386,26 @@ public:
     NUdf::TUnboxedValuePod* Throat = nullptr;
     i64 StoredDataSize = 0;
     bool IsOutOfMemory = false;
-    NYql::NUdf::TCounter CounterOutputRows_;
+    NYql::NUdf::TCounter CounterOutputRows;
 
 private:
-    std::optional<TStorageIterator> ExtractIt;
-    const ui32 KeyWidth, StateWidth;
-    const bool AllowOutOfMemory;
-    ui64 CurrentPosition = 0;
-    TRow* CurrentPage = nullptr;
-    TStorage Storage;
-    std::unique_ptr<TStates> States;
-    const THashFunc Hash;
-    const TEqualsFunc Equal;
-    const NUdf::TLoggerPtr Logger;
-    const NUdf::TLogComponentId LogComponent;
+    std::optional<TStorageIterator> ExtractIt_;
+    const ui32 KeyWidth_, StateWidth_;
+    const bool AllowOutOfMemory_;
+    ui64 CurrentPosition_ = 0;
+    TRow* CurrentPage_ = nullptr;
+    TStorage Storage_;
+    std::unique_ptr<TStates> States_;
+    const THashFunc Hash_;
+    const TEqualsFunc Equal_;
+    const NUdf::TLoggerPtr Logger_;
+    const NUdf::TLogComponentId LogComponent_;
 };
 
 class TSpillingSupportState: public TComputationValue<TSpillingSupportState> {
-    typedef TComputationValue<TSpillingSupportState> TBase;
-    typedef std::optional<NThreading::TFuture<ISpiller::TKey>> TAsyncWriteOperation;
-    typedef std::optional<NThreading::TFuture<std::optional<TChunkedBuffer>>> TAsyncReadOperation;
+    using TBase = TComputationValue<TSpillingSupportState>;
+    using TAsyncWriteOperation = std::optional<NThreading::TFuture<ISpiller::TKey>>;
+    using TAsyncReadOperation = std::optional<NThreading::TFuture<std::optional<TChunkedBuffer>>>;
 
     struct TSpilledBucket {
         std::unique_ptr<TWideUnboxedValuesSpillerAdapter> SpilledState; // state collected before switching to spilling mode
@@ -448,39 +451,39 @@ public:
         const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx,
         NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
         : TBase(memInfo)
-        , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal, logger, logComponent, allowSpilling && ctx.SpillerFactory)
-        , UsedInputItemType(usedInputItemType)
-        , KeyAndStateType(keyAndStateType)
-        , KeyWidth(keyWidth)
-        , ItemNodesSize(itemNodesSize)
-        , Hasher(hash)
-        , Mode(EOperatingMode::InMemory)
-        , ViewForKeyAndState(keyAndStateType->GetElementsCount())
-        , MemInfo(memInfo)
-        , Equal(equal)
-        , AllowSpilling(allowSpilling)
-        , Ctx(ctx)
-        , Logger(logger)
-        , LogComponent(logComponent)
+        , InMemoryProcessingState_(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal, logger, logComponent, allowSpilling && ctx.SpillerFactory)
+        , UsedInputItemType_(usedInputItemType)
+        , KeyAndStateType_(keyAndStateType)
+        , KeyWidth_(keyWidth)
+        , ItemNodesSize_(itemNodesSize)
+        , Hasher_(hash)
+        , Mode_(EOperatingMode::InMemory)
+        , ViewForKeyAndState_(keyAndStateType->GetElementsCount())
+        , MemInfo_(memInfo)
+        , Equal_(equal)
+        , AllowSpilling_(allowSpilling)
+        , Ctx_(ctx)
+        , Logger_(std::move(logger))
+        , LogComponent_(logComponent)
     {
-        BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
-        Tongue = InMemoryProcessingState.Tongue;
-        Throat = InMemoryProcessingState.Throat;
+        BufferForUsedInputItems_.reserve(usedInputItemType->GetElementsCount());
+        Tongue = InMemoryProcessingState_.Tongue;
+        Throat = InMemoryProcessingState_.Throat;
         if (ctx.CountersProvider) {
             // id will be assigned externally in future versions
             TString id = TString(Operator_Aggregation) + "0";
-            CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+            CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, /*deriv=*/false);
         }
     }
 
     EUpdateResult Update() {
-        if (IsEverythingExtracted) {
+        if (IsEverythingExtracted_) {
             return EUpdateResult::Finish;
         }
 
         switch (GetMode()) {
             case EOperatingMode::InMemory: {
-                Tongue = InMemoryProcessingState.Tongue;
+                Tongue = InMemoryProcessingState_.Tongue;
                 if (CheckMemoryAndSwitchToSpilling()) {
                     return Update();
                 }
@@ -503,14 +506,14 @@ public:
                     return EUpdateResult::Yield;
                 }
 
-                if (BufferForUsedInputItems.size()) {
-                    auto& bucket = SpilledBuckets[BufferForUsedInputItemsBucketId];
+                if (!BufferForUsedInputItems_.empty()) {
+                    auto& bucket = SpilledBuckets_[BufferForUsedInputItemsBucketId_];
                     if (bucket.AsyncWriteOperation.has_value()) {
                         return EUpdateResult::Yield;
                     }
 
-                    bucket.AsyncWriteOperation = bucket.SpilledData->WriteWideItem(BufferForUsedInputItems);
-                    BufferForUsedInputItems.resize(0); // for freeing allocated key value asap
+                    bucket.AsyncWriteOperation = bucket.SpilledData->WriteWideItem(BufferForUsedInputItems_);
+                    BufferForUsedInputItems_.resize(0); // for freeing allocated key value asap
                 }
 
                 if (InputStatus == EFetchResult::Finish) {
@@ -526,25 +529,25 @@ public:
 
     ETasteResult TasteIt() {
         if (GetMode() == EOperatingMode::InMemory) {
-            bool isNew = InMemoryProcessingState.TasteIt();
-            if (InMemoryProcessingState.IsOutOfMemory) {
-                StateWantsToSpill = true;
+            bool isNew = InMemoryProcessingState_.TasteIt();
+            if (InMemoryProcessingState_.IsOutOfMemory) {
+                StateWantsToSpill_ = true;
             }
-            Throat = InMemoryProcessingState.Throat;
+            Throat = InMemoryProcessingState_.Throat;
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
         if (GetMode() == EOperatingMode::ProcessSpilled) {
             // while restoration we process buckets one by one starting from the first in a queue
-            bool isNew = SpilledBuckets.front().InMemoryProcessingState->TasteIt();
-            Throat = SpilledBuckets.front().InMemoryProcessingState->Throat;
+            bool isNew = SpilledBuckets_.front().InMemoryProcessingState->TasteIt();
+            Throat = SpilledBuckets_.front().InMemoryProcessingState->Throat;
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
 
-        auto bucketId = ChooseBucket(ViewForKeyAndState.data());
-        auto& bucket = SpilledBuckets[bucketId];
+        auto bucketId = ChooseBucket(ViewForKeyAndState_.data());
+        auto& bucket = SpilledBuckets_[bucketId];
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
-            std::copy_n(ViewForKeyAndState.data(), KeyWidth, static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Tongue));
+            std::copy_n(ViewForKeyAndState_.data(), KeyWidth_, static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Tongue));
 
             bool isNew = bucket.InMemoryProcessingState->TasteIt();
             Throat = bucket.InMemoryProcessingState->Throat;
@@ -555,11 +558,11 @@ public:
         bucket.LineCount++;
 
         // Prepare space for raw data
-        MKQL_ENSURE(BufferForUsedInputItems.size() == 0, "Internal logic error");
-        BufferForUsedInputItems.resize(ItemNodesSize);
-        BufferForUsedInputItemsBucketId = bucketId;
+        MKQL_ENSURE(BufferForUsedInputItems_.empty(), "Internal logic error");
+        BufferForUsedInputItems_.resize(ItemNodesSize_);
+        BufferForUsedInputItemsBucketId_ = bucketId;
 
-        Throat = BufferForUsedInputItems.data();
+        Throat = BufferForUsedInputItems_.data();
 
         return ETasteResult::ConsumeRawData;
     }
@@ -567,26 +570,26 @@ public:
     NUdf::TUnboxedValuePod* Extract() {
         NUdf::TUnboxedValue* value = nullptr;
         if (GetMode() == EOperatingMode::InMemory) {
-            value = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract());
+            value = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState_.Extract());
             if (value) {
                 CounterOutputRows_.Inc();
             } else {
-                IsEverythingExtracted = true;
+                IsEverythingExtracted_ = true;
             }
             return value;
         }
 
-        MKQL_ENSURE(SpilledBuckets.front().BucketState == TSpilledBucket::EBucketState::InMemory, "Internal logic error");
-        MKQL_ENSURE(SpilledBuckets.size() > 0, "Internal logic error");
+        MKQL_ENSURE(SpilledBuckets_.front().BucketState == TSpilledBucket::EBucketState::InMemory, "Internal logic error");
+        MKQL_ENSURE(!SpilledBuckets_.empty(), "Internal logic error");
 
-        value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets.front().InMemoryProcessingState->Extract());
+        value = static_cast<NUdf::TUnboxedValue*>(SpilledBuckets_.front().InMemoryProcessingState->Extract());
         if (value) {
             CounterOutputRows_.Inc();
         } else {
-            SpilledBuckets.front().InMemoryProcessingState->ReadMore<false>();
-            SpilledBuckets.pop_front();
-            if (SpilledBuckets.empty()) {
-                IsEverythingExtracted = true;
+            SpilledBuckets_.front().InMemoryProcessingState->ReadMore<false>();
+            SpilledBuckets_.pop_front();
+            if (SpilledBuckets_.empty()) {
+                IsEverythingExtracted_ = true;
             }
         }
 
@@ -595,7 +598,7 @@ public:
 
 private:
     ui64 ChooseBucket(const NUdf::TUnboxedValuePod* const key) {
-        auto provided_hash = Hasher(key);
+        auto provided_hash = Hasher_(key);
         XXH64_hash_t bucket = XXH64(&provided_hash, sizeof(provided_hash), 0) % SpilledBucketCount;
         return bucket;
     }
@@ -604,7 +607,7 @@ private:
         UpdateSpillingBuckets();
 
         ui64 finishedCount = 0;
-        for (auto& bucket : SpilledBuckets) {
+        for (auto& bucket : SpilledBuckets_) {
             MKQL_ENSURE(bucket.BucketState != TSpilledBucket::EBucketState::SpillingState, "Internal logic error");
             if (!bucket.AsyncWriteOperation.has_value()) {
                 auto writeOperation = bucket.SpilledData->FinishWriting();
@@ -616,7 +619,7 @@ private:
             }
         }
 
-        if (finishedCount != SpilledBuckets.size()) {
+        if (finishedCount != SpilledBuckets_.size()) {
             return EUpdateResult::Yield;
         }
 
@@ -629,10 +632,10 @@ private:
         ui64 maxSize = 0;
         ui32 largestInMemoryBucketNum = (ui32)-1;
         for (ui64 i = 0; i < SpilledBucketCount; ++i) {
-            if (SpilledBuckets[i].BucketState == TSpilledBucket::EBucketState::InMemory) {
-                if (SpilledBuckets[i].LineCount >= maxSize) {
+            if (SpilledBuckets_[i].BucketState == TSpilledBucket::EBucketState::InMemory) {
+                if (SpilledBuckets_[i].LineCount >= maxSize) {
                     largestInMemoryBucketNum = i;
-                    maxSize = SpilledBuckets[i].LineCount;
+                    maxSize = SpilledBuckets_[i].LineCount;
                 }
             }
         }
@@ -645,8 +648,8 @@ private:
     }
 
     bool SplitStateIntoBucketsAndWait() {
-        if (SplitStateSpillingBucket != -1) {
-            auto& bucket = SpilledBuckets[SplitStateSpillingBucket];
+        if (SplitStateSpillingBucket_ != -1) {
+            auto& bucket = SpilledBuckets_[SplitStateSpillingBucket_];
             MKQL_ENSURE(bucket.AsyncWriteOperation.has_value(), "Internal logic error");
             if (!bucket.AsyncWriteOperation->HasValue()) {
                 return true;
@@ -655,8 +658,8 @@ private:
             bucket.AsyncWriteOperation = std::nullopt;
 
             while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
-                bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
-                for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
+                bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType_->GetElementsCount()});
+                for (size_t i = 0; i < KeyAndStateType_->GetElementsCount(); ++i) {
                     // releasing values stored in unsafe TUnboxedValue buffer
                     keyAndState[i].UnRef();
                 }
@@ -665,27 +668,27 @@ private:
                 }
             }
 
-            SplitStateSpillingBucket = -1;
+            SplitStateSpillingBucket_ = -1;
         }
-        while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState.Extract())) {
+        while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(InMemoryProcessingState_.Extract())) {
             auto bucketId = ChooseBucket(keyAndState); // This uses only key for hashing
-            auto& bucket = SpilledBuckets[bucketId];
+            auto& bucket = SpilledBuckets_[bucketId];
 
             bucket.LineCount++;
 
             if (bucket.BucketState != TSpilledBucket::EBucketState::InMemory) {
                 if (bucket.BucketState != TSpilledBucket::EBucketState::SpillingState) {
                     bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
-                    SpillingBucketsCount++;
+                    SpillingBucketsCount_++;
                 }
 
-                bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
-                for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
+                bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType_->GetElementsCount()});
+                for (size_t i = 0; i < KeyAndStateType_->GetElementsCount(); ++i) {
                     // releasing values stored in unsafe TUnboxedValue buffer
                     keyAndState[i].UnRef();
                 }
                 if (bucket.AsyncWriteOperation) {
-                    SplitStateSpillingBucket = bucketId;
+                    SplitStateSpillingBucket_ = bucketId;
                     return true;
                 }
                 continue;
@@ -693,29 +696,29 @@ private:
 
             auto& processingState = *bucket.InMemoryProcessingState;
 
-            for (size_t i = 0; i < KeyWidth; ++i) {
+            for (size_t i = 0; i < KeyWidth_; ++i) {
                 // jumping into unsafe world, refusing ownership
                 static_cast<NUdf::TUnboxedValue&>(processingState.Tongue[i]) = std::move(keyAndState[i]);
             }
             processingState.TasteIt();
-            for (size_t i = KeyWidth; i < KeyAndStateType->GetElementsCount(); ++i) {
+            for (size_t i = KeyWidth_; i < KeyAndStateType_->GetElementsCount(); ++i) {
                 // jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth]) = std::move(keyAndState[i]);
+                static_cast<NUdf::TUnboxedValue&>(processingState.Throat[i - KeyWidth_]) = std::move(keyAndState[i]);
             }
 
-            if (InMemoryBucketsCount && !HasMemoryForProcessing() && IsSpillingWhileStateSplitAllowed()) {
+            if (InMemoryBucketsCount_ && !HasMemoryForProcessing() && IsSpillingWhileStateSplitAllowed()) {
                 ui32 bucketNumToSpill = GetLargestInMemoryBucketNumber();
 
-                SplitStateSpillingBucket = bucketNumToSpill;
+                SplitStateSpillingBucket_ = bucketNumToSpill;
 
-                auto& bucket = SpilledBuckets[bucketNumToSpill];
+                auto& bucket = SpilledBuckets_[bucketNumToSpill];
                 bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
-                SpillingBucketsCount++;
-                InMemoryBucketsCount--;
+                SpillingBucketsCount_++;
+                InMemoryBucketsCount_--;
 
                 while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
-                    bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
-                    for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
+                    bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType_->GetElementsCount()});
+                    for (size_t i = 0; i < KeyAndStateType_->GetElementsCount(); ++i) {
                         // releasing values stored in unsafe TUnboxedValue buffer
                         keyAndState[i].UnRef();
                     }
@@ -732,7 +735,7 @@ private:
         }
 
         for (ui64 i = 0; i < SpilledBucketCount; ++i) {
-            auto& bucket = SpilledBuckets[i];
+            auto& bucket = SpilledBuckets_[i];
             if (bucket.BucketState == TSpilledBucket::EBucketState::SpillingState) {
                 if (bucket.AsyncWriteOperation.has_value()) {
                     if (!bucket.AsyncWriteOperation->HasValue()) {
@@ -749,22 +752,22 @@ private:
                 bucket.InMemoryProcessingState->ReadMore<false>();
 
                 bucket.BucketState = TSpilledBucket::EBucketState::SpillingData;
-                SpillingBucketsCount--;
+                SpillingBucketsCount_--;
             }
         }
 
-        InMemoryProcessingState.ReadMore<false>();
-        IsInMemoryProcessingStateSplitted = true;
+        InMemoryProcessingState_.ReadMore<false>();
+        IsInMemoryProcessingStateSplitted_ = true;
         SwitchMode(EOperatingMode::Spilling);
         return false;
     }
 
     bool CheckMemoryAndSwitchToSpilling() {
-        if (!(AllowSpilling && Ctx.SpillerFactory)) {
+        if (!(AllowSpilling_ && Ctx_.SpillerFactory)) {
             return false;
         }
-        if (StateWantsToSpill || IsSwitchToSpillingModeCondition()) {
-            StateWantsToSpill = false;
+        if (StateWantsToSpill_ || IsSwitchToSpillingModeCondition()) {
+            StateWantsToSpill_ = false;
             LogMemoryUsage();
 
             SwitchMode(EOperatingMode::SplittingState);
@@ -776,7 +779,7 @@ private:
 
     void LogMemoryUsage() const {
         const auto memoryUsageLogLevel = NUdf::ELogLevel::Info;
-        if (!Logger->IsActive(LogComponent, memoryUsageLogLevel)) {
+        if (!Logger_->IsActive(LogComponent_, memoryUsageLogLevel)) {
             return;
         }
         const auto used = TlsAllocState->GetUsed();
@@ -788,7 +791,7 @@ private:
         }
         logmsg << (used / 1_MB) << "MB/" << (limit / 1_MB) << "MB";
 
-        UDF_LOG(Logger, LogComponent, memoryUsageLogLevel, logmsg);
+        UDF_LOG(Logger_, LogComponent_, memoryUsageLogLevel, logmsg);
     }
 
     void SpillMoreStateFromBucket(TSpilledBucket& bucket) {
@@ -796,13 +799,13 @@ private:
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
             bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
-            SpillingBucketsCount++;
-            InMemoryBucketsCount--;
+            SpillingBucketsCount_++;
+            InMemoryBucketsCount_--;
         }
 
         while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
-            bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
-            for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
+            bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType_->GetElementsCount()});
+            for (size_t i = 0; i < KeyAndStateType_->GetElementsCount(); ++i) {
                 // releasing values stored in unsafe TUnboxedValue buffer
                 keyAndState[i].UnRef();
             }
@@ -819,12 +822,12 @@ private:
         bucket.InMemoryProcessingState->ReadMore<false>();
 
         bucket.BucketState = TSpilledBucket::EBucketState::SpillingData;
-        SpillingBucketsCount--;
+        SpillingBucketsCount_--;
     }
 
     void UpdateSpillingBuckets() {
         for (ui64 i = 0; i < SpilledBucketCount; ++i) {
-            auto& bucket = SpilledBuckets[i];
+            auto& bucket = SpilledBuckets_[i];
             if (bucket.AsyncWriteOperation.has_value() && bucket.AsyncWriteOperation->HasValue()) {
                 if (bucket.BucketState == TSpilledBucket::EBucketState::SpillingState) {
                     bucket.SpilledState->AsyncWriteCompleted(bucket.AsyncWriteOperation->ExtractValue());
@@ -841,14 +844,14 @@ private:
     }
 
     bool TryToReduceMemoryAndWait() {
-        if (SpillingBucketsCount > 0) {
+        if (SpillingBucketsCount_ > 0) {
             return true;
         }
-        while (InMemoryBucketsCount > 0) {
+        while (InMemoryBucketsCount_ > 0) {
             ui32 maxLineBucketInd = GetLargestInMemoryBucketNumber();
             MKQL_ENSURE(maxLineBucketInd != (ui32)-1, "Internal logic error");
 
-            auto& bucketToSpill = SpilledBuckets[maxLineBucketInd];
+            auto& bucketToSpill = SpilledBuckets_[maxLineBucketInd];
             SpillMoreStateFromBucket(bucketToSpill);
             if (bucketToSpill.BucketState == TSpilledBucket::EBucketState::SpillingState) {
                 return true;
@@ -858,52 +861,52 @@ private:
     }
 
     EUpdateResult ProcessSpilledData() {
-        if (AsyncReadOperation) {
-            if (!AsyncReadOperation->HasValue()) {
+        if (AsyncReadOperation_) {
+            if (!AsyncReadOperation_->HasValue()) {
                 return EUpdateResult::Yield;
             }
-            if (RecoverState) {
-                SpilledBuckets[0].SpilledState->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), Ctx.HolderFactory);
+            if (RecoverState_) {
+                SpilledBuckets_[0].SpilledState->AsyncReadCompleted(AsyncReadOperation_->ExtractValue().value(), Ctx_.HolderFactory);
             } else {
-                SpilledBuckets[0].SpilledData->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), Ctx.HolderFactory);
+                SpilledBuckets_[0].SpilledData->AsyncReadCompleted(AsyncReadOperation_->ExtractValue().value(), Ctx_.HolderFactory);
             }
-            AsyncReadOperation = std::nullopt;
+            AsyncReadOperation_ = std::nullopt;
         }
 
-        auto& bucket = SpilledBuckets.front();
+        auto& bucket = SpilledBuckets_.front();
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
             return EUpdateResult::Extract;
         }
 
         // recover spilled state
         while (!bucket.SpilledState->Empty()) {
-            RecoverState = true;
-            TTemporaryUnboxedValueVector bufferForKeyAndState(KeyAndStateType->GetElementsCount());
-            AsyncReadOperation = bucket.SpilledState->ExtractWideItem(bufferForKeyAndState);
-            if (AsyncReadOperation) {
+            RecoverState_ = true;
+            TTemporaryUnboxedValueVector bufferForKeyAndState(KeyAndStateType_->GetElementsCount());
+            AsyncReadOperation_ = bucket.SpilledState->ExtractWideItem(bufferForKeyAndState);
+            if (AsyncReadOperation_) {
                 return EUpdateResult::Yield;
             }
-            for (size_t i = 0; i < KeyWidth; ++i) {
+            for (size_t i = 0; i < KeyWidth_; ++i) {
                 // jumping into unsafe world, refusing ownership
                 static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Tongue[i]) = std::move(bufferForKeyAndState[i]);
             }
             auto isNew = bucket.InMemoryProcessingState->TasteIt();
             MKQL_ENSURE(isNew, "Internal logic error");
-            for (size_t i = KeyWidth; i < KeyAndStateType->GetElementsCount(); ++i) {
+            for (size_t i = KeyWidth_; i < KeyAndStateType_->GetElementsCount(); ++i) {
                 // jumping into unsafe world, refusing ownership
-                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Throat[i - KeyWidth]) = std::move(bufferForKeyAndState[i]);
+                static_cast<NUdf::TUnboxedValue&>(bucket.InMemoryProcessingState->Throat[i - KeyWidth_]) = std::move(bufferForKeyAndState[i]);
             }
         }
         // process spilled data
         if (!bucket.SpilledData->Empty()) {
-            RecoverState = false;
-            std::fill(BufferForUsedInputItems.begin(), BufferForUsedInputItems.end(), NUdf::TUnboxedValuePod());
-            AsyncReadOperation = bucket.SpilledData->ExtractWideItem(BufferForUsedInputItems);
-            if (AsyncReadOperation) {
+            RecoverState_ = false;
+            std::fill(BufferForUsedInputItems_.begin(), BufferForUsedInputItems_.end(), NUdf::TUnboxedValuePod());
+            AsyncReadOperation_ = bucket.SpilledData->ExtractWideItem(BufferForUsedInputItems_);
+            if (AsyncReadOperation_) {
                 return EUpdateResult::Yield;
             }
 
-            Throat = BufferForUsedInputItems.data();
+            Throat = BufferForUsedInputItems_.data();
             Tongue = bucket.InMemoryProcessingState->Tongue;
 
             return EUpdateResult::ExtractRawData;
@@ -913,45 +916,45 @@ private:
     }
 
     EOperatingMode GetMode() const {
-        return Mode;
+        return Mode_;
     }
 
     void SwitchMode(EOperatingMode mode) {
         switch (mode) {
             case EOperatingMode::InMemory: {
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "switching Memory mode to InMemory");
+                UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Info, "switching Memory mode to InMemory");
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
             case EOperatingMode::SplittingState: {
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "switching Memory mode to SplittingState");
-                MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
-                SpilledBuckets.resize(SpilledBucketCount);
-                auto spiller = Ctx.SpillerFactory->CreateSpiller();
-                for (auto& b : SpilledBuckets) {
-                    b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
-                    b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
-                    b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth,
-                                                                         KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal, Logger, LogComponent, false);
+                UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Info, "switching Memory mode to SplittingState");
+                MKQL_ENSURE(EOperatingMode::InMemory == Mode_, "Internal logic error");
+                SpilledBuckets_.resize(SpilledBucketCount);
+                auto spiller = Ctx_.SpillerFactory->CreateSpiller();
+                for (auto& b : SpilledBuckets_) {
+                    b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType_, 5_MB, Ctx_.RuntimeSettings.DatumValidation.Get());
+                    b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType_, 5_MB, Ctx_.RuntimeSettings.DatumValidation.Get());
+                    b.InMemoryProcessingState = std::make_unique<TState>(MemInfo_, KeyWidth_,
+                                                                         KeyAndStateType_->GetElementsCount() - KeyWidth_, Hasher_, Equal_, Logger_, LogComponent_, false);
                 }
                 break;
             }
             case EOperatingMode::Spilling: {
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "switching Memory mode to Spilling");
-                MKQL_ENSURE(EOperatingMode::SplittingState == Mode || EOperatingMode::InMemory == Mode, "Internal logic error");
+                UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Info, "switching Memory mode to Spilling");
+                MKQL_ENSURE(EOperatingMode::SplittingState == Mode_ || EOperatingMode::InMemory == Mode_, "Internal logic error");
 
-                Tongue = ViewForKeyAndState.data();
+                Tongue = ViewForKeyAndState_.data();
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "switching Memory mode to ProcessSpilled");
-                MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
-                MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
-                MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
+                UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Info, "switching Memory mode to ProcessSpilled");
+                MKQL_ENSURE(EOperatingMode::Spilling == Mode_, "Internal logic error");
+                MKQL_ENSURE(SpilledBuckets_.size() == SpilledBucketCount, "Internal logic error");
+                MKQL_ENSURE(BufferForUsedInputItems_.empty(), "Internal logic error");
 
-                BufferForUsedInputItems.resize(UsedInputItemType->GetElementsCount());
+                BufferForUsedInputItems_.resize(UsedInputItemType_->GetElementsCount());
 
-                std::sort(SpilledBuckets.begin(), SpilledBuckets.end(), [](const TSpilledBucket& lhs, const TSpilledBucket& rhs) {
+                std::sort(SpilledBuckets_.begin(), SpilledBuckets_.end(), [](const TSpilledBucket& lhs, const TSpilledBucket& rhs) {
                     bool lhs_in_memory = lhs.BucketState == TSpilledBucket::EBucketState::InMemory;
                     bool rhs_in_memory = rhs.BucketState == TSpilledBucket::EBucketState::InMemory;
                     return lhs_in_memory > rhs_in_memory;
@@ -959,7 +962,7 @@ private:
                 break;
             }
         }
-        Mode = mode;
+        Mode_ = mode;
     }
 
     bool IsSwitchToSpillingModeCondition() const {
@@ -972,93 +975,93 @@ public:
     NUdf::TUnboxedValuePod* Throat = nullptr;
 
 private:
-    bool StateWantsToSpill = false;
-    bool IsEverythingExtracted = false;
+    bool StateWantsToSpill_ = false;
+    bool IsEverythingExtracted_ = false;
 
-    TState InMemoryProcessingState;
-    bool IsInMemoryProcessingStateSplitted = false;
-    const TMultiType* const UsedInputItemType;
-    const TMultiType* const KeyAndStateType;
-    const size_t KeyWidth;
-    const size_t ItemNodesSize;
-    THashFunc const Hasher;
-    EOperatingMode Mode;
-    bool RecoverState; // sub mode for ProcessSpilledData
+    TState InMemoryProcessingState_;
+    bool IsInMemoryProcessingStateSplitted_ = false;
+    const TMultiType* const UsedInputItemType_;
+    const TMultiType* const KeyAndStateType_;
+    const size_t KeyWidth_;
+    const size_t ItemNodesSize_;
+    THashFunc const Hasher_;
+    EOperatingMode Mode_;
+    bool RecoverState_; // sub mode for ProcessSpilledData
 
-    TAsyncReadOperation AsyncReadOperation = std::nullopt;
+    TAsyncReadOperation AsyncReadOperation_ = std::nullopt;
     static constexpr size_t SpilledBucketCount = 128;
-    std::deque<TSpilledBucket> SpilledBuckets;
-    ui32 SpillingBucketsCount = 0;
-    ui32 InMemoryBucketsCount = SpilledBucketCount;
-    ui64 BufferForUsedInputItemsBucketId;
-    TUnboxedValueVector BufferForUsedInputItems;
-    std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>> ViewForKeyAndState;
-    i64 SplitStateSpillingBucket = -1;
+    std::deque<TSpilledBucket> SpilledBuckets_;
+    ui32 SpillingBucketsCount_ = 0;
+    ui32 InMemoryBucketsCount_ = SpilledBucketCount;
+    ui64 BufferForUsedInputItemsBucketId_;
+    TUnboxedValueVector BufferForUsedInputItems_;
+    std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>> ViewForKeyAndState_;
+    i64 SplitStateSpillingBucket_ = -1;
 
-    TMemoryUsageInfo* MemInfo = nullptr;
-    TEqualsFunc const Equal;
-    const bool AllowSpilling;
+    TMemoryUsageInfo* MemInfo_ = nullptr;
+    TEqualsFunc const Equal_;
+    const bool AllowSpilling_;
 
-    TComputationContext& Ctx;
+    TComputationContext& Ctx_;
     NYql::NUdf::TCounter CounterOutputRows_;
 
-    const NUdf::TLoggerPtr Logger;
-    const NUdf::TLogComponentId LogComponent;
+    const NUdf::TLoggerPtr Logger_;
+    const NUdf::TLogComponentId LogComponent_;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
 class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState>> {
 private:
     using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
-    llvm::IntegerType* ValueType;
-    llvm::PointerType* PtrValueType;
-    llvm::IntegerType* StatusType;
-    llvm::IntegerType* StoredType;
-    llvm::IntegerType* BoolType;
+    llvm::IntegerType* ValueType_;
+    llvm::PointerType* PtrValueType_;
+    llvm::IntegerType* StatusType_;
+    llvm::IntegerType* StoredType_;
+    llvm::IntegerType* BoolType_;
 
 protected:
-    using TBase::Context;
+    using TBase::GetContext;
 
 public:
     std::vector<llvm::Type*> GetFieldsArray() {
         std::vector<llvm::Type*> result = TBase::GetFields();
-        result.emplace_back(StatusType);                // status
-        result.emplace_back(PtrValueType);              // tongue
-        result.emplace_back(PtrValueType);              // throat
-        result.emplace_back(StoredType);                // StoredDataSize
-        result.emplace_back(BoolType);                  // IsOutOfMemory
-        result.emplace_back(Type::getInt32Ty(Context)); // size
-        result.emplace_back(Type::getInt32Ty(Context)); // size
+        result.emplace_back(StatusType_);                    // status
+        result.emplace_back(PtrValueType_);                  // tongue
+        result.emplace_back(PtrValueType_);                  // throat
+        result.emplace_back(StoredType_);                    // StoredDataSize
+        result.emplace_back(BoolType_);                      // IsOutOfMemory
+        result.emplace_back(Type::getInt32Ty(GetContext())); // size
+        result.emplace_back(Type::getInt32Ty(GetContext())); // size
         return result;
     }
 
     llvm::Constant* GetStatus() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 0);
     }
 
     llvm::Constant* GetTongue() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 1);
     }
 
     llvm::Constant* GetThroat() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 2);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 2);
     }
 
     llvm::Constant* GetStored() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 3);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 3);
     }
 
     llvm::Constant* GetIsOutOfMemory() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 4);
+        return ConstantInt::get(Type::getInt32Ty(GetContext()), TBase::GetFieldsCount() + 4);
     }
 
-    TLLVMFieldsStructureState(llvm::LLVMContext& context)
+    explicit TLLVMFieldsStructureState(llvm::LLVMContext& context)
         : TBase(context)
-        , ValueType(Type::getInt128Ty(Context))
-        , PtrValueType(PointerType::getUnqual(ValueType))
-        , StatusType(Type::getInt32Ty(Context))
-        , StoredType(Type::getInt64Ty(Context))
-        , BoolType(Type::getInt1Ty(Context))
+        , ValueType_(Type::getInt128Ty(context))
+        , PtrValueType_(PointerType::getUnqual(ValueType_))
+        , StatusType_(Type::getInt32Ty(context))
+        , StoredType_(Type::getInt64Ty(context))
+        , BoolType_(Type::getInt1Ty(context))
     {
     }
 };
@@ -1076,11 +1079,11 @@ class TWideCombinerWrapper: public TStatefulWideFlowCodegeneratorNode<TWideCombi
 public:
     TWideCombinerWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memLimit)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
-        , Flow(flow)
-        , Nodes(std::move(nodes))
-        , KeyTypes(std::move(keyTypes))
-        , MemLimit(memLimit)
-        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Nodes.ItemNodes.size()))
+        , Flow_(flow)
+        , Nodes_(std::move(nodes))
+        , KeyTypes_(std::move(keyTypes))
+        , MemLimit_(memLimit)
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Nodes_.ItemNodes.size()))
     {
     }
 
@@ -1105,21 +1108,21 @@ public:
                         return EFetchResult::Finish;
                 }
 
-                const auto initUsage = MemLimit ? ctx.HolderFactory.GetMemoryUsed() : 0ULL;
+                const auto initUsage = MemLimit_ ? ctx.HolderFactory.GetMemoryUsed() : 0ULL;
 
-                auto** fields = ctx.WideFields.data() + WideFieldsIndex;
+                auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
 
                 do {
-                    for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
-                        if (Nodes.ItemNodes[i]->GetDependentsCount() > 0U || Nodes.PasstroughtItems[i]) {
-                            fields[i] = &Nodes.ItemNodes[i]->RefValue(ctx);
+                    for (auto i = 0U; i < Nodes_.ItemNodes.size(); ++i) {
+                        if (Nodes_.ItemNodes[i]->GetDependentsCount() > 0U || Nodes_.PasstroughtItems[i]) {
+                            fields[i] = &Nodes_.ItemNodes[i]->RefValue(ctx);
                         }
                     }
 
-                    ptr->InputStatus = Flow->FetchValues(ctx, fields);
+                    ptr->InputStatus = Flow_->FetchValues(ctx, fields);
                     if constexpr (SkipYields) {
                         if (EFetchResult::Yield == ptr->InputStatus) {
-                            if (MemLimit) {
+                            if (MemLimit_) {
                                 const auto currentUsage = ctx.HolderFactory.GetMemoryUsed();
                                 ptr->StoredDataSize += currentUsage > initUsage ? currentUsage - initUsage : 0;
                             }
@@ -1133,22 +1136,22 @@ public:
                         }
                     }
 
-                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
-                    Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize) && !ptr->IsOutOfMemory);
+                    Nodes_.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
+                    Nodes_.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit_, initUsage - ptr->StoredDataSize) && !ptr->IsOutOfMemory);
 
                 ptr->PushStat(ctx.Stats);
             }
 
             if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
-                Nodes.FinishItem(ctx, values, output);
+                Nodes_.FinishItem(ctx, values, output);
                 return EFetchResult::One;
             }
         }
         MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1226,13 +1229,13 @@ public:
 
             block = pull;
 
-            const auto used = GetMemoryUsed(MemLimit, ctx, block);
+            const auto used = GetMemoryUsed(MemLimit_, ctx, block);
 
             BranchInst::Create(loop, block);
 
             block = loop;
 
-            const auto getres = GetNodeValues(Flow, ctx, block);
+            const auto getres = GetNodeValues(Flow_, ctx, block);
 
             if constexpr (SkipYields) {
                 const auto save = BasicBlock::Create(context, "save", ctx.Func);
@@ -1243,10 +1246,10 @@ public:
 
                 block = save;
 
-                if (MemLimit) {
+                if (MemLimit_) {
                     const auto storedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetStored()}, "stored_ptr", block);
                     const auto lastStored = new LoadInst(storedType, storedPtr, "last_stored", block);
-                    const auto currentUsage = GetMemoryUsed(MemLimit, ctx, block);
+                    const auto currentUsage = GetMemoryUsed(MemLimit_, ctx, block);
 
                     const auto skipSavingUsed = BasicBlock::Create(context, "skip_saving_used", ctx.Func);
                     const auto saveUsed = BasicBlock::Create(context, "save_used", ctx.Func);
@@ -1255,7 +1258,7 @@ public:
 
                     block = saveUsed;
 
-                    const auto usedMemory = BinaryOperator::CreateSub(GetMemoryUsed(MemLimit, ctx, block), used, "used_memory", block);
+                    const auto usedMemory = BinaryOperator::CreateSub(GetMemoryUsed(MemLimit_, ctx, block), used, "used_memory", block);
                     const auto inc = BinaryOperator::CreateAdd(lastStored, usedMemory, "inc", block);
                     new StoreInst(inc, storedPtr, block);
 
@@ -1274,11 +1277,11 @@ public:
 
             block = good;
 
-            std::vector<Value*> items(Nodes.ItemNodes.size(), nullptr);
+            std::vector<Value*> items(Nodes_.ItemNodes.size(), nullptr);
             for (ui32 i = 0U; i < items.size(); ++i) {
-                if (Nodes.ItemNodes[i]->GetDependentsCount() > 0U) {
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
-                } else if (Nodes.PasstroughtItems[i]) {
+                if (Nodes_.ItemNodes[i]->GetDependentsCount() > 0U) {
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes_.ItemNodes[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
+                } else if (Nodes_.PasstroughtItems[i]) {
                     items[i] = getres.second[i](ctx, block);
                 }
             }
@@ -1286,22 +1289,23 @@ public:
             const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetTongue()}, "tongue_ptr", block);
             const auto tongue = new LoadInst(ptrValueType, tonguePtr, "tongue", block);
 
-            std::vector<Value*> keyPointers(Nodes.KeyResultNodes.size(), nullptr), keys(Nodes.KeyResultNodes.size(), nullptr);
-            for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
+            std::vector<Value*> keyPointers(Nodes_.KeyResultNodes.size(), nullptr);
+            std::vector<Value*> keys(Nodes_.KeyResultNodes.size(), nullptr);
+            for (ui32 i = 0U; i < Nodes_.KeyResultNodes.size(); ++i) {
                 auto& key = keys[i];
                 const auto keyPtr = keyPointers[i] = GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("key_") += ToString(i)).c_str(), block);
-                if (const auto map = Nodes.KeysOnItems[i]) {
+                if (const auto map = Nodes_.KeysOnItems[i]) {
                     auto& it = items[*map];
                     if (!it) {
                         it = getres.second[*map](ctx, block);
                     }
                     key = it;
                 } else {
-                    key = GetNodeValue(Nodes.KeyResultNodes[i], ctx, block);
+                    key = GetNodeValue(Nodes_.KeyResultNodes[i], ctx, block);
                 }
 
-                if (Nodes.KeyNodes[i]->GetDependentsCount() > 0U) {
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.KeyNodes[i])->CreateSetValue(ctx, block, key);
+                if (Nodes_.KeyNodes[i]->GetDependentsCount() > 0U) {
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes_.KeyNodes[i])->CreateSetValue(ctx, block, key);
                 }
 
                 new StoreInst(key, keyPtr, block);
@@ -1317,8 +1321,8 @@ public:
             const auto throat = new LoadInst(ptrValueType, throatPtr, "throat", block);
 
             std::vector<Value*> pointers;
-            pointers.reserve(Nodes.StateNodes.size());
-            for (ui32 i = 0U; i < Nodes.StateNodes.size(); ++i) {
+            pointers.reserve(Nodes_.StateNodes.size());
+            for (ui32 i = 0U; i < Nodes_.StateNodes.size(); ++i) {
                 pointers.emplace_back(GetElementPtrInst::CreateInBounds(valueType, throat, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("state_") += ToString(i)).c_str(), block));
             }
 
@@ -1326,24 +1330,24 @@ public:
 
             block = init;
 
-            for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
-                ValueAddRef(Nodes.KeyResultNodes[i]->GetRepresentation(), keyPointers[i], ctx, block);
+            for (ui32 i = 0U; i < Nodes_.KeyResultNodes.size(); ++i) {
+                ValueAddRef(Nodes_.KeyResultNodes[i]->GetRepresentation(), keyPointers[i], ctx, block);
             }
 
-            for (ui32 i = 0U; i < Nodes.InitResultNodes.size(); ++i) {
-                if (const auto map = Nodes.InitOnItems[i]) {
+            for (ui32 i = 0U; i < Nodes_.InitResultNodes.size(); ++i) {
+                if (const auto map = Nodes_.InitOnItems[i]) {
                     auto& it = items[*map];
                     if (!it) {
                         it = getres.second[*map](ctx, block);
                     }
                     new StoreInst(it, pointers[i], block);
-                    ValueAddRef(Nodes.InitResultNodes[i]->GetRepresentation(), it, ctx, block);
-                } else if (const auto map = Nodes.InitOnKeys[i]) {
+                    ValueAddRef(Nodes_.InitResultNodes[i]->GetRepresentation(), it, ctx, block);
+                } else if (const auto map = Nodes_.InitOnKeys[i]) {
                     const auto key = keys[*map];
                     new StoreInst(key, pointers[i], block);
-                    ValueAddRef(Nodes.InitResultNodes[i]->GetRepresentation(), key, ctx, block);
+                    ValueAddRef(Nodes_.InitResultNodes[i]->GetRepresentation(), key, ctx, block);
                 } else {
-                    GetNodeValue(pointers[i], Nodes.InitResultNodes[i], ctx, block);
+                    GetNodeValue(pointers[i], Nodes_.InitResultNodes[i], ctx, block);
                 }
             }
 
@@ -1351,54 +1355,54 @@ public:
 
             block = next;
 
-            for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
-                if (Nodes.KeysOnItems[i] || Nodes.KeyResultNodes[i]->IsTemporaryValue()) {
-                    ValueCleanup(Nodes.KeyResultNodes[i]->GetRepresentation(), keyPointers[i], ctx, block);
+            for (ui32 i = 0U; i < Nodes_.KeyResultNodes.size(); ++i) {
+                if (Nodes_.KeysOnItems[i] || Nodes_.KeyResultNodes[i]->IsTemporaryValue()) {
+                    ValueCleanup(Nodes_.KeyResultNodes[i]->GetRepresentation(), keyPointers[i], ctx, block);
                 }
             }
 
-            std::vector<Value*> stored(Nodes.StateNodes.size(), nullptr);
+            std::vector<Value*> stored(Nodes_.StateNodes.size(), nullptr);
             for (ui32 i = 0U; i < stored.size(); ++i) {
-                const bool hasDependency = Nodes.StateNodes[i]->GetDependentsCount() > 0U;
-                if (const auto map = Nodes.StateOnUpdate[i]) {
+                const bool hasDependency = Nodes_.StateNodes[i]->GetDependentsCount() > 0U;
+                if (const auto map = Nodes_.StateOnUpdate[i]) {
                     if (hasDependency || i != *map) {
                         stored[i] = new LoadInst(valueType, pointers[i], (TString("state_") += ToString(i)).c_str(), block);
                         if (hasDependency) {
-                            EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, stored[i]);
+                            EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes_.StateNodes[i])->CreateSetValue(ctx, block, stored[i]);
                         }
                     }
                 } else if (hasDependency) {
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, pointers[i]);
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes_.StateNodes[i])->CreateSetValue(ctx, block, pointers[i]);
                 } else {
-                    ValueUnRef(Nodes.StateNodes[i]->GetRepresentation(), pointers[i], ctx, block);
+                    ValueUnRef(Nodes_.StateNodes[i]->GetRepresentation(), pointers[i], ctx, block);
                 }
             }
 
-            for (ui32 i = 0U; i < Nodes.UpdateResultNodes.size(); ++i) {
-                if (const auto map = Nodes.UpdateOnState[i]) {
+            for (ui32 i = 0U; i < Nodes_.UpdateResultNodes.size(); ++i) {
+                if (const auto map = Nodes_.UpdateOnState[i]) {
                     if (const auto j = *map; i != j) {
                         auto& it = stored[j];
                         if (!it) {
                             it = new LoadInst(valueType, pointers[j], (TString("state_") += ToString(j)).c_str(), block);
                         }
                         new StoreInst(it, pointers[i], block);
-                        if (i != *Nodes.StateOnUpdate[j]) {
-                            ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
+                        if (i != *Nodes_.StateOnUpdate[j]) {
+                            ValueAddRef(Nodes_.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
                         }
                     }
-                } else if (const auto map = Nodes.UpdateOnItems[i]) {
+                } else if (const auto map = Nodes_.UpdateOnItems[i]) {
                     auto& it = items[*map];
                     if (!it) {
                         it = getres.second[*map](ctx, block);
                     }
                     new StoreInst(it, pointers[i], block);
-                    ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
-                } else if (const auto map = Nodes.UpdateOnKeys[i]) {
+                    ValueAddRef(Nodes_.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
+                } else if (const auto map = Nodes_.UpdateOnKeys[i]) {
                     const auto key = keys[*map];
                     new StoreInst(key, pointers[i], block);
-                    ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), key, ctx, block);
+                    ValueAddRef(Nodes_.UpdateResultNodes[i]->GetRepresentation(), key, ctx, block);
                 } else {
-                    GetNodeValue(pointers[i], Nodes.UpdateResultNodes[i], ctx, block);
+                    GetNodeValue(pointers[i], Nodes_.UpdateResultNodes[i], ctx, block);
                 }
             }
 
@@ -1407,13 +1411,13 @@ public:
             block = test;
 
             auto totalUsed = used;
-            if (MemLimit) {
+            if (MemLimit_) {
                 const auto storedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetStored()}, "stored_ptr", block);
                 const auto lastStored = new LoadInst(storedType, storedPtr, "last_stored", block);
                 totalUsed = BinaryOperator::CreateSub(used, lastStored, "decr", block);
             }
 
-            const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, totalUsed, ctx, block);
+            const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit_, totalUsed, ctx, block);
 
             const auto isOutOfMemoryPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetIsOutOfMemory()}, "is_out_of_memory_ptr", block);
             const auto isOutOfMemory = new LoadInst(Type::getInt1Ty(context), isOutOfMemoryPtr, "is_out_of_memory", block);
@@ -1443,12 +1447,12 @@ public:
 
             block = good;
 
-            for (ui32 i = 0U; i < Nodes.FinishNodes.size(); ++i) {
+            for (ui32 i = 0U; i < Nodes_.FinishNodes.size(); ++i) {
                 const auto ptr = GetElementPtrInst::CreateInBounds(valueType, out, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("out_key_") += ToString(i)).c_str(), block);
-                if (Nodes.FinishNodes[i]->GetDependentsCount() > 0 || Nodes.ItemsOnResult[i]) {
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.FinishNodes[i])->CreateSetValue(ctx, block, ptr);
+                if (Nodes_.FinishNodes[i]->GetDependentsCount() > 0 || Nodes_.ItemsOnResult[i]) {
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes_.FinishNodes[i])->CreateSetValue(ctx, block, ptr);
                 } else {
-                    ValueUnRef(Nodes.FinishNodes[i]->GetRepresentation(), ptr, ctx, block);
+                    ValueUnRef(Nodes_.FinishNodes[i]->GetRepresentation(), ptr, ctx, block);
                 }
             }
 
@@ -1459,8 +1463,8 @@ public:
         block = over;
 
         ICodegeneratorInlineWideNode::TGettersList getters;
-        getters.reserve(Nodes.FinishResultNodes.size());
-        std::transform(Nodes.FinishResultNodes.cbegin(), Nodes.FinishResultNodes.cend(), std::back_inserter(getters), [&](IComputationNode* node) {
+        getters.reserve(Nodes_.FinishResultNodes.size());
+        std::transform(Nodes_.FinishResultNodes.cbegin(), Nodes_.FinishResultNodes.cend(), std::back_inserter(getters), [&](IComputationNode* node) {
             return [node](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(node, ctx, block); };
         });
         return {result, std::move(getters)};
@@ -1473,43 +1477,43 @@ private:
         UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(),
-                                                 TMyValueHasher(KeyTypes), TMyValueEqual(KeyTypes), logger, logComponent);
+        state = ctx.HolderFactory.Create<TState>(Nodes_.KeyNodes.size(), Nodes_.StateNodes.size(),
+                                                 TMyValueHasher(KeyTypes_), TMyValueEqual(KeyTypes_), logger, logComponent);
 #else
-        state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(),
-                                                 ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TMyValueHasher(KeyTypes)),
-                                                 ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes)),
+        state = ctx.HolderFactory.Create<TState>(Nodes_.KeyNodes.size(), Nodes_.StateNodes.size(),
+                                                 ctx.ExecuteLLVM && Hash_ ? THashFunc(std::ptr_fun(Hash_)) : THashFunc(TMyValueHasher(KeyTypes_)),
+                                                 ctx.ExecuteLLVM && Equals_ ? TEqualsFunc(std::ptr_fun(Equals_)) : TEqualsFunc(TMyValueEqual(KeyTypes_)),
                                                  logger, logComponent);
 #endif
         if (ctx.CountersProvider) {
             const auto ptr = static_cast<TState*>(state.AsBoxed().Get());
             // id will be assigned externally in future versions
             TString id = TString(Operator_Aggregation) + "0";
-            ptr->CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+            ptr->CounterOutputRows = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, /*deriv=*/false);
         }
     }
 
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) {
-            Nodes.RegisterDependencies(
+        if (const auto flow = this->FlowDependsOn(Flow_)) {
+            Nodes_.RegisterDependencies(
                 [this, flow](IComputationNode* node) { this->DependsOn(flow, node); },
                 [this, flow](IComputationExternalNode* node) { this->Own(flow, node); });
         }
     }
 
-    IComputationWideFlowNode* const Flow;
-    const TCombinerNodes Nodes;
-    const TKeyTypes KeyTypes;
-    const ui64 MemLimit;
+    IComputationWideFlowNode* const Flow_;
+    const TCombinerNodes Nodes_;
+    const TKeyTypes KeyTypes_;
+    const ui64 MemLimit_;
 
-    const ui32 WideFieldsIndex;
+    const ui32 WideFieldsIndex_;
 
 #ifndef MKQL_DISABLE_CODEGEN
-    TEqualsPtr Equals = nullptr;
-    THashPtr Hash = nullptr;
+    TEqualsPtr Equals_ = nullptr;
+    THashPtr Hash_ = nullptr;
 
-    Function* EqualsFunc = nullptr;
-    Function* HashFunc = nullptr;
+    Function* EqualsFunc_ = nullptr;
+    Function* HashFunc_ = nullptr;
 
     template <bool EqualsOrHash>
     TString MakeName() const {
@@ -1519,17 +1523,17 @@ private:
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (EqualsFunc) {
-            Equals = reinterpret_cast<TEqualsPtr>(codegen.GetPointerToFunction(EqualsFunc));
+        if (EqualsFunc_) {
+            Equals_ = reinterpret_cast<TEqualsPtr>(codegen.GetPointerToFunction(EqualsFunc_));
         }
-        if (HashFunc) {
-            Hash = reinterpret_cast<THashPtr>(codegen.GetPointerToFunction(HashFunc));
+        if (HashFunc_) {
+            Hash_ = reinterpret_cast<THashPtr>(codegen.GetPointerToFunction(HashFunc_));
         }
     }
 
     void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        codegen.ExportSymbol(HashFunc = GenerateHashFunction(codegen, MakeName<false>(), KeyTypes));
-        codegen.ExportSymbol(EqualsFunc = GenerateEqualsFunction(codegen, MakeName<true>(), KeyTypes));
+        codegen.ExportSymbol(HashFunc_ = GenerateHashFunction(codegen, MakeName<false>(), KeyTypes_));
+        codegen.ExportSymbol(EqualsFunc_ = GenerateEqualsFunction(codegen, MakeName<true>(), KeyTypes_));
     }
 #endif
 };
@@ -1552,13 +1556,13 @@ public:
         const TMultiType* keyAndStateType,
         bool allowSpilling)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
-        , Flow(flow)
-        , Nodes(std::move(nodes))
-        , KeyTypes(std::move(keyTypes))
-        , UsedInputItemType(usedInputItemType)
-        , KeyAndStateType(keyAndStateType)
-        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Nodes.ItemNodes.size()))
-        , AllowSpilling(allowSpilling)
+        , Flow_(flow)
+        , Nodes_(std::move(nodes))
+        , KeyTypes_(std::move(keyTypes))
+        , UsedInputItemType_(usedInputItemType)
+        , KeyAndStateType_(keyAndStateType)
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Nodes_.ItemNodes.size()))
+        , AllowSpilling_(allowSpilling)
     {
     }
 
@@ -1568,15 +1572,15 @@ public:
         }
 
         if (const auto ptr = static_cast<TSpillingSupportState*>(state.AsBoxed().Get())) {
-            auto** fields = ctx.WideFields.data() + WideFieldsIndex;
+            auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
 
             while (true) {
                 switch (ptr->Update()) {
                     case TSpillingSupportState::EUpdateResult::ReadInput: {
-                        for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
-                            fields[i] = Nodes.GetUsedInputItemNodePtrOrNull(ctx, i);
+                        for (auto i = 0U; i < Nodes_.ItemNodes.size(); ++i) {
+                            fields[i] = Nodes_.GetUsedInputItemNodePtrOrNull(ctx, i);
                         }
-                        switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
+                        switch (ptr->InputStatus = Flow_->FetchValues(ctx, fields)) {
                             case EFetchResult::One:
                                 break;
                             case EFetchResult::Finish:
@@ -1584,17 +1588,17 @@ public:
                             case EFetchResult::Yield:
                                 return EFetchResult::Yield;
                         }
-                        Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
+                        Nodes_.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                         break;
                     }
                     case TSpillingSupportState::EUpdateResult::Yield:
                         return EFetchResult::Yield;
                     case TSpillingSupportState::EUpdateResult::ExtractRawData:
-                        Nodes.ExtractRawData(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
+                        Nodes_.ExtractRawData(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Throat), static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                         break;
                     case TSpillingSupportState::EUpdateResult::Extract:
                         if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
-                            Nodes.FinishItem(ctx, values, output);
+                            Nodes_.FinishItem(ctx, values, output);
                             return EFetchResult::One;
                         }
                         continue;
@@ -1604,13 +1608,13 @@ public:
 
                 switch (ptr->TasteIt()) {
                     case TSpillingSupportState::ETasteResult::Init:
-                        Nodes.ProcessItem(ctx, nullptr, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                        Nodes_.ProcessItem(ctx, /*keys=*/nullptr, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                         break;
                     case TSpillingSupportState::ETasteResult::Update:
-                        Nodes.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                        Nodes_.ProcessItem(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                         break;
                     case TSpillingSupportState::ETasteResult::ConsumeRawData:
-                        Nodes.ConsumeRawData(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
+                        Nodes_.ConsumeRawData(ctx, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), fields, static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                         break;
                 }
             }
@@ -1618,7 +1622,7 @@ public:
         MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
@@ -1665,10 +1669,10 @@ public:
 
         const auto result = PHINode::Create(statusType, 4U, "result", over);
 
-        std::vector<PHINode*> phis(Nodes.ItemNodes.size(), nullptr);
+        std::vector<PHINode*> phis(Nodes_.ItemNodes.size(), nullptr);
         auto j = 0U;
         std::generate(phis.begin(), phis.end(), [&]() {
-            return Nodes.IsInputItemNodeUsed(j++) ? PHINode::Create(valueType, 2U, (TString("item_") += ToString(j)).c_str(), test) : nullptr;
+            return Nodes_.IsInputItemNodeUsed(j++) ? PHINode::Create(valueType, 2U, (TString("item_") += ToString(j)).c_str(), test) : nullptr;
         });
 
         block = more;
@@ -1695,8 +1699,8 @@ public:
             if (phis[i]) {
                 items[i] = new LoadInst(valueType, ptr, (TString("load_") += ToString(i)).c_str(), block);
             }
-            if (i < Nodes.ItemNodes.size() && Nodes.ItemNodes[i]->GetDependentsCount() > 0U) {
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i]);
+            if (i < Nodes_.ItemNodes.size() && Nodes_.ItemNodes[i]->GetDependentsCount() > 0U) {
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes_.ItemNodes[i])->CreateSetValue(ctx, block, items[i]);
             }
         }
 
@@ -1710,7 +1714,7 @@ public:
 
         block = pull;
 
-        const auto getres = GetNodeValues(Flow, ctx, block);
+        const auto getres = GetNodeValues(Flow_, ctx, block);
 
         result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
@@ -1729,8 +1733,8 @@ public:
             if (phis[i]) {
                 items[i] = getres.second[i](ctx, block);
             }
-            if (Nodes.ItemNodes[i]->GetDependentsCount() > 0U) {
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i]);
+            if (Nodes_.ItemNodes[i]->GetDependentsCount() > 0U) {
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes_.ItemNodes[i])->CreateSetValue(ctx, block, items[i]);
             }
         }
 
@@ -1747,18 +1751,19 @@ public:
         const auto tonguePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetTongue()}, "tongue_ptr", block);
         const auto tongue = new LoadInst(ptrValueType, tonguePtr, "tongue", block);
 
-        std::vector<Value*> keyPointers(Nodes.KeyResultNodes.size(), nullptr), keys(Nodes.KeyResultNodes.size(), nullptr);
-        for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
+        std::vector<Value*> keyPointers(Nodes_.KeyResultNodes.size(), nullptr);
+        std::vector<Value*> keys(Nodes_.KeyResultNodes.size(), nullptr);
+        for (ui32 i = 0U; i < Nodes_.KeyResultNodes.size(); ++i) {
             auto& key = keys[i];
             const auto keyPtr = keyPointers[i] = GetElementPtrInst::CreateInBounds(valueType, tongue, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("key_") += ToString(i)).c_str(), block);
-            if (const auto map = Nodes.KeysOnItems[i]) {
+            if (const auto map = Nodes_.KeysOnItems[i]) {
                 key = phis[*map];
             } else {
-                key = GetNodeValue(Nodes.KeyResultNodes[i], ctx, block);
+                key = GetNodeValue(Nodes_.KeyResultNodes[i], ctx, block);
             }
 
-            if (Nodes.KeyNodes[i]->GetDependentsCount() > 0U) {
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.KeyNodes[i])->CreateSetValue(ctx, block, key);
+            if (Nodes_.KeyNodes[i]->GetDependentsCount() > 0U) {
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes_.KeyNodes[i])->CreateSetValue(ctx, block, key);
             }
 
             new StoreInst(key, keyPtr, block);
@@ -1774,7 +1779,7 @@ public:
         const auto throat = new LoadInst(ptrValueType, throatPtr, "throat", block);
 
         std::vector<Value*> pointers;
-        const auto width = std::max(Nodes.StateNodes.size(), phis.size());
+        const auto width = std::max(Nodes_.StateNodes.size(), phis.size());
         pointers.reserve(width);
         for (ui32 i = 0U; i < width; ++i) {
             pointers.emplace_back(GetElementPtrInst::CreateInBounds(valueType, throat, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("state_") += ToString(i)).c_str(), block));
@@ -1787,21 +1792,21 @@ public:
 
         block = init;
 
-        for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
-            ValueAddRef(Nodes.KeyResultNodes[i]->GetRepresentation(), keyPointers[i], ctx, block);
+        for (ui32 i = 0U; i < Nodes_.KeyResultNodes.size(); ++i) {
+            ValueAddRef(Nodes_.KeyResultNodes[i]->GetRepresentation(), keyPointers[i], ctx, block);
         }
 
-        for (ui32 i = 0U; i < Nodes.InitResultNodes.size(); ++i) {
-            if (const auto map = Nodes.InitOnItems[i]) {
+        for (ui32 i = 0U; i < Nodes_.InitResultNodes.size(); ++i) {
+            if (const auto map = Nodes_.InitOnItems[i]) {
                 const auto item = phis[*map];
                 new StoreInst(item, pointers[i], block);
-                ValueAddRef(Nodes.InitResultNodes[i]->GetRepresentation(), item, ctx, block);
-            } else if (const auto map = Nodes.InitOnKeys[i]) {
+                ValueAddRef(Nodes_.InitResultNodes[i]->GetRepresentation(), item, ctx, block);
+            } else if (const auto map = Nodes_.InitOnKeys[i]) {
                 const auto key = keys[*map];
                 new StoreInst(key, pointers[i], block);
-                ValueAddRef(Nodes.InitResultNodes[i]->GetRepresentation(), key, ctx, block);
+                ValueAddRef(Nodes_.InitResultNodes[i]->GetRepresentation(), key, ctx, block);
             } else {
-                GetNodeValue(pointers[i], Nodes.InitResultNodes[i], ctx, block);
+                GetNodeValue(pointers[i], Nodes_.InitResultNodes[i], ctx, block);
             }
         }
 
@@ -1809,42 +1814,42 @@ public:
 
         block = next;
 
-        std::vector<Value*> stored(Nodes.StateNodes.size(), nullptr);
+        std::vector<Value*> stored(Nodes_.StateNodes.size(), nullptr);
         for (ui32 i = 0U; i < stored.size(); ++i) {
-            const bool hasDependency = Nodes.StateNodes[i]->GetDependentsCount() > 0U;
-            if (const auto map = Nodes.StateOnUpdate[i]) {
+            const bool hasDependency = Nodes_.StateNodes[i]->GetDependentsCount() > 0U;
+            if (const auto map = Nodes_.StateOnUpdate[i]) {
                 if (hasDependency || i != *map) {
                     stored[i] = new LoadInst(valueType, pointers[i], (TString("state_") += ToString(i)).c_str(), block);
                     if (hasDependency) {
-                        EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, stored[i]);
+                        EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes_.StateNodes[i])->CreateSetValue(ctx, block, stored[i]);
                     }
                 }
             } else if (hasDependency) {
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.StateNodes[i])->CreateSetValue(ctx, block, pointers[i]);
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes_.StateNodes[i])->CreateSetValue(ctx, block, pointers[i]);
             } else {
-                ValueUnRef(Nodes.StateNodes[i]->GetRepresentation(), pointers[i], ctx, block);
+                ValueUnRef(Nodes_.StateNodes[i]->GetRepresentation(), pointers[i], ctx, block);
             }
         }
 
-        for (ui32 i = 0U; i < Nodes.UpdateResultNodes.size(); ++i) {
-            if (const auto map = Nodes.UpdateOnState[i]) {
+        for (ui32 i = 0U; i < Nodes_.UpdateResultNodes.size(); ++i) {
+            if (const auto map = Nodes_.UpdateOnState[i]) {
                 if (const auto j = *map; i != j) {
                     const auto it = stored[j];
                     new StoreInst(it, pointers[i], block);
-                    if (i != *Nodes.StateOnUpdate[j]) {
-                        ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
+                    if (i != *Nodes_.StateOnUpdate[j]) {
+                        ValueAddRef(Nodes_.UpdateResultNodes[i]->GetRepresentation(), it, ctx, block);
                     }
                 }
-            } else if (const auto map = Nodes.UpdateOnItems[i]) {
+            } else if (const auto map = Nodes_.UpdateOnItems[i]) {
                 const auto item = phis[*map];
                 new StoreInst(item, pointers[i], block);
-                ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), item, ctx, block);
-            } else if (const auto map = Nodes.UpdateOnKeys[i]) {
+                ValueAddRef(Nodes_.UpdateResultNodes[i]->GetRepresentation(), item, ctx, block);
+            } else if (const auto map = Nodes_.UpdateOnKeys[i]) {
                 const auto key = keys[*map];
                 new StoreInst(key, pointers[i], block);
-                ValueAddRef(Nodes.UpdateResultNodes[i]->GetRepresentation(), key, ctx, block);
+                ValueAddRef(Nodes_.UpdateResultNodes[i]->GetRepresentation(), key, ctx, block);
             } else {
-                GetNodeValue(pointers[i], Nodes.UpdateResultNodes[i], ctx, block);
+                GetNodeValue(pointers[i], Nodes_.UpdateResultNodes[i], ctx, block);
             }
         }
 
@@ -1855,7 +1860,7 @@ public:
         for (ui32 i = 0U; i < phis.size(); ++i) {
             if (const auto item = phis[i]) {
                 new StoreInst(item, pointers[i], block);
-                ValueAddRef(Nodes.ItemNodes[i]->GetRepresentation(), item, ctx, block);
+                ValueAddRef(Nodes_.ItemNodes[i]->GetRepresentation(), item, ctx, block);
             }
         }
 
@@ -1870,12 +1875,12 @@ public:
 
         block = data;
 
-        for (ui32 i = 0U; i < Nodes.FinishNodes.size(); ++i) {
+        for (ui32 i = 0U; i < Nodes_.FinishNodes.size(); ++i) {
             const auto ptr = GetElementPtrInst::CreateInBounds(valueType, out, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("out_key_") += ToString(i)).c_str(), block);
-            if (Nodes.FinishNodes[i]->GetDependentsCount() > 0 || Nodes.ItemsOnResult[i]) {
-                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.FinishNodes[i])->CreateSetValue(ctx, block, ptr);
+            if (Nodes_.FinishNodes[i]->GetDependentsCount() > 0 || Nodes_.ItemsOnResult[i]) {
+                EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes_.FinishNodes[i])->CreateSetValue(ctx, block, ptr);
             } else {
-                ValueUnRef(Nodes.FinishNodes[i]->GetRepresentation(), ptr, ctx, block);
+                ValueUnRef(Nodes_.FinishNodes[i]->GetRepresentation(), ptr, ctx, block);
             }
         }
 
@@ -1891,8 +1896,8 @@ public:
         block = over;
 
         ICodegeneratorInlineWideNode::TGettersList getters;
-        getters.reserve(Nodes.FinishResultNodes.size());
-        std::transform(Nodes.FinishResultNodes.cbegin(), Nodes.FinishResultNodes.cend(), std::back_inserter(getters), [&](IComputationNode* node) {
+        getters.reserve(Nodes_.FinishResultNodes.size());
+        std::transform(Nodes_.FinishResultNodes.cbegin(), Nodes_.FinishResultNodes.cend(), std::back_inserter(getters), [&](IComputationNode* node) {
             return [node](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(node, ctx, block); };
         });
         return {result, std::move(getters)};
@@ -1904,46 +1909,46 @@ private:
         NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("WideLastCombine");
         UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 
-        state = ctx.HolderFactory.Create<TSpillingSupportState>(UsedInputItemType, KeyAndStateType,
-                                                                Nodes.KeyNodes.size(),
-                                                                Nodes.ItemNodes.size(),
+        state = ctx.HolderFactory.Create<TSpillingSupportState>(UsedInputItemType_, KeyAndStateType_,
+                                                                Nodes_.KeyNodes.size(),
+                                                                Nodes_.ItemNodes.size(),
 #ifdef MKQL_DISABLE_CODEGEN
-                                                                TMyValueHasher(KeyTypes),
-                                                                TMyValueEqual(KeyTypes),
+                                                                TMyValueHasher(KeyTypes_),
+                                                                TMyValueEqual(KeyTypes_),
 #else
-                                                                ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TMyValueHasher(KeyTypes)),
-                                                                ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes)),
+                                                                ctx.ExecuteLLVM && Hash_ ? THashFunc(std::ptr_fun(Hash_)) : THashFunc(TMyValueHasher(KeyTypes_)),
+                                                                ctx.ExecuteLLVM && Equals_ ? TEqualsFunc(std::ptr_fun(Equals_)) : TEqualsFunc(TMyValueEqual(KeyTypes_)),
 #endif
-                                                                AllowSpilling,
+                                                                AllowSpilling_,
                                                                 ctx,
                                                                 logger,
                                                                 logComponent);
     }
 
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOn(Flow)) {
-            Nodes.RegisterDependencies(
+        if (const auto flow = this->FlowDependsOn(Flow_)) {
+            Nodes_.RegisterDependencies(
                 [this, flow](IComputationNode* node) { this->DependsOn(flow, node); },
                 [this, flow](IComputationExternalNode* node) { this->Own(flow, node); });
         }
     }
 
-    IComputationWideFlowNode* const Flow;
-    const TCombinerNodes Nodes;
-    const TKeyTypes KeyTypes;
+    IComputationWideFlowNode* const Flow_;
+    const TCombinerNodes Nodes_;
+    const TKeyTypes KeyTypes_;
 
-    const TMultiType* const UsedInputItemType;
-    const TMultiType* const KeyAndStateType;
+    const TMultiType* const UsedInputItemType_;
+    const TMultiType* const KeyAndStateType_;
 
-    const ui32 WideFieldsIndex;
+    const ui32 WideFieldsIndex_;
 
-    const bool AllowSpilling;
+    const bool AllowSpilling_;
 #ifndef MKQL_DISABLE_CODEGEN
-    TEqualsPtr Equals = nullptr;
-    THashPtr Hash = nullptr;
+    TEqualsPtr Equals_ = nullptr;
+    THashPtr Hash_ = nullptr;
 
-    Function* EqualsFunc = nullptr;
-    Function* HashFunc = nullptr;
+    Function* EqualsFunc_ = nullptr;
+    Function* HashFunc_ = nullptr;
 
     template <bool EqualsOrHash>
     TString MakeName() const {
@@ -1953,17 +1958,17 @@ private:
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (EqualsFunc) {
-            Equals = reinterpret_cast<TEqualsPtr>(codegen.GetPointerToFunction(EqualsFunc));
+        if (EqualsFunc_) {
+            Equals_ = reinterpret_cast<TEqualsPtr>(codegen.GetPointerToFunction(EqualsFunc_));
         }
-        if (HashFunc) {
-            Hash = reinterpret_cast<THashPtr>(codegen.GetPointerToFunction(HashFunc));
+        if (HashFunc_) {
+            Hash_ = reinterpret_cast<THashPtr>(codegen.GetPointerToFunction(HashFunc_));
         }
     }
 
     void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        codegen.ExportSymbol(HashFunc = GenerateHashFunction(codegen, MakeName<false>(), KeyTypes));
-        codegen.ExportSymbol(EqualsFunc = GenerateEqualsFunction(codegen, MakeName<true>(), KeyTypes));
+        codegen.ExportSymbol(HashFunc_ = GenerateHashFunction(codegen, MakeName<false>(), KeyTypes_));
+        codegen.ExportSymbol(EqualsFunc_ = GenerateEqualsFunction(codegen, MakeName<true>(), KeyTypes_));
     }
 #endif
 };
@@ -2064,16 +2069,15 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
 }
 
 IComputationNode* WrapWideCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapWideCombinerT<false>(callable, ctx, false);
+    return WrapWideCombinerT<false>(callable, ctx, /*allowSpilling=*/false);
 }
 
 IComputationNode* WrapWideLastCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapWideCombinerT<true>(callable, ctx, false);
+    return WrapWideCombinerT<true>(callable, ctx, /*allowSpilling=*/false);
 }
 
 IComputationNode* WrapWideLastCombinerWithSpilling(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    return WrapWideCombinerT<true>(callable, ctx, true);
+    return WrapWideCombinerT<true>(callable, ctx, /*allowSpilling=*/true);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

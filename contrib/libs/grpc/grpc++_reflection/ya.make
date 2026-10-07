@@ -4,17 +4,17 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(1.60.2)
+VERSION(1.61.3)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/libs/grpc
-    contrib/proto/grpc/grpc/reflection/v1
-    contrib/proto/grpc/grpc/reflection/v1alpha
     contrib/libs/grpc/third_party/address_sorting
     contrib/libs/grpc/third_party/upb
     contrib/libs/protobuf
+    contrib/proto/grpc/grpc/reflection/v1
+    contrib/proto/grpc/grpc/reflection/v1alpha
     contrib/restricted/abseil-cpp-tstring
 )
 

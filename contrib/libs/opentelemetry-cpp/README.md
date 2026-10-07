@@ -28,6 +28,7 @@ C++ standards:
 * ISO/IEC 14882:2014 (C++14)
 * ISO/IEC 14882:2017 (C++17)
 * ISO/IEC 14882:2020 (C++20)
+* ISO/IEC 14882:2024 (C++23)
 
 Any exceptions to this are noted in the individual `README.md` files.
 
@@ -37,16 +38,16 @@ of the current project.
 
 ## Supported Development Platforms
 
- Our CI pipeline builds and tests on following `x86-64` platforms:
+Our CI pipeline builds and tests on the following platforms:
 
-| Platform                                                            |   Build type  |
-|---------------------------------------------------------------------|---------------|
-| ubuntu-22.04 (GCC 10, GCC 12, Clang 14)                             | CMake, Bazel  |
-| ubuntu-20.04 (GCC 9.4.0 - default compiler)                         | CMake, Bazel  |
-| ubuntu-20.04 (GCC 9.4.0 with -std=c++14/17/20 flags)                | CMake, Bazel  |
-| macOS 12.7 (Xcode 14.2)                                             | Bazel         |
-| Windows Server 2019 (Visual Studio Enterprise 2019)                 | CMake, Bazel  |
-| Windows Server 2022 (Visual Studio Enterprise 2022)                 | CMake         |
+| Platform            | Architecture | Build type   |
+|---------------------|--------------|--------------|
+| Ubuntu 22.04        | x86-64       | CMake        |
+| Ubuntu 24.04        | x86-64       | CMake, Bazel |
+| macOS 14            | arm64        | CMake        |
+| macOS 15            | arm64        | Bazel        |
+| Windows Server 2022 | x86-64       | CMake, Bazel |
+| Windows Server 2025 | x86-64       | CMake        |
 
 In general, the code shipped from this repository should build on all platforms
 having C++ compiler with [supported C++ standards](#supported-c-versions).
@@ -94,11 +95,19 @@ for specific dates and Zoom meeting links.
 Meeting notes are available as a public
 [Google doc](https://docs.google.com/document/d/1rdF6GZcCqH9huo3oqur5x_McsPS_qQ9OPSRFjIqndm8/edit?usp=sharing).
 
-For edit access, get in touch on
-[Slack](https://cloud-native.slack.com/archives/C01N3AT62SJ).
+For edit access, get in touch on the
+[#otel-cpp](https://cloud-native.slack.com/archives/C01N3AT62SJ)
+channel on CNCF Slack. If you are new to the CNCF Slack community,
+you can [create an account](https://slack.cncf.io/).
+
+The meeting is open for all to join. We invite everyone to join our meeting,
+regardless of your experience level. Whether you're a seasoned OpenTelemetry
+developer, just starting your journey, or simply curious about the work we do,
+you're more than welcome to participate!
 
 ### Maintainers
 
+* [Doug Barker](https://github.com/dbarker)
 * [Ehsan Saei](https://github.com/esigo)
 * [Lalit Kumar Bhasin](https://github.com/lalitb), Microsoft
 * [Marc Alff](https://github.com/marcalff), Oracle
@@ -108,22 +117,21 @@ For more information about the maintainer role, see the [community repository](h
 
 ### Approvers
 
-* [Doug Barker](https://github.com/dbarker)
-* [Josh Suereth](https://github.com/jsuereth), Google
-* [Pranav Sharma](https://github.com/psx95), Google
-* [WenTao Ou](https://github.com/owent), Tencent
+* [WenTao Ou](https://github.com/owent)
 
 For more information about the approver role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).
 
-### Emeritus Maintainer/Approver/Triager
+### Emeritus
 
-* [Alolita Sharma](https://github.com/alolita)
-* [Emil Mikulic](https://github.com/g-easy)
-* [Jodee Varney](https://github.com/jodeev)
-* [Johannes Tax](https://github.com/pyohannes)
-* [Max Golovanov](https://github.com/maxgolov)
-* [Reiley Yang](https://github.com/reyang)
-* [Ryan Burn](https://github.com/rnburn)
+* [Alolita Sharma](https://github.com/alolita), Triager
+* [Emil Mikulic](https://github.com/g-easy), Maintainer
+* [Jodee Varney](https://github.com/jodeev), Triager
+* [Johannes Tax](https://github.com/pyohannes), Approver
+* [Josh Suereth](https://github.com/jsuereth), Approver
+* [Max Golovanov](https://github.com/maxgolov), Approver
+* [Pranav Sharma](https://github.com/psx95), Approver
+* [Reiley Yang](https://github.com/reyang), Maintainer
+* [Ryan Burn](https://github.com/rnburn), Approver
 
 For more information about the emeritus role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#emeritus-maintainerapprovertriager).
 

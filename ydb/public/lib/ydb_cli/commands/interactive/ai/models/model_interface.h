@@ -3,6 +3,7 @@
 #include <library/cpp/json/writer/json_value.h>
 
 #include <util/generic/string.h>
+#include <util/system/types.h>
 
 #include <memory>
 
@@ -33,8 +34,15 @@ public:
             NJson::TJsonValue Parameters;
         };
 
+        struct TUsage {
+            ui64 InputTokens = 0;
+            ui64 OutputTokens = 0;
+            ui64 CachedInputTokens = 0;
+        };
+
         TString Text;
         std::vector<TToolCall> ToolCalls;
+        TUsage Usage;
     };
 
     virtual TResponse HandleMessages(const std::vector<TMessage>& messages, std::function<void()> onStartWaiting = {}, std::function<void()> onFinishWaiting = {}) = 0;

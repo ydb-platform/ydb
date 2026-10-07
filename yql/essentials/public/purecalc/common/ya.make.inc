@@ -8,6 +8,7 @@ ADDINCL(
 
 SRCS(
     compile_mkql.cpp
+    default_runtime_settings.cpp
     fwd.cpp
     inspect_input.cpp
     interface.cpp
@@ -40,7 +41,7 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/type_ann
     yql/essentials/sql
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
@@ -54,8 +55,6 @@ PEERDIR(
     yql/essentials/providers/common/udf_resolve
     yql/essentials/providers/common/arrow_resolve
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(interface.h)
 

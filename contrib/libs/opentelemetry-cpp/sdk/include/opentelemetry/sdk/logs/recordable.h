@@ -21,6 +21,9 @@ class InstrumentationScope;
 
 namespace logs
 {
+
+struct LogRecordLimits;
+
 /**
  * Maintains a representation of a log in a format that can be processed by a recorder.
  *
@@ -43,6 +46,15 @@ public:
   virtual void SetInstrumentationScope(
       const opentelemetry::sdk::instrumentationscope::InstrumentationScope
           &instrumentation_scope) noexcept = 0;
+
+  /**
+   * Apply attribute count and value length limits to this log. The default
+   * implementation is a no-op; concrete recordables that wish to enforce
+   * limits override this and copy the supplied limits before any
+   * SetAttribute call is observed, so the caller does not need to keep the
+   * supplied object alive.
+   */
+  virtual void SetLogRecordLimits(const LogRecordLimits & /* limits */) noexcept {}
 };
 
 }  // namespace logs

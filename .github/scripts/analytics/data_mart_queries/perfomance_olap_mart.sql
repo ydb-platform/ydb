@@ -53,6 +53,8 @@ $all_tests_raw =
         COALESCE(JSON_VALUE(tests_results.Info, "$.ci_launch_id"), CAST(RunId AS String)) AS LunchId_n,
         CAST(JSON_VALUE(Stats, '$.DiffsCount') AS INT) AS diff_response,
         IF(Success > 0, CAST(CAST(JSON_VALUE(Stats, '$.CompilationAvg') AS Double) AS Uint64)) AS CompilationAvg,
+        IF(Success > 0, CAST(CAST(JSON_VALUE(Stats, '$.CompilationCPUTime') AS Double) AS Uint64)) AS CompilationCPUTime,
+        IF(Success > 0, CAST(CAST(JSON_VALUE(Stats, '$.ProcessCPUTime') AS Double) AS Uint64)) AS ProcessCPUTime,
         IF(Success > 0, MeanDuration / 1000) AS YdbSumMeans,
         IF(Success > 0, MaxDuration / 1000) AS YdbSumMax,
         IF(Success > 0, MinDuration / 1000) AS YdbSumMin,
@@ -84,6 +86,8 @@ SELECT
     YdbSumMeans,
     YdbSumMin,
     CompilationAvg,
+    CompilationCPUTime,
+    ProcessCPUTime,
     Version,
     CiVersion,
     TestToolsVersion,
@@ -128,12 +132,12 @@ SELECT
         WHEN Db LIKE '%static-node-1.ydb-cluster.com/Root/db%' THEN 'ansible_'
         WHEN Db LIKE '%ydb-vla-dev04-002%' THEN 'oltp-vla-perf1_'
         WHEN Db LIKE '%ydb-vla-dev04-005%' THEN 'oltp-vla-perf2_'
-        WHEN Db LIKE '%ydb-qa-01-klg-010%' THEN 'oltp-klg-perf3_'
+        WHEN Db LIKE '%ydb-qa-01-klg-015%' THEN 'oltp-klg-perf3_'
         WHEN Db LIKE '%ydb-qa-01-klg-014%' THEN 'oltp-klg-perf4_'
-        WHEN Db LIKE '%ydb-qa-01-klg-018%' THEN 'oltp-klg-perf5_'
+        WHEN Db LIKE '%ydb-qa-01-klg-022%' THEN 'oltp-klg-perf5_'
         WHEN Db LIKE '%ydb-qa-01-sas-000%' THEN 'oltp-3dc-perf6_'
-        WHEN Db LIKE '%ydb-qa-01-klg-021%' THEN 'oltp-klg-perf7_'
-        WHEN Db LIKE '%ydb-qa-01-klg-030%' THEN 'oltp-klg-perf9_'
+        WHEN Db LIKE '%ydb-qa-01-klg-035%' THEN 'oltp-klg-perf7_'
+        WHEN Db LIKE '%ydb-qa-01-klg-021%' THEN 'oltp-klg-perf9_'
         WHEN Db LIKE '%sas%' THEN 'sas_'
         WHEN Db LIKE '%vla%' THEN 'vla_'
         WHEN Db LIKE '%klg%' THEN 'klg_'
@@ -170,6 +174,8 @@ FROM (
         COALESCE(real_data.YdbSumMax, null_template.YdbSumMax) AS YdbSumMax,
         COALESCE(real_data.YdbSumMeans, null_template.YdbSumMeans) AS YdbSumMeans,
         COALESCE(real_data.CompilationAvg, null_template.CompilationAvg) AS CompilationAvg,
+        COALESCE(real_data.CompilationCPUTime, null_template.CompilationCPUTime) AS CompilationCPUTime,
+        COALESCE(real_data.ProcessCPUTime, null_template.ProcessCPUTime) AS ProcessCPUTime,
         COALESCE(real_data.YdbSumMin, null_template.YdbSumMin) AS YdbSumMin,
         COALESCE(real_data.diff_response, null_template.diff_response) AS diff_response,
         COALESCE(real_data.Color, null_template.Color) AS Color,
@@ -216,6 +222,8 @@ FROM (
             real_data.YdbSumMax AS YdbSumMax,
             real_data.YdbSumMeans AS YdbSumMeans,
             real_data.CompilationAvg AS CompilationAvg,
+            real_data.CompilationCPUTime AS CompilationCPUTime,
+            real_data.ProcessCPUTime AS ProcessCPUTime,
             real_data.YdbSumMin AS YdbSumMin,
             real_data.diff_response AS diff_response,
             real_data.Color AS Color,

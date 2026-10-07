@@ -8,6 +8,8 @@
 
 #include <library/cpp/protobuf/interop/cast.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YDB_SDK
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -37,6 +39,11 @@ class TLocalTopicWriteSessionActor final
         TString MessageGroupId;
         std::optional<ui32> PartitionId;
         std::unordered_map<std::string, std::string> Meta;
+    };
+
+    struct TInflightMessage {
+        ui64 SeqNo = 0;
+        i64 Size = 0;
     };
 
 public:
@@ -92,10 +99,11 @@ protected:
     }
 
     void SendInitMessage() final {
-        LOG_I("Sending init message"
-            << ", ProducerId: " << WriteSettings.ProducerId
-            << ", MessageGroupId: " << WriteSettings.MessageGroupId
-            << ", PartitionId: " << (WriteSettings.PartitionId ? ToString(*WriteSettings.PartitionId) : "null"));
+        YDB_LOG_INFO("Sending init message",
+            {"logPrefix", LogPrefix()},
+            {"producerId", WriteSettings.ProducerId},
+            {"messageGroupId", WriteSettings.MessageGroupId},
+            {"partitionId", (WriteSettings.PartitionId ? ToString(*WriteSettings.PartitionId) : "null")});
 
         TRpcIn message;
 
@@ -136,7 +144,7 @@ private:
         settings.ProducerId = sessionSettings.ProducerId_;
         settings.Meta = sessionSettings.Meta_.Fields;
 
-        if (sessionSettings.DeduplicationEnabled_ && !settings.ProducerId) {
+        if (sessionSettings.DeduplicationEnabled_.value_or(false) && !settings.ProducerId) {
             settings.ProducerId = CreateGuidAsString();
         }
 
@@ -160,10 +168,13 @@ private:
         auto& data = ev->Get()->Data;
         const auto seqNo = message.SeqNo_.value_or(MessageSeqNo++);
         const auto size = data.size();
-        LOG_T("Got write message event with seq no: " << seqNo << " and size: " << size);
+        YDB_LOG_TRACE("Got write message event",
+            {"logPrefix", LogPrefix()},
+            {"no", seqNo},
+            {"size", size});
 
         InflightMemory += size;
-        Y_VALIDATE(InflightMessages.emplace(seqNo, size).second, "Got duplicated message seq no: " << seqNo);
+        InflightMessages.push({seqNo, static_cast<i64>(size)});
         Counters->BytesInflightTotal->Add(size);
 
         ContinuationEventInflight = false;
@@ -173,6 +184,19 @@ private:
 
         auto& writeRequest = *rpcMessage.mutable_write_request();
         writeRequest.set_codec(static_cast<i32>(message.Codec.value_or(ECodec::RAW)));
+
+        if (auto& publication = message.DeferredPublication_) {
+            auto& publicationProto = *writeRequest.mutable_deferred_publish();
+
+            const auto intPublicationId = publication->IntPublicationId;
+            Y_VALIDATE(intPublicationId > 0, "Internal publication id must be positive");
+            publicationProto.set_int_publication_id(publication->IntPublicationId);
+
+            if (auto& extPublicationId = publication->ExtPublicationId) {
+                Y_VALIDATE(extPublicationId->size() <= TDeferredPublication::MaxExtPublicationIdLength, "External publication id is too large, max length is " << TDeferredPublication::MaxExtPublicationIdLength << ", got " << extPublicationId->size());
+                publicationProto.set_ext_publication_id(std::move(*extPublicationId));
+            }
+        }
 
         auto& messageData = *writeRequest.add_messages();
         messageData.set_seq_no(seqNo);
@@ -190,9 +214,10 @@ private:
     }
 
     void Handle(TSessionEvents::TEvGetInitSeqNo::TPtr& ev) {
-        LOG_I("Got get init seq no event");
+        YDB_LOG_INFO("Got get init seq no event",
+            {"logPrefix", LogPrefix()});
 
-        Y_VALIDATE(!SeqNoPromise, "Can not handle get init seq no twice");
+        Y_VALIDATE(!SeqNoPromise, "Cannot handle get init seq no twice");
         SeqNoPromise = std::move(ev->Get()->SeqNoPromise);
         SendInitSeqNo();
     }
@@ -204,12 +229,17 @@ private:
         const auto reason = ev->Get()->Reason;
         Y_VALIDATE(sourceType == TEvStreamTopicWriteRequest::EventType, "Unexpected undelivered event: " << sourceType << ", reason: " << reason);
 
-        LOG_E("PQ write service is unavailable, reason: " << reason);
+        YDB_LOG_ERROR("PQ write service is unavailable",
+            {"logPrefix", LogPrefix()},
+            {"reason", reason});
         CloseSession(EStatus::INTERNAL_ERROR, "PQ write service is unavailable, please contact internal support");
     }
 
     void ComputeSessionMessage(const Ydb::Topic::StreamWriteMessage::InitResponse& message) {
-        LOG_I("Session initialized with id: " << message.session_id() << ", used partition: " << message.partition_id());
+        YDB_LOG_INFO("Session initialized",
+            {"logPrefix", LogPrefix()},
+            {"id", message.session_id()},
+            {"partition", message.partition_id()});
 
         if (!InitSeqNo.has_value()) {
             InitSeqNo = message.last_seq_no();
@@ -223,7 +253,9 @@ private:
 
     void ComputeSessionMessage(const Ydb::Topic::StreamWriteMessage::WriteResponse& message) {
         const auto partitionId = message.partition_id();
-        LOG_T("Got write response from partition: " << partitionId);
+        YDB_LOG_TRACE("Got write response",
+            {"logPrefix", LogPrefix()},
+            {"fromPartition", partitionId});
 
         const auto& protoStats = message.write_statistics();
         const auto writeStats = MakeIntrusive<TWriteStat>();
@@ -240,16 +272,17 @@ private:
             ack.SeqNo = ackProto.seq_no();
             ack.Stat = writeStats;
 
-            const auto inflightIt = InflightMessages.find(ack.SeqNo);
-            if (inflightIt != InflightMessages.end()) {
-                const auto size = inflightIt->second;
-                InflightMemory -= size;
-                InflightMessages.erase(inflightIt);
+            Y_VALIDATE(!InflightMessages.empty(), "Got unexpected ack with seq no " << ack.SeqNo << ", no messages are waiting for ack");
+            const auto& inflight = InflightMessages.front();
+            Y_VALIDATE(inflight.SeqNo == ack.SeqNo, "Got out of order ack, expected seq no " << inflight.SeqNo << ", but got " << ack.SeqNo);
 
-                Counters->MessagesWritten->Inc();
-                Counters->BytesWritten->Add(size);
-                Counters->BytesInflightTotal->Sub(size);
-            }
+            const auto size = inflight.Size;
+            InflightMemory -= size;
+            InflightMessages.pop();
+
+            Counters->MessagesWritten->Inc();
+            Counters->BytesWritten->Add(size);
+            Counters->BytesInflightTotal->Sub(size);
 
             switch (ackProto.message_write_status_case()) {
                 case Ydb::Topic::StreamWriteMessage::WriteResponse::WriteAck::kWritten: {
@@ -290,21 +323,31 @@ private:
 
     void AddContinuationEvent() {
         if (ContinuationEventInflight) {
-            LOG_T("Continuation event is already inflight, skipping adding");
+            YDB_LOG_TRACE("Continuation event is already inflight, skipping adding",
+                {"logPrefix", LogPrefix()});
             return;
         }
 
         if (InflightMemory >= MaxMemoryUsage) {
-            LOG_T("Max memory usage reached, skipping adding, InflightMemory: " << InflightMemory << ", MaxMemoryUsage: " << MaxMemoryUsage);
+            YDB_LOG_TRACE("Max memory usage reached, skipping adding",
+                {"logPrefix", LogPrefix()},
+                {"inflightMemory", InflightMemory},
+                {"maxMemoryUsage", MaxMemoryUsage});
             return;
         }
 
         if (InflightMessages.size() >= MaxInflightCount) {
-            LOG_T("Max inflight count reached, skipping adding, InflightMessages: " << InflightMessages.size() << ", MaxInflightCount: " << MaxInflightCount);
+            YDB_LOG_TRACE("Max inflight count reached, skipping adding",
+                {"logPrefix", LogPrefix()},
+                {"inflightMessages", InflightMessages.size()},
+                {"maxInflightCount", MaxInflightCount});
             return;
         }
 
-        LOG_T("Adding continuation event, InflightMemory: " << InflightMemory << ", InflightMessages: " << InflightMessages.size());
+        YDB_LOG_TRACE("Adding continuation token",
+            {"logPrefix", LogPrefix()},
+            {"inflightMemory", InflightMemory},
+            {"inflightMessages", InflightMessages.size()});
         ContinuationEventInflight = true;
         AddOutgoingEvent(TWriteSessionEvent::TReadyToAcceptEvent(IssueContinuationToken()));
     }
@@ -313,7 +356,7 @@ private:
     const TWriteSettings WriteSettings;
     const ui64 MaxInflightCount = 0;
 
-    std::unordered_map<ui64, i64> InflightMessages;
+    std::queue<TInflightMessage> InflightMessages;
     ui64 MessageSeqNo = 0;
     bool ContinuationEventInflight = false;
 
@@ -333,7 +376,7 @@ public:
     TLocalTopicWriteSession(const TLocalTopicSessionSettings& localSettings, const TWriteSessionSettings& sessionSettings)
         : TBase(localSettings)
         , Counters(SetupCounters(sessionSettings))
-        , DeduplicationEnabled(sessionSettings.DeduplicationEnabled_.value_or(true))
+        , DeduplicationEnabled(sessionSettings.DeduplicationEnabled_.value_or(!sessionSettings.ProducerId_.empty()))
         , ValidateSeqNo(sessionSettings.ValidateSeqNo_)
     {
         ValidateSettings(sessionSettings);
@@ -393,15 +436,16 @@ public:
     }
 
     NThreading::TFuture<uint64_t> GetInitSeqNo() final {
-        Y_VALIDATE(DeduplicationEnabled, "Can not get init seq no, deduplication is not enabled");
+        Y_VALIDATE(DeduplicationEnabled, "Cannot get init seq no, deduplication is not enabled");
 
         UseManualSeqNo();
 
         if (!InitSeqNoPromise) {
             InitSeqNoPromise = NThreading::NewPromise<uint64_t>();
 
-            Y_VALIDATE(WriteSessionActor, "Can not get init seq no, session already closed");
-            ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvGetInitSeqNo(*InitSeqNoPromise));
+            if (WriteSessionActor) {
+                ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvGetInitSeqNo(*InitSeqNoPromise));
+            }
         }
 
         return InitSeqNoPromise->GetFuture();
@@ -409,7 +453,8 @@ public:
 
     void Write(TContinuationToken&& continuationToken, TWriteMessage&& message, TTransactionBase* tx) final {
         Y_VALIDATE(!tx && !message.Tx_, "Transaction is not supported for local topic write session");
-        Y_VALIDATE(WriteSessionActor, "Can not write message, session already closed");
+        Y_VALIDATE(!message.GetPartition(), "Partition is not supported for local topic write session");
+        Y_VALIDATE(!message.GetKey(), "Key is not supported for local topic write session");
 
         if (message.SeqNo_) {
             UseManualSeqNo();
@@ -417,7 +462,9 @@ public:
             UseAutoSeqNo();
         }
 
-        ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvWriteMessage(std::move(continuationToken), std::move(message)));
+        if (WriteSessionActor) {
+            ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvWriteMessage(std::move(continuationToken), std::move(message)));
+        }
     }
 
     void Write(TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) final {
@@ -473,7 +520,9 @@ private:
         TBase::ValidateSettings(settings);
 
         Y_VALIDATE(settings.Codec_ == ECodec::RAW, "Compression is not supported for local topic write session");
-        Y_VALIDATE(!settings.BatchFlushInterval_, "BatchFlushInterval is not supported for local topic write session");
+        Y_VALIDATE(
+            settings.BatchFlushInterval_ == TDuration::Seconds(1),
+            "Custom BatchFlushInterval is not supported for local topic write session");
         Y_VALIDATE(!settings.BatchFlushSizeBytes_, "BatchFlushSizeBytes is not supported for local topic write session");
 
         const auto& eventHandlers = settings.EventHandlers_;
@@ -498,6 +547,7 @@ private:
             .CredentialsProvider = CredentialsProvider,
             .Counters = Counters,
         }, sessionSettings), TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+        WaitEvent(); // Request continuation token
     }
 
     void UseAutoSeqNo() {

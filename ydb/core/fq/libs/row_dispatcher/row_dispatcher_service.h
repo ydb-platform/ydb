@@ -20,7 +20,7 @@ namespace NFq {
 std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     const TRowDispatcherSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,

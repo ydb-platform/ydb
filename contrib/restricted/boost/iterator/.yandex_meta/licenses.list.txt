@@ -52,6 +52,12 @@
 
 
 ====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or copy at
+// https://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
@@ -72,6 +78,14 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 
 ====================COPYRIGHT====================
+ * Copyright (c) 2024 Georgiy Guminov
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2025 Andrey Semashev
+
+
+====================COPYRIGHT====================
 //  (C) Copyright Dave Abrahams and Daniel Walker 1999-2003.
 //  Copyright (c) Andrey Semashev 2017
 
@@ -84,6 +98,12 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 ====================COPYRIGHT====================
 // (C) Copyright Andrey Semashev 2017.
+// Distributed under the Boost Software License, Version 1.0. (See
+// accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// (C) Copyright Andrey Semashev 2025.
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
 
@@ -128,6 +148,11 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 
 ====================COPYRIGHT====================
+// Copyright (C) 2017 Michel Morin.
+// Copyright (C) 2026 Jeremy W. Murphy
+
+
+====================COPYRIGHT====================
 // Copyright (c) David Abrahams 2001.
 // Copyright (c) Jeremy Siek 2001-2003.
 // Copyright (c) Thomas Witt 2002.
@@ -139,6 +164,10 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 // Copyright 2012 (C) Jeffrey Lee Hellrung, Jr.
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+// Copyright Andrey Semashev 2025.
 
 
 ====================COPYRIGHT====================

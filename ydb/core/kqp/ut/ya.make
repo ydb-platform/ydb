@@ -1,6 +1,8 @@
 RECURSE_FOR_TESTS(
+    tracing
     arrow
     batch_operations
+    channels
     close_with_load
     cost
     data
@@ -15,7 +17,6 @@ RECURSE_FOR_TESTS(
     olap
     opt
     perf
-    pg
     rbo
     query
     scan

@@ -4,8 +4,6 @@
 #include <yt/yt/core/concurrency/fls.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
-#include <yt/yt/core/net/local_address.h>
-
 #include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
@@ -21,7 +19,7 @@
 
 #include <library/cpp/yt/global/variable.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 namespace NYT {
 
@@ -47,7 +45,6 @@ namespace {
 struct TExtensionData
 {
     NConcurrency::TFiberId Fid = NConcurrency::InvalidFiberId;
-    TStringBuf HostName;
     TTraceId TraceId = InvalidTraceId;
     TSpanId SpanId = InvalidSpanId;
 
@@ -64,35 +61,13 @@ TExtensionData Decode(const TOriginAttributes::TErasedExtensionData& storage)
     return storage.AsConcrete<TExtensionData>();
 }
 
-void TryExtractHost(const TOriginAttributes& attributes)
-{
-    if (attributes.Host || !attributes.ExtensionData) {
-        return;
-    }
-
-    auto [
-        fid,
-        name,
-        traceId,
-        spanId
-    ] = Decode(*attributes.ExtensionData);
-
-    attributes.Host = name
-        ? TStringBuf(name)
-        : TStringBuf{};
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 bool HasHost(const TOriginAttributes& attributes) noexcept
 {
-    TryExtractHost(attributes);
     return attributes.Host.operator bool();
 }
 
 TStringBuf GetHost(const TOriginAttributes& attributes) noexcept
 {
-    TryExtractHost(attributes);
     return attributes.Host;
 }
 
@@ -131,7 +106,6 @@ void UpdateTracingAttributes(TOriginAttributes* attributes, const NTracing::TTra
         auto ext = Decode(*attributes->ExtensionData);
         attributes->ExtensionData.emplace(Encode(TExtensionData{
             .Fid = ext.Fid,
-            .HostName = ext.HostName,
             .TraceId = tracingAttributes.TraceId,
             .SpanId = tracingAttributes.SpanId,
         }));
@@ -150,7 +124,6 @@ TOriginAttributes::TErasedExtensionData GetExtensionDataOverride()
 {
     TExtensionData result;
     result.Fid = NConcurrency::GetCurrentFiberId();
-    result.HostName = NNet::GetLocalHostNameRaw();
 
     if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
         result.TraceId = traceContext->GetTraceId();
@@ -160,9 +133,8 @@ TOriginAttributes::TErasedExtensionData GetExtensionDataOverride()
     return TOriginAttributes::TErasedExtensionData{result};
 }
 
-TString FormatOriginOverride(const TOriginAttributes& attributes)
+std::string FormatOriginOverride(const TOriginAttributes& attributes)
 {
-    TryExtractHost(attributes);
     return Format("%v (pid %v, thread %v, fid %x)",
         attributes.Host,
         attributes.Pid,
@@ -189,8 +161,6 @@ TOriginAttributes ExtractFromDictionaryOverride(TErrorAttributes* attributes)
 
         static const std::string TraceIdKey("trace_id");
         ext.TraceId = attributes->GetAndRemove<NTracing::TTraceId>(TraceIdKey, NTracing::InvalidTraceId);
-
-        ext.HostName = result.Host;
 
         static const std::string SpanIdKey("span_id");
         ext.SpanId = attributes->GetAndRemove<NTracing::TSpanId>(SpanIdKey, NTracing::InvalidSpanId);
@@ -429,7 +399,7 @@ void Deserialize(TError& error, const NYTree::INodePtr& node)
     error.SetCode(code);
 
     static const std::string MessageKey("message");
-    error.SetMessage(mapNode->GetChildValueOrThrow<TString>(MessageKey));
+    error.SetMessage(mapNode->GetChildValueOrThrow<std::string>(MessageKey));
 
     static const std::string AttributesKey("attributes");
     auto children = mapNode->GetChildOrThrow(AttributesKey)->AsMap()->GetChildren();
@@ -438,7 +408,7 @@ void Deserialize(TError& error, const NYTree::INodePtr& node)
         // NB(arkady-e1ppa): Serialization may add some attributes in normal yson
         // format (in legacy versions) thus we have to reconvert them into the
         // text ones in order to make sure that everything is in the text format.
-        error <<= TErrorAttribute(key, ConvertToYsonString(value));
+        error.Add(key, ConvertToYsonString(value));
     }
 
     error.UpdateOriginAttributes();
@@ -539,14 +509,14 @@ void FromProto(TError* error, const NYT::NProto::TError& protoError)
     }
 
     error->SetCode(TErrorCode(protoError.code()));
-    error->SetMessage(FromProto<TString>(protoError.message()));
+    error->SetMessage(FromProto<std::string>(protoError.message()));
     if (protoError.has_attributes()) {
         for (const auto& protoAttribute : protoError.attributes().attributes()) {
             // NB(arkady-e1ppa): Again for compatibility reasons we have to reconvert stuff
             // here as well.
-            auto key = FromProto<TString>(protoAttribute.key());
-            auto value = FromProto<TString>(protoAttribute.value());
-            (*error) <<= TErrorAttribute(key, TYsonString(value));
+            error->Add(
+                FromProto<std::string>(protoAttribute.key()),
+                FromProto<TYsonString>(protoAttribute.value()));
         }
         error->UpdateOriginAttributes();
     }
@@ -650,7 +620,7 @@ void TErrorSerializer::Save(TStreamSaveContext& context, const TError& error)
         for (const auto& [key, value] : attributePairs) {
             // NB(arkady-e1ppa): For the sake of compatibility we keep the old
             // serialization format.
-            Save(context, TString(key));
+            Save(context, std::string(key));
             Save(context, NYson::TYsonString(value));
         }
     } else {
@@ -667,14 +637,14 @@ void TErrorSerializer::Load(TStreamLoadContext& context, TError& error)
     error = {};
 
     auto code = Load<TErrorCode>(context);
-    auto message = Load<TString>(context);
+    auto message = Load<std::string>(context);
 
     if (Load<bool>(context)) {
         size_t size = TSizeSerializer::Load(context);
         for (size_t index = 0; index < size; ++index) {
-            auto key = Load<TString>(context);
+            auto key = Load<std::string>(context);
             auto value = Load<TYsonString>(context);
-            error <<= TErrorAttribute(key, value);
+            error.Add(key, value);
         }
     }
 
@@ -693,7 +663,7 @@ void TErrorSerializer::Load(TStreamLoadContext& context, TError& error)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(NConcurrency::TFlsSlot<TErrorCodicils>, ErrorCodicilsSlot);
+static YT_DEFINE_LEAKY_GLOBAL(NConcurrency::TFlsSlot<TErrorCodicils>, ErrorCodicilsSlot);
 
 TErrorCodicils::TGuard::~TGuard()
 {
@@ -728,7 +698,7 @@ TErrorCodicils& TErrorCodicils::GetOrCreate()
     return *ErrorCodicilsSlot().GetOrCreate();
 }
 
-TErrorCodicils* TErrorCodicils::TryGet()
+const TErrorCodicils* TErrorCodicils::TryGet()
 {
     return ErrorCodicilsSlot().TryGet();
 }
@@ -763,7 +733,7 @@ auto TErrorCodicils::MakeGuard(std::string key, TGetter getter) -> TGuard
 void TErrorCodicils::Apply(TError& error) const
 {
     for (const auto& [key, getter] : Getters_) {
-        error <<= TErrorAttribute(key, getter());
+        error.Add(key, getter());
     }
 }
 
@@ -781,6 +751,13 @@ void TErrorCodicils::Set(std::string key, TGetter getter)
 auto TErrorCodicils::Get(const std::string& key) const -> TGetter
 {
     return GetOrDefault(Getters_, key);
+}
+
+TErrorCodicils::TGuard MakeSourceLocationErrorCodicil(TSourceLocation location)
+{
+    return TErrorCodicils::MakeGuard("location", [location = std::move(location)] () -> std::string {
+        return NYT::ToString(location);
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

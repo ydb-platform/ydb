@@ -26,9 +26,11 @@ namespace NKikimr {
 
             TStrategyFreeSpace(
                     TIntrusivePtr<THullCtx> hullCtx,
+                    const TSelectorParams &params,
                     const TLevelIndexSnapshot &levelSnap,
                     TTask *task)
                 : HullCtx(std::move(hullCtx))
+                , Params(params)
                 , LevelSnap(levelSnap)
                 , Task(task)
                 , FreeSpaceThreshold(GetCurrentFreeSpaceThreshold(*HullCtx))
@@ -40,17 +42,12 @@ namespace NKikimr {
                 EAction action = FreeSpace();
                 if (action != ActNothing) {
                     Task->SetupAction(action);
+                    Task->SelectStrategy = ESelectStrategy::FreeSpace;
                 }
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_LOG(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO,
-                            NKikimrServices::BS_HULLCOMP,
-                            VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: FreeSpace: action# %s timeSpent# %s freeSpaceThreshold# %g candidate# %s",
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ActionToStr(action), (finishTime - startTime).ToString().data(), FreeSpaceThreshold,
-                                Candidate.ToString().data()));
+                    YDB_LOG_CTX_COMP(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: FreeSpace: action# %s timeSpent# %s freeSpaceThreshold# %g candidate# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), ActionToStr(action), (finishTime - startTime).ToString().data(), FreeSpaceThreshold, Candidate.ToString().data()));
                 }
 
                 return action;
@@ -111,20 +108,30 @@ namespace NKikimr {
             // Private Fields
             ////////////////////////////////////////////////////////////////////////
             TIntrusivePtr<THullCtx> HullCtx;
+            const TSelectorParams &Params;
             const TLevelIndexSnapshot &LevelSnap;
             TTask *Task;
             const double FreeSpaceThreshold;
             TMostAbusingSst Candidate;
+
+            // The budget is what this VDisk may allocate for compaction output; the default is
+            // unbounded, for the case where no space observation has arrived yet.
+            bool FitsBudget(const TLevelSegment &sst) const {
+                if (Params.FreeChunksBudget == Max<ui32>()) {
+                    return true;
+                }
+                return TUtils::EstimateOutputChunks(TUtils::SstKeepBytes(sst), HullCtx->ChunkSize)
+                    <= Params.FreeChunksBudget;
+            }
 
             EAction FreeSpace() {
                 EAction action = ActNothing;
 
                 if (FreeSpaceThreshold <= 0) {
                     if (HullCtx->VCtx->ActorSystem) {
-                        LOG_DEBUG_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                                HullCtx->VCtx->VDiskLogPrefix
-                                << " TStrategyFreeSpace is disabled because HullCompFreeSpaceThreshold is "
-                                << FreeSpaceThreshold);
+                        YDB_LOG_DEBUG_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyFreeSpace is disabled because HullCompFreeSpaceThreshold is",
+                            {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                            {"freeSpaceThreshold", FreeSpaceThreshold});
                     }
                     return ActNothing;
                 }
@@ -144,10 +151,26 @@ namespace NKikimr {
                 }
 
                 if (Candidate.CompactSstToFreeSpace()) {
+                    if (!FitsBudget(*Candidate.LevelSstPtr.SstPtr)) {
+                        // Squeezing this sst would need more output than this VDisk may
+                        // allocate right now. Yield: a budgeted emergency compaction can
+                        // reclaim something first, and the candidate is still here later.
+                        if (HullCtx->VCtx->ActorSystem) {
+                            YDB_LOG_INFO_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                                "TStrategyFreeSpace yields: estimated output exceeds the free-chunk budget",
+                                {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                                {"candidate", Candidate},
+                                {"freeChunksBudget", Params.FreeChunksBudget});
+                        }
+                        return ActNothing;
+                    }
                     // free space by compacting this Sst
-                    LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                            HullCtx->VCtx->VDiskLogPrefix << " TStrategyFreeSpace decided to compact Ssts " << Task->CompactSsts.ToString()
-                            << " because of high garbage/data ratio " << Candidate.ToString());
+                    if (HullCtx->VCtx->ActorSystem) {
+                        YDB_LOG_INFO_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyFreeSpace decided to compact Ssts because of high garbage/data ratio",
+                            {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                            {"compactSsts", Task->CompactSsts},
+                            {"candidate", Candidate});
+                    }
                     action = ActCompactSsts;
                     TUtils::SqueezeOneSst(LevelSnap.SliceSnap, Candidate.LevelSstPtr, Task->CompactSsts);
                 }

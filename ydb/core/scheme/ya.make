@@ -21,12 +21,12 @@ PEERDIR(
     ydb/core/scheme/protos
     ydb/core/scheme_types
     ydb/library/aclib
-    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/parser/pg_wrapper/interface/type_desc
     ydb/public/lib/scheme_types
     # temporary.
     ydb/library/pretty_types_print/protobuf
     library/cpp/lwtrace/mon
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
 )
 
 END()

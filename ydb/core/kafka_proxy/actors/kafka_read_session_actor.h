@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_protocol.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/events/global.h>
@@ -53,7 +54,8 @@ namespace NKafka {
      *           <----------------
      */
 
-class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor> {
+class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor>
+                            , public TKafkaExceptionHandler<TKafkaReadSessionActor> {
 
 enum EReadSessionSteps {
     WAIT_JOIN_GROUP,
@@ -88,10 +90,14 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::KAFKA_READ_SESSION_ACTOR; }
 
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
+
 private:
     using TActorContext = NActors::TActorContext;
 
-    TString LogPrefix();
+    NStructuredLog::TStructuredMessage LogPrefix();
 
     void Die(const TActorContext& ctx) override;
 

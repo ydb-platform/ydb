@@ -8,6 +8,7 @@ enum class EFileFormat {
     Undefined,
     CsvWithNames,
     TsvWithNames,
+    Csv,
     JsonEachRow,
     JsonList,
     Parquet,
@@ -19,6 +20,9 @@ constexpr EFileFormat ConvertFileFormat(TStringBuf format) {
     }
     if (format == "tsv_with_names") {
         return EFileFormat::TsvWithNames;
+    }
+    if (format == "csv") {
+        return EFileFormat::Csv;
     }
     if (format == "json_each_row") {
         return EFileFormat::JsonEachRow;
@@ -39,6 +43,8 @@ constexpr TStringBuf ConvertFileFormat(EFileFormat format) {
         return "csv_with_names";
     case EFileFormat::TsvWithNames:
         return "tsv_with_names";
+    case EFileFormat::Csv:
+        return "csv";
     case EFileFormat::JsonEachRow:
         return "json_each_row";
     case EFileFormat::JsonList:

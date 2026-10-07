@@ -9,15 +9,20 @@ namespace NFq::NRowDispatcher {
 
 //// TTypeParser
 
-TTypeParser::TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters)
+TTypeParser::TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager, TString memoryName)
     : Alloc(location, NKikimr::TAlignedPagePoolCounters(counters.CountersRoot, counters.MkqlCountersName), true, false)
     , FunctionRegistry(functionRegistry)
-    , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
-    , ProgramBuilder(std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(*TypeEnv, *FunctionRegistry))
-{}
+    , MemInfo("SharedReadingParser")
+{
+    LimitAllocator(Alloc, memoryQuotaManager, std::move(memoryName), counters.ReadGroupSubgroup);
+    TypeEnv = std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc);
+    ProgramBuilder = std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(*TypeEnv, *FunctionRegistry);
+    HolderFactory = std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemInfo, functionRegistry);
+}
 
 TTypeParser::~TTypeParser() {
     with_lock (Alloc) {
+        HolderFactory.reset();
         TypeEnv.reset();
         ProgramBuilder.reset();
     }
@@ -55,8 +60,8 @@ void TTopicParserBase::TStats::Clear() {
 
 //// TTopicParserBase
 
-TTopicParserBase::TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters)
-    : TTypeParser(location, functionRegistry, counters)
+TTopicParserBase::TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager, TString memoryName)
+    : TTypeParser(location, functionRegistry, counters, std::move(memoryQuotaManager), std::move(memoryName))
     , Consumer(std::move(consumer))
 {}
 
@@ -97,9 +102,11 @@ void TTopicParserBase::ParseBuffer() {
         } else {
             Consumer->OnParsingError(status);
         }
+    } catch (const NKikimr::TMemoryLimitExceededException& error) {
+        Consumer->OnParsingError(TStatus::Fail(EStatusId::OVERLOADED, GetMemoryLimitExceededMessage(error, "while parsing or filtering messages")));
     } catch (...) {
         auto error = TStringBuilder() << "Failed to parse messages";
-        if (const auto& offsets = GetOffsets()) {
+        if (const auto offsets = GetOffsets(); !offsets.empty()) {
             error << " from offset " << offsets.front();
         }
         error << ", got unexpected exception: " << CurrentExceptionMessage();
@@ -111,20 +118,23 @@ void TTopicParserBase::ParseBuffer() {
 //// Functions
 
 NYql::NUdf::TUnboxedValue LockObject(NYql::NUdf::TUnboxedValue&& value) {
-    // All UnboxedValue's with type Boxed or String should be locked
-    // because after parsing they will be used under another MKQL allocator in purecalc filters
-
-    const i32 numberRefs = value.LockRef();
-
-    // -1 - value is embbeded or empty, otherwise value should have exactly one ref
-    Y_ENSURE(numberRefs == -1 || numberRefs == 1);
-
-    return value;
+    // Object must be one of:
+    // 1) null (refs = -1)
+    // 2) embedded string/POD (refs = -1)
+    // 3) large string (refs = 1)
+    // 4a) dict as boxed: (refs = 1)
+    // 4b) (struct | tuple | list) as boxed -> direct array holder (refs = 1, except for special case: zero-length direct array holder points to special shared zero-length container)
+    Y_ABORT_UNLESS(value.RefCount() == -1 || value.RefCount() == 1 || (value.IsBoxed() && value.GetListLength() == 0));
+    // Note that GetListLength will trigger ABORT if called on non-List (i.e. Dict), so there are no much point in turning it into YQL_ENSURE/Y_VALIDATE.
+    // It is debatable if this should be Y_DEBUG_ABORT_UNLESS (if anything else keeps reference on our object, it must be outside of our code and will result in freeing-with-wrong-allocator, which is UB anyway, and better die early than later).
+    // It is debatable if it is NOT sufficient check for nested structures (but that check would be expensive and thus belong to DEBUG checks)
+    return std::move(value);
 }
 
 void ClearObject(NYql::NUdf::TUnboxedValue& value) {
-    // Value should be unlocked with same number of refs
-    value.UnlockRef(1);
+    // Every other reference to value must be cleared (except for special case - zero-length list)
+    Y_ABORT_UNLESS(value.RefCount() == -1 || value.RefCount() == 1 || (value.IsBoxed() && value.GetListLength() == 0));
+    // (again, using YQL_ENSURE/Y_VALIDATE pointless here)
     value.Clear();
 }
 

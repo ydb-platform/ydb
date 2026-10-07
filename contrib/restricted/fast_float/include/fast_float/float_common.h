@@ -17,8 +17,8 @@
 #include "constexpr_feature_detect.h"
 
 #define FASTFLOAT_VERSION_MAJOR 8
-#define FASTFLOAT_VERSION_MINOR 2
-#define FASTFLOAT_VERSION_PATCH 4
+#define FASTFLOAT_VERSION_MINOR 3
+#define FASTFLOAT_VERSION_PATCH 0
 
 #define FASTFLOAT_STRINGIZE_IMPL(x) #x
 #define FASTFLOAT_STRINGIZE(x) FASTFLOAT_STRINGIZE_IMPL(x)
@@ -39,6 +39,8 @@ enum class chars_format : uint64_t;
 namespace detail {
 constexpr chars_format basic_json_fmt = chars_format(1 << 5);
 constexpr chars_format basic_fortran_fmt = chars_format(1 << 6);
+constexpr chars_format basic_javascript_fmt = chars_format(1 << 9);
+constexpr chars_format basic_javascript_sloppy_fmt = chars_format(1 << 10);
 } // namespace detail
 
 enum class chars_format : uint64_t {
@@ -54,6 +56,24 @@ enum class chars_format : uint64_t {
   general = fixed | scientific,
   allow_leading_plus = 1 << 7,
   skip_white_space = 1 << 8,
+  // ECMAScript DecimalLiteral (strict mode):
+  // https://tc39.es/ecma262/#prod-DecimalLiteral
+  // Like JSON, the integer part must not have leading zeros ("01" is
+  // rejected), but unlike JSON the integer part may be empty (".5") and the
+  // fractional part may be empty ("5.", "5.e3"). A leading minus sign is
+  // accepted, and a leading plus sign with allow_leading_plus.
+  javascript =
+      uint64_t(detail::basic_javascript_fmt) | fixed | scientific | no_infnan,
+  // ECMAScript DecimalLiteral in sloppy mode, which adds Annex B's
+  // NonOctalDecimalIntegerLiteral: a leading zero is accepted when one of
+  // the digits is 8 or 9 ("08.5" is 8.5). A leading zero followed only by
+  // octal digits is a LegacyOctalIntegerLiteral ("0775"): it is not a
+  // decimal number, so it is rejected with legacy_octal_integer_part and the
+  // caller may parse it in base 8.
+  // https://tc39.es/ecma262/#sec-additional-syntax-numeric-literals
+  javascript_sloppy = uint64_t(detail::basic_javascript_fmt) |
+                      uint64_t(detail::basic_javascript_sloppy_fmt) | fixed |
+                      scientific | no_infnan,
 };
 
 template <typename UC> struct from_chars_result_t {
@@ -197,14 +217,40 @@ using parse_options = parse_options_t<char>;
 #define fastfloat_really_inline inline __attribute__((always_inline))
 #endif
 
+// Branch-probability hint marking the rare slow-path branches as cold, so the
+// optimizer keeps the out-of-line slow-path re-parse off the hot path (and does
+// not duplicate the force-inlined hot scanner into the caller, which bloated
+// the hot frame and hurt ILP on some targets). Used at the call site as
+//   if fastfloat_unlikely(cond) { ... }
+// (the macro supplies the parentheses). It expands to the standard [[unlikely]]
+// attribute when supported, otherwise to __builtin_expect on GCC/Clang, or
+// to a no-op elsewhere (e.g. pre-C++20 MSVC, which has no equivalent hint).
+#ifdef __has_cpp_attribute
+#if __has_cpp_attribute(unlikely) >= 201803L
+// g++-9 hits hits this branch, but then fails to compile
+// [[unlikely]]. This happens only with g++-9.
+#if !defined(__GNUC__) || (__GNUC__ != 9)
+#define FASTFLOAT_USE_UNLIKELY_ATTR
+#endif
+#endif
+#endif
+
+#ifdef FASTFLOAT_USE_UNLIKELY_ATTR
+#define fastfloat_unlikely(x) (x) [[unlikely]]
+#elif defined(__GNUC__) || defined(__clang__)
+#define fastfloat_unlikely(x) (__builtin_expect(!!(x), 0))
+#else
+#define fastfloat_unlikely(x) (x)
+#endif
+
 #ifndef FASTFLOAT_ASSERT
 #define FASTFLOAT_ASSERT(x)                                                    \
-  { ((void)(x)); }
+  { static_cast<void>(x); }
 #endif
 
 #ifndef FASTFLOAT_DEBUG_ASSERT
 #define FASTFLOAT_DEBUG_ASSERT(x)                                              \
-  { ((void)(x)); }
+  { static_cast<void>(x); }
 #endif
 
 // rust style `try!()` macro, or `?` operator
@@ -398,7 +444,7 @@ fastfloat_strncasecmp(UC const *actual_mixedcase, UC const *expected_lowercase,
     size_t sz{8 / (sizeof(UC))};
     for (size_t i = 0; i < length; i += sz) {
       val1 = val2 = 0;
-      sz = std::min(sz, length - i);
+      sz = sz < (length - i) ? sz : length - i;
       ::memcpy(&val1, actual_mixedcase + i, sz * sizeof(UC));
       ::memcpy(&val2, expected_lowercase + i, sz * sizeof(UC));
       val1 |= mask;
@@ -483,7 +529,7 @@ leading_zeroes(uint64_t input_num) {
   // Search the mask data from most significant bit (MSB)
   // to least significant bit (LSB) for a set bit (1).
   _BitScanReverse64(&leading_zero, input_num);
-  return (int)(63 - leading_zero);
+  return static_cast<int>(63 - leading_zero);
 #else
   return leading_zeroes_generic(input_num);
 #endif
@@ -530,7 +576,7 @@ countr_zero_32(uint32_t input_num) {
 #ifdef FASTFLOAT_VISUAL_STUDIO
   unsigned long trailing_zero = 0;
   if (_BitScanForward(&trailing_zero, input_num)) {
-    return (int)trailing_zero;
+    return static_cast<int>(trailing_zero);
   }
   return 32;
 #else
@@ -540,18 +586,21 @@ countr_zero_32(uint32_t input_num) {
 
 // slow emulation routine for 32-bit
 fastfloat_really_inline constexpr uint64_t emulu(uint32_t x, uint32_t y) {
-  return x * (uint64_t)y;
+  return x * static_cast<uint64_t>(y);
 }
 
 fastfloat_really_inline FASTFLOAT_CONSTEXPR14 uint64_t
 umul128_generic(uint64_t ab, uint64_t cd, uint64_t *hi) {
-  uint64_t ad = emulu((uint32_t)(ab >> 32), (uint32_t)cd);
-  uint64_t bd = emulu((uint32_t)ab, (uint32_t)cd);
-  uint64_t adbc = ad + emulu((uint32_t)ab, (uint32_t)(cd >> 32));
-  uint64_t adbc_carry = (uint64_t)(adbc < ad);
+  uint64_t ad =
+      emulu(static_cast<uint32_t>(ab >> 32), static_cast<uint32_t>(cd));
+  uint64_t bd = emulu(static_cast<uint32_t>(ab), static_cast<uint32_t>(cd));
+  uint64_t adbc =
+      ad + emulu(static_cast<uint32_t>(ab), static_cast<uint32_t>(cd >> 32));
+  uint64_t adbc_carry = static_cast<uint64_t>(adbc < ad);
   uint64_t lo = bd + (adbc << 32);
-  *hi = emulu((uint32_t)(ab >> 32), (uint32_t)(cd >> 32)) + (adbc >> 32) +
-        (adbc_carry << 32) + (uint64_t)(lo < bd);
+  *hi =
+      emulu(static_cast<uint32_t>(ab >> 32), static_cast<uint32_t>(cd >> 32)) +
+      (adbc >> 32) + (adbc_carry << 32) + static_cast<uint64_t>(lo < bd);
   return lo;
 }
 
@@ -586,7 +635,7 @@ full_multiplication(uint64_t a, uint64_t b) {
                                    !defined(_M_ARM64) && !defined(__GNUC__))
   answer.low = _umul128(a, b, &answer.high); // _umul128 not available on ARM64
 #elif defined(FASTFLOAT_64BIT) && defined(__SIZEOF_INT128__)
-  __uint128_t r = ((__uint128_t)a) * b;
+  __uint128_t r = static_cast<__uint128_t>(a) * b;
   answer.low = uint64_t(r);
   answer.high = uint64_t(r >> 64);
 #else
@@ -848,7 +897,7 @@ template <>
 inline constexpr std::float16_t
 binary_format<std::float16_t>::exact_power_of_ten(int64_t power) {
   // Work around clang bug https://godbolt.org/z/zedh7rrhc
-  return (void)powers_of_ten[0], powers_of_ten[power];
+  return static_cast<void>(powers_of_ten[0]), powers_of_ten[power];
 }
 
 template <>
@@ -892,7 +941,7 @@ binary_format<std::float16_t>::max_mantissa_fast_path(int64_t power) {
   // power >= 0 && power <= 4
   //
   // Work around clang bug https://godbolt.org/z/zedh7rrhc
-  return (void)max_mantissa[0], max_mantissa[power];
+  return static_cast<void>(max_mantissa[0]), max_mantissa[power];
 }
 
 template <>
@@ -971,7 +1020,7 @@ template <>
 inline constexpr std::bfloat16_t
 binary_format<std::bfloat16_t>::exact_power_of_ten(int64_t power) {
   // Work around clang bug https://godbolt.org/z/zedh7rrhc
-  return (void)powers_of_ten[0], powers_of_ten[power];
+  return static_cast<void>(powers_of_ten[0]), powers_of_ten[power];
 }
 
 template <>
@@ -1015,7 +1064,7 @@ binary_format<std::bfloat16_t>::max_mantissa_fast_path(int64_t power) {
   // power >= 0 && power <= 3
   //
   // Work around clang bug https://godbolt.org/z/zedh7rrhc
-  return (void)max_mantissa[0], max_mantissa[power];
+  return static_cast<void>(max_mantissa[0]), max_mantissa[power];
 }
 
 template <>
@@ -1072,7 +1121,7 @@ binary_format<double>::max_mantissa_fast_path(int64_t power) {
   // power >= 0 && power <= 22
   //
   // Work around clang bug https://godbolt.org/z/zedh7rrhc
-  return (void)max_mantissa[0], max_mantissa[power];
+  return static_cast<void>(max_mantissa[0]), max_mantissa[power];
 }
 
 template <>
@@ -1082,20 +1131,20 @@ binary_format<float>::max_mantissa_fast_path(int64_t power) {
   // power >= 0 && power <= 10
   //
   // Work around clang bug https://godbolt.org/z/zedh7rrhc
-  return (void)max_mantissa[0], max_mantissa[power];
+  return static_cast<void>(max_mantissa[0]), max_mantissa[power];
 }
 
 template <>
 inline constexpr double
 binary_format<double>::exact_power_of_ten(int64_t power) {
   // Work around clang bug https://godbolt.org/z/zedh7rrhc
-  return (void)powers_of_ten[0], powers_of_ten[power];
+  return static_cast<void>(powers_of_ten[0]), powers_of_ten[power];
 }
 
 template <>
 inline constexpr float binary_format<float>::exact_power_of_ten(int64_t power) {
   // Work around clang bug https://godbolt.org/z/zedh7rrhc
-  return (void)powers_of_ten[0], powers_of_ten[power];
+  return static_cast<void>(powers_of_ten[0]), powers_of_ten[power];
 }
 
 template <> inline constexpr int binary_format<double>::largest_power_of_ten() {
@@ -1197,7 +1246,11 @@ template <typename T> constexpr bool space_lut<T>::value[];
 #endif
 
 template <typename UC> constexpr bool is_space(UC c) {
-  return c < 256 && space_lut<>::value[uint8_t(c)];
+  // wchar_t and char can be signed, so a negative code unit slips past a plain
+  // `c < 256` and then indexes the table by its truncated low byte. Compare as
+  // unsigned, matching the care taken in ch_to_digit.
+  using UnsignedUC = typename std::make_unsigned<UC>::type;
+  return static_cast<UnsignedUC>(c) < 256 && space_lut<>::value[uint8_t(c)];
 }
 
 template <typename UC> static constexpr uint64_t int_cmp_zeros() {

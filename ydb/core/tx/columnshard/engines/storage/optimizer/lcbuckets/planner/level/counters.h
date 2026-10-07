@@ -18,7 +18,8 @@ public:
 
     TLevelAgents(const ui32 levelId, NColumnShard::TCommonCountersOwner& baseOwner)
         : LevelId(levelId)
-        , Portions(std::make_shared<TPortionCategoryCounterAgents>(baseOwner, "level=" + ::ToString(LevelId))) {
+        , Portions(std::make_shared<TPortionCategoryCounterAgents>(baseOwner, "level=" + ::ToString(LevelId)))
+    {
     }
 };
 
@@ -29,7 +30,8 @@ private:
 
 public:
     TGlobalCounters()
-        : TBase("LeveledCompactionOptimizer") {
+        : TBase("LeveledCompactionOptimizer")
+    {
         for (ui32 i = 0; i <= 10; ++i) {
             Levels.emplace_back(std::make_shared<TLevelAgents>(i, *this));
         }
@@ -48,8 +50,10 @@ public:
 class TLevelCounters {
 public:
     const std::shared_ptr<TPortionCategoryCounters> Portions;
+
     TLevelCounters(const ui32 levelId)
-        : Portions(TGlobalCounters::BuildPortionsCounter(levelId)) {
+        : Portions(TGlobalCounters::BuildPortionsCounter(levelId))
+    {
     }
 };
 

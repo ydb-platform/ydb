@@ -15,7 +15,7 @@ TStats CalcCV(const std::vector<size_t>& in) {
     if (in.size() == 1)
         return {0, static_cast<float>(in[0])};
 
-    const size_t sum = std::accumulate(in.begin(), in.end(), 0);
+    const size_t sum = std::accumulate(in.begin(), in.end(), size_t{0});
     if (!sum)
         return {0, 0.0};
 

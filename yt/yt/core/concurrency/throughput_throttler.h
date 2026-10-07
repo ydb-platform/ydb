@@ -144,7 +144,7 @@ IReconfigurableThroughputThrottlerPtr CreateReconfigurableThroughputThrottler(
 //! Constructs a throttler from #config and initializes logger and profiler.
 IReconfigurableThroughputThrottlerPtr CreateNamedReconfigurableThroughputThrottler(
     TThroughputThrottlerConfigPtr config,
-    const TString& name,
+    const std::string& name,
     NLogging::TLogger logger = {},
     NProfiling::TProfiler profiler = {});
 
@@ -153,7 +153,7 @@ IReconfigurableThroughputThrottlerPtr GetUnlimitedThrottler();
 
 //! Returns a throttler that imposes no throughput limit and profiles throughput.
 IReconfigurableThroughputThrottlerPtr CreateNamedUnlimitedThroughputThrottler(
-    const TString& name,
+    const std::string& name,
     NProfiling::TProfiler profiler = {});
 
 //! This throttler is DEPRECATED. Use TFairThrottler instead.

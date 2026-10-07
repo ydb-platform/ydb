@@ -1,10 +1,13 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/library/conclusion
     ydb/library/actors/core
     ydb/library/services
+    ydb/core/formats/arrow/accessor/composite
+    ydb/core/formats/arrow/accessor/plain
     ydb/core/formats/arrow/accessor/sub_columns
+    ydb/core/formats/arrow/filter
 
     yql/essentials/core/arrow_kernels/registry
     yql/essentials/core/arrow_kernels/request
@@ -43,6 +46,7 @@ SRCS(
     aggr_keys.cpp
     aggr_common.cpp
     filter.cpp
+    distinct_marker.cpp
     projection.cpp
     assign_const.cpp
     assign_internal.cpp
@@ -55,10 +59,19 @@ GENERATE_ENUM_SERIALIZATION(abstract.h)
 GENERATE_ENUM_SERIALIZATION(aggr_common.h)
 GENERATE_ENUM_SERIALIZATION(execution.h)
 
-YQL_LAST_ABI_VERSION()
-
 CFLAGS(
     -Wno-unused-parameter
 )
 
 END()
+
+
+RECURSE_FOR_TESTS(
+    benchmark
+    ut
+)
+
+RECURSE(
+    ascii_contains
+    olap_kernels
+)

@@ -10,6 +10,8 @@ namespace NKikimr::NSchemeShard::NResourcePool {
 namespace {
 
 constexpr uint32_t MAX_PROTOBUF_SIZE = 2 * 1024 * 1024; // 2 MiB
+constexpr double MAX_TOTAL_CPU_GUARANTEE_PERCENT = 100;
+constexpr double CPU_GUARANTEE_PERCENT_EPSILON = 1e-9;
 
 
 bool ValidateProperties(const NKikimrSchemeOp::TResourcePoolProperties& properties, TString& errorStr) {
@@ -33,7 +35,7 @@ TPath::TChecker IsParentPathValid(const TPath& parentPath) {
         .IsCommonSensePath()
         .IsLikeDirectory();
 
-    return std::move(checks);
+    return checks;
 }
 
 bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath) {
@@ -102,6 +104,35 @@ bool IsResourcePoolInfoValid(const THolder<TProposeResponse>& result, const TRes
     return true;
 }
 
+bool IsCpuGuaranteeValid(const THolder<TProposeResponse>& result, const TPath& parentPath, const TPathId& resourcePoolPathId, const TResourcePoolInfo::TPtr& info, const TOperationContext& context) {
+    const auto guarantee = NKikimr::NResourcePool::TPoolSettings(info->Properties.GetProperties()).TotalCpuGuaranteePercentPerNode;
+    if (guarantee <= 0) {
+        return true;
+    }
+
+    double totalGuarantee = guarantee;
+    for (const auto& [childName, childPathId] : parentPath.Base()->GetChildren()) {
+        if (childPathId == resourcePoolPathId) {
+            continue;
+        }
+
+        const auto& childPath = context.SS->PathsById.at(childPathId);
+        if (!childPath->IsResourcePool() || childPath->Dropped()) {
+            continue;
+        }
+
+        if (const auto& childInfo = context.SS->ResourcePools.Value(childPathId, nullptr)) {
+            totalGuarantee += std::max(NKikimr::NResourcePool::TPoolSettings(childInfo->Properties.GetProperties()).TotalCpuGuaranteePercentPerNode, 0.0);
+        }
+    }
+
+    if (totalGuarantee > MAX_TOTAL_CPU_GUARANTEE_PERCENT + CPU_GUARANTEE_PERCENT_EPSILON) {
+        result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Invalid resource pool settings: total_cpu_guarantee_percent_per_node of all resource pools is " << totalGuarantee << ", that exceeds " << MAX_TOTAL_CPU_GUARANTEE_PERCENT);
+        return false;
+    }
+    return true;
+}
+
 TTxState& CreateTransaction(const TOperationId& operationId, const TOperationContext& context, const TPathId& resourcePoolPathId, TTxState::ETxType txType) {
     Y_ABORT_UNLESS(!context.SS->FindTx(operationId));
     TTxState& txState = context.SS->CreateTx(operationId, txType, resourcePoolPathId);
@@ -109,35 +140,5 @@ TTxState& CreateTransaction(const TOperationId& operationId, const TOperationCon
     return txState;
 }
 
-void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath) {
-    if (parentPath.Base()->HasActiveChanges()) {
-        const TTxId parentTxId = parentPath.Base()->PlannedToCreate()
-                                    ? parentPath.Base()->CreateTxId
-                                    : parentPath.Base()->LastTxId;
-        context.OnComplete.Dependence(parentTxId, operationId.GetTxId());
-    }
-}
-
-void AdvanceTransactionStateToPropose(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db) {
-    context.SS->ChangeTxState(db, operationId, TTxState::Propose);
-    context.OnComplete.ActivateTx(operationId);
-}
-
-void PersistResourcePool(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acl) {
-    const auto& resourcePoolPathId = resourcePoolPath->PathId;
-
-    if (!context.SS->ResourcePools.contains(resourcePoolPathId)) {
-        context.SS->IncrementPathDbRefCount(resourcePoolPathId);
-    }
-    context.SS->ResourcePools[resourcePoolPathId] = resourcePoolInfo;
-
-    if (!acl.empty()) {
-        resourcePoolPath->ApplyACL(acl);
-    }
-
-    context.SS->PersistPath(db, resourcePoolPathId);
-    context.SS->PersistResourcePool(db, resourcePoolPathId, resourcePoolInfo);
-    context.SS->PersistTxState(db, operationId);
-}
 
 }  // namespace NKikimr::NSchemeShard::NResourcePool

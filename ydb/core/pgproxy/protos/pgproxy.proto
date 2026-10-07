@@ -1,8 +1,0 @@
-syntax = "proto3";
-
-package NKikimrPgProxy;
-
-message TEvCancelRequest {
-    int32 ProcessId = 1;
-    int32 SecretKey = 2;
-}

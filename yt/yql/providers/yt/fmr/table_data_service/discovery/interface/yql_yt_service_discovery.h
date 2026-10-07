@@ -19,7 +19,7 @@ public:
 
     virtual ui64 GetHostCount() const = 0;
 
-    virtual const std::vector<TTableDataServiceServerConnection>& GetHosts() const = 0;
+    virtual TTableDataServiceServerConnection GetHost(ui64 index) const = 0;
 };
 
 } // namespace NYql::NFmr

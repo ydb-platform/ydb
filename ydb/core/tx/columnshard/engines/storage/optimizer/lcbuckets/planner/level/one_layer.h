@@ -34,10 +34,7 @@ private:
     }
 
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(
-        const NArrow::TSimpleRow& from, 
-        const NArrow::TSimpleRow& to,
-        const TMayUsePortion& mayUsePortion
-    ) const override {
+        const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to, const TMayUsePortion& mayUsePortion) const override {
         if (Portions.empty()) {
             return std::nullopt;
         }
@@ -67,7 +64,7 @@ private:
         // So, that is why here we check all the portions if they are blocked, so that the client's
         // code can skip this [from, to] part completely.
         bool consistBlockedPortions = false;
-        for (auto& it: result) {
+        for (auto& it : result) {
             if (!mayUsePortion(it)) {
                 consistBlockedPortions = true;
                 break;
@@ -115,11 +112,7 @@ private:
     }
 
     void TryAddPortionToTask(
-        const TPortionInfo::TConstPtr& portion, 
-        TCompactionTaskData& task, 
-        ui64& compactedData,
-        const TMayUsePortion& mayUsePortion
-    ) const;
+        const TPortionInfo::TConstPtr& portion, TCompactionTaskData& task, ui64& compactedData, const TMayUsePortion& mayUsePortion) const;
 
 public:
     TOneLayerPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,
@@ -149,7 +142,9 @@ public:
             return 0;
         }
         AFL_VERIFY(from <= to);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("from", from.DebugString())("to", to.DebugString());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"from", from.DebugString()},
+            {"to", to.DebugString()});
         ui64 result = 0;
         ui64 resultPacked = 0;
         auto itFrom = Portions.upper_bound(from);
@@ -169,8 +164,12 @@ public:
             resultPacked += it->GetPortion()->GetTotalBlobBytes();
             ++count;
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("itFrom", itFrom == Portions.end())("itTo", itTo == Portions.end())("raw", result)(
-            "count", count)("packed", resultPacked);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"itFrom", itFrom == Portions.end()},
+            {"itTo", itTo == Portions.end()},
+            {"raw", result},
+            {"count", count},
+            {"packed", resultPacked});
         return result;
     }
 

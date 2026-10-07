@@ -1,4 +1,5 @@
 #include "db_counters.h"
+#include "db_counters_codec.h"
 #include "query_history.h"
 #include "query_interval.h"
 #include "sysview_service.h"
@@ -9,6 +10,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -17,124 +19,13 @@
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/time_provider/time_provider.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 
 using namespace NActors;
 
 namespace NKikimr {
 namespace NSysView {
-
-static void CopyCounters(NKikimrSysView::TDbCounters* diff,
-    const NKikimrSysView::TDbCounters& current)
-{
-    auto simpleSize = current.SimpleSize();
-    auto cumulativeSize = current.CumulativeSize();
-    auto histogramSize = current.HistogramSize();
-
-    diff->MutableSimple()->Reserve(simpleSize);
-    diff->MutableCumulative()->Reserve(cumulativeSize);
-    diff->MutableHistogram()->Reserve(histogramSize);
-
-    for (size_t i = 0; i < simpleSize; ++i) {
-        diff->AddSimple(current.GetSimple(i));
-    }
-
-    diff->SetCumulativeCount(cumulativeSize);
-    for (size_t i = 0; i < cumulativeSize; ++i) {
-        auto value = current.GetCumulative(i);
-        if (!value) {
-            continue;
-        }
-        diff->AddCumulative(i);
-        diff->AddCumulative(value);
-    }
-
-    for (size_t i = 0; i < histogramSize; ++i) {
-        const auto& currentH = current.GetHistogram(i);
-        auto bucketCount = currentH.BucketsSize();
-
-        auto* histogram = diff->AddHistogram();
-        histogram->MutableBuckets()->Reserve(bucketCount);
-        histogram->SetBucketsCount(bucketCount);
-        for (size_t b = 0; b < bucketCount; ++b) {
-            auto value = currentH.GetBuckets(b);
-            if (!value) {
-                continue;
-            }
-            histogram->AddBuckets(b);
-            histogram->AddBuckets(value);
-        }
-    }
-}
-
-static void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
-    const NKikimrSysView::TDbCounters& current,
-    NKikimrSysView::TDbCounters& prev)
-{
-    auto simpleSize = current.SimpleSize();
-    auto cumulativeSize = current.CumulativeSize();
-    auto histogramSize = current.HistogramSize();
-
-    if (prev.SimpleSize() != simpleSize) {
-        SVLOG_CRIT("CalculateCountersDiff: simple count mismatch, prev "
-            << prev.SimpleSize() << ", current " << simpleSize);
-        prev.MutableSimple()->Resize(simpleSize, 0);
-    }
-    if (prev.CumulativeSize() != cumulativeSize) {
-        SVLOG_CRIT("CalculateCountersDiff: cumulative count mismatch, prev "
-            << prev.CumulativeSize() << ", current " << cumulativeSize);
-        prev.MutableCumulative()->Resize(cumulativeSize, 0);
-    }
-    if (prev.HistogramSize() != histogramSize) {
-        SVLOG_CRIT("CalculateCountersDiff: histogram count mismatch, prev "
-            << prev.HistogramSize() << ", current " << histogramSize);
-        if (prev.HistogramSize() < histogramSize) {
-            auto missing = histogramSize - prev.HistogramSize();
-            for (; missing > 0; --missing) {
-                prev.AddHistogram();
-            }
-        }
-    }
-
-    diff->MutableSimple()->Reserve(simpleSize);
-    diff->MutableCumulative()->Reserve(cumulativeSize);
-    diff->MutableHistogram()->Reserve(histogramSize);
-
-    for (size_t i = 0; i < simpleSize; ++i) {
-        diff->AddSimple(current.GetSimple(i));
-    }
-
-    diff->SetCumulativeCount(cumulativeSize);
-    for (size_t i = 0; i < cumulativeSize; ++i) {
-        auto value = current.GetCumulative(i) - prev.GetCumulative(i);
-        if (!value) {
-            continue;
-        }
-        diff->AddCumulative(i);
-        diff->AddCumulative(value);
-    }
-
-    for (size_t i = 0; i < histogramSize; ++i) {
-        const auto& currentH = current.GetHistogram(i);
-        auto& prevH = *prev.MutableHistogram(i);
-        auto bucketCount = currentH.BucketsSize();
-        if (prevH.BucketsSize() != bucketCount) {
-            SVLOG_CRIT("CalculateCountersDiff: histogram buckets count mismatch, index " << i
-                << ", prev " << prevH.BucketsSize() << ", current " << bucketCount);
-            prevH.MutableBuckets()->Resize(bucketCount, 0);
-        }
-        auto* histogram = diff->AddHistogram();
-        histogram->MutableBuckets()->Reserve(bucketCount);
-        histogram->SetBucketsCount(bucketCount);
-        for (size_t b = 0; b < bucketCount; ++b) {
-            auto value = currentH.GetBuckets(b) - prevH.GetBuckets(b);
-            if (!value) {
-                continue;
-            }
-            histogram->AddBuckets(b);
-            histogram->AddBuckets(value);
-        }
-    }
-}
 
 static void CalculateCountersDiff(NKikimrSysView::TDbServiceCounters* diff,
     const NKikimr::NSysView::TDbServiceCounters& current,
@@ -196,6 +87,33 @@ static void CalculateCountersDiff(NKikimrSysView::TDbServiceCounters* diff,
     }
 }
 
+// Whether the elements Clear() kept (protobuf 22.x, recheck on upgrade) outgrew the last Pack.
+// ClearedCount() sees one level only, so any unused role or table slot counts as spare
+static bool HasSpareDetailedElements(
+    const NProtoBuf::RepeatedPtrField<NKikimrSysView::TEvSendDbCountersRequest::TDetailedCounters>& payload)
+{
+    // Kept leaves over about 1.25x the used ones, with a floor so small payloads do not churn
+    constexpr int MinSpareLeaves = 64;
+
+    if (payload.ClearedCount() > 0) {
+        return true;
+    }
+
+    int usedLeaves = 0;
+    int spareLeaves = 0;
+    for (const auto& entry : payload) {
+        const auto& tables = entry.GetTables();
+        if (tables.ClearedCount() > 0) {
+            return true;
+        }
+        for (const auto& table : tables) {
+            usedLeaves += table.LeavesSize();
+            spareLeaves += table.GetLeaves().ClearedCount();
+        }
+    }
+    return spareLeaves > std::max(MinSpareLeaves, usedLeaves / 4);
+}
+
 class TSysViewService : public TActorBootstrapped<TSysViewService> {
 public:
     using TBase = TActorBootstrapped<TSysViewService>;
@@ -246,7 +164,8 @@ public:
             Schedule(IntervalEnd, new TEvPrivate::TEvProcessInterval(IntervalEnd));
         }
 
-        if (AppData()->FeatureFlags.GetEnableDbCounters()) {
+        if (AppData()->FeatureFlags.GetEnableDbCounters() ||
+            AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
             {
                 auto intervalSize = ProcessCountersInterval.MicroSeconds();
                 auto deadline = (TInstant::Now().MicroSeconds() / intervalSize + 1) * intervalSize;
@@ -254,15 +173,17 @@ public:
                 Schedule(TInstant::MicroSeconds(deadline), new TEvPrivate::TEvProcessCounters());
             }
 
+            auto callback = MakeIntrusive<TServiceDbWatcherCallback>(ctx.ActorSystem());
+            DbWatcherActorId = ctx.Register(CreateDbWatcherActor(callback));
+        }
+
+        if (AppData()->FeatureFlags.GetEnableDbCounters()) {
             {
                 auto intervalSize = ProcessLabeledCountersInterval.MicroSeconds();
                 auto deadline = (TInstant::Now().MicroSeconds() / intervalSize + 1) * intervalSize;
                 deadline += RandomNumber<ui64>(intervalSize / 5);
                 Schedule(TInstant::MicroSeconds(deadline), new TEvPrivate::TEvProcessLabeledCounters());
             }
-
-            auto callback = MakeIntrusive<TServiceDbWatcherCallback>(ctx.ActorSystem());
-            DbWatcherActorId = ctx.Register(CreateDbWatcherActor(callback));
         }
 
         if (HasExternalCounters) {
@@ -283,6 +204,8 @@ public:
             hFunc(TEvPrivate::TEvProcessLabeledCounters, Handle);
             hFunc(TEvPrivate::TEvRemoveDatabase, Handle);
             hFunc(TEvSysView::TEvRegisterDbCounters, Handle);
+            hFunc(TEvSysView::TEvRegisterDbDetailedCounters, Handle);
+            hFunc(TEvSysView::TEvUnregisterDbDetailedCounters, Handle);
             hFunc(TEvSysView::TEvSendDbCountersResponse, Handle);
             hFunc(TEvSysView::TEvSendDbLabeledCountersResponse, Handle);
             hFunc(TEvSysView::TEvGetIntervalMetricsRequest, Handle);
@@ -290,8 +213,8 @@ public:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                SVLOG_CRIT("NSysView::TSysViewService: unexpected event# "
-                    << ev->GetTypeRewrite());
+                YDB_LOG_CRIT("TSysViewService::StateWork: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -376,17 +299,19 @@ private:
 
         auto& log = QueryLogs[database];
         log.Metrics.Report.FillSummary(*record.MutableMetrics());
+        record.SetQueryMetricsTotalCpuTimeUs(log.Metrics.Report.GetTotalCpuTimeUs());
+        record.SetQueryMetricsRetainedCpuTimeUs(log.Metrics.Report.GetRetainedCpuTimeUs());
         log.TopByDuration.Report.FillSummary(*record.MutableTopByDuration());
         log.TopByReadBytes.Report.FillSummary(*record.MutableTopByReadBytes());
         log.TopByCpuTime.Report.FillSummary(*record.MutableTopByCpuTime());
         log.TopByRequestUnits.Report.FillSummary(*record.MutableTopByRequestUnits());
 
-        SVLOG_D("Send interval summary: "
-            << "service id# " << SelfId()
-            << ", processor id# " << processorId
-            << ", database# " << database
-            << ", interval end# " << intervalEnd
-            << ", query count# " << record.GetMetrics().HashesSize());
+        YDB_LOG_DEBUG("TSysViewService::SendSummary: sending interval query summary",
+            {"actorId", SelfId()},
+            {"processorId", processorId},
+            {"database", database},
+            {"intervalEnd", intervalEnd},
+            {"queryHashCount", record.GetMetrics().HashesSize()});
 
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(summary.Release(), processorId, true),
@@ -402,10 +327,11 @@ private:
 
         Attempts.clear();
 
-        SVLOG_D("Rotate logs: service id# " << SelfId()
-            << ", query logs count# " << QueryLogs.size()
-            << ", processor ids count# " << ProcessorIds.size()
-            << ", processor id to database count# " << ProcessorIdToDatabase.size());
+        YDB_LOG_DEBUG("TSysViewService::Rotate: rotating query logs",
+            {"actorId", SelfId()},
+            {"queryLogCount", QueryLogs.size()},
+            {"processorIdCount", ProcessorIds.size()},
+            {"processorIdToDatabaseCount", ProcessorIdToDatabase.size()});
 
         if (QueryLogs.empty()) {
             return;
@@ -487,9 +413,24 @@ private:
         auto sendEv = MakeHolder<T>();
         auto& record = sendEv->Record;
 
+        TDuration packingTime;
+        TStringBuf detailedRelease;
         if (dbCounters.IsConfirmed) {
             for (auto& [service, state] : dbCounters.States) {
                 state.Counters->ToProto(state.Current);
+            }
+            if constexpr (!isLabeled) {
+                detailedRelease = dbCounters.ResetDetailedCurrent();
+                if (!dbCounters.DetailedStates.empty()) {
+                    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::PayloadMemoryTag());
+                    auto packStart = Now();
+                    for (auto& [service, state] : dbCounters.DetailedStates) {
+                        auto* entry = dbCounters.DetailedCurrent.Add();
+                        entry->SetService(service);
+                        state->Pack(*entry->MutableTables());
+                    }
+                    packingTime = Now() - packStart;
+                }
             }
             ++dbCounters.Generation;
             dbCounters.IsConfirmed = false;
@@ -513,14 +454,31 @@ private:
             }
         }
 
-        SVLOG_D("Send counters: "
-            << "service id# " << SelfId()
-            << ", processor id# " << processorId
-            << ", database# " << database
-            << ", generation# " << record.GetGeneration()
-            << ", node id# " << record.GetNodeId()
-            << ", is retrying# " << dbCounters.IsRetrying
-            << ", is labeled# " << isLabeled);
+        size_t detailedRoleCount = 0;
+        size_t detailedTableCount = 0;
+        if constexpr (!isLabeled) {
+            if (!dbCounters.DetailedStates.empty()) {
+                NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::PayloadMemoryTag());
+                record.MutableDetailedCounters()->CopyFrom(dbCounters.DetailedCurrent);
+            }
+            detailedRoleCount = record.DetailedCountersSize();
+            for (const auto& entry : record.GetDetailedCounters()) {
+                detailedTableCount += entry.TablesSize();
+            }
+        }
+
+        YDB_LOG_DEBUG("TSysViewService::SendCounters: sending database counters",
+            {"actorId", SelfId()},
+            {"processorId", processorId},
+            {"database", database},
+            {"generation", record.GetGeneration()},
+            {"nodeId", record.GetNodeId()},
+            {"retrying", dbCounters.IsRetrying},
+            {"labeled", isLabeled},
+            {"detailedRoles", detailedRoleCount},
+            {"detailedTables", detailedTableCount},
+            {"detailedRelease", detailedRelease},
+            {"packingTimeMs", packingTime.MilliSeconds()});
 
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(sendEv.Release(), processorId, true),
@@ -589,10 +547,10 @@ private:
     }
 
     void Handle(TEvPrivate::TEvProcessInterval::TPtr& ev) {
-        SVLOG_D("Handle TEvPrivate::TEvProcessInterval: "
-            << "service id# " << SelfId()
-            << ", interval end# " << IntervalEnd
-            << ", event interval end# " << ev->Get()->IntervalEnd);
+        YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessInterval: processing interval",
+            {"actorId", SelfId()},
+            {"intervalEnd", IntervalEnd},
+            {"eventIntervalEnd", ev->Get()->IntervalEnd});
 
         if (IntervalEnd == ev->Get()->IntervalEnd) {
             Rotate();
@@ -613,11 +571,11 @@ private:
 
         auto prevIntervalEnd = IntervalEnd - TotalInterval;
         if (record.GetIntervalEndUs() != prevIntervalEnd.MicroSeconds()) {
-            SVLOG_W("Handle TEvSysView::TEvGetIntervalMetricsRequest, time mismatch: "
-                << "service id# " << SelfId()
-                << ", database# " << database
-                << ", prev interval end# " << prevIntervalEnd
-                << ", event interval end# " << record.GetIntervalEndUs());
+            YDB_LOG_WARN("Handle TEvSysView::TEvGetIntervalMetricsRequest: interval end mismatch",
+                {"actorId", SelfId()},
+                {"database", database},
+                {"expectedIntervalEnd", prevIntervalEnd},
+                {"requestIntervalEndUs", record.GetIntervalEndUs()});
 
             Send(ev->Sender, std::move(response), 0, ev->Cookie);
             return;
@@ -625,10 +583,10 @@ private:
 
         auto it = QueryLogs.find(database);
         if (it == QueryLogs.end()) {
-            SVLOG_W("Handle TEvSysView::TEvGetIntervalMetricsRequest, no database: "
-                << "service id# " << SelfId()
-                << ", database# " << database
-                << ", prev interval end# " << prevIntervalEnd);
+            YDB_LOG_WARN("Handle TEvSysView::TEvGetIntervalMetricsRequest: database not found",
+                {"actorId", SelfId()},
+                {"database", database},
+                {"intervalEnd", prevIntervalEnd});
 
             Send(ev->Sender, std::move(response), 0, ev->Cookie);
             return;
@@ -645,19 +603,19 @@ private:
         log.TopByRequestUnits.Report.FillStats(
             record.GetTopByRequestUnits(), *response->Record.MutableTopByRequestUnits());
 
-        SVLOG_D("Handle TEvSysView::TEvGetIntervalMetricsRequest: "
-            << "service id# " << SelfId()
-            << ", database# " << database
-            << ", prev interval end# " << prevIntervalEnd
-            << ", metrics count# " << response->Record.MetricsSize()
-            << ", texts count# " << response->Record.QueryTextsSize());
+        YDB_LOG_DEBUG("Handle TEvSysView::TEvGetIntervalMetricsRequest: returning interval metrics",
+            {"actorId", SelfId()},
+            {"database", database},
+            {"intervalEnd", prevIntervalEnd},
+            {"metricsCount", response->Record.MetricsSize()},
+            {"queryTextCount", response->Record.QueryTextsSize()});
 
         Send(ev->Sender, std::move(response), 0, ev->Cookie);
     }
 
     void Handle(TEvPrivate::TEvProcessCounters::TPtr&) {
-        SVLOG_D("Handle TEvPrivate::TEvProcessCounters: "
-            << "service id# " << SelfId());
+        YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessCounters: processing database counters",
+            {"actorId", SelfId()});
 
         for (auto& [database, dbCounters] : DatabaseCounters) {
             SendCounters<TEvSysView::TEvSendDbCountersRequest>(database);
@@ -667,8 +625,8 @@ private:
     }
 
     void Handle(TEvPrivate::TEvProcessLabeledCounters::TPtr&) {
-        SVLOG_D("Handle TEvPrivate::TEvProcessLabeledCounters: "
-            << "service id# " << SelfId());
+        YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessLabeledCounters: processing labeled database counters",
+            {"actorId", SelfId()});
 
         for (auto& [database, dbCounters] : DatabaseLabeledCounters) {
             SendCounters<TEvSysView::TEvSendDbLabeledCountersRequest>(database);
@@ -681,9 +639,9 @@ private:
         auto database = ev->Get()->Database;
         auto pathId = ev->Get()->PathId;
 
-        SVLOG_D("Handle TEvPrivate::TEvRemoveDatabase: "
-            << "database# " << database
-            << ", pathId# " << pathId);
+        YDB_LOG_DEBUG("Handle TEvPrivate::TEvRemoveDatabase: removing database state",
+            {"database", database},
+            {"pathId", pathId});
 
         QueryLogs.erase(database);
         if (auto it = ProcessorIds.find(database); it != ProcessorIds.end()) {
@@ -705,19 +663,19 @@ private:
 
         auto it = DatabaseCounters.find(database);
         if (it == DatabaseCounters.end()) {
-            SVLOG_W("Handle TEvSysView::TEvSendDbCountersResponse: "
-                << "service id# " << SelfId()
-                << ", unknown database# " << database);
+            YDB_LOG_WARN("Handle TEvSysView::TEvSendDbCountersResponse: unknown database",
+                {"actorId", SelfId()},
+                {"database", database});
             return;
         }
 
         auto& dbCounters = it->second;
         if (generation != dbCounters.Generation) {
-            SVLOG_W("Handle TEvSysView::TEvSendDbCountersResponse, wrong generation: "
-                << "service id# " << SelfId()
-                << ", database# " << database
-                << ", generation# " << generation
-                << ", service generation# " << dbCounters.Generation);
+            YDB_LOG_WARN("Handle TEvSysView::TEvSendDbCountersResponse: generation mismatch",
+                {"actorId", SelfId()},
+                {"database", database},
+                {"responseGeneration", generation},
+                {"expectedGeneration", dbCounters.Generation});
             return;
         }
 
@@ -730,10 +688,10 @@ private:
             SendCounters<TEvSysView::TEvSendDbCountersRequest>(database);
         }
 
-        SVLOG_D("Handle TEvSysView::TEvSendDbCountersResponse: "
-            << "service id# " << SelfId()
-            << ", database# " << database
-            << ", generation# " << generation);
+        YDB_LOG_DEBUG("Handle TEvSysView::TEvSendDbCountersResponse: counters confirmed",
+            {"actorId", SelfId()},
+            {"database", database},
+            {"generation", generation});
     }
 
     void Handle(TEvSysView::TEvSendDbLabeledCountersResponse::TPtr& ev) {
@@ -760,10 +718,10 @@ private:
             SendCounters<TEvSysView::TEvSendDbLabeledCountersRequest>(database);
         }
 
-        SVLOG_D("Handle TEvSysView::TEvSendDbLabeledCountersResponse: "
-            << "service id# " << SelfId()
-            << ", database# " << database
-            << ", generation# " << generation);
+        YDB_LOG_DEBUG("Handle TEvSysView::TEvSendDbLabeledCountersResponse: labeled counters confirmed",
+            {"actorId", SelfId()},
+            {"database", database},
+            {"generation", generation});
     }
 
     void Handle(TEvSysView::TEvRegisterDbCounters::TPtr& ev) {
@@ -774,29 +732,69 @@ private:
             UnresolvedTabletCounters[pathId] = ev->Get()->Counters;
             RequestDatabaseName(pathId);
 
-            SVLOG_D("Handle TEvSysView::TEvRegisterDbCounters: "
-                << "service id# " << SelfId()
-                << ", path id# " << pathId
-                << ", service# " << (int)service);
+            YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbCounters: registering counters by path id",
+                {"actorId", SelfId()},
+                {"pathId", pathId},
+                {"service", static_cast<int>(service)});
 
         } else if (service == NKikimrSysView::LABELED) {
             const auto& database = ev->Get()->Database;
             RegisterDbLabeledCounters(database, service, ev->Get()->Counters);
 
-            SVLOG_D("Handle TEvSysView::TEvRegisterDbLabeledCounters: "
-                << "service id# " << SelfId()
-                << ", database# " << database
-                << ", service# " << (int)service);
+            YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbLabeledCounters: registering labeled counters",
+                {"actorId", SelfId()},
+                {"database", database},
+                {"service", static_cast<int>(service)});
 
         } else { // register by database name
             const auto& database = ev->Get()->Database;
             RegisterDbCounters(database, service, ev->Get()->Counters);
 
-            SVLOG_D("Handle TEvSysView::TEvRegisterDbCounters: "
-                << "service id# " << SelfId()
-                << ", database# " << database
-                << ", service# " << (int)service);
+            YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbCounters: registering counters",
+                {"actorId", SelfId()},
+                {"database", database},
+                {"service", static_cast<int>(service)});
         }
+    }
+
+    void Handle(TEvSysView::TEvRegisterDbDetailedCounters::TPtr& ev) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
+        const auto& database = ev->Get()->Database;
+        const auto service = ev->Get()->Service;
+
+        auto [it, inserted] = DatabaseCounters.try_emplace(database, TDbCounters());
+        if (inserted) {
+            if (ProcessorIds.find(database) == ProcessorIds.end()) {
+                RequestProcessorId(database);
+            }
+
+            if (DbWatcherActorId) {
+                auto evWatch = MakeHolder<NSysView::TEvSysView::TEvWatchDatabase>(database);
+                Send(DbWatcherActorId, evWatch.Release());
+            }
+        }
+        it->second.DetailedStates[service] = ev->Get()->Counters;
+
+        YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbDetailedCounters: registering detailed counters",
+            {"actorId", SelfId()},
+            {"database", database},
+            {"service", static_cast<int>(service)});
+    }
+
+    void Handle(TEvSysView::TEvUnregisterDbDetailedCounters::TPtr& ev) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
+        const auto& database = ev->Get()->Database;
+        const auto service = ev->Get()->Service;
+
+        auto it = DatabaseCounters.find(database);
+        if (it != DatabaseCounters.end()) {
+            it->second.DetailedStates.erase(service);
+        }
+
+        YDB_LOG_DEBUG("Handle TEvSysView::TEvUnregisterDbDetailedCounters: unregistering detailed counters",
+            {"actorId", SelfId()},
+            {"database", database},
+            {"service", static_cast<int>(service)});
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -808,9 +806,10 @@ private:
             RequestProcessorId(database);
         }
 
-        SVLOG_W("Summary delivery problem: service id# " << SelfId()
-            << ", processor id# " << processorId
-            << ", database# " << database);
+        YDB_LOG_WARN("Handle TEvPipeCache::TEvDeliveryProblem: summary delivery failed",
+            {"actorId", SelfId()},
+            {"processorId", processorId},
+            {"database", database});
 
         if (!database) {
             return;
@@ -842,9 +841,10 @@ private:
             auto pathId = entry.TableId.PathId;
 
             if (entry.Status != TNavigate::EStatus::Ok) {
-                SVLOG_W("Navigate by path id failed: service id# " << SelfId()
-                    << ", path id# " << pathId
-                    << ", status# " << entry.Status);
+                YDB_LOG_WARN("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: navigate by path id failed",
+                    {"actorId", SelfId()},
+                    {"pathId", pathId},
+                    {"status", entry.Status});
                 return;
             }
 
@@ -857,17 +857,19 @@ private:
             RegisterDbCounters(database, NKikimrSysView::TABLETS, it->second);
             UnresolvedTabletCounters.erase(it);
 
-            SVLOG_I("Navigate by path id succeeded: service id# " << SelfId()
-                << ", path id# " << pathId
-                << ", database# " << database);
+            YDB_LOG_INFO("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: navigate by path id succeeded",
+                {"actorId", SelfId()},
+                {"pathId", pathId},
+                {"database", database});
 
         } else {
             auto database = CanonizePath(entry.Path);
 
             if (entry.Status != TNavigate::EStatus::Ok) {
-                SVLOG_W("Navigate by database failed: service id# " << SelfId()
-                    << ", database# " << database
-                    << ", status# " << entry.Status);
+                YDB_LOG_WARN("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: navigate by database failed",
+                    {"actorId", SelfId()},
+                    {"database", database},
+                    {"status", entry.Status});
                 ProcessorIds.erase(database);
                 return;
             }
@@ -877,15 +879,16 @@ private:
                 ProcessorIds[database] = processorId;
                 ProcessorIdToDatabase[processorId] = database;
 
-                SVLOG_I("Navigate by database succeeded: service id# " << SelfId()
-                    << ", database# " << database
-                    << ", processor id# " << processorId);
+                YDB_LOG_INFO("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: sysview processor found",
+                    {"actorId", SelfId()},
+                    {"database", database},
+                    {"processorId", processorId});
             } else {
                 ProcessorIds[database] = 0;
 
-                SVLOG_I("Navigate by database succeeded: service id# " << SelfId()
-                    << ", database# " << database
-                    << ", no sysview processor");
+                YDB_LOG_INFO("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: sysview processor not configured",
+                    {"actorId", SelfId()},
+                    {"database", database});
             }
         }
     }
@@ -896,10 +899,11 @@ private:
         auto stats = std::make_shared<NKikimrSysView::TQueryStats>();
         stats->Swap(&ev->Get()->QueryStats);
 
-        SVLOG_T("Collect query stats: service id# " << SelfId()
-            << ", database# " << database
-            << ", query hash# " << stats->GetQueryTextHash()
-            << ", cpu time# " << stats->GetTotalCpuTimeUs());
+        YDB_LOG_TRACE("Handle TEvSysView::TEvCollectQueryStats: collecting query stats",
+            {"actorId", SelfId()},
+            {"database", database},
+            {"queryTextHash", stats->GetQueryTextHash()},
+            {"totalCpuTimeUs", stats->GetTotalCpuTimeUs()});
 
         if (AppData()->FeatureFlags.GetEnablePersistentQueryStats() && !database.empty()) {
             auto queryEnd = TInstant::MilliSeconds(stats->GetEndTimeMs());
@@ -977,8 +981,8 @@ private:
                 TopByRequestUnits1Hour->ToProto(startBucket, result->Record);
                 break;
             default:
-                SVLOG_CRIT("NSysView::TSysViewService: unexpected query stats type# "
-                    << (size_t)record.GetStatsType());
+                YDB_LOG_CRIT("Handle TEvSysView::TEvGetQueryStats: unexpected stats type",
+                    {"statsType", static_cast<size_t>(record.GetStatsType())});
                 // send empty result
                 break;
         }
@@ -1081,6 +1085,18 @@ private:
 
     struct TDbCounters {
         std::unordered_map<NKikimrSysView::EDbCountersService, TDbCountersState> States;
+        std::unordered_map<NKikimrSysView::EDbCountersService,
+                           TIntrusivePtr<IDbDetailedCounters>> DetailedStates;
+        // Pack advances the delta baseline, so retain the complete detailed payload
+        // until it is confirmed and reuse it unchanged on every retry. A deeper fix
+        // would use a pre-serialized payload (avoiding the copy), but that requires a
+        // proto change to support it in the TEventPB send path.
+        // Rebuilt in place at the next confirmed send, see ResetDetailedCurrent
+        NProtoBuf::RepeatedPtrField<NKikimrSysView::TEvSendDbCountersRequest::TDetailedCounters> DetailedCurrent;
+        // Confirmed sends in a row that found spare elements in DetailedCurrent
+        ui32 DetailedShrunkSends = 0;
+        // Confirmed sends since the elements of DetailedCurrent were last freed
+        ui32 DetailedSendsSinceRelease = 0;
         ui64 Generation;
         bool IsConfirmed = true;
         bool IsRetrying = false;
@@ -1088,6 +1104,44 @@ private:
         TDbCounters()
             : Generation(RandomNumber<ui64>())
         {}
+
+        // Once per confirmed send, before the rebuild: a retry resends DetailedCurrent unchanged.
+        // Clear() keeps the elements for the next Pack to reuse, = {} frees them. Returns why
+        // they were freed, empty when kept
+        TStringBuf ResetDetailedCurrent() {
+            const TStringBuf reason = CountConfirmedDetailedSend();
+            if (reason) {
+                DetailedCurrent = {};
+                DetailedShrunkSends = 0;
+                DetailedSendsSinceRelease = 0;
+            } else {
+                DetailedCurrent.Clear();
+            }
+            return reason;
+        }
+
+        // Advances the release counters. Returns why DetailedCurrent is to be freed, empty to keep it
+        TStringBuf CountConfirmedDetailedSend() {
+            if (DetailedStates.empty()) {
+                // No role left to Pack: free the elements rather than hold them until a role
+                // registers again. Quiet once nothing is held
+                if (DetailedCurrent.empty() && DetailedCurrent.ClearedCount() == 0) {
+                    return {};
+                }
+                return "unregistered";
+            }
+            if (++DetailedSendsSinceRelease >= DetailedReleasePeriodSends) {
+                return "period";
+            }
+            if (!HasSpareDetailedElements(DetailedCurrent)) {
+                DetailedShrunkSends = 0;
+                return {};
+            }
+            if (++DetailedShrunkSends >= DetailedReleaseAfterShrunkSends) {
+                return "shrunk";
+            }
+            return {};
+        }
     };
 
     std::unordered_map<TString, TDbCounters> DatabaseCounters;
@@ -1102,6 +1156,11 @@ private:
     static constexpr size_t SummaryRetryAttempts = 5;
 
     static constexpr TDuration ProcessCountersInterval = TDuration::Seconds(5);
+    // Confirmed sends before a shrunk detailed payload is freed, and before any detailed payload
+    // is freed for what ClearedCount() cannot see. At most one confirmed send per interval and
+    // none while a payload is retried, so at least a minute and ten minutes
+    static constexpr ui32 DetailedReleaseAfterShrunkSends = static_cast<ui32>(TDuration::Minutes(1) / ProcessCountersInterval);
+    static constexpr ui32 DetailedReleasePeriodSends = static_cast<ui32>(TDuration::Minutes(10) / ProcessCountersInterval);
 };
 
 THolder<NActors::IActor> CreateSysViewService(

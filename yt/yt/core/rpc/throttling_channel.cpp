@@ -42,7 +42,7 @@ public:
             .Subscribe(BIND([=, this, this_ = MakeStrong(this)] (const TError& error) {
                 if (!error.IsOK()) {
                     responseHandler->HandleError(TError("Error throttling RPC request")
-                        << error);
+                        .With(error));
                     return;
                 }
 

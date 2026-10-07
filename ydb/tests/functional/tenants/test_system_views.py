@@ -21,8 +21,6 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 
-pg_sysviews = {'pg_tables', 'tables', 'pg_class'}
-
 
 class BaseSystemViews(object):
     @classmethod
@@ -35,6 +33,7 @@ class BaseSystemViews(object):
             )
         )
         cls.cluster.config.yaml_config['feature_flags']['enable_column_statistics'] = False
+        cls.cluster.config.yaml_config['feature_flags']['collect_hour_metric'] = True
         cls.cluster.start()
 
     @classmethod
@@ -54,7 +53,7 @@ class BaseSystemViews(object):
                 'hdd': 1
             }
         )
-        self.cluster.register_and_start_slots(self.database, count=1)
+        self.database_nodes = self.cluster.register_and_start_slots(self.database, count=1)
         self.cluster.wait_tenant_up(self.database)
 
     def teardown_method(self, method=None):
@@ -78,12 +77,25 @@ class BaseSystemViews(object):
             "select PathId, PartIdx, Path from `{}`;".format(table)
         )
 
-    def read_query_metrics(self, driver, database):
-        table = os.path.join(database, '.sys/query_metrics_one_minute')
+    def read_query_metrics(self, driver, database, interval='one_minute', query_text=None):
+        table = os.path.join(database, '.sys/query_metrics_{}'.format(interval))
+        query = "select Count, SumReadBytes, SumRequestUnits from `{}`".format(table)
+        if query_text is not None:
+            query += " where QueryText = '{}'".format(query_text.replace("'", "''"))
         return self._stream_query_result(
             driver,
-            "select Count, SumReadBytes, SumRequestUnits from `{}`;".format(table)
+            query + ";"
         )
+
+    def wait_query_metrics(self, driver, interval, query_text=None, expected_count=None, timeout=90):
+        deadline = time.time() + timeout
+        metrics = []
+        while time.time() < deadline:
+            metrics = self.read_query_metrics(driver, self.database, interval, query_text)
+            if metrics and (expected_count is None or metrics[0].Count == expected_count):
+                return metrics
+            time.sleep(2)
+        return metrics
 
     def read_query_stats(self, driver, database, table_name):
         table = os.path.join(database, '.sys', table_name)
@@ -120,26 +132,26 @@ class BaseSystemViews(object):
 
             self.create_table(driver, table)
 
+            queries = []
             with ydb.SessionPool(driver, size=1) as pool:
                 with pool.checkout() as session:
                     for i in range(query_count):
-                        query = "select * from `{}` -- {}".format(table, i)
+                        query = "select * from `{}` -- query-metrics-test-{}".format(table, i)
+                        queries.append(query)
                         session.transaction().execute(query, commit_tx=True)
 
             time.sleep(70)
 
-            for i in range(60):
-                metrics = self.read_query_metrics(driver, self.database)
-                if len(metrics) == query_count:
-                    break
-                time.sleep(5)
-
-            assert_that(metrics, has_length(query_count))
-            assert_that(metrics[0], has_properties({
-                'Count': 1,
-                'SumReadBytes': 0,
-                'SumRequestUnits': greater_than(0),
-            }))
+            for interval in ('one_minute', 'one_hour'):
+                for query in queries:
+                    metrics = self.wait_query_metrics(
+                        driver, interval, query_text=query, expected_count=1)
+                    assert_that(metrics, has_length(1))
+                    assert_that(metrics[0], has_properties({
+                        'Count': 1,
+                        'SumReadBytes': 0,
+                        'SumRequestUnits': greater_than(0),
+                    }))
 
             for table_name in [
                 'top_queries_by_duration_one_minute',
@@ -196,6 +208,56 @@ class TestQueryMetricsUniqueQueries(BaseSystemViews):
         self.check_query_metrics_and_stats(10)
 
 
+class TestQueryMetricsOneHourRestart(BaseSystemViews):
+    def test_case(self):
+        table = os.path.join(self.database, 'table')
+        query = "select * from `{}` -- query-metrics-one-hour-restart".format(table)
+        driver_config = ydb.DriverConfig(
+            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
+            self.database
+        )
+
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(timeout=10)
+            self.create_table(driver, table)
+            with ydb.SessionPool(driver, size=1) as pool:
+                with pool.checkout() as session:
+                    session.transaction().execute(query, commit_tx=True)
+
+            metrics = self.wait_query_metrics(
+                driver, 'one_hour', query_text=query, expected_count=1)
+            assert_that(metrics, has_length(1))
+            assert_that(metrics[0], has_properties({'Count': 1}))
+
+        node = self.database_nodes[0]
+        node.stop()
+        node.start()
+        self.cluster.wait_tenant_up(self.database)
+
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(timeout=10)
+            metrics = self.wait_query_metrics(
+                driver, 'one_hour', query_text=query, expected_count=1, timeout=30)
+            assert_that(metrics, has_length(1))
+            assert_that(metrics[0], has_properties({'Count': 1}))
+
+            with ydb.SessionPool(driver, size=1) as pool:
+                with pool.checkout() as session:
+                    session.transaction().execute(query, commit_tx=True)
+
+            deadline = time.time() + 90
+            metrics = []
+            while time.time() < deadline:
+                metrics = self.read_query_metrics(
+                    driver, self.database, 'one_hour', query)
+                if sum(metric.Count for metric in metrics) >= 2:
+                    break
+                time.sleep(2)
+
+            assert_that(metrics, has_length(greater_than(0)))
+            assert_that(sum(metric.Count for metric in metrics), greater_than(1))
+
+
 class TestSysViewsRegistry(BaseSystemViews):
     """
     Test validates that changes in SysViews registry are compatible.
@@ -236,33 +298,23 @@ class TestSysViewsRegistry(BaseSystemViews):
                     sysview_name = child.name
                     sysview_path = os.path.join(sys_dir_path, sysview_name)
 
-                    try:
-                        # Try to get table description
-                        response = session.describe_table(sysview_path)
+                    response = session.describe_table(sysview_path)
 
-                        # Collect column information
-                        columns = []
-                        for col in response.columns:
-                            columns.append({
-                                'name': col.name,
-                                'type': str(col.type)
-                            })
+                    # Collect column information
+                    columns = []
+                    for col in response.columns:
+                        columns.append({
+                            'name': col.name,
+                            'type': str(col.type)
+                        })
 
-                        # Collect primary key information
-                        primary_key = [pk_col for pk_col in response.primary_key]
+                    # Collect primary key information
+                    primary_key = [pk_col for pk_col in response.primary_key]
 
-                        sysviews[sysview_name] = {
-                            'columns': columns,
-                            'primary_key': primary_key
-                        }
-
-                    except Exception as e:
-                        # Some sysviews may be unavailable or have special nature (e.g., pg_* views)
-                        if sysview_name in pg_sysviews:
-                            logger.debug(f"Skipping pg sysview '{sysview_name}': {e}")
-                            continue
-                        else:
-                            raise
+                    sysviews[sysview_name] = {
+                        'columns': columns,
+                        'primary_key': primary_key
+                    }
 
         return sysviews
 
@@ -292,7 +344,7 @@ class TestSysViewsRegistry(BaseSystemViews):
         """Writes content to file for canonization."""
         output_path = os.path.join(yatest.common.output_path(), filename)
         with open(output_path, 'w') as f:
-            f.write(json.dumps(content, indent=2, sort_keys=True, ensure_ascii=False))
+            f.write(json.dumps(content, indent=2, sort_keys=True, ensure_ascii=False) + '\n')
         return output_path
 
     def validate_compatibility(self, canonical_sysviews, current_sysviews):

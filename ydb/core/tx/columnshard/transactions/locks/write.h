@@ -1,5 +1,6 @@
 #pragma once
 #include "abstract.h"
+
 #include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
@@ -11,7 +12,6 @@ private:
 
     virtual bool DoCheckInteraction(
         const ui64 selfLockId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& /*notifications*/) const override {
-        
         THashSet<ui64> lockIdsToBreakOnCommit = context.GetAffectedLockIds(PathId, RecordBatch);
         lockIdsToBreakOnCommit.erase(selfLockId);
         TTxConflicts result;
@@ -28,9 +28,11 @@ private:
     }
 
 public:
-    TEvWriteWriter(const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema)
+    TEvWriteWriter(
+        const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema)
         : PathId(pathId)
-        , RecordBatch(NArrow::TColumnOperator().Extract(batch, pkSchema->field_names())) {
+        , RecordBatch(NArrow::TColumnOperator().Extract(batch, pkSchema->field_names()))
+    {
         AFL_VERIFY(PathId);
         AFL_VERIFY(RecordBatch);
     }

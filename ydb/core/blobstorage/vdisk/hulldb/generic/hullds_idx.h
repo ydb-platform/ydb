@@ -292,6 +292,10 @@ namespace NKikimr {
             return Fresh.NeedsCompaction(yardFreeUpToLsn, force);
         }
 
+        ui64 GetFreshFreeInPlaceSizeApproximation() const {
+            return Fresh.GetFreeInPlaceSizeApproximation();
+        }
+
         TIntrusivePtr<TFreshSegment> FindFreshSegmentForCompaction() {
             return Fresh.FindSegmentForCompaction();
         }
@@ -305,6 +309,38 @@ namespace NKikimr {
         }
         void FreshCompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment) {
             Fresh.CompactionSstCreated(std::move(freshSegment));
+        }
+        void FreshCompactionAborted() {
+            Fresh.CompactionAborted();
+        }
+
+        // Chunks reserved in advance for Fresh compaction, see TFreshData.
+        bool IsFreshRotationPending() const {
+            return Fresh.IsRotationPending();
+        }
+        ui64 GetFreshReservationShortfall(const TFreshOutputEstimate& record, bool unsequenced) const {
+            return Fresh.GetCurReservationShortfall(record, unsequenced);
+        }
+        void AddFreshReservedChunks(const TVector<TChunkIdx>& chunks) {
+            Fresh.AddCurReservedChunks(chunks);
+        }
+        void AdmitToFresh(const TFreshOutputEstimate& record, bool unsequenced) {
+            Fresh.AdmitInFlight(record, unsequenced);
+        }
+        void SequenceInFresh(const TFreshOutputEstimate& record) {
+            Fresh.SequenceInFlight(record);
+        }
+        void LandInFresh(const TFreshOutputEstimate& record, bool unsequenced) {
+            Fresh.LandInFlight(record, unsequenced);
+        }
+        bool FreshWouldOutgrowSst(const TFreshOutputEstimate& record) const {
+            return Fresh.WouldOutgrowSst(record);
+        }
+        bool CanRotateFreshCur() const {
+            return Fresh.CanRotateCur();
+        }
+        void RequestFreshSizeRotation() {
+            Fresh.RequestSizeRotation();
         }
 
         // Fresh Appendix Compaction
@@ -375,6 +411,20 @@ namespace NKikimr {
             Fresh.GetOwnedChunks(chunks);
             // include slice
             CurSlice->GetOwnedChunks(chunks);
+        }
+
+        void ResolveStripeSsts(const THashSet<TChunkIdx>& stripeChunks) {
+            CurSlice->ResolveStripeSsts(stripeChunks);
+        }
+
+        template<typename TCallback>
+        void ForEachStripeExtent(const THashSet<TChunkIdx>& stripeChunks, TCallback&& callback) const {
+            Fresh.ForEachHugeBlob([&](const TDiskPart& part) {
+                if (stripeChunks.contains(part.ChunkIdx)) {
+                    callback(part);
+                }
+            });
+            CurSlice->ForEachStripeExtent(stripeChunks, callback);
         }
 
         void SerializeToProto(NKikimrVDiskData::TLevelIndex &pb) const {

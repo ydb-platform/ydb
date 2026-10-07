@@ -99,6 +99,143 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
 
 Y_UNIT_TEST_SUITE(KqpScan) {
 
+    Y_UNIT_TEST_TWIN(SamplingHintWithNewRboWithoutFallback, AstCache) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        auto* tableService = settings.AppConfig.MutableTableServiceConfig();
+        tableService->SetEnableNewRBO(true);
+        tableService->SetEnableFallbackToYqlOptimizer(false);
+        tableService->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        tableService->SetEnableAstCache(AstCache);
+        tableService->SetEnableKqpScanQuerySourceRead(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto create = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/FourShard` (
+                Key Uint64,
+                PRIMARY KEY (Key)
+            ) WITH (PARTITION_AT_KEYS = (100u, 200u, 300u));
+        )").GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        TValueBuilder rows;
+        rows.BeginList();
+        for (ui64 key : {1u, 2u, 101u, 102u, 201u, 202u, 301u, 302u}) {
+            rows.AddListItem().BeginStruct().AddMember("Key").Uint64(key).EndStruct();
+        }
+        rows.EndList();
+        auto upsert = db.BulkUpsert("/Root/FourShard", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        const auto rboSuccess = counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Success");
+        const auto rboFailed = counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed");
+        const auto successBefore = rboSuccess->Val();
+        const auto failedBefore = rboFailed->Val();
+        const TString fullResult = R"([[[1u]];[[2u]];[[101u]];[[102u]];[[201u]];[[202u]];[[301u]];[[302u]]])";
+
+        // A tiny positive rate produces an empty sample for this fixture and
+        // verifies that optimization does not silently drop sampling.
+        for (const TString rate : {"1", "0.00000000000000000001"}) {
+            const TString query = TStringBuilder()
+                << "SELECT Key FROM `/Root/FourShard` WITH (sampling_rate=\"" << rate
+                << "\", sampling_seed=\"42\", sampling_memtable_stride=\"1\") ORDER BY Key";
+            const TString expected = rate == "1" ? fullResult : "[]";
+
+            auto scan = kikimr.GetTableClient().StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(scan.IsSuccess(), scan.GetIssues().ToString());
+            CompareYson(expected, StreamResultToYson(scan));
+
+            auto result = kikimr.GetQueryClient().ExecuteQuery(query,
+                NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rboSuccess->Val(), successBefore);
+        UNIT_ASSERT_VALUES_EQUAL(rboFailed->Val(), failedBefore);
+
+        // Cached ASTs need the same explicit translation mode as the RBO tests.
+        auto ordinary = kikimr.GetQueryClient().ExecuteQuery(
+            "PRAGMA YqlSelect = 'force'; SELECT Key FROM `/Root/FourShard` ORDER BY Key",
+            NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(ordinary.IsSuccess(), ordinary.GetIssues().ToString());
+        CompareYson(fullResult, FormatResultSetYson(ordinary.GetResultSet(0)));
+        UNIT_ASSERT_VALUES_EQUAL(rboSuccess->Val(), successBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(rboFailed->Val(), failedBefore);
+
+        if (!AstCache) {
+            auto unsupported = kikimr.GetQueryClient().ExecuteQuery(R"(
+                SELECT Key FROM `/Root/FourShard` WITH (foo="bar");
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(!unsupported.IsSuccess(), "Unsampled table hints must not bypass forced RBO translation");
+            UNIT_ASSERT_STRING_CONTAINS(unsupported.GetIssues().ToString(), "table_hints");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(RejectUnsupportedSamplingHints, NewRbo) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetInitFederatedQuerySetupFactory(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto create = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/SamplingHints` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX ByValue GLOBAL ON (Value)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        const TVector<std::pair<TString, TString>> cases = {
+            {R"(WITH (sampling_rate="0"))", "samplingrate"},
+            {R"(WITH (sampling_rate="1.1"))", "samplingrate"},
+            {R"(WITH (sampling_rate="nan"))", "samplingrate"},
+            {R"(WITH (sampling_rate="0.5", sampling_seed="-1"))", "samplingseed"},
+            {R"(WITH (sampling_rate="0.5", sampling_memtable_stride="0"))", "samplingmemtablestride"},
+            {R"(WITH (sampling_seed="42"))", "Sampling requires sampling_rate"},
+            {R"(VIEW ByValue WITH (sampling_rate="0.5"))", "Sampling is not supported for index reads"},
+            {R"(WITH (sampling_rate="0.5") WHERE Key = 1u)", "Sampling is not supported for lookups"},
+        };
+        for (const auto& [suffix, expectedIssue] : cases) {
+            auto it = db.StreamExecuteScanQuery(TStringBuilder()
+                << "SELECT * FROM `/Root/SamplingHints` " << suffix).GetValueSync();
+            if (!it.IsSuccess()) {
+                UNIT_ASSERT_STRING_CONTAINS(it.GetIssues().ToString(), expectedIssue);
+                continue;
+            }
+            auto part = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_C(!part.IsSuccess(), suffix);
+            UNIT_ASSERT_STRING_CONTAINS(part.GetIssues().ToString(), expectedIssue);
+        }
+
+        for (const TString hint : {"", R"(WITH (sampling_rate="0.5"))"}) {
+            if (NewRbo && hint.empty()) {
+                continue; // New RBO does not support explicit streamlookup joins.
+            }
+            const TString query = TStringBuilder()
+                << "SELECT r.Key FROM `/Root/SamplingHints` AS l"
+                << " LEFT JOIN /*+ streamlookup() */ ANY `/Root/SamplingHints` " << hint
+                << " AS r ON l.Key = r.Key";
+            auto result = kikimr.GetQueryClient().ExecuteQuery(query,
+                NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            if (hint.empty()) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT(!result.IsSuccess());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Sampling is not supported for lookups");
+            }
+        }
+    }
+
     Y_UNIT_TEST(StreamExecuteScanQueryCancelation) {
         TKikimrSettings settings;
         // This test expects SourceRead is enabled for ScanQuery
@@ -2615,8 +2752,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 );
             )").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            result = session.ExecuteDataQuery(R"(
+        }
+        {
+            auto result = session.ExecuteDataQuery(R"(
                 REPLACE INTO `/Root/TestTable` (Key, Value) VALUES
                     ('SomeString1', '100'),
                     ('SomeString2', '200'),
@@ -2675,7 +2813,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_DEBUG);
 
-        auto runtime = server->GetRuntime();
+        auto* runtime = server->GetRuntime();
         auto sender = runtime->AllocateEdgeActor();
         auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
 
@@ -2785,6 +2923,539 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             JOIN `/Root/Table1` b
             ON a.Key = b.Key;
         )");
+    }
+
+    // Throttled OVERLOADED responses (from KQP Compute Scheduler quota) must not be counted
+    // against MaxTotalRetries. The test sets a low MaxTotalRetries and feeds many throttled
+    // responses; query must complete successfully.
+    Y_UNIT_TEST(StreamLookupThrottleDoesNotExhaustTotalRetries) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetStartDelayMs(1);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxDelayMs(2);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMultiplier(1.0);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetUnsertaintyRatio(0);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardRetries(100);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardResolves(100);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxTotalRetries(2);
+
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(appConfig);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+        auto* runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
+        InitRoot(server, sender);
+
+        constexpr int kThrottleCount = 5;  // > MaxTotalRetries
+        int throttleResponded = 0;
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                if (throttleResponded < kThrottleCount) {
+                    auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
+                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    resp->Record.SetReadId(record.GetReadId());
+                    resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
+                    resp->Record.SetThrottleDelayMs(1);
+                    runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
+                    ++throttleResponded;
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        auto createSession = [&]() {
+            runtime->Send(new IEventHandle(kqpProxy, sender, new TEvKqp::TEvCreateSessionRequest()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            return reply->Get()->Record.GetResponse().GetSessionId();
+        };
+
+        auto createTable = [&](const TString& sessionId, const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->SetSessionId(sessionId);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        };
+
+        auto sendQuery = [&](const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+            ActorIdToProto(sender, ev->Record.MutableRequestActorId());
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                reply->Get()->Record.GetYdbStatus(),
+                Ydb::StatusIds::SUCCESS,
+                reply->Get()->Record.GetResponse().DebugString());
+        };
+
+        createTable(createSession(), R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Table1` (Key uint32, Value uint32, PRIMARY KEY(Key));
+        )");
+
+        runtime->SetEventFilter(captureEvents);
+
+        sendQuery(R"(
+            $data = AsList(AsStruct(1u AS Key, 1u AS Value));
+            SELECT a.Value, b.Value
+            FROM AS_TABLE($data) a
+            JOIN `/Root/Table1` b
+            ON a.Key = b.Key;
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(throttleResponded, kThrottleCount);
+    }
+
+    // Throttled OVERLOADED responses must not consume the per-shard retry budget.
+    // The test feeds N throttled responses (N > MaxShardRetries), then a single non-throttled
+    // OVERLOADED, then lets the real datashard answer.
+    // Bug: throttle bumps shardState.RetryAttempts -> CheckShardRetriesExeeded triggers ResolveShard
+    // on the first non-throttle error -> with MaxShardResolves=1 it exceeds and query fails.
+    // Fix: throttle does not bump the counter, the non-throttle retry succeeds.
+    Y_UNIT_TEST(StreamLookupThrottleDoesNotExhaustShardRetries) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetStartDelayMs(1);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxDelayMs(2);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMultiplier(1.0);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetUnsertaintyRatio(0);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardRetries(2);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardResolves(1);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxTotalRetries(100);
+
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(appConfig);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+        auto* runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
+        InitRoot(server, sender);
+
+        constexpr int kThrottleCount = 5;  // > MaxShardRetries
+        int throttleResponded = 0;
+        int nonThrottleResponded = 0;
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
+                if (throttleResponded < kThrottleCount) {
+                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    resp->Record.SetReadId(record.GetReadId());
+                    resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
+                    resp->Record.SetThrottleDelayMs(1);
+                    runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
+                    ++throttleResponded;
+                    return true;
+                }
+                if (nonThrottleResponded == 0) {
+                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    resp->Record.SetReadId(record.GetReadId());
+                    resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
+                    // No Throttled flag.
+                    runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
+                    ++nonThrottleResponded;
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        auto createSession = [&]() {
+            runtime->Send(new IEventHandle(kqpProxy, sender, new TEvKqp::TEvCreateSessionRequest()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            return reply->Get()->Record.GetResponse().GetSessionId();
+        };
+
+        auto createTable = [&](const TString& sessionId, const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->SetSessionId(sessionId);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        };
+
+        auto sendQuery = [&](const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+            ActorIdToProto(sender, ev->Record.MutableRequestActorId());
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                reply->Get()->Record.GetYdbStatus(),
+                Ydb::StatusIds::SUCCESS,
+                reply->Get()->Record.GetResponse().DebugString());
+        };
+
+        createTable(createSession(), R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Table1` (Key uint32, Value uint32, PRIMARY KEY(Key));
+        )");
+
+        runtime->SetEventFilter(captureEvents);
+
+        sendQuery(R"(
+            $data = AsList(AsStruct(1u AS Key, 1u AS Value));
+            SELECT a.Value, b.Value
+            FROM AS_TABLE($data) a
+            JOIN `/Root/Table1` b
+            ON a.Key = b.Key;
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(throttleResponded, kThrottleCount);
+        UNIT_ASSERT_VALUES_EQUAL(nonThrottleResponded, 1);
+    }
+
+    // Throttled OVERLOADED responses (from KQP Compute Scheduler quota) must not be counted
+    // against MaxTotalRetries in kqp_read_actor. The test sets a low MaxTotalRetries and feeds
+    // many throttled responses; query must complete successfully.
+    Y_UNIT_TEST(ReadActorThrottleDoesNotExhaustTotalRetries) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetStartDelayMs(1);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxDelayMs(2);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMultiplier(1.0);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetUnsertaintyRatio(0);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardRetries(100);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardResolves(100);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxTotalRetries(2);
+
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(appConfig);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+        auto* runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
+        InitRoot(server, sender);
+
+        constexpr int kThrottleCount = 5;  // > MaxTotalRetries
+        int throttleResponded = 0;
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                if (throttleResponded < kThrottleCount) {
+                    auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
+                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    resp->Record.SetReadId(record.GetReadId());
+                    resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
+                    resp->Record.SetThrottleDelayMs(1);
+                    runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
+                    ++throttleResponded;
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        auto createSession = [&]() {
+            runtime->Send(new IEventHandle(kqpProxy, sender, new TEvKqp::TEvCreateSessionRequest()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            return reply->Get()->Record.GetResponse().GetSessionId();
+        };
+
+        auto createTable = [&](const TString& sessionId, const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->SetSessionId(sessionId);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        };
+
+        auto sendQuery = [&](const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+            ActorIdToProto(sender, ev->Record.MutableRequestActorId());
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                reply->Get()->Record.GetYdbStatus(),
+                Ydb::StatusIds::SUCCESS,
+                reply->Get()->Record.GetResponse().DebugString());
+        };
+
+        createTable(createSession(), R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Table1` (Key uint32, Value uint32, PRIMARY KEY(Key));
+        )");
+
+        runtime->SetEventFilter(captureEvents);
+
+        sendQuery(R"(
+            SELECT * FROM `/Root/Table1`;
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(throttleResponded, kThrottleCount);
+    }
+
+    // Throttled OVERLOADED responses must not consume the per-shard retry budget in kqp_read_actor.
+    // The test feeds N throttled responses (N > MaxShardRetries), then a single non-throttled
+    // OVERLOADED, then lets the real datashard answer.
+    // Bug: throttle bumps state->RetryAttempt -> CheckShardRetriesExeeded triggers on the first
+    // non-throttle error -> with MaxShardResolves=1 it exceeds and query fails.
+    // Fix: throttle does not bump the counter, the non-throttle retry succeeds.
+    Y_UNIT_TEST(ReadActorThrottleDoesNotExhaustShardRetries) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetStartDelayMs(1);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxDelayMs(2);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMultiplier(1.0);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetUnsertaintyRatio(0);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardRetries(2);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardResolves(1);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxTotalRetries(100);
+
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(appConfig);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+        auto* runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
+        InitRoot(server, sender);
+
+        constexpr int kThrottleCount = 5;  // > MaxShardRetries
+        int throttleResponded = 0;
+        int nonThrottleResponded = 0;
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
+                if (throttleResponded < kThrottleCount) {
+                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    resp->Record.SetReadId(record.GetReadId());
+                    resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
+                    resp->Record.SetThrottleDelayMs(1);
+                    runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
+                    ++throttleResponded;
+                    return true;
+                }
+                if (nonThrottleResponded == 0) {
+                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    resp->Record.SetReadId(record.GetReadId());
+                    resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
+                    // No Throttled flag.
+                    runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
+                    ++nonThrottleResponded;
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        auto createSession = [&]() {
+            runtime->Send(new IEventHandle(kqpProxy, sender, new TEvKqp::TEvCreateSessionRequest()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            return reply->Get()->Record.GetResponse().GetSessionId();
+        };
+
+        auto createTable = [&](const TString& sessionId, const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->SetSessionId(sessionId);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        };
+
+        auto sendQuery = [&](const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+            ActorIdToProto(sender, ev->Record.MutableRequestActorId());
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                reply->Get()->Record.GetYdbStatus(),
+                Ydb::StatusIds::SUCCESS,
+                reply->Get()->Record.GetResponse().DebugString());
+        };
+
+        createTable(createSession(), R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Table1` (Key uint32, Value uint32, PRIMARY KEY(Key));
+        )");
+
+        runtime->SetEventFilter(captureEvents);
+
+        sendQuery(R"(
+            SELECT * FROM `/Root/Table1`;
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(throttleResponded, kThrottleCount);
+        UNIT_ASSERT_VALUES_EQUAL(nonThrottleResponded, 1);
+    }
+
+    // Throttled OVERLOADED responses must not consume the per-shard retry budget in
+    // kqp_buffer_lookup_actor (triggered by INSERT/UPSERT into a table with a UNIQUE secondary
+    // index). The test feeds N throttled responses (N > MaxShardRetries), then a single
+    // non-throttled OVERLOADED.
+    // Bug: throttle bumps failedRead.RetryAttempts -> on the next non-throttle response
+    // the check `!isThrottled && RetryAttempts >= MaxShardRetries` fails the retry,
+    // RetryTableRead returns false, and the actor replies with OVERLOADED.
+    // Fix: throttle does not bump the counter, the non-throttle retry succeeds.
+    // Note: TKqpBufferLookupActor has no MaxTotalRetries / MaxShardResolves limits — only
+    // MaxShardRetries — so only the shard-retry variant is meaningful here.
+    Y_UNIT_TEST(BufferLookupThrottleDoesNotExhaustShardRetries) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetStartDelayMs(1);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxDelayMs(2);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMultiplier(1.0);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetUnsertaintyRatio(0);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardRetries(2);
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(appConfig);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+        auto* runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
+        InitRoot(server, sender);
+
+        constexpr int kThrottleCount = 5;  // > MaxShardRetries
+        int throttleResponded = 0;
+        int nonThrottleResponded = 0;
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                if (runtime->FindActorName(ev->Sender) != "KQP_BUFFER_LOOKUP_ACTOR") {
+                    return false;
+                }
+                auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
+                if (throttleResponded < kThrottleCount) {
+                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    resp->Record.SetReadId(record.GetReadId());
+                    resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
+                    resp->Record.SetThrottleDelayMs(1);
+                    runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
+                    ++throttleResponded;
+                    return true;
+                }
+                if (nonThrottleResponded == 0) {
+                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    resp->Record.SetReadId(record.GetReadId());
+                    resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::OVERLOADED);
+                    // No Throttled flag.
+                    runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), resp.Release()));
+                    ++nonThrottleResponded;
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        auto createSession = [&]() {
+            runtime->Send(new IEventHandle(kqpProxy, sender, new TEvKqp::TEvCreateSessionRequest()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            return reply->Get()->Record.GetResponse().GetSessionId();
+        };
+
+        auto createTable = [&](const TString& sessionId, const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->SetSessionId(sessionId);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        };
+
+        auto sendQuery = [&](const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+            ActorIdToProto(sender, ev->Record.MutableRequestActorId());
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                reply->Get()->Record.GetYdbStatus(),
+                Ydb::StatusIds::SUCCESS,
+                reply->Get()->Record.GetResponse().DebugString());
+        };
+
+        createTable(createSession(), R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Table1` (
+                Key uint32,
+                Value uint32 NOT NULL,
+                PRIMARY KEY(Key),
+                INDEX UniqIdx GLOBAL UNIQUE SYNC ON (Value)
+            );
+        )");
+
+        runtime->SetEventFilter(captureEvents);
+
+        sendQuery(R"(
+            UPSERT INTO `/Root/Table1` (Key, Value) VALUES (1u, 1u);
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(throttleResponded, kThrottleCount);
+        UNIT_ASSERT_VALUES_EQUAL(nonThrottleResponded, 1);
     }
 
     Y_UNIT_TEST(DecimalColumnCsvBulkUpsertScan) {

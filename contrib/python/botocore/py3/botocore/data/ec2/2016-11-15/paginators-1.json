@@ -853,6 +853,144 @@
       "limit_key": "MaxResults",
       "output_token": "NextToken",
       "result_key": "MacHosts"
+    },
+    "DescribeCapacityReservationBillingRequests": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "CapacityReservationBillingRequests"
+    },
+    "DescribeInstanceImageMetadata": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "InstanceImageMetadata"
+    },
+    "DescribeSecurityGroupVpcAssociations": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "SecurityGroupVpcAssociations"
+    },
+    "DescribeCapacityBlockExtensionHistory": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "CapacityBlockExtensions"
+    },
+    "DescribeCapacityBlockExtensionOfferings": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "CapacityBlockExtensionOfferings"
+    },
+    "DescribeRouteServerEndpoints": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "RouteServerEndpoints"
+    },
+    "DescribeRouteServerPeers": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "RouteServerPeers"
+    },
+    "DescribeRouteServers": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "RouteServers"
+    },
+    "DescribeMacModificationTasks": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "MacModificationTasks"
+    },
+    "DescribeCapacityBlockStatus": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "CapacityBlockStatuses"
+    },
+    "DescribeCapacityBlocks": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "CapacityBlocks"
+    },
+    "DescribeImageReferences": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "ImageReferences"
+    },
+    "DescribeImageUsageReportEntries": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "ImageUsageReportEntries"
+    },
+    "DescribeImageUsageReports": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "ImageUsageReports"
+    },
+    "DescribeCapacityManagerDataExports": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "CapacityManagerDataExports"
+    },
+    "GetCapacityManagerMetricData": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "MetricDataResults"
+    },
+    "GetCapacityManagerMetricDimensions": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "MetricDimensionResults"
+    },
+    "DescribeIpamPrefixListResolverTargets": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "IpamPrefixListResolverTargets"
+    },
+    "DescribeIpamPrefixListResolvers": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "IpamPrefixListResolvers"
+    },
+    "GetIpamPrefixListResolverRules": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "Rules"
+    },
+    "GetIpamPrefixListResolverVersionEntries": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "Entries"
+    },
+    "GetIpamPrefixListResolverVersions": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "IpamPrefixListResolverVersions"
+    },
+    "DescribeVpnConcentrators": {
+      "input_token": "NextToken",
+      "limit_key": "MaxResults",
+      "output_token": "NextToken",
+      "result_key": "VpnConcentrators"
     }
   }
 }

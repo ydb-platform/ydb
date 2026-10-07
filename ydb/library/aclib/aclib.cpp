@@ -385,7 +385,7 @@ bool TACL::HasAccess(const NACLib::TSID& sid) {
             return true;
         }
     }
-    
+
     return false;
 }
 
@@ -553,56 +553,73 @@ TString TACL::ToString() const {
 }
 
 ui32 TACL::SpecialRightsFromString(const TString& string) {
+    if (string.empty()) {
+        throw yexception() << "Invalid acl - empty special rights list";
+    }
     TVector<TString> rights;
     ui32 result = 0;
-    StringSplitter(string).Split('|').SkipEmpty().Collect(&rights);
+    StringSplitter(string).Split('|').Collect(&rights);
     for (const TString& r : rights) {
+        if (r.empty()) {
+            throw yexception() << "Invalid acl - empty token in special rights list";
+        }
+
+        ui32 right;
         if (r == "SR")
-            result |= EAccessRights::SelectRow;
-        if (r == "UR")
-            result |= EAccessRights::UpdateRow;
-        if (r == "ER")
-            result |= EAccessRights::EraseRow;
-        if (r == "RA")
-            result |= EAccessRights::ReadAttributes;
-        if (r == "WA")
-            result |= EAccessRights::WriteAttributes;
-        if (r == "CD")
-            result |= EAccessRights::CreateDirectory;
-        if (r == "CT")
-            result |= EAccessRights::CreateTable;
-        if (r == "CQ")
-            result |= EAccessRights::CreateQueue;
-        if (r == "RS")
-            result |= EAccessRights::RemoveSchema;
-        if (r == "DS")
-            result |= EAccessRights::DescribeSchema;
-        if (r == "AS")
-            result |= EAccessRights::AlterSchema;
-        if (r == "CDB")
-            result |= EAccessRights::CreateDatabase;
-        if (r == "DDB")
-            result |= EAccessRights::DropDatabase;
-        if (r == "GAR")
-            result |= EAccessRights::GrantAccessRights;
-        if (r == "ConnDB")
-            result |= EAccessRights::ConnectDatabase;
-        if (r == "WUA")
-            result |= EAccessRights::WriteUserAttributes;
+            right = EAccessRights::SelectRow;
+        else if (r == "UR")
+            right = EAccessRights::UpdateRow;
+        else if (r == "ER")
+            right = EAccessRights::EraseRow;
+        else if (r == "RA")
+            right = EAccessRights::ReadAttributes;
+        else if (r == "WA")
+            right = EAccessRights::WriteAttributes;
+        else if (r == "CD")
+            right = EAccessRights::CreateDirectory;
+        else if (r == "CT")
+            right = EAccessRights::CreateTable;
+        else if (r == "CQ")
+            right = EAccessRights::CreateQueue;
+        else if (r == "RS")
+            right = EAccessRights::RemoveSchema;
+        else if (r == "DS")
+            right = EAccessRights::DescribeSchema;
+        else if (r == "AS")
+            right = EAccessRights::AlterSchema;
+        else if (r == "CDB")
+            right = EAccessRights::CreateDatabase;
+        else if (r == "DDB")
+            right = EAccessRights::DropDatabase;
+        else if (r == "GAR")
+            right = EAccessRights::GrantAccessRights;
+        else if (r == "ConnDB")
+            right = EAccessRights::ConnectDatabase;
+        else if (r == "WUA")
+            right = EAccessRights::WriteUserAttributes;
+        else
+            throw yexception() << "Invalid acl - unknown access right: " << r;
+
+        if (result & right) {
+            throw yexception() << "Invalid acl - duplicate special rights";
+        }
+        result |= right;
     }
     return result;
 }
 
 void TACL::FromString(NACLibProto::TACE& ace, const TString& string) {
     auto it = string.begin();
+    if (it == string.end()) {
+        throw yexception() << "Invalid acl - no access rights";
+    }
+
     switch (*it) {
         case '+':
             ace.SetAccessType(static_cast<ui32>(EAccessType::Allow));
             break;
         case '-':
             ace.SetAccessType(static_cast<ui32>(EAccessType::Deny));
-            break;
-        case '*':
             break;
         default:
             throw yexception() << "Invalid access type";
@@ -644,13 +661,15 @@ void TACL::FromString(NACLibProto::TACE& ace, const TString& string) {
             break;
         case '(': {
             ++it;
-            TString specialRights = string.substr(it - string.begin(), string.find(')', it - string.begin()) - (it - string.begin()));
-            ace.SetAccessRight(SpecialRightsFromString(specialRights));
-            it = it + specialRights.size();
+            if (const auto closingBracePos = string.find(')', it - string.begin()); closingBracePos != TString::npos) {
+                TString specialRights = string.substr(it - string.begin(), closingBracePos - (it - string.begin()));
+                ace.SetAccessRight(SpecialRightsFromString(specialRights));
+                it = it + specialRights.size();
+            } else {
+                throw yexception() << "Invalid acl - missing closing parenthesis in special rights";
+            }
             break;
         }
-        case '*':
-            break;
         default:
             // TODO: more access rights
             throw yexception() << "Invalid access rights";
@@ -666,35 +685,60 @@ void TACL::FromString(NACLibProto::TACE& ace, const TString& string) {
     if (it == string.end()) {
         throw yexception() << "Invalid acl - no security id";
     }
-    auto start_pos = it - string.begin();
-    auto end_pos = string.find(':', start_pos);
-    ace.SetSID(string.substr(start_pos, end_pos == TString::npos ? end_pos : end_pos - start_pos));
-    if (end_pos == TString::npos) {
+    const auto subjectStartPos = it - string.begin();
+    const auto subjectEndPos = string.find(':', subjectStartPos);
+    if (subjectEndPos == TString::npos) {
+        TString subject = string.substr(subjectStartPos);
+        ace.SetSID(std::move(subject));
         ace.SetInheritanceType(EInheritanceType::DefaultInheritanceType);
         return;
+    } else {
+        TString subject = string.substr(subjectStartPos, subjectEndPos - subjectStartPos);
+        if (subject.empty()) {
+            throw yexception() << "Invalid acl - no security id";
+        }
+        it = it + subject.size();
+        ace.SetSID(std::move(subject));
+    }
+    ++it;
+    if (it == string.end()) {
+        throw yexception() << "Invalid acl - no inheritance type";
     }
     ui32 inheritanceType = 0;
-    if (string[end_pos] == ':') {
-        while (++end_pos < string.size()) {
-            switch(string[end_pos]) {
+    while (it != string.end()) {
+        switch(*it) {
             case '-':
+                if (inheritanceType || (it + 1 != string.end())) {
+                    throw yexception() << "Invalid acl - invalid inheritance flags";
+                }
                 inheritanceType |= EInheritanceType::InheritNone;
-                break;
+                ace.SetInheritanceType(inheritanceType);
+                return;
             case 'C':
+                if (inheritanceType & EInheritanceType::InheritContainer) {
+                    throw yexception() << "Invalid acl - invalid inheritance flags";
+                }
                 inheritanceType |= EInheritanceType::InheritContainer;
                 break;
             case 'O':
+                if (inheritanceType & EInheritanceType::InheritObject) {
+                    throw yexception() << "Invalid acl - invalid inheritance flags";
+                }
                 inheritanceType |= EInheritanceType::InheritObject;
                 break;
             case '+':
+                if (inheritanceType & EInheritanceType::InheritOnly) {
+                    throw yexception() << "Invalid acl - invalid inheritance flags";
+                }
                 inheritanceType |= EInheritanceType::InheritOnly;
                 break;
             default:
                 throw yexception() << "Invalid acl - invalid inheritance flags";
-            }
         }
-        ace.SetInheritanceType(inheritanceType);
+        ++it;
     }
+
+    ace.SetInheritanceType(inheritanceType);
 }
 
 void TACL::FromString(const TString& string) {

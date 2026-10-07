@@ -1,3 +1,5 @@
+#pragma once
+
 #include "ydb_workload.h"
 #include <library/cpp/threading/future/async_semaphore.h>
 

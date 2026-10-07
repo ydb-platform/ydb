@@ -6,8 +6,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -19,20 +18,20 @@ public:
     TDynamicVariantBaseWrapper(TComputationMutables& mutables, IComputationNode* item,
                                IComputationNode* index)
         : TBase(mutables)
-        , Item(item)
-        , Index(index)
+        , Item_(item)
+        , Index_(index)
     {
     }
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Item);
-        this->DependsOn(Index);
+        this->DependsOn(Item_);
+        this->DependsOn(Index_);
     }
 
 protected:
-    IComputationNode* const Item;
-    IComputationNode* const Index;
+    IComputationNode* const Item_;
+    IComputationNode* const Index_;
 };
 
 class TDynamicVariantTupleWrapper: public TDynamicVariantBaseWrapper<TDynamicVariantTupleWrapper> {
@@ -42,23 +41,23 @@ public:
     TDynamicVariantTupleWrapper(TComputationMutables& mutables, IComputationNode* item,
                                 IComputationNode* index, TVariantType* varType)
         : TBase(mutables, item, index)
-        , AltCounts(varType->GetAlternativesCount())
+        , AltCounts_(varType->GetAlternativesCount())
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto indexValue = Index->GetValue(ctx);
-        if (!indexValue || indexValue.Get<ui32>() >= AltCounts) {
+        auto indexValue = Index_->GetValue(ctx);
+        if (!indexValue || indexValue.Get<ui32>() >= AltCounts_) {
             return {};
         }
 
-        NUdf::TUnboxedValuePod item = Item->GetValue(ctx).Release();
+        NUdf::TUnboxedValuePod item = Item_->GetValue(ctx).Release();
         NUdf::TUnboxedValuePod var = ctx.HolderFactory.CreateVariantHolder(item, indexValue.Get<ui32>());
         return var.MakeOptional();
     }
 
 private:
-    const ui32 AltCounts;
+    const ui32 AltCounts_;
 };
 
 class TDynamicVariantStructWrapper: public TDynamicVariantBaseWrapper<TDynamicVariantStructWrapper> {
@@ -68,23 +67,23 @@ public:
     TDynamicVariantStructWrapper(TComputationMutables& mutables, IComputationNode* item,
                                  IComputationNode* index, TVariantType* varType)
         : TBase(mutables, item, index)
-        , Fields(MakeFields(varType))
+        , Fields_(MakeFields(varType))
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto indexValue = Index->GetValue(ctx);
+        auto indexValue = Index_->GetValue(ctx);
         if (!indexValue) {
             return {};
         }
 
         TStringBuf indexStr = indexValue.AsStringRef();
-        auto ptr = Fields.FindPtr(indexStr);
+        auto ptr = Fields_.FindPtr(indexStr);
         if (!ptr) {
             return {};
         }
 
-        NUdf::TUnboxedValuePod item = Item->GetValue(ctx).Release();
+        NUdf::TUnboxedValuePod item = Item_->GetValue(ctx).Release();
         NUdf::TUnboxedValuePod var = ctx.HolderFactory.CreateVariantHolder(item, *ptr);
         return var.MakeOptional();
     }
@@ -100,8 +99,7 @@ private:
         return res;
     }
 
-private:
-    const THashMap<TStringBuf, ui32> Fields;
+    const THashMap<TStringBuf, ui32> Fields_;
 };
 
 } // namespace
@@ -123,5 +121,4 @@ IComputationNode* WrapDynamicVariant(TCallable& callable, const TComputationNode
     return nullptr;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

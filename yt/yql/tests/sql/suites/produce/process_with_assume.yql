@@ -1,6 +1,4 @@
-/* postgres can not */
 /* multirun can not */
-/* syntax version 1 */
 use plato;
 
 $udf = YQL::@@(lambda '(x) 

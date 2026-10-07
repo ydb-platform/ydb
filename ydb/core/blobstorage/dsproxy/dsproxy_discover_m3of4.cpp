@@ -165,7 +165,9 @@ public:
             BlockedGeneration = record.GetBlockedGeneration();
         }
         const TVDiskID& vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-        TDiskState& disk = DiskState[Info->GetOrderNumber(vdiskId)];
+        Y_ABORT_UNLESS(Info->GetTopology().IsValidId(vdiskId), "incorrect VDiskId# %s", vdiskId.ToString().data());
+        const ui32 orderNumber = Info->GetOrderNumber(vdiskId);
+        TDiskState& disk = DiskState[orderNumber];
         Y_DEBUG_ABORT_UNLESS(disk.VDiskId == vdiskId);
         const EDiskState prev = std::exchange(disk.State, EDiskState::IDLE);
         Y_ABORT_UNLESS(prev == EDiskState::READ_PENDING);

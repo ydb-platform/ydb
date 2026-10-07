@@ -18,6 +18,7 @@ void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TKqpStatsSt
 void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForCombiner(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void PropagateStatisticsToStageArguments(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void InferStatisticsForStage(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);

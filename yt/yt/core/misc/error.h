@@ -13,6 +13,8 @@
 #include <library/cpp/yt/error/error.h>
 #include <library/cpp/yt/error/origin_attributes.h>
 
+#include <library/cpp/yt/misc/source_location.h>
+
 #include <util/generic/noncopyable.h>
 
 namespace NYT {
@@ -125,7 +127,7 @@ public:
     static TErrorCodicils& GetOrCreate();
 
     // Gets the instance for this fiber if one was created previously.
-    static TErrorCodicils* TryGet();
+    static const TErrorCodicils* TryGet();
 
     // Evaluates the codicil for the key if one was set.
     static std::optional<std::string> MaybeEvaluate(const std::string& key);
@@ -146,6 +148,8 @@ private:
     THashMap<std::string, TGetter> Getters_;
     static bool Initialized_;
 };
+
+TErrorCodicils::TGuard MakeSourceLocationErrorCodicil(TSourceLocation location);
 
 ////////////////////////////////////////////////////////////////////////////////
 

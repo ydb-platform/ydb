@@ -2,6 +2,7 @@
 #include <ydb/library/slide_limiter/usage/abstract.h>
 #include <ydb/library/slide_limiter/usage/config.h>
 #include <ydb/library/slide_limiter/usage/events.h>
+#include <ydb/library/slide_limiter/usage/service.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -83,7 +84,10 @@ public:
             hFunc(TEvExternal::TEvAskResource, HandleMain);
             hFunc(NActors::TEvents::TEvWakeup, HandleMain);
             default:
-                AFL_ERROR(NKikimrServices::TX_LIMITER)("limiter", LimiterName)("problem", "unexpected event")("type", ev->GetTypeRewrite());
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_LIMITER, "",
+                    {"limiter", LimiterName},
+                    {"problem", "unexpected event"},
+                    {"type", ev->GetTypeRewrite()});
                 AFL_VERIFY_DEBUG(false)("type", ev->GetTypeRewrite());
                 break;
         }
@@ -95,5 +99,12 @@ public:
         Become(&TLimiterActor::StateMain);
     }
 };
+
+template <class TLimiterPolicy>
+NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals) {
+    using TOperator = TServiceOperatorImpl<TLimiterPolicy>;
+    TOperator::Register(config);
+    return new TLimiterActor(config, TOperator::GetLimiterName(), baseSignals);
+}
 
 }   // namespace NKikimr::NLimiter

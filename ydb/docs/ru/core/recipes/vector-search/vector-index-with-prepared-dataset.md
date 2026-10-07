@@ -118,12 +118,7 @@ ADD INDEX idx_vector
 GLOBAL USING vector_kmeans_tree
 ON (embedding)
 WITH (
-  distance=cosine,
-  vector_type="float",
-  vector_dimension=768,
-  levels=1,
-  clusters=200,
-  overlap_clusters=3);
+  distance=cosine);
 ```
 
 Данный запрос создаёт индекс типа `vector_kmeans_tree`.
@@ -135,6 +130,8 @@ WITH (
 На данном шаге выполняется точный поиск 3-х ближайших соседей для заданного вектора **без** использования индекса. Предполагается, что входной текст для поиска в таблице `wikipedia` преобразован в данный вектор с помощью модели-энкодера ([Embed от cohere.com](https://cohere.com/embed)).
 
 Сначала целевой вектор кодируется в бинарное представление с помощью [`Knn::ToBinaryStringFloat`](../../yql/reference/udf/list/knn#functions-convert).
+
+Здесь поисковый вектор задан в YQL. Если он передаётся параметром запроса из C++ SDK, сериализуйте его на клиенте с помощью `NYdb::NValueHelpers::Embedding` (C++ SDK v3.24.0 или новее) и объявляйте параметр как `Bytes`; см. [рецепт для SDK](../ydb-sdk/vector-search.md#search-by-vector).
 
 Затем вычисляется косинусное расстояние от `embedding` каждой строки до целевого вектора.
 

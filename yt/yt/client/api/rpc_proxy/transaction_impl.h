@@ -24,6 +24,7 @@ DEFINE_ENUM(ETransactionState,
     (Aborted)
     (AbortFailed)
     (Detached)
+    (Abandoned)
 );
 
 class TTransaction
@@ -47,7 +48,7 @@ public:
         std::optional<TDuration> pingPeriod,
         std::optional<TStickyTransactionParameters> stickyParameters,
         i64 sequenceNumberSourceId,
-        TStringBuf capitalizedCreationReason);
+        TStringBuf creationReason);
 
     void Initialize();
 
@@ -305,12 +306,12 @@ private:
 
     std::atomic<i64> ModifyRowsRequestSequenceCounter_ = 0;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     ETransactionState State_ = ETransactionState::Active;
     TPromise<void> AbortPromise_;
     std::vector<NApi::ITransactionPtr> AlienTransactions_;
 
-    THashSet<NObjectClient::TCellId> AdditionalParticipantCellIds_;
+    THashMap<NObjectClient::TCellId, NTransactionClient::TTransactionSignature> AdditionalParticipantCellIds_;
 
     TApiServiceProxy::TReqBatchModifyRowsPtr BatchModifyRowsRequest_;
     std::vector<TFuture<void>> BatchModifyRowsFutures_;
@@ -324,8 +325,10 @@ private:
     bool IsPingableState();
 
     TFuture<void> DoAbort(
-        TGuard<NThreading::TSpinLock>* guard,
+        TGuard<TSpinLock>* guard,
         const TTransactionAbortOptions& options = {});
+
+    void Abandon(TGuard<TSpinLock>* guard);
 
     void ValidateActive();
     void DoValidateActive();

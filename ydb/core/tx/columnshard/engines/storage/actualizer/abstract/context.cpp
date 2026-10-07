@@ -1,5 +1,3 @@
 #include "context.h"
 
-namespace NKikimr::NOlap::NActualizer {
-
-}
+namespace NKikimr::NOlap::NActualizer {}

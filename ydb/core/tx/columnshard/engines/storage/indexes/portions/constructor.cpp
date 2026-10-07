@@ -24,8 +24,7 @@ TConclusionStatus TColumnIndexConstructor::DoDeserializeFromJson(const NJson::TJ
 }
 
 TConclusion<TString> TColumnIndexConstructor::ResolveColumnNameForAlterIndex(
-    const NSchemeShard::TOlapSchema& currentSchema,
-    const IIndexMeta& existingMeta) const {
+    const NSchemeShard::TOlapSchema& currentSchema, const IIndexMeta& existingMeta) const {
     const auto colId = existingMeta.GetSingleColumnId();
     if (!colId) {
         return TConclusionStatus::Fail("existing index has no single column; cannot determine column for ALTER INDEX");

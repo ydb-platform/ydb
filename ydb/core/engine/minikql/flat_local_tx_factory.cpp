@@ -5,6 +5,8 @@
 #include "flat_local_tx_read_columns.h"
 #include "flat_local_tx_scheme.h"
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 

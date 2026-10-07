@@ -43,7 +43,7 @@ void ToProto(NProto::TTimestampMap* protoMap, const TTimestampMap& map)
     protoMap->clear_timestamps();
     for (auto [cellTag, timestamp] : map.Timestamps) {
         protoMap->add_cell_tags(ToProto(cellTag));
-        protoMap->add_timestamps(timestamp);
+        protoMap->add_timestamps(ToProto(timestamp));
     }
 }
 

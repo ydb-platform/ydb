@@ -74,11 +74,17 @@ public:
     inline static constexpr TDuration TEST_OPERATION_TIMEOUT = TDuration::Seconds(10);
 
 public:
+    ~TStreamingTestFixture();
+
     // Local kikimr settings
 
     NKikimrConfig::TAppConfig& SetupAppConfig();
 
-    TIntrusivePtr<NTestUtils::IMockPqGateway> SetupMockPqGateway();
+    void UpdateConfig(NKikimrConfig::TAppConfig& appConfig);
+
+    TIntrusivePtr<NTestUtils::IMockPqGateway> SetupMockPqGateway(NTestUtils::TMockPqGatewaySettings settings = {});
+
+    TIntrusivePtr<NYql::IPqGateway> SetupRealPqGateway();
 
     std::shared_ptr<NYql::NConnector::NTest::TConnectorClientMock> SetupMockConnectorClient();
 
@@ -102,11 +108,15 @@ public:
 
     void KillTopicPqrbTablet(const std::string& topicPath);
 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> GetCounters(const TString& svc = "kqp", ui32 nodeIdx = 0);
+
     // External YDB recipe
 
     std::shared_ptr<NYdb::TDriver> GetExternalDriver();
 
     std::shared_ptr<NYdb::NTopic::TTopicClient> GetTopicClient(bool local = false);
+
+    std::shared_ptr<NYdb::NTopic::TDeferredPublishClient> GetDeferredPublishClient(bool local = false, const TString& user = "", std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = nullptr);
 
     std::shared_ptr<NYdb::NQuery::TQueryClient> GetExternalQueryClient();
 
@@ -115,14 +125,42 @@ public:
     // Topic client SDK (external YDB recipe)
 
     void CreateTopic(const std::string& topicName, std::optional<NYdb::NTopic::TCreateTopicSettings> settings = std::nullopt, bool local = false);
+#define CreateScopedTopicExt(TOPIC, SETTINGS,...) \
+    CreateTopic((TOPIC), (SETTINGS), ## __VA_ARGS__); \
+    Y_DEFER { \
+        DropTopic((TOPIC), ## __VA_ARGS__); \
+    }
+#define CreateScopedTopic(TOPIC) CreateScopedTopicExt((TOPIC), std::nullopt, false)
+
+    void DropTopic(const std::string& topicName, bool local = false);
+
+    void AlterTopic(const std::string& topicName, NYdb::NTopic::TAlterTopicSettings settings, bool local = false);
 
     void WriteTopicMessage(const std::string& topicName, const std::string& message, ui64 partition = 0, bool local = false);
 
-    void WriteTopicMessages(const std::string& topicName, const std::vector<std::string>& messages, ui64 partition = 0);
+    void WriteTopicMessages(const std::string& topicName, const std::vector<std::string>& messages, ui64 partition = 0, bool local = false);
 
-    void ReadTopicMessage(const std::string& topicName, const std::string& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool local = false);
+    void ReadTopicMessage(const TString& topicName, const std::string& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool local = false);
 
-    void ReadTopicMessages(const std::string& topicName, std::vector<std::string> expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false, bool local = false);
+    std::vector<std::pair<std::string, TInstant>> ReadTopicMessages(
+        const TString& topicName,
+        std::vector<std::string> expectedMessages,
+        TInstant disposition = TInstant::Now() - TDuration::Seconds(100),
+        bool sort = false,
+        bool local = false,
+        bool checkResult = true);
+
+    std::vector<std::pair<std::string, TInstant>> ReadTopicMessages(
+        const TString& topicName,
+        std::vector<std::string> expectedMessages,
+        NYdb::NTopic::TTopicClient& topicClient,
+        TInstant disposition = TInstant::Now() - TDuration::Seconds(100),
+        bool sort = false,
+        bool checkResult = true);
+
+    void EnsureTopicEndOffset(const TString& topicName, ui64 endOffset = 0, bool local = false);
+
+    void EnsureTopicEndOffset(const TString& topicName, ui64 endOffset, NYdb::NTopic::TTopicClient& topicClient);
 
     void TestReadTopicBasic(const std::string& testSuffix);
 
@@ -130,19 +168,23 @@ public:
 
     void ExecSchemeQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
 
+    void WaitForClassifierPropagation();
+
     // Query client SDK
 
     std::vector<NYdb::TResultSet> ExecQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const std::string& expectedError = "", std::function<void(const std::string&)> astValidator = nullptr);
 
     void CreatePqSource(const std::string& pqSourceName);
 
-    void CreatePqSourceBasicAuth(const std::string& pqSourceName, const bool useSchemaSecrets = false);
+    void CreatePqSourceBasicAuth(const std::string& pqSourceName, const bool useSchemaSecrets = false, const bool createSecrets = true);
 
     void CreateS3Source(const std::string& bucket, const std::string& s3SourceName);
 
     void CreateYdbSource(const std::string& ydbSourceName);
 
     void CreateSolomonSource(const std::string& solomonSourceName);
+
+    void DropSource(const TString& sourceName);
 
     // Script executions (using query client SDK)
 
@@ -172,7 +214,26 @@ public:
 
     void CheckScriptExecutionsCount(ui64 expectedExecutionsCount, ui64 expectedLeasesCount);
 
-    void WaitCheckpointUpdate(const std::string& checkpointId);
+    // Streaming queries
+
+    // Allow the initial checkpoint, then hold checkpoint creation until the returned callback is called.
+    std::function<void()> BlockCheckpointCreation();
+
+    void WaitCheckpointUpdate(const TString& checkpointId, std::optional<std::pair<ui64, ui64>> initialBound = std::nullopt);
+
+    ui64 GetLastCheckpointSeqNo(const TString& checkpointId);
+
+    ui64 CheckNoCheckpointUpdate(const TString& checkpointId, TDuration waitDuration = TDuration::Seconds(5), std::optional<ui64> expectedSeqNo = std::nullopt);
+
+    TString GetStreamingQueryCheckpointId(const TString& queryName);
+
+    void CheckStreamingQueryProperty(const TString& queryName, const TString& propertyName, const TString& expectedValue);
+
+    void WaitStreamingQueryStatus(const TString& queryName, const TString& expectedStatus = "RUNNING");
+
+    void ValidateStreamingQueryAst(const TString& queryName, std::function<void(const TString&)> validator);
+
+    TString GetStreamingQueryIssues(const TString& queryName);
 
     // Mock Connector utils
 
@@ -191,10 +252,6 @@ public:
     // Should be called at most once
     static void SetupMockConnectorTableData(std::shared_ptr<NYql::NConnector::NTest::TConnectorClientMock> mockClient, const TMockConnectorReadSplitsSettings& settings);
 
-    // Other helpers
-
-    static std::function<void(const std::string&)> AstChecker(ui64 txCount, ui64 stagesCount);
-
 private:
     void EnsureNotInitialized(const std::string& info);
 
@@ -204,11 +261,16 @@ private:
 
 protected:
     ui32 NodeCount = 1;
+    ui32 DynamicNodeCount = 0;
+    ui32 DqChannelsVersion = 2;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     TTestLogSettings LogSettings;
     bool InternalInitFederatedQuerySetupFactory = false;
+    TVector<TString> StoragePoolTypes;
+    bool NeedsStatsCollectors = false;
     NYdb::NQuery::TClientSettings QueryClientSettings = NYdb::NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
     NYdb::NTopic::TTopicClientSettings TopicClientSettings = NYdb::NTopic::TTopicClientSettings().AuthToken(BUILTIN_ACL_ROOT);
+    std::shared_ptr<NYdb::TDriver> PqGatewayDriver;
 
 private:
     std::optional<NKikimrConfig::TAppConfig> AppConfig;
@@ -222,11 +284,13 @@ private:
     std::shared_ptr<NYdb::NTable::TTableClient> TableClient;
     std::shared_ptr<NYdb::NTable::TSession> TableClientSession;
     std::shared_ptr<NYdb::NTopic::TTopicClient> LocalTopicClient;
+    std::shared_ptr<NYdb::NTopic::TDeferredPublishClient> LocalDeferredPublishClient;
     std::shared_ptr<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> LocalFlatMsgBusPQClient;
 
     // Attached to database from recipe (YDB_ENDPOINT / YDB_DATABASE)
     std::shared_ptr<NYdb::TDriver> ExternalDriver;
     std::shared_ptr<NYdb::NTopic::TTopicClient> TopicClient;
+    std::shared_ptr<NYdb::NTopic::TDeferredPublishClient> DeferredPublishClient;
     std::shared_ptr<NYdb::NQuery::TQueryClient> ExternalQueryClient;
 };
 
@@ -237,7 +301,7 @@ public:
 
 class TStreamingSysViewTestFixture : public TStreamingTestFixture {
 public:
-    inline static constexpr ui64 SYS_VIEW_COLUMNS_COUNT = 13;
+    inline static constexpr ui64 SYS_VIEW_COLUMNS_COUNT = 22;
     inline static constexpr char INPUT_TOPIC_NAME[] = "sysViewInput";
     inline static constexpr char OUTPUT_TOPIC_NAME[] = "sysViewOutput";
     inline static constexpr char PQ_SOURCE[] = "sysViewSourceName";
@@ -255,11 +319,15 @@ public:
         std::optional<std::string> Ast;
         std::optional<std::string> Text;
         bool Run = true;
-        std::string Pool = "default";
+        std::string Pool = "";
         ui64 RetryCount = 0;
         std::optional<TInstant> LastFailAt;
         std::optional<TInstant> SuspendedUntil;
         bool CheckPlan = false;
+        std::string CreatedBy;
+        std::string ModifiedBy;
+        std::string StartedBy;
+        std::string StoppedBy;
     };
 
     struct TSysViewResult {
@@ -274,7 +342,7 @@ protected:
 
 protected:
     std::string InputTopic;
-    std::string OutputTopic;
+    TString OutputTopic;
 };
 
 class TTestTopicLoader : public TActorBootstrapped<TTestTopicLoader> {

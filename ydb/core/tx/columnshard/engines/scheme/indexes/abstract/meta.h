@@ -19,6 +19,7 @@ class TExprBase;
 namespace NKikimr::NOlap {
 struct TIndexInfo;
 class TIndexChunk;
+
 namespace NReader::NCommon {
 class IKernelFetchLogic;
 }
@@ -49,14 +50,13 @@ private:
     YDB_READONLY_DEF(bool, InheritPortionStorage);
 
     virtual std::shared_ptr<NReader::NCommon::IKernelFetchLogic> DoBuildFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
-        const std::shared_ptr<IIndexMeta>& selfPtr,
-        const std::shared_ptr<IStoragesManager>& storagesManager) const;
+        const std::shared_ptr<IIndexMeta>& selfPtr, const std::shared_ptr<IStoragesManager>& storagesManager) const;
 
     virtual TConclusion<std::shared_ptr<IIndexHeader>> DoBuildHeader(const TChunkOriginalData& data) const {
         return std::make_shared<TDefaultHeader>(data.GetSize());
     }
 
-    virtual std::optional<ui64> DoCalcCategory(const TString& /*subColumnName*/) const {
+    virtual std::optional<ui64> DoCalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& /*subColumnName*/) const {
         return std::nullopt;
     }
 
@@ -67,6 +67,7 @@ protected:
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const = 0;
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const = 0;
+
     virtual NJson::TJsonValue DoSerializeDataToJson(const TString& /*data*/, const TIndexInfo& /*indexInfo*/) const {
         return "NO_IMPLEMENTED";
     }
@@ -83,7 +84,7 @@ public:
         return std::nullopt;
     }
 
-    std::optional<ui64> CalcCategory(const TString& subColumnName) const;
+    std::optional<ui64> CalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const;
 
     TConclusion<std::shared_ptr<IIndexHeader>> BuildHeader(const TChunkOriginalData& data) const {
         return DoBuildHeader(data);
@@ -102,6 +103,7 @@ public:
     }
 
     IIndexMeta() = default;
+
     IIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionStorage)
         : IndexName(indexName)
         , IndexId(indexId)
@@ -110,7 +112,7 @@ public:
     {
     }
 
-    NJson::TJsonValue SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const;
+    NJson::TJsonValue SerializeDataToJson(const TString& iChunk, const TIndexInfo& indexInfo) const;
 
     TConclusionStatus CheckModificationCompatibility(const std::shared_ptr<IIndexMeta>& newMeta) const {
         if (!newMeta) {
@@ -140,8 +142,10 @@ private:
 
 public:
     TIndexMetaContainer() = default;
+
     TIndexMetaContainer(const std::shared_ptr<IIndexMeta>& object)
-        : TBase(object) {
+        : TBase(object)
+    {
         AFL_VERIFY(Object);
     }
 };

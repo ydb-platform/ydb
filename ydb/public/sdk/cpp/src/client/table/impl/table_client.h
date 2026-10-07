@@ -21,7 +21,6 @@
 
 #include <library/cpp/threading/future/core/coroutine_traits.h>
 
-
 namespace NYdb::inline Dev {
 namespace NTable {
 
@@ -140,6 +139,7 @@ public:
 
     bool ReturnSession(TKqpSessionCommon* sessionImpl) override;
     void DeleteSession(TKqpSessionCommon* sessionImpl) override;
+    void PessimizeNode(std::uint64_t nodeId) override;
     ui32 GetSessionRetryLimit() const;
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector);
@@ -157,7 +157,12 @@ public:
     void CollectRetryStatAsync(EStatus status);
     void CollectRetryStatSync(EStatus status);
 
-public:
+    std::shared_ptr<NObservability::TRequestSpan> CreateRetryRootSpan();
+    std::shared_ptr<NObservability::TRequestSpan> CreateRetryAttemptSpan(std::uint32_t attempt
+        , std::int64_t backoffMs
+        , const std::shared_ptr<NObservability::TRequestSpan>& parent = nullptr
+    );
+
     TClientSettings Settings_;
 
 private:
@@ -288,10 +293,9 @@ private:
                     sessionPtr->SessionImpl_->AddQueryToCache(*dataQuery);
                 }
 
+                obs->End(status.Status, status.Endpoint);
                 TDataQueryResult dataQueryResult(TStatus(std::move(status)),
                     std::move(res), tx, dataQuery, fromCache, queryStats);
-
-                obs->End(dataQueryResult.GetStatus());
 
                 delete sessionPtr;
                 tx.reset();
@@ -347,9 +351,7 @@ private:
             &OperationStatCollector_,
             Tracer_,
             operationName,
-            DbDriverState_->DiscoveryEndpoint,
-            DbDriverState_->Database,
-            DbDriverState_->Log
+            DbDriverState_
         );
     }
 };

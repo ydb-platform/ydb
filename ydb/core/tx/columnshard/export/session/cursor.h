@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/scheme/scheme_tablecell.h>
+
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 
@@ -15,7 +16,8 @@ private:
     std::optional<TOwnedCellVec> LastKey;
     bool Finished = false;
 
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardExportProto::TCursor& proto);
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardExportProto::TCursor &proto);
+
 public:
     TCursor() = default;
     TCursor(const TOwnedCellVec &lastKey, const bool finished);
@@ -30,9 +32,9 @@ public:
 
     void InitNext(const TOwnedCellVec &lastKey, const bool finished);
 
-    static TConclusion<TCursor> BuildFromProto(const NKikimrColumnShardExportProto::TCursor& proto);
+    static TConclusion<TCursor> BuildFromProto(const NKikimrColumnShardExportProto::TCursor &proto);
 
     NKikimrColumnShardExportProto::TCursor SerializeToProto() const;
 };
 
-}
+}   // namespace NKikimr::NOlap::NExport

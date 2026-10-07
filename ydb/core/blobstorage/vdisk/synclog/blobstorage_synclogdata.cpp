@@ -112,7 +112,8 @@ namespace NKikimr {
                                            ui32 appendBlockSize,
                                            const TEntryPointDbgInfo &lastEntryPointDbgInfo,
                                            const TSyncLogHeader &header,
-                                           const std::optional<TPhantomFlagStorageData>& phantomFlagStorageData)
+                                           const std::optional<TPhantomFlagStorageData>& phantomFlagStorageData,
+                                           const std::unordered_map<ui32, ui32>& chunksToExtract)
             : DiskSnapPtr(diskSnapPtr)
             , MemSnapPtr(memSnapPtr)
             , LogStartLsn(logStartLsn)
@@ -120,6 +121,7 @@ namespace NKikimr {
             , LastEntryPointDbgInfo(lastEntryPointDbgInfo)
             , Header(header)
             , PhantomFlagStorageData(phantomFlagStorageData)
+            , ChunksToExtract(chunksToExtract)
         {
             CheckSnapshotConsistency(); // For debug
         }
@@ -151,6 +153,11 @@ namespace NKikimr {
             if (PhantomFlagStorageData) {
                 auto* data = pb.MutablePhantomFlagStorageData();
                 PhantomFlagStorageData->Serialize(data);
+            }
+            for (const auto& [chunkIdx, usedPagesNum] : ChunksToExtract) {
+                auto* entryProto = pb.AddChunksToExtract();
+                entryProto->SetChunkIdx(chunkIdx);
+                entryProto->SetUsedPagesNum(usedPagesNum);
             }
             // DiskRecLog
             TStringStream s;
@@ -283,7 +290,8 @@ namespace NKikimr {
                                                             DiskRecLog.AppendBlockSize,
                                                             LastEntryPointDbgInfo,
                                                             Header,
-                                                            PhantomFlagStorageData));
+                                                            PhantomFlagStorageData,
+                                                            ChunksToExtract));
         }
 
         bool TSyncLog::CheckMemAndDiskRecLogsDoNotIntersect() const {
@@ -340,11 +348,11 @@ namespace NKikimr {
             }
         }
 
-        TVector<ui32> TSyncLog::TrimLogByRemovingChunks(
+        TVector<TDeletedChunk> TSyncLog::TrimLogByRemovingChunks(
             ui32 numChunksToDel,
             std::shared_ptr<IActorNotify> notifier)
         {
-            TVector<ui32> chunks;
+            TVector<TDeletedChunk> chunks;
             ui64 sLsn = DiskRecLog.DeleteChunks(numChunksToDel, std::move(notifier), chunks);
             Y_ABORT_UNLESS(LogStartLsn <= sLsn, "sLsn# %" PRIu64 " %s", sLsn, BoundariesToString().data());
             LogStartLsn = sLsn;
@@ -384,6 +392,21 @@ namespace NKikimr {
             return DiskRecLog.GetSizeInChunks();
         }
 
+        TSyncLogDiskSpaceStat TSyncLog::GetDiskSpaceStat() const {
+            const ui64 activeChunkCount = DiskRecLog.GetSizeInChunks();
+            const ui64 freeBytes = activeChunkCount
+                ? ui64(DiskRecLog.LastChunkFreePagesNum()) * DiskRecLog.AppendBlockSize
+                : 0;
+            const ui64 allocatedBytes = activeChunkCount * DiskRecLog.ChunkSize;
+            Y_VERIFY_DEBUG_S(freeBytes <= allocatedBytes, "Invalid SyncLog disk extent");
+            return {
+                .ChunkSizeBytes = DiskRecLog.ChunkSize,
+                .ActiveChunkCount = activeChunkCount,
+                .UsedBytes = allocatedBytes - freeBytes,
+                .FreeBytes = freeBytes,
+            };
+        }
+
         // returns lsn of last record stored in DiskRecLog or 0 if it's empty
         ui64 TSyncLog::GetDiskLastLsn() const {
             return DiskRecLog.Empty() ? 0 : DiskRecLog.GetLastLsn();
@@ -419,6 +442,14 @@ namespace NKikimr {
                 res.ChunkSize = GetChunkSize();
             }
             return res;
+        }
+
+        std::unordered_map<ui32, ui32> TSyncLog::GetChunksToExtract() const {
+            return ChunksToExtract;
+        }
+
+        void TSyncLog::UpdateChunksToExtract(const std::unordered_map<ui32, ui32>& chunksToExtract) {
+            ChunksToExtract = chunksToExtract;
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -536,6 +567,13 @@ namespace NKikimr {
             } else {
                 SyncLogPtr->UpdatePhantomFlagStorageData(std::nullopt);
             }
+
+            std::unordered_map<ui32, ui32> chunksToExtract;
+            chunksToExtract.reserve(pb.ChunksToExtractSize());
+            for (const auto& entry : pb.GetChunksToExtract()) {
+                chunksToExtract.emplace(entry.GetChunkIdx(), entry.GetUsedPagesNum());
+            }
+            SyncLogPtr->UpdateChunksToExtract(chunksToExtract);
 
             return true;
         }

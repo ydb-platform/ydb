@@ -11,6 +11,8 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <util/generic/ptr.h>
+
 namespace NKikimr {
 
 struct TEvTableCreator {
@@ -49,6 +51,8 @@ protected:
 
     static NKikimrSchemeOp::TTTLSettings TtlCol(const TString& columnName, TDuration expireAfter, TDuration runInterval);
 
+    static NKikimrSchemeOp::TPartitioningPolicy AutoPartitioningByLoadPolicy();
+
 private:
     void Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) override;
 
@@ -60,7 +64,7 @@ protected:
     NActors::TActorId Owner;
 
 private:
-    std::vector<NActors::IActor*> TableCreators;
+    std::vector<THolder<NActors::IActor>> TableCreators;
     size_t TablesCreating = 0;
     bool Success = true;
     NYql::TIssues Issues;
@@ -80,6 +84,8 @@ NActors::IActor* CreateTableCreator(
     const TString& database = {},
     bool isSystemUser = false,
     TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing(),
-    TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing());
+    TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing(),
+    TVector<NKikimrSchemeOp::TIndexDescription> tableIndexes = {},
+    TVector<NKikimrSchemeOp::TSequenceDescription> tableSequences = {});
 
 } // namespace NKikimr

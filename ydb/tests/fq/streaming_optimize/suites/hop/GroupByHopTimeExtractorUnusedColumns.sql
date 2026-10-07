@@ -1,25 +1,29 @@
-/* syntax version 1 */
-/* dq can not */
+$input = (
+    SELECT
+        *
+    FROM
+        pq.test_topic_input WITH (
+            FORMAT = json_each_row,
+            SCHEMA (t String, k String, v Int64),
+            STREAMING = 'TRUE'
+        )
+);
 
-PRAGMA dq.MaxTasksPerStage="2";
-
-PRAGMA pq.Consumer="test_client";
+$output = (
+    SELECT
+        k,
+        percentile(v, 0.75) AS p75,
+        percentile(v, 0.9) AS p90
+    FROM
+        $input
+    GROUP BY
+        k,
+        HOP (CAST(t AS Timestamp), 'PT0.005S', 'PT0.01S', 'PT0.01S')
+);
 
 INSERT INTO pq.test_topic_output
-SELECT STREAM
+SELECT
     Yson::SerializeText(Yson::From(TableRow()))
-FROM (
-    SELECT STREAM
-        percentile(v, 0.75) as p75,
-        percentile(v, 0.9) as p90
-    FROM (
-        SELECT STREAM
-            Yson::LookupUint64(ys, "time") as t,
-            Yson::LookupInt64(ys, "key") as k,
-            Yson::LookupInt64(ys, "val") as v
-        FROM (
-            SELECT STREAM
-                Yson::Parse(Data) AS ys
-            FROM pq.test_topic_input))
-    GROUP BY
-        HOP(DateTime::FromMilliseconds(CAST(Unwrap(t) as Uint32)), "PT0.005S", "PT0.01S", "PT0.01S"));
+FROM
+    $output
+;

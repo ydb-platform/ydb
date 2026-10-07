@@ -9,6 +9,10 @@
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
 
 namespace NTabletFlatExecutor {
@@ -41,7 +45,7 @@ public:
         ui64 TotalKeysSize = 0;
     };
 
-    TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, NACLib::TUserContext::TPtr userCtx);
+    TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, TIntrusivePtr<NACLib::TUserContext> userCtx);
 
     virtual ~TEngineBay();
 

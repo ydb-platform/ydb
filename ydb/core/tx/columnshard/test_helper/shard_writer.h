@@ -1,7 +1,7 @@
 #pragma once
-#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/tx/data_events/events.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -36,12 +36,25 @@ public:
     const TActorId& GetSender() const {
         return Sender;
     }
+
     void StartCommitFail(const ui64 txId);
     [[nodiscard]] NTxUT::TPlanStep StartCommit(const ui64 txId);
+    [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus StartCommitWithLock(const ui64 txId, const NKikimrDataEvents::TLock& lock);
     [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Abort();
 
+    void SendWrite(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId);
+    [[nodiscard]] NKikimrDataEvents::TEvWriteResult WaitWriteResult();
+
+    [[nodiscard]] NKikimrDataEvents::TEvWriteResult WriteWithResult(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId) {
+        SendWrite(batch, columnIds, txId);
+        return WaitWriteResult();
+    }
+
     [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Write(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId);
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId) {
+        return WriteWithResult(batch, columnIds, txId).GetStatus();
+    }
 };
 
 }   // namespace NKikimr::NTxUT

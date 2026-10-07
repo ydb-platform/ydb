@@ -53,6 +53,26 @@ VALUES
 
 Мы рекомендуем применять `raw string` и способ экранирования с помощью `\"`, так как он более нагляден.
 
+### Как обновить JSON в таблице? {#update-json}
+
+Частичное обновление JSON-поля не поддерживается, поэтому необходимо сконструировать новое значение из частей старого и новых данных. Для этого используется [`Yson` UDF](../../yql/reference/udf/list/yson.md) в комбинации с функциями для работы со [словарями](../../yql/reference/builtins/dict.md).
+
+В примере ниже к JSON-объекту из колонки `column` добавляется новое поле `new_field`:
+
+```yql
+UPDATE table
+SET column = Yson::SerializeJson(
+    Yson::From(
+        SetUnion(
+            Yson::ConvertTo(Yson::ParseJson(column), Dict<String, Yson>),
+            {'new_field': Yson('"value"')},
+            ($K, $v1, $v2) -> { RETURN COALESCE($v2, $v1); }
+        )
+    )
+)
+WHERE id = 1;
+```
+
 ### Как обновить только те значения, ключей которых нет в таблице? {#update-non-existent}
 
 Можно использовать операцию `LEFT JOIN`, чтобы пометить отсутствующие в таблице ключи, после чего обновить их значения:
@@ -107,18 +127,13 @@ ON t.Key1 = d.Key1 AND t.Key2 = d.Key2;
 
 ### Как лучше реализовать запрос вида (key1, key2) IN ((v1, v2), (v3, v4), ...)? {#key-pairs-in}
 
-Это лучше записывать через JOIN с константной таблицей:
+Для выборки по набору ключей (в том числе составных) используется синтаксис `WHERE ... IN`:
 
 ```yql
-$keys = AsList(
-    AsStruct(1 AS Key1, "One" AS Key2),
-    AsStruct(2 AS Key1, "Three" AS Key2),
-    AsStruct(4 AS Key1, "One" AS Key2)
-);
+DECLARE $key_pairs AS List<Tuple<Uint64, Uint64>>;
 
-SELECT t.* FROM AS_TABLE($keys) AS k
-INNER JOIN table1 AS t
-ON t.Key1 = k.Key1 AND t.Key2 = k.Key2;
+SELECT * FROM some_table
+WHERE (Key1, Key2) IN $key_pairs;
 ```
 
 ## Транзакции {#transactions}

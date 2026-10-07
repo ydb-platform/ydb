@@ -24,7 +24,14 @@ class WorkloadConfig:
     allowed_secondary_indexes_count: List[int] = field(default_factory=lambda: [1, 2, 3, 8, 16])
     unique_indexes_allowed: bool = True
     unique_index_probability: float = 0.05
+    unique_table_probability: float = 0.1
     null_probability: float = 0.05
+
+    # DEFAULT columns
+    default_table_probability: float = 0.5
+
+    # RETURNING clause
+    returning_probability: float = 0.1
 
     # Column types
     allowed_column_types: List[str] = field(
@@ -95,6 +102,7 @@ class TableInfo:
     primary_key_size: int
     indexes: List[IndexInfo]
     column_types: List[str]
+    default_columns: Dict[int, str] = field(default_factory=dict)  # column index -> SQL default literal
 
 
 class TypeConverter:
@@ -179,7 +187,8 @@ class WorkloadStats:
         """Get current statistics as a formatted string"""
         with self._lock:
             return (
-                f"Tables: {self.tables}, Operations: {self.operations}, PreconditionFailed: {self.precondition_failed}"
+                f"Tables: {self.tables}, Operations: {self.operations}, "
+                f"PreconditionFailed: {self.precondition_failed}"
             )
 
 
@@ -188,7 +197,8 @@ class ParameterBuilder:
 
     @staticmethod
     def create_list_parameter(
-        operation_id: int, rows: List[List[Any]], column_types: List[str], prefix: str = ""
+        operation_id: int, rows: List[List[Any]], column_types: List[str], prefix: str = "",
+        field_names: Optional[List[str]] = None
     ) -> Tuple[List[str], Dict[str, Any]]:
         """
         Create a list parameter for batch operations
@@ -198,6 +208,7 @@ class ParameterBuilder:
             rows: List of rows, each row is a list of values
             column_types: List of column types
             prefix: Optional prefix for parameter names
+            field_names: Optional list of struct field names (defaults to c0, c1, ...)
 
         Returns:
             Tuple of (parameter_declarations, parameters_dict)
@@ -208,8 +219,11 @@ class ParameterBuilder:
         # Create a single parameter that is a List of Structs
         param_name = f"$p{operation_id}_{prefix}rows"
 
+        if field_names is None:
+            field_names = [f"c{i}" for i in range(len(column_types))]
+
         # Build the struct type definition with optional types
-        struct_fields = [f"c{i}: Optional<{col_type}>" for i, col_type in enumerate(column_types)]
+        struct_fields = [f"{name}: Optional<{col_type}>" for name, col_type in zip(field_names, column_types)]
         param_declarations.append(f"DECLARE {param_name} AS List<Struct<{', '.join(struct_fields)}>>;")
 
         # Convert rows to list of dicts for the parameter
@@ -218,13 +232,12 @@ class ParameterBuilder:
             row_dict = {}
             for i, value in enumerate(row):
                 if value is not None:
-                    row_dict[f"c{i}"] = TypeConverter.convert_value(value, column_types[i])
+                    row_dict[field_names[i]] = TypeConverter.convert_value(value, column_types[i])
                 else:
-                    row_dict[f"c{i}"] = None
+                    row_dict[field_names[i]] = None
             rows_list.append(row_dict)
 
         # Create the parameter with the list of rows and its type
-        field_names = [f"c{i}" for i in range(len(column_types))]
         struct_type = TypeConverter.create_struct_type(column_types, field_names)
         list_type = ydb.ListType(struct_type)
 
@@ -273,6 +286,30 @@ class ParameterBuilder:
 
 class SqlBuilder:
     """Helper class for building SQL queries"""
+
+    @staticmethod
+    def generate_default_literal(column_type: str) -> str:
+        """Generate a random DEFAULT literal for the given column type"""
+        if column_type == "Uint8":
+            return f"Cast({random.randint(0, 255)} AS Uint8)"
+        elif column_type == "Uint32":
+            return f"Cast({random.randint(0, 1000)} AS Uint32)"
+        elif column_type == "Uint64":
+            return f"Cast({random.randint(0, 1000)} AS Uint64)"
+        elif column_type == "Int8":
+            return f"Cast({random.randint(-128, 127)} AS Int8)"
+        elif column_type == "Int32":
+            return f"Cast({random.randint(-1000, 1000)} AS Int32)"
+        elif column_type == "Int64":
+            return f"Cast({random.randint(-1000, 1000)} AS Int64)"
+        elif column_type == "Bool":
+            return random.choice(["True", "False"])
+        elif column_type == "String":
+            return '"default"'
+        elif column_type == "Utf8":
+            return 'Utf8("default")'
+        else:
+            raise YdbTypeError(f"Cannot generate default for type {column_type}")
 
     @staticmethod
     def build_index_description(index_id: int, index_info: IndexInfo, column_names: List[str]) -> str:
@@ -327,14 +364,22 @@ class WorkloadSecondaryIndex(WorkloadBase):
         # Column names cache
         self._column_names = [f"c{i}" for i in range(self.config.columns)]
 
-        # Type converter
-        self._type_converter = TypeConverter()
-
         # SQL builder
         self._sql_builder = SqlBuilder()
 
         # Parameter builder
         self._param_builder = ParameterBuilder()
+
+        # Operation handlers dispatch table
+        self._operation_handlers = {
+            OperationType.INSERT: self._insert_operation,
+            OperationType.REPLACE: self._replace_operation,
+            OperationType.UPSERT: self._upsert_operation,
+            OperationType.UPDATE: self._update_operation,
+            OperationType.DELETE: self._delete_operation,
+            OperationType.UPDATE_ON: self._update_on_operation,
+            OperationType.DELETE_ON: self._delete_on_operation,
+        }
 
     def get_stat(self) -> str:
         """Get workload statistics"""
@@ -348,6 +393,12 @@ class WorkloadSecondaryIndex(WorkloadBase):
         # Generate random column types
         column_types = [random.choice(self.config.allowed_column_types) for _ in range(self.config.columns)]
 
+        # Decide whether this table will have unique indexes (~10% of tables)
+        table_has_unique = (
+            self.config.unique_indexes_allowed
+            and random.random() < self.config.unique_table_probability
+        )
+
         # Generate secondary indexes
         for _ in range(random.choice(self.config.allowed_secondary_indexes_count)):
             columns = self._generate_index_columns(primary_key_size)
@@ -356,16 +407,31 @@ class WorkloadSecondaryIndex(WorkloadBase):
             indexes.append(
                 IndexInfo(
                     unique=(
-                        (random.random() < self.config.unique_index_probability)
-                        if self.config.unique_indexes_allowed
-                        else False
+                        table_has_unique
+                        and random.random() < self.config.unique_index_probability
                     ),
                     columns=columns,
                     cover=cover,
                 )
             )
 
-        return TableInfo(primary_key_size, indexes, column_types)
+        # If this table was selected for unique indexes but none ended up unique, force one
+        if table_has_unique and indexes and not any(idx.unique for idx in indexes):
+            idx_to_make_unique = random.randint(0, len(indexes) - 1)
+            indexes[idx_to_make_unique].unique = True
+
+        # Generate DEFAULT columns for ~50% of tables
+        default_columns: Dict[int, str] = {}
+        if random.random() < self.config.default_table_probability:
+            # Pick a random subset of non-PK columns to have DEFAULT values
+            non_pk_columns = list(range(primary_key_size, self.config.columns))
+            if non_pk_columns:
+                default_count = random.randint(1, len(non_pk_columns))
+                chosen = random.sample(non_pk_columns, default_count)
+                for col_idx in chosen:
+                    default_columns[col_idx] = self._sql_builder.generate_default_literal(column_types[col_idx])
+
+        return TableInfo(primary_key_size, indexes, column_types, default_columns)
 
     def _generate_index_columns(self, primary_key_size: int) -> List[int]:
         """Generate columns for a secondary index"""
@@ -399,8 +465,13 @@ class WorkloadSecondaryIndex(WorkloadBase):
         """Create a single table with its secondary indexes"""
         table_path = self.get_table_path(table_name)
 
-        # Generate column definitions with random types
-        columns = [f"{col} {table_info.column_types[i]}" for i, col in enumerate(self._column_names)]
+        # Generate column definitions with random types and optional DEFAULT
+        columns = []
+        for i, col in enumerate(self._column_names):
+            col_def = f"{col} {table_info.column_types[i]}"
+            if i in table_info.default_columns:
+                col_def += f" DEFAULT {table_info.default_columns[i]}"
+            columns.append(col_def)
 
         # Generate primary key columns
         pk_columns = [self._column_names[i] for i in range(table_info.primary_key_size)]
@@ -461,7 +532,8 @@ class WorkloadSecondaryIndex(WorkloadBase):
         threads = []
         for i in range(self.config.jobs_per_table):
             thread = threading.Thread(
-                target=self.run_job, args=(table_name, table_info, i), name=f"{table_name} job:{i}"
+                target=lambda i=i: self.run_with_fatal_handler(lambda: self.run_job(table_name, table_info, i)),
+                name=f"{table_name} job:{i}"
             )
             threads.append(thread)
 
@@ -508,6 +580,13 @@ class WorkloadSecondaryIndex(WorkloadBase):
 
     def _run_operations(self, table: str, table_info: TableInfo) -> None:
         """Execute a batch of operations on the specified table"""
+        if random.random() < self.config.returning_probability:
+            self._run_returning_operation(table, table_info)
+
+        self._run_batch_operations(table, table_info)
+
+    def _run_batch_operations(self, table: str, table_info: TableInfo) -> None:
+        """Execute a batch of operations without RETURNING"""
         operations_count = random.randint(1, self.config.max_operations)
         declare_statements = []
         operation_queries = []
@@ -521,18 +600,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
         for operation_id in range(operations_count):
             operation_type = random.choice(available_operations)
 
-            # Use a dispatch dictionary to avoid repetitive if-elif chains
-            operation_handlers = {
-                OperationType.INSERT: self._insert_operation,
-                OperationType.REPLACE: self._replace_operation,
-                OperationType.UPSERT: self._upsert_operation,
-                OperationType.UPDATE: self._update_operation,
-                OperationType.DELETE: self._delete_operation,
-                OperationType.UPDATE_ON: self._update_on_operation,
-                OperationType.DELETE_ON: self._delete_on_operation,
-            }
-
-            handler = operation_handlers.get(operation_type)
+            handler = self._operation_handlers.get(operation_type)
             if handler:
                 declare, query, parameters = handler(operation_id, table, table_info)
                 declare_statements.extend(declare)
@@ -543,6 +611,57 @@ class WorkloadSecondaryIndex(WorkloadBase):
         query = '\n'.join(declare_statements + operation_queries)
         logger.debug("Executing operations")
         self._execute_query_with_retry(query, is_ddl=False, parameters=all_parameters)
+
+    def _run_returning_operation(self, table: str, table_info: TableInfo) -> None:
+        """Run a single INSERT/UPSERT/REPLACE operation with RETURNING.
+        If the table has DEFAULT columns, they are omitted to exercise the DEFAULT mechanism."""
+        table_path = self.get_table_path(table)
+        pk_size = table_info.primary_key_size
+
+        # Choose operation type: INSERT, UPSERT, or REPLACE (these support RETURNING + column list)
+        # Weight towards UPSERT/REPLACE to avoid PreconditionFailed on duplicate keys
+        op_type = random.choice(["INSERT", "UPSERT", "UPSERT", "REPLACE", "REPLACE"])
+
+        # If table has DEFAULT columns, randomly choose whether to omit them to exercise
+        # the DEFAULT mechanism (and also test explicit values combined with RETURNING).
+        # Otherwise include all columns.
+        omit_defaults = bool(table_info.default_columns) and random.random() < 0.5
+        included_column_indices = [
+            i for i in range(self.config.columns)
+            if i < pk_size or not omit_defaults or i not in table_info.default_columns
+        ]
+        included_column_names = [self._column_names[i] for i in included_column_indices]
+        included_column_types = [table_info.column_types[i] for i in included_column_indices]
+
+        # Generate rows for included columns only
+        rows_count = random.randint(1, self.config.max_rows_per_operation)
+        batch_rows = []
+        for _ in range(rows_count):
+            row = []
+            for col_idx in included_column_indices:
+                row.append(self._generate_value_by_type(table_info.column_types[col_idx], col_idx < pk_size))
+            batch_rows.append(row)
+
+        # Build parameterized query
+        operation_id = 0
+        param_declarations, parameters = self._param_builder.create_list_parameter(
+            operation_id, batch_rows, included_column_types,
+            field_names=included_column_names,
+        )
+
+        # RETURNING all columns
+        returning_columns = self._column_names
+
+        column_list = ", ".join(included_column_names)
+        select_list = ", ".join(included_column_names)
+        query = '\n'.join(param_declarations + [
+            f"{op_type} INTO `{table_path}` ({column_list})",
+            f"SELECT {select_list} FROM AS_TABLE($p{operation_id}_rows)",
+            f"RETURNING {', '.join(returning_columns)};",
+        ])
+
+        logger.debug(f"Executing RETURNING query: {query}")
+        self._execute_query_with_retry(query, is_ddl=False, parameters=parameters)
 
     def _execute_query_with_retry(self, query: str, is_ddl: bool, parameters: Dict[str, Any] = None) -> Any:
         """Execute a query with retry logic for handling transient failures"""
@@ -832,7 +951,10 @@ class WorkloadSecondaryIndex(WorkloadBase):
             threads = []
             for table_name in [f'test_{iteration}_{i}' for i in range(self.config.tables_inflight)]:
                 threads.append(
-                    threading.Thread(target=lambda t=table_name: self.run_for_table(t), name=f'{table_name}')
+                    threading.Thread(
+                        target=lambda t=table_name: self.run_with_fatal_handler(lambda: self.run_for_table(t)),
+                        name=f'{table_name}'
+                    )
                 )
 
             for thread in threads:

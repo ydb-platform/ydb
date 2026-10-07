@@ -5,8 +5,10 @@
 
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/core/jaeger_tracing/settings.h>
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -48,12 +50,12 @@ TJaegerTracingConfigurator::TJaegerTracingConfigurator(
 {}
 
 void TJaegerTracingConfigurator::Bootstrap(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TJaegerTracingConfigurator: Bootstrap");
+    YDB_LOG_DEBUG_CTX(ctx, "TJaegerTracingConfigurator: Bootstrap");
     Become(&TThis::StateWork);
 
     ApplyConfigs(initialConfig);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TJaegerTracingConfigurator: subscribing to config updates");
+    YDB_LOG_DEBUG_CTX(ctx, "TJaegerTracingConfigurator: subscribing to config updates");
     ui32 item = static_cast<ui32>(NKikimrConsole::TConfigItem::TracingConfigItem);
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
              new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
@@ -62,13 +64,13 @@ void TJaegerTracingConfigurator::Bootstrap(const TActorContext& ctx) {
 void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
     auto& rec = ev->Get()->Record;
 
-    LOG_INFO_S(ctx, NKikimrServices::CMS_CONFIGS, "TJaegerTracingConfigurator: got new config: " << rec.GetConfig().ShortDebugString());
+    YDB_LOG_INFO_CTX(ctx, "TJaegerTracingConfigurator: got new config",
+        {"config", rec.GetConfig().ShortDebugString()});
 
     ApplyConfigs(rec.GetConfig().GetTracingConfig());
 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TJaegerTracingConfigurator: Send TEvConfigNotificationResponse");
+    YDB_LOG_TRACE_CTX(ctx, "TJaegerTracingConfigurator: Send TEvConfigNotificationResponse");
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
 
@@ -84,7 +86,8 @@ TVector<ERequestType> TJaegerTracingConfigurator::GetRequestTypes(const NKikimrC
         if (auto it = NameToRequestType.FindPtr(requestType)) {
             requestTypes.push_back(*it);
         } else {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "Failed to parse request type \"" << requestType << "\"");
+            YDB_LOG_ERROR("Failed to parse request type",
+                {"requestType", requestType});
             hasErrors = true;
         }
     }
@@ -115,33 +118,33 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
 
         auto requestTypes = GetRequestTypes(scope);
         if (requestTypes.empty()) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "failed to parse request type in the rule "
-                       << samplingRule.ShortDebugString() << ". Skipping the rule");
+            YDB_LOG_ERROR("Failed to parse request type in the rule. Skipping the rule",
+                {"rule", samplingRule.ShortDebugString()});
             continue;
         }
 
         if (!samplingRule.HasLevel() || !samplingRule.HasFraction() || !samplingRule.HasMaxTracesPerMinute()) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required fields in rule " << samplingRule.ShortDebugString()
-                       << " (required fields are: level, fraction, max_traces_per_minute). Skipping the rule");
+            YDB_LOG_ERROR("Missing required fields in rule (required fields are: level, fraction, max_traces_per_minute). Skipping the rule",
+                {"rule", samplingRule.ShortDebugString()});
             continue;
         }
         if (samplingRule.GetMaxTracesPerMinute() == 0) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "max_traces_per_minute should never be zero. Found in rule " << samplingRule.GetMaxTracesPerMinute()
-                       << ". Skipping the rule");
+            YDB_LOG_ERROR("Max_traces_per_minute should never be zero. Found in rule. Skipping the rule",
+                {"rule", samplingRule.GetMaxTracesPerMinute()});
             continue;
         }
 
         ui64 level = samplingRule.GetLevel();
         double fraction = samplingRule.GetFraction();
         if (level > TComponentTracingLevels::MostVerbose) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "sampling level exceeds maximum allowed value (" << level
-                       << " provided, maximum is " << static_cast<ui32>(TComponentTracingLevels::MostVerbose)
-                       << "). Lowering the level");
+            YDB_LOG_ERROR("Sampling level exceeds maximum allowed value; lowering the level",
+                {"level", level},
+                {"mostVerbose", static_cast<ui32>(TComponentTracingLevels::MostVerbose)});
             level = TComponentTracingLevels::MostVerbose;
         }
         if (fraction < 0 || fraction > 1) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "provided fraction " << fraction
-                       << " violated range [0; 1]. Clamping it to the range");
+            YDB_LOG_ERROR("Provided fraction violated range [0; 1]. Clamping it to the range",
+                {"fraction", fraction});
             fraction = std::clamp(fraction, 0.0, 1.0);
         }
 
@@ -173,27 +176,27 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
 
         auto requestTypes = GetRequestTypes(throttlingRule.GetScope());
         if (requestTypes.empty()) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "failed to parse request type in rule "
-                       << throttlingRule.ShortDebugString() << ". Skipping the rule");
+            YDB_LOG_ERROR("Failed to parse request type in rule. Skipping the rule",
+                {"rule", throttlingRule.ShortDebugString()});
             continue;
         }
 
         ui64 level = throttlingRule.HasLevel() ? throttlingRule.GetLevel() : TComponentTracingLevels::ProductionVerbose;
         if (level > TComponentTracingLevels::MostVerbose) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "sampling level exceeds maximum allowed value (" << level
-                       << " provided, maximum is " << static_cast<ui32>(TComponentTracingLevels::MostVerbose)
-                       << "). Lowering the level");
+            YDB_LOG_ERROR("Sampling level exceeds maximum allowed value; lowering the level",
+                {"level", level},
+                {"mostVerbose", static_cast<ui32>(TComponentTracingLevels::MostVerbose)});
             level = TComponentTracingLevels::MostVerbose;
         }
 
         if (!throttlingRule.HasMaxTracesPerMinute()) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "missing required field max_traces_per_minute in rule "
-                       << throttlingRule.ShortDebugString() << ". Skipping the rule");
+            YDB_LOG_ERROR("Missing required field max_traces_per_minute in rule. Skipping the rule",
+                {"rule", throttlingRule.ShortDebugString()});
             continue;
         }
         if (throttlingRule.GetMaxTracesPerMinute() == 0) {
-            ALOG_ERROR(NKikimrServices::CMS_CONFIGS, "max_traces_per_minute should never be zero. Found in rule " << throttlingRule.GetMaxTracesPerMinute()
-                       << ". Skipping the rule");
+            YDB_LOG_ERROR("Max_traces_per_minute should never be zero. Found in rule. Skipping the rule",
+                {"maxTracesPerMinute", throttlingRule.GetMaxTracesPerMinute()});
             continue;
         }
 

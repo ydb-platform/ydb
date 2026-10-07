@@ -4,6 +4,8 @@
 #include <util/generic/hash_set.h>
 #include <util/system/guard.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 namespace NKikimr {
 
 using namespace NActors;
@@ -50,6 +52,28 @@ public:
         return IsBlocked(id.TabletID(), id.Generation());
     }
 
+    // A block with generation Max<ui32>() is the tombstone Hive writes when it deletes a tablet for
+    // good. From that moment on nothing can ever be written for this tablet again and none of its
+    // data is needed, so the VDisk drops its blobs and barrier records without waiting for the hard
+    // barrier that Hive sends next -- see TBarriersEssence/NBarriers::TTree.
+    bool IsTabletDeleted(ui64 tabletId) const {
+        auto it = Blocks.find(tabletId);
+        return it != Blocks.end() && IsCompleteTabletDeletionBlock(it->second);
+    }
+
+    // drop everything we keep for a completely deleted tablet -- blobs on every channel and all of
+    // its barrier records
+    void DropTabletData(ui64 tabletId) {
+        auto blobIt = LogoBlobs.lower_bound(TLogoBlobID(tabletId, 0, 0, 0, 0, 0));
+        while (blobIt != LogoBlobs.end() && blobIt->first.TabletID() == tabletId) {
+            blobIt = LogoBlobs.erase(blobIt);
+        }
+        auto barrierIt = Barriers.lower_bound(std::make_tuple(tabletId, ui8(0), ui32(0), ui32(0), false));
+        while (barrierIt != Barriers.end() && std::get<0>(barrierIt->first) == tabletId) {
+            barrierIt = Barriers.erase(barrierIt);
+        }
+    }
+
     template<typename TMsg>
     void PutBlob(const TLogoBlobID& id, TMsg& msg, ui32 payloadIdx) {
         // get data
@@ -94,7 +118,8 @@ public:
                 VDiskIDFromVDiskID(record.GetVDiskID()).ToString().data(), VDiskId.ToString().data());
         TLogoBlobID id{LogoBlobIDFromLogoBlobID(record.GetBlobID())};
 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVPut# %s", ev->Get()->ToString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "Dump event",
+            {"event", ev->Get()->ToString().data()});
 
         auto sendResponse = [&](NKikimrProto::EReplyStatus status, const TString& errorReason) {
             ui64 cookie = record.GetCookie();
@@ -121,6 +146,12 @@ public:
             }
         }
 
+        // an IgnoreBlock put for a tablet that is already deleted for good is accepted and dropped
+        // right away, just like the real VDisk does at its next compaction
+        if (IsTabletDeleted(id.TabletID())) {
+            return sendResponse(NKikimrProto::OK, TString());
+        }
+
         // put the blob in place
         PutBlob(id, *ev->Get(), 0);
 
@@ -134,7 +165,8 @@ public:
                 "record.VDiskId# %s VDiskId# %s",
                 VDiskIDFromVDiskID(record.GetVDiskID()).ToString().data(), VDiskId.ToString().data());
 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVMultiPut# %s", ev->Get()->ToString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "Dump event",
+            {"event", ev->Get()->ToString().data()});
 
         ui64 cookie = record.GetCookie();
         auto response = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(NKikimrProto::OK,
@@ -143,8 +175,9 @@ public:
                 &record, nullptr, nullptr, nullptr, 0, 0, TString());
         if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);
-            LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVMultiPut %s -> %s", ev->Get()->ToString().data(),
-                    response->ToString().data());
+            YDB_LOG_DEBUG_CTX(ctx, "TEvVMultiPut ->",
+                {"event", ev->Get()->ToString().data()},
+                {"response", response->ToString().data()});
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
             return;
         }
@@ -155,6 +188,10 @@ public:
             // check for blocks
             if (!record.GetIgnoreBlock() && IsBlocked(id)) {
                 response->AddVPutResult(NKikimrProto::BLOCKED, "blocked", id, &i);
+                continue;
+            }
+            if (IsTabletDeleted(id.TabletID())) {
+                response->AddVPutResult(NKikimrProto::OK, TString(), id, &i);
                 continue;
             }
 
@@ -182,7 +219,9 @@ public:
 
         if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);
-            LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVGet# %s -> %s", ev->Get()->ToString().data(), response->ToString().data());
+            YDB_LOG_DEBUG_CTX(ctx, "->",
+                {"event", ev->Get()->ToString().data()},
+                {"response", response->ToString().data()});
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
             return;
         }
@@ -322,7 +361,9 @@ public:
         }
 
         // send final response
-        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVGet# %s -> %s", ev->Get()->ToString().data(), response->ToString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "->",
+            {"event", ev->Get()->ToString().data()},
+            {"response", response->ToString().data()});
         FinalizeAndSend(std::move(response), ctx, ev->Sender);
     }
 
@@ -330,12 +371,46 @@ public:
         auto& record = ev->Get()->Record;
         Y_ABORT_UNLESS(VDiskIDFromVDiskID(record.GetVDiskID()) == VDiskId);
 
-        ui32& gen = Blocks[record.GetTabletId()];
-        gen = Max(gen, record.GetGeneration());
-        TEvBlobStorage::TEvVBlockResult::TTabletActGen actual(record.GetTabletId(), record.GetGeneration());
-        auto response = std::make_unique<TEvBlobStorage::TEvVBlockResult>(NKikimrProto::OK, &actual,
+        const ui64 tabletId = record.GetTabletId();
+        const auto writeSource = WriteSourceFromProto(record.GetWriteSourceOp());
+        const bool raw = writeSource == TWriteSource::SyncerMergeBlock
+            || writeSource == TWriteSource::SkeletonForceBlock;
+        NKikimrProto::EReplyStatus status = NKikimrProto::OK;
+        bool obsoleteVersion = false;
+        if (!raw) {
+            if (!tabletId || tabletId >> 63) {
+                status = NKikimrProto::ERROR;
+            } else if (record.HasVersion()) {
+                const auto versionIt = Blocks.find(~tabletId);
+                const ui32 version = versionIt != Blocks.end() ? versionIt->second : 0;
+                if (record.GetVersion() < version) {
+                    status = NKikimrProto::ERROR;
+                    obsoleteVersion = true;
+                } else if (const auto it = Blocks.find(tabletId); record.GetVersion() > version
+                        && it != Blocks.end() && it->second >= record.GetGeneration()) {
+                    status = NKikimrProto::ERROR;
+                } else if (record.GetVersion() > version) {
+                    Blocks[~tabletId] = record.GetVersion();
+                }
+            }
+        }
+        if (status == NKikimrProto::OK) {
+            ui32& gen = Blocks[tabletId];
+            gen = Max(gen, record.GetGeneration());
+            // ids with the high bit set are tablet storage info version records, not real blocks
+            if (!(tabletId >> 63) && IsCompleteTabletDeletionBlock(gen)) {
+                DropTabletData(tabletId);
+            }
+        }
+        const auto it = Blocks.find(tabletId);
+        TEvBlobStorage::TEvVBlockResult::TTabletActGen actual(tabletId,
+            it != Blocks.end() ? it->second : record.GetGeneration());
+        auto response = std::make_unique<TEvBlobStorage::TEvVBlockResult>(status, &actual,
                 VDiskIDFromVDiskID(record.GetVDiskID()), TAppData::TimeProvider->Now(),
                 (ui32)ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, 0);
+        if (obsoleteVersion) {
+            response->Record.SetIsTabletStorageInfoVersionObsolete(true);
+        }
         FinalizeAndSend(std::move(response), ctx, ev->Sender);
     }
 
@@ -362,7 +437,12 @@ public:
         auto& record = ev->Get()->Record;
         Y_ABORT_UNLESS(VDiskIDFromVDiskID(record.GetVDiskID()) == VDiskId);
 
-        if (IsBlocked(record.GetTabletId(), record.GetRecordGeneration())) {
+        // the complete tablet deletion command is the one that follows the Max<ui32>() block, so it is
+        // let through even though that block blocks every generation -- same as THullDbRecovery::IsBlocked
+        const bool completeDel = record.GetCollectGeneration() == Max<ui32>() &&
+            record.GetCollectStep() == Max<ui32>();
+        if (IsBlocked(record.GetTabletId(), record.GetRecordGeneration()) &&
+                !(completeDel && IsTabletDeleted(record.GetTabletId()))) {
             auto response = std::make_unique<TEvBlobStorage::TEvVCollectGarbageResult>(NKikimrProto::BLOCKED,
                     record.GetTabletId(), record.GetRecordGeneration(), record.GetChannel(),
                     VDiskIDFromVDiskID(record.GetVDiskID()), TAppData::TimeProvider->Now(),
@@ -375,8 +455,10 @@ public:
                 record.GetPerGenerationCounter(), record.GetHard());
         auto value = std::make_tuple(record.GetCollectGeneration(), record.GetCollectStep());
 
-        auto it = Barriers.find(key);
-        if (it != Barriers.end()) {
+        if (IsTabletDeleted(record.GetTabletId())) {
+            // the complete-deletion block already collected everything, and the real VDisk drops the
+            // barrier records of such a tablet, so do not keep this one either
+        } else if (auto it = Barriers.find(key); it != Barriers.end()) {
             Y_ABORT_UNLESS(it->second == value);
         } else {
             Barriers[key] = value;

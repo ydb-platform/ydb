@@ -1,4 +1,5 @@
 #include <util/system/byteorder.h>
+#include <util/system/thread.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/producer.h>
 #include <library/cpp/string_utils/url/url.h>
@@ -13,6 +14,39 @@ namespace NYdb::inline Dev::NTopic {
 namespace {
 
 static constexpr auto PARTITION_KEY_META_KEY = "__partition_key";
+static constexpr size_t DESCRIBE_TOPIC_ATTEMPTS = 3;
+static constexpr TDuration DESCRIBE_TOPIC_RETRY_DELAY = TDuration::MilliSeconds(100);
+
+TDescribeTopicResult DescribeTopicWithRetries(
+    TTopicClient::TImpl* client,
+    const std::string& path,
+    const TDescribeTopicSettings& settings,
+    const TDbDriverStatePtr& dbDriverState,
+    const std::string& logPrefix) {
+    for (size_t attempt = 1; attempt <= DESCRIBE_TOPIC_ATTEMPTS; ++attempt) {
+        auto result = client->DescribeTopic(path, settings).GetValueSync();
+        if (result.IsSuccess() && !result.GetTopicDescription().GetPartitions().empty()) {
+            return result;
+        }
+
+        if (attempt == DESCRIBE_TOPIC_ATTEMPTS) {
+            return result;
+        }
+
+        TStringBuilder message;
+        message << logPrefix << "DescribeTopic returned ";
+        if (result.IsSuccess()) {
+            message << "no partitions";
+        } else {
+            message << "status " << result.GetStatus();
+        }
+        message << ", retry attempt " << attempt;
+        LOG_LAZY(dbDriverState->Log, TLOG_DEBUG, message);
+        Sleep(DESCRIBE_TOPIC_RETRY_DELAY);
+    }
+
+    Y_UNREACHABLE();
+}
 
 } // namespace
 
@@ -51,6 +85,22 @@ bool TProducer::TPartitionInfo::IsSplitted() const {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TProducer::TMessageInfo
 
+TProducer::TMessageInfo::TMessageInfo(TWriteMessage&& message)
+    : Key(message.GetKey().value_or(""))
+    , Data(message.Data)
+    , Codec(std::move(message.Codec))
+    , OriginalSize(message.OriginalSize)
+    , SeqNo(std::move(message.SeqNo_))
+    , CreateTimestamp(std::move(message.CreateTimestamp_))
+    , Tx(std::move(message.Tx_))
+    , DeferredPublication(std::move(message.DeferredPublication_))
+    , HasKey(message.GetKey().has_value())
+{
+    for (const auto& [key, value] : message.MessageMeta_) {
+        MessageMeta.Fields.emplace_back(key, value);
+    }
+}
+
 TProducer::TMessageInfo::TMessageInfo(const std::string& key, const std::string& choosePartitionKey, TWriteMessage&& message, std::uint32_t partition)
     : Key(key)
     , Data(message.Data)
@@ -59,12 +109,23 @@ TProducer::TMessageInfo::TMessageInfo(const std::string& key, const std::string&
     , SeqNo(message.SeqNo_)
     , CreateTimestamp(message.CreateTimestamp_)
     , Tx(message.Tx_)
+    , DeferredPublication(std::move(message.DeferredPublication_))
+    , HasKey(true)
     , Partition(partition)
 {
     for (const auto& [key, value] : message.MessageMeta_) {
         MessageMeta.Fields.emplace_back(key, value);
     }
 
+    if (!choosePartitionKey.empty()) {
+        MessageMeta.Fields.emplace_back(PARTITION_KEY_META_KEY, choosePartitionKey);
+    }
+}
+
+void TProducer::TMessageInfo::AssignPartition(const std::string& key, const std::string& choosePartitionKey, std::uint32_t partition) {
+    Key = key;
+    HasKey = true;
+    Partition = partition;
     if (!choosePartitionKey.empty()) {
         MessageMeta.Fields.emplace_back(PARTITION_KEY_META_KEY, choosePartitionKey);
     }
@@ -80,8 +141,25 @@ TWriteMessage TProducer::TMessageInfo::BuildMessage() const {
         message.MessageMeta_.emplace_back(key, value);
     }
     message.Tx(Tx);
+    message.DeferredPublication(DeferredPublication);
     return message;
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TProducer::TClientRequest
+
+TProducer::TClientRequest::TClientRequest(TMessageInfo&& message)
+    : Kind(EKind::Message)
+    , Message(std::move(message))
+{
+}
+
+TProducer::TClientRequest::TClientRequest(NThreading::TPromise<TFlushResult>&& flushPromise)
+    : Kind(EKind::Flush)
+    , FlushPromise(std::move(flushPromise))
+{
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TProducer::TWriteSessionWrapper
 
@@ -132,38 +210,56 @@ std::string TProducer::TSplittedPartitionWorker::GetStateName() const {
             return "GotDescribe";
         case EState::PendingMaxSeqNo:
             return "PendingMaxSeqNo";
-        case EState::Done:
-            return "Done";
         case EState::GotMaxSeqNo:
             return "GotMaxSeqNo";
+        case EState::Failed:
+            return "Failed";
+        case EState::Done:
+            return "Done";
     }
 }
 
 void TProducer::TSplittedPartitionWorker::DoWork() {
+    // Must be called while TProducer::GlobalLock is held. After this worker's
+    // lock is released below, we mutate producer-level workers and partitions
+    // that are protected by GlobalLock.
+    std::vector<WrappedWriteSessionPtr> writeSessionsToCloseOnError;
+    std::vector<std::uint32_t> writeSessionPartitionsToDestroy;
+    bool handleGotMaxSeqNo = false;
+    std::uint64_t maxSeqNo = 0;
+    std::unordered_map<std::uint32_t, std::uint64_t> cachedMaxSeqNos;
+
     std::unique_lock lock(Lock);
     std::weak_ptr<TProducer> producer = Producer->shared_from_this();
     switch (State) {
-        case EState::Init:
+        case EState::Init: {
             DescribeTopicFuture = Producer->Client->DescribeTopic(Producer->Settings.Path_, TDescribeTopicSettings());
             lock.unlock();
-            DescribeTopicFuture.Subscribe([this, producer](const NThreading::TFuture<TDescribeTopicResult>&) {
+            std::weak_ptr<TSplittedPartitionWorker> self = weak_from_this();
+            DescribeTopicFuture.Subscribe([self, producer](const NThreading::TFuture<TDescribeTopicResult>&) {
+                auto selfPtr = self.lock();
+                if (!selfPtr) {
+                    return;
+                }
+
                 auto producerPtr = producer.lock();
                 if (!producerPtr) {
                     return;
                 }
 
                 {
-                    std::lock_guard lock(Lock);
-                    MoveTo(EState::GotDescribe);
+                    std::lock_guard lock(selfPtr->Lock);
+                    selfPtr->MoveTo(EState::GotDescribe);
                 }
 
-                producerPtr->RunMainWorker(static_cast<std::int64_t>(PartitionId));
+                producerPtr->RunMainWorker(static_cast<std::int64_t>(selfPtr->PartitionId));
             });
             lock.lock();
             if (State == EState::Init) {
                 MoveTo(EState::PendingDescribe);
             }
             break;
+        }
         case EState::GotDescribe:
             HandleDescribeResult();
             if (State != EState::GotDescribe) {
@@ -179,24 +275,58 @@ void TProducer::TSplittedPartitionWorker::DoWork() {
         case EState::PendingMaxSeqNo:
         case EState::Done:
             break;
-        case EState::GotMaxSeqNo:
-            Producer->MessagesWorker->RebuildPendingMessagesIndex(PartitionId);
-            Producer->MessagesWorker->ScheduleResendMessages(PartitionId, MaxSeqNo);
-            for (const auto& child : Producer->Partitions[PartitionId].Children_) {
-                Producer->Partitions[child].Locked(false);
-            }
-            Producer->Partitions[PartitionId].Locked_ = false;
-
-            for (const auto& [partitionId, maxSeqNo] : CachedMaxSeqNos) {
-                Producer->Partitions[partitionId].CachedMaxSeqNo = maxSeqNo;
-            }
+        case EState::Failed:
+            writeSessionsToCloseOnError.swap(WriteSessionsToCloseOnError);
+            writeSessionPartitionsToDestroy.swap(WriteSessionPartitionsToDestroy);
             MoveTo(EState::Done);
             break;
+        case EState::GotMaxSeqNo:
+            handleGotMaxSeqNo = true;
+            maxSeqNo = MaxSeqNo;
+            cachedMaxSeqNos = CachedMaxSeqNos;
+            writeSessionPartitionsToDestroy.swap(WriteSessionPartitionsToDestroy);
+            MoveTo(EState::Done);
+            break;
+    }
+    lock.unlock();
+
+    for (const auto& writeSession : writeSessionsToCloseOnError) {
+        if (!writeSession) {
+            continue;
+        }
+        TSessionClosedEvent sessionClosedEvent(EStatus::INTERNAL_ERROR, {});
+        Producer->GetSessionClosedEventAndDie(writeSession, std::move(sessionClosedEvent));
+    }
+
+    if (handleGotMaxSeqNo) {
+        Producer->MessagesWorker->RebuildPendingMessagesIndex(PartitionId);
+        Producer->MessagesWorker->ScheduleResendMessages(PartitionId, maxSeqNo);
+        auto partitionIt = Producer->Partitions.find(PartitionId);
+        Y_ABORT_UNLESS(partitionIt != Producer->Partitions.end(), "Partition %u not found", PartitionId);
+        for (const auto& child : partitionIt->second.Children_) {
+            auto childIt = Producer->Partitions.find(child);
+            Y_ABORT_UNLESS(childIt != Producer->Partitions.end(), "Child partition %u not found", child);
+            childIt->second.Locked(false);
+        }
+        partitionIt->second.Locked_ = false;
+
+        for (const auto& [partitionId, cachedMaxSeqNo] : cachedMaxSeqNos) {
+            auto cachedPartitionIt = Producer->Partitions.find(partitionId);
+            Y_ABORT_UNLESS(cachedPartitionIt != Producer->Partitions.end(), "Partition %u not found", partitionId);
+            cachedPartitionIt->second.CachedMaxSeqNo = cachedMaxSeqNo;
+        }
+    }
+
+    for (const auto& partitionId : writeSessionPartitionsToDestroy) {
+        Producer->SessionsWorker->DestroyWriteSession(partitionId);
     }
 }
 
 void TProducer::TSplittedPartitionWorker::MoveTo(EState state) {
     State = state;
+    if (State == EState::Done || State == EState::Failed) {
+        DoneAt = TInstant::Now();
+    }
     LOG_LAZY(Producer->DbDriverState->Log, TLOG_INFO, Producer->LogPrefix() << "Moving splitted partition worker for partition " << PartitionId << " to state " << GetStateName());
 }
 
@@ -205,13 +335,12 @@ void TProducer::TSplittedPartitionWorker::UpdateMaxSeqNo(std::uint32_t partition
     MaxSeqNo = std::max(MaxSeqNo, maxSeqNo);
 }
 
-bool TProducer::TSplittedPartitionWorker::IsDone() {
+bool TProducer::TSplittedPartitionWorker::IsDone() const {
     std::lock_guard lock(Lock);
-    DoneAt = TInstant::Now();
-    return State == EState::Done;
+    return State == EState::Done || State == EState::Failed;
 }
 
-bool TProducer::TSplittedPartitionWorker::IsInit() {
+bool TProducer::TSplittedPartitionWorker::IsInit() const {
     std::lock_guard lock(Lock);
     return State == EState::Init;
 }
@@ -232,32 +361,68 @@ void TProducer::TSplittedPartitionWorker::HandleDescribeResult() {
     }
 
     if (newPartitionsIds.empty()) {
+        if (++Retries >= 40) {
+            // Server keeps returning incomplete describe responses; give up gracefully
+            // instead of aborting the whole user process.
+            LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix()
+                << "Too many retries (" << Retries << ") waiting for complete describe response for partition "
+                << PartitionId << "; giving up.");
+            MoveTo(EState::Failed);
+            return;
+        }
         // describe response is incomplete, we need to resend describe request
         MoveTo(EState::Init);
-        Y_ABORT_UNLESS(++Retries < 40, "Too many retries for partition %u", PartitionId);
         LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix() << "Describe response is incomplete, we need to resend describe request for partition " << PartitionId);
         return;
     }
 
+    struct TChildPartitionInfo {
+        std::uint32_t PartitionId;
+        std::string FromBound;
+        std::optional<std::string> ToBound;
+    };
+
     std::vector<std::uint32_t> children;
-    const auto& splittedPartition = Producer->Partitions[PartitionId];
-    Producer->PartitionsIndex.erase(splittedPartition.FromBound_);
+    std::vector<TChildPartitionInfo> childPartitionInfos;
+    children.reserve(newPartitionsIds.size());
+    childPartitionInfos.reserve(newPartitionsIds.size());
 
     for (const auto& newPartitionId : newPartitionsIds) {
         auto partitionDescribeInfo = std::find_if(partitions.begin(), partitions.end(), [newPartitionId](const auto& partition) {
             return partition.GetPartitionId() == newPartitionId;
         });
-        Y_ABORT_UNLESS(partitionDescribeInfo != partitions.end(), "Partition describe info not found");
-        Producer->PartitionsIndex[partitionDescribeInfo->GetFromBound().value_or("")] = newPartitionId;
-        Producer->Partitions[newPartitionId] = TPartitionInfo()
-            .PartitionId(newPartitionId)
-            .FromBound(partitionDescribeInfo->GetFromBound().value_or(""))
-            .ToBound(partitionDescribeInfo->GetToBound())
-            .Locked(true);
+        if (partitionDescribeInfo == partitions.end()) {
+            // Server returned a child partition id without a corresponding describe entry.
+            // This is a server bug; fail this worker gracefully rather than aborting the process.
+            LOG_LAZY(Producer->DbDriverState->Log, TLOG_ERR, Producer->LogPrefix()
+                << "Describe response for partition " << PartitionId
+                << " references child partition " << newPartitionId
+                << " without a describe entry; failing worker.");
+            MoveTo(EState::Failed);
+            return;
+        }
         children.push_back(newPartitionId);
+        childPartitionInfos.push_back({
+            .PartitionId = newPartitionId,
+            .FromBound = partitionDescribeInfo->GetFromBound().value_or(""),
+            .ToBound = partitionDescribeInfo->GetToBound(),
+        });
     }
 
-    Producer->Partitions[PartitionId].Children(children);
+    auto splittedPartitionIt = Producer->Partitions.find(PartitionId);
+    Y_ABORT_UNLESS(splittedPartitionIt != Producer->Partitions.end(), "Partition %u not found", PartitionId);
+    Producer->PartitionsIndex.erase(splittedPartitionIt->second.FromBound_);
+
+    for (const auto& childPartitionInfo : childPartitionInfos) {
+        Producer->PartitionsIndex[childPartitionInfo.FromBound] = childPartitionInfo.PartitionId;
+        Producer->Partitions[childPartitionInfo.PartitionId] = TPartitionInfo()
+            .PartitionId(childPartitionInfo.PartitionId)
+            .FromBound(childPartitionInfo.FromBound)
+            .ToBound(childPartitionInfo.ToBound)
+            .Locked(true);
+    }
+
+    splittedPartitionIt->second.Children(children);
 }
 
 void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_lock<std::mutex>& lock) {
@@ -289,9 +454,11 @@ void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_l
 
     NotReadyFutures = ancestors.size();
     for (const auto& ancestor : ancestors) {
-        if (Producer->Partitions[ancestor].CachedMaxSeqNo.has_value()) {
+        auto ancestorIt = Producer->Partitions.find(ancestor);
+        Y_ABORT_UNLESS(ancestorIt != Producer->Partitions.end(), "Ancestor partition %u not found", ancestor);
+        if (ancestorIt->second.CachedMaxSeqNo.has_value()) {
             --NotReadyFutures;
-            UpdateMaxSeqNo(ancestor, Producer->Partitions[ancestor].CachedMaxSeqNo.value());
+            UpdateMaxSeqNo(ancestor, ancestorIt->second.CachedMaxSeqNo.value());
             continue;
         }
         auto wrappedSession = Producer->SessionsWorker->GetOrCreateWriteSession(ancestor, false);
@@ -300,39 +467,44 @@ void TProducer::TSplittedPartitionWorker::LaunchGetMaxSeqNoFutures(std::unique_l
 
         auto future = wrappedSession->Session->GetInitSeqNo();
         std::weak_ptr<TProducer> producer = Producer->shared_from_this();
+        std::weak_ptr<TSplittedPartitionWorker> self = weak_from_this();
         lock.unlock();
-        future.Subscribe([this, producer, wrappedSession, ancestor](const NThreading::TFuture<uint64_t>& result) {
+        future.Subscribe([self, producer, wrappedSession, ancestor](const NThreading::TFuture<uint64_t>& result) {
+            auto selfPtr = self.lock();
+            if (!selfPtr) {
+                return;
+            }
+
             auto producerPtr = producer.lock();
             if (!producerPtr) {
                 return;
             }
 
-            if (IsDone()) {
-                return;
-            }
-            
-            bool gotMaxSeqNo = false;
+            bool needRunMainWorker = false;
             {
-                std::lock_guard lock(Lock);
-                if (result.HasException()) {
-                    LOG_LAZY(producerPtr->DbDriverState->Log, TLOG_ERR, producerPtr->LogPrefix() << "Failed to get max seq no for partition " << ancestor << " for splitted partition " << PartitionId);
-                    TSessionClosedEvent sessionClosedEvent(EStatus::INTERNAL_ERROR, {});
-                    producerPtr->GetSessionClosedEventAndDie(wrappedSession, std::move(sessionClosedEvent));
-                    MoveTo(EState::Done);
+                std::lock_guard lock(selfPtr->Lock);
+                if (selfPtr->State == EState::Done || selfPtr->State == EState::Failed) {
                     return;
                 }
 
-                UpdateMaxSeqNo(ancestor, result.GetValue());
-                if (--NotReadyFutures == 0) {
-                    MoveTo(EState::GotMaxSeqNo);   
-                    gotMaxSeqNo = true;
+                if (result.HasException()) {
+                    LOG_LAZY(producerPtr->DbDriverState->Log, TLOG_ERR, producerPtr->LogPrefix() << "Failed to get max seq no for partition " << ancestor << " for splitted partition " << selfPtr->PartitionId);
+                    selfPtr->WriteSessionsToCloseOnError.push_back(wrappedSession);
+                    selfPtr->MoveTo(EState::Failed);
+                    needRunMainWorker = true;
+                } else {
+                    selfPtr->UpdateMaxSeqNo(ancestor, result.GetValue());
+                    selfPtr->WriteSessionPartitionsToDestroy.push_back(ancestor);
+                    if (--selfPtr->NotReadyFutures == 0) {
+                        selfPtr->MoveTo(EState::GotMaxSeqNo);
+                        needRunMainWorker = true;
+                    }
                 }
             }
 
-            if (gotMaxSeqNo) {
-                producerPtr->RunMainWorker(static_cast<std::int64_t>(PartitionId));
+            if (needRunMainWorker) {
+                producerPtr->RunMainWorker(static_cast<std::int64_t>(selfPtr->PartitionId));
             }
-            producerPtr->SessionsWorker->DestroyWriteSession(ancestor);
         });
         lock.lock();
         GetMaxSeqNoFutures.push_back(future);
@@ -374,7 +546,10 @@ void TProducer::TEventsWorker::HandleSessionClosedEvent(TSessionClosedEvent&& ev
         return;
     }
 
-    Producer->Partitions[partition].Locked_ = true;
+    auto partitionIt = Producer->Partitions.find(partition);
+    if (partitionIt != Producer->Partitions.end()) {
+        partitionIt->second.Locked_ = true;
+    }
 
     if (event.GetStatus() == EStatus::OVERLOADED) {
         Producer->HandleAutoPartitioning(partition);
@@ -437,16 +612,39 @@ std::optional<NThreading::TPromise<void>> TProducer::TEventsWorker::DoWork() {
         lock.lock();
     }
 
-    if (!Producer->Done.load() && TransferEventsToOutputQueue()) {
-        return EventsPromise;
+    if (Producer->Done.load() || !TransferEventsToOutputQueue()) {
+        return std::nullopt;
     }
 
-    return std::nullopt;
+    // Atomically rotate EventsPromise/EventsFuture under Lock:
+    //   - the returned promise will be fulfilled by the caller outside the lock,
+    //   - any concurrent WaitEvent() seeing the lock will get the fresh, not-yet-set future.
+    // This avoids racing with WaitEvent re-creating the promise out from under us.
+    auto firedPromise = std::move(EventsPromise);
+    EventsPromise = NThreading::NewPromise<void>();
+    EventsFuture = EventsPromise.GetFuture();
+    return firedPromise;
+}
+
+NThreading::TPromise<void> TProducer::TEventsWorker::WakeAndRotate() {
+    std::lock_guard lock(Lock);
+    auto firedPromise = std::move(EventsPromise);
+    EventsPromise = NThreading::NewPromise<void>();
+    EventsFuture = EventsPromise.GetFuture();
+    return firedPromise;
 }
 
 void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
-    if (Producer->Partitions[partition].IsSplitted() || Producer->SplittedPartitionWorkers.contains(partition)) {
-        Producer->Partitions[partition].Future(NThreading::MakeFuture());
+    auto partitionIt = Producer->Partitions.find(partition);
+    if (partitionIt == Producer->Partitions.end()) {
+        return;
+    }
+
+    if (partitionIt->second.IsSplitted() || Producer->SplittedPartitionWorkers.contains(partition)) {
+        std::lock_guard lock(Lock);
+        SubscribedPartitions.erase(partition);
+        ReadyFutures.erase(partition);
+        partitionIt->second.Future(NThreading::MakeFuture());
         return;
     }
 
@@ -454,6 +652,13 @@ void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
     auto newFuture = wrappedSession->Session->WaitEvent();
     std::weak_ptr<TProducer> producer = Producer->shared_from_this();
     std::weak_ptr<TEventsWorker> self = shared_from_this();
+
+    {
+        // Arm the subscription before Subscribe(): WaitEvent() may run the callback
+        // synchronously, and that callback takes Lock itself.
+        std::lock_guard lock(Lock);
+        SubscribedPartitions.insert(partition);
+    }
 
     newFuture.Subscribe([self, producer, partition](const NThreading::TFuture<void>&) {
         auto producerPtr = producer.lock();
@@ -468,11 +673,25 @@ void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
 
         {
             std::lock_guard lock(selfPtr->Lock);
+            if (!selfPtr->SubscribedPartitions.contains(partition)) {
+                return;
+            }
             selfPtr->ReadyFutures.insert(partition);
         }
         producerPtr->RunMainWorker(static_cast<std::int64_t>(partition));
     });
-    Producer->Partitions[partition].Future(newFuture);
+
+    {
+        std::lock_guard lock(Lock);
+        if (!SubscribedPartitions.contains(partition)) {
+            return;
+        }
+        // The callback above may have run synchronously and mutated Partitions.
+        auto subscribedPartition = Producer->Partitions.find(partition);
+        if (subscribedPartition != Producer->Partitions.end()) {
+            subscribedPartition->second.Future(newFuture);
+        }
+    }
 }
 
 std::optional<TSessionClosedEvent> TProducer::TEventsWorker::GetSessionClosedEvent() {
@@ -481,23 +700,6 @@ std::optional<TSessionClosedEvent> TProducer::TEventsWorker::GetSessionClosedEve
         return CloseEvent;
     }
     return std::nullopt;
-}
-
-std::optional<NThreading::TPromise<void>> TProducer::TEventsWorker::HandleNewMessage() {
-    std::lock_guard lock(Lock);
-    if (Producer->MessagesWorker->IsMemoryUsageOK()) {
-        AddContinuationToken();
-        return EventsPromise;
-    }
-
-    Producer->Metrics.IncBufferFull();
-    return std::nullopt;
-}
-
-void TProducer::TEventsWorker::AddContinuationToken() {
-    auto continuationToken = IssueContinuationToken();
-    TokensQueue.push_back(std::move(continuationToken));
-    Producer->Metrics.IncContinuationTokensSent();
 }
 
 bool TProducer::TEventsWorker::AddSessionClosedIfNeeded() {
@@ -519,7 +721,6 @@ bool TProducer::TEventsWorker::AddSessionClosedIfNeeded() {
 
 bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
     bool eventsTransferred = false;
-    bool shouldAddContinuationToken = false;
     std::unordered_map<std::uint32_t, std::deque<TWriteSessionEvent::TWriteAck>> acks;
 
     auto messagesWorker = Producer->MessagesWorker;
@@ -535,14 +736,15 @@ bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
         acksQueue.pop_front();
         return ackEvent;
     };
-    auto finishWithAck = [this, messagesWorker, &shouldAddContinuationToken](std::uint64_t seqNo) {
-        Producer->LastWrittenSeqNo = std::max(Producer->LastWrittenSeqNo, seqNo);
-        Producer->MessagesWritten++;
-        bool wasMemoryUsageOk = messagesWorker->IsMemoryUsageOK();
-        messagesWorker->HandleAck();
-        if (messagesWorker->IsMemoryUsageOK() && !wasMemoryUsageOk) {
-            shouldAddContinuationToken = true;
+    auto finishWithAck = [this, messagesWorker](std::uint64_t seqNo) {
+        auto lastWrittenSeqNo = Producer->LastWrittenSeqNo.load();
+        while (lastWrittenSeqNo < seqNo) {
+            if (Producer->LastWrittenSeqNo.compare_exchange_weak(lastWrittenSeqNo, seqNo)) {
+                break;
+            }
         }
+        Producer->MessagesWritten++;
+        messagesWorker->HandleAck();
     };
 
     while (messagesWorker->HasInFlightMessages()) {
@@ -594,22 +796,7 @@ bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
         }
     }
 
-    if (shouldAddContinuationToken) {
-        AddContinuationToken();
-    }
-
     return eventsTransferred;
-}
-
-std::optional<TContinuationToken> TProducer::TEventsWorker::GetContinuationToken() {
-    std::lock_guard lock(Lock);
-    if (TokensQueue.empty()) {
-        return std::nullopt;
-    }
-
-    auto continuationToken = std::move(TokensQueue.front());
-    TokensQueue.pop_front();
-    return std::move(continuationToken);
 }
 
 std::list<TWriteSessionEvent::TEvent>::iterator TProducer::TEventsWorker::AckQueueBegin(std::uint32_t partition) {
@@ -692,24 +879,31 @@ std::vector<TWriteSessionEvent::TEvent> TProducer::TEventsWorker::GetEvents(bool
 }
 
 NThreading::TFuture<void> TProducer::TEventsWorker::WaitEvent() {
-    std::unique_lock lock(Lock);
+    std::lock_guard lock(Lock);
 
     AddSessionClosedIfNeeded();
     if (!EventsOutputQueue.empty()) {
         return NThreading::MakeFuture();
     }
 
-    if (EventsFuture.IsReady() && !Producer->Closed.load()) {
-        EventsPromise = NThreading::NewPromise();
-        EventsFuture = EventsPromise.GetFuture();
-    }
-
+    // Invariant maintained under Lock: EventsPromise has not been set yet, and
+    // EventsFuture corresponds to that promise. The promise is rotated atomically
+    // by DoWork()/WakeAndRotate() (under the same Lock), so we can simply hand
+    // out the current future without any reset logic.
     return EventsFuture;
 }
 
 void TProducer::TEventsWorker::UnsubscribeFromPartition(std::uint32_t partition) {
+    // SubscribeToPartition's WaitEvent callback inserts into ReadyFutures on the gRPC
+    // thread. Clear the subscription under the same Lock so that insert cannot race
+    // with erase, and a callback that already lost the race does not resurrect the partition.
+    std::lock_guard lock(Lock);
+    SubscribedPartitions.erase(partition);
     ReadyFutures.erase(partition);
-    Producer->Partitions[partition].Future(NThreading::MakeFuture());
+    auto partitionIt = Producer->Partitions.find(partition);
+    if (partitionIt != Producer->Partitions.end()) {
+        partitionIt->second.Future(NThreading::MakeFuture());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -757,7 +951,9 @@ std::string TProducer::TSessionsWorker::GetProducerId(std::uint32_t partitionId)
 }
 
 TProducer::WrappedWriteSessionPtr TProducer::TSessionsWorker::CreateWriteSession(std::uint32_t partition, bool directToPartition) {
-    auto partitionId = Producer->Partitions[partition].PartitionId_;
+    auto partitionIt = Producer->Partitions.find(partition);
+    Y_ABORT_UNLESS(partitionIt != Producer->Partitions.end(), "Partition %u not found", partition);
+    auto partitionId = partitionIt->second.PartitionId_;
     auto producerId = GetProducerId(partitionId);
     TWriteSessionSettings alteredSettings = Producer->Settings;
 
@@ -800,6 +996,7 @@ void TProducer::TSessionsWorker::DestroyWriteSession(std::uint32_t partition) {
 
     if (it->second->DirectToPartition) {
         Producer->EventsWorker->UnsubscribeFromPartition(partition);
+        Producer->MessagesWorker->DropContinuationTokens(partition);
     }
 
     // Remove idle bookkeeping before erasing the session from SessionsIndex so stale
@@ -888,7 +1085,13 @@ void TProducer::TSessionsWorker::DoWork() {
 
         auto expiredIdleSession = *it;
         const auto partition = expiredIdleSession->Session->Partition;
-        if (Producer->Partitions[partition].Locked_) {
+        auto partitionIt = Producer->Partitions.find(partition);
+        if (partitionIt == Producer->Partitions.end()) {
+            IdlerSessions.erase(it);
+            IdlerSessionsIndex.erase(partition);
+            continue;
+        }
+        if (partitionIt->second.Locked_) {
             break;
         }
 
@@ -917,8 +1120,9 @@ TProducer::TMessagesWorker::TMessagesWorker(TProducer* producer)
 }
 
 void TProducer::TMessagesWorker::RechoosePartitionIfNeeded(MessageIter message) {
-    const auto& partitionInfo = Producer->Partitions[message->Partition];
-    if (partitionInfo.Children_.empty()) {
+    auto partitionIt = Producer->Partitions.find(message->Partition);
+    Y_ABORT_UNLESS(partitionIt != Producer->Partitions.end(), "Partition %u not found", message->Partition);
+    if (partitionIt->second.Children_.empty()) {
         return;
     }
 
@@ -936,7 +1140,9 @@ void TProducer::TMessagesWorker::HandleReadyInitSeqNoFutures() {
 
         auto gotMaxSeqNo = it->second.GetValue();
         CurrentSeqNo = std::max(CurrentSeqNo, gotMaxSeqNo);
-        Producer->Partitions[partition].CachedMaxSeqNo = gotMaxSeqNo;
+        auto partitionIt = Producer->Partitions.find(partition);
+        Y_ABORT_UNLESS(partitionIt != Producer->Partitions.end(), "Partition %u not found", partition);
+        partitionIt->second.CachedMaxSeqNo = gotMaxSeqNo;
         InitGetMaxSeqNoFutures.erase(it);
     }
 
@@ -963,7 +1169,7 @@ bool TProducer::TMessagesWorker::LazyInit() {
         return true;
     }
     
-    if (Producer->SeqNoStrategy == ESeqNoStrategy::WithSeqNo) {
+    if (Producer->SeqNoStrategy.load(std::memory_order_acquire) == ESeqNoStrategy::WithSeqNo) {
         MoveTo(EState::Ready);
         return true;
     }
@@ -1071,15 +1277,19 @@ void TProducer::TMessagesWorker::DoWork() {
     iterateMessagesIndex(
         MessagesToResendIndex,
         [this](MessageIter head) {
-            return Producer->Partitions[head->Partition].Locked_;
+            auto partitionIt = Producer->Partitions.find(head->Partition);
+            Y_ABORT_UNLESS(partitionIt != Producer->Partitions.end(), "Partition %u not found", head->Partition);
+            return partitionIt->second.Locked_;
         }
     );
 
     iterateMessagesIndex(
         PendingMessagesIndex,
         [this](MessageIter head) {
-        return Producer->Partitions[head->Partition].Locked_ ||
-            MessagesToResendIndex.contains(head->Partition);
+            auto partitionIt = Producer->Partitions.find(head->Partition);
+            Y_ABORT_UNLESS(partitionIt != Producer->Partitions.end(), "Partition %u not found", head->Partition);
+            return partitionIt->second.Locked_ ||
+                MessagesToResendIndex.contains(head->Partition);
         }
     );
 }
@@ -1137,21 +1347,17 @@ void TProducer::TMessagesWorker::PopInFlightMessage() {
         }
     }
 
-    Y_ABORT_UNLESS(it->Data.size() <= MemoryUsage, "MemoryUsage is less than the size of the message");
-    MemoryUsage -= it->Data.size();
+    Producer->ReleaseReservedMemory(it->Data.size());
 
-    if (it->FlushPromise.Initialized()) {
-        Producer->FlushPromises.push_back(std::make_pair(it->FlushPromise, TFlushResult{
-            .Status = EFlushStatus::Success,
-            .LastWrittenSeqNo = Producer->LastWrittenSeqNo,
-            .ClosedDescription = std::nullopt,
-        }));
+    auto flushResult = TFlushResult{
+        .Status = EFlushStatus::Success,
+        .LastWrittenSeqNo = Producer->LastWrittenSeqNo.load(),
+        .ClosedDescription = std::nullopt,
+    };
+    for (auto& flushPromise : it->FlushPromises) {
+        Producer->FlushPromises.push_back(std::make_pair(std::move(flushPromise), flushResult));
     }
     InFlightMessages.pop_front();
-}
-
-bool TProducer::TMessagesWorker::IsMemoryUsageOK() const {
-    return MemoryUsage <= Producer->Settings.MaxMemoryUsage_ / 2;
 }
 
 void TProducer::TMessagesWorker::AddMessage(
@@ -1159,8 +1365,12 @@ void TProducer::TMessagesWorker::AddMessage(
     const std::string& choosePartitionKey,
     TWriteMessage&& message,
     std::uint32_t partition) {
-    MemoryUsage += message.Data.size();
     PushInFlightMessage(partition, TMessageInfo(key, choosePartitionKey, std::move(message), partition));
+}
+
+void TProducer::TMessagesWorker::AddMessage(TMessageInfo&& message) {
+    Y_ABORT_UNLESS(message.Partition != TMessageInfo::UNKNOWN_PARTITION_ID, "Partition is not assigned");
+    PushInFlightMessage(message.Partition, std::move(message));
 }
 
 std::optional<TContinuationToken> TProducer::TMessagesWorker::GetContinuationToken(std::uint32_t partition) {
@@ -1182,6 +1392,10 @@ void TProducer::TMessagesWorker::HandleContinuationToken(std::uint32_t partition
     it->second.push_back(std::move(continuationToken));
 }
 
+void TProducer::TMessagesWorker::DropContinuationTokens(std::uint32_t partition) {
+    ContinuationTokens.erase(partition);
+}
+
 bool TProducer::TMessagesWorker::IsQueueEmpty() const {
     return InFlightMessages.empty();
 }
@@ -1197,10 +1411,10 @@ bool TProducer::TMessagesWorker::HasInFlightMessages() const {
 
 void TProducer::TMessagesWorker::SetClosedStatusToFlushPromises(std::optional<TCloseDescription> closedDescription) {
     for (auto& inFlightMessage : InFlightMessages) {
-        if (inFlightMessage.FlushPromise.Initialized()) {
-            inFlightMessage.FlushPromise.TrySetValue(TFlushResult{
+        for (auto& flushPromise : inFlightMessage.FlushPromises) {
+            flushPromise.TrySetValue(TFlushResult{
                 .Status = EFlushStatus::ProducerClosed,
-                .LastWrittenSeqNo = Producer->LastWrittenSeqNo,
+                .LastWrittenSeqNo = Producer->LastWrittenSeqNo.load(),
                 .ClosedDescription = closedDescription,
             });
         }
@@ -1392,11 +1606,6 @@ void TProducer::TMetrics::AddWriteLag(std::uint64_t lagMs) {
     WriteLagMs.Add(lagMs);
 }
 
-void TProducer::TMetrics::IncContinuationTokensSent() {
-    std::lock_guard lock(Lock);
-    ContinuationTokensSent.Add(1);
-}
-
 void TProducer::TMetrics::IncBufferFull() {
     std::lock_guard lock(Lock);
     BufferFull.Add(1);
@@ -1424,14 +1633,12 @@ void TProducer::TMetrics::PrintMetrics() {
             << "max MainWorkerTimeMs: " << MainWorkerTimeMs.GetMax() << " ms, "
             << "max CycleTimeMs: " << CycleTimeMs.GetMax() << " ms, "
             << "max WriteLagMs: " << WriteLagMs.GetMax() << " ms, "
-            << "ContinuationTokensSent: " << ContinuationTokensSent.GetSum() << " tokens, "
             << "BufferFull: " << BufferFull.GetSum() << " times, "
             << "IncomingMessages: " << IncomingMessages.GetSum() << " messages, "
             << "OutgoingMessages: " << OutgoingMessages.GetSum() << " messages");
     MainWorkerTimeMs.Clear();
     CycleTimeMs.Clear();
     WriteLagMs.Clear();
-    ContinuationTokensSent.Clear();
     BufferFull.Clear();
     IncomingMessages.Clear();
     OutgoingMessages.Clear();
@@ -1470,11 +1677,15 @@ TProducer::TProducer(
     }
 
     TDescribeTopicSettings describeTopicSettings;
-    auto topicConfig = client->DescribeTopic(settings.Path_, describeTopicSettings).GetValueSync();
+    auto topicConfig = DescribeTopicWithRetries(client.get(), settings.Path_, describeTopicSettings, DbDriverState, LogPrefix());
     auto partitions = topicConfig.GetTopicDescription().GetPartitions();
     std::sort(partitions.begin(), partitions.end(), [](const auto& a, const auto& b) -> bool {
         return a.GetPartitionId() < b.GetPartitionId();
     });
+
+    if (partitions.empty()) {
+        ythrow TContractViolation("Topic has no partitions");
+    }
 
     auto partitionChooserStrategy = settings.PartitionChooserStrategy_;
     auto strategy = topicConfig.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy();
@@ -1519,6 +1730,7 @@ TProducer::TProducer(
         case TProducerSettings::EPartitionChooserStrategy::Bound:
             PartitioningKeyHasher = settings.PartitioningKeyHasher_;
             PartitionChooser = std::make_unique<TBoundPartitionChooser>(this);
+
             for (size_t i = 0; i < partitions.size(); ++i) {
                 const auto& partition = partitions[i];
                 if (i > 0 && !partition.GetFromBound().has_value() && !partition.GetToBound().has_value()) {
@@ -1557,13 +1769,19 @@ TProducer::TProducer(
     EventsWorker = std::make_shared<TEventsWorker>(this);
     RetryPolicy = std::make_shared<TProducerRetryPolicy>(this);
 
-    EventsWorker->AddContinuationToken();
+    if (Settings.AsyncExecutionMode_) {
+        MainWorkerThread = SystemThreadFactory()->Run([this] {
+            RunMainWorkerLoop();
+        });
+    }
 
     // Start handlers executor for user callbacks (Acks/ReadyToAccept/SessionClosed/Common).
-    Settings.EventHandlers_.HandlersExecutor_->Start();
+    if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
+        handlersExecutor->Start();
+    }
 
     CloseFuture.Subscribe([this](const NThreading::TFuture<void>&) {
-        RunMainWorker(-1);
+        RequestMainWorkerRun(-1);
     });
 
     RunMainWorker(-1);
@@ -1571,6 +1789,7 @@ TProducer::TProducer(
 }
 
 std::vector<TProducer::TPartitionInfo> TProducer::GetPartitions() const {
+    std::lock_guard lock(GlobalLock);
     std::vector<TPartitionInfo> partitions;
     partitions.reserve(Partitions.size());
     for (const auto& [partitionId, partitionInfo] : Partitions) {
@@ -1580,10 +1799,12 @@ std::vector<TProducer::TPartitionInfo> TProducer::GetPartitions() const {
 }
 
 std::unordered_map<std::uint32_t, TProducer::TPartitionInfo> TProducer::GetPartitionsMap() const {
+    std::lock_guard lock(GlobalLock);
     return Partitions;
 }
 
 std::map<std::string, std::uint32_t> TProducer::GetPartitionsIndex() const {
+    std::lock_guard lock(GlobalLock);
     return PartitionsIndex;
 }
 
@@ -1617,17 +1838,20 @@ TCloseResult TProducer::Close(TDuration closeTimeout) {
     ShutdownFuture.Wait(CloseDeadline);
     RunUserEventLoop();
     Done.store(true);
+    WakeMainWorkerThread();
 
-    if (MessagesWorker->IsQueueEmpty()) {
-        return TCloseResult{ .Status = ECloseStatus::Success };
+    {
+        std::lock_guard lock(GlobalLock);
+        if (MessagesWorker->IsQueueEmpty() && ClientRequests.IsEmpty()) {
+            return TCloseResult{ .Status = ECloseStatus::Success };
+        }
     }
 
     auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
     if (sessionClosedEvent && sessionClosedEvent->GetStatus() != EStatus::SUCCESS) {
-        auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
         return TCloseResult{
             .Status = ECloseStatus::Error,
-            .ClosedDescription = sessionClosedEvent ? std::make_optional<TCloseDescription>(*sessionClosedEvent) : std::nullopt
+            .ClosedDescription = std::make_optional<TCloseDescription>(*sessionClosedEvent)
         };
     }
 
@@ -1637,6 +1861,7 @@ TCloseResult TProducer::Close(TDuration closeTimeout) {
 void TProducer::NonBlockingClose() {
     Closed.store(true);
     Done.store(true);
+    WakeMainWorkerThread();
 }
 
 void TProducer::SetCloseDeadline(const TDuration& closeTimeout) {
@@ -1645,14 +1870,30 @@ void TProducer::SetCloseDeadline(const TDuration& closeTimeout) {
 }
 
 TProducer::~TProducer() {
-    auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
-    Settings.EventHandlers_.HandlersExecutor_->Stop();
+    try {
+        auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
 
-    if (MainWorkerState.load() == 0) {
-        ShutdownPromise.TrySetValue();
+        if (MainWorkerState.load() == Idle) {
+            ShutdownPromise.TrySetValue();
+        }
+
+        // Bounded wait to avoid hanging the destructor indefinitely if
+        // ShutdownPromise is never fulfilled (e.g. RunMainWorker is stuck
+        // or the state machine never reaches Idle).
+        ShutdownFuture.Wait(TDuration::Seconds(30));
+
+        Done.store(true);
+        WakeMainWorkerThread();
+        if (MainWorkerThread) {
+            MainWorkerThread->Join();
+            MainWorkerThread.Reset();
+        }
+        if (auto handlersExecutor = Settings.EventHandlers_.HandlersExecutor_) {
+            handlersExecutor->Stop();
+        }
+    } catch (...) {
+        // Destructors must not throw.
     }
-
-    ShutdownFuture.Wait();
 }
 
 NThreading::TFuture<void> TProducer::WaitEvent() {
@@ -1815,30 +2056,199 @@ void TProducer::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSessio
 }
 
 TStringBuilder TProducer::LogPrefix() {
-    return TStringBuilder() << " Id: " << Id << " Epoch: " << Epoch.load() << " ";
+    return TStringBuilder() << " Id: " << Id << " Epoch: " << Epoch.load() << " TraceId: " << Settings.TraceId_ << " ";
 }
 
 void TProducer::NextEpoch() {
-    auto maxEpoch = MAX_EPOCH - 1;
-    if (Epoch.compare_exchange_weak(maxEpoch, 0)) {
-        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Epoch overflow, resetting to 0");
+    auto epoch = Epoch.load(std::memory_order_relaxed);
+    for (;;) {
+        auto nextEpoch = epoch >= MAX_EPOCH - 1 ? 0 : epoch + 1;
+        if (Epoch.compare_exchange_weak(epoch, nextEpoch, std::memory_order_relaxed)) {
+            if (nextEpoch == 0) {
+                LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Epoch overflow, resetting to 0");
+            }
+            return;
+        }
+    }
+}
+
+bool TProducer::TryReserveMemory(std::uint64_t size) {
+    const auto limit = Settings.MaxMemoryUsage_ / 2;
+    auto current = ReservedMemory.load(std::memory_order_relaxed);
+    for (;;) {
+        if (current > limit || size > std::numeric_limits<std::uint64_t>::max() - current) {
+            Metrics.IncBufferFull();
+            return false;
+        }
+
+        if (ReservedMemory.compare_exchange_weak(
+                current,
+                current + size,
+                std::memory_order_acq_rel,
+                std::memory_order_relaxed)) {
+            return true;
+        }
+    }
+}
+
+void TProducer::ReserveMemory(std::uint64_t size) {
+    const auto previous = ReservedMemory.fetch_add(size, std::memory_order_acq_rel);
+    Y_ABORT_UNLESS(size <= std::numeric_limits<std::uint64_t>::max() - previous, "ReservedMemory overflow");
+}
+
+void TProducer::ReleaseReservedMemory(std::uint64_t size) {
+    const auto previous = ReservedMemory.fetch_sub(size, std::memory_order_acq_rel);
+    Y_ABORT_UNLESS(size <= previous, "ReservedMemory is less than the released message size");
+}
+
+std::optional<TWriteResult> TProducer::ReserveMemoryForWrite(std::uint64_t size, bool checkMemory) {
+    if (checkMemory) {
+        if (!TryReserveMemory(size)) {
+            return TWriteResult{
+                .Status = EWriteStatus::Timeout,
+            };
+        }
+    } else {
+        ReserveMemory(size);
+    }
+
+    return std::nullopt;
+}
+
+void TProducer::ValidateSeqNoStrategy(bool hasSeqNo) {
+    const auto expectedStrategy = hasSeqNo
+        ? ESeqNoStrategy::WithSeqNo
+        : ESeqNoStrategy::WithoutSeqNo;
+
+    auto strategy = SeqNoStrategy.load(std::memory_order_acquire);
+    for (;;) {
+        if (strategy == expectedStrategy) {
+            return;
+        }
+
+        if (strategy != ESeqNoStrategy::NotInitialized) {
+            ythrow TContractViolation("Can not mix messages with and without seqNo");
+        }
+
+        if (SeqNoStrategy.compare_exchange_weak(
+                strategy,
+                expectedStrategy,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+TWriteResult TProducer::WriteToExplicitPartition(
+        TWriteMessage& message,
+        std::uint32_t partition,
+        std::uint64_t memoryUsage,
+        bool checkMemory) {
+    {
+        std::lock_guard lock(GlobalLock);
+        auto partitionIt = Partitions.find(partition);
+        if (partitionIt == Partitions.end()) {
+            return TWriteResult{
+                .Status = EWriteStatus::Error,
+                .ErrorMessage = "Unknown partition",
+            };
+        }
+        if (!partitionIt->second.Children_.empty()) {
+            return TWriteResult{
+                .Status = EWriteStatus::Error,
+                .ErrorMessage = "Partition was split",
+            };
+        }
+
+        if (auto error = ReserveMemoryForWrite(memoryUsage, checkMemory)) {
+            return *error;
+        }
+
+        Metrics.IncIncomingMessages();
+        MessagesWorker->AddMessage(std::string{}, std::string{}, std::move(message), partition);
+        RunUserEventLoop();
+    }
+
+    RequestMainWorkerRun(-1);
+
+    return TWriteResult{
+        .Status = EWriteStatus::Queued,
+    };
+}
+
+void TProducer::DrainClientRequests() {
+    std::vector<TClientRequest> clientRequests;
+    ClientRequests.DequeueAll(&clientRequests);
+
+    for (auto& request : clientRequests) {
+        switch (request.Kind) {
+            case TClientRequest::EKind::Message:
+                HandleClientMessage(std::move(request.Message));
+                break;
+            case TClientRequest::EKind::Flush:
+                HandleClientFlush(std::move(request.FlushPromise));
+                break;
+        }
+    }
+}
+
+void TProducer::HandleClientMessage(TMessageInfo&& message) {
+    std::uint32_t chosenPartition;
+    std::string key;
+    std::string choosePartitionKey;
+    if (!message.HasKey) {
+        key = Settings.ProducerIdPrefix_;
+        const auto partitionChoice = PartitionChooser->ChoosePartition(Settings.ProducerIdPrefix_);
+        chosenPartition = partitionChoice.first;
+        choosePartitionKey = partitionChoice.second;
+    } else {
+        const auto partitionChoice = PartitionChooser->ChoosePartition(message.Key);
+        chosenPartition = partitionChoice.first;
+        choosePartitionKey = partitionChoice.second;
+        key = message.Key;
+    }
+
+    message.AssignPartition(key, choosePartitionKey, chosenPartition);
+    MessagesWorker->AddMessage(std::move(message));
+}
+
+void TProducer::HandleClientFlush(NThreading::TPromise<TFlushResult> promise) {
+    if (Closed.load() || MessagesWorker->InFlightMessages.empty()) {
+        auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
+        bool isClosedDueToError = sessionClosedEvent &&
+            sessionClosedEvent->GetStatus() != EStatus::SUCCESS;
+        FlushPromises.push_back(std::make_pair(std::move(promise), TFlushResult{
+            .Status = isClosedDueToError ? EFlushStatus::ProducerClosed : EFlushStatus::Success,
+            .LastWrittenSeqNo = LastWrittenSeqNo.load(),
+            .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
+        }));
         return;
     }
 
-    Epoch.fetch_add(1);
+    auto lastInFlightMessage = std::prev(MessagesWorker->InFlightMessages.end());
+    lastInFlightMessage->FlushPromises.push_back(std::move(promise));
+}
+
+void TProducer::RequestMainWorkerRun(std::int64_t owner) {
+    if (owner != -1 || !MainWorkerThread) {
+        RunMainWorker(owner);
+        return;
+    }
+
+    MainWorkerState.fetch_or(Rerun, std::memory_order_acq_rel);
+    WakeMainWorkerThread();
 }
 
 void TProducer::RunMainWorker(std::int64_t owner) {
-    // This function is both "request to run" and the runner itself.
-    // We must handle two properties:
-    // - TFuture::Subscribe may call back synchronously when future is already ready.
-    // - A callback may race with the runner trying to go idle (avoid lost wakeups).
-    enum : std::uint8_t {
-        Idle = 0,
-        Running = 1,
-        Rerun = 2,
-    };
+    if (!TryAcquireMainWorker()) {
+        return;
+    }
 
+    RunMainWorkerAcquired(owner);
+}
+
+bool TProducer::TryAcquireMainWorker() {
     // Try to become the runner. If already running, just request a rerun.
     std::uint8_t state = MainWorkerState.load(std::memory_order_acquire);
     for (;;) {
@@ -1846,19 +2256,44 @@ void TProducer::RunMainWorker(std::int64_t owner) {
             if (MainWorkerState.compare_exchange_weak(state, std::uint8_t(state | Rerun),
                                                      std::memory_order_acq_rel,
                                                      std::memory_order_acquire)) {
-                return;
+                return false;
             }
             continue;
         } else {
             if (MainWorkerState.compare_exchange_weak(state, Running,
                                                      std::memory_order_acq_rel,
                                                      std::memory_order_acquire)) {
-                break; // we are the runner now
+                return true;
             }
             continue;
         }
     }
+}
 
+void TProducer::WakeMainWorkerThread() {
+    if (MainWorkerThread) {
+        MainWorkerEvent.NotifyOne();
+    }
+}
+
+void TProducer::RunMainWorkerLoop() {
+    TThread::SetCurrentThreadName("topic_producer");
+
+    for (;;) {
+        MainWorkerEvent.Await([this] {
+            const auto state = MainWorkerState.load(std::memory_order_acquire);
+            return Done.load(std::memory_order_acquire) || ((state & Rerun) && !(state & Running));
+        });
+
+        if (Done.load(std::memory_order_acquire)) {
+            return;
+        }
+
+        RunMainWorker(-1);
+    }
+}
+
+void TProducer::RunMainWorkerAcquired(std::int64_t owner) {
     MainWorkerOwner = owner;
     NextEpoch();
 
@@ -1876,6 +2311,7 @@ void TProducer::RunMainWorker(std::int64_t owner) {
             eventsPromise = EventsWorker->DoWork();
             RunUserEventLoop();
             needRerun = RunSplittedPartitionWorkers();
+            DrainClientRequests();
             if (!Done.load()) {
                 SessionsWorker->DoWork();
                 MessagesWorker->DoWork();
@@ -1894,8 +2330,10 @@ void TProducer::RunMainWorker(std::int64_t owner) {
 
         const auto isClosed = Closed.load();
         const auto closeTimeout = GetCloseTimeout();
-        if (isClosed && (Done.load() || MessagesWorker->IsQueueEmpty() || closeTimeout == TDuration::Zero())) {
-            EventsWorker->EventsPromise.TrySetValue();
+        if (isClosed && (Done.load() || (MessagesWorker->IsQueueEmpty() && ClientRequests.IsEmpty()) || closeTimeout == TDuration::Zero())) {
+            // Use the canonical wake path: rotate under EventsWorker's Lock and fire outside.
+            auto closeWakeup = EventsWorker->WakeAndRotate();
+            closeWakeup.TrySetValue();
             auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
             MessagesWorker->SetClosedStatusToFlushPromises(
                 sessionClosedEvent ?
@@ -1932,135 +2370,102 @@ void TProducer::RunMainWorker(std::int64_t owner) {
     }
 }
 
-TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
-    std::optional<NThreading::TPromise<void>> eventsPromise;
-    {
-        std::lock_guard lock(GlobalLock);
-        Metrics.IncIncomingMessages();
-        if (Closed.load()) {
-            auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
-            return TWriteResult{
-                .Status = EWriteStatus::Error,
-                .ErrorMessage = "producer is closed",
-                .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
-            };
-        }
-
-        if ((message.SeqNo_.has_value() && SeqNoStrategy == ESeqNoStrategy::WithoutSeqNo)
-            || (!message.SeqNo_.has_value() && SeqNoStrategy == ESeqNoStrategy::WithSeqNo)) {
-            ythrow TContractViolation("Can not mix messages with and without seqNo");
-        }
-
-        if (SeqNoStrategy == ESeqNoStrategy::NotInitialized) {
-            SeqNoStrategy = message.SeqNo_.has_value() ? ESeqNoStrategy::WithSeqNo : ESeqNoStrategy::WithoutSeqNo;
-        }
-
-        std::uint32_t chosenPartition;
-        std::string key;
-        std::string choosePartitionKey;
-        if (message.GetPartition().has_value()) {
-            if (!Partitions[message.GetPartition().value()].Children_.empty()) {
-                return TWriteResult{
-                    .Status = EWriteStatus::Error,
-                    .ErrorMessage = "Partition was split",
-                };
-            }
-
-            chosenPartition = message.GetPartition().value();
-        } else if (!message.GetKey().has_value()) {
-            key = Settings.ProducerIdPrefix_;
-            const auto partitionChoice = PartitionChooser->ChoosePartition(Settings.ProducerIdPrefix_);
-            chosenPartition = partitionChoice.first;
-            choosePartitionKey = partitionChoice.second;
-        } else {
-            const auto partitionChoice = PartitionChooser->ChoosePartition(*message.GetKey());
-            chosenPartition = partitionChoice.first;
-            choosePartitionKey = partitionChoice.second;
-            key = *message.GetKey();
-        }
-
-        MessagesWorker->AddMessage(key, choosePartitionKey, std::move(message), chosenPartition);
-        eventsPromise = EventsWorker->HandleNewMessage();
-        RunUserEventLoop();
-    }
-
-    RunMainWorker(-1);
-    if (eventsPromise) {
-        eventsPromise->TrySetValue();
-    }
-
-    return TWriteResult{
-        .Status = EWriteStatus::Queued,
+TWriteResult TProducer::WriteInternal(TWriteMessage& message, bool checkMemory) {
+    const auto makeClosedResult = [this]() {
+        auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
+        return TWriteResult{
+            .Status = EWriteStatus::Error,
+            .ErrorMessage = "producer is closed",
+            .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
+        };
     };
+
+    if (Closed.load()) {
+        return makeClosedResult();
+    }
+
+    ValidateSeqNoStrategy(message.SeqNo_.has_value());
+
+    const auto memoryUsage = message.Data.size();
+    const auto partition = message.GetPartition();
+
+    if (!partition.has_value()) {
+        if (auto error = ReserveMemoryForWrite(memoryUsage, checkMemory)) {
+            return *error;
+        }
+
+        try {
+            ClientRequests.Enqueue(TClientRequest(TMessageInfo(std::move(message))));
+        } catch (...) {
+            ReleaseReservedMemory(memoryUsage);
+            throw;
+        }
+
+        Metrics.IncIncomingMessages();
+        RequestMainWorkerRun(-1);
+
+        return TWriteResult{
+            .Status = EWriteStatus::Queued,
+        };
+    }
+
+    return WriteToExplicitPartition(message, *partition, memoryUsage, checkMemory);
 }
 
 TWriteResult TProducer::Write(TWriteMessage&& message) {
     auto remainingTimeout = Settings.MaxBlockTimeout_;
     auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
     for (;;) {
-        if (Closed.load()) {
-            auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
-            return TWriteResult{
-                .Status = EWriteStatus::Error,
-                .ErrorMessage = "producer is closed",
-                .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
-            };
+        auto result = WriteInternal(message, true);
+        if (!result.IsTimeout() || remainingTimeout == TDuration::Zero()) {
+            return result;
         }
 
-        auto continuationToken = EventsWorker->GetContinuationToken();
-        if (!continuationToken) {
-            if (remainingTimeout > TDuration::Zero()) {
-                auto toSleep = Min(sleepTimeMs, remainingTimeout);
-                Sleep(toSleep);
-                sleepTimeMs *= 2;
-                if (remainingTimeout > toSleep) {
-                    remainingTimeout -= toSleep;
-                    continue;
-                }
-
-                return TWriteResult{
-                    .Status = EWriteStatus::Timeout,
-                };
-            }
-
-            return TWriteResult{
-                .Status = EWriteStatus::Timeout,
-            };
+        auto toSleep = Min(sleepTimeMs, remainingTimeout);
+        Sleep(toSleep);
+        sleepTimeMs *= 2;
+        if (remainingTimeout > toSleep) {
+            remainingTimeout -= toSleep;
+            continue;
         }
 
-        return WriteInternal(std::move(*continuationToken), std::move(message));
+        return TWriteResult{
+            .Status = EWriteStatus::Timeout,
+        };
     }
 }
 
-void TProducer::Write(TContinuationToken&& continuationToken, TWriteMessage&& message) {
-    WriteInternal(std::move(continuationToken), std::move(message));
+void TProducer::Write(TContinuationToken&&, TWriteMessage&& message) {
+    WriteInternal(message, false);
 }
 
 TWriteStats TProducer::GetWriteStats() {
     std::lock_guard lock(GlobalLock);
     return TWriteStats{
-        .LastWrittenSeqNo = LastWrittenSeqNo,
+        .LastWrittenSeqNo = LastWrittenSeqNo.load(),
         .MessagesWritten = MessagesWritten,
     };
 }
 
 NThreading::TFuture<TFlushResult> TProducer::Flush() {
-    std::unique_lock lock(GlobalLock);
-    if (Closed.load() || MessagesWorker->InFlightMessages.empty()) {
+    if (Closed.load()) {
         auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
+        bool isClosedDueToError = sessionClosedEvent &&
+            sessionClosedEvent->GetStatus() != EStatus::SUCCESS;
         return NThreading::MakeFuture(TFlushResult{
-            .Status = EFlushStatus::Success,
-            .LastWrittenSeqNo = LastWrittenSeqNo,
+            .Status = isClosedDueToError ? EFlushStatus::ProducerClosed : EFlushStatus::Success,
+            .LastWrittenSeqNo = LastWrittenSeqNo.load(),
             .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
         });
     }
 
-    auto lastInFlightMessage = std::prev(MessagesWorker->InFlightMessages.end());
-    if (!lastInFlightMessage->FlushPromise.Initialized()) {
-        lastInFlightMessage->FlushPromise = NThreading::NewPromise<TFlushResult>();
-    }
+    auto promise = NThreading::NewPromise<TFlushResult>();
+    auto future = promise.GetFuture();
 
-    return lastInFlightMessage->FlushPromise.GetFuture();
+    ClientRequests.Enqueue(TClientRequest(std::move(promise)));
+    RequestMainWorkerRun(-1);
+
+    return future;
 }
 
 TInstant TProducer::GetCloseDeadline() {
@@ -2095,10 +2500,17 @@ std::pair<std::uint32_t, std::string> TProducer::TBoundPartitionChooser::ChooseP
 
 TProducer::THashPartitionChooser::THashPartitionChooser(std::vector<std::uint32_t>&& partitions)
     : Partitions(std::move(partitions))
-{}
+{
+    if (Partitions.empty()) {
+        ythrow TContractViolation("THashPartitionChooser requires at least one partition");
+    }
+}
 
 std::pair<std::uint32_t, std::string> TProducer::THashPartitionChooser::ChoosePartition(const std::string_view key) {
-    auto hash = MurmurHash<std::uint64_t>(key.data(), key.size());
+    constexpr auto mask = 0x7FFFFFFF;
+    constexpr auto seed = 0x9747b28c;
+    // Partitions is guaranteed non-empty by the constructor invariant.
+    auto hash = MurmurHash<std::uint32_t>(key.data(), key.size(), seed) & mask;
     return {Partitions[hash % Partitions.size()], ""};
 }
 

@@ -25,6 +25,7 @@ SRCS(
     ut_unique_index.cpp
     ut_vector_index.cpp
     ut_fulltext_index.cpp
+    ut_json_index.cpp
 )
 
 YQL_LAST_ABI_VERSION()

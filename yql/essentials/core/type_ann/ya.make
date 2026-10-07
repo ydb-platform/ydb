@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ENABLE(SKIP_YQL_STYLE_CPP)
 
@@ -12,6 +12,7 @@ SRCS(
     type_ann_join.cpp
     type_ann_list.cpp
     type_ann_pg.cpp
+    type_ann_partial.cpp
     type_ann_sql.cpp
     type_ann_types.cpp
     type_ann_wide.cpp
@@ -27,7 +28,7 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/expr_nodes
     yql/essentials/core/issue
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/core/sql_types
     yql/essentials/core/poly_args
     yql/essentials/providers/common/schema/expr
@@ -39,7 +40,5 @@ PEERDIR(
     yql/essentials/public/udf_meta
     library/cpp/yson/node
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

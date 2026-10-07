@@ -16,6 +16,8 @@ struct TSolomonState : public TThrRefBase
     using TPtr = TIntrusivePtr<TSolomonState>;
 
 public:
+    explicit TSolomonState(bool strictConfigValidation = false);
+
     bool IsRtmrMode() const {
        return SupportRtmrMode;
     }
@@ -26,15 +28,15 @@ public:
 
     ISolomonGateway::TPtr Gateway;
     TTypeAnnotationContext* Types = nullptr;
-    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
-    TSolomonConfiguration::TPtr Configuration = MakeIntrusive<TSolomonConfiguration>();
+    IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
+    TSolomonConfiguration::TPtr Configuration;
     THolder<IDqIntegration> DqIntegration;
     THolder<IYtflowIntegration> YtflowIntegration;
     THolder<IYtflowOptimization> YtflowOptimization;
     ui32 ExecutorPoolId = 0;
 };
 
-TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, bool supportRtmrMode = true, bool useYtflowEngine = false);
+TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode = true, bool useYtflowEngine = false);
 
 TIntrusivePtr<IDataProvider> CreateSolomonDataSource(TSolomonState::TPtr state);
 TIntrusivePtr<IDataProvider> CreateSolomonDataSink(TSolomonState::TPtr state);

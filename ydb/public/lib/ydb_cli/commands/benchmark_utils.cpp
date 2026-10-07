@@ -60,8 +60,9 @@ NQuery::TTxControl GetTxControl(ETxMode txMode) {
     return NQuery::TTxControl::BeginTx(txSettings).CommitTx();
 }
 
-TTestInfo::TTestInfo(std::vector<TTiming>&& timings)
+TTestInfo::TTestInfo(std::vector<TTiming>&& timings, std::vector<TTiming>&& cpuTime)
     : Timings(std::move(timings))
+    , CPUTime(std::move(cpuTime))
 {
 
     if (Timings.empty()) {
@@ -119,6 +120,10 @@ TTestInfo::TTestInfo(std::vector<TTiming>&& timings)
         ub *= serverTimingsCopy[i].MillisecondsFloat();
     }
     UnixBench = TDuration::MilliSeconds(pow(ub, 1. / ubCount));
+    for (const auto& cTime: CPUTime) {
+        CompilationCPUTime += cTime.Compilation;
+        ProcessCPUTime += cTime.Total;
+    }
 }
 
 void TTestInfo::operator /=(const ui32 count) {
@@ -134,6 +139,8 @@ void TTestInfo::operator /=(const ui32 count) {
     CompilationMin /= count;
     CompilationMax /= count;
     CompilationMean /= count;
+    CompilationCPUTime /= count;
+    ProcessCPUTime /= count;
 }
 
 void TTestInfo::operator +=(const TTestInfo& other) {
@@ -149,6 +156,8 @@ void TTestInfo::operator +=(const TTestInfo& other) {
     CompilationMin += other.CompilationMin;
     CompilationMax += other.CompilationMax;
     CompilationMean += other.CompilationMean;
+    CompilationCPUTime += other.CompilationCPUTime;
+    ProcessCPUTime += other.ProcessCPUTime;
 }
 
 TString FullTablePath(const TString& database, const TString& table) {
@@ -173,6 +182,7 @@ class TQueryResultScanner {
 private:
     YDB_READONLY_DEF(TString, ErrorInfo);
     YDB_READONLY_DEF(TTiming, Timing);
+    YDB_READONLY_DEF(TTiming, CPUTime);
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
     YDB_ACCESSOR_DEF(TString, DeadlineName);
@@ -226,14 +236,10 @@ public:
                         auto plan = execStats->GetPlan();
                         if (plan) {
                             {
-                                TPlanVisualizer pv;
+                                NPlan2Svg::TPlanVisualizer pv;
                                 TFileOutput out(currentPlanWithStatsFileName);
-                                try {
-                                    pv.LoadPlans(TString(*execStats->GetPlan()));
-                                    out << pv.PrintSvg();
-                                } catch (std::exception& e) {
-                                    out << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>" << e.what() << "<text></svg>";
-                                }
+                                pv.LoadPlansSafe(TString(*execStats->GetPlan()));
+                                out << pv.PrintSvgSafe();
                             }
                             {
                                 TFileOutput out(currentPlanWithStatsFileNameJson);
@@ -287,6 +293,9 @@ public:
             ExecStats = execStats->ToString();
             const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
             Timing.Compilation += TDuration::MicroSeconds(protoStats.Getcompilation().Getduration_us());
+            CPUTime.Compilation += TDuration::MicroSeconds(protoStats.Getcompilation().cpu_time_us());
+            CPUTime.Server += TDuration::MicroSeconds(protoStats.Getprocess_cpu_time_us());
+            CPUTime.Total += TDuration::MicroSeconds(protoStats.Gettotal_cpu_time_us());
         }
         return TStatus(EStatus::SUCCESS, NIssue::TIssues());
     }
@@ -298,6 +307,7 @@ TQueryBenchmarkResult  ConstructResultByStatus(const TStatus& status, const THol
         return TQueryBenchmarkResult::Result(
             scaner->ExtractRawResults(),
             scaner->GetTiming(),
+            scaner->GetCPUTime(),
             scaner->GetQueryPlan(),
             scaner->GetPlanAst(),
             scaner->GetExecStats(),
@@ -589,7 +599,9 @@ bool CompareValue(IOutputStream& errStream, const NYdb::TValue& v, TStringBuf vE
         vp.OpenOptional();
         if (vp.IsNull()) {
             return vExpected == "";
-        } else if (vExpected == "") {
+        } else if (vExpected.empty() &&
+            (vp.GetKind() != TTypeParser::ETypeKind::Primitive ||
+             !IsIn({EPrimitiveType::String, EPrimitiveType::Utf8}, vp.GetPrimitiveType()))) {
             return false;
         }
     }

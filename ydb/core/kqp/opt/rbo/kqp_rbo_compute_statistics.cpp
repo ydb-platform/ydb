@@ -1,8 +1,14 @@
 #include "kqp_operator.h"
 
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_hints.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat_kqp.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
+
+#include <yql/essentials/utils/log/log.h>
+
+namespace NKikimr::NKqp {
 
 /***
  * All the methods to compute metadata and statistics are collected in this file
@@ -13,60 +19,102 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NYql;
+using namespace NYql::NNodes;
 using namespace NYql::NDq;
-TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NKikimr::NKqp::TOptimizerStatistics::TKeyColumns> keyColumns, const TVector<TInfoUnit>& outputColumns) {
-    if (!keyColumns) {
+
+// Known limitation: only the left input's aliases are collected; the right
+// side contributes none.
+void ComputeAlisesForJoin(IOperator* left, const TColumnLineage& lineage, TVector<TString>& leftAliases,
+                          TVector<TString>& rightAliases, TVector<TString>& unionOfAliases) {
+    leftAliases = lineage.GetAliases(left->Props.Metadata->HintRelations);
+    rightAliases.clear();
+    unionOfAliases = leftAliases;
+}
+
+TOrderedIUs<> ComputeKeysAfterJoin(TOpJoin* join) {
+    auto leftKeys = join->GetLeftInput()->Props.Metadata->KeyColumns;
+    if (!JoinOutputsRight(join->JoinKind)) {
+        return leftKeys;
+    }
+
+    auto rightKeys = join->GetRightInput()->Props.Metadata->KeyColumns;
+    if (!JoinOutputsLeft(join->JoinKind)) {
+        return rightKeys;
+    }
+    
+    if (leftKeys.Items().empty() || rightKeys.Items().empty()) {
         return {};
     }
 
-    TVector<TInfoUnit> result;
-    for (const auto& key : keyColumns->Data) {
-        auto it = std::find_if(outputColumns.begin(), outputColumns.end(), [&key](const TInfoUnit& iu) {
-            return key == iu.GetColumnName();
-        });
+    // If right join keys covers all the keys of the right hand side,
+    // we don't need the key of the right side at all
+    if (rightKeys.Unordered().IsSubsetOf(join->JoinKeys.Right())) {
+        return leftKeys;
+    }
+    // Same for the left side
+    else if (leftKeys.Unordered().IsSubsetOf(join->JoinKeys.Left())) {
+        return rightKeys;
+    }
 
-        Y_ENSURE(it != outputColumns.end());
-        result.push_back(*it);
+    else {
+        leftKeys.AppendMissing(rightKeys.Items());
+        return leftKeys;
+    }
+}
+
+using TStorageBindings = THashMap<TString, TInfoUnitId>;
+
+TStorageBindings AddSourceLineage(TColumnLineage& lineage, TRBOMetadata& metadata, const TUnorderedIUs& columns,
+    const TInfoUnitRegistry& registry, const TString& table, const TString& alias)
+{
+    TStorageBindings bindings;
+    bindings.reserve(columns.Size());
+    const auto relation = lineage.AddRelation(alias, table);
+    metadata.SourceStatsColumns.UnionWith(columns);
+    for (const auto id : columns) {
+        const auto name = registry.Get(id).GetColumnName();
+        // Several IDs may fetch one field. Retain one representative for keys;
+        // every binding still receives its own lineage entry.
+        bindings.try_emplace(name, id);
+        lineage.Add(id, TColumnLineageEntry{.SourceAlias = alias, .TableName = table, .ColumnName = name, .Relation = relation});
+        metadata.HintRelations.Add(id, relation);
+    }
+    return bindings;
+}
+
+TOrderedIUs<> ResolveStorageColumns(const TVector<TString>& names, const TStorageBindings& bindings) {
+    TOrderedIUs<> result;
+    result.Reserve(names.size());
+    for (const auto& name : names) {
+        const auto it = bindings.find(name);
+        if (it == bindings.end()) {
+            return {};
+        }
+        result.Append(it->second);
     }
     return result;
 }
 
-void ComputeAlisesForJoin(const TIntrusivePtr<IOperator>& left, const TIntrusivePtr<IOperator>& right, TVector<TString>& leftAliases,
-                          TVector<TString>& rightAliases, TVector<TString>& unionOfAliases) {
-    THashSet<TString> leftAliasSet;
-    THashSet<TString> rightAliasSet;
-
-    for (const auto& iu : left->GetOutputIUs()) {
-        if (auto lineage = left->Props.Metadata->ColumnLineage.Mapping.find(iu); lineage != left->Props.Metadata->ColumnLineage.Mapping.end()) {
-            TString alias = lineage->second.GetSourceAlias();
-            if (alias == "") {
-                alias = lineage->second.TableName;
-            }
-            leftAliasSet.insert(alias);
-        }
-        if (auto lineage = right->Props.Metadata->ColumnLineage.Mapping.find(iu); lineage != right->Props.Metadata->ColumnLineage.Mapping.end()) {
-            TString alias = lineage->second.GetSourceAlias();
-            if (alias == "") {
-                alias = lineage->second.TableName;
-            }
-            rightAliasSet.insert(alias);
+template <typename TValue, typename TRebind>
+TOrderedIUs<TValue> RebindColumns(const TOrderedIUs<TValue>& columns, const TRebind& rebind) {
+    TOrderedIUs<TValue> result;
+    result.Reserve(columns.Items().size());
+    for (const auto& entry : columns.Items()) {
+        if constexpr (std::is_void_v<TValue>) {
+            result.Append(rebind(entry));
+        } else {
+            result.Append(rebind(entry.first), entry.second);
         }
     }
-
-    leftAliases.insert(leftAliases.begin(), leftAliasSet.begin(), leftAliasSet.end());
-    std::sort(leftAliases.begin(), leftAliases.end());
-    rightAliases.insert(rightAliases.begin(), rightAliasSet.begin(), rightAliasSet.end());
-    std::sort(rightAliases.begin(), rightAliases.end());
-    std::set_union(leftAliasSet.begin(), leftAliasSet.end(), rightAliasSet.begin(), rightAliasSet.end(),
-            std::back_inserter(unionOfAliases));
-}
+    return result;
 }
 
-namespace NKikimr {
-namespace NKqp {
+TJoinColumn StatisticsColumn(const TColumnLineage& lineage, TInfoUnitId id) {
+    const auto* entry = lineage.Find(id);
+    return TJoinColumn(entry ? entry->GetRawAlias() : TString{}, ToString(id));
+}
 
-using namespace NYql;
-using namespace NYql::NNodes;
+} // anonymous namespace
 
 /**
  * Default metadata computation for unary operators
@@ -75,6 +123,10 @@ void IUnaryOperator::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
     Props.Metadata = GetInput()->Props.Metadata;
+    if (Props.Metadata) {
+        Props.Metadata->SourceStatsColumns.IntersectWith(GetOutputIUs());
+        Props.Metadata->HintRelations.RetainKeys(GetOutputIUs());
+    }
 }
 
 /**
@@ -87,6 +139,98 @@ void IUnaryOperator::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) 
     Props.Cost = GetInput()->Props.Cost;
 }
 
+void TOpReplicate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+    Props.Metadata = GetInput()->Props.Metadata;
+    if (IsPrimary() || !Props.Metadata) {
+        return;
+    }
+    const auto& bindings = GetRebindings();
+    const auto& inputs = GetInput()->GetOutputIUs();
+    const auto rebind = [&](TInfoUnitId id) {
+        const auto* output = bindings.Find(id);
+        Y_ENSURE(output, "Missing Replicate metadata binding");
+        return *output;
+    };
+    // Producer metadata may mention IDs it does not output (e.g. columns a
+    // semi lookup join fetched). Keep only what this port can rebind.
+    const auto rebindAll = [&](auto& columns) {
+        columns = columns.Unordered().IsSubsetOf(inputs)
+            ? RebindColumns(columns, rebind) : std::remove_reference_t<decltype(columns)>{};
+    };
+    auto& metadata = *Props.Metadata;
+    rebindAll(metadata.KeyColumns);
+    rebindAll(metadata.ShuffledByColumns);
+    TUnorderedIUs sourceStats;
+    for (const auto id : metadata.SourceStatsColumns) {
+        sourceStats.Add(rebind(id));
+    }
+    metadata.SourceStatsColumns = std::move(sourceStats);
+    // The port is another instance of every relation it reads from.
+    auto& lineage = planProps.ColumnLineage;
+    THashMap<ui32, ui32> relations;
+    const auto rebindRelation = [&](ui32 relation) {
+        const auto [it, inserted] = relations.try_emplace(relation);
+        if (inserted) {
+            it->second = lineage.CopyRelation(relation);
+        }
+        return it->second;
+    };
+    TMappedIUs<ui32> hints;
+    for (const auto& [id, relation] : metadata.HintRelations.Items()) {
+        hints.Add(rebind(id), rebindRelation(relation));
+    }
+    metadata.HintRelations = std::move(hints);
+    for (const auto id : inputs) {
+        if (const auto* source = lineage.Find(id)) {
+            auto entry = *source;
+            entry.Relation = rebindRelation(entry.Relation);
+            lineage.Add(rebind(id), std::move(entry));
+        }
+    }
+}
+
+void TOpReplicate::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(planProps);
+    Props.Statistics = GetInput()->Props.Statistics;
+    Props.Cost = GetInput()->Props.Cost;
+}
+
+/***
+ * Compute metadata for table lookup
+ */
+void TOpTableLookup::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    auto path = TKqpTable(Table).Path();
+    const auto& tableData = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, path.Value());
+
+    Props.Metadata = TRBOMetadata();
+    if (IsJoin() && GetInput()->Props.Metadata.has_value()) {
+        Props.Metadata = GetInput()->Props.Metadata;
+    }
+    Props.Metadata->ColumnsCount += GetColumns().Size();
+    Props.Metadata->StorageType = EStorageType::RowStorage;
+
+    const auto& registry = planProps.InfoUnitRegistry;
+    const TString alias = GetColumns().Empty() ? TString{} : registry.Get(*GetColumns().begin()).GetAlias();
+    const auto bindings = AddSourceLineage(planProps.ColumnLineage, *Props.Metadata, GetColumns(), registry, path.StringValue(), alias);
+    Props.Metadata->SourceStatsColumns.IntersectWith(GetOutputIUs());
+    Props.Metadata->HintRelations.RetainKeys(GetOutputIUs());
+
+    if (IsJoin()) {
+        Props.Metadata->KeyColumns = {};
+        return;
+    }
+
+    TOrderedIUs<> keyColumns;
+    for (const auto& key : tableData.Metadata->KeyColumnNames) {
+        if (const auto it = bindings.find(key); it != bindings.end()) {
+            keyColumns.Append(it->second);
+        }
+    }
+    Props.Metadata->KeyColumns = std::move(keyColumns);
+}
+
 /***
  * Compute metadata for empty source
  */
@@ -94,7 +238,7 @@ void TOpEmptySource::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
     Props.Metadata = TRBOMetadata();
-    Props.Metadata->LogicalCard = ELogicalCardinality::One;
+    Props.Metadata->LogicalCard = Input ? ELogicalCardinality::ZeroOrMore : ELogicalCardinality::One;
 }
 
 /***
@@ -115,8 +259,6 @@ void TOpEmptySource::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) 
  * This method also fetches Nrows and ByteSize statistics
  */
 void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
-    Y_UNUSED(planProps);
-
     auto readTable = TKqpTable(TableCallable);
     auto path = readTable.Path();
 
@@ -128,23 +270,9 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata = TRBOMetadata();
 
     const auto& tableData = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, path.Value());
-    Props.Metadata->ColumnsCount = tableData.Metadata->Columns.size();
-
-    for(const auto& column : tableData.Metadata->KeyColumnNames) {
-        if (std::find(Columns.begin(), Columns.end(), column) == Columns.end()) {
-            Props.Metadata->KeyColumns = {};
-            break;
-        }
-        Props.Metadata->KeyColumns.emplace_back(Alias, column);
-    }
-
-    // Record lineage: source can rename its columns, so already we need to record that
-    auto outputIUs = GetOutputIUs();
-
-    const int duplicateId = Props.Metadata->ColumnLineage.AddAlias(Alias, path.StringValue());
-    for (size_t i = 0; i < outputIUs.size(); i++) {
-        Props.Metadata->ColumnLineage.AddMapping(outputIUs[i], TColumnLineageEntry(Alias, path.StringValue(), Columns[i], duplicateId));
-    }
+    Props.Metadata->ColumnsCount = GetColumns().Size();
+    const auto bindings = AddSourceLineage(planProps.ColumnLineage, *Props.Metadata, GetColumns(), planProps.InfoUnitRegistry, path.StringValue(), Alias);
+    Props.Metadata->KeyColumns = ResolveStorageColumns(tableData.Metadata->KeyColumnNames, bindings);
 
     EStorageType storageType = EStorageType::NA;
     switch (tableData.Metadata->Kind) {
@@ -159,6 +287,10 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
     Props.Metadata->StorageType = storageType;
 
+    if (storageType == EStorageType::ColumnStorage && !tableData.Metadata->PartitionedByColumns.empty()) {
+        Props.Metadata->ShuffledByColumns = ResolveStorageColumns(tableData.Metadata->PartitionedByColumns, bindings);
+    }
+
     YQL_CLOG(TRACE, CoreDq) << "Inferred metadata for table: " << path.Value();
 }
 
@@ -166,7 +298,6 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
  * Add cost and statistics info for read operator
  */
 void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
-    Y_UNUSED(planProps);
     if (!Props.Metadata.has_value()) {
         return;
     }
@@ -193,6 +324,33 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
             }
         }
     }
+
+    auto hints = ctx.KqpCtx.GetOptimizerHints();
+    auto hintCandidates = BuildTableHintCandidates(Alias, path.StringValue());
+    if (hints.CardinalityHints) {
+        ApplySingleLabelHint(*hints.CardinalityHints, hintCandidates, Props.Statistics->ERows);
+    }
+    if (hints.BytesHints) {
+        ApplySingleLabelHint(*hints.BytesHints, hintCandidates, Props.Statistics->EBytes);
+    }
+
+    const auto totalColumns = tableData.Metadata->Columns.size();
+    const auto readColumns = GetColumns().Size();
+    if (totalColumns > 0 && readColumns < totalColumns) {
+        Props.Statistics->EBytes *= static_cast<double>(readColumns) / static_cast<double>(totalColumns);
+    }
+
+    // Overwrite with selectivity for successfully pushed-down filters within the read operator.
+    if (OriginalPredicate.has_value()) {
+        auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(*this, planProps.ColumnLineage, true, ctx.TypeCtx));
+        auto lambda = TCoLambda(OriginalPredicate->Node);
+        double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
+
+        double filterSelectivity = selectivity * Props.Statistics->Selectivity;
+        Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
+        Props.Statistics->ERows = filterSelectivity * Props.Statistics->ERows;
+        Props.Statistics->Selectivity = filterSelectivity;
+    }
 }
 
 /**
@@ -201,7 +359,12 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 void TOpFilter::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
+    if (!GetInput()->Props.Metadata.has_value()) {
+        return;
+    }
+
     Props.Metadata = GetInput()->Props.Metadata;
+
     auto newCard = Props.Metadata->LogicalCard;
 
     switch( Props.Metadata->LogicalCard) {
@@ -224,7 +387,6 @@ void TOpFilter::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
  */
 void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
-    Y_UNUSED(planProps);
     if (!GetInput()->Props.Statistics.has_value() || !Props.Metadata.has_value()) {
         return;
     }
@@ -232,12 +394,17 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Statistics = GetInput()->Props.Statistics;
     Props.Cost = GetInput()->Props.Cost;
 
-    auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetInput()->Props, true));
+    if (PartiallyPushedDown) {
+        return;
+    }
+
+    auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics((*GetInput()), planProps.ColumnLineage, true, ctx.TypeCtx));
     auto lambda = TCoLambda(FilterExpr.Node);
     double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
 
     double filterSelectivity = selectivity * Props.Statistics->Selectivity;
     Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
+    Props.Statistics->ERows = filterSelectivity * Props.Statistics->ERows;
     Props.Statistics->Selectivity = filterSelectivity;
 }
 
@@ -246,54 +413,35 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
  */
 void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
-    Y_UNUSED(planProps);
     if (!GetInput()->Props.Metadata.has_value()) {
         return;
     }
-    auto inputMetadata = *GetInput()->Props.Metadata;
+    const auto& inputMetadata = *GetInput()->Props.Metadata;
     Props.Metadata = TRBOMetadata();
 
     Props.Metadata->Type = inputMetadata.Type;
     Props.Metadata->StorageType = inputMetadata.StorageType;
+    Props.Metadata->ColumnsCount = GetOutputIUs().Size();
+    // A Map only appends: the input rows, their keys and distribution survive.
+    Props.Metadata->KeyColumns = inputMetadata.KeyColumns;
+    Props.Metadata->ShuffledByColumns = inputMetadata.ShuffledByColumns;
+    Props.Metadata->SourceStatsColumns = inputMetadata.SourceStatsColumns;
+    Props.Metadata->HintRelations = inputMetadata.HintRelations;
 
-    if (Project) {
-        Props.Metadata->ColumnsCount = MapElements.size();
-    } else {
-        Props.Metadata->ColumnsCount += inputMetadata.ColumnsCount + MapElements.size();
-    }
-
-    auto renamesWithTransform = GetRenamesWithTransforms(planProps);
-
-    for (const auto& column : inputMetadata.KeyColumns) {
-        const auto it = std::find_if(renamesWithTransform.begin(), renamesWithTransform.end(), [&column](const std::pair<TInfoUnit, TInfoUnit>& rename) {
-            // Check that a key column has been renamed into something new
-            return column == rename.second;
-        });
-
-        if (it != renamesWithTransform.end()) {
-            // Add the new name to column list
-            Props.Metadata->KeyColumns.push_back(it->first);
-        } else {
-            Props.Metadata->KeyColumns.push_back(column);
-        }
-
-        if (Project && it == renamesWithTransform.end()) {
-            Props.Metadata->KeyColumns = {};
-            break;
-        }
-    }
-
-    // Build lineage data
-    Props.Metadata->ColumnLineage = {};
-    auto renames = GetRenames();
-
-    for (const auto& iu : GetOutputIUs()) {
-        const auto it = std::find_if(renames.begin(), renames.end(), [&iu](const std::pair<TInfoUnit, TInfoUnit>& rename) { return iu == rename.first; });
-
-        if (it != renames.end() && inputMetadata.ColumnLineage.Mapping.contains(it->second)) {
-            Props.Metadata->ColumnLineage.AddMapping(iu, inputMetadata.ColumnLineage.Mapping.at(it->second));
-        } else if (it == renames.end() && inputMetadata.ColumnLineage.Mapping.contains(iu)) {
-            Props.Metadata->ColumnLineage.AddMapping(iu, inputMetadata.ColumnLineage.Mapping.at(iu));
+    // A copy has the lineage of its source
+    auto& lineage = planProps.ColumnLineage;
+    for (const auto& [id, element] : MapElements.Items()) {
+        if (element.IsColumnAccess()) {
+            const auto input = element.GetColumnAccess();
+            if (inputMetadata.SourceStatsColumns.Contains(input)) {
+                Props.Metadata->SourceStatsColumns.Add(id);
+            }
+            if (const auto* relation = inputMetadata.HintRelations.Find(input)) {
+                Props.Metadata->HintRelations.Add(id, *relation);
+            }
+            if (const auto* source = lineage.Find(element.GetColumnAccess())) {
+                lineage.Add(id, *source);
+            }
         }
     }
 }
@@ -330,32 +478,90 @@ void TOpMap::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
  * Compute metadata for aggregare operator
  */
 void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(planProps);
     if (!GetInput()->Props.Metadata.has_value()) {
         return;
     }
 
-    Props.Metadata = GetInput()->Props.Metadata;
+    const auto& inputMetadata = *GetInput()->Props.Metadata;
 
+    Props.Metadata = TRBOMetadata();
+
+    Props.Metadata->StorageType = inputMetadata.StorageType;
     // Compute logical cardinality info. Its the same as input cardinality, except in the case
     // where the group-by list is empty, then we always produce a single tuple
-    if (KeyColumns.empty()) {
-        Props.Metadata->LogicalCard = ELogicalCardinality::One;
-    }
-
+    Props.Metadata->LogicalCard = KeyColumns.Items().empty() ? ELogicalCardinality::One : inputMetadata.LogicalCard;
     Props.Metadata->Type = EStatisticsType::BaseTable;
-    Props.Metadata->KeyColumns = KeyColumns;
-    Props.Metadata->ColumnsCount = GetOutputIUs().size();
 
-    // Aggregate acts list a source in terms of lineage
-    // FIXME: We currently delete all lineage of columns before Aggregate, maybe this is suboptimal in some future cases?
-    Props.Metadata->ColumnLineage = {};
-    TString alias = "_aggregate";
-    int duplicateId = Props.Metadata->ColumnLineage.AddAlias(alias, alias);
-    for (const auto & iu : GetOutputIUs()) {
-        Props.Metadata->ColumnLineage.AddMapping(iu, TColumnLineageEntry(alias, alias, iu.GetColumnName(), duplicateId));
+    const auto& outputIUs = GetOutputIUs();
+    // If the aggregate just adds more columns to existing key columns, use original key columns
+    if (DistinctAll) {
+        Props.Metadata->KeyColumns = TOrderedIUs<>(outputIUs.begin(), outputIUs.end());
+    } else if (IsDeduplication()) {
+        // Like DistinctAll: the whole grouping tuple is unique, even when the
+        // input has no known key.
+        Props.Metadata->KeyColumns = KeyColumns;
+    } else if (inputMetadata.KeyColumns.Unordered().IsSubsetOf(KeyColumns.Unordered()))
+    {
+        Props.Metadata->KeyColumns = inputMetadata.KeyColumns;
+    } else {
+        Props.Metadata->KeyColumns = KeyColumns;
     }
+    Props.Metadata->ColumnsCount = outputIUs.Size();
+
+    Props.Metadata->ShuffledByColumns = GetAggregatePreservedShuffling(*this, ctx);
+
+    // Aggregate acts like a source for the columns it computes. Grouping keys
+    // pass through under their input IDs and keep their input lineage.
+    TString alias = "_aggregate";
+    const auto relation = planProps.ColumnLineage.AddRelation(alias);
+    // Statistical and hint boundaries are independent of the keys' SSA IDs.
+    for (const auto id : outputIUs) {
+        Props.Metadata->HintRelations.Add(id, relation);
+    }
+    for (const auto id : Aggregations.Keys()) {
+        planProps.ColumnLineage.Add(id, TColumnLineageEntry{.SourceAlias = alias, .ColumnName = ::ToString(id), .Relation = relation});
+    }
+}
+
+void TOpGroupingSets::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+    Props.Metadata = GetInput()->Props.Metadata;
+    if (!Props.Metadata) {
+        return;
+    }
+    auto& metadata = *Props.Metadata;
+    TMappedIUs<TInfoUnitId> outputs;
+    for (const auto output : Columns.Keys()) {
+        const auto input = *Columns.Find(output);
+        if (!outputs.Find(input)) {
+            outputs.Add(input, output);
+        }
+    }
+    // Keep the input metadata, rebound to the output IDs. A pruned component
+    // invalidates the whole key, not just that component.
+    const auto rebind = [&](const auto& columns) {
+        return columns.Unordered().IsSubsetOf(outputs.Keys())
+            ? RebindColumns(columns, [&](TInfoUnitId id) { return *outputs.Find(id); })
+            : std::decay_t<decltype(columns)>{};
+    };
+    metadata.KeyColumns = rebind(metadata.KeyColumns);
+    metadata.ShuffledByColumns = rebind(metadata.ShuffledByColumns);
+    metadata.SourceStatsColumns.Clear();
+    metadata.HintRelations.Clear();
+    const auto& inputMetadata = *GetInput()->Props.Metadata;
+    auto& lineage = planProps.ColumnLineage;
+    for (const auto& [output, input] : Columns.Items()) {
+        if (inputMetadata.SourceStatsColumns.Contains(input)) {
+            metadata.SourceStatsColumns.Add(output);
+        }
+        if (const auto* relation = inputMetadata.HintRelations.Find(input)) {
+            metadata.HintRelations.Add(output, *relation);
+        }
+        if (const auto* source = lineage.Find(input)) {
+            lineage.Add(output, *source);
+        }
+    }
+    metadata.ColumnsCount = GetOutputIUs().Size();
 }
 
 /**
@@ -385,7 +591,6 @@ void TOpAggregate::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
  */
 void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
-    Y_UNUSED(planProps);
     if (!GetLeftInput()->Props.Metadata.has_value() || !GetRightInput()->Props.Metadata.has_value()) {
         return;
     }
@@ -395,21 +600,22 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     // FIXME: Compute decent logical cardinality
     Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrMore;
     
-    auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetLeftInput()->Props, false));
-    auto rightStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetRightInput()->Props, false));
+    auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics((*GetLeftInput()), planProps.ColumnLineage, false, ctx.TypeCtx));
+    auto rightStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics((*GetRightInput()), planProps.ColumnLineage, false, ctx.TypeCtx));
 
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
 
-    for (const auto& [leftKey, rightKey] : JoinKeys) {
-        leftJoinKeys.push_back(TJoinColumn(leftKey.GetAlias(), leftKey.GetColumnName()));
-        rightJoinKeys.push_back(TJoinColumn(rightKey.GetAlias(), rightKey.GetColumnName()));
+    for (const auto& [leftKey, rightKey, equalNulls] : JoinKeys.Items()) {
+        leftJoinKeys.push_back(StatisticsColumn(planProps.ColumnLineage, leftKey));
+        rightJoinKeys.push_back(StatisticsColumn(planProps.ColumnLineage, rightKey));
+        leftJoinKeys.back().EqualNulls = rightJoinKeys.back().EqualNulls = equalNulls;
     }
 
     TVector<TString> leftAliases;
     TVector<TString> rightAliases;
     TVector<TString> unionOfAliases;
-    ComputeAlisesForJoin(GetLeftInput(), GetRightInput(), leftAliases, rightAliases, unionOfAliases);
+    ComputeAlisesForJoin(GetLeftInput().Get(), planProps.ColumnLineage, leftAliases, rightAliases, unionOfAliases);
     
     NKqp::EJoinAlgoType joinAlgo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined;
 
@@ -426,44 +632,88 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         FindCardHint(unionOfAliases, *hints.BytesHints));
 
     Props.Metadata->ColumnsCount = GetLeftInput()->Props.Metadata->ColumnsCount + GetRightInput()->Props.Metadata->ColumnsCount;
-    Props.Metadata->KeyColumns = ConvertKeyColumns(CBOStats.KeyColumns, GetOutputIUs());
     Props.Metadata->StorageType = CBOStats.StorageType;
     Props.Metadata->Type = CBOStats.Type;
 
-    if (JoinKind == "LeftOnly" || JoinKind == "LeftSemi") {
-        Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;
-    } else if (JoinKind == "RightOnly" || JoinKind == "RightSemi") {
-        Props.Metadata->ColumnLineage = GetRightInput()->Props.Metadata->ColumnLineage;
-    } else {
-        Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;
-        Props.Metadata->ColumnLineage.Merge(GetRightInput()->Props.Metadata->ColumnLineage);
+    Props.Metadata->KeyColumns = ComputeKeysAfterJoin(this);
+    const auto& outputs = GetOutputIUs();
+    for (const auto* input : GetChildren()) {
+        Props.Metadata->SourceStatsColumns.UnionWith(input->Props.Metadata->SourceStatsColumns);
+        for (const auto& [id, relation] : input->Props.Metadata->HintRelations.Items()) {
+            if (outputs.Contains(id)) {
+                Props.Metadata->HintRelations.Add(id, relation);
+            }
+        }
     }
+    Props.Metadata->SourceStatsColumns.IntersectWith(outputs);
+
+    NKqp::EJoinAlgoType algo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined;
+    if (algo == NKqp::EJoinAlgoType::MapJoin) {
+        // Build side is always right (broadcast), so left-family output keeps the left distribution.
+        // For right-family joins be conservative: output rows are right-side rows, so left-side
+        // shuffling is not a valid distribution claim for the result.
+        const bool rightSided = (JoinKind == "Right" || JoinKind == "RightSemi" || JoinKind == "RightOnly");
+        if (!rightSided) {
+            Props.Metadata->ShuffledByColumns = GetLeftInput()->Props.Metadata->ShuffledByColumns;
+        }
+    } else if (algo == NKqp::EJoinAlgoType::GraceJoin) {
+        // Both sides will be partitioned by their respective join keys,
+        // but the columns by which they are shuffled may not survive after the join.
+
+        // For example, if you do a right semi join, the columns from the right
+        // table won't be available.
+
+        // For consistency, we'll take join keys from the right table for the "right"
+        // family of joins (including ones like a simple right join in which
+        // we can probably take either) and columns from the left keys otherwise.
+
+        // TODO: Later down the line, we should store ordering id instead of a column
+        // list. This will allow us to not discard compatible joins, when one of
+        // the equal columns is dropped by a projection later.
+
+        bool rightSided = (JoinKind == "Right" || JoinKind == "RightSemi" || JoinKind == "RightOnly");
+        // Describe the shuffle stage assignment performs: CBO's key order when it
+        // chose one (join key pairs have no order), the input's own distribution
+        // when that side's shuffle was eliminated.
+        const auto& shuffleBy = rightSided ? Props.RightShuffleBy : Props.LeftShuffleBy;
+        if (shuffleBy && shuffleBy->Items().empty()) {
+            Props.Metadata->ShuffledByColumns = (rightSided ? (*GetRightInput()) : (*GetLeftInput())).Props.Metadata->ShuffledByColumns;
+        } else if (shuffleBy) {
+            Props.Metadata->ShuffledByColumns = *shuffleBy;
+        } else {
+            for (const auto& [leftKey, rightKey, equalNulls] : JoinKeys.Items()) {
+                Props.Metadata->ShuffledByColumns.Append(rightSided ? rightKey : leftKey);
+            }
+        }
+    }
+    // Currently there are no other algos.
+    // If any other are added, leave ShuffledByColumns empty (unknown distribution) - the safest default.
 }
 
 void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
-    Y_UNUSED(planProps);
     if (!GetLeftInput()->Props.Statistics.has_value() || !GetRightInput()->Props.Statistics.has_value()) {
         return;
     }
 
     Props.Statistics = TRBOStatistics();
     
-    auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetLeftInput()->Props, true));
-    auto rightStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetRightInput()->Props, true));
+    auto leftStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics((*GetLeftInput()), planProps.ColumnLineage, true, ctx.TypeCtx));
+    auto rightStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics((*GetRightInput()), planProps.ColumnLineage, true, ctx.TypeCtx));
 
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
 
-    for (const auto& [leftKey, rightKey] : JoinKeys) {
-        leftJoinKeys.push_back(TJoinColumn(leftKey.GetAlias(), leftKey.GetColumnName()));
-        rightJoinKeys.push_back(TJoinColumn(rightKey.GetAlias(), rightKey.GetColumnName()));
+    for (const auto& [leftKey, rightKey, equalNulls] : JoinKeys.Items()) {
+        leftJoinKeys.push_back(StatisticsColumn(planProps.ColumnLineage, leftKey));
+        rightJoinKeys.push_back(StatisticsColumn(planProps.ColumnLineage, rightKey));
+        leftJoinKeys.back().EqualNulls = rightJoinKeys.back().EqualNulls = equalNulls;
     }
 
     TVector<TString> leftAliases;
     TVector<TString> rightAliases;
     TVector<TString> unionOfAliases;
-    ComputeAlisesForJoin(GetLeftInput(), GetRightInput(), leftAliases, rightAliases, unionOfAliases);
+    ComputeAlisesForJoin(GetLeftInput().Get(), planProps.ColumnLineage, leftAliases, rightAliases, unionOfAliases);
 
     auto hints = ctx.KqpCtx.GetOptimizerHints();
 
@@ -495,30 +745,71 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     }
 }
 
-void TOpUnionAll::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+// It does not have runtime support, it could be eliminated or we will rewrite it into cross join.
+void TOpDependentJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
-    if (!GetLeftInput()->Props.Metadata.has_value() || !GetRightInput()->Props.Metadata.has_value()) {
+    if (!GetDomain()->Props.Metadata.has_value() || !GetInput()->Props.Metadata.has_value()) {
         return;
     }
 
     Props.Metadata = TRBOMetadata();
-    Props.Metadata->ColumnsCount = GetLeftInput()->Props.Metadata->ColumnsCount + GetRightInput()->Props.Metadata->ColumnsCount;
+    Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrMore;
+    Props.Metadata->ColumnsCount = GetOutputIUs().Size();
+}
+
+void TOpDependentJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(planProps);
+    if (!GetDomain()->Props.Statistics.has_value() || !GetInput()->Props.Statistics.has_value()) {
+        return;
+    }
+
+    Props.Statistics = TRBOStatistics();
+    // Just a workaround, we do not have runtime support anyway.
+    Props.Statistics->ERows = GetDomain()->Props.Statistics->ERows * GetInput()->Props.Statistics->ERows;
+    Props.Statistics->EBytes = GetDomain()->Props.Statistics->EBytes + GetInput()->Props.Statistics->EBytes;
+    Props.Cost = std::nullopt;
+}
+
+void TOpUnionAll::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(planProps);
+    for (const auto& input : GetChildren()) {
+        if (!input->Props.Metadata.has_value()) {
+            return;
+        }
+    }
+
+    Props.Metadata = TRBOMetadata();
+    Props.Metadata->ColumnsCount = GetOutputIUs().Size();
 }
 
 void TOpUnionAll::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
-    if (!GetLeftInput()->Props.Statistics.has_value() || !GetRightInput()->Props.Statistics.has_value()) {
-        return;
+    for (const auto& input : GetChildren()) {
+        if (!input->Props.Statistics.has_value()) {
+            return;
+        }
     }
 
     Props.Statistics = TRBOStatistics();
-    Props.Statistics->EBytes = GetLeftInput()->Props.Statistics->EBytes + GetRightInput()->Props.Statistics->EBytes;
-    Props.Statistics->ERows = GetLeftInput()->Props.Statistics->ERows + GetRightInput()->Props.Statistics->ERows;
 
-    if (GetLeftInput()->Props.Cost.has_value() && GetRightInput()->Props.Cost.has_value()) {
-        Props.Cost = *GetLeftInput()->Props.Cost + *GetRightInput()->Props.Cost;
+    double cost = 0.0;
+    bool allInputsHaveCost = true;
+    for (const auto& input : GetChildren()) {
+        Props.Statistics->EBytes += input->Props.Statistics->EBytes;
+        Props.Statistics->ERows += input->Props.Statistics->ERows;
+        if (input->Props.Cost.has_value()) {
+            cost += *input->Props.Cost;
+        } else {
+            allInputsHaveCost = false;
+        }
+    }
+
+    if (allInputsHaveCost) {
+        Props.Cost = cost;
     } else {
         Props.Cost = std::nullopt;
     }
@@ -542,16 +833,21 @@ void TOpCBOTree::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 }
 
 void TOpRoot::ComputePlanMetadata(TRBOContext& ctx) {
-    for (auto it : *this) {
+    PlanProps.ColumnLineage.Clear();
+    for (const auto& it : *this) {
         it.Current->ComputeMetadata(ctx, PlanProps);
+        if (const auto& metadata = it.Current->Props.Metadata) {
+            const auto& outputs = it.Current->GetOutputIUs();
+            Y_ENSURE(metadata->SourceStatsColumns.IsSubsetOf(outputs));
+            Y_ENSURE(metadata->HintRelations.Keys().IsSubsetOf(outputs));
+        }
     }
 }
 
 void TOpRoot::ComputePlanStatistics(TRBOContext& ctx) {
-    for (auto it : *this) {
+    for (const auto& it : *this) {
         it.Current->ComputeStatistics(ctx, PlanProps);
     }
 }
 
-}
-}
+} // namespace NKikimr::NKqp

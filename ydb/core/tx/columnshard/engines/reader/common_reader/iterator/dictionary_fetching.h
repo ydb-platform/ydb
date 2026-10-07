@@ -2,6 +2,7 @@
 #include "constructor.h"
 
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 
@@ -24,14 +25,13 @@ public:
 
     const std::shared_ptr<arrow::Array>& GetDictionaryArray() const;
 
-    TDictionaryChunkRestoreInfo(const TBlobRange& fullChunkRange,
-        const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo);
+    TDictionaryChunkRestoreInfo(const TBlobRange& fullChunkRange, const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo);
 
     static TDictionaryChunkRestoreInfo BuildEmpty(const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo);
 };
 
 // Fetches only the dictionary part of each blob (first DictionaryBlobSize bytes per chunk)
-class TDictionaryFetchLogic : public IKernelFetchLogic {
+class TDictionaryFetchLogic: public IKernelFetchLogic {
 private:
     using TBase = IKernelFetchLogic;
 
@@ -39,14 +39,20 @@ private:
     std::vector<TDictionaryChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
 
-    void DoOnDataCollected(TFetchingResultContext& context) override;
+    TConclusionStatus DoOnDataCollected(TFetchingResultContext& context) override;
     void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override;
     void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) override;
 
 public:
-    TDictionaryFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source);
+    TDictionaryFetchLogic(const ui32 columnId, const IDataSource& source);
     TDictionaryFetchLogic(const ui32 columnId, const std::shared_ptr<ISnapshotSchema>& sourceSchema,
         const std::shared_ptr<IStoragesManager>& storages, const ui32 recordsCount);
 };
+
+// Dictionary-only accessors are indexed by dictionary entries, not portion rows.
+// Row filters with denied rows (duplicate/deletion/sharding) use portion row indices.
+inline bool IsDictionaryOnlyFetchCompatible(const NArrow::TColumnFilter& filter) {
+    return filter.IsTotalAllowFilter();
+}
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

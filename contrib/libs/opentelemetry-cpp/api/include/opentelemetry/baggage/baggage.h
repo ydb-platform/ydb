@@ -142,7 +142,7 @@ public:
         value    = value.substr(0, metadata_separator);
       }
 
-      bool err       = 0;
+      bool err       = false;
       auto key_str   = UrlDecode(common::StringUtil::Trim(key), err);
       auto value_str = UrlDecode(common::StringUtil::Trim(value), err);
 
@@ -235,8 +235,8 @@ private:
       else
       {
         ret.push_back('%');
-        ret.push_back(to_hex(c >> 4));
-        ret.push_back(to_hex(c & 15));
+        ret.push_back(to_hex(static_cast<char>(c >> 4)));
+        ret.push_back(to_hex(static_cast<char>(c & 15)));
       }
     }
 
@@ -264,10 +264,10 @@ private:
       {
         if (i + 2 >= str.size() || !IsHex(str[i + 1]) || !IsHex(str[i + 2]))
         {
-          err = 1;
+          err = true;
           return "";
         }
-        ret.push_back(from_hex(str[i + 1]) << 4 | from_hex(str[i + 2]));
+        ret.push_back(static_cast<char>(from_hex(str[i + 1]) << 4 | from_hex(str[i + 2])));
         i += 2;
       }
       else if (str[i] == '+')
@@ -286,7 +286,7 @@ private:
       }
       else
       {
-        err = 1;
+        err = true;
         return "";
       }
     }

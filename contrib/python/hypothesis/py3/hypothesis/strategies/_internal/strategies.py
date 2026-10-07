@@ -24,6 +24,7 @@ from typing import (
     Generic,
     Literal,
     TypeAlias,
+    TypeGuard,
     TypeVar,
     cast,
     overload,
@@ -110,14 +111,14 @@ def recursive_property(strategy: "SearchStrategy", name: str, default: object) -
     calculation = "calc_" + name
     force_key = "force_" + name
 
-    def forced_value(target: SearchStrategy) -> Any:
+    def forced_or_cached_value(target: SearchStrategy) -> Any:
         try:
             return getattr(target, force_key)
         except AttributeError:
             return getattr(target, cache_key)
 
     try:
-        return forced_value(strategy)
+        return forced_or_cached_value(strategy)
     except AttributeError:
         pass
 
@@ -132,7 +133,7 @@ def recursive_property(strategy: "SearchStrategy", name: str, default: object) -
     def recur(strat: SearchStrategy) -> Any:
         nonlocal hit_recursion
         try:
-            return forced_value(strat)
+            return forced_or_cached_value(strat)
         except AttributeError:
             pass
         result = mapping.get(strat, sentinel)
@@ -168,7 +169,7 @@ def recursive_property(strategy: "SearchStrategy", name: str, default: object) -
     def recur2(strat: SearchStrategy) -> Any:
         def recur_inner(other: SearchStrategy) -> Any:
             try:
-                return forced_value(other)
+                return forced_or_cached_value(other)
             except AttributeError:
                 pass
             listeners[other].add(strat)
@@ -215,7 +216,18 @@ def recursive_property(strategy: "SearchStrategy", name: str, default: object) -
     # them (not just the strategy we started out with).
     for k, v in mapping.items():
         setattr(k, cache_key, v)
-    return getattr(strategy, cache_key)
+    # This used to simply be `getattr(strategy, cache_key)`. That relied on the invariant
+    # that our loop above has set `strategy.cached_* = v` on `strategy` if we've reached
+    # here. However, under threading, this is not necessarily true. If a concurrent thread
+    # sets `strategy.force_* = v` in between the two places we check for `force_*`, we
+    # will not set `strategy.cached_*`.
+    #
+    # There are several places where we might do this. unwrap_strategies sets
+    # force_has_reusable_values = True. our numpy.py's `arrays` strategy also does.
+    #
+    # We guard against this in general by checking the forced and cached values here,
+    # rather than just the cached value.
+    return forced_or_cached_value(strategy)
 
 
 class SearchStrategy(Generic[Ex]):
@@ -233,7 +245,7 @@ class SearchStrategy(Generic[Ex]):
     # this works so I'm not looking into it further atm.
     __label: int | UniqueIdentifier | None = None
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.validate_called: dict[int, bool] = {}
 
     def is_currently_empty(self, data: ConjectureData) -> bool:
@@ -414,7 +426,13 @@ class SearchStrategy(Generic[Ex]):
     # entire Callable[[Ex], Any] expression rather than use a type alias.
     # TypeAlias is *not* simply a macro that inserts the text. TypeAlias will not
     # reference the local TypeVar context.
-    def filter(self, condition: Callable[[Ex], Any]) -> "SearchStrategy[Ex]":
+    @overload
+    def filter(
+        self, condition: Callable[[Ex], TypeGuard[T]]
+    ) -> "SearchStrategy[T]": ...
+    @overload
+    def filter(self, condition: Callable[[Ex], Any]) -> "SearchStrategy[Ex]": ...
+    def filter(self, condition):
         """Returns a new strategy that generates values from this strategy
         which satisfy the provided condition.
 
@@ -597,7 +615,13 @@ class SampledFromStrategy(SearchStrategy[Ex]):
         # guaranteed by the ("map", pack) transformation
         return cast(SearchStrategy[T], s)
 
-    def filter(self, condition: Callable[[Ex], Any]) -> SearchStrategy[Ex]:
+    @overload
+    def filter(
+        self, condition: Callable[[Ex], TypeGuard[T]]
+    ) -> "SearchStrategy[T]": ...
+    @overload
+    def filter(self, condition: Callable[[Ex], Any]) -> "SearchStrategy[Ex]": ...
+    def filter(self, condition):
         return type(self)(
             self.elements,
             force_repr=self.force_repr,
@@ -654,7 +678,7 @@ class SampledFromStrategy(SearchStrategy[Ex]):
         # The worst case performance of this scheme is
         # itertools.chain(range(2**100), [st.none()]), where it degrades to
         # hashing every int in the range.
-        (elements_is_hashable, hash_value) = _is_hashable(self.elements)
+        elements_is_hashable, hash_value = _is_hashable(self.elements)
         if isinstance(self.elements, range) or (
             elements_is_hashable
             and not any(isinstance(e, SearchStrategy) for e in self.elements)
@@ -873,7 +897,13 @@ class OneOfStrategy(SearchStrategy[Ex]):
             else:
                 return [self]
 
-    def filter(self, condition: Callable[[Ex], Any]) -> SearchStrategy[Ex]:
+    @overload
+    def filter(
+        self, condition: Callable[[Ex], TypeGuard[T]]
+    ) -> "SearchStrategy[T]": ...
+    @overload
+    def filter(self, condition: Callable[[Ex], Any]) -> "SearchStrategy[Ex]": ...
+    def filter(self, condition):
         return FilteredStrategy(
             OneOfStrategy([s.filter(condition) for s in self.original_strategies]),
             conditions=(),
@@ -1039,9 +1069,15 @@ class MappedStrategy(SearchStrategy[MappedTo], Generic[MappedFrom, MappedTo]):
             for strategy in self.mapped_strategy.branches
         ]
 
+    @overload
+    def filter(
+        self, condition: Callable[[MappedTo], TypeGuard[T]]
+    ) -> "SearchStrategy[T]": ...
+    @overload
     def filter(
         self, condition: Callable[[MappedTo], Any]
-    ) -> "SearchStrategy[MappedTo]":
+    ) -> "SearchStrategy[MappedTo]": ...
+    def filter(self, condition):
         # Includes a special case so that we can rewrite filters on collection
         # lengths, when most collections are `st.lists(...).map(the_type)`.
         ListStrategy = _list_strategy_type()
@@ -1161,7 +1197,13 @@ class FilteredStrategy(SearchStrategy[Ex]):
             # an in-place method so we still just re-initialize the strategy!
             FilteredStrategy.__init__(self, fresh, ())
 
-    def filter(self, condition: Callable[[Ex], Any]) -> "FilteredStrategy[Ex]":
+    @overload
+    def filter(
+        self, condition: Callable[[Ex], TypeGuard[T]]
+    ) -> "FilteredStrategy[T]": ...
+    @overload
+    def filter(self, condition: Callable[[Ex], Any]) -> "FilteredStrategy[Ex]": ...
+    def filter(self, condition):
         # If we can, it's more efficient to rewrite our strategy to satisfy the
         # condition.  We therefore exploit the fact that the order of predicates
         # doesn't matter (`f(x) and g(x) == g(x) and f(x)`) by attempting to apply
@@ -1189,11 +1231,9 @@ class FilteredStrategy(SearchStrategy[Ex]):
             condition = self.flat_conditions[0]
         elif len(self.flat_conditions) == 0:
             # Possible, if unlikely, due to filter predicate rewriting
-            condition = lambda _: True  # type: ignore # covariant type param
+            condition = lambda _: True
         else:
-            condition = lambda x: all(  # type: ignore # covariant type param
-                cond(x) for cond in self.flat_conditions
-            )
+            condition = lambda x: all(cond(x) for cond in self.flat_conditions)
         self.__condition = condition
         return condition
 

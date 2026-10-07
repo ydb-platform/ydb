@@ -82,7 +82,7 @@ void TRemoteRegistry::Transfer(const NProto::TSensorDump& dump)
             for (const auto& tagId : projection.tag_ids()) {
                 if (tagId <= 0 || tagId > dump.tags().size()) {
                     THROW_ERROR_EXCEPTION("Incorrect tag")
-                        << TErrorAttribute("tag_id", tagId);
+                        .With("tag_id", tagId);
                 }
             }
         }
@@ -109,7 +109,7 @@ void TRemoteRegistry::Transfer(const NProto::TSensorDump& dump)
         TSensorOptions options;
         options.Sparse = cube.sparse();
         options.Global = cube.global();
-        options.DisableSensorsRename = cube.disable_sensors_rename();
+        options.DisableSensorsRename = YT_OPTIONAL_FROM_PROTO(cube, disable_sensors_rename);
         options.DisableDefault = cube.disable_default();
         options.SummaryPolicy = NYT::FromProto<ESummaryPolicy>(cube.summary_policy());
 

@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 import re
+import subprocess
 import ydb
 import logging
 import sys
@@ -33,10 +34,13 @@ from mute.constants import (
     get_manual_unmute_min_runs,
     get_manual_unmute_window_days,
     get_mute_window_days,
+    get_stable_branch_grace_days,
     get_unmute_window_days,
 )
 from mute.naming import mute_file_line_to_tests_monitor_full_name
 from mute.mute_utils import dedicated_relative
+from mute.llm_debug_comment import post_llm_debug_comment
+from mute.fast_unmute_pipeline import enter_fast_unmute_grace_for_unmuted_tests
 from ydb_wrapper import YDBWrapper
 from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
 
@@ -51,6 +55,193 @@ repo_path = os.path.normpath(os.path.join(dir, '..', '..', '..', '..')) + os.sep
 _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
     os.path.join(dir, '..', '..', '..', 'config', 'mute_issue_and_digest_config.json')
 )
+
+_STABLE_BRANCHES_CONFIG = '.github/config/stable_tests_branches.json'
+
+
+def _grace_inherited_debug_line(line, branch, config_since, grace_until):
+    return (
+        f"{line} # GRACE: inherited mute ({branch}, config since "
+        f"{config_since.isoformat()}, until {grace_until.isoformat()}, no monitor data yet)"
+    )
+
+
+def _git_branch_added_to_stable_config(branch, repo_root):
+    """Calendar date the branch first appeared in ``_STABLE_BRANCHES_CONFIG``.
+
+    ``git log -S<needle>`` (pickaxe) narrows to the commit(s) that changed the
+    branch string's occurrence count, instead of ``git show``-ing every commit
+    that ever touched the config file on every scheduled run.
+    """
+    if not branch or branch == 'main':
+        return None
+    try:
+        proc = subprocess.run(
+            [
+                'git', 'log', '--format=%H', '--reverse', '-S' + json.dumps(branch),
+                '--', _STABLE_BRANCHES_CONFIG,
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        logging.warning(
+            'stable branch grace: git log failed for branch=%s: %s',
+            branch,
+            exc,
+        )
+        return None
+    if proc.returncode != 0:
+        logging.warning(
+            'stable branch grace: git log exit %s for %s: %s',
+            proc.returncode,
+            _STABLE_BRANCHES_CONFIG,
+            (proc.stderr or '').strip(),
+        )
+        return None
+    for commit in proc.stdout.splitlines():
+        commit = commit.strip()
+        if not commit:
+            continue
+        show = subprocess.run(
+            ['git', 'show', f'{commit}:{_STABLE_BRANCHES_CONFIG}'],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if show.returncode != 0:
+            logging.warning(
+                'stable branch grace: git show %s:%s failed with exit %s: %s',
+                commit,
+                _STABLE_BRANCHES_CONFIG,
+                show.returncode,
+                (show.stderr or '').strip(),
+            )
+            continue
+        try:
+            branches = json.loads(show.stdout)
+            names = {str(b).strip() for b in branches if str(b).strip()}
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if branch not in names:
+            continue
+        dproc = subprocess.run(
+            ['git', 'log', '-1', '--format=%aI', commit],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if dproc.returncode != 0:
+            logging.warning(
+                'stable branch grace: git log -1 date for commit %s failed with exit %s: %s',
+                commit,
+                dproc.returncode,
+                (dproc.stderr or '').strip(),
+            )
+            continue
+        raw = dproc.stdout.strip()
+        if raw.endswith('Z'):
+            raw = raw[:-1] + '+00:00'
+        try:
+            return datetime.datetime.fromisoformat(raw).astimezone(datetime.timezone.utc).date()
+        except ValueError:
+            logging.warning(
+                'stable branch grace: invalid author date for commit %s: %r',
+                commit,
+                raw,
+            )
+            continue
+    return None
+
+
+def _debug_line_test_string(debug_line):
+    """Recover the raw ``testsuite testcase`` prefix from a ``create_debug_string`` line."""
+    return debug_line.split(' # ', 1)[0]
+
+
+def _apply_stable_branch_grace(
+    branch,
+    inherited_muted_ya_path,
+    all_muted_ya,
+    all_muted_ya_debug,
+    to_delete,
+    to_delete_debug,
+    repo_root,
+):
+    """Keep inherited ``muted_ya`` lines for a new stable branch during its grace window.
+
+    Returns ``(all_muted_ya, all_muted_ya_debug, to_delete, to_delete_debug,
+    grace_inherited, grace_config_since, grace_until)``. The ``*_debug`` lists are
+    kept 1:1 with their raw counterparts, so grace can't desync ``foo.txt`` from
+    ``foo_debug.txt`` (previously it could, e.g. a test grace protected from
+    deletion would still show up in ``to_delete_debug.txt`` as removed).
+    """
+    inactive = all_muted_ya, all_muted_ya_debug, to_delete, to_delete_debug, frozenset(), None, None
+    added = _git_branch_added_to_stable_config(branch, repo_root)
+    if added is None:
+        return inactive
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    grace_days = get_stable_branch_grace_days()
+    grace_until = added + datetime.timedelta(days=grace_days - 1)
+    if today > grace_until:
+        return inactive
+    try:
+        with open(inherited_muted_ya_path, encoding='utf-8') as fp:
+            inherited = {line.strip() for line in fp if line.strip()}
+    except OSError as exc:
+        logging.warning(
+            'stable branch grace: cannot read inherited mute file %s: %s',
+            inherited_muted_ya_path,
+            exc,
+        )
+        return inactive
+    if not inherited:
+        return inactive
+
+    # to_delete: drop debug lines for entries grace just pulled back out of to_delete
+    # (matched by their raw "testsuite testcase" prefix, so wildcard delete patterns —
+    # whose debug line is rendered from one concrete chunk rather than the pattern
+    # itself — are conservatively left as-is rather than mismatched).
+    removed_from_delete = set(to_delete) & inherited
+    new_to_delete = sorted(set(to_delete) - inherited)
+    new_to_delete_debug = sorted(
+        d for d in to_delete_debug if _debug_line_test_string(d) not in removed_from_delete
+    )
+
+    # muted_ya: add a synthetic debug line for every inherited entry that grace newly
+    # restores. all_muted_ya/all_muted_ya_debug are 1:1 going in, so anything not
+    # already in all_muted_ya cannot already have a debug line either.
+    newly_added = inherited - set(all_muted_ya)
+    grace_debug_lines = [
+        _grace_inherited_debug_line(line, branch, added, grace_until) for line in sorted(newly_added)
+    ]
+    new_all_muted_ya = sorted(set(all_muted_ya) | inherited)
+    new_all_muted_ya_debug = sorted(list(all_muted_ya_debug) + grace_debug_lines)
+
+    logging.info(
+        'stable branch grace for %s (config since %s, until %s): keep %d inherited mute(s) '
+        '(%d newly restored, %d protected from zero-run delete)',
+        branch,
+        added,
+        grace_until,
+        len(inherited),
+        len(newly_added),
+        len(removed_from_delete),
+    )
+    return (
+        new_all_muted_ya,
+        new_all_muted_ya_debug,
+        new_to_delete,
+        new_to_delete_debug,
+        frozenset(inherited),
+        added,
+        grace_until,
+    )
+
 
 def load_manual_unmute_config():
     """Manual fast-unmute window — required keys in ``mute_config.json`` via ``mute.constants``."""
@@ -530,7 +721,7 @@ def create_debug_string(test, success_rate=None, period_days=None, date_window=N
     
     is_muted = test.get('is_muted', False)
     mute_state = "muted" if is_muted else "not muted"
-    debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state {state}"
+    debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state: {state}"
     return debug_string
 
 def is_mute_candidate(test):
@@ -609,6 +800,24 @@ def is_delete_candidate(test):
 
     return result
 
+
+def file_set_from_rows(rows, debug_suffix=''):
+    """Sorted mute + debug lines from pre-filtered rows (same shape as ``create_file_set``)."""
+    result_set = set()
+    debug_list = []
+    for test in rows:
+        result_set.add(create_test_string(test, use_wildcards=False))
+        debug_string = create_debug_string(
+            test,
+            period_days=test.get('period_days'),
+            date_window=test.get('date_window'),
+        )
+        if debug_suffix:
+            debug_string += debug_suffix
+        debug_list.append(debug_string)
+    return sorted(list(result_set)), sorted(debug_list)
+
+
 def create_file_set(
     aggregated_for_mute,
     filter_func,
@@ -625,14 +834,13 @@ def create_file_set(
     for idx, test in enumerate(aggregated_for_mute, 1):
         testsuite = test.get('suite_folder')
         testcase = test.get('test_name')
-        
+
         if not testsuite or not testcase:
             continue
-        
+
         # Apply mute_check when provided.
         if mute_check and not mute_check(testsuite, testcase):
             continue
-        # Progress bar.
         percent = int(idx / total * 100)
         if percent != last_percent and (percent % 5 == 0 or percent == 100):
             print(f"\r[create_file_set] Progress: {percent}% ({idx}/{total})", end="")
@@ -641,7 +849,7 @@ def create_file_set(
         if filter_func(test):
             test_string = create_test_string(test, use_wildcards)
             result_set.add(test_string)
-            
+
             if resolution:
                 debug_string = create_debug_string(
                     test,
@@ -651,11 +859,10 @@ def create_file_set(
                 if debug_suffix:
                     debug_string += debug_suffix
                 debug_list.append(debug_string)
-    
-    # Force 100% output if it was not printed yet.
+
     if last_percent != 100:
         print(f"\r[create_file_set] Progress: 100% ({total}/{total})", end="")
-    print()  # Newline after progress output.
+    print()
     return sorted(list(result_set)), sorted(debug_list)
 
 def write_file_set(file_path, test_set, debug_list=None, sort_without_prefixes=False):
@@ -693,6 +900,8 @@ def apply_and_add_mutes(
     ydb_wrapper=None,
     branch=None,
     build_type=None,
+    inherited_muted_ya_path=None,
+    repo_root=None,
 ):
     output_path = os.path.join(output_path, 'mute_update')
     logging.info(f"Creating mute files in directory: {output_path}")
@@ -732,6 +941,10 @@ def apply_and_add_mutes(
         to_unmute = sorted(list(set(to_unmute) | set(wildcard_unmute_patterns)))
         to_unmute_debug = sorted(list(set(to_unmute_debug) | set(wildcard_unmute_debugs)))
 
+        # Manual fast-delete (zero CI activity) merges into to_delete, not to_unmute (workflow labels).
+        manual_fast_delete_lines = []
+        manual_fast_delete_debug = []
+
         # 2a. Manual fast-unmute candidates.
         # A test is considered under manual fast-unmute when its full_name is
         # registered in `fast_unmute_active` (populated when a
@@ -740,37 +953,88 @@ def apply_and_add_mutes(
         # sooner when stable.
         manual_unmute_full_names = set(manual_unmute_full_names or [])
         if manual_unmute_full_names and aggregated_for_manual_unmute and manual_unmute_min_runs:
-            def is_manual_unmute_candidate(test):
-                if is_chunk_test(test):
-                    return False
+            manual_stable_rows = []
+            manual_zero_rows = []
+            _mu_total = len(aggregated_for_manual_unmute)
+            _mu_last_pct = -1
+            for _mu_idx, test in enumerate(aggregated_for_manual_unmute, 1):
+                testsuite = test.get('suite_folder')
+                testcase = test.get('test_name')
+                if not testsuite or not testcase:
+                    continue
+                if mute_check and not mute_check(testsuite, testcase):
+                    continue
+                _mu_pct = int(_mu_idx / _mu_total * 100)
+                if _mu_pct != _mu_last_pct and (_mu_pct % 5 == 0 or _mu_pct == 100):
+                    print(
+                        f"\r[manual fast-unmute] Progress: {_mu_pct}% ({_mu_idx}/{_mu_total})",
+                        end="",
+                    )
+                    _mu_last_pct = _mu_pct
+
                 fn = test.get('full_name')
-                if fn not in manual_unmute_full_names:
-                    return False
-                total_runs = test.get('pass_count', 0) + test.get('fail_count', 0) + test.get('mute_count', 0)
-                total_fails = test.get('fail_count', 0) + test.get('mute_count', 0)
-                result = total_runs >= manual_unmute_min_runs and total_fails == 0
+                if is_chunk_test(test) or fn not in manual_unmute_full_names:
+                    continue
+                p = test.get('pass_count', 0)
+                f = test.get('fail_count', 0)
+                m = test.get('mute_count', 0)
+                s = test.get('skip_count', 0)
+                total_runs_pf_m = p + f + m
+                total_activity = p + f + m + s
+                total_fails = f + m
+                win = manual_unmute_window_days if manual_unmute_window_days is not None else '?'
+                if total_activity == 0:
+                    logging.info(
+                        'FAST_UNMUTE_CHECK: %s - runs(p+f+m):%s, activity(p+f+m+s):%s, fails:%s, '
+                        'min_runs:%s, window_days=%s, path:fast-delete, result:True',
+                        fn,
+                        total_runs_pf_m,
+                        total_activity,
+                        total_fails,
+                        manual_unmute_min_runs,
+                        win,
+                    )
+                    manual_zero_rows.append(test)
+                    continue
+                stable_ok = total_runs_pf_m >= manual_unmute_min_runs and total_fails == 0
                 logging.info(
-                    'FAST_UNMUTE_CHECK: %s - runs:%s, fails:%s, min_runs:%s, window_days=%s, result:%s',
+                    'FAST_UNMUTE_CHECK: %s - runs(p+f+m):%s, fails:%s, min_runs:%s, window_days=%s, '
+                    'path:fast-unmute, result:%s',
                     fn,
-                    total_runs,
+                    total_runs_pf_m,
                     total_fails,
                     manual_unmute_min_runs,
-                    manual_unmute_window_days if manual_unmute_window_days is not None else '?',
-                    result,
+                    win,
+                    stable_ok,
                 )
-                return result
+                if stable_ok:
+                    manual_stable_rows.append(test)
 
-            to_unmute_manual, to_unmute_manual_debug = create_file_set(
-                aggregated_for_manual_unmute,
-                is_manual_unmute_candidate,
-                mute_check,
-                resolution='to_unmute',
-                debug_suffix=' [fast-unmute]',
+            if _mu_last_pct != 100:
+                print(
+                    f"\r[manual fast-unmute] Progress: 100% ({_mu_total}/{_mu_total})",
+                    end="",
+                )
+            print()
+
+            to_unmute_manual_stable, to_unmute_manual_stable_debug = file_set_from_rows(
+                manual_stable_rows, ' [fast-unmute]'
             )
-            if to_unmute_manual:
-                logging.info(f"Manual fast-unmute added {len(to_unmute_manual)} test(s) to to_unmute")
-            to_unmute = sorted(list(set(to_unmute) | set(to_unmute_manual)))
-            to_unmute_debug = sorted(list(set(to_unmute_debug) | set(to_unmute_manual_debug)))
+            manual_fast_delete_lines, manual_fast_delete_debug = file_set_from_rows(
+                manual_zero_rows, ' [fast-delete]'
+            )
+            if to_unmute_manual_stable:
+                logging.info(
+                    'Manual fast-unmute added %d test(s) to to_unmute [fast-unmute]',
+                    len(to_unmute_manual_stable),
+                )
+            if manual_fast_delete_lines:
+                logging.info(
+                    'Manual fast-delete (no CI activity) added %d test(s) to to_delete',
+                    len(manual_fast_delete_lines),
+                )
+            to_unmute = sorted(list(set(to_unmute) | set(to_unmute_manual_stable)))
+            to_unmute_debug = sorted(list(set(to_unmute_debug) | set(to_unmute_manual_stable_debug)))
 
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
@@ -795,13 +1059,37 @@ def apply_and_add_mutes(
         # Merge per-test and wildcard results.
         to_delete = sorted(list(set(to_delete) | set(wildcard_delete_patterns)))
         to_delete_debug = sorted(list(set(to_delete_debug) | set(wildcard_delete_debugs)))
-        
-        write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
-        
+
+        to_delete = sorted(list(set(to_delete) | set(manual_fast_delete_lines)))
+        to_delete_debug = sorted(list(set(to_delete_debug) | set(manual_fast_delete_debug)))
+
         # 4. muted_ya (all currently muted tests).
         all_muted_ya, all_muted_ya_debug = create_file_set(
             all_data, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
         )
+        grace_inherited = frozenset()
+        grace_config_since = None
+        grace_until = None
+        if branch and inherited_muted_ya_path and repo_root:
+            (
+                all_muted_ya,
+                all_muted_ya_debug,
+                to_delete,
+                to_delete_debug,
+                grace_inherited,
+                grace_config_since,
+                grace_until,
+            ) = _apply_stable_branch_grace(
+                branch,
+                inherited_muted_ya_path,
+                all_muted_ya,
+                all_muted_ya_debug,
+                to_delete,
+                to_delete_debug,
+                repo_root,
+            )
+
+        write_file_set(os.path.join(output_path, 'to_delete.txt'), to_delete, to_delete_debug)
         write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug)
         to_mute_set = set(to_mute)
         to_unmute_set = set(to_unmute)
@@ -820,6 +1108,15 @@ def apply_and_add_mutes(
             if is_chunk_test(test):
                 wildcard_key = create_test_string(test, use_wildcards=True)
                 wildcard_to_chunks[wildcard_key].append(test)
+        for line in grace_inherited:
+            if (
+                line not in test_debug_dict
+                and grace_config_since is not None
+                and grace_until is not None
+            ):
+                test_debug_dict[line] = _grace_inherited_debug_line(
+                    line, branch, grace_config_since, grace_until
+                )
         # Build wildcard-level debug strings.
         for wildcard, chunks in wildcard_to_chunks.items():
             N = len(chunks)
@@ -969,6 +1266,7 @@ def create_mute_issues(
     close_issues=True,
     branch='main',
     build_type=DEFAULT_BUILD_TYPE,
+    ydb_wrapper=None,
 ):
     tests_from_file = read_tests_from_file(file_path)
     issues_index = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
@@ -1107,26 +1405,39 @@ def create_mute_issues(
     results = []
     queue_items = []
     for item in prepared_tests_by_suite:
-        title, body = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
-        raw_owner = prepared_tests_by_suite[item][0]['owner']
+        tests_in_issue = prepared_tests_by_suite[item]
+        first_test = tests_in_issue[0]
+        title, body = generate_github_issue_title_and_body(tests_in_issue)
+        raw_owner = first_test['owner']
         owner_value = canonical_team_slug(raw_owner)
         result = create_and_add_issue_to_project(title, body, state='Muted', owner=owner_value)
         if not result:
             break
         else:
             issue_url = result['issue_url']
+            issue_id = result.get('issue_id')
             results.append(
                 {
                     'message': f"Created issue '{title}' for TEAM:@ydb-platform/{owner_value}, url {issue_url}",
                     'owner': owner_value
                 }
             )
+
+            if issue_id:
+                post_llm_debug_comment(
+                    ydb_wrapper,
+                    issue_id=issue_id,
+                    issue_url=issue_url,
+                    full_names=[t['full_name'] for t in tests_in_issue if t.get('full_name')],
+                    branch=first_test.get('branch', branch),
+                    build_type=first_test.get('build_type', build_type),
+                )
+
             try:
                 issue_number = int(issue_url.rstrip('/').split('/')[-1])
             except (ValueError, IndexError):
                 issue_number = None
             if issue_number:
-                first_test = prepared_tests_by_suite[item][0]
                 queue_items.append({
                     'github_issue_number': issue_number,
                     'github_issue_url': issue_url,
@@ -1375,6 +1686,22 @@ def mute_worker(args):
             return 1
 
         build_type = getattr(args, 'build_type', DEFAULT_BUILD_TYPE)
+
+        if args.mode == 'enter_fast_unmute_grace':
+            logging.info(
+                'Starting enter_fast_unmute_grace for branch=%s build_type=%s',
+                args.branch,
+                build_type,
+            )
+            enter_fast_unmute_grace_for_unmuted_tests(ydb_wrapper, args.branch, build_type)
+            logging.info(
+                'enter_fast_unmute_grace step finished for branch=%s build_type=%s '
+                '(see log above for recorded/skipped rows and any warnings)',
+                args.branch,
+                build_type,
+            )
+            return 0
+
         logging.info(f"Starting mute worker with mode: {args.mode}")
         logging.info(f"Branch: {args.branch}")
         logging.info(f"build_type: {build_type}")
@@ -1448,6 +1775,8 @@ def mute_worker(args):
                 ydb_wrapper=ydb_wrapper,
                 branch=args.branch,
                 build_type=build_type,
+                inherited_muted_ya_path=input_muted_ya_path,
+                repo_root=repo_path.rstrip(os.sep),
             )
 
         elif args.mode == 'sync_fast_unmute_grace':
@@ -1481,6 +1810,7 @@ def mute_worker(args):
                 close_issues=args.close_issues,
                 branch=args.branch,
                 build_type=build_type,
+                ydb_wrapper=ydb_wrapper,
             )
 
             try:
@@ -1517,6 +1847,18 @@ if __name__ == "__main__":
     )
     sync_fast_unmute_grace_parser.add_argument('--branch', default='main', help='Branch to get history')
     sync_fast_unmute_grace_parser.add_argument(
+        '--build-type',
+        default=DEFAULT_BUILD_TYPE,
+        dest='build_type',
+        help='tests_monitor build_type slice (default: relwithdebinfo)',
+    )
+
+    enter_fast_unmute_grace_parser = subparsers.add_parser(
+        'enter_fast_unmute_grace',
+        help='start fast_unmute_grace when tests left mute on branch (after tests_monitor refresh)',
+    )
+    enter_fast_unmute_grace_parser.add_argument('--branch', default='main', help='Branch to get history')
+    enter_fast_unmute_grace_parser.add_argument(
         '--build-type',
         default=DEFAULT_BUILD_TYPE,
         dest='build_type',

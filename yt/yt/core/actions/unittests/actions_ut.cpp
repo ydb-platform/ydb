@@ -138,7 +138,26 @@ TEST(TAllSucceededBoundedConcurrencyTest, CancelOthers)
     auto error = WaitFor(RunWithAllSucceededBoundedConcurrency(std::move(callbacks), 4));
 
     EXPECT_FALSE(error.IsOK());
-    EXPECT_EQ(error.GetMessage(), TString("Testing"));
+    EXPECT_EQ(error.GetMessage(), std::string("Testing"));
+
+    EXPECT_EQ(numDone->load(), 4);
+}
+
+TEST(TAllSucceededBoundedConcurrencyTest, FinishesOrFailsVeryQuickly)
+{
+    using TCounter = std::atomic<int>;
+    auto numDone = std::make_shared<TCounter>(0);
+
+    TCallback<TFuture<void>()> callback = BIND([numDone] {
+        if (numDone->fetch_add(1) == 3) {
+            return MakeFuture(TError("This one fails"));
+        }
+        return MakeFuture(TErrorOr<void>());
+    });
+
+    std::vector callbacks(50, callback);
+
+    auto error = WaitFor(RunWithAllSucceededBoundedConcurrency(std::move(callbacks), 20));
 
     EXPECT_EQ(numDone->load(), 4);
 }

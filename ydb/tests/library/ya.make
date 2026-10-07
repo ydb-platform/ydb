@@ -98,6 +98,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    logbroker_federation
     compatibility
     stability
     clients
@@ -106,5 +107,6 @@ RECURSE(
     test_meta
     wardens
     sqs
+    sqs_topic
 )
 RECURSE_FOR_TESTS(ut)

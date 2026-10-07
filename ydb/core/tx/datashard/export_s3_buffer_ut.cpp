@@ -1,19 +1,36 @@
 #include "export_s3_buffer.h"
+
+#include <ydb/core/tx/datashard/backup_restore_traits.h>
 #include <ydb/core/tx/datashard/export_scan.h>
 
+#include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/array_ref.h>
+#include <util/stream/mem.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 namespace NKikimr::NDataShard {
 
+using NBackupRestoreTraits::EDataFormat;
+
 class TExportS3BufferFixture : public NUnitTest::TBaseFixture {
 public:
     void SetUp(NUnitTest::TTestContext&) override {
-        Columns[0] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "key", true);
-        Columns[1] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "value", false);
+        TVector<ui32> tags;
+        {
+            ui32 tag = 0;
+            Columns[tag] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "key", true);
+            tags.push_back(tag);
+        }
+
+        for (ui32 tag = 1; tag < 20; ++tag) {
+            auto name = "value" + ToString(tag);
+            Columns[tag] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", name, false);
+            tags.push_back(tag);
+        }
+        Tags.swap(tags);
     }
 
     TS3ExportBufferSettings& Settings() {
@@ -24,37 +41,102 @@ public:
         return Columns;
     }
 
-    NExportScan::IBuffer& Buffer() {
-        if (!S3ExportBuffer) {
-            TS3ExportBufferSettings settings = S3ExportBufferSettings;
-            settings.WithColumns(Columns);
-            S3ExportBuffer.Reset(CreateS3ExportBuffer(std::move(settings)));
+    NExportScan::IBuffer* CreateBuffer(EDataFormat dataFormat) {
+        TS3ExportBufferSettings settings = S3ExportBufferSettings;
+        settings.WithColumns(Columns);
 
-            TVector<ui32> tags;
-            tags.reserve(Columns.size());
-            for (auto&& [tag, _] : Columns) {
-                tags.push_back(tag);
+        NExportScan::IBuffer* buffer = nullptr;
+        switch (dataFormat) {
+        case EDataFormat::YdbDump:
+            {
+                TYdbDumpExportSettings dataFormatSettings;
+                dataFormatSettings.WithColumns(Columns);
+                auto dataFormat = CreateExportDataFormat(std::move(dataFormatSettings));
+                buffer = CreateS3ExportBuffer(std::move(settings), std::move(dataFormat));
+                break;
             }
-            S3ExportBuffer->ColumnsOrder(tags);
+        case EDataFormat::Parquet:
+            {
+                TParquetExportSettings dataFormatSettings;
+                dataFormatSettings.WithColumns(Columns);
+                dataFormatSettings.WithRowGroupSize(100);
+                // Mirror production: Parquet handles compression internally, so
+                // buffer-level compression is disabled and the codec is forwarded
+                // to the Parquet writer instead.
+                if (settings.CompressionSettings) {
+                    dataFormatSettings.WithCompression(TParquetExportSettings::TCompressionSettings()
+                        .WithAlgorithm(TParquetExportSettings::TCompressionSettings::EAlgorithm::Zstd)
+                        .WithLevel(settings.CompressionSettings->CompressionLevel));
+                    settings.WithoutCompression();
+                }
+                auto dataFormat = CreateExportDataFormat(std::move(dataFormatSettings));
+                buffer = CreateS3ExportBuffer(std::move(settings), std::move(dataFormat));
+                break;
+            }
+        case EDataFormat::Invalid:
+            break;
         }
-        return *S3ExportBuffer;
+
+        if (!buffer) {
+            return nullptr;
+        }
+
+        buffer->ColumnsOrder(Tags);
+
+        return buffer;
     }
 
-    bool CollectKeyValue(ui32 k, TStringBuf v) {
+    NExportScan::IBuffer* Buffer(EDataFormat dataFormat) {
+        THolder<NExportScan::IBuffer>* exportBuffer = nullptr;
+        switch (dataFormat) {
+            case EDataFormat::YdbDump:
+                exportBuffer = &S3ExportBuffer;
+                break;
+            case EDataFormat::Parquet:
+                exportBuffer = &ParquetBuffer;
+                break;
+            case EDataFormat::Invalid:
+                break;
+        }
+
+        if (!exportBuffer) {
+            return nullptr;
+        }
+
+        if (!*exportBuffer) {
+            exportBuffer->Reset(CreateBuffer(dataFormat));
+        }
+        return exportBuffer->Get();
+    }
+
+    bool CollectKeyValue(EDataFormat dataFormat, ui32 k, TStringBuf v) {
         NTable::IScan::TRow row;
-        row.Init(2);
+        row.Init(Columns.size());
         row.Set(0, NKikimr::NTable::ECellOp::Set, NKikimr::TCell::Make(k));
-        row.Set(1, NKikimr::NTable::ECellOp::Set, NKikimr::TCell(v.data(), v.size()));
-        return Buffer().Collect(row);
+        // The cells below reference the backing strings, so they must outlive the Collect() call.
+        TVector<TString> values;
+        values.reserve(Columns.size());
+        for (ui32 tag = 1; tag < Columns.size(); ++tag) {
+            const auto& value = values.emplace_back(TStringBuilder() << v << "_" << tag << "_" << k);
+            row.Set(tag, NKikimr::NTable::ECellOp::Set, NKikimr::TCell(value.data(), value.size()));
+        }
+        auto buffer = Buffer(dataFormat);
+        auto res = buffer->Collect(row);
+        return res;
     }
 
     // Tests impl
-    void TestMinBufferSize(ui64 minBufferSize) {
-        for (ui32 i = 0; i < 100; ++i) {
-            UNIT_ASSERT(CollectKeyValue(i, "1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"));
+    void TestMinBufferSize(EDataFormat dataFormat, ui64 minBufferSize) {
+        if (dataFormat == EDataFormat::Invalid) {
+            return;
+        }
+
+        for (ui32 i = 0; i < 10000; ++i) {
+            UNIT_ASSERT(CollectKeyValue(dataFormat, i, TString("v") * 16));
             NExportScan::IBuffer::TStats stats;
-            if (Buffer().IsFilled()) {
-                THolder<NActors::IEventBase> event(Buffer().PrepareEvent(false, stats));
+            auto buffer = Buffer(dataFormat);
+            if (buffer->IsFilled()) {
+                THolder<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
                 UNIT_ASSERT(event);
                 auto* evBuffer = dynamic_cast<NKikimr::NDataShard::TEvExportScan::TEvBuffer<TBuffer>*>(event.get());
                 UNIT_ASSERT(evBuffer);
@@ -64,35 +146,51 @@ public:
     }
 
 public:
+    TVector<ui32> Tags;
     IExport::TTableColumns Columns;
     TS3ExportBufferSettings S3ExportBufferSettings;
     THolder<NExportScan::IBuffer> S3ExportBuffer;
+    THolder<NExportScan::IBuffer> ParquetBuffer;
 };
 
 Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
-    Y_UNIT_TEST(MinBufferSize) {
-        ui64 minBufferSize = 5000;
+    Y_UNIT_TEST(MinBufferSize, EDataFormat) {
+        ui64 minBufferSize = 100000;
+        auto dataFormat = Arg<0>();
         Settings()
             .WithMaxRows(2)
             .WithMinBytes(minBufferSize)
             .WithMaxBytes(1'000'000);
 
-        TestMinBufferSize(minBufferSize);
+        TestMinBufferSize(dataFormat, minBufferSize);
     }
 
-    Y_UNIT_TEST(MinBufferSizeWithCompression) {
-        ui64 minBufferSize = 5000;
+    Y_UNIT_TEST(MinBufferSizeSmall, EDataFormat) {
+        ui64 minBufferSize = 1000;
+        auto dataFormat = Arg<0>();
+        Settings()
+            .WithMaxRows(2)
+            .WithMinBytes(minBufferSize)
+            .WithMaxBytes(1'000'000);
+
+        TestMinBufferSize(dataFormat, minBufferSize);
+    }
+
+    Y_UNIT_TEST(MinBufferSizeWithCompression, EDataFormat) {
+        ui64 minBufferSize = 100000;
+        auto dataFormat = Arg<0>();
         Settings()
             .WithCompression(TS3ExportBufferSettings::ZstdCompression(20))
             .WithMaxRows(2)
             .WithMinBytes(minBufferSize)
             .WithMaxBytes(1'000'000);
 
-        TestMinBufferSize(minBufferSize);
+        TestMinBufferSize(dataFormat, minBufferSize);
     }
 
-    Y_UNIT_TEST(MinBufferSizeWithCompressionAndEncryption) {
-        ui64 minBufferSize = 5000;
+    Y_UNIT_TEST(MinBufferSizeWithCompressionAndEncryption, EDataFormat) {
+        ui64 minBufferSize = 100000;
+        auto dataFormat = Arg<0>();
         Settings()
             .WithCompression(TS3ExportBufferSettings::ZstdCompression(20))
             .WithEncryption(TS3ExportBufferSettings::TEncryptionSettings()
@@ -103,7 +201,94 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
             .WithMinBytes(minBufferSize)
             .WithMaxBytes(1'000'000);
 
-        TestMinBufferSize(minBufferSize);
+        TestMinBufferSize(dataFormat, minBufferSize);
+    }
+
+    Y_UNIT_TEST(MaxBytesCapsUncompressedSizeWithZstd) {
+        const ui64 maxBytes = 32'000;
+        Settings()
+            .WithCompression(TS3ExportBufferSettings::ZstdCompression(10))
+            .WithMaxRows(Max<ui64>())
+            .WithMinBytes(1)
+            .WithMaxBytes(maxBytes);
+
+        const auto dataFormat = EDataFormat::YdbDump;
+        ui64 flushes = 0;
+        for (ui32 i = 0; i < 20'000; ++i) {
+            UNIT_ASSERT(CollectKeyValue(dataFormat, i, TString(256, 'a')));
+            auto* buffer = Buffer(dataFormat);
+            if (!buffer->IsFilled()) {
+                continue;
+            }
+
+            NExportScan::IBuffer::TStats stats;
+            THolder<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
+            UNIT_ASSERT(event);
+            ++flushes;
+            // zstd accumulates more rows before compressing the data and sending it to output. Multiplier ~ *6x
+            UNIT_ASSERT_LE_C(stats.BytesRead, maxBytes * 6,
+                "BytesRead=" << stats.BytesRead << " maxBytes=" << maxBytes
+                << " iteration=" << i);
+        }
+        UNIT_ASSERT_GT_C(flushes, 0, "expected at least one flush under MaxBytes");
+    }
+
+    // Highly compressible data with zstd: the compressed output stays below MinBytes for a long time,
+    // so the buffer keeps collecting rows. The raw rows must not be accumulated in memory meanwhile,
+    // the memory usage has to stay bounded by MaxBytes regardless of the compression ratio.
+    Y_UNIT_TEST(MemoryIsBoundedWithZstdAndMinBytes) {
+        const ui64 minBytes = 64'000;
+        const ui64 maxBytes = 128'000;
+        Settings()
+            .WithCompression(TS3ExportBufferSettings::ZstdCompression(1))
+            .WithMaxRows(Max<ui64>())
+            .WithMinBytes(minBytes)
+            .WithMaxBytes(maxBytes);
+
+        const auto dataFormat = EDataFormat::YdbDump;
+        const TString value(1024, 'a');
+
+        TString expected;
+        TString compressed;
+        ui64 flushes = 0;
+        ui64 rawBytesPerFlush = 0;
+        ui64 maxMemoryBytes = 0;
+        for (ui32 i = 0; i < 100'000 && flushes < 2; ++i) {
+            UNIT_ASSERT(CollectKeyValue(dataFormat, i, value));
+            expected += ToString(i);
+            for (ui32 tag = 1; tag < Columns.size(); ++tag) {
+                expected += TStringBuilder() << ",\"" << value << "_" << tag << "_" << i << "\"";
+            }
+            expected += "\n";
+
+            auto* buffer = Buffer(dataFormat);
+            maxMemoryBytes = Max(maxMemoryBytes, buffer->GetMemoryBytes());
+            if (!buffer->IsFilled()) {
+                UNIT_ASSERT_LT_C(buffer->GetMemoryBytes(), maxBytes,
+                    "Buffer is not filled but holds " << buffer->GetMemoryBytes() << " bytes in memory"
+                    << ", maxBytes=" << maxBytes << ", iteration=" << i);
+                continue;
+            }
+
+            NExportScan::IBuffer::TStats stats;
+            THolder<NActors::IEventBase> event(buffer->PrepareEvent(false, stats));
+            UNIT_ASSERT(event);
+            auto* evBuffer = dynamic_cast<TEvExportScan::TEvBuffer<TBuffer>*>(event.Get());
+            UNIT_ASSERT(evBuffer);
+            UNIT_ASSERT_GE(evBuffer->Buffer.Size(), minBytes);
+            compressed.append(evBuffer->Buffer.Data(), evBuffer->Buffer.Size());
+            rawBytesPerFlush = Max(rawBytesPerFlush, stats.BytesRead);
+            ++flushes;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(flushes, 2);
+        // The scenario is meaningful only if the compression ratio is high enough for the raw data
+        // of a single part to exceed MaxBytes
+        UNIT_ASSERT_GT_C(rawBytesPerFlush, maxBytes * 4, "rawBytesPerFlush=" << rawBytesPerFlush);
+        Cerr << "Raw bytes per flush: " << rawBytesPerFlush << ", max memory: " << maxMemoryBytes << Endl;
+
+        TMemoryInput compressedInput(compressed);
+        TZstdDecompress decompress(&compressedInput);
+        UNIT_ASSERT_VALUES_EQUAL(decompress.ReadAll(), expected);
     }
 }
 

@@ -1,9 +1,9 @@
 items:
-- name: Рецепты коллекций резервных копий
-  href: backup-collections/index.md
+- name: Рецепты резервного копирования
+  href: backup/index.md
   include:
     mode: link
-    path: backup-collections/toc_p.yaml
+    path: backup/toc_p.yaml
 - name: YDB SDK и фреймворки
   include:
     mode: link
@@ -27,13 +27,21 @@ items:
   include:
     mode: link
     path: fulltext-search/toc_p.yaml
+- name: Поиск по JSON
+  href: json-search/index.md
+  include:
+    mode: link
+    path: json-search/toc_p.yaml
+- name: Локальные индексы
+  href: local-indexes/index.md
+  include:
+    mode: link
+    path: local-indexes/toc_p.yaml
 - name: Трансфер
   href: transfer/index.md
   include:
     mode: link
     path: transfer/toc_p.yaml
-- name: Импорт и экспорт данных в колоночные таблицы
-  href: import-export-column-tables.md
 - name: Потоковые запросы
   href: streaming_queries/index.md
   include:

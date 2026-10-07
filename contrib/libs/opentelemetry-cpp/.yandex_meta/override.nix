@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; rec {
-  version = "1.26.0";
+  version = "1.29.0";
 
   src = fetchFromGitHub {
     owner = "open-telemetry";
     repo = "opentelemetry-cpp";
     rev = "v${version}";
-    hash = "sha256-jYYTPcTFIrgMn1NUjwacZC1J26TZRKdGlq+5yw7NNsU=";
+    hash = "sha256-md4JwlqxMM7zAz0/v9/S3hSj1S0cwXXn4sWT8UWK0Dw=";
   };
 
   patches = [];
@@ -30,6 +30,7 @@ pkgs: attrs: with pkgs; rec {
 
     "-DWITH_OTLP_HTTP=ON"
     "-DWITH_OTLP_GRPC=ON"
+    "-DWITH_OTLP_UTF8_VALIDITY=OFF"
 
     "-DWITH_ABI_VERSION_1=OFF"
     "-DWITH_ABI_VERSION_2=ON"

@@ -50,7 +50,7 @@ TExprNode::TPtr ExpandRangeComputeFor(const TExprNode::TPtr& node, TExprContext&
 
     TString prunedLambdaSerialized;
     {
-        auto ast = ConvertToAst(*buildResult.PrunedLambda, ctx, TExprAnnotationFlags::None, true);
+        auto ast = ConvertToAst(*buildResult.PrunedLambda, ctx, TExprAnnotationFlags::None, /*refAtoms=*/true);
         YQL_ENSURE(ast.Root);
         prunedLambdaSerialized = "__yql_ast:" + ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
     }

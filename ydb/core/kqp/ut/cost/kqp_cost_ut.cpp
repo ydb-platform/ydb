@@ -307,8 +307,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/SecondaryKeys/Index/indexImplTable").second, 16);
     }
 
-    Y_UNIT_TEST(VectorIndexLookup) {
-        TKikimrRunner kikimr(GetAppConfig(true, false));
+    Y_UNIT_TEST_TWIN(VectorIndexLookup, EnableVectorSearchActor) {
+        auto appConfig = GetAppConfig(true, false);
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -446,9 +448,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 12}, // about rows / clusters^levels = 100 / 2^3 = 12.5
-                {"/Root/Vectors", 12} // same as posting
+                {"/Root/Vectors/vector_idx/indexImplLevelTable", 14}, // 2 + 4 + 8 = sum(clusters^i for i=1..levels) = levels=3, clusters=2 with default levelTop=10
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 100}, // all rows scanned with large levelTop
+                {"/Root/Vectors", 100} // same as posting
             });
 
             // SELECT Key, Value --- same stats
@@ -457,9 +459,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx/indexImplLevelTable", 6},
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 12},
-                {"/Root/Vectors", 12}
+                {"/Root/Vectors/vector_idx/indexImplLevelTable", 14},
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 100},
+                {"/Root/Vectors", 100}
             });
 
             // KMeansTreeSearchTopSize = 2 --- about twice more
@@ -482,8 +484,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 12}, // about rows / clusters^levels = 100 / 2^3 = 12.5
+                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 14}, // 2 + 4 + 8 with default levelTop=10
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 100}, // all rows scanned with large levelTop
                 // no main table
             });
 
@@ -493,8 +495,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6},
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 12},
+                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 14},
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 100},
             });
 
             // KMeansTreeSearchTopSize = 2 --- about twice more
@@ -518,10 +520,154 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_prefixed/indexImplPrefixTable", 1},
-                {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 4},
-                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 4}, // about rows / 10 / clusters^levels = 100 / 10 / 2^2 = 2.5
-                {"/Root/Vectors", 4} // same as posting
+                {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 6}, // 2 + 4 with default levelTop=10 and levels=2, clusters=2
+                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 10}, // all rows for Prefix=7 with large levelTop
+                {"/Root/Vectors", 10} // same as posting
             });
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(VectorIndexAutoSearchTopSize, EnableVectorSearchActor) {
+        auto appConfig = GetAppConfig(true, false);
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
+        TKikimrRunner kikimr(appConfig);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableAccessToIndexImplTables(true);
+        NSchemeShard::gVectorIndexSeed = 1337;
+
+        { // CREATE TABLE
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/VectorsTopSize` (
+                    Key Int32,
+                    Embedding String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        { // UPSERT VALUES
+            for (ui32 key = 0; key < 100; key++) {
+                TString embedding = "00\x02";
+                embedding[0] = 'a' + key % 26;
+                embedding[1] = 'A' + (key * 17) % 26;
+
+                auto query = Sprintf(R"(
+                    UPSERT INTO `/Root/VectorsTopSize` (Key, Embedding) VALUES (%u, "%s");
+                )", key, embedding.c_str());
+
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            }
+        }
+
+        { // ADD INDEX without overlap
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/VectorsTopSize`
+                    ADD INDEX idx_no_overlap
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        { // ADD INDEX with overlap (overlap_clusters=2 > 1, so withOverlap=true)
+            auto result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/VectorsTopSize`
+                    ADD INDEX idx_with_overlap
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2, overlap_clusters=2);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        auto getReadsByTable = [&](const TString& query) {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            TMap<TString, ui64> readsByTable;
+            for (const auto& queryPhase : stats.query_phases()) {
+                for (const auto& tableAccess : queryPhase.table_access()) {
+                    readsByTable[tableAccess.name()] += tableAccess.reads().rows();
+                }
+            }
+            return readsByTable;
+        };
+
+        { // Without pragma, no-overlap index must behave same as pragma KMeansTreeSearchTopSize = "10"
+            auto autoReads = getReadsByTable(Q_(R"(
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_no_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            auto explicitReads = getReadsByTable(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "10";
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_no_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            UNIT_ASSERT_VALUES_EQUAL_C(autoReads, explicitReads,
+                "Auto TopSize for no-overlap index must equal explicit TopSize=10");
+        }
+
+        { // Without pragma, overlap index must behave same as pragma KMeansTreeSearchTopSize = "4"
+            auto autoReads = getReadsByTable(Q_(R"(
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_with_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            auto explicitReads = getReadsByTable(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "4";
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_with_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            UNIT_ASSERT_VALUES_EQUAL_C(autoReads, explicitReads,
+                "Auto TopSize for overlap index must equal explicit TopSize=4");
+        }
+
+        { // Explicit pragma overrides auto for no-overlap index
+            auto readsTopSize1 = getReadsByTable(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_no_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            auto autoReads = getReadsByTable(Q_(R"(
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_no_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            // With TopSize=1 (default old value) we should read fewer rows than with auto TopSize=10
+            UNIT_ASSERT_C(
+                readsTopSize1["/Root/VectorsTopSize/idx_no_overlap/indexImplLevelTable"] <=
+                autoReads["/Root/VectorsTopSize/idx_no_overlap/indexImplLevelTable"],
+                "Explicit TopSize=1 must read no more level rows than auto TopSize=10");
+        }
+
+        { // Explicit pragma overrides auto for overlap index
+            auto readsTopSize10 = getReadsByTable(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "10";
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_with_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            auto autoReads = getReadsByTable(Q_(R"(
+                SELECT Key FROM `/Root/VectorsTopSize` VIEW idx_with_overlap
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
+                    LIMIT 10;
+            )"));
+            // With explicit TopSize=10 we should read more or equal rows than with auto TopSize=4
+            UNIT_ASSERT_C(
+                readsTopSize10["/Root/VectorsTopSize/idx_with_overlap/indexImplLevelTable"] >=
+                autoReads["/Root/VectorsTopSize/idx_with_overlap/indexImplLevelTable"],
+                "Explicit TopSize=10 must read no fewer level rows than auto TopSize=4");
         }
     }
 
@@ -1440,8 +1586,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         }
     }
 
-    Y_UNIT_TEST(WriteRowInsertFailsSecondary) {
-        TKikimrRunner kikimr(GetAppConfig(false, false));
+    Y_UNIT_TEST_TWIN(WriteRowInsertFailsSecondary, EnableIndexStreamWrite) {
+        auto appConfig = GetAppConfig(false, false);
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+
+        TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -1468,11 +1617,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 2,
+                    .Writes = EnableIndexStreamWrite ? 1 : 2,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 28,
+                    .WriteBytes = EnableIndexStreamWrite ? 20 : 28,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1498,11 +1647,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 2,
+                    .Writes = EnableIndexStreamWrite ? 1 : 2,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 28,
+                    .WriteBytes = EnableIndexStreamWrite ? 20 : 28,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1524,14 +1673,17 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             Cerr << stats.DebugString() << Endl;
 
+            // Other INSERT may ack before the failure.
+            const size_t writes = FromProto(stats).Writes;
+            UNIT_ASSERT_C(writes <= 1, writes);
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = writes,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = writes * 20,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1553,14 +1705,16 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             Cerr << stats.DebugString() << Endl;
 
+            const size_t writes = FromProto(stats).Writes;
+            UNIT_ASSERT_C(writes <= 1, writes);
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = writes,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = writes * 20,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1616,11 +1770,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = EnableIndexStreamWrite ? 1 : 0,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = EnableIndexStreamWrite ? 20 : 0,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1647,11 +1801,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = EnableIndexStreamWrite ? 1 : 0,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = EnableIndexStreamWrite ? 20 : 0,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1678,14 +1832,15 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = EnableIndexStreamWrite ? 2 : 0,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = EnableIndexStreamWrite ? 40 : 0,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
+                
         }
 
         {
@@ -1823,19 +1978,18 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             Cerr << stats.DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
 
+            // Other INSERT may ack before the failure.
+            const size_t writes = FromProto(stats).Writes;
+            UNIT_ASSERT_C(writes <= 1, writes);
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = writes,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = writes * 20,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -1857,21 +2011,17 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             Cerr << stats.DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
-
+            const size_t writes = FromProto(stats).Writes;
+            UNIT_ASSERT_C(writes <= 1, writes);
             Check(
                 FromProto(stats),
                 TTotalStats{
-                    .Writes = 0,
+                    .Writes = writes,
                     .Reads = 1,
                     .Deletes = 0,
 
-                    .WriteBytes = 0,
+                    .WriteBytes = writes * 20,
                     .ReadBytes = 8,
                     .DeleteBytes = 0,
                 });
@@ -2184,8 +2334,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
     Y_UNIT_TEST(BatchOperation_Update) {
         auto appConfig = GetAppConfig(false, false);
-        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
-
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
 
@@ -2218,8 +2366,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
     Y_UNIT_TEST(BatchOperation_Delete) {
         auto appConfig = GetAppConfig(false, false);
-        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
-
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
 
@@ -2251,8 +2397,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
     Y_UNIT_TEST(BatchOperation_RetryIsFree) {
         auto appConfig = GetAppConfig(false, false);
-        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
-
         auto settings = TKikimrSettings(appConfig)
             .SetUseRealThreads(false)
             .SetWithSampleTables(false);
@@ -2339,8 +2483,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         auto appConfig = GetAppConfig(false, false);
         // Set MaxBatchSize to 1 so each row is processed in a separate batch
         appConfig.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetMaxBatchSize(1);
-        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
-
         auto settings = TKikimrSettings(appConfig)
             .SetUseRealThreads(false)
             .SetWithSampleTables(false);
@@ -2424,9 +2566,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 32);
     }
 
-    Y_UNIT_TEST(BatchOperation_SecondaryIndex) {
+    Y_UNIT_TEST_TWIN(BatchOperation_SecondaryIndex, EnableIndexStreamWrite) {
         auto appConfig = GetAppConfig(false, false);
-        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
@@ -2472,6 +2614,310 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).updates().bytes(), 64);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).deletes().rows(), 4);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).deletes().bytes(), 0);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(WriteRowWithIndex, EnableIndexStreamWrite) {
+        auto appConfig = GetAppConfig(false, false);
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, false);
+
+        {
+            const auto query = R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX `TestIndex` GLOBAL SYNC ON (Amount);
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = R"(
+                UPDATE `/Root/TestTable` SET Amount = 1000;
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "UPDATE secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 8,
+                    .Reads = 4,
+                    .Deletes = 4,
+
+                    .WriteBytes = 128,
+                    .ReadBytes = 64,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                UPDATE `/Root/TestTable` SET Comment = "Comment";
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "UPDATE secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 4,
+                    .Reads = 4,
+                    .Deletes = 0,
+
+                    .WriteBytes = 60,
+                    .ReadBytes = 32,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                DELETE FROM `/Root/TestTable`;
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "DELETE secondary index: " << Endl << stats.DebugString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 92);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).deletes().rows(), 4);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 4,
+                    .Deletes = 8,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 92,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (101u, "Anna", 3500ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "UPSERT secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 0,
+                    .Deletes = 0,
+
+                    .WriteBytes = 36,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (101u, "Anna", 3500ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "UPSERT (exists) secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 16,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (101u, "Anna", 1000ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "UPSERT (exists other) secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 1,
+                    .Deletes = 1,
+
+                    .WriteBytes = 36,
+                    .ReadBytes = 16,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                REPLACE INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (102u, "Anna", 3500ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "REPLACE secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 0,
+                    .Deletes = 0,
+
+                    .WriteBytes = 36,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                REPLACE INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (102u, "Anna", 3500ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "REPLACE (exists) secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 20,
+                    .ReadBytes = 16,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                REPLACE INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (102u, "Anna", 1000ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "REPLACE (exists other) secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 1,
+                    .Deletes = 1,
+
+                    .WriteBytes = 36,
+                    .ReadBytes = 16,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (103u, "Anna", 3500ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "INSERT secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 0,
+                    .Deletes = 0,
+
+                    .WriteBytes = 36,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            const auto query = R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
+                    (103u, "Anna", 3500ul, "None");
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "INSERT (exists) secondary index: " << Endl << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
         }
     }
 }

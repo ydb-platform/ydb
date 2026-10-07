@@ -173,7 +173,6 @@ public:
     {
     }
 
-public:
     void OnObject(NPureCalcProto::TSimpleMessage* t) override {
         Buf_->push_back(t->GetX());
     }
@@ -191,7 +190,6 @@ public:
     using TType1 = TVector<std::pair<ui32, TString>>;
     using TType2 = TVector<TString>;
 
-public:
     TVariantConsumerImpl(TType0* q0, TType1* q1, TType2* q2, int* v)
         : Queue0_(q0)
         , Queue1_(q1)
@@ -232,7 +230,6 @@ public:
         Message_.SetAString("Hello!");
     }
 
-public:
     NPureCalcProto::TUnsplitted* Fetch() override {
         switch (I_) {
             case 0:
@@ -416,15 +413,18 @@ void CheckMessageIsInvalid(const TString& expectedExceptionMessage) {
 
     UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
         factory->MakePushStreamProgram(TProtobufInputSpec<T>(), TProtobufOutputSpec<T>(), "SELECT * FROM Input", ETranslationMode::SQL);
-    }(), yexception, expectedExceptionMessage);
+    }(), yexception,
+                                   TStringBuf{expectedExceptionMessage});
 
     UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
         factory->MakePullStreamProgram(TProtobufInputSpec<T>(), TProtobufOutputSpec<T>(), "SELECT * FROM Input", ETranslationMode::SQL);
-    }(), yexception, expectedExceptionMessage);
+    }(), yexception,
+                                   TStringBuf{expectedExceptionMessage});
 
     UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
         factory->MakePullListProgram(TProtobufInputSpec<T>(), TProtobufOutputSpec<T>(), "SELECT * FROM Input", ETranslationMode::SQL);
-    }(), yexception, expectedExceptionMessage);
+    }(), yexception,
+                                   TStringBuf{expectedExceptionMessage});
 }
 
 Y_UNIT_TEST(TestSimpleNested) {
@@ -923,13 +923,13 @@ Y_UNIT_TEST(TestFieldRenames) {
     inputProtoOptions.SetFieldRenames({{"X", "InputAlias"}});
 
     auto inputSpec = TProtobufInputSpec<NPureCalcProto::TSimpleMessage>(
-        Nothing(), std::move(inputProtoOptions));
+        Nothing(), inputProtoOptions);
 
     auto outputProtoOptions = TProtoSchemaOptions();
     outputProtoOptions.SetFieldRenames({{"X", "OutputAlias"}});
 
     auto outputSpec = TProtobufOutputSpec<NPureCalcProto::TSimpleMessage>(
-        std::move(outputProtoOptions));
+        outputProtoOptions);
 
     {
         auto program = factory->MakePullStreamProgram(
@@ -998,7 +998,7 @@ Y_UNIT_TEST(TestNestedFieldRenames) {
     inputProtoOptions.SetEnableRecursiveRenaming(true);
 
     auto inputSpec = TProtobufInputSpec<NPureCalcProto::TSimpleNested>(
-        Nothing(), std::move(inputProtoOptions));
+        Nothing(), inputProtoOptions);
 
     auto outputProtoOptions = TProtoSchemaOptions();
     outputProtoOptions.SetEnableRecursiveRenaming(true);
@@ -1009,7 +1009,7 @@ Y_UNIT_TEST(TestNestedFieldRenames) {
 
     outputProtoOptions.SetFieldRenames({{"Y", "OutputAlias"}});
     auto outputSpecWithoutNestedRename = TProtobufOutputSpec<NPureCalcProto::TSimpleNested>(
-        std::move(outputProtoOptions));
+        outputProtoOptions);
 
     {
         auto program = factory->MakePullStreamProgram(

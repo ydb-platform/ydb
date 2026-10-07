@@ -20,7 +20,7 @@ PEERDIR(
     yql/essentials/ast
     yql/essentials/core/services/mounts
     yql/essentials/core/user_data
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/core/type_ann
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/public/udf_meta
@@ -41,7 +41,7 @@ PEERDIR(
     yql/essentials/sql/v1/format
     yql/essentials/sql/settings
     yql/essentials/parser/pg_wrapper/interface
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
 )
 
 RESOURCE(

@@ -1,6 +1,17 @@
-/* Generated from norwegian.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from norwegian.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_ISO_8859_1_norwegian.h"
+
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
+
+struct SN_local {
+    struct SN_env z;
+    int i_p1;
+};
+
+typedef struct SN_local SN_local;
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,22 +20,14 @@ extern int norwegian_ISO_8859_1_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
+
 static int r_other_suffix(struct SN_env * z);
 static int r_consonant_pair(struct SN_env * z);
 static int r_main_suffix(struct SN_env * z);
 static int r_mark_regions(struct SN_env * z);
-#ifdef __cplusplus
-extern "C" {
-#endif
 
+static const symbol s_0[] = { 'e', 'r' };
 
-extern struct SN_env * norwegian_ISO_8859_1_create_env(void);
-extern void norwegian_ISO_8859_1_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_1[3] = { 'i', 'n', 'd' };
 static const symbol s_0_2[2] = { 'k', 'k' };
 static const symbol s_0_3[2] = { 'n', 'k' };
@@ -154,44 +157,59 @@ static const unsigned char g_v[] = { 17, 65, 16, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 static const unsigned char g_s_ending[] = { 119, 125, 148, 1 };
 
-static const symbol s_0[] = { 'e', 'r' };
-
 static int r_mark_regions(struct SN_env * z) {
-    z->I[1] = z->l;
+    ((SN_local *)z)->i_p1 = z->l;
     {
         int v_1 = z->c;
-z->c = z->c + 3;
-        if (z->c > z->l) return 0;
-        z->I[0] = z->c;
+        do {
+            int v_2 = z->c;
+            while (1) {
+                if (z->c == z->l || z->p[z->c] != '\'') goto lab2;
+                z->c++;
+                break;
+            lab2:
+                if (z->c >= z->l) goto lab1;
+                z->c++;
+            }
+            break;
+        lab1:
+            z->c = v_2;
+            {
+                int ret = out_grouping(z, g_v, 97, 248, 1);
+                if (ret < 0) goto lab0;
+                z->c += ret;
+            }
+            {
+                int ret = in_grouping(z, g_v, 97, 248, 1);
+                if (ret < 0) goto lab0;
+                z->c += ret;
+            }
+        } while (0);
+        ((SN_local *)z)->i_p1 = z->c;
+    lab0:
         z->c = v_1;
     }
     {
-        int ret = out_grouping(z, g_v, 97, 248, 1);
-        if (ret < 0) return 0;
-        z->c += ret;
+        int v_3 = z->c;
+        if (z->c + 3 > z->l) return 0;
+        z->c += 3;
+        if (((SN_local *)z)->i_p1 >= z->c) goto lab3;
+        ((SN_local *)z)->i_p1 = z->c;
+    lab3:
+        z->c = v_3;
     }
-    {
-        int ret = in_grouping(z, g_v, 97, 248, 1);
-        if (ret < 0) return 0;
-        z->c += ret;
-    }
-    z->I[1] = z->c;
-    if (z->I[1] >= z->I[0]) goto lab0;
-    z->I[1] = z->I[0];
-lab0:
     return 1;
 }
 
 static int r_main_suffix(struct SN_env * z) {
     int among_var;
-
     {
         int v_1;
-        if (z->c < z->I[1]) return 0;
-        v_1 = z->lb; z->lb = z->I[1];
+        if (z->c < ((SN_local *)z)->i_p1) return 0;
+        v_1 = z->lb; z->lb = ((SN_local *)z)->i_p1;
         z->ket = z->c;
         if (z->c <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((1851426 >> (z->p[z->c - 1] & 0x1f)) & 1)) { z->lb = v_1; return 0; }
-        among_var = find_among_b(z, a_1, 29);
+        among_var = find_among_b(z, a_1, 29, 0);
         if (!among_var) { z->lb = v_1; return 0; }
         z->bra = z->c;
         z->lb = v_1;
@@ -205,7 +223,7 @@ static int r_main_suffix(struct SN_env * z) {
             break;
         case 2:
             if (z->c <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((5318672 >> (z->p[z->c - 1] & 0x1f)) & 1)) among_var = 1; else
-            among_var = find_among_b(z, a_0, 15);
+            among_var = find_among_b(z, a_0, 15, 0);
             switch (among_var) {
                 case 1:
                     {
@@ -216,30 +234,24 @@ static int r_main_suffix(struct SN_env * z) {
             }
             break;
         case 3:
-            {
+            do {
                 int v_2 = z->l - z->c;
-                if (in_grouping_b(z, g_s_ending, 98, 122, 0)) goto lab1;
-                goto lab0;
-            lab1:
-                z->c = z->l - v_2;
-                if (z->c <= z->lb || z->p[z->c - 1] != 'r') goto lab2;
+                if (in_grouping_b(z, g_s_ending, 98, 122, 0)) goto lab0;
+                break;
+            lab0:
+                if (z->c <= z->lb || z->p[z->c - 1] != 'r') goto lab1;
                 z->c--;
-                {
-                    int v_3 = z->l - z->c;
-                    if (z->c <= z->lb || z->p[z->c - 1] != 'e') goto lab3;
-                    z->c--;
-                    goto lab2;
-                lab3:
-                    z->c = z->l - v_3;
-                }
-                goto lab0;
+                if (z->c <= z->lb || z->p[z->c - 1] != 'e') goto lab2;
+                z->c--;
+                goto lab1;
             lab2:
+                break;
+            lab1:
                 z->c = z->l - v_2;
                 if (z->c <= z->lb || z->p[z->c - 1] != 'k') return 0;
                 z->c--;
                 if (out_grouping_b(z, g_v, 97, 248, 0)) return 0;
-            }
-        lab0:
+            } while (0);
             {
                 int ret = slice_del(z);
                 if (ret < 0) return ret;
@@ -258,14 +270,13 @@ static int r_main_suffix(struct SN_env * z) {
 static int r_consonant_pair(struct SN_env * z) {
     {
         int v_1 = z->l - z->c;
-
         {
             int v_2;
-            if (z->c < z->I[1]) return 0;
-            v_2 = z->lb; z->lb = z->I[1];
+            if (z->c < ((SN_local *)z)->i_p1) return 0;
+            v_2 = z->lb; z->lb = ((SN_local *)z)->i_p1;
             z->ket = z->c;
             if (z->c - 1 <= z->lb || z->p[z->c - 1] != 116) { z->lb = v_2; return 0; }
-            if (!find_among_b(z, a_2, 2)) { z->lb = v_2; return 0; }
+            if (!find_among_b(z, a_2, 2, 0)) { z->lb = v_2; return 0; }
             z->bra = z->c;
             z->lb = v_2;
         }
@@ -282,14 +293,13 @@ static int r_consonant_pair(struct SN_env * z) {
 }
 
 static int r_other_suffix(struct SN_env * z) {
-
     {
         int v_1;
-        if (z->c < z->I[1]) return 0;
-        v_1 = z->lb; z->lb = z->I[1];
+        if (z->c < ((SN_local *)z)->i_p1) return 0;
+        v_1 = z->lb; z->lb = ((SN_local *)z)->i_p1;
         z->ket = z->c;
         if (z->c - 1 <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((4718720 >> (z->p[z->c - 1] & 0x1f)) & 1)) { z->lb = v_1; return 0; }
-        if (!find_among_b(z, a_3, 11)) { z->lb = v_1; return 0; }
+        if (!find_among_b(z, a_3, 11, 0)) { z->lb = v_1; return 0; }
         z->bra = z->c;
         z->lb = v_1;
     }
@@ -302,18 +312,22 @@ static int r_other_suffix(struct SN_env * z) {
 
 extern int norwegian_ISO_8859_1_stem(struct SN_env * z) {
     {
-        int v_1 = z->c;
-        {
-            int ret = r_mark_regions(z);
-            if (ret < 0) return ret;
-        }
-        z->c = v_1;
+        int ret = r_mark_regions(z);
+        if (ret <= 0) return ret;
     }
     z->lb = z->c; z->c = z->l;
     {
-        int v_2 = z->l - z->c;
+        int v_1 = z->l - z->c;
         {
             int ret = r_main_suffix(z);
+            if (ret < 0) return ret;
+        }
+        z->c = z->l - v_1;
+    }
+    {
+        int v_2 = z->l - z->c;
+        {
+            int ret = r_consonant_pair(z);
             if (ret < 0) return ret;
         }
         z->c = z->l - v_2;
@@ -321,24 +335,32 @@ extern int norwegian_ISO_8859_1_stem(struct SN_env * z) {
     {
         int v_3 = z->l - z->c;
         {
-            int ret = r_consonant_pair(z);
+            int ret = r_other_suffix(z);
             if (ret < 0) return ret;
         }
         z->c = z->l - v_3;
     }
+    z->ket = z->c;
+    if (z->c <= z->lb || z->p[z->c - 1] != '\'') return 0;
+    z->c--;
+    z->bra = z->c;
     {
-        int v_4 = z->l - z->c;
-        {
-            int ret = r_other_suffix(z);
-            if (ret < 0) return ret;
-        }
-        z->c = z->l - v_4;
+        int ret = slice_del(z);
+        if (ret < 0) return ret;
     }
     z->c = z->lb;
     return 1;
 }
 
-extern struct SN_env * norwegian_ISO_8859_1_create_env(void) { return SN_create_env(0, 2); }
+extern struct SN_env * norwegian_ISO_8859_1_create_env(void) {
+    struct SN_env * z = SN_new_env(sizeof(SN_local));
+    if (z) {
+        ((SN_local *)z)->i_p1 = 0;
+    }
+    return z;
+}
 
-extern void norwegian_ISO_8859_1_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void norwegian_ISO_8859_1_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

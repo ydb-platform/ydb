@@ -32,7 +32,9 @@ public:
         AddHandler({TYtReadTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleReadTable));
         AddHandler({TYtReadTableScheme::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleReadTableScheme));
         AddHandler({TYtCreateTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleCreateDrop));
+        AddHandler({TYtCreateSymlink::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleCreateDrop));
         AddHandler({TYtDropTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleCreateDrop));
+        AddHandler({TYtDropSymlink::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleCreateDrop));
         AddHandler({TYtCreateView::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleCreateDrop));
         AddHandler({TYtDropView::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleCreateDrop));
         AddHandler({TYtPublish::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandlePublish));
@@ -42,6 +44,7 @@ public:
         AddHandler({TYtMapReduce::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleOperation));
         AddHandler({TYtCopy::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleOperation));
         AddHandler({TYtMerge::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleOperation));
+        AddHandler({TYtPersist::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleOperation));
         AddHandler({TYtEquiJoin::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleOperation));
         AddHandler({TYtFill::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleOutOperation));
         AddHandler({TYtTouch::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleOutOperation));
@@ -98,12 +101,22 @@ public:
             RegisterAnonymouseTable(cluster, tableInfo.Name);
         }
 
+        TMaybe<EYtWriteMode> writeMode;
         if (auto mode = NYql::GetSetting(write.Arg(4).Ref(), EYtSettingType::Mode)) {
             try {
-                switch (FromString<EYtWriteMode>(mode->Child(1)->Content())) {
+                writeMode = FromString<EYtWriteMode>(mode->Child(1)->Content());
+                switch (*writeMode) {
                 case EYtWriteMode::Drop:
                 case EYtWriteMode::DropIfExists:
                     tableDesc.Intents |= TYtTableIntent::Drop;
+                    break;
+                case EYtWriteMode::DropSymlink:
+                case EYtWriteMode::DropSymlinkIfExists:
+                    tableDesc.Intents |= TYtTableIntent::SymlinkDrop;
+                    break;
+                case EYtWriteMode::CreateSymlink:
+                case EYtWriteMode::CreateSymlinkIfNotExists:
+                    tableDesc.Intents |= TYtTableIntent::SymlinkCreate;
                     break;
                 case EYtWriteMode::DropObject:
                 case EYtWriteMode::DropObjectIfExists:
@@ -147,6 +160,18 @@ public:
 
         if (!ValidateOutputTableIntent(ctx.GetPosition(input.Pos()), tableDesc.Intents, cluster, tableInfo.Name, ctx)) {
             return TStatus::Error;
+        }
+
+        if (writeMode && IsCreateSymlinkMode(*writeMode)) {
+            if (!write.Arg(3).Maybe<TYtTable>()) {
+                ctx.AddError(TIssue(ctx.GetPosition(write.Arg(3).Pos()), TStringBuilder()
+                    << "Expected " << TYtTable::CallableName()));
+                return TStatus::Error;
+            }
+            const TYtTableInfo targetInfo(write.Arg(3), false);
+            if (!ProcessInputTableIntent(ctx.GetPosition(write.Arg(3).Pos()), targetInfo, ctx, TYtTableIntent::Referenced)) {
+                return TStatus::Error;
+            }
         }
 
         return TStatus::Ok;
@@ -236,8 +261,20 @@ public:
         if (input->IsCallable({TYtCreateView::CallableName(), TYtDropView::CallableName()})) {
             tableDesc.Intents |= TYtTableIntent::View;
         }
-
+        if (input->IsCallable(TYtCreateSymlink::CallableName())) {
+            tableDesc.Intents |= TYtTableIntent::SymlinkCreate;
+        }
+        if (input->IsCallable(TYtDropSymlink::CallableName())) {
+            tableDesc.Intents |= TYtTableIntent::SymlinkDrop;
+        }
         UpdateDescriptorMeta(tableDesc, tableInfo);
+
+        if (const auto maybeCreateSymlink = TMaybeNode<TYtCreateSymlink>(input)) {
+            const TYtTableInfo targetInfo(maybeCreateSymlink.Cast().Target(), false);
+            if (!ProcessInputTableIntent(ctx.GetPosition(maybeCreateSymlink.Cast().Target().Pos()), targetInfo, ctx, TYtTableIntent::Referenced)) {
+                return TStatus::Error;
+            }
+        }
 
         output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         return !output ? TStatus::Error : TStatus::Ok;
@@ -273,6 +310,10 @@ public:
                     break;
                 case EYtWriteMode::Replace:
                     tableDesc.Intents |= TYtTableIntent::Replace;
+                    break;
+                case EYtWriteMode::Create:
+                case EYtWriteMode::CreateIfNotExists:
+                    tableDesc.Intents |= TYtTableIntent::Create;
                     break;
                 default:
                     ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), TStringBuilder() << "Unsupported "
@@ -388,7 +429,7 @@ private:
         }
     }
 
-    bool ProcessInputTableIntent(TPosition pos, const TYtTableInfo& tableInfo, TExprContext& ctx) {
+    bool ProcessInputTableIntent(TPosition pos, const TYtTableInfo& tableInfo, TExprContext& ctx, TYtTableIntent intent = TYtTableIntent::Read) {
         YQL_ENSURE(tableInfo.Cluster && tableInfo.Cluster != YtUnspecifiedCluster);
         if (!State_->Checkpoints.empty() && State_->Checkpoints.contains(std::make_pair(tableInfo.Cluster, tableInfo.Name))) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Reading from checkpoint " << tableInfo.Name.Quote() << " is not allowed"));
@@ -406,8 +447,8 @@ private:
             RegisterAnonymouseTable(tableInfo.Cluster, tableInfo.Name);
         }
 
-        TYtTableIntents intents = TYtTableIntent::Read;
-        if (tableInfo.Settings) {
+        TYtTableIntents intents = TYtTableIntent::Read | intent;
+        if (intent == TYtTableIntent::Read && tableInfo.Settings) {
             auto view = NYql::GetSetting(tableInfo.Settings.Cast().Ref(), EYtSettingType::View);
             if (view) {
                 if (tableInfo.Epoch.GetOrElse(0)) {

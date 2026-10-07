@@ -42,10 +42,9 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId, ui64 cookie) {
-        if ((StaticNodeSessionId && sessionId != StaticNodeSessionId) || cookie != StaticNodeSubscriptionCookie) {
+        if (nodeId != ConnectedToStaticNode || (StaticNodeSessionId && sessionId != StaticNodeSessionId) || cookie != StaticNodeSubscriptionCookie) {
             return; // possible race with unsubscription
         }
-        Y_ABORT_UNLESS(nodeId == ConnectedToStaticNode);
         ConnectedToStaticNode = 0;
         StaticNodeSessionId = {};
         ConnectToStaticNode();

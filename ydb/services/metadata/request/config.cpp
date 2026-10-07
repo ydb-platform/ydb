@@ -1,4 +1,5 @@
 #include "config.h"
+#include <ydb/core/protos/config.pb.h>
 #include <util/generic/ylimits.h>
 
 namespace NKikimr::NMetadata::NRequest {

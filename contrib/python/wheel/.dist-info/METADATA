@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wheel
-Version: 0.46.3
+Version: 0.47.0
 Summary: Command line tool for manipulating wheel files
 Keywords: wheel,packaging
 Author-email: Daniel Holth <dholth@fastmail.fm>
@@ -21,13 +21,10 @@ Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3.14
 License-File: LICENSE.txt
 Requires-Dist: packaging >= 24.0
-Requires-Dist: pytest >= 6.0.0 ; extra == "test"
-Requires-Dist: setuptools >= 77 ; extra == "test"
 Project-URL: Changelog, https://wheel.readthedocs.io/en/stable/news.html
 Project-URL: Documentation, https://wheel.readthedocs.io/
 Project-URL: Issue Tracker, https://github.com/pypa/wheel/issues
 Project-URL: Source, https://github.com/pypa/wheel
-Provides-Extra: test
 
 wheel
 =====
@@ -40,7 +37,7 @@ This is a command line tool for manipulating Python wheel files, as defined in
 * Repack wheel archives
 * Add or remove tags in existing wheel archives
 
-.. _PEP 427: https://www.python.org/dev/peps/pep-0427/
+.. _PEP 427: https://peps.python.org/pep-0427/
 
 Historical note
 ---------------

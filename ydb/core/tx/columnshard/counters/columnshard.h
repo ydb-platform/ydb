@@ -19,7 +19,8 @@ enum class EOverloadStatus {
     Disk /* "disk" */,
     None /* "none" */,
     OverloadCompaction /* "overload_compaction" */,
-    RejectProbability,
+    RejectProbability /* "reject_probability" */,
+    SmallBlobsQuota /* "small_blobs_quota" */,
 };
 
 struct TOverloadStatus {
@@ -101,6 +102,12 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FutureIndexationInputBytes;
     NMonitoring::TDynamicCounters::TCounterPtr IndexationInputBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr CutHistoryRequestsSent;
+    NMonitoring::TDynamicCounters::TCounterPtr CutHistoryCuttableIntervals;
+    NMonitoring::TDynamicCounters::TCounterPtr CutHistoryScansAborted;
+    NMonitoring::TDynamicCounters::TCounterPtr CutHistoryBlobGroupMismatches;
+    NMonitoring::THistogramPtr CutHistoryScanDurationMs;
+    NMonitoring::THistogramPtr CutHistoryWaitDurationMs;
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataBytes;
@@ -115,6 +122,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardWritesSizeCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadRejectProbabilityBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadRejectProbabilityCount;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadSmallBlobsQuotaBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr OverloadSmallBlobsQuotaCount;
 
     std::shared_ptr<TValueAggregationClient> InternalCompactionGranuleBytes;
     std::shared_ptr<TValueAggregationClient> InternalCompactionGranulePortionsCount;
@@ -236,6 +245,11 @@ public:
         OverloadRejectProbabilityCount->Add(1);
     }
 
+    void OnWriteOverloadSmallBlobsQuota(const ui64 size) const {
+        OverloadSmallBlobsQuotaBytes->Add(size);
+        OverloadSmallBlobsQuotaCount->Add(1);
+    }
+
     void SkipIndexationInputDueToSplitCompaction(const ui64 size) const {
         SkipIndexationInputDueToSplitCompactionBytes->Add(size);
         SkipIndexationInputDueToSplitCompactionCount->Add(1);
@@ -252,6 +266,27 @@ public:
 
     void IndexationInput(const ui64 size) const {
         IndexationInputBytes->Add(size);
+    }
+
+    void OnCutHistoryScanAborted() const {
+        CutHistoryScansAborted->Inc();
+    }
+
+    void OnCutHistoryBlobGroupMismatch() const {
+        CutHistoryBlobGroupMismatches->Inc();
+    }
+
+    void OnCutHistoryScanFinished(const TDuration duration) const {
+        CutHistoryScanDurationMs->Collect(duration.MilliSeconds());
+    }
+
+    void OnCutHistoryRequestSent(const TDuration duration) const {
+        CutHistoryRequestsSent->Inc();
+        CutHistoryWaitDurationMs->Collect(duration.MilliSeconds());
+    }
+
+    void OnCuttableHistoryIntervalsFound(const ui64 count) const {
+        CutHistoryCuttableIntervals->Add(count);
     }
 
     void OnIndexMetadataLimit(const ui64 limit) const {

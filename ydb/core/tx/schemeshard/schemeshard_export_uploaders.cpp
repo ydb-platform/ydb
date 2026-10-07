@@ -24,10 +24,13 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/backup/proto/proto.h>
 
 #include <library/cpp/json/json_writer.h>
 
 #include <type_traits>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXPORT
 
 namespace NKikimr::NSchemeShard {
 
@@ -58,6 +61,11 @@ protected:
         return NKikimrServices::TActivity::EXPORT_UPLOADER_ACTOR;
     }
 
+    TString GetObjectKey(TStringBuf path, bool addEncryptionSuffix = false) const {
+        return TStringBuilder() << NBackup::NormalizeExportPrefix(DestinationPrefix) << '/' << path
+            << (addEncryptionSuffix ? ".enc" : "");
+    }
+
     // Adds a file to queue.
     // filePath is relative to DestinationPrefix
     // iv if file is needed to be encrypted
@@ -68,7 +76,7 @@ protected:
     {
         if (iv) {
             if (!Key) {
-                Fail(TStringBuilder() << "Internal error: no encryption key");
+                Fail(TStringBuilder() << GetObjectKey(filePath, true) << ": internal error: no encryption key");
                 return false;
             }
             filePath += ".enc";
@@ -79,7 +87,7 @@ protected:
                     content);
                 content.assign(encContent.Data(), encContent.Size());
             } catch (const std::exception& ex) {
-                Fail(TStringBuilder() << "Failed to encrypt " << filePath << ": " << ex.what());
+                Fail(TStringBuilder() << GetObjectKey(filePath) << ": failed to encrypt: " << ex.what());
                 return false;
             }
         }
@@ -110,10 +118,7 @@ protected:
 
         const TFileUpload& upload = Files.front();
 
-        TStringBuilder path;
-        path << NBackup::NormalizeExportPrefix(DestinationPrefix) << '/' << upload.Path;
-
-        auto request = Aws::S3::Model::PutObjectRequest().WithKey(path);
+        auto request = Aws::S3::Model::PutObjectRequest().WithKey(GetObjectKey(upload.Path));
 
         this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(upload.Content)));
     }
@@ -122,9 +127,10 @@ protected:
         const auto& result = ev->Get()->Result;
         TFileUpload& upload = Files.front();
 
-        LOG_D("Put file response " << upload.Path
-            << ", self: " << this->SelfId()
-            << ", result: " << result
+        YDB_LOG_DEBUG("Put file response " << upload.Path,
+            {"self", this->SelfId()},
+            {"key", GetObjectKey(upload.Path)},
+            {"result", result},
         );
 
         if (!result.IsSuccess()) {
@@ -139,7 +145,7 @@ protected:
         if (upload.Attempt < Settings.number_of_retries() && NWrappers::ShouldRetry(error)) {
             Retry(upload);
         } else {
-            Fail(TStringBuilder() << upload.Path << ". S3 error: " << error.GetMessage());
+            Fail(TStringBuilder() << GetObjectKey(upload.Path) << ": " << LogPrefix() << " error: " << error.GetMessage());
         }
     }
 
@@ -170,6 +176,11 @@ protected:
     void PassAway() override {
         this->Send(StorageOperator, new TEvents::TEvPoisonPill());
         IActor::PassAway();
+    }
+
+public:
+    static constexpr TStringBuf LogPrefix() {
+        return NBackup::NFieldsWrappers::GetStorageName<TSettings>();
     }
 
 private:
@@ -219,9 +230,9 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
     void HandleSchemeDescription(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         const auto& describeResult = ev->Get()->GetRecord();
 
-        LOG_D("HandleSchemeDescription"
-            << ", self: " << this->SelfId()
-            << ", status: " << describeResult.GetStatus()
+        YDB_LOG_DEBUG("HandleSchemeDescription",
+            {"self", this->SelfId()},
+            {"status", describeResult.GetStatus()},
         );
 
         if (describeResult.GetStatus() != TEvSchemeShard::EStatus::StatusSuccess) {
@@ -234,9 +245,9 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
         }
 
         if (auto permissions = NDataShard::GenYdbPermissions(describeResult.GetPathDescription())) {
-            google::protobuf::TextFormat::PrintToString(permissions.GetRef(), &Permissions);
+            Y_ENSURE(NYdb::NBackup::PrintProto(permissions.GetRef(), Permissions));
         } else {
-            return Finish(false, "cannot infer permissions");
+            return Finish(false, TStringBuilder() << this->GetObjectKey("permissions.pb", IV.Defined()) << ": cannot infer permissions");
         }
 
         StartUploadFiles();
@@ -244,7 +255,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
 
     void StartUploadFiles() {
         if (!Scheme) {
-            return Finish(false, "cannot infer scheme");
+            return Finish(false, TStringBuilder() << this->GetObjectKey(FileName, IV.Defined()) << ": cannot infer scheme");
         }
 
         if (!this->AddFile(FileName, Scheme, MakeIV(SchemeFileType))) {
@@ -259,7 +270,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
 
         if (EnablePermissions) {
             if (!Permissions) {
-                return Finish(false, "cannot infer permissions");
+                return Finish(false, TStringBuilder() << this->GetObjectKey("permissions.pb", IV.Defined()) << ": cannot infer permissions");
             }
 
             if (!this->AddFile("permissions.pb", Permissions, MakeIV(NBackup::EBackupFileType::Permissions))) {
@@ -274,7 +285,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
         }
 
         if (!Metadata) {
-            return Finish(false, "empty metadata");
+            return Finish(false, TStringBuilder() << this->GetObjectKey("metadata.json", IV.Defined()) << ": empty metadata");
         }
         if (!this->AddFile("metadata.json", Metadata, IV)) {
             return;
@@ -298,10 +309,10 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
-        LOG_I("Finish"
-            << ", self: " << this->SelfId()
-            << ", success: " << success
-            << ", error: " << error
+        YDB_LOG_INFO("Finish",
+            {"self", this->SelfId()},
+            {"success", success},
+            {"error", error},
         );
 
         this->Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, success, error));
@@ -473,10 +484,10 @@ private:
     }
 
     void OnFilesUploaded(bool success, const TString& error) override {
-        LOG_I("Finish uploading export metadata"
-            << ", self: " << this->SelfId()
-            << ", success: " << success
-            << ", error: " << error
+        YDB_LOG_INFO("Finish uploading export metadata",
+            {"self", this->SelfId()},
+            {"success", success},
+            {"error", error},
         );
 
         this->Send(SchemeShard, new TEvPrivate::TEvExportUploadMetadataResult(ExportId, success, error));
@@ -535,3 +546,5 @@ template NActors::IActor* CreateExportMetadataUploader<Ydb::Export::ExportToFsSe
 );
 
 } // NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

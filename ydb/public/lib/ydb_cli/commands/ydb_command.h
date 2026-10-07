@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
@@ -26,8 +27,8 @@ public:
         const TString& description = TString()
     );
 
-    static TDriver CreateDriver(TConfig& config);
-    static TDriver CreateDriver(TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend);
+    static TScopedDriver CreateDriver(TConfig& config);
+    static TScopedDriver CreateDriver(TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend);
 };
 
 class TYdbReadOnlyCommand : public TYdbCommand {

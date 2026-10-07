@@ -57,13 +57,13 @@ SELECT
     t_s_secyear.customer_first_name,
     t_s_secyear.customer_last_name
 FROM
-    year_total AS t_s_firstyear
+    $year_total AS t_s_firstyear
 ,
-    year_total AS t_s_secyear
+    $year_total AS t_s_secyear
 ,
-    year_total AS t_w_firstyear
+    $year_total AS t_w_firstyear
 ,
-    year_total AS t_w_secyear
+    $year_total AS t_w_secyear
 WHERE
     t_s_secyear.customer_id == t_s_firstyear.customer_id
     AND t_s_firstyear.customer_id == t_w_secyear.customer_id

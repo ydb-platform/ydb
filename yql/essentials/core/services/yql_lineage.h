@@ -6,7 +6,13 @@ namespace NYql {
 struct TTypeAnnotationContext;
 struct TExprContext;
 
-TString CalculateLineage(const TExprNode& root, TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone, ui32 version);
+struct TLineageRunOptions {
+    bool Standalone = false;
+    ui32 Version = 1;
+    bool YsonTypeFormat = false;
+};
+
+TString CalculateLineage(const TExprNode& root, TTypeAnnotationContext& ctx, TExprContext& exprCtx, const TLineageRunOptions& options);
 
 // Check that lineage section is not empty
 void ValidateLineage(const TString& lineageStr);

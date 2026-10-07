@@ -4,6 +4,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCJOB
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -71,12 +73,12 @@ namespace NKikimr {
             // check that the disk is from this group
             if (!SelfVDiskId.SameGroupAndGeneration(evInfo.SourceVDisk) ||
                     !SelfVDiskId.SameDisk(evInfo.TargetVDisk)) {
-                LOG_DEBUG_S(TActivationContext::AsActorContext(), BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
-                        << "TVSyncFullHandler: Invalid VDisk ids: "
-                        << " SelfVDiskId# " << SelfVDiskId.ToString()
-                        << " SorceVDiskId# " << evInfo.SourceVDisk.ToString()
-                        << " TargetVDiskId# " << evInfo.TargetVDisk.ToString()
-                        << " Marker# BSVSFH07");
+                YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TVSyncFullHandler: Invalid VDisk ids",
+                    {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
+                    {"selfVDiskId", SelfVDiskId},
+                    {"sorceVDiskId", evInfo.SourceVDisk},
+                    {"targetVDiskId", evInfo.TargetVDisk},
+                    {"marker", "BSVSFH07"});
                 RespondWithErroneousStatus(evInfo, {}, NKikimrProto::ERROR);
                 return false;
             }
@@ -84,33 +86,35 @@ namespace NKikimr {
             // check disk guid and start from the beginning if it has changed
             TVDiskIncarnationGuid incarnationGuid = Db->GetVDiskIncarnationGuid();
             if (incarnationGuid != evInfo.ClientSyncState.Guid) {
-                LOG_DEBUG_S(TActivationContext::AsActorContext(), BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
-                        << "TVSyncFullHandler: GUID CHANGED;"
-                        << " SourceVDisk# " << evInfo.SourceVDisk
-                        << " DbBirthLsn# " << DbBirthLsn
-                        << " VDiskIncarnationGuid# " << incarnationGuid
-                        << " ClientGuid# " << evInfo.ClientSyncState.Guid
-                        << " Marker# BSVSFH02");
+                YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TVSyncFullHandler: GUID CHANGED;",
+                    {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
+                    {"sourceVDisk", evInfo.SourceVDisk},
+                    {"dbBirthLsn", DbBirthLsn},
+                    {"VDiskIncarnationGuid", incarnationGuid},
+                    {"clientGuid", evInfo.ClientSyncState.Guid},
+                    {"marker", "BSVSFH02"});
                 RespondWithErroneousStatus(evInfo, TSyncState(incarnationGuid, DbBirthLsn), NKikimrProto::NODATA);
                 return false;
             }
 
             Y_VERIFY_DEBUG_S(evInfo.SourceVDisk != SelfVDiskId, HullCtx->VCtx->VDiskLogPrefix);
 
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
-                    << "TVSyncFullHandler: syncedLsn# " << evInfo.ClientSyncState.SyncedLsn
-                    << " SourceVDisk# " << evInfo.SourceVDisk
-                    << " TargetVDisk# " << evInfo.TargetVDisk
-                    << " Marker# BSVSFH90");
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TVSyncFullHandler",
+                {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
+                {"syncedLsn", evInfo.ClientSyncState.SyncedLsn},
+                {"sourceVDisk", evInfo.SourceVDisk},
+                {"targetVDisk", evInfo.TargetVDisk},
+                {"marker", "BSVSFH90"});
             return true;
         }
 
         void Bootstrap() {
             Become(&TThis::StateFunc);
 
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
-                    << "TVSyncFullHandler: Bootstrap: SelfVDiskId# " << SelfVDiskId
-                    << " Marker# BSVSFH01");
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TVSyncFullHandler: Bootstrap",
+                {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
+                {"selfVDiskId", SelfVDiskId},
+                {"marker", "BSVSFH01"});
         }
 
         void CreateActorForLegacyProtocol(const TEventInfo& evInfo, TSyncState syncState) {
@@ -219,16 +223,18 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
             TEventInfo evInfo(ev, HullCtx->VCfg->EnablePhantomFlagStorage);
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
-                    << "TVSyncFullHandler: Handle TEvVSyncFull, ev# " << ev->ToString()
-                    << " From SyncState# " << evInfo.ClientSyncState.ToString()
-                    << " Marker# BSVSFH04");
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TVSyncFullHandler: Handle TEvVSyncFull, From",
+                {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
+                {"ev", ev->ToString()},
+                {"syncState", evInfo.ClientSyncState},
+                {"marker", "BSVSFH04"});
 
             IFaceMonGroup->SyncFullMsgs()++;
 
             if (!CheckEvent(evInfo)) {
-                LOG_DEBUG_S(TActivationContext::AsActorContext(), BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
-                        << "TVSyncFullHandler: TEvVSyncFull event discarded, Marker# BSVSFH05");
+                YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TVSyncFullHandler: TEvVSyncFull event discarded,",
+                    {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
+                    {"marker", "BSVSFH05"});
                 return;
             }
 

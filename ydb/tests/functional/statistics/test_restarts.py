@@ -4,9 +4,11 @@ import itertools
 import logging
 
 from hamcrest import assert_that, equal_to
+import pytest
 import requests
 
 from ydb.tests.oss.ydb_sdk_import import ydb
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.common.wait_for import wait_for
 
@@ -16,13 +18,34 @@ logger = logging.getLogger(__name__)
 
 CLUSTER_CONFIG = dict(
     use_in_memory_pdisks=False,
+    extra_feature_flags=["enable_snapshots_locking"],
     additional_log_configs={
         'STATISTICS': LogLevels.DEBUG,
     },
     column_shard_config={
         'max_read_staleness_ms': 200,
+        # Default report period is 60s; shorten for medium timeout.
+        'statistics': {
+            'report_base_statistics_period_ms': 1000,
+            'report_executor_statistics_period_ms': 1000,
+        },
     },
 )
+
+LONG_TX_SERVICE_CONFIG = {
+    'local_snapshot_promotion_time_seconds': 1,
+    'snapshots_exchange_interval_seconds': 1,
+    'snapshots_registry_update_interval_seconds': 1,
+}
+
+
+@pytest.fixture(scope="module")
+def ydb_configurator(ydb_cluster_configuration):
+    config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
+    # Explicitly configure snapshot registry timings for CS min-read-snapshot
+    # calculation. Total service delay is up to 1+1+1+10 = 13s.
+    config_generator.yaml_config["long_tx_service_config"] = LONG_TX_SERVICE_CONFIG
+    return config_generator
 
 
 def test_basic(ydb_cluster, ydb_database, ydb_client):
@@ -83,11 +106,11 @@ def test_basic(ydb_cluster, ydb_database, ydb_client):
 
     def base_stats_ready():
         resp = get_base_stats_response()
-        return resp and resp.status_code == 200 and resp.json()["row_count"] == total_count
+        # Portion counters may temporarily exceed the logical row count.
+        return resp is not None and resp.status_code == 200 and resp.json()["row_count"] >= total_count
 
-    # SchemeShard will wait for 120 seconds before sending the first update
-    # to StatisticsAggregator so provide a generous timeout.
-    assert_that(wait_for(base_stats_ready, timeout_seconds=150), "base stats ready")
+    assert_that(wait_for(base_stats_ready, timeout_seconds=60), "base stats ready")
+    row_count_before = last_response.json()["row_count"]
 
     logger.info("restart and check that table stats are still the same")
 
@@ -95,7 +118,6 @@ def test_basic(ydb_cluster, ydb_database, ydb_client):
         node.stop()
         node.start()
 
-    assert_that(wait_for(get_base_stats_response, timeout_seconds=5),
+    assert_that(wait_for(base_stats_ready, timeout_seconds=60),
                 "base stats available after restart")
-    assert_that(last_response.status_code, equal_to(200))
-    assert_that(last_response.json()["row_count"], equal_to(total_count))
+    assert_that(last_response.json()["row_count"], equal_to(row_count_before))

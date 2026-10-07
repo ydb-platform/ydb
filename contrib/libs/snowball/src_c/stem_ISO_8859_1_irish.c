@@ -1,6 +1,19 @@
-/* Generated from irish.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from irish.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_ISO_8859_1_irish.h"
+
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
+
+struct SN_local {
+    struct SN_env z;
+    int i_p2;
+    int i_p1;
+    int i_pV;
+};
+
+typedef struct SN_local SN_local;
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,26 +22,30 @@ extern int irish_ISO_8859_1_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
+
 static int r_verb_sfx(struct SN_env * z);
 static int r_deriv(struct SN_env * z);
 static int r_noun_sfx(struct SN_env * z);
 static int r_mark_regions(struct SN_env * z);
 static int r_initial_morph(struct SN_env * z);
-static int r_RV(struct SN_env * z);
 static int r_R2(struct SN_env * z);
 static int r_R1(struct SN_env * z);
-#ifdef __cplusplus
-extern "C" {
-#endif
 
+static const symbol s_0[] = { 'f' };
+static const symbol s_1[] = { 's' };
+static const symbol s_2[] = { 'b' };
+static const symbol s_3[] = { 'c' };
+static const symbol s_4[] = { 'd' };
+static const symbol s_5[] = { 'g' };
+static const symbol s_6[] = { 'p' };
+static const symbol s_7[] = { 't' };
+static const symbol s_8[] = { 'm' };
+static const symbol s_9[] = { 'a', 'r', 'c' };
+static const symbol s_10[] = { 'g', 'i', 'n' };
+static const symbol s_11[] = { 'g', 'r', 'a', 'f' };
+static const symbol s_12[] = { 'p', 'a', 'i', 't', 'e' };
+static const symbol s_13[] = { 0xF3, 'i', 'd' };
 
-extern struct SN_env * irish_ISO_8859_1_create_env(void);
-extern void irish_ISO_8859_1_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_0[2] = { 'b', '\'' };
 static const symbol s_0_1[2] = { 'b', 'h' };
 static const symbol s_0_2[3] = { 'b', 'h', 'f' };
@@ -197,25 +214,10 @@ static const struct among a_3[12] = {
 
 static const unsigned char g_v[] = { 17, 65, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 17, 4, 2 };
 
-static const symbol s_0[] = { 'f' };
-static const symbol s_1[] = { 's' };
-static const symbol s_2[] = { 'b' };
-static const symbol s_3[] = { 'c' };
-static const symbol s_4[] = { 'd' };
-static const symbol s_5[] = { 'g' };
-static const symbol s_6[] = { 'p' };
-static const symbol s_7[] = { 't' };
-static const symbol s_8[] = { 'm' };
-static const symbol s_9[] = { 'a', 'r', 'c' };
-static const symbol s_10[] = { 'g', 'i', 'n' };
-static const symbol s_11[] = { 'g', 'r', 'a', 'f' };
-static const symbol s_12[] = { 'p', 'a', 'i', 't', 'e' };
-static const symbol s_13[] = { 0xF3, 'i', 'd' };
-
 static int r_mark_regions(struct SN_env * z) {
-    z->I[2] = z->l;
-    z->I[1] = z->l;
-    z->I[0] = z->l;
+    ((SN_local *)z)->i_pV = z->l;
+    ((SN_local *)z)->i_p1 = z->l;
+    ((SN_local *)z)->i_p2 = z->l;
     {
         int v_1 = z->c;
         {
@@ -223,13 +225,13 @@ static int r_mark_regions(struct SN_env * z) {
             if (ret < 0) goto lab0;
             z->c += ret;
         }
-        z->I[2] = z->c;
+        ((SN_local *)z)->i_pV = z->c;
         {
             int ret = in_grouping(z, g_v, 97, 250, 1);
             if (ret < 0) goto lab0;
             z->c += ret;
         }
-        z->I[1] = z->c;
+        ((SN_local *)z)->i_p1 = z->c;
         {
             int ret = out_grouping(z, g_v, 97, 250, 1);
             if (ret < 0) goto lab0;
@@ -240,7 +242,7 @@ static int r_mark_regions(struct SN_env * z) {
             if (ret < 0) goto lab0;
             z->c += ret;
         }
-        z->I[0] = z->c;
+        ((SN_local *)z)->i_p2 = z->c;
     lab0:
         z->c = v_1;
     }
@@ -250,7 +252,7 @@ static int r_mark_regions(struct SN_env * z) {
 static int r_initial_morph(struct SN_env * z) {
     int among_var;
     z->bra = z->c;
-    among_var = find_among(z, a_0, 24);
+    among_var = find_among(z, a_0, 24, 0);
     if (!among_var) return 0;
     z->ket = z->c;
     switch (among_var) {
@@ -318,22 +320,18 @@ static int r_initial_morph(struct SN_env * z) {
     return 1;
 }
 
-static int r_RV(struct SN_env * z) {
-    return z->I[2] <= z->c;
-}
-
 static int r_R1(struct SN_env * z) {
-    return z->I[1] <= z->c;
+    return ((SN_local *)z)->i_p1 <= z->c;
 }
 
 static int r_R2(struct SN_env * z) {
-    return z->I[0] <= z->c;
+    return ((SN_local *)z)->i_p2 <= z->c;
 }
 
 static int r_noun_sfx(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
-    among_var = find_among_b(z, a_1, 16);
+    among_var = find_among_b(z, a_1, 16, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -364,7 +362,7 @@ static int r_noun_sfx(struct SN_env * z) {
 static int r_deriv(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
-    among_var = find_among_b(z, a_2, 25);
+    among_var = find_among_b(z, a_2, 25, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -416,15 +414,12 @@ static int r_verb_sfx(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 2 <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((282896 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    among_var = find_among_b(z, a_3, 12);
+    among_var = find_among_b(z, a_3, 12, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
         case 1:
-            {
-                int ret = r_RV(z);
-                if (ret <= 0) return ret;
-            }
+            if (((SN_local *)z)->i_pV > z->c) return 0;
             {
                 int ret = slice_del(z);
                 if (ret < 0) return ret;
@@ -486,7 +481,17 @@ extern int irish_ISO_8859_1_stem(struct SN_env * z) {
     return 1;
 }
 
-extern struct SN_env * irish_ISO_8859_1_create_env(void) { return SN_create_env(0, 3); }
+extern struct SN_env * irish_ISO_8859_1_create_env(void) {
+    struct SN_env * z = SN_new_env(sizeof(SN_local));
+    if (z) {
+        ((SN_local *)z)->i_p2 = 0;
+        ((SN_local *)z)->i_p1 = 0;
+        ((SN_local *)z)->i_pV = 0;
+    }
+    return z;
+}
 
-extern void irish_ISO_8859_1_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void irish_ISO_8859_1_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

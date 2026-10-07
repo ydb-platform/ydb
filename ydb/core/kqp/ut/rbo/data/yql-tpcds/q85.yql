@@ -1,10 +1,11 @@
+$to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
 SELECT
-    Substring(r_reason_desc, 1, 20) AS reason,
+    Substring(CAST(r_reason_desc AS String), 1, 20) AS reason,
     Avg(ws_quantity) AS avg_ws_q,
     Avg(wr_refunded_cash) AS avg_wr_r,
     Avg(wr_fee) AS avg_wr_f
@@ -44,7 +45,7 @@ WHERE
             AND
             cd1.cd_education_status == cd2.cd_education_status
             AND
-            ws_sales_price BETWEEN 100.00 AND 150.00
+            ws_sales_price BETWEEN $to_decimal(100) AND $to_decimal(150)
         )
         OR
         (
@@ -56,7 +57,7 @@ WHERE
             AND
             cd1.cd_education_status == cd2.cd_education_status
             AND
-            ws_sales_price BETWEEN 50.00 AND 100.00
+            ws_sales_price BETWEEN $to_decimal(50) AND $to_decimal(100)
         )
         OR
         (
@@ -68,7 +69,7 @@ WHERE
             AND
             cd1.cd_education_status == cd2.cd_education_status
             AND
-            ws_sales_price BETWEEN 150.00 AND 200.00
+            ws_sales_price BETWEEN $to_decimal(150) AND $to_decimal(200)
         )
     )
     AND
@@ -77,27 +78,27 @@ WHERE
             ca_country == 'United States'
             AND
             ca_state IN ('KY', 'GA', 'NM')
-            AND ws_net_profit BETWEEN 100 AND 200
+            AND ws_net_profit BETWEEN $to_decimal(100) AND $to_decimal(200)
         )
         OR
         (
             ca_country == 'United States'
             AND
             ca_state IN ('MT', 'OR', 'IN')
-            AND ws_net_profit BETWEEN 150 AND 300
+            AND ws_net_profit BETWEEN $to_decimal(150) AND $to_decimal(300)
         )
         OR
         (
             ca_country == 'United States'
             AND
             ca_state IN ('WI', 'MO', 'WV')
-            AND ws_net_profit BETWEEN 50 AND 250
+            AND ws_net_profit BETWEEN $to_decimal(50) AND $to_decimal(250)
         )
     )
 GROUP BY
     r_reason_desc
 ORDER BY
-    Substring(r_reason_desc, 1, 20),
+    Substring(CAST(r_reason_desc AS String), 1, 20),
     Avg(ws_quantity),
     Avg(wr_refunded_cash),
     Avg(wr_fee)

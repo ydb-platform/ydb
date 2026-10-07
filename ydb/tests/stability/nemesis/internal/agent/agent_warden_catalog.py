@@ -4,17 +4,22 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Iterable, List, Tuple
+from typing import Any, Iterable, List, Optional, Tuple
 
 from ydb.tests.library.nemesis.safety_warden import (
+    AggregateSafetyWarden,
     LocalCommandExecutor,
     UnifiedAgentVerifyFailedSafetyWarden,
+    UnifiedAgentSanitizerSafetyWarden,
     GrepJournalctlKernelForPatternsSafetyWarden,
 )
 from ydb.tests.library.wardens.logs import (
     kikimr_start_logs_safety_warden_factory,
     kikimr_crit_and_alert_logs_safety_warden_factory,
+    kikimr_grep_kernel_log_safety_warden_factory,
 )
+from ydb.tests.stability.nemesis.internal.models import WardenTimeWindow
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
 from ydb.tests.stability.nemesis.internal.safety_warden_execution import SafetyCheckSpec
 
 _logger = logging.getLogger(__name__)
@@ -26,6 +31,7 @@ class AgentSafetyContext:
 
     log_directory: str
     hostname: str
+    time_window: Optional[WardenTimeWindow] = None
 
     @property
     def log_prefix(self) -> str:
@@ -48,6 +54,48 @@ def _pairs_from_wardens(factory_name: str, wardens: Iterable[Any]) -> List[Tuple
     ]
 
 
+def safety_warden_factory(
+    cluster, lines_after=20, cut=False, modification_days=3,
+    start_time=None, end_time=None,
+):
+    """
+    Local version of ``ydb.tests.library.wardens.factories.safety_warden_factory``.
+
+    Uses ``LocalCommandExecutor`` instead of ``RemoteCommandExecutor`` because
+    the agent runs directly on the host.  Iterates over ``cluster.nodes`` and
+    ``cluster.slots`` to discover all log directories (including slot dirs like
+    ``/Berkanavt/kikimr_N/logs``).
+
+    Default parameters match ``stability/tool``'s ``perform_checks`` call.
+    """
+    executor = LocalCommandExecutor()
+    wardens = []
+    wardens.extend(kikimr_grep_kernel_log_safety_warden_factory(
+        executor=executor,
+        start_time=start_time,
+        end_time=end_time,
+    ))
+
+    by_directory = {}
+    for node in list(cluster.slots.values()) + list(cluster.nodes.values()):
+        if node.logs_directory not in by_directory:
+            by_directory[node.logs_directory] = []
+        by_directory[node.logs_directory].append(node.host)
+
+    for directory in by_directory:
+        wardens.extend(
+            kikimr_start_logs_safety_warden_factory(
+                executor=executor,
+                deploy_path=directory,
+                lines_after=lines_after,
+                cut=cut,
+                modification_days=modification_days,
+            )
+        )
+
+    return AggregateSafetyWarden(wardens)
+
+
 def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyCheckSpec]:
     """
     Agent safety check specs.
@@ -59,20 +107,17 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
     directly on the agent host, no SSH.
     """
     local_executor = LocalCommandExecutor()
+    window = ctx.time_window or WardenTimeWindow.from_hours_back(24)
+    start_dt, end_dt = window.as_local_naive()
 
     return [
         SafetyCheckSpec(
-            name="kikimr_start_logs",
-            description="Check Kikimr start logs for errors",
-            build_pairs=lambda: _pairs_from_wardens(
-                kikimr_start_logs_safety_warden_factory.__name__,
-                kikimr_start_logs_safety_warden_factory(
-                    executor=local_executor,
-                    deploy_path=ctx.log_directory,
-                    lines_after=5,
-                    cut=True,
-                    modification_days=1,
-                ),
+            name="safety_warden_factory",
+            description="Local safety_warden_factory (nodes + slots log dirs, lines_after=20, cut=False, modification_days=3)",
+            build_warden=lambda: safety_warden_factory(
+                require_external_cluster(),
+                start_time=start_dt,
+                end_time=end_dt,
             ),
         ),
         SafetyCheckSpec(
@@ -82,7 +127,8 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
                 executor=local_executor,
                 list_of_markers=['Out of memory: Kill process'],
                 lines_after=5,
-                hours_back=24,
+                start_time=start_dt,
+                end_time=end_dt,
             ),
         ),
         SafetyCheckSpec(
@@ -98,6 +144,17 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
         SafetyCheckSpec(
             name="unified_agent_verify_failed",
             description="Check for VERIFY failed errors in unified agent logs",
-            build_warden=lambda: UnifiedAgentVerifyFailedSafetyWarden(hours_back=24),
+            build_warden=lambda: UnifiedAgentVerifyFailedSafetyWarden(
+                start_time=start_dt,
+                end_time=end_dt,
+            ),
+        ),
+        SafetyCheckSpec(
+            name="unified_agent_sanitizer",
+            description="Check for sanitizer errors (ASan/LSan/TSan/MSan/UBSan) in unified agent logs",
+            build_warden=lambda: UnifiedAgentSanitizerSafetyWarden(
+                start_time=start_dt,
+                end_time=end_dt,
+            ),
         ),
     ]

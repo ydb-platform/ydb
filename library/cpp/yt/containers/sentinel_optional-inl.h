@@ -22,7 +22,7 @@ constexpr TSentinelOptional<T, TSentinel>::TSentinelOptional(T value) noexcept
 
 template <class T, class TSentinel>
 constexpr TSentinelOptional<T, TSentinel>::TSentinelOptional(std::optional<T> opt) noexcept
-    : Value_(opt.has_value() ? *opt : TSentinel::Sentinel)
+    : Value_(opt ? *opt : TSentinel::Sentinel)
 { }
 
 template <class T, class TSentinel>

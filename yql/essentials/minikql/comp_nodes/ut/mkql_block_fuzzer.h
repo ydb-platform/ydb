@@ -2,6 +2,7 @@
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <util/random/random.h>
 #include <util/generic/ptr.h>
@@ -11,23 +12,17 @@
 // The framework supports various fuzzing strategies like removing optional bitmasks and shifting offsets.
 namespace NKikimr::NMiniKQL {
 
-struct TFuzzOptions {
-    bool FuzzZeroOptionalBitmaskRemove = false;
-    bool FuzzOffsetShift = false;
-
-    static TFuzzOptions FuzzAll() {
-        return TFuzzOptions{.FuzzZeroOptionalBitmaskRemove = true, .FuzzOffsetShift = true};
-    }
+struct TStreamFuzzOptions {
+    bool InsertYields = true;
 };
 
 class IFuzzer {
 public:
     virtual ~IFuzzer() = default;
 
-    virtual NYql::NUdf::TUnboxedValue Fuzz(NYql::NUdf::TUnboxedValue input,
-                                           const THolderFactory& holderFactory,
-                                           arrow::MemoryPool& memoryPool,
-                                           IRandomProvider& randomProvider) const = 0;
+    virtual arrow::Datum Fuzz(const arrow::ArrayData& input,
+                              arrow::MemoryPool& memoryPool,
+                              IRandomProvider& randomProvider) const = 0;
 };
 
 using TFuzzerList = TVector<THolder<IFuzzer>>;
@@ -41,7 +36,8 @@ public:
 
     ui64 ReserveFuzzer();
 
-    void CreateFuzzers(TFuzzOptions options, ui64 fuzzerIndex, const TType* type, const TTypeEnvironment& env);
+    void CreateFuzzers(ui64 fuzzerIndex, const TType* type, const TTypeEnvironment& env,
+                       NYql::EDatumValidationMode validationMode, bool chunked);
 
     void ClearFuzzers();
 
@@ -52,7 +48,7 @@ public:
                                            IRandomProvider& randomProvider) const;
 
 private:
-    std::map<ui64, TFuzzerList> NodeToFuzzOptions_;
+    std::map<ui64, TFuzzerList> NodeToFuzzers_;
     ui64 FuzzerIdx_ = 1;
 };
 

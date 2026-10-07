@@ -24,6 +24,10 @@ public:
     NCommon::TConfSetting<ui64, Static> ComputeActorBatchSize;
     NCommon::TConfSetting<ui64, Static> MaxApiInflight;
     NCommon::TConfSetting<ui64, Static> MaxDataInflightBytes;
+    NCommon::TConfSetting<ui64, Static> MaxPointsPerOneRequest;
+    NCommon::TConfSetting<ui64, Static> PoisonTimeoutSec;
+    NCommon::TConfSetting<ui64, Static> RoundRobinStageTimeoutMs;
+    NCommon::TConfSetting<ui64, Static> LabelsListingLimit;
 };
 
 struct TSolomonConfiguration
@@ -32,7 +36,7 @@ struct TSolomonConfiguration
 {
     using TPtr = TIntrusivePtr<TSolomonConfiguration>;
 
-    TSolomonConfiguration();
+    explicit TSolomonConfiguration(bool strictConfigValidation = false);
     TSolomonConfiguration(const TSolomonConfiguration&) = delete;
 
     template <typename TProtoConfig>

@@ -122,22 +122,44 @@ SELECT * FROM $base WHERE event_ts > CurrentUtcTimestamp()
 
 Коррелированный подзапрос — это подзапрос, который ссылается на столбцы из внешнего запроса. В YQL такие подзапросы не поддерживаются.
 Большинство случаев использования коррелированных подзапросов можно заменить с помощью `JOIN` и агрегатных функций.
+Полная матрица поддержки и правила преобразования приведены в разделе [Коррелированные подзапросы, EXISTS и NOT EXISTS](../yql/reference/syntax/correlated-subqueries.md).
 
 #### EXISTS
 
-Преобразование `EXISTS` → `INNER JOIN` с использованием `DISTINCT`.
+Преобразование коррелированного `EXISTS` → `LEFT SEMI JOIN` или `INNER JOIN`
+с уникальными ключами справа.
 
 Оригинальный запрос:
 
-```sql
+```yql
 SELECT a.* FROM A a WHERE EXISTS (
   SELECT 1 FROM B b WHERE b.key = a.key AND b.flag = 1
 );
 ```
 
-##### Решение
+##### Решение с LEFT SEMI JOIN
 
-```sql
+```yql
+$B_match = (
+  SELECT key
+  FROM B
+  WHERE flag = 1
+);
+
+SELECT a.*
+FROM A AS a
+LEFT SEMI JOIN $B_match AS b
+ON b.key = a.key;
+```
+
+##### Альтернатива с INNER JOIN
+
+Перед соединением удалите повторяющиеся ключи с правой стороны. Тогда несколько
+подходящих строк не будут дублировать строку слева. Применять `DISTINCT` к
+колонкам левой стороны не требуется: он может объединить одинаковые строки
+внешней выборки.
+
+```yql
 $B_match = (
   SELECT key
   FROM B
@@ -145,9 +167,9 @@ $B_match = (
   GROUP BY key
 );
 
-SELECT DISTINCT a.*
+SELECT a.*
 FROM A AS a
-JOIN $B_match AS b
+INNER JOIN $B_match AS b
 ON b.key = a.key;
 ```
 
@@ -157,14 +179,14 @@ ON b.key = a.key;
 
 Оригинальный запрос:
 
-```sql
+```yql
 SELECT a.*, (SELECT MAX(ts) FROM B b WHERE b.user_id = a.user_id) AS last_ts
 FROM A a;
 ```
 
 ##### Решение
 
-```sql
+```yql
 $B_last = (
   SELECT user_id, MAX(ts) AS last_ts
   FROM B
@@ -179,11 +201,11 @@ ON bl.user_id = a.user_id;
 
 #### NOT EXISTS
 
-`NOT EXISTS` → анти-джойн
+Преобразование коррелированного `NOT EXISTS` → `LEFT ONLY JOIN`.
 
-Оригинальный запрос
+Оригинальный запрос:
 
-```sql
+```yql
 SELECT a.* FROM A a WHERE NOT EXISTS (
   SELECT 1 FROM B b WHERE b.key = a.key AND b.flag = 1
 );
@@ -191,10 +213,17 @@ SELECT a.* FROM A a WHERE NOT EXISTS (
 
 ##### Решение
 
-```sql
-$B_keys = (SELECT DISTINCT key FROM B);
+```yql
+$B_match = (
+  SELECT key
+  FROM B
+  WHERE flag = 1
+);
 
-SELECT a.* FROM A AS a LEFT ONLY JOIN $B_keys AS b ON b.key = a.key;
+SELECT a.*
+FROM A AS a
+LEFT ONLY JOIN $B_match AS b
+ON b.key = a.key;
 ```
 
 ### Поддержка только equi-JOIN (соединения по равенству)
@@ -240,12 +269,9 @@ WHERE e.user_id = p.user_id
 
 Список ограничений:
 
-- [ClickHouse](../concepts/query_execution/federated_query/clickhouse.md#limitations)
-- [Greenplum](../concepts/query_execution/federated_query/greenplum.md#limitations)
-- [Microsoft SQL Server](../concepts/query_execution/federated_query/ms_sql_server.md#limitations)
-- [MySQL](../concepts/query_execution/federated_query/mysql.md#limitations)
-- [PostgreSQL](../concepts/query_execution/federated_query/postgresql.md#limitations)
-- [YDB](../concepts/query_execution/federated_query/ydb.md#limitations)
+{% include [!](../concepts/query_execution/federated_query/_includes/experimental_connectors_warning.md) %}
+
+{% include [!](../concepts/query_execution/federated_query/_includes/experimental_eds.md) %}
 
 ```sql
 -- Параметры (для примера — как переменные)
@@ -299,7 +325,12 @@ FROM s3_my_columnstore_table_backup;
 - Начальное количество партиций: для базовой оценки числа партиций можно использовать формулу `(количество узлов * 4)`. Это позволит максимально утилизировать ресурсы кластера при выполнении параллельных запросов.
 - Выбирайте число партиций с учётом ожидаемого роста объёма данных и увеличения количества узлов в кластере.
 - Суммарное количество партиций во всех таблицах одной базы данных не должно превышать **2000**.
-- Если необходимо увеличить число партиций, можно создать новую таблицу и перенести в неё данные с помощью запроса `CREATE TABLE (PRIMARY KEY (a, b)) PARTITION BY HASH(a) WITH(STORE=COLUMN, PARTITION_COUNT=96) new_table AS SELECT * FROM old_table;`.
+- Если необходимо увеличить число партиций, можно создать новую таблицу и перенести в неё данные с помощью запроса:
+
+```yql
+CREATE TABLE (PRIMARY KEY (a, b)) PARTITION BY HASH(a)
+WITH(STORE=COLUMN, PARTITION_COUNT=96) new_table AS SELECT * FROM old_table;
+```
 
 ## Отсутствуют вторичные индексы и скип-индексы
 
@@ -323,4 +354,3 @@ FROM s3_my_columnstore_table_backup;
 ### Решение
 
 Для обеспечения стабильной и предсказуемой производительности обоих контуров используйте две отдельные базы данных {{ ydb-short-name }}: одну для OLTP, другую для OLAP. Для синхронизации данных между ними используйте механизм Change Data Capture (CDC) и сервис [{#T}](../concepts/transfer.md), который позволяет в потоковом режиме доставлять изменения из OLTP-базы в OLAP-базу.
-

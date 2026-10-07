@@ -1,5 +1,7 @@
 #include "ydb_common_ut.h"
 
+#include <ydb/library/testlib/helpers.h>
+
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -14,7 +16,7 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -131,6 +133,31 @@ static void MultiTenantSDK(bool asyncDiscovery) {
 */
     driver.Stop(true);
 }
+
+namespace {
+
+template <class TStub, class TRequest, class TResponse>
+Ydb::Operations::Operation SyncCall(TStub& stub,
+    grpc::Status (TStub::*method)(grpc::ClientContext*, const TRequest&, TResponse*), TRequest request)
+{
+    grpc::ClientContext context;
+    context.AddMetadata("x-ydb-database", "/Root");
+    request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
+    TResponse response;
+    const auto status = (stub.*method)(&context, request, &response);
+    UNIT_ASSERT_C(status.ok(), status.error_message());
+    return response.operation();
+}
+
+NYdb::NRetry::TRetryOperationSettings FastNestedRetryTestSettings(ui32 maxRetries) {
+    return NYdb::NRetry::TRetryOperationSettings()
+        .MaxRetries(maxRetries)
+        .Idempotent(true)
+        .FastBackoffSettings(NYdb::NRetry::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(50)).Ceiling(2))
+        .SlowBackoffSettings(NYdb::NRetry::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(50)).Ceiling(2));
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(YdbYqlClient) {
     Y_UNIT_TEST(TestYqlWrongTable) {
@@ -762,6 +789,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddAdministrationAllowedSIDs(clusterAdminToken);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddRegisterDynamicNodeAllowedSIDs("root@builtin");
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
         TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
@@ -783,7 +811,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             };
             auto status = client.RetryOperationSync(call);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, status.GetIssues().ToString());
         }
 
 
@@ -798,7 +826,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             };
             auto status = client.RetryOperationSync(call);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, status.GetIssues().ToString());
         }
 
         { // no connect right (for the ordinary user)
@@ -860,6 +888,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(true);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddRegisterDynamicNodeAllowedSIDs("root@builtin");
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
         // Make all users except root@builtin non-admins.
@@ -4828,6 +4857,228 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             "Unexpected error message");
     }
 
+    Y_UNIT_TEST(CreateTableWithMetricsSettings) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableDataShardDetailedMetrics(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(driver);
+        auto getSessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
+        auto session = getSessionResult.GetSession();
+
+        const std::tuple<const char*, TMetricsSettings::EMetricsLevel, TMetricsSettings::EMetricsLevel> cases[] = {
+            {"/Root/MetricsDatabase", TMetricsSettings::EMetricsLevel::Database, TMetricsSettings::EMetricsLevel::Database},
+            {"/Root/MetricsUnspecified", TMetricsSettings::EMetricsLevel::Unspecified, TMetricsSettings::EMetricsLevel::Database},
+            {"/Root/MetricsTable", TMetricsSettings::EMetricsLevel::Table, TMetricsSettings::EMetricsLevel::Table},
+        };
+
+        for (const auto& [path, setLevel, expectedLevel] : cases) {
+            auto builder = TTableBuilder()
+                .AddNullableColumn("key", EPrimitiveType::Uint64)
+                .AddNullableColumn("value", EPrimitiveType::Utf8)
+                .SetPrimaryKeyColumn("key")
+                .SetMetricsSettings(setLevel);
+
+            auto desc = builder.Build();
+
+            auto result = session.CreateTable(path, std::move(desc)).GetValueSync();
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = session.DescribeTable(path).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT(describeResult.GetTableDescription().GetMetricsSettings().has_value());
+            UNIT_ASSERT_EQUAL(describeResult.GetTableDescription().GetMetricsSettings()->GetMetricsLevel(), expectedLevel);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TableMetricsSettingsApi, EnableDataShardDetailedMetrics) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableDataShardDetailedMetrics(EnableDataShardDetailedMetrics);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GetPort()), grpc::InsecureChannelCredentials());
+        auto tableService = Ydb::Table::V1::TableService::NewStub(channel);
+        using TLevel = Ydb::Table::MetricsSettings::MetricsLevel;
+        constexpr auto databaseLevel = Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE;
+        constexpr auto tableLevel = Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE;
+        constexpr auto partitionLevel = Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION;
+
+        struct TCase {
+            const char* Name;
+            bool HasSettings;
+            std::optional<int> RawLevel;
+            std::optional<TLevel> ExpectedLevel;
+
+            void Apply(Ydb::Table::MetricsSettings& s) const {
+                if (RawLevel) {
+                    s.set_metrics_level(static_cast<TLevel>(*RawLevel));
+                }
+            }
+        };
+        const TVector<TCase> cases = {
+            {"Absent", false, std::nullopt, std::nullopt},
+            {"Empty", true, std::nullopt, databaseLevel},
+            {"Unspecified", true, 0, databaseLevel},
+            {"Database", true, 2, databaseLevel},
+            {"Table", true, 3, tableLevel},
+            {"Partition", true, 4, partitionLevel},
+            {"Disabled", true, 1, std::nullopt},
+            {"UnknownPositive", true, 99, std::nullopt},
+            {"UnknownNegative", true, -1, std::nullopt},
+        };
+
+        auto checkOperation = [](const auto& operation, Ydb::StatusIds::StatusCode expected, const TString& label) {
+            UNIT_ASSERT_C(operation.ready(), label << ": " << operation.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), expected, label << ": " << operation.DebugString());
+        };
+
+        auto createTable = [&](const TString& path, const TCase& testCase) {
+            Ydb::Table::CreateTableRequest request;
+            request.set_path(path);
+            auto* key = request.add_columns();
+            key->set_name("key");
+            key->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+            request.add_primary_key("key");
+            if (testCase.HasSettings) {
+                testCase.Apply(*request.mutable_metrics_settings());
+            }
+            return SyncCall(*tableService, &Ydb::Table::V1::TableService::Stub::CreateTable, request);
+        };
+
+        auto alterTable = [&](Ydb::Table::AlterTableRequest request) {
+            request.set_path("/Root/MetricsAlter");
+            return SyncCall(*tableService, &Ydb::Table::V1::TableService::Stub::AlterTable, request);
+        };
+
+        auto checkDescription = [&](const TString& path, std::optional<TLevel> expectedLevel) {
+            Ydb::Table::DescribeTableRequest request;
+            request.set_path(path);
+            auto operation = SyncCall(*tableService, &Ydb::Table::V1::TableService::Stub::DescribeTable, request);
+            checkOperation(operation, Ydb::StatusIds::SUCCESS, path);
+
+            Ydb::Table::DescribeTableResult description;
+            UNIT_ASSERT(operation.result().UnpackTo(&description));
+            UNIT_ASSERT_VALUES_EQUAL_C(description.has_metrics_settings(), expectedLevel.has_value(),
+                path << ": " << description.DebugString());
+            if (expectedLevel) {
+                UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(description.metrics_settings().metrics_level()), static_cast<int>(*expectedLevel),
+                    path << ": " << description.DebugString());
+            }
+        };
+
+        checkOperation(createTable("/Root/MetricsAlter", cases.front()), Ydb::StatusIds::SUCCESS, "Create ALTER target");
+        for (const auto& testCase : cases) {
+            const auto expectedStatus = !testCase.HasSettings || (EnableDataShardDetailedMetrics && testCase.ExpectedLevel)
+                ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST;
+            const TString path = TStringBuilder() << "/Root/Metrics" << testCase.Name;
+            checkOperation(createTable(path, testCase), expectedStatus, TStringBuilder() << "CREATE " << testCase.Name);
+            if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+                checkDescription(path, testCase.ExpectedLevel);
+            }
+
+            std::optional<TLevel> expectedAfterAlter;
+            if (EnableDataShardDetailedMetrics) {
+                Ydb::Table::AlterTableRequest seed;
+                seed.mutable_set_metrics_settings()->set_metrics_level(tableLevel);
+                checkOperation(alterTable(seed), Ydb::StatusIds::SUCCESS, "Seed TABLE override");
+                expectedAfterAlter = tableLevel;
+            }
+
+            Ydb::Table::AlterTableRequest request;
+            if (testCase.HasSettings) {
+                testCase.Apply(*request.mutable_set_metrics_settings());
+                if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+                    expectedAfterAlter = testCase.ExpectedLevel;
+                }
+            } else {
+                request.set_set_key_bloom_filter(Ydb::FeatureFlag::ENABLED);
+            }
+            checkOperation(alterTable(request), expectedStatus, TStringBuilder() << "ALTER " << testCase.Name);
+            checkDescription("/Root/MetricsAlter", expectedAfterAlter);
+        }
+
+        Ydb::Table::AlterTableRequest reset;
+        reset.mutable_drop_metrics_settings();
+        checkOperation(alterTable(reset),
+            EnableDataShardDetailedMetrics ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST, "RESET metrics");
+        checkDescription("/Root/MetricsAlter", std::nullopt);
+    }
+
+    // The metrics settings of a table reach the impl table of its index; the table must stay
+    // usable by queries after they are set and dropped.
+    Y_UNIT_TEST(AlterMetricsSettingsOfIndexedTable) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableDataShardDetailedMetrics(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        {
+            auto desc = TTableBuilder()
+                .AddNullableColumn("key", EPrimitiveType::Uint64)
+                .AddNullableColumn("value", EPrimitiveType::Utf8)
+                .SetPrimaryKeyColumn("key")
+                .AddSecondaryIndex("value_index", "value")
+                .Build();
+            auto result = session.CreateTable("/Root/Indexed", std::move(desc)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto checkLevel = [&](const TString& path, std::optional<TMetricsSettings::EMetricsLevel> expected) {
+            auto describe = session.DescribeTable(path).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto metrics = describe.GetTableDescription().GetMetricsSettings();
+            UNIT_ASSERT_VALUES_EQUAL_C(metrics.has_value(), expected.has_value(), path);
+            if (expected) {
+                UNIT_ASSERT_EQUAL_C(metrics->GetMetricsLevel(), *expected, path);
+            }
+        };
+
+        auto checkQueries = [&](ui64 key) {
+            auto upsert = session.ExecuteDataQuery(TStringBuilder()
+                    << "UPSERT INTO `/Root/Indexed` (key, value) VALUES (" << key << "u, \"value" << key << "\");",
+                TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+
+            auto select = session.ExecuteDataQuery(TStringBuilder()
+                    << "SELECT key FROM `/Root/Indexed` VIEW value_index WHERE value = \"value" << key << "\";",
+                TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(select.GetStatus(), EStatus::SUCCESS, select.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(select.GetResultSet(0)), TStringBuilder() << "[[[" << key << "u]]]");
+        };
+
+        checkQueries(1);
+
+        {
+            auto result = session.AlterTable("/Root/Indexed", TAlterTableSettings()
+                .BeginAlterMetricsSettings()
+                    .Set(TMetricsSettings::EMetricsLevel::Table)
+                .EndAlterMetricsSettings()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        checkLevel("/Root/Indexed", TMetricsSettings::EMetricsLevel::Table);
+        checkLevel("/Root/Indexed/value_index/indexImplTable", TMetricsSettings::EMetricsLevel::Table);
+        checkQueries(2);
+
+        {
+            auto result = session.AlterTable("/Root/Indexed", TAlterTableSettings()
+                .BeginAlterMetricsSettings()
+                    .Drop()
+                .EndAlterMetricsSettings()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        checkLevel("/Root/Indexed", std::nullopt);
+        checkLevel("/Root/Indexed/value_index/indexImplTable", std::nullopt);
+        checkQueries(3);
+    }
+
     Y_UNIT_TEST(TableKeyRangesSinglePartition) {
         TKikimrWithGrpcAndRootSchema server;
 
@@ -4870,5 +5121,229 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT(!keyRanges[0].From());
             UNIT_ASSERT(!keyRanges[0].To());
         }
+    }
+
+    Y_UNIT_TEST(BulkUpsertBuiltInRetrySuccess) {
+        TKikimrWithGrpcAndRootSchema server;
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::Utf8);
+            tableBuilder.SetPrimaryKeyColumn("Key");
+            UNIT_ASSERT(session.CreateTable("/Root/BuiltinRetry", tableBuilder.Build()).ExtractValueSync().IsSuccess());
+        }
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem()
+            .BeginStruct()
+                .AddMember("Key").Uint64(1)
+                .AddMember("Value").Utf8("value")
+            .EndStruct();
+        rows.EndList();
+
+        auto result = client.BulkUpsert("/Root/BuiltinRetry", rows.Build()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(BulkUpsertBuiltInRetryDisabled) {
+        TKikimrWithGrpcAndRootSchema server;
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        auto clientSettings = TClientSettings().RetrySettings(TRetryOperationSettings().MaxRetries(0));
+        NYdb::NTable::TTableClient client(driver, clientSettings);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::Utf8);
+            tableBuilder.SetPrimaryKeyColumn("Key");
+            UNIT_ASSERT(session.CreateTable("/Root/BuiltinRetryDisabled", tableBuilder.Build()).ExtractValueSync().IsSuccess());
+        }
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem()
+            .BeginStruct()
+                .AddMember("Key").Uint64(1)
+                .AddMember("Value").Utf8("value")
+            .EndStruct();
+        rows.EndList();
+
+        auto result = client.BulkUpsert("/Root/BuiltinRetryDisabled", rows.Build()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(BulkUpsertNoDoubleRetryInRetryOperation) {
+        const ui32 outerMaxRetries = 2;
+        const ui32 innerMaxRetries = 5;
+        const auto outerRetrySettings = FastNestedRetryTestSettings(outerMaxRetries);
+        const auto innerRetrySettings = FastNestedRetryTestSettings(innerMaxRetries);
+        const auto bulkUpsertSettings = TBulkUpsertSettings().RetrySettings(innerRetrySettings);
+
+        // Use an unreachable endpoint to inject transport failures on every BulkUpsert attempt.
+        TPortManager portManager;
+        const ui16 badPort = portManager.GetPort(2136);
+        const TString badLocation = TStringBuilder() << "localhost:" << badPort;
+
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(badLocation));
+        NYdb::NTable::TTableClient client(driver, TClientSettings().RetrySettings(outerRetrySettings));
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem()
+            .BeginStruct()
+                .AddMember("Key").Uint64(1)
+                .AddMember("Value").Utf8("value")
+            .EndStruct();
+        rows.EndList();
+        const auto rowsValue = rows.Build();
+
+        const auto startedAt = TInstant::Now();
+        client.RetryOperationSync([&](TTableClient& tableClient) {
+            return tableClient.BulkUpsert("/Root/BuiltinRetryNested", NYdb::TValue{rowsValue}, bulkUpsertSettings)
+                .GetValueSync();
+        }, outerRetrySettings);
+        const auto duration = TInstant::Now() - startedAt;
+
+        // Inner retries are suppressed inside RetryOperationSync. Without that guard, each outer attempt
+        // would run up to (innerMaxRetries + 1) BulkUpsert tries with backoff and take much longer.
+        UNIT_ASSERT(duration < TDuration::Seconds(1));
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ReadRowsNoDoubleRetryInRetryOperation) {
+        const ui32 outerMaxRetries = 2;
+        const ui32 innerMaxRetries = 5;
+        const auto outerRetrySettings = FastNestedRetryTestSettings(outerMaxRetries);
+        const auto innerRetrySettings = FastNestedRetryTestSettings(innerMaxRetries);
+        const auto readRowsSettings = TReadRowsSettings().RetrySettings(innerRetrySettings);
+
+        // Use an unreachable endpoint to inject transport failures on every ReadRows attempt.
+        TPortManager portManager;
+        const ui16 badPort = portManager.GetPort(2137);
+        const TString badLocation = TStringBuilder() << "localhost:" << badPort;
+
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(badLocation));
+        NYdb::NTable::TTableClient client(driver, TClientSettings().RetrySettings(outerRetrySettings));
+
+        NYdb::TValueBuilder keys;
+        keys.BeginList();
+        keys.AddListItem()
+            .BeginStruct()
+                .AddMember("Key").Uint64(1)
+            .EndStruct();
+        keys.EndList();
+        const auto keysValue = keys.Build();
+
+        const auto startedAt = TInstant::Now();
+        client.RetryOperationSync([&](TTableClient& tableClient) {
+            return tableClient.ReadRows("/Root/ReadRowsBuiltinRetryNested", NYdb::TValue{keysValue}, {}, readRowsSettings)
+                .GetValueSync();
+        }, outerRetrySettings);
+        const auto duration = TInstant::Now() - startedAt;
+
+        // Inner retries are suppressed inside RetryOperationSync. Without that guard, each outer attempt
+        // would run up to (innerMaxRetries + 1) ReadRows tries with backoff and take much longer.
+        UNIT_ASSERT(duration < TDuration::Seconds(1));
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(SetNotNullOperationsLifecycle) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableSetColumnConstraint(true);
+
+        NYdb::TDriver driver(
+            TDriverConfig()
+                .SetEndpoint(
+                    TStringBuilder() << "localhost:" << server.GetPort())
+                .SetDatabase("/Root")
+        );
+
+        {
+            NYdb::NOperation::TOperationClient operationClient(driver);
+            auto result = operationClient.List<NYdb::NTable::TSetNotNullOperation>().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0); // No operations in progress
+        }
+
+        NYdb::NTable::TTableClient client(driver);
+        auto getSessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
+        auto session = getSessionResult.GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"___(
+                CREATE TABLE `/Root/SetNotNullTest` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )___").ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            result = session.ExecuteDataQuery(R"___(
+                UPSERT INTO `/Root/SetNotNullTest` (Key, Value)
+                    VALUES (1u, "a"), (2u, "b"), (3u, "c");
+            )___", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(
+                "ALTER TABLE `/Root/SetNotNullTest` ALTER COLUMN Value SET NOT NULL;"
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            NYdb::NOperation::TOperationClient operationClient(driver);
+            auto result = operationClient.List<NYdb::NTable::TSetNotNullOperation>().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_GE(result.GetList().size(), 1);
+            auto op = result.GetList()[0];
+            UNIT_ASSERT_VALUES_EQUAL(op.Ready(), true);
+            UNIT_ASSERT_VALUES_EQUAL(op.Status().GetStatus(), EStatus::SUCCESS);
+            auto meta = op.Metadata();
+            UNIT_ASSERT_VALUES_EQUAL(meta.State, NYdb::NTable::ESetNotNullState::Done);
+            UNIT_ASSERT_DOUBLES_EQUAL(meta.Progress, 100, 0.001);
+            UNIT_ASSERT(meta.Path.find("SetNotNullTest") != TString::npos);
+            UNIT_ASSERT_GE(meta.Columns.size(), 1u);
+
+            auto result2 = operationClient.Get<NYdb::NTable::TSetNotNullOperation>(result.GetList()[0].Id()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result2.Status().GetStatus(), EStatus::SUCCESS, result2.Status().GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().State, NYdb::NTable::ESetNotNullState::Done);
+            UNIT_ASSERT_DOUBLES_EQUAL(result2.Metadata().Progress, 100, 0.001);
+
+            {
+                // Cancel already finished operation returns PRECONDITION_FAILED
+                auto resultOp = operationClient.Cancel(result.GetList()[0].Id()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultOp.GetStatus(), EStatus::PRECONDITION_FAILED, resultOp.GetIssues().ToString());
+            }
+
+            {
+                auto resultOp = operationClient.Forget(result.GetList()[0].Id()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultOp.GetStatus(), EStatus::SUCCESS, resultOp.GetIssues().ToString());
+            }
+
+            {
+                auto resultOp = operationClient.Get<NYdb::NTable::TSetNotNullOperation>(result.GetList()[0].Id()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultOp.Status().GetStatus(), EStatus::NOT_FOUND, resultOp.Status().GetIssues().ToString());
+            }
+        }
+
+        driver.Stop(true);
     }
 }

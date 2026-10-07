@@ -1,6 +1,8 @@
 #include "blob_info.h"
 #include "column_info.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 std::vector<TSplittedBlob> TSplittedEntity::TNormalizedBlobChunks::Finish(const TString& groupName) {
@@ -82,16 +84,21 @@ bool TSplittedEntity::TBlobChunk::TakeEntityPartFrom(TBlobChunk& sourceNormal, c
                 }
 
                 counters->BySizeSplitter.OnTrashSerialized(c->GetPackedSize());
-                auto splitParts = c->InternalSplit(schema->GetColumnSaver(i->GetEntityId()), counters, { (ui64)(0.5 * (deltaSelf + std::min(deltaSource, cSize))) });
+                auto splitParts = c->InternalSplit(
+                    schema->GetColumnSaver(i->GetEntityId()), counters, { (ui64)(0.5 * (deltaSelf + std::min(deltaSource, cSize))) });
                 AFL_VERIFY(splitParts.size() == 2)("size", splitParts.size());
                 if (i->GetSize() - c->GetPackedSize() + splitParts.back()->GetPackedSize() < maxSize &&
                     GetSize() + splitParts.front()->GetPackedSize() < maxSize) {
                     i->Exchange(c, splitParts);
                     AddChunk(i->DetachEntityChunkVerified(splitParts.front()));
                 } else {
-                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "grow_size_after_split")("start", c->GetPackedSize())(
-                        "s1", splitParts.front()->GetPackedSize())("s2", splitParts.back()->GetPackedSize())("normal", i->GetSize())(
-                        "self", GetSize());
+                    YDB_LOG_WARN("",
+                        {"event", "grow_size_after_split"},
+                        {"start", c->GetPackedSize()},
+                        {"s1", splitParts.front()->GetPackedSize()},
+                        {"s2", splitParts.back()->GetPackedSize()},
+                        {"normal", i->GetSize()},
+                        {"self", GetSize()});
                 }
 
                 ++internalSplitsCount;

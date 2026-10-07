@@ -2,9 +2,120 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-Ниже приведены примеры кода аутентификации при помощи переменных окружения в разных {{ ydb-short-name }} SDK.
+Аутентификация через сервис метаданных получает IAM-токен из HTTP-эндпоинта виртуальной машины или облачной функции Яндекс Облака. Этот способ предназначен для приложений, которые работают внутри Яндекс Облака и не хранят ключи в коде. Типичные шаги: создать провайдер метаданных, открыть транспорт с защищённым соединением к {{ ydb-short-name }} в облаке и выполнить запрос. Подробности — в разделе [Аутентификация](../../reference/ydb-sdk/auth.md); базовое подключение — в рецепте [инициализации драйвера](./init.md). Другие способы: [токен](./auth-access-token.md), [анонимная](./auth-anonymous.md), [переменные окружения](./auth-env.md), [сервисный аккаунт](./auth-service-account.md), [логин и пароль](./auth-static.md).
+
+Ниже приведены примеры кода аутентификации при помощи сервиса метаданных в разных {{ ydb-short-name }} SDK.
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/iam/iam.h>
+
+    NYdb::TDriver CreateDriverWithMetadataCredentials(
+        const std::string& connectionString,
+        const std::string& internalCA)
+    {
+        auto config = NYdb::TDriverConfig(connectionString)
+            .UseSecureConnection(internalCA)
+            .SetCredentialsProviderFactory(NYdb::CreateIamCredentialsProviderFactory());
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    Готовой настройки для сервиса метаданных в `ydb::YdbComponent` нет — нужен свой `ydb::CredentialsProviderComponent` с `NYdb::CreateIamCredentialsProviderFactory()`.
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        credentials-provider: ydb-metadata-credentials
+        databases:
+            db:
+                endpoint: grpcs://localhost:2135
+                database: /local
+                credentials: {}
+    ```
+
+    {% endcut %}
+
+    {% cut "secdist" %}
+
+    `<PEM>` - сертификаты Yandex Cloud.
+
+    ```json
+    {
+      "ydb_settings": {
+        "db": {
+          "secure_connection_cert": "<PEM>"
+        }
+      }
+    }
+    ```
+
+    {% endcut %}
+
+    ```cpp
+    #include <userver/components/component_base.hpp>
+    #include <userver/components/minimal_server_component_list.hpp>
+    #include <userver/storages/secdist/component.hpp>
+    #include <userver/storages/secdist/provider_component.hpp>
+    #include <userver/utils/daemon_run.hpp>
+    #include <userver/ydb/component.hpp>
+    #include <userver/ydb/credentials.hpp>
+    #include <userver/ydb/table.hpp>
+
+    #include <ydb-cpp-sdk/client/iam/iam.h>
+
+    class YdbMetadataCredentials final : public ydb::CredentialsProviderComponent {
+    public:
+        static constexpr std::string_view kName = "ydb-metadata-credentials";
+
+        using ydb::CredentialsProviderComponent::CredentialsProviderComponent;
+
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFactory(
+            const yaml_config::YamlConfig&) const override
+        {
+            return NYdb::CreateIamCredentialsProviderFactory();
+        }
+    };
+
+    class MyYdbWorker final : public components::ComponentBase {
+    public:
+        static constexpr std::string_view kName = "my-ydb-worker";
+
+        MyYdbWorker(const components::ComponentConfig& config, const components::ComponentContext& context)
+            : components::ComponentBase(config, context),
+              table_client_(context.FindComponent<ydb::YdbComponent>().GetTableClient("db"))
+        {
+            // ...
+        }
+
+    private:
+        std::shared_ptr<ydb::TableClient> table_client_;
+    };
+
+    int main(int argc, char* argv[]) {
+        auto component_list = components::MinimalServerComponentList()
+            .Append<components::DefaultSecdistProvider>()
+            .Append<components::Secdist>()
+            .Append<YdbMetadataCredentials>()
+            .Append<ydb::YdbComponent>()
+            .Append<MyYdbWorker>();
+        return utils::DaemonMain(argc, argv, component_list);
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -84,15 +195,37 @@
   - Native SDK
 
     ```java
-    public void work(String connectionString) {
-        AuthProvider authProvider = CloudAuthHelper.getMetadataAuthProvider();
+    import tech.ydb.auth.iam.CloudAuthHelper;
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(authProvider)
-                .build();
-             QueryClient queryClient = QueryClient.newClient(transport).build()) {
+    public class MetadataAuthExample {
+        public static void main(String[] args) throws Exception {
+            // Строка подключения из переменной окружения или локальный {{ ydb-short-name }} по умолчанию
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-            doWork(queryClient);
+            // Токен запрашивается у сервиса метаданных виртуальной машины или функции в Яндекс Облаке
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    .withAuthProvider(CloudAuthHelper.getMetadataAuthProvider())
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+                QueryReader reader = retryCtx.supplyResult(
+                        session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
+                ).join().getValue();
+
+                // Проверка подключения: выводим результат SELECT 1
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn(0).getInt32());
+                }
+            }
         }
     }
     ```
@@ -100,19 +233,34 @@
   - JDBC
 
     ```java
-    public void work() throws SQLException {
-        Properties props = new Properties();
-        props.setProperty("useMetadata", "true");
-        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
-            doWork(connection);
-        }
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.Properties;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
 
-        // Опцию useMetadata также можно указать прямо в JDBC URL
-        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?useMetadata=true")) {
-            doWork(connection);
+    public class MetadataAuthJdbcExample {
+        public static void main(String[] args) throws SQLException {
+            String jdbcUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            // Аутентификация через сервис метаданных Яндекс Облака
+            Properties props = new Properties();
+            props.setProperty("useMetadata", "true");
+
+            try (Connection connection = DriverManager.getConnection(jdbcUrl, props);
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1")) {
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getInt(1));
+                }
+            }
         }
     }
     ```
+
+    Опцию `useMetadata` также можно указать прямо в JDBC URL: `jdbc:ydb:grpc://localhost:2136/local?useMetadata=true`.
 
     В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC передайте те же JDBC URL и параметры (`useMetadata` в URL или в свойствах источника данных), что и в примере выше.
 

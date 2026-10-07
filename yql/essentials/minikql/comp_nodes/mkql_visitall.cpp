@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <util/string/cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -14,44 +13,44 @@ class TVisitAllWrapper: public TMutableCodegeneratorNode<TVisitAllWrapper> {
 public:
     TVisitAllWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode, TComputationExternalNodePtrVector&& args, TComputationNodePtrVector&& newNodes)
         : TBaseComputation(mutables, kind)
-        , VarNode(varNode)
-        , Args(std::move(args))
-        , NewNodes(std::move(newNodes))
+        , VarNode_(varNode)
+        , Args_(std::move(args))
+        , NewNodes_(std::move(newNodes))
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& var = VarNode->GetValue(ctx);
+        const auto& var = VarNode_->GetValue(ctx);
         const auto currentIndex = var.GetVariantIndex();
-        if (currentIndex >= Args.size()) {
+        if (currentIndex >= Args_.size()) {
             return NUdf::TUnboxedValuePod();
         }
-        Args[currentIndex]->SetValue(ctx, var.GetVariantItem());
-        return NewNodes[currentIndex]->GetValue(ctx).Release();
+        Args_[currentIndex]->SetValue(ctx, var.GetVariantItem());
+        return NewNodes_[currentIndex]->GetValue(ctx).Release();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        const auto variant = GetNodeValue(VarNode, ctx, block);
+        const auto variant = GetNodeValue(VarNode_, ctx, block);
         const auto unpack = GetVariantParts(variant, ctx, block);
 
-        const auto result = PHINode::Create(variant->getType(), Args.size() + 1U, "result", done);
+        const auto result = PHINode::Create(variant->getType(), Args_.size() + 1U, "result", done);
         result->addIncoming(ConstantInt::get(variant->getType(), 0ULL), block);
 
-        const auto choise = SwitchInst::Create(unpack.first, done, Args.size(), block);
+        const auto choise = SwitchInst::Create(unpack.first, done, Args_.size(), block);
 
-        for (ui32 i = 0; i < NewNodes.size(); ++i) {
+        for (ui32 i = 0; i < NewNodes_.size(); ++i) {
             const auto var = BasicBlock::Create(context, (TString("case_") += ToString(i)).c_str(), ctx.Func);
             choise->addCase(ConstantInt::get(Type::getInt32Ty(context), i), var);
             block = var;
 
-            const auto codegenArg = dynamic_cast<ICodegeneratorExternalNode*>(Args[i]);
+            const auto codegenArg = dynamic_cast<ICodegeneratorExternalNode*>(Args_[i]);
             MKQL_ENSURE(codegenArg, "Arg must be codegenerator node.");
             codegenArg->CreateSetValue(ctx, block, unpack.second);
-            const auto item = GetNodeValue(NewNodes[i], ctx, block);
+            const auto item = GetNodeValue(NewNodes_[i], ctx, block);
 
             result->addIncoming(item, block);
             BranchInst::Create(done, block);
@@ -63,14 +62,14 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        DependsOn(VarNode);
-        std::for_each(Args.cbegin(), Args.cend(), std::bind(&TVisitAllWrapper::Own, this, std::placeholders::_1));
-        std::for_each(NewNodes.cbegin(), NewNodes.cend(), std::bind(&TVisitAllWrapper::DependsOn, this, std::placeholders::_1));
+        DependsOn(VarNode_);
+        std::for_each(Args_.cbegin(), Args_.cend(), std::bind(&TVisitAllWrapper::Own, this, std::placeholders::_1));
+        std::for_each(NewNodes_.cbegin(), NewNodes_.cend(), std::bind(&TVisitAllWrapper::DependsOn, this, std::placeholders::_1));
     }
 
-    IComputationNode* const VarNode;
-    const TComputationExternalNodePtrVector Args;
-    const TComputationNodePtrVector NewNodes;
+    IComputationNode* const VarNode_;
+    const TComputationExternalNodePtrVector Args_;
+    const TComputationNodePtrVector NewNodes_;
 };
 
 class TFlowVisitAllWrapper: public TStatefulFlowCodegeneratorNode<TFlowVisitAllWrapper> {
@@ -78,28 +77,28 @@ class TFlowVisitAllWrapper: public TStatefulFlowCodegeneratorNode<TFlowVisitAllW
 
 public:
     TFlowVisitAllWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode, TComputationExternalNodePtrVector&& args, TComputationNodePtrVector&& newNodes)
-        : TBaseComputation(mutables, nullptr, kind, EValueRepresentation::Embedded)
-        , VarNode(varNode)
-        , Args(std::move(args))
-        , NewNodes(std::move(newNodes))
+        : TBaseComputation(mutables, /*source=*/nullptr, kind, EValueRepresentation::Embedded)
+        , VarNode_(varNode)
+        , Args_(std::move(args))
+        , NewNodes_(std::move(newNodes))
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsInvalid()) {
-            const auto& var = VarNode->GetValue(ctx);
+            const auto& var = VarNode_->GetValue(ctx);
             const auto index = var.GetVariantIndex();
             state = NUdf::TUnboxedValuePod(index);
-            if (index < Args.size()) {
-                Args[index]->SetValue(ctx, var.GetVariantItem());
+            if (index < Args_.size()) {
+                Args_[index]->SetValue(ctx, var.GetVariantItem());
             }
         }
 
         const auto index = state.Get<ui32>();
-        return index < NewNodes.size() ? NewNodes[index]->GetValue(ctx).Release() : NUdf::TUnboxedValuePod::MakeFinish();
+        return index < NewNodes_.size() ? NewNodes_[index]->GetValue(ctx).Release() : NUdf::TUnboxedValuePod::MakeFinish();
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -107,26 +106,26 @@ public:
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto result = PHINode::Create(valueType, NewNodes.size() + 2U, "result", done);
+        const auto result = PHINode::Create(valueType, NewNodes_.size() + 2U, "result", done);
 
         BranchInst::Create(init, work, IsInvalid(statePtr, block, context), block);
 
         {
             block = init;
 
-            const auto variant = GetNodeValue(VarNode, ctx, block);
+            const auto variant = GetNodeValue(VarNode_, ctx, block);
             const auto unpack = GetVariantParts(variant, ctx, block);
             const auto index = SetterFor<ui32>(unpack.first, context, block);
             new StoreInst(index, statePtr, block);
             result->addIncoming(GetFinish(context), block);
-            const auto choise = SwitchInst::Create(unpack.first, done, Args.size(), block);
+            const auto choise = SwitchInst::Create(unpack.first, done, Args_.size(), block);
 
-            for (ui32 i = 0; i < Args.size(); ++i) {
+            for (ui32 i = 0; i < Args_.size(); ++i) {
+                const auto codegenArg = dynamic_cast<ICodegeneratorExternalNode*>(Args_[i]);
                 const auto var = BasicBlock::Create(context, (TString("init_") += ToString(i)).c_str(), ctx.Func);
                 choise->addCase(ConstantInt::get(Type::getInt32Ty(context), i), var);
                 block = var;
 
-                const auto codegenArg = dynamic_cast<ICodegeneratorExternalNode*>(Args[i]);
                 MKQL_ENSURE(codegenArg, "Arg must be codegenerator node.");
                 codegenArg->CreateSetValue(ctx, block, unpack.second);
                 BranchInst::Create(work, block);
@@ -139,13 +138,13 @@ public:
             const auto state = new LoadInst(valueType, statePtr, "state", block);
             const auto index = GetterFor<ui32>(state, context, block);
             result->addIncoming(GetFinish(context), block);
-            const auto choise = SwitchInst::Create(index, done, NewNodes.size(), block);
-            for (ui32 i = 0; i < NewNodes.size(); ++i) {
+            const auto choise = SwitchInst::Create(index, done, NewNodes_.size(), block);
+            for (ui32 i = 0; i < NewNodes_.size(); ++i) {
                 const auto var = BasicBlock::Create(context, (TString("case_") += ToString(i)).c_str(), ctx.Func);
                 choise->addCase(ConstantInt::get(Type::getInt32Ty(context), i), var);
                 block = var;
 
-                const auto item = GetNodeValue(NewNodes[i], ctx, block);
+                const auto item = GetNodeValue(NewNodes_[i], ctx, block);
 
                 result->addIncoming(item, block);
                 BranchInst::Create(done, block);
@@ -158,16 +157,16 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOnAll(NewNodes)) {
-            DependsOn(flow, VarNode);
-            std::for_each(Args.cbegin(), Args.cend(), std::bind(&TFlowVisitAllWrapper::Own, flow, std::placeholders::_1));
+        if (const auto flow = FlowDependsOnAll(NewNodes_)) {
+            DependsOn(flow, VarNode_);
+            std::for_each(Args_.cbegin(), Args_.cend(), std::bind(&TFlowVisitAllWrapper::Own, flow, std::placeholders::_1));
         }
-        std::for_each(Args.cbegin(), Args.cend(), std::bind(&IComputationNode::AddDependent, VarNode, std::placeholders::_1));
+        std::for_each(Args_.cbegin(), Args_.cend(), std::bind(&IComputationNode::AddDependent, VarNode_, std::placeholders::_1));
     }
 
-    IComputationNode* const VarNode;
-    const TComputationExternalNodePtrVector Args;
-    const TComputationNodePtrVector NewNodes;
+    IComputationNode* const VarNode_;
+    const TComputationExternalNodePtrVector Args_;
+    const TComputationNodePtrVector NewNodes_;
 };
 
 class TWideVisitAllWrapper: public TStatefulWideFlowCodegeneratorNode<TWideVisitAllWrapper> {
@@ -175,28 +174,28 @@ class TWideVisitAllWrapper: public TStatefulWideFlowCodegeneratorNode<TWideVisit
 
 public:
     TWideVisitAllWrapper(TComputationMutables& mutables, IComputationNode* varNode, TComputationExternalNodePtrVector&& args, TComputationWideFlowNodePtrVector&& newNodes)
-        : TBaseComputation(mutables, nullptr, EValueRepresentation::Embedded)
-        , VarNode(varNode)
-        , Args(std::move(args))
-        , NewNodes(std::move(newNodes))
+        : TBaseComputation(mutables, /*source=*/nullptr, EValueRepresentation::Embedded)
+        , VarNode_(varNode)
+        , Args_(std::move(args))
+        , NewNodes_(std::move(newNodes))
     {
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
-            const auto& var = VarNode->GetValue(ctx);
+            const auto& var = VarNode_->GetValue(ctx);
             const auto index = var.GetVariantIndex();
             state = NUdf::TUnboxedValuePod(index);
-            if (index < Args.size()) {
-                Args[index]->SetValue(ctx, var.GetVariantItem());
+            if (index < Args_.size()) {
+                Args_[index]->SetValue(ctx, var.GetVariantItem());
             }
         }
 
         const auto index = state.Get<ui32>();
-        return index < NewNodes.size() ? NewNodes[index]->FetchValues(ctx, output) : EFetchResult::Finish;
+        return index < NewNodes_.size() ? NewNodes_[index]->FetchValues(ctx, output) : EFetchResult::Finish;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -204,26 +203,26 @@ public:
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
         const auto resultType = Type::getInt32Ty(context);
-        const auto result = PHINode::Create(resultType, NewNodes.size() + 2U, "result", done);
+        const auto result = PHINode::Create(resultType, NewNodes_.size() + 2U, "result", done);
 
         BranchInst::Create(init, work, IsInvalid(statePtr, block, context), block);
 
         {
             block = init;
 
-            const auto variant = GetNodeValue(VarNode, ctx, block);
+            const auto variant = GetNodeValue(VarNode_, ctx, block);
             const auto unpack = GetVariantParts(variant, ctx, block);
             const auto index = SetterFor<ui32>(unpack.first, context, block);
             new StoreInst(index, statePtr, block);
             result->addIncoming(ConstantInt::get(resultType, static_cast<i32>(EFetchResult::Finish)), block);
-            const auto choise = SwitchInst::Create(unpack.first, done, Args.size(), block);
+            const auto choise = SwitchInst::Create(unpack.first, done, Args_.size(), block);
 
-            for (ui32 i = 0; i < Args.size(); ++i) {
+            for (ui32 i = 0; i < Args_.size(); ++i) {
+                const auto codegenArg = dynamic_cast<ICodegeneratorExternalNode*>(Args_[i]);
                 const auto var = BasicBlock::Create(context, (TString("init_") += ToString(i)).c_str(), ctx.Func);
                 choise->addCase(ConstantInt::get(Type::getInt32Ty(context), i), var);
                 block = var;
 
-                const auto codegenArg = dynamic_cast<ICodegeneratorExternalNode*>(Args[i]);
                 MKQL_ENSURE(codegenArg, "Arg must be codegenerator node.");
                 codegenArg->CreateSetValue(ctx, block, unpack.second);
                 BranchInst::Create(work, block);
@@ -231,7 +230,7 @@ public:
         }
 
         std::vector<TGettersList> allGetters;
-        allGetters.reserve(NewNodes.size());
+        allGetters.reserve(NewNodes_.size());
 
         {
             block = work;
@@ -239,13 +238,13 @@ public:
             const auto state = new LoadInst(Type::getInt128Ty(context), statePtr, "state", block);
             const auto index = GetterFor<ui32>(state, context, block);
             result->addIncoming(ConstantInt::get(resultType, static_cast<i32>(EFetchResult::Finish)), block);
-            const auto choise = SwitchInst::Create(index, done, NewNodes.size(), block);
-            for (ui32 i = 0; i < NewNodes.size(); ++i) {
+            const auto choise = SwitchInst::Create(index, done, NewNodes_.size(), block);
+            for (ui32 i = 0; i < NewNodes_.size(); ++i) {
                 const auto var = BasicBlock::Create(context, (TString("case_") += ToString(i)).c_str(), ctx.Func);
                 choise->addCase(ConstantInt::get(Type::getInt32Ty(context), i), var);
                 block = var;
 
-                auto get = GetNodeValues(NewNodes[i], ctx, block);
+                auto get = GetNodeValues(NewNodes_[i], ctx, block);
                 allGetters.emplace_back(std::move(get.second));
 
                 result->addIncoming(get.first, block);
@@ -298,16 +297,16 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOnAll(NewNodes)) {
-            DependsOn(flow, VarNode);
-            std::for_each(Args.cbegin(), Args.cend(), std::bind(&TWideVisitAllWrapper::Own, flow, std::placeholders::_1));
+        if (const auto flow = this->FlowDependsOnAll(NewNodes_)) {
+            DependsOn(flow, VarNode_);
+            std::for_each(Args_.cbegin(), Args_.cend(), std::bind(&TWideVisitAllWrapper::Own, flow, std::placeholders::_1));
         }
-        std::for_each(Args.cbegin(), Args.cend(), std::bind(&IComputationNode::AddDependent, VarNode, std::placeholders::_1));
+        std::for_each(Args_.cbegin(), Args_.cend(), std::bind(&IComputationNode::AddDependent, VarNode_, std::placeholders::_1));
     }
 
-    IComputationNode* const VarNode;
-    const TComputationExternalNodePtrVector Args;
-    const TComputationWideFlowNodePtrVector NewNodes;
+    IComputationNode* const VarNode_;
+    const TComputationExternalNodePtrVector Args_;
+    const TComputationWideFlowNodePtrVector NewNodes_;
 };
 
 } // namespace
@@ -335,7 +334,7 @@ IComputationNode* WrapVisitAll(TCallable& callable, const TComputationNodeFactor
         TComputationWideFlowNodePtrVector wideNodes;
         wideNodes.reserve(newNodes.size());
         std::transform(newNodes.cbegin(), newNodes.cend(), std::back_inserter(wideNodes), [](IComputationNode* node) { return dynamic_cast<IComputationWideFlowNode*>(node); });
-        wideNodes.erase(std::remove_if(wideNodes.begin(), wideNodes.end(), std::logical_not<IComputationWideFlowNode*>()), wideNodes.cend());
+        wideNodes.erase(std::remove_if(wideNodes.begin(), wideNodes.end(), std::logical_not<>()), wideNodes.cend());
         if (wideNodes.empty()) {
             return new TFlowVisitAllWrapper(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), variant, std::move(args), std::move(newNodes));
         } else if (wideNodes.size() == newNodes.size()) {
@@ -348,5 +347,4 @@ IComputationNode* WrapVisitAll(TCallable& callable, const TComputationNodeFactor
     THROW yexception() << "Wrong signature.";
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

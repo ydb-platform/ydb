@@ -2,6 +2,7 @@
 """
 Topic cloud events audit tests.
 Compare captured events with canondata/*/topic_cloud_events.json.
+CloudEvents are emitted as JSON by default; helpers also accept protobuf for compatibility.
 """
 import os
 import time
@@ -22,7 +23,7 @@ from helpers import (
 CLUSTER_CONFIG = dict(
     additional_log_configs={
         'GRPC_PROXY': LogLevels.DEBUG,
-        'FLAT_TX_SCHEMESHARD': LogLevels.TRACE,
+        'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
         'PERSQUEUE_CLUSTER_TRACKER': LogLevels.CRIT,
     },
     enable_audit_log=True,

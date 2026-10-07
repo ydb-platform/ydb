@@ -1,10 +1,13 @@
 #include "yql_solomon_config.h"
 
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+
 namespace NYql {
 
 using namespace NCommon;
 
-TSolomonConfiguration::TSolomonConfiguration()
+TSolomonConfiguration::TSolomonConfiguration(bool strictConfigValidation)
+    : NCommon::TSettingDispatcher(SolomonProviderName, TQContext(), strictConfigValidation)
 {
     REGISTER_SETTING(*this, _EnableReading);
     REGISTER_SETTING(*this, _EnableRuntimeListing);
@@ -23,6 +26,10 @@ TSolomonConfiguration::TSolomonConfiguration()
     REGISTER_SETTING(*this, ComputeActorBatchSize);
     REGISTER_SETTING(*this, MaxApiInflight);
     REGISTER_SETTING(*this, MaxDataInflightBytes);
+    REGISTER_SETTING(*this, MaxPointsPerOneRequest);
+    REGISTER_SETTING(*this, PoisonTimeoutSec);
+    REGISTER_SETTING(*this, RoundRobinStageTimeoutMs);
+    REGISTER_SETTING(*this, LabelsListingLimit);
 }
 
 TSolomonSettings::TConstPtr TSolomonConfiguration::Snapshot() const {

@@ -5,24 +5,52 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-const THashSet<TString> CmpOperators{"=", "<", ">", "<=", ">="};
+bool IsSimpleConstant(const TExprBase& input) {
+    if (auto maybeData = input.Maybe<TCoDataCtor>()) {
+        auto data = maybeData.Cast();
+        return data.Maybe<TCoBool>() || data.Maybe<TCoFloat>() || data.Maybe<TCoDouble>() || data.Maybe<TCoInt8>() || data.Maybe<TCoInt16>() ||
+               data.Maybe<TCoInt32>() || data.Maybe<TCoInt64>() || data.Maybe<TCoUint8>() || data.Maybe<TCoUint16>() || data.Maybe<TCoUint32>() ||
+               data.Maybe<TCoUint64>() || data.Maybe<TCoUtf8>() || data.Maybe<TCoString>() || data.Maybe<TCoDate>() || data.Maybe<TCoDate32>() ||
+               data.Maybe<TCoDatetime>() || data.Maybe<TCoDatetime64>() || data.Maybe<TCoTimestamp64>() || data.Maybe<TCoInterval64>() ||
+               data.Maybe<TCoInterval>() || data.Maybe<TCoTimestamp>();
+    }
+    return false;
+}
 
-TExprNode::TPtr PruneCast(TExprNode::TPtr node) {
-    if (node->IsCallable("ToPg") || node->IsCallable("PgCast")) {
-        return node->Child(0);
+bool IsAllowedComparator(TExprNode::TPtr input) {
+    return input->IsCallable({"==", "<=", ">=", "<", ">", "!=", "StringContains", "StartsWith", "EndsWith", "StringContainsIgnoreCase", "StartsWithIgnoreCase",
+                              "EndsWithIgnoreCase"});
+}
+
+bool IsSimpleColumnAccess(const TExprBase& colAccess, const TExprBase& columnArg) {
+    if (auto maybeMember = colAccess.Maybe<TCoMember>()) {
+        return maybeMember.Cast().Struct().Ptr().Get() == columnArg.Ptr().Get();
+    }
+    return false;
+}
+
+template <typename T>
+bool IsNullRejecting(const TExprBase& input, const TExprBase& lambdaArg) {
+    auto compare = input.Cast<T>();
+    auto leftArg = compare.Left();
+    auto rightArg = compare.Right();
+    return (IsSimpleColumnAccess(leftArg, lambdaArg) && IsSimpleConstant(rightArg)) || (IsSimpleColumnAccess(rightArg, lambdaArg) && IsSimpleConstant(leftArg));
+}
+
+TExprBase PruneNot(const TExprBase& node) {
+    if (auto maybeNot = node.Maybe<TCoNot>()) {
+        return maybeNot.Cast().Value();
     }
     return node;
 }
 
-bool IsNullRejectingPredicate(const TExpression &filter) {
-#ifdef DEBUG_PREDICATE
-    YQL_CLOG(TRACE, CoreDq) << "IsNullRejectingPredicate: " << filter.ToString();
-#endif
-    auto predicate = filter.GetExpressionBody();
-    if (predicate->IsCallable("PgResolvedOp") && CmpOperators.contains(TString(predicate->Child(0)->Content()))) {
-        auto left = PruneCast(predicate->Child(2));
-        auto right = PruneCast(predicate->Child(3));
-        return (left->IsCallable("PgConst") || right->IsCallable("PgConst"));
+bool IsNullRejectingPredicate(const TExpression& filter) {
+    auto lambda = TCoLambda(filter.GetLambda());
+    auto arg = lambda.Args().Arg(0);
+
+    auto predicate = PruneNot(lambda.Body());
+    if (IsAllowedComparator(predicate.Ptr())) {
+        return IsNullRejecting<TCoCompare>(predicate, arg);
     }
     return false;
 }
@@ -31,12 +59,13 @@ bool IsNullRejectingPredicate(const TExpression &filter) {
 namespace NKikimr {
 namespace NKqp {
 
+bool TPushFilterIntoJoinRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter &&
+        input->GetChildren().front()->Kind == EOperator::Join;
+}
+
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
-TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-
-    Y_UNUSED(ctx);
-    Y_UNUSED(props);
-
+TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Filter) {
         return input;
     }
@@ -46,51 +75,63 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
-    // Only handle Inner and Cross join at this time
     auto join = CastOperator<TOpJoin>(filter->GetInput());
 
-    // Make sure the join and its inputs are single consumer
-    if (!join->IsSingleConsumer()) {
-        YQL_CLOG(TRACE, CoreDq) << "Multiple consumers in push filter rule";
-        return input;
-    }
-
-    if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left") {
+    if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left" && join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly") {
         YQL_CLOG(TRACE, CoreDq) << "Wrong join type " << join->JoinKind << Endl;
         return input;
     }
 
-    auto output = input;
+    const bool usingBlockCrossJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin() && ctx.KqpCtx.Config->GetUseBlockHashJoinForCross();
+    const bool forceInlining = ctx.KqpCtx.Config->GetEnableInlineJoinFiltersAfterCBO();
+
+    if (join->JoinKind == "Cross" && usingBlockCrossJoin && !forceInlining) {
+        auto conjuncts = filter->GetFilterExpression().SplitConjunct();
+        // If all not equal - we cannot rewrite cross to inner, just adding them as join filters.
+        const bool containsEquiJoinCondition = AnyOf(conjuncts, [](const TExpression& conjunct) {
+            return conjunct.MaybeEquiJoinCondition();
+        });
+        if (!containsEquiJoinCondition) {
+            join->JoinFilters.insert(join->JoinFilters.end(), conjuncts.begin(), conjuncts.end());
+            return join;
+        }
+    }
+
     auto leftIUs = join->GetLeftInput()->GetOutputIUs();
     auto rightIUs = join->GetRightInput()->GetOutputIUs();
 
     // Break the filter into join conditions and other conjuncts
     // Join conditions can be pushed into the join operator and conjucts can either be pushed
     // or left on top of the join
-    auto conjuncts = filter->FilterExpr.SplitConjunct();
+    auto conjuncts = filter->GetFilterExpression().SplitConjunct();
 
     // Check if we need a top level filter
     TVector<TExpression> topLevelPreds;
     TVector<TExpression> pushLeft;
     TVector<TExpression> pushRight;
-    TVector<std::pair<TInfoUnit, TInfoUnit>> joinConditions;
+    TJoinIUs joinConditions;
+
+    bool canPushRight = join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly";
 
     for (const auto& conj : conjuncts) {
-        if (conj.MaybeEquiJoinCondition()) {
+        if (conj.MaybeEquiJoinCondition() && !ReferencesUnresolvedSubplan(conj, props)) {
             TEquiJoinCondition cond(conj);
 
-            if (IUSetDiff({cond.GetLeftIU()}, leftIUs).empty() && IUSetDiff({cond.GetRightIU()}, rightIUs).empty()) {
-                joinConditions.push_back(std::make_pair(cond.GetLeftIU(), cond.GetRightIU()));
-                continue;
-            } else if (IUSetDiff({cond.GetLeftIU()}, rightIUs).empty() && IUSetDiff({cond.GetRightIU()}, leftIUs).empty()) {
-                joinConditions.push_back(std::make_pair(cond.GetRightIU(), cond.GetLeftIU()));
-                continue;
+            // We cannot push filter into join conditions of a LeftOnly join - will break semantics
+            if(join->JoinKind != "LeftOnly") {
+                if (leftIUs.Contains(cond.GetLeftIU()) && rightIUs.Contains(cond.GetRightIU())) {
+                    joinConditions.Add(cond.GetLeftIU(), cond.GetRightIU());
+                    continue;
+                } else if (rightIUs.Contains(cond.GetLeftIU()) && leftIUs.Contains(cond.GetRightIU())) {
+                    joinConditions.Add(cond.GetRightIU(), cond.GetLeftIU());
+                    continue;
+                }
             }
         }
 
-        if (IUSetDiff(conj.GetInputIUs(true, true), leftIUs).empty()) {
+        if (conj.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true).IsSubsetOf(leftIUs)) {
             pushLeft.push_back(conj);
-        } else if (IUSetDiff(conj.GetInputIUs(true, true), rightIUs).empty()) {
+        } else if (conj.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true).IsSubsetOf(rightIUs) && canPushRight) {
             pushRight.push_back(conj);
         } else {
             topLevelPreds.push_back(conj);
@@ -98,22 +139,57 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     
     }
 
-    if (!pushLeft.size() && !pushRight.size() && !joinConditions.size()) {
+    if (!pushLeft.size() && !pushRight.size() && !joinConditions.Items().size()) {
         YQL_CLOG(TRACE, CoreDq) << "Nothing to push";
         return input;
     }
 
-    if (!joinConditions.empty()) {
+    if ((join->JoinKind == "Cross" || join->JoinKind == "Left" ) && !joinConditions.Items().empty()) {
         join->JoinKind = "Inner";
     }
 
-    join->JoinKeys.insert(join->JoinKeys.end(), joinConditions.begin(), joinConditions.end());
-    auto leftInput = join->GetLeftInput();
-    auto rightInput = join->GetRightInput();
+    for (const auto& key : joinConditions.Items()) {
+        join->JoinKeys.Add(key);
+    }
+
+    // When join conditions have been set for the join, replicate constant conditions from left/right side
+    // to the other side. This optimization is enabled for inner joins
+    // FIXME: Check if we can expand this to Left Joins
+   
+    if (join->JoinKind == "Inner") {
+        TVector<TExpression> pushConstantCondsRight;
+        TVector<TExpression> pushConstantCondsLeft;
+
+        // Check if left constant condition on the left key can be pushed to right side
+        for (const auto& expr : pushLeft) {
+            if (expr.MaybeConstantCondition()) {
+                auto iu = *expr.GetInputIUs().begin();
+                if (auto it = std::find_if(join->JoinKeys.Items().begin(), join->JoinKeys.Items().end(), [&iu](const auto& cond)
+                    {return iu == cond.first;}); it != join->JoinKeys.Items().end()) {
+                    auto rightExpr = expr.ApplyRenames({{iu, it->second}});
+                    pushConstantCondsRight.push_back(rightExpr);
+                }
+            }
+        }
+        // Check if right constant condition on the right key can be pushed to left side
+        for (const auto& expr : pushRight) {
+            if (expr.MaybeConstantCondition()) {
+                auto iu = *expr.GetInputIUs().begin();
+                if (auto it = std::find_if(join->JoinKeys.Items().begin(), join->JoinKeys.Items().end(), [&iu](const auto& cond)
+                    {return iu == cond.second;}); it != join->JoinKeys.Items().end()) {
+                    auto leftExpr = expr.ApplyRenames({{iu, it->first}});
+                    pushConstantCondsLeft.push_back(leftExpr);
+                }
+            }
+        }
+
+        pushRight.insert(pushRight.end(), pushConstantCondsRight.begin(), pushConstantCondsRight.end());
+        pushLeft.insert(pushLeft.end(), pushConstantCondsLeft.begin(), pushConstantCondsLeft.end());
+    }
 
     if (pushLeft.size()) {
         auto leftExpr = MakeConjunction(pushLeft, props.PgSyntax);
-        leftInput = MakeIntrusive<TOpFilter>(leftInput, input->Pos, leftExpr);
+        join->SetLeftInput(MakeIntrusive<TOpFilter>(join->GetLeftInput(), input->Pos, leftExpr));
     }
 
     if (pushRight.size()) {
@@ -126,30 +202,25 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
                     topLevelPreds.push_back(predicate);
                 }
             }
-            if (predicatesForRightSide.size()) {
-                auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
-                rightInput = MakeIntrusive<TOpFilter>(rightInput, input->Pos, rightExpr);
+            if (!predicatesForRightSide.empty()) {
+                auto rightExpr = MakeConjunction(predicatesForRightSide, props.PgSyntax);
+                join->SetRightInput(MakeIntrusive<TOpFilter>(join->GetRightInput(), input->Pos, rightExpr));
                 join->JoinKind = "Inner";
             } else if (!pushLeft.size()) {
                 return input;
             }
         } else {
             auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
-            rightInput = MakeIntrusive<TOpFilter>(rightInput, input->Pos, rightExpr);
+            join->SetRightInput(MakeIntrusive<TOpFilter>(join->GetRightInput(), input->Pos, rightExpr));
         }
     }
 
-    join->SetLeftInput(leftInput);
-    join->SetRightInput(rightInput);
-
     if (topLevelPreds.size()) {
         auto topFilterExpr = MakeConjunction(topLevelPreds, props.PgSyntax);
-        output =  MakeIntrusive<TOpFilter>(join, input->Pos, topFilterExpr);
-    } else {
-        output = join;
+        return MakeIntrusive<TOpFilter>(join, input->Pos, topFilterExpr);
     }
 
-    return output;
+    return join;
 }
 }
 }

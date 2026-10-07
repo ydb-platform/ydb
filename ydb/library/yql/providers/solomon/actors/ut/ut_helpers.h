@@ -7,8 +7,6 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 
-#include <ydb/core/testlib/basics/runtime.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <chrono>
@@ -21,7 +19,9 @@ void InitAsyncOutput(
     NSo::NProto::TDqSolomonShard&& settings,
     i64 freeSpace = 100000);
 
-NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud);
+NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(
+    bool isCloud,
+    NUdf::TDataTypeId timestampType = NUdf::TDataType<NUdf::TTimestamp>::Id);
 
 NUdf::TUnboxedValue CreateStruct(
     NKikimr::NMiniKQL::THolderFactory& holderFactory,

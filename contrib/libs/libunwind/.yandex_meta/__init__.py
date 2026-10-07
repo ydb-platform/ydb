@@ -14,6 +14,18 @@ def post_install(self):
         libunwind.CFLAGS.remove("-D_LIBUNWIND_LINK_DL_LIB")
         libunwind.CFLAGS.remove("-D_LIBUNWIND_LINK_PTHREAD_LIB")
 
+        libunwind.CFLAGS.remove("-D_LIBUNWIND_HAVE_GETAUXVAL")
+        libunwind.after(
+            "CFLAGS",
+            """
+            IF (OS_LINUX)
+                CFLAGS(
+                    -D_LIBUNWIND_HAVE_GETAUXVAL
+                )
+            ENDIF()
+            """,
+        )
+
         # original build uses -f options heavily, keep only necessary subset
         libunwind.CFLAGS += ["-fno-exceptions", "-fno-rtti", "-funwind-tables"]
         libunwind.after("CFLAGS", Switch({"SANITIZER_TYPE == memory": "CFLAGS(-fPIC)"}))

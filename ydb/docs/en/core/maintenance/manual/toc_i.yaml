@@ -1,15 +1,11 @@
 items:
-- name: Expanding a cluster
-  href: cluster_expansion.md
 - name: Adding storage groups
   href: adding_storage_groups.md
 - name: Safe restart and shutdown of nodes
   href: node_restarting.md
 - name: Enabling/disabling Scrubbing
   href: scrubbing.md
-- name: Working with SelfHeal
-  href: selfheal.md
-- name: Decommissioning a cluster part
+- name: Data Center Decommissioning
   href: ../../devops/deployment-options/manual/decommissioning.md
 - name: Decommissioning groups using virtual groups
   href: virtual_storage_groups_decommit.md
@@ -23,19 +19,7 @@ items:
   href: disk_end_space.md
 - name: Replacing a node's FQDN
   href: replacing_nodes.md
-- name: Config overview
-  href: config-overview.md
-- name: Dynamic cluster configuration
-  href: dynamic-config.md
-- name: Cluster configuration DSL
-  href: dynamic-config-selectors.md
-- name: Temporary configurations
-  href: dynamic-config-volatile-config.md
-- name: CMS
-  href: cms.md
-- name: Changing actor system configs
-  href: change_actorsystem_configs.md
 - name: BlobDepot
   href: blobdepot.md
-- name: BlobDepot decommit
+- name: BlobDepot decommissioning
   href: blobdepot_decommit.md

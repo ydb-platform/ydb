@@ -1,10 +1,11 @@
 #pragma once
 
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+
+#include <ydb/library/conclusion/status.h>
+
 #include <cmath>
 #include <optional>
-
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
-#include <ydb/library/conclusion/status.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
@@ -14,9 +15,8 @@ struct TRequestSettings {
     template <class TBloomFilterProto>
     static TRequestSettings FromProtoFilter(const TBloomFilterProto& bFilter) {
         TRequestSettings result;
-        result.FalsePositiveProbability = bFilter.HasFalsePositiveProbability()
-            ? std::optional<double>(bFilter.GetFalsePositiveProbability())
-            : std::nullopt;
+        result.FalsePositiveProbability =
+            bFilter.HasFalsePositiveProbability() ? std::optional<double>(bFilter.GetFalsePositiveProbability()) : std::nullopt;
         return result;
     }
 
@@ -45,4 +45,4 @@ inline TConclusionStatus ValidateRequest(const TRequestSettings& request) {
     return TConclusionStatus::Success();
 }
 
-} // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes

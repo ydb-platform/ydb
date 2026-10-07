@@ -1,7 +1,8 @@
 #include "grpc_pq_write.h"
 
-#include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tx/scheme_board/cache.h>
+
 #include <util/generic/queue.h>
 
 using namespace NActors;
@@ -26,7 +27,8 @@ IActor* CreatePQWriteService(const TActorId& schemeCache,
 
 TPQWriteService::TPQWriteService(const TActorId& schemeCache,
                              TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions)
-    : SchemeCache(schemeCache)
+    : TBase(NKikimrServices::PQ_WRITE_PROXY)
+    , SchemeCache(schemeCache)
     , Counters(counters)
     , MaxSessions(maxSessions)
     , Enabled(false)
@@ -37,7 +39,7 @@ TPQWriteService::TPQWriteService(const TActorId& schemeCache,
 void TPQWriteService::Bootstrap(const TActorContext& ctx) {
     HaveClusters = !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(); // ToDo[migration]: switch to proper option
     if (HaveClusters) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "TPQWriteService: send TEvClusterTracker::TEvSubscribe");
+        LOG_D("send TEvClusterTracker::TEvSubscribe");
 
         ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
                  new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
@@ -63,8 +65,11 @@ void TPQWriteService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpda
 
 
 void TPQWriteService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(ev->Get()->ClustersList);
-    Y_ABORT_UNLESS(ev->Get()->ClustersList->Clusters.size());
+    AFL_ENSURE(ev->Get()->ClustersList)("local_cluster", LocalCluster)("enabled", Enabled);
+    AFL_ENSURE(ev->Get()->ClustersList->Clusters.size())
+        ("clusters", ev->Get()->ClustersList->Clusters.size())
+        ("local_cluster", LocalCluster)
+        ("enabled", Enabled);
 
     const auto& clusters = ev->Get()->ClustersList->Clusters;
 
@@ -128,11 +133,12 @@ void TPQWriteService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvCluster
     }
 }
 
-void TPQWriteService::Handle(TEvPQProxy::TEvSessionSetPreferredCluster::TPtr& ev, const TActorContext& ctx) {
+void TPQWriteService::Handle(TEvPQProxy::TEvSessionSetPreferredCluster::TPtr& ev, const TActorContext&) {
     const auto& cookie = ev->Get()->Cookie;
     const auto& preferredCluster = ev->Get()->PreferredCluster;
     if (!Sessions.contains(cookie)) {
-        LOG_ERROR_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "Got TEvSessionSetPreferredCluster message from session with cookie " << cookie << " that is not in session collection");
+        LOG_E("Got TEvSessionSetPreferredCluster message from session with cookie that is not in session collection",
+            {"cookie", cookie});
         return;
     }
     if (!preferredCluster.empty() && *LocalCluster != preferredCluster) {

@@ -1,4 +1,3 @@
-/* postgres can not */
 $null_t = TypeOf(NULL);
 $struct_t = Struct<a: String, b: Int32?, c: $null_t, d: pgtext>;
 

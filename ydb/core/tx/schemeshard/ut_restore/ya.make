@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(120)
+SPLIT_FACTOR(200)
 
 REQUIREMENTS(cpu:4)
 
@@ -14,6 +14,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    contrib/libs/apache/arrow
     contrib/libs/double-conversion
     library/cpp/streams/zstd
     library/cpp/string_utils/quote
@@ -22,6 +23,9 @@ PEERDIR(
     ydb/core/util
     ydb/core/wrappers/ut_helpers
     ydb/core/ydb_convert
+    ydb/library/aws_init
+    ydb/library/testlib/backup_test_enums
+    ydb/library/testlib/parquet_helpers
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     ydb/core/testlib/audit_helpers
@@ -31,6 +35,7 @@ SRCS(
     ut_restore.cpp
     ut_restore_fs.cpp
 )
+
 
 YQL_LAST_ABI_VERSION()
 

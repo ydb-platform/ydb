@@ -78,10 +78,6 @@ void FillSchema(ISystemViewResolver::TSchema& schema) {
     TSchemaFiller<Schema>::Fill(schema);
 }
 
-constexpr TStringBuf PgTablesName = "pg_tables";
-constexpr TStringBuf InformationSchemaTablesName = "tables";
-constexpr TStringBuf PgClassName = "pg_class";
-
 struct Schema : NIceDb::Schema {
     struct PartitionStats : Table<1> {
         struct OwnerId                  : Column<1, NScheme::NTypeIds::Uint64> {};
@@ -206,6 +202,7 @@ struct Schema : NIceDb::Schema {
         struct ProcessCPUTime    : Column<27, NScheme::NTypeIds::Uint64> {};
         struct TypeCol           : Column<28, NScheme::NTypeIds::Utf8> { static TString GetColumnName(const TString&) { return "Type"; } };
         struct RequestUnits      : Column<29, NScheme::NTypeIds::Uint64> {};
+        struct TraceId           : Column<30, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<IntervalEnd, Rank>;
         using TColumns = TableColumns<
@@ -237,7 +234,8 @@ struct Schema : NIceDb::Schema {
             CompileCPUTime,
             ProcessCPUTime,
             TypeCol,
-            RequestUnits>;
+            RequestUnits,
+            TraceId>;
     };
 
     struct PDisks : Table<4> {
@@ -262,6 +260,7 @@ struct Schema : NIceDb::Schema {
         struct SlotSizeInUnits                 : Column<19, NScheme::NTypeIds::Uint32> {};
         // struct InferPDiskSlotCountFromUnitSize : Column<20, NScheme::NTypeIds::Uint64> {};
         struct MaintenanceStatus               : Column<21, NScheme::NTypeIds::Utf8> {};
+        struct ExpectedSlotSize                : Column<22, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -280,6 +279,7 @@ struct Schema : NIceDb::Schema {
             State,
             StatusChangeTimestamp,
             ExpectedSlotCount,
+            ExpectedSlotSize,
             NumActiveSlots,
             DecommitStatus,
             SlotSizeInUnits,
@@ -305,6 +305,7 @@ struct Schema : NIceDb::Schema {
         struct Replicated      : Column<16, NScheme::NTypeIds::Bool> {};
         struct DiskSpace       : Column<17, NScheme::NTypeIds::Utf8> {};
         struct State           : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct PhantomOnly     : Column<19, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<NodeId, PDiskId, VSlotId>;
         using TColumns = TableColumns<
@@ -322,7 +323,8 @@ struct Schema : NIceDb::Schema {
             Kind,
             FailRealm,
             Replicated,
-            DiskSpace>;
+            DiskSpace,
+            PhantomOnly>;
     };
 
     struct Groups : Table<6> {
@@ -355,6 +357,7 @@ struct Schema : NIceDb::Schema {
         struct BridgeSyncFirstErrorTimestamp : Column<27, NScheme::NTypeIds::Uint64> {};
         struct BridgeSyncErrorCount          : Column<28, NScheme::NTypeIds::Uint32> {};
         struct BridgeSyncRunning             : Column<29, NScheme::NTypeIds::Bool> {};
+        struct SpaceColor                    : Column<30, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -384,7 +387,8 @@ struct Schema : NIceDb::Schema {
             BridgeSyncLastErrorTimestamp,
             BridgeSyncFirstErrorTimestamp,
             BridgeSyncErrorCount,
-            BridgeSyncRunning>;
+            BridgeSyncRunning,
+            SpaceColor>;
     };
 
     struct StoragePools : Table<7> {
@@ -400,6 +404,9 @@ struct Schema : NIceDb::Schema {
         struct SchemeshardId           : Column<10, NScheme::NTypeIds::Uint64> {};
         struct PathId                  : Column<11, NScheme::NTypeIds::Uint64> {};
         struct DefaultGroupSizeInUnits : Column<12, NScheme::NTypeIds::Uint32> {};
+        struct BestSpaceColor          : Column<13, NScheme::NTypeIds::Utf8> {};
+        struct WorstSpaceColor         : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct SpaceExhausted          : Column<15, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<BoxId, StoragePoolId>;
         using TColumns = TableColumns<
@@ -414,7 +421,10 @@ struct Schema : NIceDb::Schema {
             EncryptionMode,
             SchemeshardId,
             PathId,
-            DefaultGroupSizeInUnits>;
+            DefaultGroupSizeInUnits,
+            BestSpaceColor,
+            WorstSpaceColor,
+            SpaceExhausted>;
     };
 
     struct Tablets : Table<8> {
@@ -540,10 +550,13 @@ struct Schema : NIceDb::Schema {
         struct CurrentAvailableSize    : Column<6, NScheme::NTypeIds::Uint64> {};
         struct AvailableGroupsToCreate : Column<7, NScheme::NTypeIds::Uint32> {};
         struct AvailableSizeToCreate   : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct ImmediateGroupsToCreate : Column<9, NScheme::NTypeIds::Uint32> {};
+        struct ImmediateSizeToCreate   : Column<10, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PDiskFilter, ErasureSpecies>;
         using TColumns = TableColumns<PDiskFilter, ErasureSpecies, CurrentGroupsCreated, CurrentAllocatedSize,
-                                      CurrentAvailableSize, AvailableGroupsToCreate, AvailableSizeToCreate>;
+                                      CurrentAvailableSize, AvailableGroupsToCreate, AvailableSizeToCreate,
+                                      ImmediateGroupsToCreate, ImmediateSizeToCreate>;
     };
 
     struct TopPartitions : Table<12> {
@@ -577,24 +590,30 @@ struct Schema : NIceDb::Schema {
     };
 
     struct QuerySessions : Table<13> {
-        struct SessionId          : Column<1, NScheme::NTypeIds::Utf8> {};
-        struct NodeId             : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct State              : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct Query              : Column<4, NScheme::NTypeIds::Utf8> {};
-        struct QueryCount         : Column<5, NScheme::NTypeIds::Uint32> {};
-        struct ClientAddress      : Column<6, NScheme::NTypeIds::Utf8> {};
-        struct ClientPID          : Column<7, NScheme::NTypeIds::Utf8> {};
-        struct ClientUserAgent    : Column<8, NScheme::NTypeIds::Utf8> {};
-        struct ClientSdkBuildInfo : Column<9, NScheme::NTypeIds::Utf8> {};
-        struct ApplicationName    : Column<10, NScheme::NTypeIds::Utf8> {};
-        struct SessionStartAt     : Column<11, NScheme::NTypeIds::Timestamp> {};
-        struct QueryStartAt       : Column<12, NScheme::NTypeIds::Timestamp> {};
-        struct StateChangeAt      : Column<13, NScheme::NTypeIds::Timestamp> {};
-        struct UserSID            : Column<14, NScheme::NTypeIds::Utf8> {};
-        struct WmPoolId           : Column<17, NScheme::NTypeIds::Utf8> {};
-        struct WmState            : Column<18, NScheme::NTypeIds::Utf8> {};
-        struct WmEnterTime        : Column<19, NScheme::NTypeIds::Timestamp> {};
-        struct WmExitTime         : Column<20, NScheme::NTypeIds::Timestamp> {};
+        struct SessionId            : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct NodeId               : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct State                : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct Query                : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct QueryCount           : Column<5, NScheme::NTypeIds::Uint32> {};
+        struct ClientAddress        : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct ClientPID            : Column<7, NScheme::NTypeIds::Utf8> {};
+        struct ClientUserAgent      : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct ClientSdkBuildInfo   : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct ApplicationName      : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct SessionStartAt       : Column<11, NScheme::NTypeIds::Timestamp> {};
+        struct QueryStartAt         : Column<12, NScheme::NTypeIds::Timestamp> {};
+        struct StateChangeAt        : Column<13, NScheme::NTypeIds::Timestamp> {};
+        struct UserSID              : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct WmPoolId             : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct WmState              : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct WmEnterTime          : Column<19, NScheme::NTypeIds::Timestamp> {};
+        struct WmExitTime           : Column<20, NScheme::NTypeIds::Timestamp> {};
+        struct TraceId              : Column<21, NScheme::NTypeIds::Utf8> {};
+        struct WmClassifiedBy       : Column<22, NScheme::NTypeIds::Utf8> {};
+        struct DurationUs           : Column<23, NScheme::NTypeIds::Uint64> {};
+        struct CpuTimeUs            : Column<24, NScheme::NTypeIds::Uint64> {};
+        struct ComputeMemoryBytes   : Column<25, NScheme::NTypeIds::Uint64> {};
+        struct ReadIngressBytesRate : Column<26, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<SessionId>;
         using TColumns = TableColumns<
@@ -615,7 +634,13 @@ struct Schema : NIceDb::Schema {
             WmPoolId,
             WmState,
             WmEnterTime,
-            WmExitTime>;
+            WmExitTime,
+            TraceId,
+            WmClassifiedBy,
+            DurationUs,
+            CpuTimeUs,
+            ComputeMemoryBytes,
+            ReadIngressBytesRate>;
     };
 
     struct PrimaryIndexPortionStats : Table<14> {
@@ -765,33 +790,28 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct PgColumn {
-        NIceDb::TColumnId _ColumnId;
-        NScheme::TTypeInfo _ColumnTypeInfo;
-        TString _ColumnName;
-        PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName);
-    };
-
-    class PgTablesSchemaProvider {
-    public:
-        PgTablesSchemaProvider();
-        const TVector<PgColumn>& GetColumns(TStringBuf tableName) const;
-    private:
-        std::unordered_map<TString, TVector<PgColumn>> columnsStorage;
-    };
-
     struct ResourcePoolClassifiers : Table<20> {
         struct Name         : Column<1, NScheme::NTypeIds::Utf8> {};
         struct Rank         : Column<2, NScheme::NTypeIds::Int64> {};
         struct MemberName   : Column<4, NScheme::NTypeIds::Utf8> {};
         struct ResourcePool : Column<5, NScheme::NTypeIds::Utf8> {};
+        struct HasAppName   : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct Action       : Column<7, NScheme::NTypeIds::Utf8> {};
+        struct HasFullScan  : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct HasPath      : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct HasStream    : Column<10, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
             Name,
             Rank,
             MemberName,
-            ResourcePool>;
+            ResourcePool,
+            HasAppName,
+            Action,
+            HasFullScan,
+            HasPath,
+            HasStream>;
     };
 
     struct ShowCreate : Table<21> {
@@ -808,14 +828,16 @@ struct Schema : NIceDb::Schema {
     };
 
     struct ResourcePools : Table<22> {
-        struct Name                           : Column<1, NScheme::NTypeIds::Utf8> {};
-        struct ConcurrentQueryLimit           : Column<2, NScheme::NTypeIds::Int32> {};
-        struct QueueSize                      : Column<3, NScheme::NTypeIds::Int32> {};
-        struct DatabaseLoadCpuThreshold       : Column<4, NScheme::NTypeIds::Double> {};
-        struct ResourceWeight                 : Column<5, NScheme::NTypeIds::Double> {};
-        struct TotalCpuLimitPercentPerNode    : Column<6, NScheme::NTypeIds::Double> {};
-        struct QueryCpuLimitPercentPerNode    : Column<7, NScheme::NTypeIds::Double> {};
-        struct QueryMemoryLimitPercentPerNode : Column<8, NScheme::NTypeIds::Double> {};
+        struct Name                            : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct ConcurrentQueryLimit            : Column<2, NScheme::NTypeIds::Int32> {};
+        struct QueueSize                       : Column<3, NScheme::NTypeIds::Int32> {};
+        struct DatabaseLoadCpuThreshold        : Column<4, NScheme::NTypeIds::Double> {};
+        struct ResourceWeight                  : Column<5, NScheme::NTypeIds::Double> {};
+        struct TotalCpuLimitPercentPerNode     : Column<6, NScheme::NTypeIds::Double> {};
+        struct QueryCpuLimitPercentPerNode     : Column<7, NScheme::NTypeIds::Double> {};
+        struct QueryMemoryLimitPercentPerNode  : Column<8, NScheme::NTypeIds::Double> {};
+        struct TotalMemoryLimitPercentPerNode  : Column<9, NScheme::NTypeIds::Double> {};
+        struct TotalCpuGuaranteePercentPerNode : Column<10, NScheme::NTypeIds::Double> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
@@ -826,7 +848,9 @@ struct Schema : NIceDb::Schema {
             ResourceWeight,
             TotalCpuLimitPercentPerNode,
             QueryCpuLimitPercentPerNode,
-            QueryMemoryLimitPercentPerNode>;
+            QueryMemoryLimitPercentPerNode,
+            TotalMemoryLimitPercentPerNode,
+            TotalCpuGuaranteePercentPerNode>;
     };
 
     struct TopPartitionsTli : Table<23> {
@@ -923,6 +947,15 @@ struct Schema : NIceDb::Schema {
         struct SuspendedUntil       : Column<11, NScheme::NTypeIds::Timestamp> {};
         struct LastExecutionId      : Column<12, NScheme::NTypeIds::Utf8> {};
         struct PreviousExecutionIds : Column<13, NScheme::NTypeIds::Utf8> {};
+        struct CreatedBy            : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct ModifiedBy           : Column<15, NScheme::NTypeIds::Utf8> {};
+        struct StartedBy            : Column<16, NScheme::NTypeIds::Utf8> {};
+        struct StoppedBy            : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct CreatedAt            : Column<18, NScheme::NTypeIds::Timestamp> {};
+        struct ModifiedAt           : Column<19, NScheme::NTypeIds::Timestamp> {};
+        struct SubmittedAt          : Column<20, NScheme::NTypeIds::Timestamp> {};
+        struct StartedAt            : Column<21, NScheme::NTypeIds::Timestamp> {};
+        struct FinishedAt           : Column<22, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<Path>;
         using TColumns = TableColumns<
@@ -938,7 +971,48 @@ struct Schema : NIceDb::Schema {
             LastFailAt,
             SuspendedUntil,
             LastExecutionId,
-            PreviousExecutionIds>;
+            PreviousExecutionIds,
+            CreatedBy,
+            ModifiedBy,
+            StartedBy,
+            StoppedBy,
+            CreatedAt,
+            ModifiedAt,
+            SubmittedAt,
+            StartedAt,
+            FinishedAt>;
+    };
+
+    struct UdfModules : Table<27> {
+        struct Uid               : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Md5               : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Name              : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct ModuleType        : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct Version           : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Size              : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct ChunkCount        : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct CompileStatus     : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct CompileError      : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct CreatedAt         : Column<10, NScheme::NTypeIds::Timestamp> {};
+        struct CompileStartedAt  : Column<11, NScheme::NTypeIds::Timestamp> {};
+        struct CompileFinishedAt : Column<12, NScheme::NTypeIds::Timestamp> {};
+        struct Manifest          : Column<13, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Uid>;
+        using TColumns = TableColumns<
+            Uid,
+            Md5,
+            Name,
+            ModuleType,
+            Version,
+            Size,
+            ChunkCount,
+            CompileStatus,
+            CompileError,
+            CreatedAt,
+            CompileStartedAt,
+            CompileFinishedAt,
+            Manifest>;
     };
 };
 

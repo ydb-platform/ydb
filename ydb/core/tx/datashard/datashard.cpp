@@ -5,19 +5,28 @@
 #include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
+#include <ydb/core/base/auth.h>
+#include <ydb/core/base/mon_auth.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/library/formats/arrow/size_calcer.h>
-#include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/core/tablet/tablet_counters_protobuf.h>
-#include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
-
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
+
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 LWTRACE_USING(DATASHARD_PROVIDER)
 
@@ -39,6 +48,10 @@ bool gAllowLogBatchingDefaultValue = true;
 ui64 gDbStatsDataSizeResolution = 10*1024*1024;
 ui64 gDbStatsRowCountResolution = 100000;
 ui32 gDbStatsHistogramBucketsCount = 10;
+
+ui32 gFulltextMaxDelta = 10000;
+ui32 gFulltextMaxSegment = 10000;
+ui32 gFulltextSegmentPenalty = 4;
 
 // Avoid caching too many txIds when operations are cancelled en-masse
 size_t MaxCachedGlobalTxIds = 16;
@@ -191,14 +204,17 @@ TDataShard::~TDataShard() {
 
 void TDataShard::OnDetach(const TActorContext &ctx) {
     Cleanup(ctx);
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "OnDetach: " << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "OnDetach",
+        {"tabletId", TabletID()});
     return Die(ctx);
 }
 
 void TDataShard::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
     const auto* msg = ev->Get();
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "OnTabletStop: " << TabletID() << " reason = " << msg->GetReason());
+    YDB_LOG_INFO_CTX(ctx, "OnTabletStop",
+        {"tabletId", TabletID()},
+        {"reason", msg->GetReason()});
 
     if (!IsFollower() && GetState() == TShardState::Ready) {
         if (!Stopping) {
@@ -261,7 +277,8 @@ void TDataShard::OnStopGuardComplete(const TActorContext &ctx) {
 
 void TDataShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "OnTabletDead: " << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "OnTabletDead",
+        {"tabletId", TabletID()});
     Cleanup(ctx);
     return Die(ctx);
 }
@@ -380,7 +397,9 @@ TDuration TDataShard::ReadOnlyLeaseDuration() {
 }
 
 void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::OnActivateExecutor: tablet " << TabletID() << " actor " << ctx.SelfID);
+    YDB_LOG_INFO_CTX(ctx, "TDataShard::OnActivateExecutor: tablet actor",
+        {"tabletId", TabletID()},
+        {"selfId", ctx.SelfID});
 
     InitControls();
 
@@ -396,17 +415,27 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     if (!IsFollower()) {
         Execute(CreateTxInitSchema(), ctx);
         Become(&TThis::StateInactive);
+
+        // In tests the scheduler may be uninitialized
+        if (auto scheduler = AppData()->KqpComputeScheduler) {
+            SchedulableReadFactory = std::make_unique<NKqp::NScheduler::TSchedulableReadFactory>(scheduler);
+        }
     } else {
         SyncConfig();
         State = TShardState::Readonly;
         FollowerState = { };
+        // The initial state comes without follower update notifications
+        SyncSchemeOnFollowerNeeded = true;
+        // Do not rely on a sync queued before the reactivation, an extra one is a no-op
+        SyncSchemeOnFollowerPending = false;
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
         if (AppData(ctx)->FeatureFlags.GetEnableFollowerStats()) {
             DoPeriodicTasks(ctx);
         }
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Follower switched to work state: " << TabletID());
+        YDB_LOG_INFO_CTX(ctx, "Follower switched to work state",
+            {"tabletId", TabletID()});
     }
 }
 
@@ -423,8 +452,9 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     OutReadSets.ResendAll(ctx);
 
     Become(&TThis::StateWork);
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Switched to work state "
-         << DatashardStateName(State) << " tabletId " << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "Switched to work state tabletId",
+        {"state", DatashardStateName(State)},
+        {"tabletId", TabletID()});
 
     if (State == TShardState::Ready && DstSplitDescription) {
         // This shard was created as a result of split/merge (and not e.g. copy table)
@@ -462,10 +492,9 @@ void TDataShard::SendRegistrationRequestTimeCast(const TActorContext &ctx) {
         return;
 
     if (!ProcessingParams) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID()
-            << " not sending time cast registration request in state "
-            << DatashardStateName(State)
-            << ": missing processing params");
+        YDB_LOG_DEBUG_CTX(ctx, "Not sending time cast registration request due to missing processing params",
+            {"tabletId", TabletID()},
+            {"state", DatashardStateName(State)});
         return;
     }
 
@@ -473,17 +502,18 @@ void TDataShard::SendRegistrationRequestTimeCast(const TActorContext &ctx) {
         State == TShardState::SplitDstReceivingSnapshot)
     {
         // We don't have all the necessary info yet
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID()
-            << " not sending time cast registration request in state "
-            << DatashardStateName(State));
+        YDB_LOG_DEBUG_CTX(ctx, "Not sending time cast registration request",
+            {"tabletId", TabletID()},
+            {"state", DatashardStateName(State)});
         return;
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Send registration request to time cast "
-         << DatashardStateName(State) << " tabletId " << TabletID()
-         << " mediators count is " << ProcessingParams->MediatorsSize()
-         << " coordinators count is " << ProcessingParams->CoordinatorsSize()
-         << " buckets per mediator " << ProcessingParams->GetTimeCastBucketsPerMediator());
+    YDB_LOG_INFO_CTX(ctx, "Send registration request to time cast",
+        {"state", DatashardStateName(State)},
+        {"tabletId", TabletID()},
+        {"mediatorsSize", ProcessingParams->MediatorsSize()},
+        {"coordinatorsSize", ProcessingParams->CoordinatorsSize()},
+        {"timeCastBucketsPerMediator", ProcessingParams->GetTimeCastBucketsPerMediator()});
 
     RegistrationSended = true;
     ctx.Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvRegisterTablet(TabletID(), *ProcessingParams));
@@ -569,9 +599,9 @@ void TDataShard::PrepareAndSaveOutReadSets(ui64 step,
 
 void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEventHandle>>& delayedAcks) const {
     for (auto& x : delayedAcks) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
-                  "Send delayed Ack RS Ack at %" PRIu64 " %s",
-                  TabletID(), x->ToString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "Send delayed Ack RS Ack",
+            {"tabletId", TabletID()},
+            {"eventString", x->ToString().data()});
         ctx.Send(x.Release());
         IncCounter(COUNTER_ACK_SENT_DELAYED);
     }
@@ -587,8 +617,10 @@ void TDataShard::GetCleanupReplies(TOperation* op, std::vector<std::unique_ptr<I
 
     auto& delayedAcks = op->DelayedAcks();
     for (auto& x : delayedAcks) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-            "Cleanup TxId# " << op->GetTxId() << " at " << TabletID() << " Ack RS " << x->ToString());
+        YDB_LOG_DEBUG("Cleanup at Ack RS",
+            {"txId", op->GetTxId()},
+            {"tabletId", TabletID()},
+            {"eventString", x->ToString()});
         cleanupReplies.emplace_back(x.Release());
         IncCounter(COUNTER_ACK_SENT_DELAYED);
     }
@@ -713,15 +745,21 @@ public:
     void OnCommit(ui64) override {
         TString error = Result->GetError();
         if (error) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Complete [" << Step << " : " << TxId << "] from " << Self->TabletID()
-                    << " at tablet " << Self->TabletID() << ", error: " << error);
+            YDB_LOG_INFO("Complete volatile tx",
+                {"step", Step},
+                {"txId", TxId},
+                {"fromTabletId", Self->TabletID()},
+                {"atTabletId", Self->TabletID()},
+                {"error", error});
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Complete [" << Step << " : " << TxId << "] from " << Self->TabletID()
-                    << " at tablet " << Self->TabletID() << " send result to client "
-                    << Target <<  ", exec latency: " << Result->Record.GetExecLatency()
-                    << " ms, propose latency: " << Result->Record.GetProposeLatency() << " ms");
+            YDB_LOG_DEBUG("Complete volatile tx, send result to client",
+                {"step", Step},
+                {"txId", TxId},
+                {"fromTabletId", Self->TabletID()},
+                {"atTabletId", Self->TabletID()},
+                {"target", Target},
+                {"execLatency", Result->Record.GetExecLatency()},
+                {"proposeLatency", Result->Record.GetProposeLatency()});
         }
 
         ui64 resultSize = Result->GetTxResult().size();
@@ -753,29 +791,36 @@ public:
             TDataShard* self, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> writeResult,
             const TActorId& target,
             ui64 step, ui64 txId,
-            NWilson::TSpan&& span)
+            NWilson::TSpan&& span, ui64 cookie)
         : Self(self)
         , WriteResult(std::move(writeResult))
         , Target(target)
         , Step(step)
         , TxId(txId)
         , Span(std::move(span))
+        , Cookie(cookie)
     {
     }
 
     void OnCommit(ui64) override {
         if (WriteResult->IsError()) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID()
-                << " at tablet " << Self->TabletID() << ", error:  " << WriteResult->GetError());
+            YDB_LOG_INFO("Complete volatile write",
+                {"step", Step},
+                {"txId", TxId},
+                {"fromTabletId", Self->TabletID()},
+                {"atTabletId", Self->TabletID()},
+                {"error", WriteResult->GetError()});
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Complete volatile write [" << Step << " : " << TxId << "] from " << Self->TabletID()
-                << " at tablet " << Self->TabletID() << " send result to client " << Target);
+            YDB_LOG_DEBUG("Complete volatile write, send result to client",
+                {"step", Step},
+                {"txId", TxId},
+                {"fromTabletId", Self->TabletID()},
+                {"atTabletId", Self->TabletID()},
+                {"target", Target});
         }
 
         LWTRACK(ProposeTransactionSendResult, WriteResult->GetOrbit());
-        Self->Send(Target, WriteResult.release(), 0, 0, Span.GetTraceId());
+        Self->Send(Target, WriteResult.release(), 0, Cookie, Span.GetTraceId());
         Span.End();
     }
 
@@ -794,6 +839,7 @@ private:
     ui64 Step;
     ui64 TxId;
     NWilson::TSpan Span;
+    ui64 Cookie;
 };
 
 void TDataShard::SendResult(const TActorContext &ctx,
@@ -816,11 +862,14 @@ void TDataShard::SendResult(const TActorContext &ctx,
         return;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Complete [" << step << " : " << txId << "] from " << TabletID()
-                << " at tablet " << TabletID() << " send result to client "
-                << target <<  ", exec latency: " << res->Record.GetExecLatency()
-                << " ms, propose latency: " << res->Record.GetProposeLatency() << " ms");
+    YDB_LOG_DEBUG_CTX(ctx, "Complete tx",
+        {"step", step},
+        {"txId", txId},
+        {"fromTabletId", TabletID()},
+        {"atTabletId", TabletID()},
+        {"target", target},
+        {"execLatency", res->Record.GetExecLatency()},
+        {"proposeLatency", res->Record.GetProposeLatency()});
 
     ui64 resultSize = res->GetTxResult().size();
     ui32 flags = IEventHandle::MakeFlags(TInterconnectChannels::GetTabletChannel(resultSize), 0);
@@ -830,7 +879,7 @@ void TDataShard::SendResult(const TActorContext &ctx,
 
 void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>& result,
         const TActorId& target, ui64 step, ui64 txId,
-        NWilson::TTraceId traceId)
+        NWilson::TTraceId traceId, ui64 cookie)
 {
     Y_ENSURE(txId == result->Record.GetTxId(), " Result for txId " << txId << " has txId " << result->Record.GetTxId());
 
@@ -840,15 +889,20 @@ void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEven
         // This is a volatile transaction, and we need to wait until it is resolved
         bool ok = VolatileTxManager.AttachVolatileTxCallback(txId,
             new TSendVolatileWriteResult(this, std::move(result), target, step, txId,
-                std::move(span)));
+                std::move(span), cookie));
         Y_ENSURE(ok);
         return;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Complete write [" << step << " : " << txId << "] from " << TabletID() << " at tablet " << TabletID() << " send result to client " << target);
+    YDB_LOG_DEBUG_CTX(ctx, "Complete write tx",
+        {"step", step},
+        {"txId", txId},
+        {"fromTabletId", TabletID()},
+        {"toTabletId", TabletID()},
+        {"target", target});
 
     LWTRACK(ProposeTransactionSendResult, result->GetOrbit());
-    ctx.Send(target, result.release(), 0, 0, span.GetTraceId());
+    ctx.Send(target, result.release(), 0, cookie, span.GetTraceId());
 }
 
 void TDataShard::FillExecutionStats(const TExecutionProfile& execProfile, NKikimrQueryStats::TTxStats& txStats) const {
@@ -890,7 +944,7 @@ ui64 TDataShard::GetNextChangeRecordLockOffset(ui64 lockId) {
     return it->second.Changes.back().LockOffset + 1;
 }
 
-void TDataShard::FillUserCtxColumns(NACLib::TUserContext::TPtr userCtx, TString& userSID, TString& userTraceId) {
+void TDataShard::FillUserCtxColumns(TIntrusivePtr<NACLib::TUserContext> userCtx, TString& userSID, TString& userTraceId) {
     if (userCtx != nullptr) {
         userSID = userCtx->GetUserSID();
         if (userCtx->GetUserTraceId()) {
@@ -905,9 +959,9 @@ void TDataShard::FillUserCtxColumns(NACLib::TUserContext::TPtr userCtx, TString&
 }
 
 void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PersistChangeRecord"
-        << ": record: " << (GetChangeRecordDebugPrint() ? ChangeRecordDebugSerializer->DebugString(record) : ToString(record))
-        << ", at tablet: " << TabletID());
+    YDB_LOG_DEBUG("PersistChangeRecord",
+        {"record", (GetChangeRecordDebugPrint() ? ChangeRecordDebugSerializer->DebugString(record) : ToString(record))},
+        {"tabletId", TabletID()});
 
     ui64 lockId = record.GetLockId();
     if (lockId == 0) {
@@ -1030,11 +1084,11 @@ bool TDataShard::HasLockChangeRecords(ui64 lockId) const {
 }
 
 void TDataShard::CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 group, const TRowVersion& rowVersion, TVector<IDataShardChangeCollector::TChange>& collected) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CommitLockChangeRecords"
-        << ": lockId# " << lockId
-        << ", group# " << group
-        << ", version# " << rowVersion
-        << ", at tablet: " << TabletID());
+    YDB_LOG_DEBUG("CommitLockChangeRecords",
+        {"lockId", lockId},
+        {"group", group},
+        {"version", rowVersion},
+        {"tabletId", TabletID()});
 
     auto it = LockChangeRecords.find(lockId);
     Y_ENSURE(it != LockChangeRecords.end() && !it->second.Changes.empty(), "Cannot commit lock " << lockId << " change records: there are no pending change records");
@@ -1109,10 +1163,10 @@ void TDataShard::CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 
 }
 
 void TDataShard::MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "MoveChangeRecord"
-        << ": order: " << order
-        << ": pathId: " << pathId
-        << ", at tablet: " << TabletID());
+    YDB_LOG_DEBUG("MoveChangeRecord",
+        {"order", order},
+        {"pathId", pathId},
+        {"tabletId", TabletID()});
 
     db.Table<Schema::ChangeRecords>().Key(order).Update(
         NIceDb::TUpdate<Schema::ChangeRecords::PathOwnerId>(pathId.OwnerId),
@@ -1120,11 +1174,11 @@ void TDataShard::MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId
 }
 
 void TDataShard::MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOffset, const TPathId& pathId) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "MoveChangeRecord"
-        << ": lockId: " << lockId
-        << ", lockOffset: " << lockOffset
-        << ": pathId: " << pathId
-        << ", at tablet: " << TabletID());
+    YDB_LOG_DEBUG("MoveChangeRecord",
+        {"lockId", lockId},
+        {"lockOffset", lockOffset},
+        {"pathId", pathId},
+        {"tabletId", TabletID()});
 
     db.Table<Schema::LockChangeRecords>().Key(lockId, lockOffset).Update(
         NIceDb::TUpdate<Schema::LockChangeRecords::PathOwnerId>(pathId.OwnerId),
@@ -1132,9 +1186,9 @@ void TDataShard::MoveChangeRecord(NIceDb::TNiceDb& db, ui64 lockId, ui64 lockOff
 }
 
 void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "RemoveChangeRecord"
-        << ": order: " << order
-        << ", at tablet: " << TabletID());
+    YDB_LOG_DEBUG("RemoveChangeRecord",
+        {"order", order},
+        {"tabletId", TabletID()});
 
     auto it = ChangesQueue.find(order);
     if (it == ChangesQueue.end()) {
@@ -1185,6 +1239,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
 
     IncCounter(COUNTER_CHANGE_RECORDS_REMOVED);
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
+    SetCounter(COUNTER_CHANGE_QUEUE_BYTES, ChangesQueueBytes);
 
     CheckChangesQueueNoOverflow();
 }
@@ -1210,16 +1265,15 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
     }
 
     if (OutChangeSenderSuspended) {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Cannot enqueue change records"
-            << ": change sender suspended"
-            << ", at tablet: " << TabletID()
-            << ", records: " << JoinSeq(", ", records));
+        YDB_LOG_NOTICE("Cannot enqueue change records: change sender suspended",
+            {"tabletId", TabletID()},
+            {"records", JoinSeq(", ", records)});
         return;
     }
 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "EnqueueChangeRecords"
-        << ": at tablet: " << TabletID()
-        << ", records: " << JoinSeq(", ", records));
+    YDB_LOG_DEBUG("EnqueueChangeRecords",
+        {"tabletId", TabletID()},
+        {"records", JoinSeq(", ", records)});
 
     const auto now = AppData()->TimeProvider->Now();
     TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> forward(Reserve(records.size()));
@@ -1243,6 +1297,7 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
     UpdateChangeExchangeLag(now);
     IncCounter(COUNTER_CHANGE_RECORDS_ENQUEUED, forward.size());
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
+    SetCounter(COUNTER_CHANGE_QUEUE_BYTES, ChangesQueueBytes);
 
     Y_ENSURE(OutChangeSender);
     Send(OutChangeSender, new NChangeExchange::TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
@@ -1297,21 +1352,21 @@ void TDataShard::CreateChangeSender(const TActorContext& ctx) {
     Y_ENSURE(!OutChangeSender);
     OutChangeSender = Register(NDataShard::CreateChangeSender(this));
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Change sender created"
-        << ": at tablet: " << TabletID()
-        << ", actorId: " << OutChangeSender);
+    YDB_LOG_DEBUG_CTX(ctx, "Change sender created",
+        {"tabletId", TabletID()},
+        {"actorId", OutChangeSender});
 }
 
 void TDataShard::MaybeActivateChangeSender(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Trying to activate change sender"
-        << ": at tablet: " << TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "Trying to activate change sender",
+        {"tabletId", TabletID()});
 
     OutChangeSenderSuspended = false;
 
     if (ReceiveActivationsFrom) {
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Cannot activate change sender"
-            << ": at tablet: " << TabletID()
-            << ", wait to activation from: " << JoinSeq(", ", ReceiveActivationsFrom));
+        YDB_LOG_NOTICE_CTX(ctx, "Cannot activate change sender: wait to activation",
+            {"tabletId", TabletID()},
+            {"activationFrom", JoinSeq(", ", ReceiveActivationsFrom)});
         return;
     }
 
@@ -1319,9 +1374,9 @@ void TDataShard::MaybeActivateChangeSender(const TActorContext& ctx) {
     case TShardState::WaitScheme:
     case TShardState::SplitDstReceivingSnapshot:
     case TShardState::Offline:
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Cannot activate change sender"
-            << ": at tablet: " << TabletID()
-            << ", state: " << DatashardStateName(State));
+        YDB_LOG_INFO_CTX(ctx, "Cannot activate change sender",
+            {"tabletId", TabletID()},
+            {"state", DatashardStateName(State)});
         return;
 
     case TShardState::SplitSrcMakeSnapshot:
@@ -1329,10 +1384,10 @@ void TDataShard::MaybeActivateChangeSender(const TActorContext& ctx) {
     case TShardState::SplitSrcWaitForPartitioningChanged:
     case TShardState::PreOffline:
         if (!ChangesQueue) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Cannot activate change sender"
-                << ": at tablet: " << TabletID()
-                << ", state: " << DatashardStateName(State)
-                << ", queue size: " << ChangesQueue.size());
+            YDB_LOG_INFO_CTX(ctx, "Cannot activate change sender",
+                {"tabletId", TabletID()},
+                {"state", DatashardStateName(State)},
+                {"queueSize", ChangesQueue.size()});
             return;
         }
         break;
@@ -1341,16 +1396,16 @@ void TDataShard::MaybeActivateChangeSender(const TActorContext& ctx) {
     Y_ENSURE(OutChangeSender);
     Send(OutChangeSender, new TEvChangeExchange::TEvActivateSender());
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Change sender activated"
-        << ": at tablet: " << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "Change sender activated",
+        {"tabletId", TabletID()});
 }
 
 void TDataShard::KillChangeSender(const TActorContext& ctx) {
     if (OutChangeSender) {
         Send(std::exchange(OutChangeSender, TActorId()), new TEvents::TEvPoison());
 
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Change sender killed"
-            << ": at tablet: " << TabletID());
+        YDB_LOG_INFO_CTX(ctx, "Change sender killed",
+            {"tabletId", TabletID()});
     }
 }
 
@@ -1362,9 +1417,9 @@ void TDataShard::SuspendChangeSender(const TActorContext& ctx) {
 bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<IDataShardChangeCollector::TChange>& records) {
     using Schema = TDataShard::Schema;
 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "LoadChangeRecords"
-        << ": QueueSize: " << ChangesQueue.size()
-        << ", at tablet: " << TabletID());
+    YDB_LOG_DEBUG("LoadChangeRecords",
+        {"queueSize", ChangesQueue.size()},
+        {"tabletId", TabletID()});
 
     records.reserve(ChangesQueue.size());
 
@@ -1419,8 +1474,8 @@ bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<IDataShardChange
 bool TDataShard::LoadLockChangeRecords(NIceDb::TNiceDb& db) {
     using Schema = TDataShard::Schema;
 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "LoadLockChangeRecords"
-        << " at tablet: " << TabletID());
+    YDB_LOG_DEBUG("LoadLockChangeRecords",
+        {"tabletId", TabletID()});
 
     auto rowset = db.Table<Schema::LockChangeRecords>().Range().Select();
     if (!rowset.IsReady()) {
@@ -1468,8 +1523,8 @@ bool TDataShard::LoadLockChangeRecords(NIceDb::TNiceDb& db) {
 bool TDataShard::LoadChangeRecordCommits(NIceDb::TNiceDb& db, TVector<IDataShardChangeCollector::TChange>& records) {
     using Schema = TDataShard::Schema;
 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "LoadChangeRecordCommits"
-        << " at tablet: " << TabletID());
+    YDB_LOG_DEBUG("LoadChangeRecordCommits",
+        {"tabletId", TabletID()});
 
     bool needSort = false;
 
@@ -1647,9 +1702,12 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
     if (!op || !op->Done)
         return;
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               TabletID() << " Sending notify to schemeshard " << op->TabletId
-                << " txId " << txId << " state " << DatashardStateName(State) << " TxInFly " << TxInFly());
+    YDB_LOG_INFO_CTX(ctx, "Sending notify to schemeshard",
+        {"tabletId", TabletID()},
+        {"targetTabletId", op->TabletId},
+        {"txId", txId},
+        {"state", DatashardStateName(State)},
+        {"txInFly", TxInFly()});
 
     if (op->IsDrop()) {
         Y_ENSURE(State == TShardState::PreOffline,
@@ -1895,12 +1953,12 @@ TUserTable::TPtr TDataShard::AlterTableRotateCdcStream(
 void TDataShard::AddSchemaSnapshot(const TPathId& pathId, ui64 tableSchemaVersion, ui64 step, ui64 txId,
     TTransactionContext& txc, const TActorContext& ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Add schema snapshot"
-        << ": pathId# " << pathId
-        << ", version# " << tableSchemaVersion
-        << ", step# " << step
-        << ", txId# " << txId
-        << ", at tablet# " << TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "Add schema snapshot",
+        {"pathId", pathId},
+        {"version", tableSchemaVersion},
+        {"step", step},
+        {"txId", txId},
+        {"tabletId", TabletID()});
 
     Y_ENSURE(GetPathOwnerId() == pathId.OwnerId);
     Y_ENSURE(TableInfos.contains(pathId.LocalPathId));
@@ -2096,7 +2154,7 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
 
     newTableInfo->SetSchema(schema);
     TDataShardLocksDb locksDb(*this, txc);
-    AddUserTable(pathId, newTableInfo, &locksDb);
+    ReplaceUserTable(pathId, newTableInfo, locksDb);
 
     if (newTableInfo->NeedSchemaSnapshots()) {
         AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
@@ -2123,9 +2181,10 @@ TUserTable::TPtr TDataShard::AlterUserTable(const TActorContext& ctx, TTransacti
     TString strError;
     tableInfo->ApplyAlter(txc, *oldTable, alter, strError);
     if (strError) {
-        LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD,
-            "Cannot alter datashard %" PRIu64 " for table %" PRIu64 ": %s",
-            TabletID(), tableId, strError.data());
+        YDB_LOG_ERROR_CTX(ctx, "Cannot alter datashard for table",
+            {"tabletId", TabletID()},
+            {"tableId", tableId},
+            {"errorMessage", strError.data()});
     }
 
     NIceDb::TNiceDb db(txc.DB);
@@ -2234,9 +2293,9 @@ void TDataShard::SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnaps
 
         Y_DEBUG_ABORT_UNLESS(op, "The Tx that requested snapshot must be active!");
         if (!op) {
-            LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD,
-                       "Got snapshot for missing operation " << stepOrder
-                       << " at " << TabletID());
+            YDB_LOG_CRIT_CTX(ctx, "Got snapshot for missing operation",
+                {"stepOrder", stepOrder},
+                {"tabletId", TabletID()});
             return;
         }
 
@@ -2244,9 +2303,10 @@ void TDataShard::SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnaps
                  "Currently only 1 table can be snapshotted");
         ui32 tableId = txSnapContext->TablesToSnapshot()[0];
 
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
-                  "Got snapshot in active state at %" PRIu64 " for table %" PRIu32 " txId %" PRIu64,
-                  TabletID(), tableId, stepOrder.TxId);
+        YDB_LOG_DEBUG_CTX(ctx, "Got snapshot in active state at for table",
+            {"tabletId", TabletID()},
+            {"tableId", tableId},
+            {"txId", stepOrder.TxId});
 
         op->AddInputSnapshot(snapContext);
         Pipeline.AddCandidateOp(op);
@@ -2330,9 +2390,11 @@ void TDataShard::EnableKeyAccessSampling(const TActorContext &ctx, TInstant unti
         }
         CurrentKeySampler = EnabledKeySampler;
         StartedKeyAccessSamplingAt = AppData(ctx)->TimeProvider->Now();
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Started key access sampling at datashard: " << TabletID());
+        YDB_LOG_NOTICE_CTX(ctx, "Started key access sampling",
+            {"datashard", TabletID()});
     } else {
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Extended key access sampling at datashard: " << TabletID());
+        YDB_LOG_NOTICE_CTX(ctx, "Extended key access sampling",
+            {"datashard", TabletID()});
     }
     StopKeyAccessSamplingAt = until;
 }
@@ -2344,54 +2406,72 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     if (!ev)
         return true;
 
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvRemoteHttpInfo: %s", ev->Get()->Query.data());
+    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvRemoteHttpInfo",
+        {"query", ev->Get()->Query.data()});
 
     auto cgi = ev->Get()->Cgi();
-
-    if (const auto& action = cgi.Get("action")) {
-        if (action == "cleanup-borrowed-parts") {
-            HandleMonCleanupBorrowedParts(ev);
-            return true;
-        }
-
-        if (action == "reset-schema-version") {
-            HandleMonResetSchemaVersion(ev);
-            return true;
-        }
-
-        if (action == "key-access-sample") {
-            TDuration duration = TDuration::Seconds(120);
-            EnableKeyAccessSampling(ctx, ctx.Now() + duration);
-            ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Enabled key access sampling for " + duration.ToString()));
-            return true;
-        }
-
-        ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
+    // DataShard exposes no non-admin handlers, so nothing is whitelisted here. Must stay ahead of
+    // the action/page dispatch below, otherwise a CGI parameter would pick a handler before the
+    // access check runs.
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(ctx),
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            /*isMonitoringDevUiRequest=*/false))
+    {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;
     }
 
-    if (const auto& page = cgi.Get("page")) {
-        if (page == "main") {
-            // fallthrough
-        } else if (page == "change-sender") {
-            if (OutChangeSender) {
-                ctx.Send(ev->Forward(OutChangeSender));
-                return true;
-            } else {
-                ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Change sender is not running"));
+    {
+        if (const auto& action = cgi.Get("action")) {
+            if (action == "cleanup-borrowed-parts") {
+                HandleMonCleanupBorrowedParts(ev);
                 return true;
             }
-        } else if (page == "volatile-txs") {
-            HandleMonVolatileTxs(ev);
-            return true;
-        } else {
+
+            if (action == "reset-schema-version") {
+                HandleMonResetSchemaVersion(ev);
+                return true;
+            }
+
+            if (action == "key-access-sample") {
+                TDuration duration = TDuration::Seconds(120);
+                EnableKeyAccessSampling(ctx, ctx.Now() + duration);
+                ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Enabled key access sampling for " + duration.ToString()));
+                return true;
+            }
+
+            if (action == "send-read-set") {
+                HandleMonSendReadSetToSelf(ev, ctx);
+                return true;
+            }
+
             ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
             return true;
         }
-    }
 
-    HandleMonIndexPage(ev);
-    return true;
+        if (const auto& page = cgi.Get("page")) {
+            if (page == "change-sender") {
+                if (OutChangeSender) {
+                    ctx.Send(ev->Forward(OutChangeSender));
+                    return true;
+                } else {
+                    ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Change sender is not running"));
+                    return true;
+                }
+            } else if (page == "volatile-txs") {
+                HandleMonVolatileTxs(ev);
+                return true;
+            } else if (page != "main") {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
+                return true;
+            }
+        }
+
+        HandleMonIndexPage(ev);
+        return true;
+    }
 }
 
 ui64 TDataShard::GetMemoryUsage() const {
@@ -2423,12 +2503,13 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
         }
     }
 
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "GetMvccTxVersion at " << TabletID()
-        << " CompleteEdge# " << SnapshotManager.GetCompleteEdge()
-        << " IncompleteEdge# " << SnapshotManager.GetIncompleteEdge()
-        << " UnprotectedReadEdge# " << SnapshotManager.GetUnprotectedReadEdge()
-        << " ImmediateWriteEdge# " << SnapshotManager.GetImmediateWriteEdge()
-        << " ImmediateWriteEdgeReplied# " << SnapshotManager.GetImmediateWriteEdgeReplied());
+    YDB_LOG_TRACE("GetMvccTxVersion",
+        {"tabletId", TabletID()},
+        {"completeEdge", SnapshotManager.GetCompleteEdge()},
+        {"incompleteEdge", SnapshotManager.GetIncompleteEdge()},
+        {"unprotectedReadEdge", SnapshotManager.GetUnprotectedReadEdge()},
+        {"immediateWriteEdge", SnapshotManager.GetImmediateWriteEdge()},
+        {"immediateWriteEdgeReplied", SnapshotManager.GetImmediateWriteEdgeReplied()});
 
     TRowVersion version = [&]() {
         TRowVersion edge;
@@ -2538,8 +2619,9 @@ TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdge
             break;
 
         case EPromotePostExecuteEdges::RepeatableRead: {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PromoteImmediatePostExecuteEdges at " << TabletID()
-                << " promoting UnprotectedReadEdge to " << version);
+            YDB_LOG_TRACE("PromoteImmediatePostExecuteEdges at promoting UnprotectedReadEdge",
+                {"tabletId", TabletID()},
+                {"version", version});
             SnapshotManager.PromoteUnprotectedReadEdge(version);
 
             // Make sure pending distributed transactions are marked incomplete,
@@ -2623,7 +2705,8 @@ void TDataShard::SendImmediateWriteResult(
     if (MediatorTimeCastEntry && (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin())) {
         MediatorTimeCastWaitingSteps.insert(step);
         Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
+        YDB_LOG_DEBUG("Waiting for plan step from mediator time cast",
+            {"planStep", step});
     }
 }
 
@@ -2770,7 +2853,8 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
         if (MediatorTimeCastEntry && (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin())) {
             MediatorTimeCastWaitingSteps.insert(step);
             Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
+            YDB_LOG_DEBUG_CTX(ctx, "Waiting for plan step from mediator time cast",
+                {"planStep", step});
         }
         break;
     }
@@ -2872,10 +2956,11 @@ void TDataShard::CheckMediatorStateRestored() {
     const ui64 waitStep = CoordinatorPrevReadStepMax;
     const ui64 readStep = CoordinatorPrevReadStepMax;
     const ui64 observedStep = GetMaxObservedStep();
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CheckMediatorStateRestored at " << TabletID() << ":"
-        << " waitStep# " << waitStep
-        << " readStep# " << readStep
-        << " observedStep# " << observedStep);
+    YDB_LOG_DEBUG("CheckMediatorStateRestored",
+        {"tabletId", TabletID()},
+        {"waitStep", waitStep},
+        {"readStep", readStep},
+        {"observedStep", observedStep});
 
     // WARNING: we must perform this check BEFORE we update unprotected read edge
     // We may enter this code path multiple times, and we expect that the above
@@ -2885,7 +2970,8 @@ void TDataShard::CheckMediatorStateRestored() {
         // as large as the step we found.
         if (MediatorTimeCastWaitingSteps.insert(waitStep).second) {
             Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), waitStep));
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << waitStep << " from mediator time cast");
+            YDB_LOG_DEBUG("Waiting for plan step from mediator time cast",
+                {"planStep", waitStep});
         }
         return;
     }
@@ -2908,8 +2994,9 @@ void TDataShard::FinishMediatorStateRestore(TTransactionContext& txc, ui64 readS
         ? SnapshotManager.GetImmediateWriteEdge().Prev()
         : TRowVersion::Min();
     const TRowVersion edge = Max(lastReadEdge, preImmediateWriteEdge);
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CheckMediatorStateRestored at " << TabletID()
-        << " promoting UnprotectedReadEdge to " << edge);
+    YDB_LOG_TRACE("CheckMediatorStateRestored promoting UnprotectedReadEdge",
+        {"tabletId", TabletID()},
+        {"edge", edge});
     Pipeline.MarkPlannedLogicallyCompleteUpTo(edge, txc);
     Pipeline.MarkPlannedLogicallyIncompleteUpTo(edge, txc);
     SnapshotManager.PromoteUnprotectedReadEdge(edge);
@@ -2927,7 +3014,8 @@ void TDataShard::FinishMediatorStateRestore(TTransactionContext& txc, ui64 readS
         if (edge.Step < writeStep) {
             if (MediatorTimeCastWaitingSteps.insert(writeStep).second) {
                 Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), writeStep));
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << writeStep << " from mediator time cast");
+                YDB_LOG_DEBUG("Waiting for plan step from mediator time cast",
+                    {"planStep", writeStep});
             }
         }
     }
@@ -3018,19 +3106,18 @@ void TDataShard::Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorCo
 }
 
 void TDataShard::Handle(TEvDataShard::TEvSchemaChangedResult::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Handle TEvSchemaChangedResult " << ev->Get()->Record.GetTxId()
-                << "  datashard " << TabletID()
-                << " state " << DatashardStateName(State));
+    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvSchemaChangedResult",
+        {"txId", ev->Get()->Record.GetTxId()},
+        {"tabletId", TabletID()},
+        {"state", DatashardStateName(State)});
     Execute(CreateTxSchemaChanged(ev), ctx);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvStateChangedResult::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ev);
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Handle TEvStateChangedResult "
-                << "  datashard " << TabletID()
-                << " state " << DatashardStateName(State));
+    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvStateChangedResult",
+        {"tabletId", TabletID()},
+        {"state", DatashardStateName(State)});
     // TODO: implement
     NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe);
 }
@@ -3165,7 +3252,8 @@ bool TDataShard::CheckDataTxRejectAndReply(const TEvDataShard::TEvProposeTransac
                                                             rejectStatus));
 
         result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectDescription);
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectDescription);
+        YDB_LOG_NOTICE_CTX(ctx, "Reject",
+            {"rejectDescription", rejectDescription});
 
         ctx.Send(ev->Sender, result.Release());
         IncCounter(COUNTER_PREPARE_OVERLOADED);
@@ -3205,14 +3293,15 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
         }
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), msg->GetTxId(), status, rejectDescription);
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectDescription);
+        YDB_LOG_NOTICE_CTX(ctx, "Reject",
+            {"rejectDescription", rejectDescription});
 
         if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED) {
             std::optional<ui64> overloadSubscribe = ev->Get()->Record.HasOverloadSubscribe() ? ev->Get()->Record.GetOverloadSubscribe() : std::optional<ui64>{};
             SetOverloadSubscribed(overloadSubscribe, ev->Recipient, ev->Sender, rejectReasons, result->Record);
         }
 
-        ctx.Send(ev->Sender, result.release());
+        ctx.Send(ev->Sender, result.release(), 0, ev->Cookie);
         IncCounter(COUNTER_WRITE_OVERLOADED);
         IncCounter(COUNTER_WRITE_COMPLETE);
         return true;
@@ -3254,8 +3343,8 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
     }
 
     if (Pipeline.HasProposeDelayers()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Handle TEvProposeTransaction delayed at " << TabletID() << " until dependency graph is restored");
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvProposeTransaction delayed until dependency graph is restored",
+            {"tabletId", TabletID()});
         LWTRACK(ProposeTransactionWaitDelayers, msg->Orbit);
         DelayedProposeQueue.emplace_back().Reset(ev.Release());
         UpdateProposeQueueSize();
@@ -3263,8 +3352,8 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
     }
 
     if (CheckTxNeedWait(ev)) {
-         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Handle TEvProposeTransaction delayed at " << TabletID() << " until interesting plan step will come");
+         YDB_LOG_DEBUG_CTX(ctx, "Handle TEvProposeTransaction delayed until interesting plan step will come",
+             {"tabletId", TabletID()});
         if (Pipeline.AddWaitingTxOp(ev, ctx)) {
             UpdateProposeQueueSize();
             return;
@@ -3434,7 +3523,9 @@ void TDataShard::ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, c
         UpdateProposeQueueSize();
     } else {
         // Prepare planned transactions as soon as possible
-        NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.WriteTransaction", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan datashardTransactionSpan(
+            TWilsonTablet::TabletTopLevel, NWilson::TTraceId(ev->TraceId),
+            "Datashard.WriteTransaction", NWilson::EFlags::AUTO_END);
         if (datashardTransactionSpan) {
             datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
         }
@@ -3446,9 +3537,10 @@ void TDataShard::ProposeTransaction(NEvents::TDataEvents::TEvWrite::TPtr&& ev, c
 void TDataShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorContext &ctx) {
     ui64 srcMediatorId = ev->Get()->Record.GetMediatorID();
     if (!CheckMediatorAuthorisation(srcMediatorId)) {
-        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "tablet " << TabletID() <<
-                   " receive PlanStep " << ev->Get()->Record.GetStep() <<
-                   " from unauthorized mediator " << srcMediatorId);
+        YDB_LOG_CRIT_CTX(ctx, "Tablet receive PlanStep from unauthorized mediator",
+            {"tabletId", TabletID()},
+            {"step", ev->Get()->Record.GetStep()},
+            {"srcMediatorId", srcMediatorId});
         HandlePoison(ctx);
         return;
     }
@@ -3461,8 +3553,12 @@ void TDataShard::Handle(TEvTxProcessing::TEvReadSet::TPtr &ev, const TActorConte
     ui64 dest = ev->Get()->Record.GetTabletDest();
     ui64 producer = ev->Get()->Record.GetTabletProducer();
     ui64 txId = ev->Get()->Record.GetTxId();
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Receive RS at %" PRIu64 " source %" PRIu64 " dest %" PRIu64 " producer %" PRIu64 " txId %" PRIu64,
-              TabletID(), sender, dest, producer, txId);
+    YDB_LOG_DEBUG_CTX(ctx, "Receive RS",
+        {"tabletId", TabletID()},
+        {"sender", sender},
+        {"dest", dest},
+        {"producer", producer},
+        {"txId", txId});
     IncCounter(COUNTER_READSET_RECEIVED_COUNT);
     IncCounter(COUNTER_READSET_RECEIVED_SIZE, ev->Get()->Record.GetReadSet().size());
     Execute(new TTxReadSet(this, ev), ctx);
@@ -3487,73 +3583,71 @@ void TDataShard::Handle(TEvPrivate::TEvProgressTransaction::TPtr &ev, const TAct
     ExecuteProgressTx(ctx);
 }
 
+void TDataShard::SendCancelledProposeReply(const TProposeQueue::TItem& item, const TActorContext& ctx) {
+    TActorId target = item.Event->Sender;
+    ui64 cookie = item.Event->Cookie;
+    switch (item.Event->GetTypeRewrite()) {
+        case TEvDataShard::TEvProposeTransaction::EventType: {
+            auto* msg = item.Event->Get<TEvDataShard::TEvProposeTransaction>();
+            auto kind = msg->GetTxKind();
+            auto txId = msg->GetTxId();
+            auto result = new TEvDataShard::TEvProposeTransactionResult(
+                kind, TabletID(), txId,
+                NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED);
+            ctx.Send(target, result, 0, cookie);
+            break;
+        }
+        case NEvents::TDataEvents::TEvWrite::EventType: {
+            auto* msg = item.Event->Get<NEvents::TDataEvents::TEvWrite>();
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), msg->GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Canceled");
+            ctx.Send(target, result.release(), 0, cookie);
+            break;
+        }
+        default:
+            Y_ENSURE(false, "Unexpected event type " << item.Event->GetTypeRewrite());
+    }
+}
+
 void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
     IncCounter(COUNTER_PROPOSE_QUEUE_EV);
 
     if (ProposeQueue) {
+        // N.B. Cancelled items are removed immediately in Cancel() and never reach here.
         auto item = ProposeQueue.Dequeue();
         UpdateProposeQueueSize();
 
-        TDuration latency = TAppData::TimeProvider->Now() - item.ReceivedAt;
+        TDuration latency = TAppData::TimeProvider->Now() - item->ReceivedAt;
         IncCounter(COUNTER_PROPOSE_QUEUE_LATENCY, latency);
 
-        if (!item.Cancelled) {
-            // N.B. we don't call ProposeQueue.Reset(), tx will Ack() on its first Execute()
-
-            switch (item.Event->GetTypeRewrite()) {
-                case TEvDataShard::TEvProposeTransaction::EventType: {
-                    auto event = IEventHandle::Downcast<TEvDataShard::TEvProposeTransaction>(std::move(item.Event));
-                    NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(event->TraceId), "Datashard.Transaction", NWilson::EFlags::AUTO_END);
-                    if (datashardTransactionSpan) {
-                        datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
-                    }
-
-                    auto userCtx = NACLib::TUserContextBuilder()
-                        .DeserializeFromEventHandle(*event.Get())
-                        .Build();
-                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), userCtx), ctx);
-                    return;
-                }
-                case NEvents::TDataEvents::TEvWrite::EventType: {
-                    auto event = IEventHandle::Downcast<NEvents::TDataEvents::TEvWrite>(std::move(item.Event));
-                    NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(event->TraceId), "Datashard.WriteTransaction", NWilson::EFlags::AUTO_END);
-                    if (datashardTransactionSpan) {
-                        datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
-                    }
-
-                    Execute(new TTxWrite(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan)), ctx);
-                    return;
-                }
-                default:
-                    Y_ENSURE(false, "Unexpected event type " << item.Event->GetTypeRewrite());
-            }
-        }
-
-        TActorId target = item.Event->Sender;
-        ui64 cookie = item.Event->Cookie;
-        switch (item.Event->GetTypeRewrite()) {
+        // N.B. we don't call ProposeQueue.Reset(), tx will Ack() on its first Execute()
+        switch (item->Event->GetTypeRewrite()) {
             case TEvDataShard::TEvProposeTransaction::EventType: {
-                auto* msg = item.Event->Get<TEvDataShard::TEvProposeTransaction>();
-                auto kind = msg->GetTxKind();
-                auto txId = msg->GetTxId();
-                auto result = new TEvDataShard::TEvProposeTransactionResult(
-                    kind, TabletID(), txId,
-                    NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED);
-                ctx.Send(target, result, 0, cookie);
-                break;
+                auto event = IEventHandle::Downcast<TEvDataShard::TEvProposeTransaction>(std::move(item->Event));
+                NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(event->TraceId), "Datashard.Transaction", NWilson::EFlags::AUTO_END);
+                if (datashardTransactionSpan) {
+                    datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
+                }
+
+                auto userCtx = NACLib::TUserContextBuilder()
+                    .DeserializeFromEventHandle(*event.Get())
+                    .Build();
+                Execute(new TTxProposeTransactionBase(this, std::move(event), item->ReceivedAt, item->TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), userCtx), ctx);
+                return;
             }
             case NEvents::TDataEvents::TEvWrite::EventType: {
-                auto* msg = item.Event->Get<NEvents::TDataEvents::TEvWrite>();
-                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), msg->GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Canceled");
-                ctx.Send(target, result.release(), 0, cookie);
-                break;
+                auto event = IEventHandle::Downcast<NEvents::TDataEvents::TEvWrite>(std::move(item->Event));
+                NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(event->TraceId), "Datashard.WriteTransaction", NWilson::EFlags::AUTO_END);
+                if (datashardTransactionSpan) {
+                    datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
+                }
+
+                Execute(new TTxWrite(this, std::move(event), item->ReceivedAt, item->TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan)), ctx);
+                return;
             }
             default:
-                Y_ENSURE(false, "Unexpected event type " << item.Event->GetTypeRewrite());
+                Y_ENSURE(false, "Unexpected event type " << item->Event->GetTypeRewrite());
         }
-
-
     }
 
     // N.B. Ack directly since we didn't start any delayed transactions
@@ -3570,15 +3664,15 @@ void TDataShard::Handle(TEvPrivate::TEvRegisterScanActor::TPtr &ev, const TActor
     auto op = Pipeline.FindOp(txId);
 
     if (!op) {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                   "Cannot find op " << txId << " to register scan actor");
+        YDB_LOG_INFO_CTX(ctx, "Cannot find op to register scan actor",
+            {"txId", txId});
         return;
     }
 
     if (!op->IsReadTable()) {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                   "Cannot register scan actor for op " << txId
-                   << " of kind " << op->GetKind());
+        YDB_LOG_INFO_CTX(ctx, "Cannot register scan actor for op of kind",
+            {"txId", txId},
+            {"opKind", op->GetKind()});
         return;
     }
 
@@ -3606,8 +3700,8 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
 
     if (ev->Get()->ClientId == SchemeShardPipe) {
         if (!TransQueue.HasNotAckedSchemaTx()) {
-            LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD,
-                "Datashard's schemeshard pipe connected while no messages to sent at %" PRIu64, TabletID());
+            YDB_LOG_ERROR_CTX(ctx, "Datashard's schemeshard pipe connected while no messages to sent",
+                {"tabletId", TabletID()});
         }
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
@@ -3651,12 +3745,14 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
     if (LoanReturnTracker.Has(ev->Get()->TabletId, ev->Get()->ClientId)) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             if (!ev->Get()->Dead) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                          "Resending loan returns from " << TabletID() << " to " << ev->Get()->TabletId);
+                YDB_LOG_DEBUG_CTX(ctx, "Resending loan returns from current tablet to target tablet",
+                    {"tabletId", TabletID()},
+                    {"targetTabletId", ev->Get()->TabletId});
                 LoanReturnTracker.ResendLoans(ev->Get()->TabletId, ctx);
             } else {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                          "Auto-Acking loan returns to dead " << ev->Get()->TabletId << " from " << TabletID());
+                YDB_LOG_DEBUG_CTX(ctx, "Auto-Acking loan returns to dead target tablet from current tablet",
+                    {"targetTabletId", ev->Get()->TabletId},
+                    {"tabletId", TabletID()});
                 LoanReturnTracker.AutoAckLoans(ev->Get()->TabletId, ctx);
             }
         }
@@ -3686,8 +3782,8 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
 void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
     if (ev->Get()->ClientId == SchemeShardPipe) {
         if (!TransQueue.HasNotAckedSchemaTx()) {
-            LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD,
-                "Datashard's schemeshard pipe destroyed while no messages to sent at %" PRIu64, TabletID());
+            YDB_LOG_ERROR_CTX(ctx, "Datashard's schemeshard pipe destroyed while no messages to sent",
+                {"tabletId", TabletID()});
         }
         SchemeShardPipe = TActorId();
         NotifySchemeshard(ctx);
@@ -3713,8 +3809,9 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActo
 
     // Resend loan-related messages in needed
     if (LoanReturnTracker.Has(ev->Get()->TabletId, ev->Get()->ClientId)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Resending loan returns from " << TabletID() << " to " << ev->Get()->TabletId);
+        YDB_LOG_DEBUG_CTX(ctx, "Resending loan returns from current tablet to target tablet",
+            {"tabletId", TabletID()},
+            {"targetTabletId", ev->Get()->TabletId});
         LoanReturnTracker.ResendLoans(ev->Get()->TabletId, ctx);
         return;
     }
@@ -3751,11 +3848,14 @@ void TDataShard::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActor
     auto* msg = ev->Get();
 
     if (!msg->Connected) {
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Client pipe to tablet " << msg->TabletId
-            << " from " << TabletID() << " failed to connect (IsDeleted=" << (msg->IsDeleted ? "true" : "false") << ")");
+        YDB_LOG_NOTICE_CTX(ctx, "Client pipe to target tablet from current tablet failed to connect",
+            {"targetTabletId", msg->TabletId},
+            {"tabletId", TabletID()},
+            {"isDeleted", (msg->IsDeleted ? "true" : "false")});
     } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Client pipe to tablet " << msg->TabletId
-            << " from " << TabletID() << " is reset");
+        YDB_LOG_DEBUG_CTX(ctx, "Client pipe to target tablet from current tablet is reset",
+            {"targetTabletId", msg->TabletId},
+            {"tabletId", TabletID()});
     }
 
     auto& state = PersistentTablets[msg->TabletId];
@@ -3781,8 +3881,10 @@ void TDataShard::AckRSToDeletedTablet(ui64 tabletId, TPersistentTablet& state, c
     state.OutReadSets.clear();
 
     for (ui64 seqno : seqnos) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Pipe reset to dead tablet %" PRIu64 " caused ack of readset %" PRIu64
-            " at tablet %" PRIu64, tabletId, seqno, TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "Pipe reset to dead target tablet caused ack of readset at current tablet",
+            {"targetTabletId", tabletId},
+            {"seqno", seqno},
+            {"tabletId", TabletID()});
 
         OutReadSets.AckForDeletedDestination(tabletId, seqno, ctx);
 
@@ -3813,8 +3915,10 @@ void TDataShard::RestartPipeRS(ui64 tabletId, TPersistentTablet& state, const TA
     state.OutReadSets.clear();
 
     for (auto seqno : seqnos) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Pipe reset to tablet %" PRIu64 " caused resend of readset %" PRIu64
-            " at tablet %" PRIu64, tabletId, seqno, TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "Pipe reset to target tablet caused resend of readset at current tablet",
+            {"targetTabletId", tabletId},
+            {"seqno", seqno},
+            {"tabletId", TabletID()});
 
         ResendReadSetQueue.Progress(seqno, ctx);
     }
@@ -3825,12 +3929,12 @@ void TDataShard::RestartPipeRS(ui64 tabletId, TPersistentTablet& state, const TA
 }
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Server connected at "
-        << (IsFollower() ? Sprintf("follower %u ", FollowerId()) : "leader ")
-        << "tablet# " << ev->Get()->TabletId
-        << ", clientId# " << ev->Get()->ClientId
-        << ", serverId# " << ev->Get()->ServerId
-        << ", sessionId# " << ev->InterconnectSession);
+    YDB_LOG_DEBUG_CTX(ctx, "Server connected",
+        {"role", (IsFollower() ? Sprintf("follower %u ", FollowerId()) : "leader ")},
+        {"tabletId", ev->Get()->TabletId},
+        {"clientId", ev->Get()->ClientId},
+        {"serverId", ev->Get()->ServerId},
+        {"sessionId", ev->InterconnectSession});
 
     auto res = PipeServers.emplace(
         std::piecewise_construct,
@@ -3843,12 +3947,12 @@ void TDataShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActo
 }
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Server disconnected at "
-        << (IsFollower() ? Sprintf("follower %u ", FollowerId()) : "leader ")
-        << "tablet# " << ev->Get()->TabletId
-        << ", clientId# " << ev->Get()->ClientId
-        << ", serverId# " << ev->Get()->ServerId
-        << ", sessionId# " << ev->InterconnectSession);
+    YDB_LOG_DEBUG_CTX(ctx, "Server disconnected",
+        {"role", (IsFollower() ? Sprintf("follower %u ", FollowerId()) : "leader ")},
+        {"tabletId", ev->Get()->TabletId},
+        {"clientId", ev->Get()->ClientId},
+        {"serverId", ev->Get()->ServerId},
+        {"sessionId", ev->InterconnectSession});
 
     auto it = PipeServers.find(ev->Get()->ServerId);
     Y_VERIFY_DEBUG_S(it != PipeServers.end(),
@@ -3868,9 +3972,9 @@ void TDataShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TA
 }
 
 void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Got TEvMediatorTimecast::TEvRegisterTabletResult at " << TabletID()
-                << " time " << ev->Get()->Entry->Get(TabletID()));
+    YDB_LOG_DEBUG_CTX(ctx, "Got TEvMediatorTimecast::TEvRegisterTabletResult",
+        {"tabletId", TabletID()},
+        {"mediatorTime", ev->Get()->Entry->Get(TabletID())});
     Y_ENSURE(ev->Get()->TabletId == TabletID());
     MediatorTimeCastEntry = ev->Get()->Entry;
     Y_ENSURE(MediatorTimeCastEntry);
@@ -3884,11 +3988,11 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, 
 
 void TDataShard::Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Got TEvMediatorTimecast::TEvSubscribeReadStepResult at " << TabletID()
-                << " coordinator " << msg->CoordinatorId
-                << " last step " << msg->LastReadStep
-                << " next step " << msg->NextReadStep);
+    YDB_LOG_DEBUG_CTX(ctx, "Got TEvMediatorTimecast::TEvSubscribeReadStepResult",
+        {"tabletId", TabletID()},
+        {"coordinatorId", msg->CoordinatorId},
+        {"lastReadStep", msg->LastReadStep},
+        {"nextReadStep", msg->NextReadStep});
     auto it = CoordinatorSubscriptionById.find(msg->CoordinatorId);
     Y_ENSURE(it != CoordinatorSubscriptionById.end(),
         "Unexpected TEvSubscribeReadStepResult for coordinator " << msg->CoordinatorId);
@@ -3908,7 +4012,9 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const 
 
     Y_ENSURE(MediatorTimeCastEntry);
     ui64 step = MediatorTimeCastEntry->Get(TabletID());
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Notified by mediator time cast with PlanStep# " << step << " at tablet " << TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "Notified by mediator time cast with plan step",
+        {"planStep", step},
+        {"tabletId", TabletID()});
 
     for (auto it = MediatorTimeCastWaitingSteps.begin(); it != MediatorTimeCastWaitingSteps.end() && *it <= step;)
         it = MediatorTimeCastWaitingSteps.erase(it);
@@ -3940,7 +4046,8 @@ bool TDataShard::WaitPlanStep(ui64 step) {
     if (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin()) {
         MediatorTimeCastWaitingSteps.insert(step);
         Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
+        YDB_LOG_DEBUG("Waiting for plan step from mediator time cast",
+            {"planStep", step});
         return true;
     }
 
@@ -3961,18 +4068,17 @@ void TDataShard::WaitPredictedPlanStep(ui64 step) {
     if (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin()) {
         MediatorTimeCastWaitingSteps.insert(step);
         Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
+        YDB_LOG_DEBUG("Waiting for plan step from mediator time cast",
+            {"planStep", step});
     }
 }
 
 bool TDataShard::CheckTxNeedWait(const TRowVersion& mvccSnapshot) const {
     TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge();
     if (mvccSnapshot >= unreadableEdge) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-            "New transaction uses snapshot "
-            << mvccSnapshot
-            << " which is not before unreadable edge "
-            << unreadableEdge);
+        YDB_LOG_TRACE("New transaction uses snapshot which is not before unreadable edge",
+            {"mvccSnapshot", mvccSnapshot},
+            {"unreadableEdge", unreadableEdge});
         return true;
     }
 
@@ -4037,16 +4143,67 @@ void TDataShard::CheckChangesQueueNoOverflow(ui64 cookie) {
     }
 }
 
+void TDataShard::SendTableInfoToCountersAggregator(const TActorContext &ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+        return;
+    }
+
+    // No user table means there is nothing to attribute counters to. Not sending the event
+    // is how that is expressed; the aggregator keeps whatever it last learned until the
+    // tablet is forgotten.
+    if (TableInfos.empty()) {
+        return;
+    }
+
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
+
+    // Expected that it's almost always one table here, hence only TableInfos.begin()
+    // IsBackup can be filtered out though
+    const auto& [localPathId, table] = *TableInfos.begin();
+
+    // Read straight from TableInfos on every tick: a rename or a schema bump is picked up
+    // on the next tick with no cache to invalidate.
+    ctx.Send(MakeTabletCountersAggregatorID(ctx.SelfID.NodeId(), IsFollower()),
+        new TEvTabletCounters::TEvTabletSetTableInfo(
+            TabletID(),
+            Info()->TenantPathId,
+            FollowerId(),
+            TPathId(GetPathOwnerId(), localPathId),
+            table->Path,
+            table->GetTableSchemaVersion(),
+            static_cast<ui32>(GetEffectiveMetricsLevel(*table))));
+}
+
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     UpdateLagCounters(ctx);
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);
     SendPeriodicTableStats(ctx);
+
+    // Followers run periodic tasks only with EnableFollowerStats on. The sync
+    // usually completes right away and is reported below, while a sync that
+    // has to wait is reported on the next tick
+    if (IsFollower() &&
+        AppData(ctx)->FeatureFlags.GetEnableDataShardDetailedMetrics() &&
+        SyncSchemeOnFollowerNeeded &&
+        !SyncSchemeOnFollowerPending)
+    {
+        SyncSchemeOnFollowerNeeded = false;
+        SyncSchemeOnFollowerPending = true;
+        Execute(CreateTxSyncSchemeOnFollower(), ctx);
+    }
+
+    SendTableInfoToCountersAggregator(ctx);
     CollectCpuUsage(ctx);
 
     if (CurrentKeySampler == EnabledKeySampler && ctx.Now() > StopKeyAccessSamplingAt) {
         CurrentKeySampler = DisabledKeySampler;
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Stoped key access sampling at datashard: " << TabletID());
+        YDB_LOG_NOTICE_CTX(ctx, "Stoped key access sampling at datashard",
+            {"tabletId", TabletID()});
+    }
+
+    if (SchedulableReadFactory) {
+        SchedulableReadFactory->CleanupReadsCache();
     }
 
     if (!PeriodicWakeupPending) {
@@ -4065,17 +4222,17 @@ void TDataShard::UpdateLagCounters(const TActorContext &ctx) {
     TDuration txCompleteLag = GetTxCompleteLag();
     TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Set(txCompleteLag.MilliSeconds());
     if (txCompleteLag > TDuration::Minutes(5)) {
-        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                   "Tx completion lag (" << txCompleteLag << ") is > 5 min on tablet "
-                   << TabletID());
+        YDB_LOG_WARN_CTX(ctx, "Tx completion lag is > 5 min on tablet",
+            {"txCompleteLag", txCompleteLag},
+            {"tabletId", TabletID()});
     }
 
     TDuration scanTxCompleteLag = GetScanTxCompleteLag();
     TabletCounters->Simple()[COUNTER_SCAN_TX_COMPLETE_LAG].Set(scanTxCompleteLag.MilliSeconds());
     if (scanTxCompleteLag > TDuration::Hours(1)) {
-        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                   "Scan completion lag (" << scanTxCompleteLag << ") is > 1 hour on tablet "
-                   << TabletID());
+        YDB_LOG_WARN_CTX(ctx, "Scan completion lag is > 1 hour on tablet",
+            {"scanTxCompleteLag", scanTxCompleteLag},
+            {"tabletId", TabletID()});
     }
 }
 
@@ -4117,8 +4274,12 @@ void TDataShard::SendReadSet(
     ui64 source = rs->Record.GetTabletSource();
     ui64 target = rs->Record.GetTabletDest();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Send RS " << seqno << " at " << TabletID() << " from " << source << " to " << target << " txId " << txId);
+    YDB_LOG_DEBUG_CTX(ctx, "Send RS",
+        {"seqno", seqno},
+        {"tabletId", TabletID()},
+        {"source", source},
+        {"target", target},
+        {"txId", txId});
 
     IncCounter(COUNTER_READSET_SENT_COUNT);
     IncCounter(COUNTER_READSET_SENT_SIZE, rs->Record.GetReadSet().size());
@@ -4228,8 +4389,11 @@ void TDataShard::SendReadSets(const TActorContext& ctx,
 void TDataShard::ResendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target,
                                       const TString& body, ui64 seqNo)
 {
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               "Resend RS at " << TabletID() << " from " << source << " to " << target << " txId " << txId);
+    YDB_LOG_INFO_CTX(ctx, "Resend RS",
+        {"tabletId", TabletID()},
+        {"source", source},
+        {"target", target},
+        {"txId", txId});
 
     SendReadSet(ctx, step, txId, source, target, body, seqNo);
 }
@@ -4307,8 +4471,9 @@ void TDataShard::ResolveTablePath(const TActorContext &ctx)
             reason = "buggy path";
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Resolve path at " << TabletID()
-            << ": reason# " << reason);
+        YDB_LOG_DEBUG_CTX(ctx, "Resolve path",
+            {"tabletId", TabletID()},
+            {"reason", reason});
 
         if (!TableResolvePipe) {
             NTabletPipe::TClientConfig clientConfig;
@@ -4367,22 +4532,23 @@ void TDataShard::SerializeKeySample(const TUserTable &tinfo,
 void TDataShard::Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx) {
     const auto &rec = ev->Get()->GetRecord();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Got scheme resolve result at " << TabletID() << ": "
-                << rec.ShortDebugString());
+    YDB_LOG_DEBUG_CTX(ctx, "Got scheme resolve result",
+        {"tabletId", TabletID()},
+        {"record", rec.ShortDebugString()});
 
     ui64 pathId = rec.GetPathId();
     if (!TableInfos.contains(pathId)) {
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Shard " << TabletID() << " got describe result for unknown table "
-                    << pathId);
+        YDB_LOG_ERROR_CTX(ctx, "Shard got describe result for unknown table",
+            {"tabletId", TabletID()},
+            {"pathId", pathId});
         return;
     }
 
     if (!rec.GetPath()) {
-        LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD,
-                   "Shard " << TabletID() << " couldn't get path for table "
-                   << pathId << " with status " << rec.GetStatus());
+        YDB_LOG_CRIT_CTX(ctx, "Shard couldn't get path for table with status",
+            {"tabletId", TabletID()},
+            {"pathId", pathId},
+            {"recordStatus", rec.GetStatus()});
         return;
     }
     Execute(new TTxStoreTablePath(this, pathId, rec.GetPath()), ctx);
@@ -4490,9 +4656,7 @@ void TDataShard::Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& e
     Execute(new TTxDiscardVolatileSnapshot(this, std::move(ev)), ctx);
 }
 
-void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev,
-                               const TActorContext &ctx)
-{
+void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
     auto op = Pipeline.FindOp(ev->Cookie);
     if (op) {
         op->AddInputEvent(ev.Release());
@@ -4515,8 +4679,9 @@ void TDataShard::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev,
 {
     const ui32 nodeId = ev->Get()->NodeId;
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                 "Shard " << TabletID() << " disconnected from node " << nodeId);
+    YDB_LOG_INFO_CTX(ctx, "Shard disconnected from node",
+        {"tabletId", TabletID()},
+        {"nodeId", nodeId});
 
     Pipeline.ProcessDisconnected(nodeId);
     PlanQueue.Progress(ctx);
@@ -4577,20 +4742,20 @@ void TDataShard::ScanComplete(NTable::EStatus,
                                      const TActorContext &ctx)
 {
     if (auto* noTxScan = dynamic_cast<INoTxScan*>(prod.Get())) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Non-transactinal scan complete at "
-                    << TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "Non-transactinal scan complete",
+            {"tabletId", TabletID()});
 
         noTxScan->OnFinished(this);
         prod.Destroy();
     } else if (cookie != 0 && cookie != Max<ui64>()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "FullScan complete at " << TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "FullScan complete",
+            {"tabletId", TabletID()});
 
         auto op = Pipeline.FindOp(cookie);
         if (op) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Found op"
-                << ": cookie: " << cookie
-                << ", at: "<< TabletID());
+            YDB_LOG_DEBUG_CTX(ctx, "Found op",
+                {"cookie", cookie},
+                {"tabletId", TabletID()});
 
             if (op->IsWaitingForScan()) {
                 op->SetScanResult(prod);
@@ -4598,20 +4763,21 @@ void TDataShard::ScanComplete(NTable::EStatus,
             }
         } else {
             if (InFlightCondErase && InFlightCondErase.TxId == cookie) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Conditional erase complete"
-                    << ": cookie: " << cookie
-                    << ", at: "<< TabletID());
+                YDB_LOG_DEBUG_CTX(ctx, "Conditional erase complete",
+                    {"cookie", cookie},
+                    {"tabletId", TabletID()});
 
                 InFlightCondErase.Clear();
             } else if (CdcStreamScanManager.Has(cookie)) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Cdc stream scan complete"
-                    << ": cookie: " << cookie
-                    << ", at: "<< TabletID());
+                YDB_LOG_DEBUG_CTX(ctx, "Cdc stream scan complete",
+                    {"cookie", cookie},
+                    {"tabletId", TabletID()});
 
                 CdcStreamScanManager.Complete(cookie);
             } else if (!Pipeline.FinishStreamingTx(cookie)) {
-                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
-                            "Scan complete at " << TabletID() << " for unknown tx " << cookie);
+                YDB_LOG_ERROR_CTX(ctx, "Scan complete for unknown tx",
+                    {"tabletId", TabletID()},
+                    {"cookie", cookie});
             }
         }
     }
@@ -4621,23 +4787,23 @@ void TDataShard::ScanComplete(NTable::EStatus,
 }
 
 void TDataShard::Handle(TEvDataShard::TEvAsyncJobComplete::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "AsyncJob complete"
-        << " at " << TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "AsyncJob complete",
+        {"tabletId", TabletID()});
 
     auto op = Pipeline.FindOp(ev->Cookie);
     if (op) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Found op"
-            << " at "<< TabletID()
-            << " cookie " << ev->Cookie);
+        YDB_LOG_DEBUG_CTX(ctx, "Found op",
+            {"tabletId", TabletID()},
+            {"cookie", ev->Cookie});
 
         if (op->IsWaitingForAsyncJob()) {
             op->SetAsyncJobResult(ev->Get()->Prod);
             Pipeline.AddCandidateOp(op);
         }
     } else {
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "AsyncJob complete"
-            << " at " << TabletID()
-            << " for unknown tx " << ev->Cookie);
+        YDB_LOG_ERROR_CTX(ctx, "AsyncJob complete",
+            {"tabletId", TabletID()},
+            {"cookie", ev->Cookie});
     }
 
     // Continue current Tx
@@ -4648,8 +4814,9 @@ void TDataShard::Handle(TEvPrivate::TEvRestartOperation::TPtr &ev, const TActorC
     const auto txId = ev->Get()->TxId;
 
     if (auto op = Pipeline.FindOp(txId)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Restart op: " << txId
-            << " at " << TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "Restart op",
+            {"txId", txId},
+            {"tabletId", TabletID()});
 
         if (op->IsWaitingForRestart()) {
             op->ResetWaitingForRestartFlag();
@@ -5083,4 +5250,17 @@ size_t TEvDataShard::TEvReadResult::GetDataSizeEstimate() const {
     return 0;
 }
 
+void TEvDataShard::TEvProposeTransactionResult::SetStepOrderId(const std::pair<ui64, ui64>& stepOrderId) {
+    Record.SetStep(stepOrderId.first);
+    Record.SetOrderId(stepOrderId.second);
+    // Note: this method is used by schema operations where stepOrderId == commitVersion
+    auto* commitVersion = Record.MutableCommitVersion();
+    commitVersion->SetStep(stepOrderId.first);
+    commitVersion->SetTxId(stepOrderId.second);
+}
+
 } // NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

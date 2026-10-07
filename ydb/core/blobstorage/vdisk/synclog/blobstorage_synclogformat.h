@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/queue.h>
@@ -11,6 +12,10 @@
 namespace NKikimr {
 
     namespace NSyncLog {
+        struct TDeletedChunk {
+            ui32 ChunkIdx = 0;
+            ui32 UsedPagesNum = 0;
+        };
 
         ////////////////////////////////////////////////////////////////////////////
         // SYNC LOG FORMAT

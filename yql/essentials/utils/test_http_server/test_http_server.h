@@ -62,11 +62,10 @@ public:
 
     using TRequestHandler = std::function<TReply(const TRequest& request)>;
 
-public:
     explicit TTestHttpServer(int port);
     ~TTestHttpServer();
     void Start();
-    TString GetUrl() const;
+    [[nodiscard]] TString GetUrl() const;
     void SetRequestHandler(TRequestHandler handler);
 
 private:

@@ -57,19 +57,26 @@ public:
     TRuntimeNode KqpBlockReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& range,
         const TArrayRef<TKqpTableColumn>& columns, TType* returnType);
 
-    TRuntimeNode KqpUpsertRows(const TTableId& tableId, const TRuntimeNode& rows,
-        const TArrayRef<TKqpTableColumn>& upsertColumns, bool isUpdate);
-
-    TRuntimeNode KqpDeleteRows(const TTableId& tableId, const TRuntimeNode& rows);
-
-    TRuntimeNode KqpEffects(const TArrayRef<const TRuntimeNode>& effects);
-
     TRuntimeNode KqpEnsure(TRuntimeNode value, TRuntimeNode predicate, TRuntimeNode issueCode, TRuntimeNode message);
 
-    TRuntimeNode KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType, const TString& leftLabel, const TString& rightLabel);
+    TRuntimeNode KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType, const TString& leftLabel, const TString& rightLabel, ui32 cookieFormatVersion = 0);
 
     TRuntimeNode FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings, TRuntimeNode mode);
+
+    // input: List/Flow/Stream<T> -> same container of Tuple<Uint64, T> with a 1-based rank.
+    TRuntimeNode KqpStreamEnumerate(TRuntimeNode input);
+
+    TRuntimeNode KqpStreamingAggregation(TRuntimeNode flow,
+        const TUnaryLambda& keyExtractor, // (input_item) -> (key)
+        const TUnaryLambda& init, // (input_item) -> (state)
+        const TBinaryLambda& update, // (state, input_item) -> (state)
+        const TBinaryLambda& finish, // (key, state) -> (output_item)
+        TRuntimeNode stateTablePath, // String path or Tuple<path, Struct<aggregation column: table column>> literal
+        const TUnaryLambda& save = {}, // (state) -> (saved_state)
+        const TUnaryLambda& load = {}, // (saved_state) -> (state)
+        const TBinaryLambda& merge = {}); // (state, state) -> (state)
 };
 
 } // namespace NMiniKQL
+
 } // namespace NKikimr

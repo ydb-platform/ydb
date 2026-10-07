@@ -3,38 +3,68 @@
 #include "space_monitor.h"
 #include "s3.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerConnected::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "TEvServerConnected", (Id, GetLogId()), (ClientId, ev->Get()->ClientId),
-            (ServerId, ev->Get()->ServerId));
+        YDB_LOG_DEBUG("TEvServerConnected",
+            {"marker", "BDT01"},
+            {"id", GetLogId()},
+            {"clientId", ev->Get()->ClientId},
+            {"serverId", ev->Get()->ServerId});
         const auto [it, inserted] = PipeServers.try_emplace(ev->Get()->ServerId);
         Y_ABORT_UNLESS(inserted);
+        it->second.ConnectionSequence = ++NextConnectionSequence;
     }
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT02, "TEvServerDisconnected", (Id, GetLogId()), (PipeServerId, ev->Get()->ServerId));
+        YDB_LOG_DEBUG("TEvServerDisconnected",
+            {"marker", "BDT02"},
+            {"id", GetLogId()},
+            {"pipeServerId", ev->Get()->ServerId});
 
         const auto it = PipeServers.find(ev->Get()->ServerId);
         Y_ABORT_UNLESS(it != PipeServers.end());
+
+        // Requests parked in tablet-wide queues still name this pipe server as their recipient. It is about to go
+        // away and there is no one left to answer to, so drop them before anything below may try to resolve the
+        // agent behind them.
+        S3Manager->DropPendingPrepareWrites(it->first);
+
         if (const auto& nodeId = it->second.NodeId) {
             if (const auto agentIt = Agents.find(*nodeId); agentIt != Agents.end() && agentIt->second.Connection &&
                     agentIt->second.Connection->PipeServerId == it->first) {
                 OnAgentDisconnect(agentIt->second);
                 agentIt->second.Connection.reset();
+                TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_AGENTS_CONNECTED] -= 1;
                 agentIt->second.ExpirationTimestamp = TActivationContext::Now() + ExpirationTimeout;
+                ScheduleCheckExpiredAgents();
             }
         }
         PipeServers.erase(it);
     }
 
     void TBlobDepot::OnAgentDisconnect(TAgent& agent) {
+        Y_ABORT_UNLESS(agent.Connection); // this releases what one particular connection held
+
+        // Anything still parked in a tablet-wide queue on behalf of this connection can no longer be answered. Drop
+        // it before releasing the write slots below, because that release runs the pending-write drain and it must
+        // not dispatch a request bound to the connection we are tearing down.
+        S3Manager->DropPendingPrepareWrites(agent.Connection->PipeServerId);
+
         agent.InvalidateStepRequests.clear();
         agent.PushCallbacks.clear();
 
         for (TS3Locator locator : agent.S3WritesInFlight) {
             // they were not in InFlightTrashS3, so we just have to delete them
             S3Manager->AddTrashToCollect(locator);
+        }
+        if (const ui32 numAbandoned = agent.S3WritesInFlight.size()) {
+            // The agent is never going to commit or discard these writes now. Their slots have to be given back
+            // explicitly: otherwise they stay occupied for the rest of this tablet generation and, once enough of
+            // them leak, TEvPrepareWriteS3 from *every* agent gets queued in PendingPrepareWrites forever.
+            S3Manager->OnS3WritesInFlightAbandoned(numAbandoned);
         }
         agent.S3WritesInFlight.clear();
     }
@@ -44,27 +74,45 @@ namespace NKikimr::NBlobDepot {
         const TActorId& pipeServerId = ev->Recipient;
         const auto& req = ev->Get()->Record;
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "TEvRegisterAgent", (Id, GetLogId()), (Msg, req), (NodeId, nodeId),
-            (PipeServerId, pipeServerId), (Id, ev->Cookie));
+        YDB_LOG_DEBUG("TEvRegisterAgent",
+            {"marker", "BDT03"},
+            {"id", GetLogId()},
+            {"msg", req},
+            {"nodeId", nodeId},
+            {"pipeServerId", pipeServerId},
+            {"cookie", ev->Cookie});
 
         const auto it = PipeServers.find(pipeServerId);
         Y_ABORT_UNLESS(it != PipeServers.end());
         Y_ABORT_UNLESS(!it->second.NodeId || *it->second.NodeId == nodeId);
         it->second.NodeId = nodeId;
         auto& agent = Agents[nodeId];
+        if (agent.Connection && agent.Connection->PipeServerId != pipeServerId) {
+            // This registration supersedes an older connection. Its TEvServerDisconnected either has not been
+            // processed yet or never will be -- either way the handler above skips it once Connection has moved on,
+            // so nothing else would ever release what that connection held. Note that this covers a plain reconnect
+            // of the same agent instance too, not just an AgentInstanceId change, and that it deliberately runs
+            // before Connection is replaced so the resources are attributed to the connection that held them.
+            OnAgentDisconnect(agent);
+        }
+        if (!agent.Connection) {
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_AGENTS_CONNECTED] += 1;
+        }
         agent.Connection = {
             .PipeServerId = pipeServerId,
             .AgentId = ev->Sender,
             .NodeId = nodeId,
         };
+        agent.LastConnectionSequence = it->second.ConnectionSequence;
         agent.ExpirationTimestamp = TInstant::Max();
         agent.LastPushedSpaceColor = SpaceMonitor->GetSpaceColor();
         agent.LastPushedApproximateFreeSpaceShare = SpaceMonitor->GetApproximateFreeSpaceShare();
 
         if (agent.AgentInstanceId && *agent.AgentInstanceId != req.GetAgentInstanceId()) {
-            ResetAgent(agent);
+            ResetAgent(nodeId, agent);
         }
         agent.AgentInstanceId = req.GetAgentInstanceId();
+        agent.SupportsIdRangeExpiry = req.GetSupportsIdRangeExpiry();
 
         OnAgentConnect(agent);
 
@@ -94,9 +142,18 @@ namespace NKikimr::NBlobDepot {
             record->SetName(Config.GetName());
         }
 
+        // The agent applies these before it resumes serving queries, so anything it still holds down there is
+        // dropped rather than committed against blobs we may already have collected.
+        for (const auto& [channel, step] : agent.ExpiredSteps) {
+            auto *item = record->AddInvalidatedSteps();
+            item->SetChannel(channel);
+            item->SetGeneration(Executor()->Generation());
+            item->SetInvalidatedStep(step);
+        }
+
         TActivationContext::Send(response.release());
 
-        if (!agent.InvalidatedStepInFlight.empty()) {
+        if (!agent.InvalidatedStepInFlight.empty() || !agent.BlockToDeliver.empty()) {
             const ui32 generation = Executor()->Generation();
             const ui64 id = ++agent.LastRequestId;
 
@@ -143,14 +200,29 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT04, "TEvAllocateIds", (Id, GetLogId()), (Msg, ev->Get()->Record),
-            (PipeServerId, ev->Recipient));
+        YDB_LOG_DEBUG("TEvAllocateIds",
+            {"marker", "BDT04"},
+            {"id", GetLogId()},
+            {"msg", ev->Get()->Record},
+            {"pipeServerId", ev->Recipient});
 
         const ui32 generation = Executor()->Generation();
-        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, ev->Get()->Record.GetChannelKind(), generation);
+        const auto channelKind = ev->Get()->Record.GetChannelKind();
+        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, channelKind, generation);
 
-        std::vector<ui8> channels(ev->Get()->Record.GetCount());
-        if (PickChannels(record->GetChannelKind(), channels)) {
+        // Both of these come straight off the wire. A kind we have no channels configured for would trip the
+        // Y_ABORT_UNLESS inside PickChannels, and an unbounded Count would let a single request size a vector and
+        // burn that many sequence numbers. Replying without a range is a case the agent already handles
+        // (TChannelKind::ProcessQueriesWaitingForId), so degrade to that instead of trusting the peer.
+        std::vector<ui8> channels(Min<ui32>(ev->Get()->Record.GetCount(), MaxBlobSeqIdsPerAllocation));
+
+        if (!ChannelKinds.contains(channelKind)) {
+            YDB_LOG_ERROR("TEvAllocateIds for a channel kind this BlobDepot has no channels for",
+                {"marker", "BDT95"},
+                {"id", GetLogId()},
+                {"channelKind", int(channelKind)},
+                {"pipeServerId", ev->Recipient});
+        } else if (PickChannels(channelKind, channels)) {
             auto *givenIdRange = record->MutableGivenIdRange();
 
             THashMap<ui8, NKikimrBlobDepot::TGivenIdRange::TChannelRange*> issuedRanges;
@@ -174,9 +246,13 @@ namespace NKikimr::NBlobDepot {
                 agent.GivenIdRanges[range.GetChannel()].IssueNewRange(range.GetBegin(), range.GetEnd());
                 Channels[range.GetChannel()].GivenIdRanges.IssueNewRange(range.GetBegin(), range.GetEnd());
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT05, "IssueNewRange", (Id, GetLogId()),
-                    (AgentId, agent.Connection->NodeId), (Channel, range.GetChannel()),
-                    (Begin, range.GetBegin()), (End, range.GetEnd()));
+                YDB_LOG_DEBUG("IssueNewRange",
+                    {"marker", "BDT05"},
+                    {"id", GetLogId()},
+                    {"agentId", agent.Connection->NodeId},
+                    {"channel", range.GetChannel()},
+                    {"begin", range.GetBegin()},
+                    {"end", range.GetEnd()});
             }
         }
 
@@ -199,7 +275,20 @@ namespace NKikimr::NBlobDepot {
         return agent;
     }
 
-    void TBlobDepot::ResetAgent(TAgent& agent) {
+    TBlobDepot::TAgent *TBlobDepot::FindAgent(const TActorId& pipeServerId) {
+        const auto it = PipeServers.find(pipeServerId);
+        if (it == PipeServers.end() || !it->second.NodeId) {
+            return nullptr;
+        }
+        const auto agentIt = Agents.find(*it->second.NodeId);
+        if (agentIt == Agents.end()) {
+            return nullptr;
+        }
+        TAgent& agent = agentIt->second;
+        return agent.Connection && agent.Connection->PipeServerId == pipeServerId ? &agent : nullptr;
+    }
+
+    void TBlobDepot::ResetAgent(ui32 nodeId, TAgent& agent) {
         for (auto& [channel, agentGivenIdRange] : agent.GivenIdRanges) {
             if (agentGivenIdRange.IsEmpty()) {
                 continue;
@@ -209,9 +298,14 @@ namespace NKikimr::NBlobDepot {
             auto& givenIdRanges = Channels[channel].GivenIdRanges;
             const bool unblock = givenIdRanges.GetMinimumValue() == agentGivenIdRange.GetMinimumValue();
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "ResetAgent", (Id, GetLogId()), (AgentId, agent.Connection->NodeId),
-                (Channel, int(channel)), (GivenIdRanges, givenIdRanges), (Agent.GivenIdRanges, agentGivenIdRange),
-                (Unblock, unblock));
+            YDB_LOG_DEBUG("ResetAgent",
+                {"marker", "BDT06"},
+                {"id", GetLogId()},
+                {"agentId", nodeId},
+                {"channel", int(channel)},
+                {"givenIdRanges", givenIdRanges},
+                {"Agent.GivenIdRanges", agentGivenIdRange},
+                {"unblock", unblock});
 
             givenIdRanges.Subtract(std::exchange(agentGivenIdRange, {}));
 
@@ -220,6 +314,84 @@ namespace NKikimr::NBlobDepot {
             }
         }
         agent.InvalidatedStepInFlight.clear();
+    }
+
+    void TBlobDepot::ScheduleCheckExpiredAgents() {
+        if (!std::exchange(CheckExpiredAgentsScheduled, true)) {
+            // A single timer for all agents: they share ExpirationTimeout, so the worst an agent waits is twice it
+            TActivationContext::Schedule(ExpirationTimeout, new IEventHandle(TEvPrivate::EvCheckExpiredAgents, 0,
+                SelfId(), {}, nullptr, 0));
+        }
+    }
+
+    void TBlobDepot::HandleCheckExpiredAgents() {
+        CheckExpiredAgentsScheduled = false;
+
+        const TInstant now = TActivationContext::Now();
+        bool morePending = false;
+
+        // Collected first and expired afterwards: ExpireAgent unblocks garbage collection, which walks Agents of
+        // its own accord (TData::HandleTrash), and we would rather not be iterating it at the same time.
+        std::vector<ui32> expired;
+
+        for (auto& [nodeId, agent] : Agents) {
+            if (agent.Connection) {
+                continue; // it is back
+            } else if (!agent.SupportsIdRangeExpiry) {
+                continue; // we have no way to make this agent drop the ids, so we must keep them reserved
+            }
+
+            if (!agent.HasGivenIdRanges()) {
+                continue;
+            }
+
+            if (agent.ExpirationTimestamp <= now) {
+                expired.push_back(nodeId);
+            } else {
+                morePending = true;
+            }
+        }
+
+        for (const ui32 nodeId : expired) {
+            ExpireAgent(nodeId, GetAgent(nodeId));
+        }
+
+        if (morePending) {
+            ScheduleCheckExpiredAgents();
+        }
+    }
+
+    void TBlobDepot::ExpireAgent(ui32 nodeId, TAgent& agent) {
+        Y_ABORT_UNLESS(!agent.Connection);
+        Y_ABORT_UNLESS(agent.SupportsIdRangeExpiry);
+
+        const ui32 generation = Executor()->Generation();
+
+        for (const auto& [channelIndex, range] : agent.GivenIdRanges) {
+            if (range.IsEmpty()) {
+                continue;
+            }
+            Y_ABORT_UNLESS(channelIndex < Channels.size());
+            TChannelInfo& channel = Channels[channelIndex];
+            Y_ABORT_UNLESS(channel.NextBlobSeqId);
+
+            // Everything this agent could still be holding on this channel -- free ids and writes in flight alike --
+            // was issued below NextBlobSeqId, so ordering it to drop that whole step range covers all of it.
+            ui32& step = agent.ExpiredSteps[channelIndex];
+            step = Max(step, TBlobSeqId::FromSequentalNumber(channelIndex, generation, channel.NextBlobSeqId - 1).Step);
+
+            channel.AdvanceNextBlobSeqId(generation, step);
+
+            YDB_LOG_WARN("reclaiming blob sequence range of an expired agent",
+                {"marker", "BDT96"},
+                {"id", GetLogId()},
+                {"agentId", nodeId},
+                {"channel", int(channelIndex)},
+                {"invalidatedStep", step},
+                {"nextBlobSeqId", channel.NextBlobSeqId});
+        }
+
+        ResetAgent(nodeId, agent); // releases the ranges and lets garbage collection move on
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
@@ -252,7 +424,10 @@ namespace NKikimr::NBlobDepot {
                 auto ev = std::make_unique<TEvBlobDepot::TEvPushNotify>();
                 ev->Record.SetSpaceColor(spaceColor);
                 ev->Record.SetApproximateFreeSpaceShare(approximateFreeSpaceShare);
-                Send(agent.Connection->AgentId, ev.release(), 0, id);
+                // Must be sent *from the pipe server*, like every other TEvPushNotify: the agent drops any push
+                // notification whose sender is not its current pipe server (see TBlobDepotAgent::Handle).
+                TActivationContext::Send(new IEventHandle(agent.Connection->AgentId, agent.Connection->PipeServerId,
+                    ev.release(), 0, id));
                 agent.LastPushedSpaceColor = spaceColor;
                 agent.LastPushedApproximateFreeSpaceShare = approximateFreeSpaceShare;
             }

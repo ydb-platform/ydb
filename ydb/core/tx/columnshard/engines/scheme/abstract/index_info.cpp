@@ -1,7 +1,9 @@
 #include "index_info.h"
-#include <ydb/core/sys_view/common/path.h>
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
+
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/sys_view/common/path.h>
+
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 
@@ -16,8 +18,10 @@ const std::shared_ptr<TColumnLoader>& IIndexInfo::GetColumnLoaderVerified(const 
 void IIndexInfo::AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bool isDelete) {
     const i64 numRows = batch.num_rows();
 
-    batch.AddField(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()),
-        NArrow::TThreadSimpleArraysCache::GetConst(arrow::boolean(), std::make_shared<arrow::BooleanScalar>(isDelete), numRows)).Validate();
+    batch
+        .AddField(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()),
+            NArrow::TThreadSimpleArraysCache::GetConst(arrow::boolean(), std::make_shared<arrow::BooleanScalar>(isDelete), numRows))
+        .Validate();
 }
 
 void IIndexInfo::AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot, const ui64 insertWriteId) {
@@ -125,4 +129,4 @@ std::shared_ptr<arrow::Scalar> IIndexInfo::DefaultColumnValue(const ui32 colId) 
     }
 }
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

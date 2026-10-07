@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/core/base
@@ -13,7 +13,5 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(scheme_cache.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()

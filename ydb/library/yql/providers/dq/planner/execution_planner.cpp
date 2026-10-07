@@ -26,6 +26,7 @@
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/minikql/aligned_page_pool.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <ydb/library/actors/core/event_pb.h>
 
 #include <stack>
@@ -57,7 +58,8 @@ namespace NYql::NDqs {
                 exprRoot,
                 [](const TExprNode::TPtr& exprNode) {
                     const auto& node = TExprBase(exprNode);
-                    return !node.Maybe<TCoLambda>();
+                    return !node.Maybe<TCoLambda>()
+                        && !node.Maybe<TDqSource>();
                 },
                 [&stages](const TExprNode::TPtr& exprNode) {
                     const auto& node = TExprBase(exprNode);
@@ -266,7 +268,7 @@ namespace NYql::NDqs {
             SourceTaskID = resultTask.Id;
         }
 
-        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default");
+        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("disable") != "disable");
 
         return TasksGraph.GetTasks().size() <= maxTasksPerOperation;
     }
@@ -347,6 +349,7 @@ namespace NYql::NDqs {
             std::tie(programStr, stageId, publicId) = StagePrograms[task.StageId];
             program.SetRaw(programStr);
             program.SetLangVer(TypeContext->LangVer);
+            *program.MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*TypeContext->RuntimeSettings);
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
@@ -529,6 +532,10 @@ namespace NYql::NDqs {
         if (auto maybeIsMultiMatches = streamLookup.IsMultiMatches()) {
             settings.SetIsMultiMatches(FromString<bool>(maybeIsMultiMatches.Cast().StringValue()));
         }
+        if (auto maybeFullscanLimit = streamLookup.FullscanLimit().Maybe<TCoAtom>()) {
+            settings.SetFullscanLimit(FromString<ui64>(maybeFullscanLimit.Cast().StringValue()));
+        }
+        /* ShuffleMode intentionally omitted */
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
         const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());
@@ -735,12 +742,14 @@ namespace NYql::NDqs {
         NActors::TActorId executerID,
         NActors::TActorId resultID,
         const TTypeAnnotationNode* typeAnn,
-        TLangVersion langver)
+        TLangVersion langver,
+        TRuntimeSettings::TConstPtr runtimeSettings)
         : Program(program)
         , ExecuterID(executerID)
         , ResultID(resultID)
         , TypeAnn(typeAnn)
         , LangVer(langver)
+        , RuntimeSettings(std::move(runtimeSettings))
     { }
 
     TVector<TDqTask>& TDqsSingleExecutionPlanner::GetTasks()
@@ -769,6 +778,7 @@ namespace NYql::NDqs {
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         program.SetRaw(Program);
         program.SetLangVer(LangVer);
+        *program.MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*RuntimeSettings);
 
         auto outputDesc = task.AddOutputs();
         outputDesc->MutableMap();

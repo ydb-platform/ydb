@@ -3,18 +3,27 @@
 #include "ctx.h"
 #include "events.h"
 #include "rdma.h"
+#include "mem_pool.h"
 
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/util/intrusive_funnel_queue.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/monlib/metrics/metric_sub_registry.h>
+#include <library/cpp/threading/queue/mpsc_read_as_filled.h>
+
+
 
 #include <util/thread/lfqueue.h>
+#include <util/system/guard.h>
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
+#include <util/system/yield.h>
 #include <util/system/sanitizers.h>
 #include <util/system/compiler.h>
 
+#include <cerrno>
 #include <span>
 
 namespace NInterconnect::NRdma {
@@ -41,7 +50,9 @@ NMonitoring::TDynamicCounterPtr MakeCounters(NMonitoring::TDynamicCounters* coun
 
 class TWr;
 
-class TIbVerbsBuilderImpl final : public IIbVerbsBuilder {
+class TIbVerbsBuilderImpl final
+    : public IIbVerbsBuilder
+    , public TIntrusiveFunnelQueueItem<TIbVerbsBuilderImpl> {
 public:
     TIbVerbsBuilderImpl(size_t hint) noexcept {
         WorkBuf.reserve(hint);
@@ -49,19 +60,340 @@ public:
 
     void AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize,
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept;
+    bool AddSendVerb(const TRcBuf& packet,
+        std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept;
+    void AddSendVerb(std::span<const TSendSge> sgList,
+        std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept;
     size_t GetVerbsNum() const noexcept;
     ibv_send_wr* BuildListOfVerbs(std::vector<TWr*>& preparedWr) noexcept;
 
+    void AttachQp(std::shared_ptr<TQueuePair> qp) noexcept {
+        HoldedQp = std::move(qp);
+    }
+
+    int PostSend(struct ::ibv_send_wr *wr, struct ::ibv_send_wr **bad_wr) noexcept {
+        return HoldedQp->PostSend(wr, bad_wr);
+    }
+
 private:
     struct TWrVerbData {
-        ibv_sge Sg;
+        std::vector<ibv_sge> SgList;
         ibv_send_wr Wr;
+        std::vector<const TMemRegion*> SendMemRegions;
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> IoCb;
     };
     std::vector<TWrVerbData> WorkBuf;
+
+    std::shared_ptr<TQueuePair> HoldedQp;
 };
 
 void SetSigHandler() noexcept;
+
+class TSrq {
+    struct TRecieveSlot {
+        TRcBuf Buffer;
+    };
+
+public:
+    static constexpr ui64 SRQ_WR_MASK = 1ull << 63;
+    static constexpr int CqTerminalError = -1;
+
+    struct TCmd {
+        ui32 QpNum;
+        enum ECmd {
+            RegQp,
+            DeregQp
+        } Cmd;
+        std::variant<NActors::TActorId> Target;
+    };
+
+    ibv_srq* Get() noexcept { return Srq; }
+
+    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool) noexcept {
+        if (!memPool || params.MaxSrqWr <= 0 || params.RecieveBufSz <= 0) {
+            return EINVAL;
+        }
+        MemPool = std::move(memPool);
+        RecieveBufSz = params.RecieveBufSz;
+        DeviceIndex = ctx->GetDeviceIndex();
+
+        struct ibv_srq_init_attr srqInitAttr;
+        memset(&srqInitAttr, 0, sizeof(srqInitAttr));
+
+        srqInitAttr.attr.max_wr = params.MaxSrqWr;
+        srqInitAttr.attr.max_sge = 1;
+
+        Srq = ibv_create_srq(ctx->GetProtDomain(), &srqInitAttr);
+        if (!Srq) {
+            return errno;
+        }
+
+        const ui64 maxWr = srqInitAttr.attr.max_wr;
+        if (maxWr == 0) {
+            if (const int destroyErr = Destroy()) {
+                return destroyErr;
+            }
+            return EINVAL;
+        }
+
+        Slots.reserve(maxWr);
+        PendingRefillSlots.reserve(maxWr);
+
+        for (ui64 i = 0; i < maxWr; i++) {
+            auto buffer = MemPool->AllocRcBuf(RecieveBufSz, IMemPool::EMPTY);
+            if (!buffer) {
+                if (const int destroyErr = Destroy()) {
+                    return destroyErr;
+                }
+                return ENOMEM;
+            }
+            Slots.emplace_back(TRecieveSlot{std::move(*buffer)});
+            auto region = TryExtractFromRcBuf(Slots.back().Buffer);
+            if (region.Empty()) {
+                if (const int destroyErr = Destroy()) {
+                    return destroyErr;
+                }
+                return EINVAL;
+            }
+        }
+
+        for (ui64 i = 0; i < maxWr; i++) {
+            if (const int err = PostSlot(i, Slots[i].Buffer)) {
+                if (const int destroyErr = Destroy()) {
+                    return destroyErr;
+                }
+                return err;
+            }
+        }
+
+        CommandsClosed = false;
+        return 0;
+    }
+
+    void ProcessCommands() noexcept {
+        for (;;) {
+            std::unique_ptr<TCmd> cmd(Queue.Pop());
+            if (!cmd) {
+                return;
+            }
+
+            switch (cmd->Cmd) {
+                case TCmd::RegQp:
+                    QpActors[cmd->QpNum] = std::get<NActors::TActorId>(cmd->Target);
+                    break;
+                case TCmd::DeregQp:
+                    QpActors.erase(cmd->QpNum);
+                    break;
+            }
+        }
+    }
+
+    void DrainCommands() noexcept {
+        for (;;) {
+            std::unique_ptr<TCmd> cmd(Queue.Pop());
+            if (!cmd) {
+                return;
+            }
+        }
+    }
+
+    bool HasPendingRefillSlots() const noexcept {
+        return !PendingRefillSlots.empty();
+    }
+
+    int RetryPendingRefillSlots(size_t maxSlots) noexcept {
+        for (size_t i = 0; i < maxSlots && !PendingRefillSlots.empty(); ++i) {
+            const ui64 id = PendingRefillSlots.back();
+            PendingRefillSlots.pop_back();
+
+            const auto refill = RefillSlot(id);
+            switch (refill.Status) {
+                case ERefillStatus::Ok:
+                    break;
+                case ERefillStatus::NoMemory:
+                    PendingRefillSlots.push_back(id);
+                    return 0;
+                case ERefillStatus::Fatal:
+                    return refill.Err;
+            }
+        }
+        return 0;
+    }
+
+    int HandleWc(NActors::TActorSystem* as, ibv_wc* wc) noexcept {
+        ui64 id = wc->wr_id & ~SRQ_WR_MASK;
+        Y_DEBUG_ABORT_UNLESS(id < Slots.size());
+        if (Y_UNLIKELY(id >= Slots.size())) {
+            return CqTerminalError;
+        }
+
+        auto it = QpActors.find(wc->qp_num);
+        const bool registered = it != QpActors.end();
+
+        TRecieveSlot& slot = Slots[id];
+        TRcBuf received;
+        int receiveErr = 0;
+        if (wc->status == IBV_WC_SUCCESS) {
+            if (Y_UNLIKELY(wc->byte_len > slot.Buffer.GetSize())) {
+                receiveErr = EMSGSIZE;
+            } else {
+                slot.Buffer.TrimBack(wc->byte_len);
+                received = std::move(slot.Buffer);
+            }
+        }
+
+        const auto refill = RefillSlot(id);
+        if (refill.Status == ERefillStatus::NoMemory) {
+            PendingRefillSlots.push_back(id);
+        }
+
+        if (!registered) {
+            if (refill.Status == ERefillStatus::Fatal) {
+                return refill.Err;
+            }
+            return receiveErr ? CqTerminalError : 0;
+        }
+
+        if (wc->status == IBV_WC_SUCCESS && !receiveErr) {
+            as->Send(it->second, TEvRdmaIoReceiveDone::Success(std::move(received)));
+        } else {
+            as->Send(it->second, TEvRdmaIoReceiveDone::WcError(receiveErr ? receiveErr : wc->status));
+        }
+
+        if (refill.Status == ERefillStatus::Fatal) {
+            return refill.Err;
+        }
+        return receiveErr ? CqTerminalError : 0;
+    }
+
+    void NotifyTerminalError(NActors::TActorSystem* as, int error) noexcept {
+        if (!error) {
+            return;
+        }
+        for (const auto& [qpNum, actorId] : QpActors) {
+            Y_UNUSED(qpNum);
+            if (error > 0) {
+                as->Send(actorId, TEvRdmaIoReceiveDone::WrError(error));
+            } else {
+                as->Send(actorId, TEvRdmaIoReceiveDone::CqError());
+            }
+        }
+        QpActors.clear();
+    }
+
+    bool EnqueueCmd(TCmd* cmd) noexcept {
+        std::unique_ptr<TCmd> holder(cmd);
+        TGuard<TSpinLock> guard(CommandsLock);
+        if (CommandsClosed) {
+            return false;
+        }
+        Queue.Push(holder.release());
+        return true;
+    }
+
+    void CloseCommands() noexcept {
+        TGuard<TSpinLock> guard(CommandsLock);
+        CommandsClosed = true;
+    }
+
+    int Destroy() noexcept {
+        CloseCommands();
+        DrainCommands();
+        if (Srq) {
+            if (const int err = ibv_destroy_srq(Srq)) {
+                Cerr << "Unable to destroy SRQ, err: " << err << ", errno: " << errno << Endl;
+                Y_DEBUG_ABORT_UNLESS(false);
+                return err;
+            }
+            Srq = nullptr;
+        }
+        Slots.clear();
+        PendingRefillSlots.clear();
+        QpActors.clear();
+        MemPool.reset();
+        RecieveBufSz = 0;
+        DeviceIndex = 0;
+        return 0;
+    }
+
+    ~TSrq() {
+        Y_UNUSED(Destroy());
+    }
+private:
+    enum class ERefillStatus {
+        Ok,
+        NoMemory,
+        Fatal,
+    };
+
+    struct TRefillResult {
+        ERefillStatus Status;
+        int Err = 0;
+    };
+
+    TRefillResult RefillSlot(ui64 id) noexcept {
+        if (Y_UNLIKELY(!MemPool || !Srq || id >= Slots.size())) {
+            return {ERefillStatus::Fatal, EINVAL};
+        }
+
+        auto buffer = MemPool->AllocRcBuf(RecieveBufSz, IMemPool::EMPTY);
+        if (!buffer) {
+            return {ERefillStatus::NoMemory, ENOMEM};
+        }
+
+        if (const int err = PostSlot(id, *buffer)) {
+            return {ERefillStatus::Fatal, err};
+        }
+
+        Slots[id].Buffer = std::move(*buffer);
+        return {ERefillStatus::Ok};
+    }
+
+    int PostSlot(ui64 id, TRcBuf& buffer) noexcept {
+        if (Y_UNLIKELY(!Srq || id >= Slots.size())) {
+            return EINVAL;
+        }
+
+        auto region = TryExtractFromRcBuf(buffer);
+        if (region.Empty()) {
+            return EINVAL;
+        }
+
+        ibv_sge sg = {
+            .addr = reinterpret_cast<ui64>(region.GetAddr()),
+            .length = region.GetSize(),
+            .lkey = region.GetLKey(DeviceIndex),
+        };
+        ibv_recv_wr wr = {
+            .wr_id = SRQ_WR_MASK | id,
+            .sg_list = &sg,
+            .num_sge = 1,
+        };
+        ibv_recv_wr* badWr = nullptr;
+        if (const int err = ibv_post_srq_recv(Srq, &wr, &badWr)) {
+            Y_DEBUG_ABORT_UNLESS(badWr == &wr, "unexpected bad wr for single SRQ recv post");
+            return err;
+        }
+        Y_DEBUG_ABORT_UNLESS(!badWr, "bad wr must not be set on successful SRQ recv post");
+        if (Y_UNLIKELY(badWr)) {
+            return EIO;
+        }
+
+        return 0;
+    }
+
+    ibv_srq* Srq = nullptr;
+    std::shared_ptr<IMemPool> MemPool;
+    int RecieveBufSz = 0;
+    size_t DeviceIndex = 0;
+    std::vector<TRecieveSlot> Slots;
+    std::vector<ui64> PendingRefillSlots;
+    NThreading::TReadAsFilledQueue<TCmd> Queue;
+    TSpinLock CommandsLock;
+    bool CommandsClosed = true;
+    // TODO: replace with a paged radix/direct map for faster qp_num -> actor lookup on the receive hot path.
+    absl::flat_hash_map<ui32, NActors::TActorId> QpActors;
+};
 
 class TCqCommon : public ICq {
 public:
@@ -78,10 +410,22 @@ public:
         return Cq;
     }
 
-    int Init(const TRdmaCtx* ctx, int maxCqe, struct ibv_comp_channel* ch) noexcept {
-        Cq = ibv_create_cq(ctx->GetContext(), maxCqe, nullptr, ch, 0);
+    ibv_srq* GetSrq() noexcept {
+        return Srq.Get();
+    }
+
+    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool, struct ibv_comp_channel* ch) noexcept {
+        Cq = ibv_create_cq(ctx->GetContext(), params.MaxCqe, nullptr, ch, 0);
         if (!Cq) {
             return errno;
+        }
+        if (params.MaxSrqWr > 0) {
+            if (const int err = Srq.Init(ctx, params, std::move(memPool))) {
+                if (const int destroyErr = DestroyCq()) {
+                    return destroyErr;
+                }
+                return err;
+            }
         }
         return 0;
     }
@@ -94,14 +438,25 @@ public:
         SpinLockPause();
     }
 
-    void DestroyCq () noexcept {
-        if (Cq) {
-            ibv_destroy_cq(Cq);
+    int DestroyCq() noexcept {
+        if (const int err = Srq.Destroy()) {
+            return err;
         }
+        if (Cq) {
+            if (const int err = ibv_destroy_cq(Cq)) {
+                Cerr << "Unable to destroy CQ, err: " << err << ", errno: " << errno << Endl;
+                Y_DEBUG_ABORT_UNLESS(false);
+                return err;
+            }
+            Cq = nullptr;
+        }
+        return 0;
     }
+
 protected:
     NActors::TActorSystem* const As;
     ibv_cq* Cq;
+    TSrq Srq;
 };
 
 class TWr : public ICq::IWr {
@@ -179,16 +534,28 @@ private:
 };
 
 template<class TCq>
-static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept {
-    if (maxCqe <= 0) {
-        const ibv_device_attr& attr = ctx->GetDevAttr();
-        maxCqe = attr.max_cqe;
+static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept {
+    const ibv_device_attr& attr = ctx->GetDevAttr();
+    if (runtimeParams.MaxCqe <= 0) {
+        runtimeParams.MaxCqe = attr.max_cqe;
     }
-    if (maxWr <= 0) {
-        maxWr = maxCqe;
+    if (runtimeParams.MaxSrqWr < 0) {
+        runtimeParams.MaxSrqWr = attr.max_srq_wr;
     }
-    auto p = std::make_shared<TCq>(as, maxWr, counter);
-    int err = p->Init(ctx, maxCqe);
+    if (runtimeParams.MaxWr <= 0) {
+        runtimeParams.MaxWr = runtimeParams.MaxCqe;
+    }
+
+    if (runtimeParams.MaxSrqWr > 0) {
+        if (attr.max_srq <= 0 || attr.max_srq_wr <= 0 || attr.max_srq_sge < 1) {
+            return nullptr; // or fail CQ creation
+        }
+
+        runtimeParams.MaxSrqWr = Min(runtimeParams.MaxSrqWr, attr.max_srq_wr);
+    }
+
+    auto p = std::make_shared<TCq>(as, runtimeParams.MaxWr, counter);
+    int err = p->Init(ctx, runtimeParams, std::move(memPool));
     if (err) {
         return nullptr;
     }
@@ -201,30 +568,11 @@ static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int ma
 }
 
 class TSimpleCqBase : public TCqCommon {
-protected:
-    struct TWaiterCtx {
-        TWaiterCtx(std::shared_ptr<TQueuePair> qp, std::unique_ptr<IIbVerbsBuilder> verbsBuilder) noexcept
-            : Qp(std::move(qp))
-            , VerbsBuilder(std::move(verbsBuilder))
-        {}
-        size_t GetVerbsNum() const noexcept {
-            return static_cast<TIbVerbsBuilderImpl*>(VerbsBuilder.get())->GetVerbsNum();
-        }
-
-        ibv_send_wr* BuildListOfVerbs(std::vector<TWr*>& preparedWr) noexcept {
-            return static_cast<TIbVerbsBuilderImpl*>(VerbsBuilder.get())->BuildListOfVerbs(preparedWr);
-        }
-
-        std::shared_ptr<TQueuePair> Qp;
-        std::unique_ptr<IIbVerbsBuilder> VerbsBuilder;
-    };
-
 public:
     TSimpleCqBase(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c, bool nonBlockingPolling) noexcept
         : TCqCommon(as)
         , Thread(ThreadFunc, this)
         , Finished(false)
-        , Err(false)
         , NonBlockingPolling(nonBlockingPolling)
     {
         auto counter = MakeCounters(c);
@@ -248,8 +596,20 @@ public:
         Queue.Enqueue(static_cast<TWr*>(wr));
     }
 
+protected:
+    // Internal terminal transition. It may be called from the CQ poller thread,
+    // so it must not try to wake or wait for the poller.
+    void DoNotifyErr() noexcept {
+        SetTerminalError(TSrq::CqTerminalError);
+    }
+
+public:
     void NotifyErr() noexcept override {
-        Err.store(true, std::memory_order_relaxed);
+        DoNotifyErr();
+    }
+
+    void SetTerminalError(int error) noexcept {
+        TerminalError.store(error ? error : TSrq::CqTerminalError, std::memory_order_relaxed);
     }
 
     TWrStats GetWrStats() const noexcept override {
@@ -262,10 +622,12 @@ public:
     }
 
     std::optional<TErr> DoWrBatchAsync(std::shared_ptr<TQueuePair> qp, std::unique_ptr<IIbVerbsBuilder> builder) noexcept override {
-        if (Err.load(std::memory_order_relaxed)) {
+        if (TerminalError.load(std::memory_order_relaxed)) {
             return TErr();
         }
-        Waiters.Enqueue(new TWaiterCtx(std::move(qp), std::move(builder)));
+        TIbVerbsBuilderImpl* b = static_cast<TIbVerbsBuilderImpl*>(builder.release());
+        b->AttachQp(std::move(qp));
+        Waiters.Push(b);
         // If the thread may sleep we need to start Wr processing from caller thread. It is not a problem due to thread safe ibverbs api.
         // If we can't finish wr prosessing (no more wr to allocate without waiting) it means there are some verbs infligh so we can process it
         // from cq thread.
@@ -283,9 +645,25 @@ public:
         return {};
     }
 
-    // Build RDMA verbs and post it
-    // Returns false if it safe to sleep to wait for cq event
-    bool ProcessWr(std::unique_ptr<TWaiterCtx>& ctx, std::vector<TWr*>& preparedWr, bool tryBuildAtOnce) noexcept {
+    bool RegisterQpAsync(ui32 qpNum, NActors::TActorId actorId) noexcept override {
+        if (TerminalError.load(std::memory_order_relaxed)) {
+            return false;
+        }
+        auto cmd = new TSrq::TCmd{qpNum, TSrq::TCmd::RegQp, actorId};
+        return Srq.EnqueueCmd(cmd);
+    }
+
+    bool DeregisterQpAsync(ui32 qpNum) noexcept override {
+        if (TerminalError.load(std::memory_order_relaxed)) {
+            return false;
+        }
+        auto cmd = new TSrq::TCmd{qpNum, TSrq::TCmd::DeregQp, NActors::TActorId()};
+        return Srq.EnqueueCmd(cmd);
+    }
+
+    // Builds and posts pending RDMA send WRs.
+    // Returns false when there is no pending send work and the CQ thread may idle.
+    bool ProcessWr(std::unique_ptr<TIbVerbsBuilderImpl>& ctx, std::vector<TWr*>& preparedWr, bool tryBuildAtOnce) noexcept {
         while (true) {
             if (ctx) {
                 TWr* wr = nullptr;
@@ -302,14 +680,14 @@ public:
 
                     ibv_send_wr* wrList = ctx->BuildListOfVerbs(preparedWr);
 
-                    if (Err.load(std::memory_order_relaxed)) {
+                    if (TerminalError.load(std::memory_order_relaxed)) {
                         for (auto x : preparedWr) {
                             x->ReplyCqErr(As);
                         }
                     } else {
                         Allocated.fetch_add(preparedWr.size());
                         ibv_send_wr* wrErr = nullptr;
-                        int err = ctx->Qp->PostSend(wrList, &wrErr);
+                        int err = ctx->PostSend(wrList, &wrErr);
                         if (err) {
                             while (wrErr) {
                                 TWr* x = &WrBuf[wrErr->wr_id];
@@ -326,8 +704,7 @@ public:
                     return false;
                 }
             } else {
-                TWaiterCtx* p = nullptr;
-                Waiters.Dequeue(&p);
+                TIbVerbsBuilderImpl* p = Waiters.Pop();
                 if (p == nullptr) {
                     // No wr to build
                     return false;
@@ -351,14 +728,14 @@ public:
         while (Cont.load(std::memory_order_relaxed)) {
             const constexpr size_t wcBatchSize = 16;
             std::array<ibv_wc, wcBatchSize> wcs;
-            if (Err.load(std::memory_order_relaxed)) {
+            if (TerminalError.load(std::memory_order_relaxed)) {
                 HandleErr();
                 Cont.store(false, std::memory_order_relaxed);
             } else {
                 int rv = Do(wcs);
                 if (rv < 0) {
                     //TODO: Is it correct err handling?
-                    Err.store(true, std::memory_order_relaxed);
+                    DoNotifyErr();
                 } else if (rv == 0) {
                     bool idleAllowed = false;
                     MaybeIdle.store(true);
@@ -369,8 +746,27 @@ public:
                         }
                         VerbsBuildingState.Lock.Release();
                     }
+                    if (Srq.HasPendingRefillSlots()) {
+                        static constexpr ui64 SrqRefillRetryPeriod = 1024;
+                        if ((++SrqRefillRetryCounter & (SrqRefillRetryPeriod - 1)) == 0) {
+                            if (auto error = Srq.RetryPendingRefillSlots(1)) {
+                                SetTerminalError(error);
+                                idleAllowed = false;
+                                MaybeIdle.store(false);
+                            }
+                        }
+                        if (Srq.HasPendingRefillSlots()) {
+                            idleAllowed = false;
+                            MaybeIdle.store(false);
+                            SpinLockPause();
+                        }
+                    } else {
+                        SrqRefillRetryCounter = 0;
+                    }
                     if (idleAllowed) {
-                        Idle();
+                        if (!TerminalError.load(std::memory_order_relaxed)) {
+                            Idle();
+                        }
                         MaybeIdle.store(false);
                     }
                 } else {
@@ -383,6 +779,10 @@ public:
     }
 
     void HandleErr() noexcept {
+        Srq.CloseCommands();
+        Srq.ProcessCommands();
+        const int terminalError = TerminalError.load(std::memory_order_relaxed);
+        Srq.NotifyTerminalError(As, terminalError);
         for (size_t i = 0; i < WrBuf.size(); i++) {
             TWr* wr = &WrBuf[i];
             wr->ReplyCqErr(As);
@@ -393,11 +793,18 @@ public:
 
     void HandleWc(ibv_wc* wc, size_t sz) noexcept {
         for (size_t i = 0; i < sz; i++, wc++) {
-            TWr* wr = &WrBuf[wc->wr_id];
-            double passed = wr->GetTimePassed();
-            RdmaDeviceVerbTimeUs->Collect(passed * 1000000.0);
-            wr->Reply(As, wc);
-            ReturnWr(wr);
+            if (wc->wr_id & TSrq::SRQ_WR_MASK) {
+                Srq.ProcessCommands();
+                if (auto error = Srq.HandleWc(As, wc)) {
+                    SetTerminalError(error);
+                }
+            } else {
+                TWr* wr = &WrBuf[wc->wr_id];
+                double passed = wr->GetTimePassed();
+                RdmaDeviceVerbTimeUs->Collect(passed * 1000000.0);
+                wr->Reply(As, wc);
+                ReturnWr(wr);
+            }
         }
     }
 
@@ -413,10 +820,44 @@ public:
     }
 
     void Awake() noexcept {
-        pthread_kill(CqThreadId, SIGUSR1);
+        if (CqThreadId) {
+            pthread_kill(CqThreadId, SIGUSR1);
+        }
     }
 
 protected:
+    bool IsCqThread() const noexcept {
+        return CqThreadId && pthread_equal(pthread_self(), CqThreadId);
+    }
+
+    // External terminal notifications may arrive through async_fd while the poller
+    // sleeps in ibv_get_cq_event() on a different completion channel. Since a
+    // signal can be delivered just before the blocking syscall, repeat wakeups
+    // until the poller observes TerminalError and exits the loop.
+    void WakeUntilFinished() noexcept {
+        if (!Thread.Running() || IsCqThread()) {
+            return;
+        }
+        while (!Finished.load(std::memory_order_relaxed)) {
+            Awake();
+            if (Finished.load(std::memory_order_relaxed)) {
+                break;
+            }
+            ThreadYield();
+        }
+    }
+
+    // The intrusive queue does not own its items. This must be called only
+    // after the poller has stopped and submissions have been externally
+    // serialized with CQ destruction.
+    void DrainWaiters() noexcept {
+        VerbsBuildingState.CurCtx.reset();
+        VerbsBuildingState.PreparedWr.clear();
+        while (TIbVerbsBuilderImpl* waiter = Waiters.Pop()) {
+            delete waiter;
+        }
+    }
+
     TThread Thread;
     std::atomic<bool> Finished;
     std::atomic<bool> Cont;
@@ -428,22 +869,23 @@ protected:
     // imlementation of Release() methos on IWr* will be musch more difficult
     TLockFreeQueue<TWr*> Queue;
 
-    TLockFreeQueue<TWaiterCtx*> Waiters;
+    TIntrusiveFunnelQueue<TIbVerbsBuilderImpl> Waiters;
 
     struct {
-        std::unique_ptr<TWaiterCtx> CurCtx;
+        std::unique_ptr<TIbVerbsBuilderImpl> CurCtx;
         std::vector<TWr*> PreparedWr;
         TSpinLock Lock; // Is used to protect VerbsBulding due to cuncurrent access from one poller thred and multiple actor system threads
     } VerbsBuildingState;
 
     std::atomic<bool> MaybeIdle = false;
 
-    std::atomic<bool> Err;
+    std::atomic<int> TerminalError = 0;
     const bool NonBlockingPolling;
     std::atomic<ui64> Allocated;
+    ui64 SrqRefillRetryCounter = 0;
     NMonitoring::THistogramPtr RdmaDeviceVerbTimeUs;
 private:
-    pthread_t CqThreadId;
+    pthread_t CqThreadId = {};
 };
 
 }

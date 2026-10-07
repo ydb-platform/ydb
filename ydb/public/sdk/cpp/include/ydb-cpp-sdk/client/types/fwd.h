@@ -29,6 +29,7 @@ class ITokenSource;
 
 namespace NStatusHelpers {
 class TYdbErrorException;
+class TYdbRangeErrorException;
 }
 
 }  // namespace NYdb

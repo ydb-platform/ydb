@@ -1,4 +1,5 @@
 import pytest
+import uuid
 
 from collections.abc import Sequence
 
@@ -45,6 +46,10 @@ def db_fixture(ydb_cluster):
 
     ydb_cluster.remove_database(DATABASE)
     ydb_cluster.unregister_and_stop_slots(database_nodes)
+
+
+def unique_user_name(prefix):
+    return f"{prefix}{uuid.uuid4().hex[:8]}"
 
 
 def create_user(ydb_cluster, admin_config, user_name):

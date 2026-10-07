@@ -3,7 +3,8 @@
 #include "public.h"
 
 #include <yt/yt/core/actions/future.h>
-#include <yt/yt/core/misc/ring_queue.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
 
 namespace NYT::NConcurrency {
 
@@ -24,7 +25,7 @@ public:
     TFuture<T> Dequeue();
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
 
     TRingQueue<TFuture<T>> AsyncValueQueue_;
     TRingQueue<TPromise<T>> PromiseQueue_;
@@ -53,7 +54,7 @@ public:
 private:
     const i64 SizeLimit_ = 0;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
 
     TRingQueue<TFuture<T>> AsyncValueQueue_;
     TRingQueue<TPromise<T>> ConsumerQueue_;

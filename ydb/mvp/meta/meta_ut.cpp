@@ -6,9 +6,12 @@
 
 #include <ydb/library/actors/http/http.h>
 
+#include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/folder/path.h>
 #include <util/generic/yexception.h>
+#include <util/stream/file.h>
 #include <yaml-cpp/yaml.h>
 
 static NMvp::NMeta::TMetaAppConfig ParseConfig(const TString& yaml) {
@@ -101,6 +104,29 @@ generic:
             "Check that `meta` section exists and is on the same indentation as `generic` section"
         );
     }
+
+    Y_UNIT_TEST(ExampleConfigsParse) {
+        const TFsPath examplesPath = TFsPath(ArcadiaFromCurrentLocation(__SOURCE_FILE__, "examples"));
+        UNIT_ASSERT_C(examplesPath.IsDirectory(), "Examples directory not found: " << examplesPath.GetPath());
+        TVector<TString> fileNames;
+        examplesPath.ListNames(fileNames);
+        int parsedFiles = 0;
+
+        for (const TString& fileName : fileNames) {
+            if (!fileName.EndsWith(".yaml")) {
+                continue;
+            }
+
+            const TFsPath filePath = examplesPath / fileName;
+            UNIT_ASSERT_NO_EXCEPTION_C(
+                ParseConfig(TFileInput(filePath.GetPath()).ReadAll()),
+                "Failed to parse " << filePath.GetPath()
+            );
+            ++parsedFiles;
+        }
+
+        UNIT_ASSERT_C(parsedFiles > 0, "No .yaml example configs found in " << examplesPath.GetPath());
+    }
 }
 
 Y_UNIT_TEST_SUITE(SupportLinksSourceValidation) {
@@ -109,7 +135,7 @@ Y_UNIT_TEST_SUITE(SupportLinksSourceValidation) {
         return NMVP::TMVP(1, argv);
     }
 
-    Y_UNIT_TEST(RejectsMissingSourceInConfig) {
+    Y_UNIT_TEST(AllowsUrlSourceWithoutSourceField) {
         auto mvp = MakeTestMvp();
         const TString yaml = R"(
 generic:
@@ -123,7 +149,51 @@ meta:
         url: "https://example.test"
 )";
         const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(mvp.TryGetMetaOptionsFromConfig(appConfig), yexception, "source is required");
+        UNIT_ASSERT_NO_EXCEPTION(mvp.TryGetMetaOptionsFromConfig(appConfig));
+    }
+
+    Y_UNIT_TEST(UrlSourceRejectsGrafanaOnlyFields) {
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  support_links:
+    cluster:
+      - title: "Broken"
+        url: "https://example.test"
+        tag: ["ui-cluster"]
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            mvp.TryGetMetaOptionsFromConfig(appConfig),
+            yexception,
+            "tag is not supported for source=url"
+        );
+    }
+
+    Y_UNIT_TEST(NonUrlSourceRejectsTemplatePlaceholdersInUrl) {
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  support_links:
+    cluster:
+      - source: "grafana/dashboard"
+        title: "Broken"
+        url: "/d/{dashboard}"
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            mvp.TryGetMetaOptionsFromConfig(appConfig),
+            yexception,
+            "url template placeholders are not supported for source=grafana/dashboard"
+        );
     }
 
     Y_UNIT_TEST(UnsupportedSourceInConfigThrows) {

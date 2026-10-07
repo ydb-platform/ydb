@@ -15,10 +15,15 @@ SRCS(
     bool_ut.cpp
     datatime64_ut.cpp
     decimal_ut.cpp
+    dictionary_ut.cpp
+    dynumber_ut.cpp
+    interval_ut.cpp
     json_ut.cpp
+    uuid_ut.cpp
 )
 
 PEERDIR(
+    yql/essentials/types/binary_json
     ydb/core/testlib
     ydb/core/kqp
     ydb/core/kqp/ut/common
@@ -30,10 +35,11 @@ PEERDIR(
     ydb/core/kqp/ut/olap/combinatory
     ydb/core/tx/datashard/ut_common
     ydb/public/sdk/cpp/src/client/operation
+    yql/essentials/types/dynumber
 )
 
 YQL_LAST_ABI_VERSION()
 
-GENERATE_ENUM_SERIALIZATION(bool_test_enums.h)
+GENERATE_ENUM_SERIALIZATION(column_type_test_enums.h)
 
 END()

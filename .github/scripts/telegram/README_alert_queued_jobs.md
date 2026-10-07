@@ -12,7 +12,7 @@
 
 | Type | Name | Description |
 |------|------|-------------|
-| Secret | `TELEGRAM_YDBOT_TOKEN` | Bot token (passed as `TELEGRAM_BOT_TOKEN` in the workflow). |
+| Secret | `YDBOT_TELEGRAM_BOT_TOKEN` | Bot token (passed as `TELEGRAM_BOT_TOKEN` in the workflow). |
 | Variable | `GH_ALERTS_TG_LOGINS` | Call string at the **start** of alert messages so the duty bot reacts (e.g. `"/duty ydb-ci"` or `"@user"`). Empty = no call. |
 | Variable | `GH_ALERTS_RUNS_BLACK_LIST` | Space-separated run IDs to ignore (passed as `--blacklist`). |
 

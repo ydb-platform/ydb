@@ -1,9 +1,16 @@
 #pragma once
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
-#include <ydb/library/actors/core/actor.h>
+#include <util/datetime/base.h>
+#include <util/generic/ptr.h>
+#include <util/generic/string.h>
+#include <util/system/types.h>
+
+#include <memory>
+#include <optional>
 
 namespace NKikimrConfig {
 
@@ -19,13 +26,17 @@ class StreamingDisposition;
 
 namespace NKikimr::NKqp {
 
+class TKqpCounters;
+
 struct TKqpRunScriptActorSettings {
     TString Database;
     TString ExecutionId;
+    NWilson::TTraceId TraceId;
     i64 LeaseGeneration = 0;
     TDuration LeaseDuration;
     TDuration ResultsTtl;
     TDuration ProgressStatsPeriod;
+    std::optional<TDuration> CheckpointInterval;
     TIntrusivePtr<TKqpCounters> Counters;
     bool SaveQueryPhysicalGraph = false;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
@@ -33,6 +44,7 @@ struct TKqpRunScriptActorSettings {
     TString CheckpointId;
     TString StreamingQueryPath;
     TString CustomerSuppliedId;
+    TString WatermarkLateEventsPolicy;
     std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
 };
 

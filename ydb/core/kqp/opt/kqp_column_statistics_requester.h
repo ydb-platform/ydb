@@ -61,7 +61,10 @@ private:
 
 private:
     TMaybe<std::pair<TString, TString>> GetTableAndColumnNames(const TCoMember& member);
-
+    TVector<std::pair<TString, TString>> GetEquiJoinConditions(const TCoEquiJoin& equiJoin);
+    void GetEquiJoinConditions(const TCoEquiJoinTuple& joinTuple, 
+        THashMap<TString, TExprNode::TPtr> & joinArgMap,
+        TVector<std::pair<TString, TString>> & result);
 private:
     THashMap<TExprNode::TPtr, TExprNode::TPtr> KqpTableByExprNode;
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
@@ -69,7 +72,7 @@ private:
 
     //////////////////////////////////////////////////////////////
     /* for waiting response with column statistics */
-    std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
+    std::shared_ptr<TColumnStatisticsSharedState> SharedState;
     NThreading::TFuture<void> AsyncReadiness;
 
     //////////////////////////////////////////////////////////////

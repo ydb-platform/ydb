@@ -15,7 +15,8 @@ private:
 public:
     TMergedColumn(const TColumnMergeContext& context)
         : Context(context)
-        , Portion(Context) {
+        , Portion(Context)
+    {
     }
 
     const TColumnPortion& GetPortion() const {

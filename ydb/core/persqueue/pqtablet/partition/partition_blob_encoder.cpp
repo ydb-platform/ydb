@@ -1,6 +1,9 @@
 #include "partition_blob_encoder.h"
 #include "partition_util.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/library/actors/core/log.h>
+
 namespace NKikimr::NPQ {
 
 TPartitionBlobEncoder::TPartitionBlobEncoder(const TPartitionId& partition, bool fastWrite)
@@ -67,6 +70,10 @@ ui64 TPartitionBlobEncoder::GetBodySizeBefore(TInstant expirationTimestamp) cons
     return size;
 }
 
+bool TPartitionBlobEncoder::IsKeyGreaterThan(const TKey& key, ui64 offset, ui32 partNo) const {
+    return offset < key.GetOffset() || (offset == key.GetOffset() && partNo < key.GetPartNo());
+}
+
 TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 startOffset,
                                                                 const ui16 partNo,
                                                                 const ui32 maxCount,
@@ -79,7 +86,7 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
     TVector<TRequestedBlob> blobs;
     if (!DataKeysBody.empty() && PositionInBody(startOffset, partNo)) { //will read smth from body
         auto it = std::upper_bound(DataKeysBody.begin(), DataKeysBody.end(), std::make_pair(startOffset, partNo),
-            [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
+            [this](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return IsKeyGreaterThan(p.Key, offsetAndPartNo.first, offsetAndPartNo.second); });
         if (it == DataKeysBody.begin()) { //could be true if data is deleted or gaps are created
             return blobs;
         }
@@ -89,8 +96,10 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
         AFL_ENSURE(it->Key.GetOffset() < startOffset || (it->Key.GetOffset() == startOffset && it->Key.GetPartNo() <= partNo));
         ui32 cnt = 0;
         ui32 sz = 0;
-        if (startOffset > it->Key.GetOffset() + it->Key.GetCount()) { //there is a gap
-            ++it;
+        if (startOffset > it->Key.GetOffset() + it->Key.GetCount()) { //there is a gap or startOffset is inside the batch
+            if (!it->Key.HasOffsetDelta() || startOffset >= it->Key.GetOffset() + *it->Key.GetOffsetDelta()) {
+                ++it;
+            }
             if (it != DataKeysBody.end()) {
                 cnt = it->Key.GetCount();
                 sz = it->Size;
@@ -151,13 +160,14 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
             ui64 curOffset = offset;
 
             AFL_ENSURE(pno == blobs[i].GetPartNo());
-            bool skip = offset < startOffset || offset == startOffset &&
-                blobs[i].GetPartNo() < partNo;
+            bool skip = (offset + blobs[i].LogicalMessageCount <= startOffset)
+                || (offset == startOffset && blobs[i].GetPartNo() < partNo);
+
             if (0 < lastOffset && lastOffset <= offset) {
                 break;
             }
             if (blobs[i].IsLastPart()) {
-                ++offset;
+                offset += blobs[i].LogicalMessageCount;
                 pno = 0;
             } else {
                 ++pno;
@@ -277,7 +287,11 @@ bool TPartitionBlobEncoder::PositionInBody(ui64 offset, ui32 partNo) const
         }
 
         const auto& lastKey = DataKeysBody.back().Key;
-        pos = std::make_pair(lastKey.GetOffset() + lastKey.GetCount(), 0);
+        if (lastKey.HasOffsetDelta()) {
+            pos = std::make_pair(lastKey.GetOffset() + *lastKey.GetOffsetDelta(), 0);
+        } else {
+            pos = std::make_pair(lastKey.GetOffset() + lastKey.GetCount(), 0);
+        }
 
         return required <= pos;
     }
@@ -340,7 +354,7 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
     AFL_ENSURE(size >= valueD.size());
 
     if (size > valueD.size() && key.HasSuffix()) { //change to real size if real packed size is smaller
-        Y_ABORT("Can't be here right now, only after merging of small batches");
+        AFL_ENSURE(false)("reason", "Can't be here right now, only after merging of small batches")("key", key.ToString())("size", size)("value_size", valueD.size());
 
         //for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
         //    if (it->KeysCount() > 0 ) {
@@ -367,21 +381,44 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
     return valueD;
 }
 
+namespace {
+
+TKey WithHeadOffsetDelta(TKey&& key, const THead& head) {
+    if (HasAppData()
+        && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()
+        && !head.GetBatches().empty())
+    {
+        const ui64 offsetDelta = head.GetOffsetDelta();
+        if (offsetDelta > 0) {
+            key.SetOffsetDelta(offsetDelta);
+        }
+    }
+    return std::move(key);
+}
+
+} // namespace
+
 TKey TPartitionBlobEncoder::KeyForWrite(TKeyPrefix::EType type,
                                         const TPartitionId& partitionId,
                                         bool needCompaction) const
 {
     AFL_ENSURE(!ForFastWrite);
     if (needCompaction) {
-        return TKey::ForBody(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
+        return WithHeadOffsetDelta(
+            TKey::ForBody(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount()),
+            NewHead);
     }
-    return TKey::ForHead(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
+    return WithHeadOffsetDelta(
+        TKey::ForHead(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount()),
+        NewHead);
 }
 
 TKey TPartitionBlobEncoder::KeyForFastWrite(TKeyPrefix::EType type, const TPartitionId& partitionId) const
 {
     AFL_ENSURE(ForFastWrite);
-    return TKey::ForFastWrite(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
+    return WithHeadOffsetDelta(
+        TKey::ForFastWrite(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount()),
+        NewHead);
 }
 
 void TPartitionBlobEncoder::NewPartitionedBlob(const TPartitionId& partitionId,
@@ -622,6 +659,43 @@ void TPartitionBlobEncoder::pop_front() {
     ScheduleDelete(key);
     BodySize -= key.Size;
     DataKeysBody.pop_front();
+}
+
+void TPartitionBlobEncoder::PopFrontHeadKey() {
+    AFL_ENSURE(!HeadKeys.empty());
+
+    const TDataKey deletedKey = HeadKeys.front();
+    ScheduleDelete(HeadKeys.front());
+    HeadKeys.pop_front();
+
+    for (auto& level : DataKeysHead) {
+        if (level.KeysCount() > 0) {
+            AFL_ENSURE(level.GetKey(0) == deletedKey.Key);
+            level.PopFront();
+            break;
+        }
+    }
+
+    AFL_ENSURE(Head.PackedSize >= deletedKey.Size);
+    Head.PackedSize -= deletedKey.Size;
+
+    if (HeadKeys.empty()) {
+        Head.Clear();
+        return;
+    }
+
+    const auto& frontKey = HeadKeys.front().Key;
+    Head.Offset = frontKey.GetOffset();
+    Head.PartNo = frontKey.GetPartNo();
+
+    while (!Head.GetBatches().empty()) {
+        const auto& batch = Head.GetBatch(0);
+        if (batch.GetOffset() > frontKey.GetOffset() ||
+            (batch.GetOffset() == frontKey.GetOffset() && batch.GetPartNo() >= frontKey.GetPartNo())) {
+            break;
+        }
+        Head.ExtractFirstBatch();
+    }
 }
 
 void TPartitionBlobEncoder::ScheduleDelete(TDataKey& key) {

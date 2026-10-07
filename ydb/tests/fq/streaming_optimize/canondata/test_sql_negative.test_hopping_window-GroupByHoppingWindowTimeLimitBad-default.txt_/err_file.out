@@ -1,6 +1,5 @@
-Failed to execute query, invalid final status FAILED, issues:
-<main>: Error: Query failed with code ABORTED at ISOTIME
-    <main>: Error: Failed to parse query
-        <main>: Error: Parse Sql
-            <main>:31:25: Error: Invalid value "barfoo" for type Interval
+Failed to execute query, reason:
+Request finished with status: GENERIC_ERROR
+Issues:
+<main>:22:13: Error: Invalid value "barfoo" for type Interval
 

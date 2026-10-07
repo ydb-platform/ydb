@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_id.h>
 
@@ -47,6 +47,9 @@ inline TIssue YqlIssue(const TPosition& position, EYqlIssueCode id, const TStrin
 inline TIssue YqlIssue(const TPosition& position, EYqlIssueCode id) {
     return YqlIssue(position, id, IssueCodeToString(id));
 }
+
+// Initializes and retains the built-in issue metadata while memory is available.
+void PreloadIssueRegistry();
 
 // reportTarget allows to describe a way to report bugs (e.g. a GitHub issue)
 void CheckFatalIssues(TIssues& issues, const TString& reportTarget);

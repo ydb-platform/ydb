@@ -18,6 +18,7 @@ Y_UNIT_TEST_SUITE(RuntimeFeatureFlags) {
         // Check some known defaults (both true and false)
         CHECK_FLAG_MATCHES(flags, proto, TrimEntireDeviceOnStartup);
         CHECK_FLAG_MATCHES(flags, proto, EnableFailureInjectionTermination);
+        CHECK_FLAG_MATCHES(flags, proto, EnableTopicDeferredPublish);
     }
 
     Y_UNIT_TEST(ConversionToProto) {

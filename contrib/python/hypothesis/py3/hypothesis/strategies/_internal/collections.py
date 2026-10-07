@@ -10,8 +10,8 @@
 
 import copy
 import math
-from collections.abc import Callable, Iterable
-from typing import Any, overload
+from collections.abc import Callable, Iterable, Mapping
+from typing import Any, TypeGuard, overload
 
 from hypothesis import strategies as st
 from hypothesis.control import current_build_context
@@ -232,7 +232,15 @@ class ListStrategy(SearchStrategy[list[Ex]]):
             f"min_size={self.min_size:_}, max_size={self.max_size:_})"
         )
 
-    def filter(self, condition: Callable[[list[Ex]], Any]) -> SearchStrategy[list[Ex]]:
+    @overload
+    def filter(
+        self, condition: Callable[[list[Ex]], TypeGuard[T]]
+    ) -> "SearchStrategy[T]": ...
+    @overload
+    def filter(
+        self, condition: Callable[[list[Ex]], Any]
+    ) -> "SearchStrategy[list[Ex]]": ...
+    def filter(self, condition):
         if condition in self._nonempty_filters or is_identity_function(condition):
             assert self.max_size >= 1, "Always-empty is special cased in st.lists()"
             if self.min_size >= 1:
@@ -321,7 +329,7 @@ class UniqueListStrategy(ListStrategy[Ex]):
                 for key, seen in zip(self.keys, seen_sets, strict=True):
                     seen.add(key(value))
                 if self.tuple_suffixes is not None:
-                    value = (value, *data.draw(self.tuple_suffixes))  # type: ignore
+                    value = (value, *data.draw(self.tuple_suffixes))
                 result.append(value)
         assert self.max_size >= len(result) >= self.min_size
         return result
@@ -362,37 +370,37 @@ class UniqueSampledListStrategy(UniqueListStrategy):
         return result
 
 
-class FixedDictStrategy(SearchStrategy[dict[Any, Any]]):
-    """A strategy which produces dicts with a fixed set of keys, given a
+class FixedDictStrategy(SearchStrategy[Mapping[Any, Any]]):
+    """A strategy which produces mappings with a fixed set of keys, given a
     strategy for each of their equivalent values.
 
-    e.g. {'foo' : some_int_strategy} would generate dicts with the single
+    e.g. {'foo' : some_int_strategy} would generate mappings with the single
     key 'foo' mapping to some integer.
     """
 
     def __init__(
         self,
-        mapping: dict[Any, SearchStrategy[Any]],
+        mapping: Mapping[Any, SearchStrategy[Any]],
         *,
-        optional: dict[Any, SearchStrategy[Any]] | None,
+        optional: Mapping[Any, SearchStrategy[Any]] | None,
     ):
         super().__init__()
         dict_type = type(mapping)
         self.mapping = mapping
         keys = tuple(mapping.keys())
         self.fixed = st.tuples(*[mapping[k] for k in keys]).map(
-            lambda value: dict_type(zip(keys, value, strict=True))
+            lambda value: dict_type(zip(keys, value, strict=True))  # type: ignore
         )
         self.optional = optional
 
-    def do_draw(self, data: ConjectureData) -> dict[Any, Any]:
+    def do_draw(self, data: ConjectureData) -> Mapping[Any, Any]:
         context = current_build_context()
         arg_labels: ArgLabelsT = {}
-        value = type(self.mapping)()
+        pairs: list[tuple[Any, Any]] = []
 
         for key, strategy in self.mapping.items():
             with context.track_arg_label(str(key)) as arg_label:
-                value[key] = data.draw(strategy)
+                pairs.append((key, data.draw(strategy)))
             arg_labels |= arg_label
 
         if self.optional is not None:
@@ -408,12 +416,17 @@ class FixedDictStrategy(SearchStrategy[dict[Any, Any]]):
                 remaining[-1], remaining[j] = remaining[j], remaining[-1]
                 key = remaining.pop()
                 with context.track_arg_label(str(key)) as arg_label:
-                    value[key] = data.draw(self.optional[key])
+                    pairs.append((key, data.draw(self.optional[key])))
                 arg_labels |= arg_label
+
+        # Vary the dict's iteration order (#3906).  We shuffle after choosing
+        # the optional keys, so only order varies, not the set of keys.
+        cu.fisher_yates_shuffle(data, pairs)
+        value = type(self.mapping)(pairs)  # type: ignore
 
         if arg_labels:
             context.known_object_printers[IDKey(value)].append(
-                _fixeddict_pprinter(arg_labels, self.mapping)
+                _fixeddict_pprinter(arg_labels)
             )
         return value
 

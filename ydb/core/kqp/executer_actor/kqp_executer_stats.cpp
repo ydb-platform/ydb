@@ -1,5 +1,6 @@
 #include "kqp_executer_stats.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
 namespace NKikimr::NKqp {
@@ -414,6 +415,7 @@ void TTableStats::Resize(ui32 taskCount) {
     EraseRows.resize(taskCount);
     EraseBytes.resize(taskCount);
     AffectedPartitions.resize(taskCount);
+    AffectedRows.resize(taskCount);
 }
 
 void TOperatorStats::Resize(ui32 taskCount) {
@@ -470,6 +472,7 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
     MemoryUsage.Resize(taskCount);
     MaxMemoryUsage.Resize(taskCount);
     Finished.resize(taskCount);
+    TaskNodeId.resize(taskCount);
 }
 
 void TStageExecutionStats::SetHistorySampleCount(ui32 historySampleCount) {
@@ -537,7 +540,19 @@ ui64 TStageExecutionStats::UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncSt
     return baseTimeMs;
 }
 
-ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs) {
+void TStageExecutionStats::SetTaskNode(ui32 index, ui32 nodeId) {
+    AFL_ENSURE(index < TaskNodeId.size());
+    if (nodeId && !TaskNodeId[index]) {
+        TaskNodeId[index] = nodeId;
+        auto& node = Nodes[nodeId];
+        node.Tasks++;
+        if (Finished[index]) {
+            node.Finished++;
+        }
+    }
+}
+
+ui64 TStageExecutionStats::UpdateStats(ui32 nodeId, const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs) {
     auto taskId = taskStats.GetTaskId();
     auto it = Task2Index.find(taskId);
     ui64 baseTimeMs = 0;
@@ -556,10 +571,15 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
         index = it->second;
     }
 
+    SetTaskNode(index, nodeId);
+
     if (state == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
         if (!Finished[index]) {
             Finished[index] = true;
             FinishedCount++;
+            if (auto taskNodeId = TaskNodeId[index]) {
+                Nodes[taskNodeId].Finished++;
+            }
         }
     }
 
@@ -612,6 +632,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
         SetNonZero(aggrTableStats.EraseRows, index, tableStat.GetEraseRows());
         SetNonZero(aggrTableStats.EraseBytes, index, tableStat.GetEraseBytes());
         SetNonZero(aggrTableStats.AffectedPartitions, index, tableStat.GetAffectedPartitions());
+        SetNonZero(aggrTableStats.AffectedRows, index, tableStat.GetAffectedRows());
     }
 
     for (auto& sourceStat : taskStats.GetSources()) {
@@ -741,6 +762,39 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
 }
 
 bool TStageExecutionStats::IsDeadlocked(ui64 deadline) const {
+    /*
+        Deadlocked stage criterion:
+
+        1. Stage is not finished yet
+        2. Stage does not produce any output, finish status and does not schedule continuation events from MKQL for a long time
+        3. All stage sources has no any data extraction attempts for a long time
+        4. Stage have input channels sets and for each channels set stage does not extract any data from it for a long time
+           (1, 2, 3, 4 => for correct program, at least one input channel set permanently empty and does not receive any data)
+        5. All input stages for each input channels set are one of:
+           - Finished for a long time
+           - Waiting for sending data (has overflow buffer) for all output channels sets and sinks for a long time
+             (except merge channel set, there must be overflow for all output channels in such set)
+           - Deadlocked
+
+        Notice, that from criterion above follow that we must hit one of cases:
+
+        - There is some non full input channel that does not receive data, but input stage has some data to send into this channel
+          => hanging in sending channel data between stages / major network problem between nodes
+        - Part of stage input channels got checkpoint barrier and there is some channel/source `X` without checkpoint barrier on top of it
+          and stage does not read data from `X`
+          => checkpointing contract violation
+        - Stage does not read data from any input channel/source and produce `Yield` for a long time
+          => DQ program contract violation
+
+        N.B. criterion may not detect cases when:
+        1. Only one channel between some two tasks is hanging and cannot send data
+        2. Deadlock due to diamond-shaped dependence of two stages with incompatible inputs read ordering
+    */
+
+    // Checking only CurrentWaitInputTimeUs may lead to false-positive detection due to missing:
+    // - Output producing with active input reading (returns `Yield` + produces some data)
+    // - Long spilling in MKQL node
+    // - Reading sources / channels without producing data (e. g. GROUP BY HOP with long window)
     if (CurrentWaitInputTimeUs.MinValue < deadline || InputStages.empty()) {
         return false;
     }
@@ -748,10 +802,17 @@ bool TStageExecutionStats::IsDeadlocked(ui64 deadline) const {
     for (auto stat : InputStages) {
         if (stat->IsFinished()) {
             auto nowMs = TInstant::Now().MilliSeconds();
+            // N.B. does not support graph with checkpoints, where stage continue stats sending after finish
             if (nowMs < stat->UpdateTimeMs || (nowMs - stat->UpdateTimeMs) * 1000 < deadline) {
                 return false;
             }
         } else {
+            // Checking only CurrentWaitOutputTimeUs may lead to false-positive is stage have multiple
+            // output channels sets / sinks / merge channel, in this case large output wait time may be reason
+            // of slow sending data into other stage (not current one)
+            //
+            // N.B. call !stat->IsDeadlocked() lead to exponential complexity of IsDeadlocked function on graphs with diamond-shaped dependencies
+            // (possible with spilling)
             if (stat->CurrentWaitOutputTimeUs.MinValue < deadline && !stat->IsDeadlocked(deadline)) {
                 return false;
             }
@@ -760,7 +821,7 @@ bool TStageExecutionStats::IsDeadlocked(ui64 deadline) const {
     return true;
 }
 
-bool TStageExecutionStats::IsFinished() {
+bool TStageExecutionStats::IsFinished() const {
     return FinishedCount == Task2Index.size();
 }
 
@@ -838,6 +899,7 @@ void TNodeExecutionStats::UpdateStats(const NYql::NDqProto::TEvNodeState& state)
         .InputInflightBytes = state.GetInputInflightBytes(),
         .OutputInflightBytes = state.GetOutputInflightBytes(),
         .LocalInflightBytes = state.GetLocalInflightBytes(),
+        .MemQueryAllocated = state.GetMemQueryAllocated(),
     });
 }
 
@@ -881,7 +943,7 @@ NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDq::TStageId& stageI
     const TKqpTasksGraph& tasksGraph, NDqProto::TDqExecutionStats& execStats)
 {
     auto& stageInfo = tasksGraph.GetStageInfo(stageId);
-    auto& stageProto = stageInfo.Meta.Tx.Body->GetStages(stageId.StageId);
+    auto& stageProto = stageInfo.Meta.GetStage(stageId);
 
     for (auto& stage : *execStats.MutableStages()) {
         if (stage.GetStageGuid() == stageProto.GetStageGuid()) {
@@ -971,7 +1033,7 @@ void TQueryExecutionStats::Prepare() {
                 auto& info = TasksGraph->GetStageInfo(stageStats.StageId);
                 auto& stage = info.Meta.GetStage(info.Id);
                 for (const auto& input : stage.GetInputs()) {
-                    auto& peerStageStats = StageStats[NYql::NDq::TStageId(stageStats.StageId.TxId, input.GetStageIndex())];
+                    auto& peerStageStats = StageStats[TasksGraph->MakeStageId(stageStats.StageId.TxId, input.GetStageIndex())];
                     stageStats.InputStages.push_back(&peerStageStats);
                     stageStats.Input.emplace(peerStageStats.StageId.StageId, 0);
                     peerStageStats.OutputStages.push_back(&stageStats);
@@ -1005,7 +1067,7 @@ void TQueryExecutionStats::FillStageDurationUs(NYql::NDqProto::TDqStageStats& st
 }
 
 ui64 TQueryExecutionStats::EstimateCollectMem() {
-    ui64 result = 0;
+    ui64 result = CollectCurrentQueryStats ? CurrentTaskStats.capacity() * sizeof(TCurrentTaskStats) : 0;
     for (auto& [_, stageStat] : StageStats) {
         result += stageStat.EstimateMem();
     }
@@ -1109,6 +1171,7 @@ void TQueryExecutionStats::UpdateQueryTables(const NYql::NDqProto::TDqTaskStats&
         queryTableStats.WriteBytes.SetNonZero(index, tableStat.GetWriteBytes());
         queryTableStats.EraseRows.SetNonZero(index, tableStat.GetEraseRows());
         queryTableStats.EraseBytes.SetNonZero(index, tableStat.GetEraseBytes());
+        queryTableStats.AffectedRows.SetNonZero(index, tableStat.GetAffectedRows());
 
         if (txStats) {
             auto& tableShards = TableShards[tablePath];
@@ -1157,6 +1220,10 @@ void TQueryExecutionStats::UpdateStorageTables(const NYql::NDqProto::TDqTaskStat
         queryTableStats.StorageStats.WriteBytes += tableStat.GetWriteBytes();
         queryTableStats.StorageStats.EraseRows += tableStat.GetEraseRows();
         queryTableStats.StorageStats.EraseBytes += tableStat.GetEraseBytes();
+        if (tableStat.HasAffectedRows()) {
+            queryTableStats.StorageStats.AffectedRows =
+                queryTableStats.StorageStats.AffectedRows.value_or(0) + tableStat.GetAffectedRows();
+        }
         if (txStats) {
             auto& tableShards = TableShards[tablePath];
             for (const auto& perShard : txStats->GetPerShardStats()) {
@@ -1173,8 +1240,43 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
     NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
 
     if (taskId) {
+        if (CollectCurrentQueryStats) {
+            AFL_ENSURE(taskId <= TaskCount);
+            CurrentTaskStats.resize(TaskCount);
+            auto& current = CurrentTaskStats[taskId - 1];
+            CurrentMemoryBytes -= current.MemoryBytes;
+            current.MemoryBytes = state == NDqProto::COMPUTE_STATE_EXECUTING
+                ? stats.GetMemoryUsage() : 0;
+            CurrentMemoryBytes += current.MemoryBytes;
+        }
+        // CA may fail before SetTaskRunner (e.g. WASM compartment acquire);
+        // FillStats then sends empty Tasks. Do not ENSURE — that would mask
+        // the real failure issues from COMPUTE_STATE_FAILURE.
+        if (stats.GetTasks().empty()) {
+            return;
+        }
         AFL_ENSURE(stats.GetTasks().size() == 1);
         AFL_ENSURE(stats.GetTasks(0).GetTaskId() == taskId);
+        if (CollectCurrentQueryStats) {
+            auto readIngressBytes = stats.GetTasks(0).GetIngressBytes();
+            if (!CollectFullStats(StatsMode) && TasksGraph) {
+                const auto& task = TasksGraph->GetTask(taskId);
+                const auto& stage = TasksGraph->GetStageInfo(task.StageId);
+                if (task.Meta.ScanTask && (stage.Meta.IsDatashard() || stage.Meta.IsOlap())) {
+                    // Scan compute actors include scan bytes in IngressBytes only in FULL/PROFILE.
+                    // BASIC already carries the same counter in table stats.
+                    for (const auto& table : stats.GetTasks(0).GetTables()) {
+                        if (table.GetTablePath() == stage.Meta.TablePath) {
+                            readIngressBytes += table.GetReadBytes();
+                        }
+                    }
+                }
+            }
+            auto& current = CurrentTaskStats[taskId - 1];
+            CurrentReadIngressBytes -= current.ReadIngressBytes;
+            current.ReadIngressBytes = std::max(current.ReadIngressBytes, readIngressBytes);
+            CurrentReadIngressBytes += current.ReadIngressBytes;
+        }
     }
 
     for (auto& taskStats : stats.GetTasks()) {
@@ -1228,18 +1330,19 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     stageStats.TaskCount = 4;
                     stageStats.Resize(4);
                 }
-                BaseTimeMs = NonZeroMin(BaseTimeMs, stageStats.UpdateStats(taskStats, state, stats.GetMemoryUsage(), stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
+                BaseTimeMs = NonZeroMin(BaseTimeMs, stageStats.UpdateStats(nodeId, taskStats, state, stats.GetMemoryUsage(), stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
 
-                constexpr ui64 deadline = 600'000'000; // 10m
-                if (stageStats.CurrentWaitOutputTimeUs.MinValue > deadline) {
-                    for (auto stat : stageStats.OutputStages) {
-                        if (stat->IsDeadlocked(deadline)) {
-                            DeadlockedStageId = stat->StageId.StageId;
-                            break;
+                if (DeadlockTimeoutUs) {
+                    if (stageStats.CurrentWaitOutputTimeUs.MinValue > DeadlockTimeoutUs) {
+                        for (auto stat : stageStats.OutputStages) {
+                            if (stat->IsDeadlocked(DeadlockTimeoutUs)) {
+                                DeadlockedStageId = stat->StageId.StageId;
+                                break;
+                            }
                         }
+                    } else if (stageStats.IsDeadlocked(DeadlockTimeoutUs)) {
+                        DeadlockedStageId = stageStats.StageId.StageId;
                     }
-                } else if (stageStats.IsDeadlocked(deadline)) {
-                    DeadlockedStageId = stageStats.StageId.StageId;
                 }
 
                 if (nodeId)
@@ -1483,11 +1586,27 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
     stats.SetLocalBytes(ExportAggStats(data.LocalBytes));
 }
 
+TCurrentQueryResources TQueryExecutionStats::GetCurrentQueryResources() const {
+    TCurrentQueryResources result;
+    result.CpuTimeUs = StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
+    result.ComputeMemoryBytes = CurrentMemoryBytes;
+    result.ReadIngressBytes = CurrentReadIngressBytes;
+    return result;
+}
+
+TCurrentExecStatsReport TQueryExecutionStats::TakeCurrentStats(bool finished) {
+    auto current = GetCurrentQueryResources();
+    if (finished) {
+        current.ComputeMemoryBytes = 0;
+    }
+    return {current, ++CurrentStatsSequenceNo};
+}
+
 void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     if (!metrics) {
         return;
     }
-    metrics->CpuTimeMs = (StorageCpuTimeUs + ComputeCpuTimeUs.Sum) / 1000;
+    metrics->CpuTimeMs = GetCpuTimeUs() / 1000;
     metrics->DurationSeconds = (TInstant::Now().MicroSeconds() - StartTs.MicroSeconds()) / 1000000;
 
     ui64 memoryUsageBytes = 0;
@@ -1519,15 +1638,30 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
             THashMap<ui32, NDqProto::TDqStageStats*> protoStages;
 
             for (auto& [stageId, stagetype] : TasksGraph->GetStagesInfo()) {
-                if (stageId.TxId == 0) {
-                    protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
-                }
+                protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
             }
 
             for (auto& [stageId, stageStat] : StageStats) {
-                auto& stageStats = *protoStages[stageStat.StageId.StageId];
+                auto it = protoStages.find(stageStat.StageId.StageId);
+                YQL_ENSURE(it != protoStages.end());
+                auto& stageStats = *it->second;
                 stageStats.SetTotalTasksCount(stageStat.Task2Index.size());
                 stageStats.SetFinishedTasksCount(stageStat.FinishedCount);
+
+                // Tasks that have not sent stats yet are attributed to the node their compute actor was started on
+                for (auto& [taskId, index] : stageStat.Task2Index) {
+                    if (taskId && !stageStat.TaskNodeId[index]) {
+                        if (const auto& computeActorId = TasksGraph->GetTask(taskId).ComputeActorId) {
+                            stageStat.SetTaskNode(index, computeActorId.NodeId());
+                        }
+                    }
+                }
+                for (auto& [nodeId, node] : stageStat.Nodes) {
+                    auto& nodeStats = *stageStats.AddNodes();
+                    nodeStats.SetNodeId(nodeId);
+                    nodeStats.SetTasks(node.Tasks);
+                    nodeStats.SetFinished(node.Finished);
+                }
 
                 stageStats.SetBaseTimeMs(BaseTimeMs);
                 stageStat.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
@@ -1571,6 +1705,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                     ExportAggStats(t.EraseRows, *table.MutableEraseRows());
                     ExportAggStats(t.EraseBytes, *table.MutableEraseBytes());
                     table.SetAffectedPartitions(ExportAggStats(t.AffectedPartitions));
+                    if (TasksGraph->GetMeta().CollectAffectedRows) {
+                        table.SetAffectedRows(ExportAggStats(t.AffectedRows));
+                    }
                 }
                 for (auto& [id, i] : stageStat.Ingress) {
                     ExportAggAsyncBufferStats(i, (*stageStats.MutableIngress())[id]);
@@ -1654,6 +1791,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                         stats.SetInputInflightBytes((usage.InputInflightBytes + 512_KB) / 1_MB);
                         stats.SetOutputInflightBytes((usage.OutputInflightBytes + 512_KB) / 1_MB);
                         stats.SetLocalInflightBytes((usage.LocalInflightBytes + 512_KB) / 1_MB);
+                        stats.SetMemQueryAllocated((usage.MemQueryAllocated + 512_KB) / 1_MB);
                     }
                 }
             }
@@ -1664,7 +1802,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         }
             [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
-            stats.SetCpuTimeUs(StorageCpuTimeUs + ComputeCpuTimeUs.Sum);
+            stats.SetCpuTimeUs(GetCpuTimeUs());
             stats.SetDurationUs(TInstant::Now().MicroSeconds() - StartTs.MicroSeconds());
             [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
@@ -1683,12 +1821,21 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         tableAggr.SetWriteBytes(t.StorageStats.WriteBytes + t.WriteBytes.Sum);
         tableAggr.SetEraseRows(t.StorageStats.EraseRows + t.EraseRows.Sum);
         tableAggr.SetEraseBytes(t.StorageStats.EraseBytes + t.EraseBytes.Sum);
+        if (TasksGraph->GetMeta().CollectAffectedRows) {
+            tableAggr.SetAffectedRows(t.StorageStats.AffectedRows.value_or(0) + t.AffectedRows.Sum);
+        }
         tableAggr.SetAffectedPartitions(t.StorageStats.AffectedPartitions +
             (t.AffectedPartitionsUniqueCount ? t.AffectedPartitionsUniqueCount : t.AffectedPartitions.Sum)
         );
     }
 
     ExtraStats.SetAffectedShards(AffectedShards.size());
+    // Executer TxId, so that query stats can be matched with LWTrace records.
+    // It is 0 for literal-only execution (such phases never reach shards).
+    // Gated by EnableTxIdInStats feature flag.
+    if (AppData()->FeatureFlags.GetEnableTxIdInStats() && TasksGraph && TasksGraph->GetMeta().TxId) {
+        ExtraStats.SetTxId(TasksGraph->GetMeta().TxId);
+    }
     stats.MutableExtra()->PackFrom(ExtraStats);
 }
 
@@ -1747,8 +1894,11 @@ void TProgressStat::Update() {
     Cur = TEntry();
 }
 
-TBatchOperationExecutionStats::TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode)
-    : StatsMode(statsMode) {}
+TBatchOperationExecutionStats::TBatchOperationExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode,
+        bool collectAffectedRows)
+    : StatsMode(statsMode)
+    , CollectAffectedRows(collectAffectedRows)
+{}
 
 void TBatchOperationExecutionStats::TakeExecStats(NYql::NDqProto::TDqExecutionStats&& stats) {
     for (const auto& tableStat : stats.GetTables()) {
@@ -1759,6 +1909,9 @@ void TBatchOperationExecutionStats::TakeExecStats(NYql::NDqProto::TDqExecutionSt
         tableStats.WriteBytes += tableStat.GetWriteBytes();
         tableStats.EraseRows += tableStat.GetEraseRows();
         tableStats.EraseBytes += tableStat.GetEraseBytes();
+        if (tableStat.HasAffectedRows()) {
+            tableStats.AffectedRows = tableStats.AffectedRows.value_or(0) + tableStat.GetAffectedRows();
+        }
     }
 
     CpuTimeUs += stats.GetCpuTimeUs();
@@ -1794,6 +1947,9 @@ void TBatchOperationExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecution
         tableAggr.SetWriteBytes(tableStats.WriteBytes);
         tableAggr.SetEraseRows(tableStats.EraseRows);
         tableAggr.SetEraseBytes(tableStats.EraseBytes);
+        if (CollectAffectedRows) {
+            tableAggr.SetAffectedRows(tableStats.AffectedRows.value_or(0));
+        }
 
         // TODO: it is not correct for indexImplTables
         tableAggr.SetAffectedPartitions(AffectedPartitions.size());

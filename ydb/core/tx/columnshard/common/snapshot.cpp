@@ -1,4 +1,5 @@
 #include "snapshot.h"
+
 #include <ydb/core/tx/columnshard/common/protos/snapshot.pb.h>
 
 #include <library/cpp/json/writer/json_value.h>
@@ -51,4 +52,4 @@ NJson::TJsonValue TSnapshot::SerializeToJson() const {
     return DebugJson();
 }
 
-};
+};   // namespace NKikimr::NOlap

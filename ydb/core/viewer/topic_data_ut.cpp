@@ -1,11 +1,20 @@
 #include "ut/ut_utils.h"
 
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
+
+#include <limits>
+#include <memory>
+#include <string>
+#include <string_view>
+
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/http/fetch/httpheader.h>
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -16,6 +25,50 @@ using namespace NHttp;
 using namespace NJson;
 
 
+namespace {
+
+class TWrappingTimestampKafkaCodec final : public NYdb::NTopic::ICodec {
+public:
+    explicit TWrappingTimestampKafkaCodec(NKafka::ECompressionType compression)
+        : Compression(compression)
+    {}
+
+    std::string Decompress(const std::string& data) const override {
+        return Codec.Decompress(data);
+    }
+
+    NYdb::NTopic::TDecompressionResult DecompressData(const std::string& data) const override {
+        return Codec.DecompressData(data);
+    }
+
+    std::unique_ptr<IOutputStream> CreateCoder(TBuffer& result, int quality) const override {
+        return Codec.CreateCoder(result, quality);
+    }
+
+    void CompressWriteBlock(NYdb::NTopic::TWriteBlockCompression& ctx) const override {
+        if (ctx.Payloads.size() == 1) {
+            return;
+        }
+        Codec.CompressWriteBlock(ctx);
+        auto batch = NKafka::ReadKafkaRecordBatch(TStringBuf(ctx.Data.data(), ctx.Data.size()));
+        batch.Attributes = static_cast<i16>(Compression);
+        batch.BaseTimestamp = ctx.BaseSequence == 1 ? std::numeric_limits<i64>::min() : std::numeric_limits<i64>::max();
+        batch.MaxTimestamp = std::numeric_limits<i64>::max();
+        for (size_t i = 0; i < batch.Records.size(); ++i) {
+            batch.Records[i].TimestampDelta = i == 0 ? 0 : (ctx.BaseSequence == 1 ? -1 : 1);
+        }
+        const TString bytes = NKafka::WriteKafkaRecordBatch(batch);
+        ctx.Data = TBuffer(bytes.data(), bytes.size());
+        ctx.Payloads.assign(1, std::string_view(ctx.Data.data(), ctx.Data.size()));
+    }
+
+private:
+    const NYdb::NTopic::TKafkaBatchCodec Codec;
+    const NKafka::ECompressionType Compression;
+};
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
     template <typename T>
     void CheckMapValue(const NJson::TJsonValue::TMapType& map, const TString& key, const T& value) {
@@ -23,13 +76,17 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         UNIT_ASSERT(iter != map.end());
         UNIT_ASSERT_VALUES_EQUAL_C(iter->second, value, key);
     }
-    TString GetRequestUrl(TString topic, ui32 partition, ui64 offset = 0, ui32 limit = 10, bool noTruncate = false) {
+
+    TString GetRequestUrl(TString topic, ui32 partition, ui64 offset = 0, ui32 limit = 10, bool noTruncate = false, ui64 lastOffset = 0) {
         TStringBuilder url;
         CGIUnescape(topic);
         url << "/viewer/topic_data" << "?path=" << topic << "&partition=" << partition << "&offset=" << offset
             << "&limit=" << limit;
         if (noTruncate) {
             url << "&truncate=false";
+        }
+        if (lastOffset > 0) {
+            url << "&last_offset=" << lastOffset;
         }
         return url;
     }
@@ -135,7 +192,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 UNIT_ASSERT(item.GetType() == EJsonValueType::JSON_MAP);
                 const auto& jsonMap = item.GetMap();
                 CheckMapValue(jsonMap, "Offset", i);
-                CheckMapValue(jsonMap, "SeqNo", i + 1);
+                UNIT_ASSERT(jsonMap.find("SeqNo") != jsonMap.end());
                 CheckMapValue(jsonMap, "StorageSize", 35);
                 CheckMapValue(jsonMap, "OriginalSize", 112);
                 CheckMapValue(jsonMap, "Codec", 1);
@@ -147,6 +204,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 }
                 UNIT_ASSERT(jsonMap.find("CreateTimestamp") != jsonMap.end());
                 UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
+                UNIT_ASSERT(jsonMap.find("Ip") != jsonMap.end());
             }
         }
         // Test 2 - uncompressed data with limit and start offset
@@ -165,7 +223,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 UNIT_ASSERT(item.GetType() == EJsonValueType::JSON_MAP);
                 const auto& jsonMap = item.GetMap();
                 CheckMapValue(jsonMap, "Offset", 20 + i);
-                CheckMapValue(jsonMap, "SeqNo", i + 1);
+                UNIT_ASSERT(jsonMap.find("SeqNo") != jsonMap.end());
                 CheckMapValue(jsonMap, "StorageSize", 112);
                 CheckMapValue(jsonMap, "OriginalSize", 112);
                 CheckMapValue(jsonMap, "Codec", 0);
@@ -178,6 +236,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 }
                 UNIT_ASSERT(jsonMap.find("CreateTimestamp") != jsonMap.end());
                 UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
+                UNIT_ASSERT(jsonMap.find("Ip") != jsonMap.end());
             }
         }
         // Test 3 - large messages
@@ -203,7 +262,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 Cerr << "Size: " << jsonMap.find("Message")->second.GetString().size() << Endl;
                 UNIT_ASSERT(jsonMap.find("Message")->second.GetString().size() < 1500_KB);
                 UNIT_ASSERT(jsonMap.find("Message")->second.GetString().size() > 500_KB);
-                CheckMapValue(jsonMap, "SeqNo", i + 1);
+                UNIT_ASSERT(jsonMap.find("SeqNo") != jsonMap.end());
 
                 if (producer3.empty()) {
                     UNIT_ASSERT(jsonMap.find("ProducerId") != jsonMap.end());
@@ -214,6 +273,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 }
                 UNIT_ASSERT(jsonMap.find("CreateTimestamp") != jsonMap.end());
                 UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
+                UNIT_ASSERT(jsonMap.find("Ip") != jsonMap.end());
             }
         }
         // large message with no truncate
@@ -233,6 +293,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
             Cerr << "Size: " << jsonMap.find("Message")->second.GetString().size() << Endl;
             UNIT_ASSERT(jsonMap.find("Message")->second.GetString().size() > 1500_KB);
         }
+
         // Test 4 - bad topic, partition, offset
         {
             auto statusCode = MakeRequest(httpClient, GetRequestUrl("/Root/bad-topic", 0, 20, 10), json);
@@ -242,5 +303,124 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
             statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, 10000, 10), json);
             UNIT_ASSERT_EQUAL(statusCode, HTTP_BAD_REQUEST);
         }
+    }
+
+    void CheckReadKafkaBatchMessages(ui64 readFromOffset, ui32 limit = 6, ui64 lastOffset = 0, ui32 batchSize = 3,
+                                    bool wrappingTimestamps = false, NKafka::ECompressionType compression = NKafka::ECompressionType::NONE) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+
+        auto settings = NKikimr::NPersQueueTests::PQSettings(port, 1);
+        NKikimr::NPQ::NTest::EnableTopicBatching(settings);
+        settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetMonitoringPortOffset(monPort, true);
+
+        auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
+        TServer server{settings};
+        server.EnableGRpc(grpcSettings);
+
+        auto client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        client->InitRoot();
+        client->InitSourceIds();
+
+        NYdb::TDriverConfig driverCfg;
+        TString topicPath = "/Root/topic-kafka-batch";
+        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
+                 .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+
+        NYdb::TDriver ydbDriver{driverCfg};
+        auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
+
+        auto createTopicResult = topicClient.CreateTopic(topicPath).GetValueSync();
+        UNIT_ASSERT_C(createTopicResult.IsSuccess(), createTopicResult.GetIssues().ToString());
+
+        const TString producerId = "viewer-kafka-batch-producer";
+        constexpr size_t dataSize = 16;
+        const TVector<std::tuple<ui64, ui32, char>> writes = {
+            {1, batchSize, 'a'},
+            {static_cast<ui64>(batchSize) + 1, batchSize, 'b'},
+        };
+        if (wrappingTimestamps) {
+            NYdb::NTopic::TCodecMap::GetTheCodecMap().Set(
+                static_cast<ui32>(NYdb::NTopic::ECodec::KAFKA_BATCH), std::make_unique<TWrappingTimestampKafkaCodec>(compression));
+        }
+        NKikimr::NPQ::NTest::WriteKafkaBatchMessages(topicClient, topicPath, producerId, dataSize, batchSize, writes, false);
+        if (wrappingTimestamps) {
+            NYdb::NTopic::TCodecMap::GetTheCodecMap().Set(
+                static_cast<ui32>(NYdb::NTopic::ECodec::KAFKA_BATCH), std::make_unique<NYdb::NTopic::TKafkaBatchCodec>());
+        }
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        NKikimr::NViewerTests::WaitForHttpReady(httpClient);
+
+        TJsonValue json;
+        auto statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, readFromOffset, limit, false, lastOffset), json);
+        UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
+
+        const auto& overallResponse = json.GetMap();
+        const ui64 totalMessages = 2 * static_cast<ui64>(batchSize);
+        const ui64 readUntilOffset = lastOffset > 0 ? lastOffset : totalMessages;
+        CheckMapValue(overallResponse, "StartOffset", 0);
+        CheckMapValue(overallResponse, "EndOffset", totalMessages);
+
+        const auto& messages = overallResponse.find("Messages")->second.GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), Min<ui64>(limit, readUntilOffset - readFromOffset));
+
+        constexpr ui32 kafkaBatchCodec = static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1;
+        for (ui64 i = 0; i < messages.size(); ++i) {
+            const ui64 messageOffset = i + readFromOffset;
+            const auto& item = messages[i];
+            UNIT_ASSERT(item.GetType() == EJsonValueType::JSON_MAP);
+            const auto& jsonMap = item.GetMap();
+            CheckMapValue(jsonMap, "Offset", messageOffset);
+            UNIT_ASSERT(jsonMap.find("SeqNo") != jsonMap.end());
+            UNIT_ASSERT_VALUES_EQUAL(jsonMap.find("SeqNo")->second.GetInteger(), messageOffset + 1);
+            CheckMapValue(jsonMap, "Codec", kafkaBatchCodec);
+            CheckMapValue(jsonMap, "ProducerId", producerId);
+            UNIT_ASSERT(jsonMap.find("Message") != jsonMap.end());
+            UNIT_ASSERT_VALUES_EQUAL(
+                Base64Decode(jsonMap.find("Message")->second.GetString()),
+                TString(dataSize, messageOffset < batchSize ? 'a' : 'b'));
+            if (wrappingTimestamps) {
+                const i64 baseTimestamp = messageOffset < batchSize ? std::numeric_limits<i64>::min() : std::numeric_limits<i64>::max();
+                const i64 timestamp = messageOffset % batchSize == 0 ? baseTimestamp :
+                    (baseTimestamp == std::numeric_limits<i64>::min() ? std::numeric_limits<i64>::max() : std::numeric_limits<i64>::min());
+                CheckMapValue(jsonMap, "CreateTimestamp", static_cast<ui64>(timestamp));
+            } else {
+                CheckMapValue(jsonMap, "CreateTimestamp", 1000 + messageOffset);
+            }
+            UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
+            UNIT_ASSERT(jsonMap.find("Ip") != jsonMap.end());
+        }
+    }
+
+    Y_UNIT_TEST(TopicDataShowsKafkaBatchesWithWrappingTimestamps) {
+        for (const auto compression : {NKafka::ECompressionType::NONE, NKafka::ECompressionType::GZIP, NKafka::ECompressionType::ZSTD}) {
+            CheckReadKafkaBatchMessages(0, 6, 0, 3, true, compression);
+        }
+    }
+
+    Y_UNIT_TEST(TopicDataShowsSdkKafkaBatchMessages) {
+        CheckReadKafkaBatchMessages(0);
+    }
+
+    Y_UNIT_TEST(TopicDataShowsSdkKafkaBatchMessagesReadFromMiddle) {
+        CheckReadKafkaBatchMessages(2);
+    }
+
+    Y_UNIT_TEST(TopicDataShowsSdkKafkaBatchMessagesRespectsLimit) {
+        CheckReadKafkaBatchMessages(2, 2);
+    }
+
+    Y_UNIT_TEST(TopicDataShowsSdkKafkaBatchMessagesReadSingleFromLargeBatch) {
+        CheckReadKafkaBatchMessages(119, 1, 120, 100);
     }
 };

@@ -136,12 +136,17 @@ public:
     }
 
     grpc::Status Authenticate(
-            grpc::ServerContext*,
+            grpc::ServerContext* ctx,
             const nebius::iam::v1::AuthenticateRequest* request,
             nebius::iam::v1::AuthenticateResponse* response) override {
         Cerr << "NebiusAccessService::Authenticate request\n"
              << request->Utf8DebugString()
              << Endl;
+
+        with_lock (MetadataMutex) {
+            CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+            CapturedRequestId = NTestUtils::CaptureRequestId(ctx);
+        }
 
         ++AuthenticateCount;
 
@@ -203,8 +208,9 @@ public:
     THashSet<TString> UnavailableUserPermissions;
     TString ContainerId;
 
-    TMutex UserIPMutex;
+    TMutex MetadataMutex;
     TString CapturedXUserIP;
+    TString CapturedRequestId;
 
     grpc::Status Authorize(
             grpc::ServerContext* ctx,
@@ -214,9 +220,9 @@ public:
              << request->Utf8DebugString()
              << Endl;
 
-        {
-            std::lock_guard guard(UserIPMutex);
+        with_lock (MetadataMutex) {
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
+            CapturedRequestId = NTestUtils::CaptureRequestId(ctx);
         }
 
         ++AuthorizeCount;

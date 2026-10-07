@@ -1,8 +1,11 @@
 #include "compile_cache.h"
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/interop/cast.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/sys_view/auth/auth_scan_base.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/registry.h>
@@ -11,14 +14,36 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/scheduler_cookie.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 namespace NKikimr::NSysView {
+
+namespace {
+
+struct TEvPrivate {
+    enum EEv {
+        EvNodeRequestTimeout = NActors::TEvents::ES_PRIVATE,
+    };
+
+    struct TEvNodeRequestTimeout : public NActors::TEventLocal<TEvNodeRequestTimeout, EvNodeRequestTimeout> {
+        ui32 NodeId = 0;
+
+        explicit TEvNodeRequestTimeout(ui32 nodeId)
+            : NodeId(nodeId)
+        {}
+    };
+};
+
+} // anonymous namespace
 
 using namespace NActors;
 using namespace NNodeWhiteboard;
@@ -145,14 +170,20 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             hFunc(NKqp::TEvKqp::TEvListQueryCacheQueriesResponse, Handle);
             hFunc(NKqp::TEvKqp::TEvListProxyNodesResponse, Handle);
+            hFunc(TEvPrivate::TEvNodeRequestTimeout, HandleNodeRequestTimeout);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TCompileCacheQueriesScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TCompileCacheQueriesScan: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
 private:
     void ProceedToScan() override {
+        if (IsServerlessDatabase) {
+            ReplyUnsupportedDatabase("serverless");
+            return;
+        }
+
         Become(&TCompileCacheQueriesScan::StateScan);
 
         if (UserToken) {
@@ -160,6 +191,7 @@ private:
             bool isDatabaseAdmin = AppData()->FeatureFlags.GetEnableDatabaseAdmin()
                 && IsDatabaseAdministrator(UserToken.Get(), DatabaseOwner);
             IsAdmin = isClusterAdmin || isDatabaseAdmin;
+            IsMetadataUser = UserToken->GetUserSID() == NACLib::TSystemUsers::Metadata().GetUserSID();
         }
 
         if (!MissingSchemaColumns.empty()) {
@@ -191,12 +223,103 @@ private:
 
             if (matchFrom && matchTo) {
                 PendingNodes.emplace_back(selfNodeId);
+                HadNodesToScan = true;
             }
+            NodesTotal = PendingNodes.size();
         }
 
         if (AckReceived) {
             StartScan();
         }
+    }
+
+    void CancelNodeRequestTimeout() {
+        NodeRequestTimeoutCookieHolder.Detach();
+    }
+
+    void ScheduleNodeRequestTimeout(ui32 nodeId) {
+        CancelNodeRequestTimeout();
+        NodeRequestTimeoutCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
+        Schedule(NodeRequestTimeout, new TEvPrivate::TEvNodeRequestTimeout(nodeId), NodeRequestTimeoutCookieHolder.Get());
+    }
+
+    void SkipCurrentNode(const char* reason, ui32 nodeId, const NYql::TIssues* peerIssues = nullptr) {
+        YDB_LOG_WARN("TCompileCacheQueriesScan::SkipCurrentNode: skipping compile cache scan for peer",
+            {"nodeId", nodeId},
+            {"reason", reason},
+            {"issues", (peerIssues && !peerIssues->Empty() ? peerIssues->ToOneLineString() : TString())});
+
+        if (auto& counters = AppData()->Counters) {
+            counters
+                ->GetSubgroup("counters", "kqp")
+                ->GetCounter("CompileCacheView/PeerScanWarnings", true)
+                ->Inc();
+        }
+
+        // Preserve the peer-reported reason (tenant mismatch, auth, etc.) as sub-issues
+        // so the final SendScanWarning summary stays actionable.
+        NYql::TIssue skipIssue(
+            TStringBuilder() << "compile cache scan skipped node_id=" << nodeId << ": " << reason);
+        if (peerIssues) {
+            for (const auto& issue : *peerIssues) {
+                skipIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+            }
+        }
+        skipIssue.SetCode(skipIssue.GetCode(), NYql::TSeverityIds::S_WARNING);
+        PartialIssues.AddIssue(std::move(skipIssue));
+
+        CancelNodeRequestTimeout();
+        PendingRequest = false;
+        ContinuationToken.clear();
+        if (!PendingNodes.empty()) {
+            PendingNodes.pop_front();
+        }
+        ++NodesFailed;
+        if (PendingNodes.empty()) {
+            FinishScanOrReplyEmpty();
+        } else {
+            StartScan();
+        }
+    }
+
+    void SendScanWarning(NYql::TIssues issues) {
+        if (issues.Empty()) {
+            return;
+        }
+        Send(OwnerActorId, new NKqp::TEvKqpCompute::TEvScanWarning(std::move(issues)));
+    }
+
+    void MaybeSendPartialScanWarning() {
+        if (PartialWarningSent || NodesFailed == 0 || !HadNodesToScan) {
+            return;
+        }
+        PartialWarningSent = true;
+
+        const ui32 nodesTotal = NodesTotal > 0 ? NodesTotal : (NodesSucceeded + NodesFailed);
+        YDB_LOG_WARN("TCompileCacheQueriesScan::FinishScan: compile cache scan skipped on some nodes",
+            {"nodesFailed", NodesFailed},
+            {"nodesTotal", nodesTotal});
+
+        NYql::TIssue summary(TStringBuilder()
+            << "compile cache scan: skipped " << NodesFailed << " of " << nodesTotal << " nodes");
+        for (const auto& issue : PartialIssues) {
+            summary.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+        }
+        summary.SetCode(summary.GetCode(), NYql::TSeverityIds::S_WARNING);
+        NYql::TIssues toSend;
+        toSend.AddIssue(std::move(summary));
+        SendScanWarning(std::move(toSend));
+    }
+
+    void FinishScanOrReplyEmpty() {
+        if (HadNodesToScan && NodesSucceeded == 0 && NodesFailed > 0) {
+            ReplyErrorAndDie(
+                Ydb::StatusIds::UNAVAILABLE,
+                "Failed to read compile cache from all nodes");
+            return;
+        }
+        MaybeSendPartialScanWarning();
+        ReplyEmptyAndDie();
     }
 
     void StartScan() {
@@ -205,10 +328,9 @@ private:
             return;
         }
 
-        // Check if database is serverless: for serverless databases, TenantName != AppData()->TenantName
-        // This is a simple heuristic - serverless databases use shared compute resources
+        // Keep the node/tenant locality check separate from database type.
         if (TenantName != AppData()->TenantName) {
-            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Compile cache is not available for this database");
+            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Compile cache view is not available for this database");
             return;
         }
 
@@ -220,12 +342,13 @@ private:
 
         // If no pending nodes left after initialization/filtering, return empty result
         if (PendingNodesInitialized && PendingNodes.empty()) {
-            ReplyEmptyAndDie();
+            FinishScanOrReplyEmpty();
             return;
         }
 
         if (!PendingNodes.empty() && !PendingRequest)  {
             const auto& nodeId = PendingNodes.front();
+            CurrentNodeHadSuccessfulResponse = false;
             auto kqpProxyId = NKqp::MakeKqpCompileServiceID(nodeId);
             auto req = std::make_unique<NKikimr::NKqp::TEvKqp::TEvListQueryCacheQueriesRequest>();
             req->Record.SetTenantName(TenantName);
@@ -246,11 +369,13 @@ private:
 
             req->Record.SetFreeSpace(FreeSpace);
 
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Send request to node_id=" << nodeId << ", request: " << req->Record.ShortDebugString());
+            YDB_LOG_DEBUG("TCompileCacheQueriesScan::StartScan: sending list query cache request",
+                {"nodeId", nodeId},
+                {"request", req->Record.ShortDebugString()});
 
-            Send(kqpProxyId, req.release(), 0, nodeId);
+            Send(kqpProxyId, req.release(), IEventHandle::FlagTrackDelivery, nodeId);
             PendingRequest = true;
+            ScheduleNodeRequestTimeout(nodeId);
         }
     }
 
@@ -267,8 +392,10 @@ private:
                     (NodeIdToInclusive ? nodeId <= NodeIdTo : nodeId < NodeIdTo);
                 if (matchFrom && matchTo) {
                     PendingNodes.push_back(nodeId);
+                    HadNodesToScan = true;
                 }
             }
+            NodesTotal = PendingNodes.size();
         }
         PendingNodesInitialized = true;
         StartScan();
@@ -281,61 +408,109 @@ private:
 
     void Handle(NKqp::TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
+        const ui32 responseNodeId = record.GetNodeId();
 
-        // Check for error status (e.g., tenant mismatch for serverless)
-        if (record.HasStatus() && record.GetStatus() != Ydb::StatusIds::SUCCESS) {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(record.GetIssues(), issues);
-            ReplyErrorAndDie(record.GetStatus(), issues);
+        // Stale: timeout/disconnect already advanced PendingNodes.
+        if (!PendingRequest || PendingNodes.empty() || PendingNodes.front() != responseNodeId) {
+            YDB_LOG_DEBUG("TCompileCacheQueriesScan::HandleListQueryCacheQueriesResponse: ignoring stale response",
+                {"nodeId", responseNodeId});
             return;
+        }
+
+        if (record.HasStatus() && record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues peerIssues;
+            NYql::IssuesFromMessage(record.GetIssues(), peerIssues);
+            bool accessDenied = false;
+            for (const auto& topIssue : peerIssues) {
+                NYql::WalkThroughIssues(topIssue, false, [&](const NYql::TIssue& issue, ui16) {
+                    accessDenied |= issue.GetCode() == NKikimrIssues::TIssuesIds::ACCESS_DENIED;
+                });
+            }
+            if (record.GetStatus() == Ydb::StatusIds::UNSUPPORTED && accessDenied) {
+                ReplyErrorAndDie(Ydb::StatusIds::UNSUPPORTED, peerIssues);
+                return;
+            }
+            SkipCurrentNode("node returned error", responseNodeId, &peerIssues);
+            return;
+        }
+
+        CancelNodeRequestTimeout();
+        if (!CurrentNodeHadSuccessfulResponse) {
+            CurrentNodeHadSuccessfulResponse = true;
+            ++NodesSucceeded;
         }
 
         LastResponse = std::move(record);
         ProcessRows();
     }
 
-    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->SourceType == NKqp::TKqpEvents::EvListCompileCacheQueriesRequest) {
-            ui32 nodeId = ev->Cookie;
-            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Undelivered response for node_id=" << nodeId);
-            PendingRequest = false;
-            PendingNodes.pop_front();
-            StartScan();
+    void HandleNodeRequestTimeout(TEvPrivate::TEvNodeRequestTimeout::TPtr& ev) {
+        const ui32 nodeId = ev->Get()->NodeId;
+        if (PendingRequest && !PendingNodes.empty() && PendingNodes.front() == nodeId) {
+            SkipCurrentNode("node request timeout", nodeId);
         }
+    }
+
+    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType != NKqp::TKqpEvents::EvListCompileCacheQueriesRequest) {
+            return;
+        }
+        const ui32 nodeId = ev->Cookie;
+        if (!PendingRequest || PendingNodes.empty() || PendingNodes.front() != nodeId) {
+            YDB_LOG_DEBUG("TCompileCacheQueriesScan::Undelivered: ignoring stale undelivered event",
+                {"nodeId", nodeId});
+            return;
+        }
+        SkipCurrentNode("undelivered", nodeId);
     }
 
     void Connected(TEvInterconnect::TEvNodeConnected::TPtr&) {
     }
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        ui32 nodeId = ev->Get()->NodeId;
-        Y_UNUSED(nodeId);
-        ProcessRows();
+        const ui32 nodeId = ev->Get()->NodeId;
+        if (PendingRequest && !PendingNodes.empty() && PendingNodes.front() == nodeId) {
+            SkipCurrentNode("node disconnected", nodeId);
+        }
     }
 
     bool CanAccessEntry(const TCompileCacheQuery& entry) const {
-        if (!UserToken || IsAdmin) {
-            return true;
+        if (!entry.HasDatabase() || entry.GetDatabase() != DatabaseName) {
+            return false;
         }
 
-        // Filter by database: user can only see queries from their own database
-        if (entry.HasDatabase() && entry.GetDatabase() != DatabaseName) {
-            return false;
+        if (!UserToken || IsAdmin || IsMetadataUser) {
+            return true;
         }
 
         // Filter by user SID: non-admin user can only see their own queries
         return entry.GetUserSID() == UserToken->GetUserSID();
     }
 
+    void ReplyUnsupportedDatabase(TStringBuf databaseType) {
+        NYql::TIssues issues;
+        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED,
+            TStringBuilder() << "Compile cache view and warmup are not supported for " << databaseType << " databases"));
+        ReplyErrorAndDie(Ydb::StatusIds::UNSUPPORTED, issues);
+    }
+
     void ProcessRows() {
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         auto nodeId = LastResponse.GetNodeId();
 
-        for(int idx = 0; idx < LastResponse.GetCacheCacheQueries().size(); ++idx) {
-            const auto& entry = LastResponse.GetCacheCacheQueries(idx);
+        for (auto& entry : *LastResponse.MutableCacheCacheQueries()) {
             if (!CanAccessEntry(entry)) {
                 continue;
+            }
+
+            if (!IsMetadataUser && entry.HasMetaInfo()) {
+                NJson::TJsonValue metadata;
+                if (NJson::ReadJsonTree(entry.GetMetaInfo(), &metadata, false) && metadata.IsMap()) {
+                    metadata.EraseValue("user_group_sids");
+                    entry.SetMetaInfo(NJson::WriteJson(metadata, false));
+                } else {
+                    entry.ClearMetaInfo();
+                }
             }
 
             TVector<TCell> cells;
@@ -362,6 +537,9 @@ private:
         }
 
         PendingRequest = false;
+        if (batch->Finished) {
+            MaybeSendPartialScanWarning();
+        }
         SendBatch(std::move(batch));
         if (AppData()->FeatureFlags.GetEnableCompileCacheView() && shouldContinue) {
             StartScan();
@@ -399,6 +577,18 @@ private:
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     bool IsAdmin = false;
+    bool IsMetadataUser = false;
+
+    static constexpr TDuration NodeRequestTimeout = TDuration::Seconds(10);
+
+    bool HadNodesToScan = false;
+    ui32 NodesTotal = 0;
+    ui32 NodesSucceeded = 0;
+    ui32 NodesFailed = 0;
+    bool CurrentNodeHadSuccessfulResponse = false;
+    bool PartialWarningSent = false;
+    NYql::TIssues PartialIssues;
+    NActors::TSchedulerCookieHolder NodeRequestTimeoutCookieHolder;
     };
 THolder<NActors::IActor> CreateCompileCacheQueriesScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,

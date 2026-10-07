@@ -12,25 +12,10 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/util/memory_track.h>
 
-#if defined LOG_T || \
-    defined LOG_D || \
-    defined LOG_I || \
-    defined LOG_N || \
-    defined LOG_W || \
-    defined LOG_E || \
-    defined LOG_C
-    #error log macro redefinition
-#endif
-
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -65,11 +50,20 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
         LockMode = TDataShardUserDb::ELockMode(record.GetLockMode());
     }
 
+    if (record.HasCollectAffectedRows()) {
+        CollectAffectedRows = record.GetCollectAffectedRows();
+    }
+
     OverloadSubscribe = record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>{};
+
+    PreserveLockTxIds.assign(record.GetPreserveLockTxIds().begin(), record.GetPreserveLockTxIds().end());
 
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
 
-    LOG_T("Parsing write transaction for " << globalTxId << " at " << TabletId << ", record: " << record.ShortDebugString());
+    YDB_LOG_TRACE("Parsing write transaction",
+        {"globalTxId", globalTxId},
+        {"tabletId", TabletId},
+        {"record", record.ShortDebugString()});
 
     Operations.reserve(record.operations().size());
     for (const auto& recordOperation : record.operations()) {
@@ -87,7 +81,8 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     if (record.HasLocks()) {
         KqpLocks = record.GetLocks();
-        KqpSetTxLocksKeys(record.GetLocks(), self->SysLocksTable(), KeyValidator);
+        const bool allowAncestorLocks = AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+        KqpSetTxLocksKeys(record.GetLocks(), self->SysLocksTable(), KeyValidator, allowAncestorLocks);
     }
     KeyValidator.GetInfo().SetLoaded();
 }
@@ -106,6 +101,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT:
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE:
             break;
         default:
             return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << OperationType << " operation is not supported now"};
@@ -130,6 +126,23 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
 
     if (tableInfo.GetTableSchemaVersion() != 0 && tableIdRecord.GetSchemaVersion() != tableInfo.GetTableSchemaVersion())
         return {NKikimrTxDataShard::TError::SCHEME_CHANGED, TStringBuilder() << "Table '" << tableInfo.Path << "' scheme changed."};
+
+    if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE) {
+        // An unsafe truncate wipes the whole table on this shard, so it carries neither payload nor
+        // columns and registers no key ranges. Conflicts are covered by the GlobalWriter flag
+        // instead, see TPipeline::BuildOperation.
+        if (!ColumnIds.empty())
+            return {NKikimrTxDataShard::TError::BAD_ARGUMENT, "Unsafe truncate operation doesn't support column ids"};
+
+        if (recordOperation.HasPayloadIndex())
+            return {NKikimrTxDataShard::TError::BAD_ARGUMENT, "Unsafe truncate operation doesn't support payload"};
+
+        TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
+        UserCtx = NACLib::TUserContextBuilder()
+            .DeserializeFromEvent(ev, traceId)
+            .Build();
+        return {NKikimrTxDataShard::TError::OK, {}};
+    }
 
     if (recordOperation.GetPayloadFormat() != NKikimrDataEvents::FORMAT_CELLVEC)
         return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Only FORMAT_CELLVEC is supported now. Got: " << recordOperation.GetPayloadFormat()};
@@ -157,10 +170,15 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         if (!col)
             return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Missing column with id " << columnTag};
 
-        if (col->NotNull) {
+        if (col->NotNull || col->SetNotNullInProgress) {
             for (ui32 rowIdx = 0; rowIdx < Matrix.GetRowCount(); ++rowIdx) {
                 const TCell& cell = Matrix.GetCell(rowIdx, colIdx);
                 if (cell.IsNull()) {
+                    if (col->SetNotNullInProgress) {
+                        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder()
+                            << "NULL value is not allowed for column " << columnTag
+                            << ": `SET NOT NULL` operation is currently in progress for this column"};
+                    }
                     return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "NULL value for NON NULL column " << columnTag};
                 }
             }
@@ -173,7 +191,12 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         // at this stage, so we skip the check for UPSERT.
         auto columnIdsSet = THashSet<ui32>(ColumnIds.begin(), ColumnIds.end());
         for (const auto& [id, column] : tableInfo.Columns) {
-            if (column.NotNull && !columnIdsSet.contains(id)) {
+            if ((column.NotNull || column.SetNotNullInProgress) && !columnIdsSet.contains(id)) {
+                if (column.SetNotNullInProgress) {
+                    return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder()
+                        << "Missing inserted values for column " << id
+                        << ": `SET NOT NULL` operation is currently in progress for this column"};
+                }
                 return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Missing inserted values for NON NULL column " << id};
             }
         }
@@ -228,6 +251,18 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     }
     TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
 
+    if (recordOperation.HasWriteSeqNum()) {
+        WriteSeqNum.WriterIndex = recordOperation.GetWriteSeqNum().GetWriterIndex();
+        WriteSeqNum.WriteSeqNum = recordOperation.GetWriteSeqNum().GetWriteSeqNum();
+    }
+
+    OriginalShard = recordOperation.GetOriginalShard();
+    if (OriginalShard && !recordOperation.HasWriteSeqNum()) {
+        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder()
+            << "Retrying operation performed on OriginalShard " << OriginalShard
+            << " requires WriteSeqNum"};
+    }
+
     SetTxKeys(tableInfo, tabletId, keyValidator);
     UserCtx = NACLib::TUserContextBuilder()
         .DeserializeFromEvent(ev, traceId)
@@ -258,8 +293,10 @@ void TValidatedWriteTxOperation::SetTxKeys(const TUserTable& tableInfo, ui64 tab
     {
         Matrix.GetSubmatrix(rowIdx, rowIdx, 0, tableInfo.KeyColumnIds.size() - 1, keyCells);
 
-        LOG_T("Table " << tableInfo.Path << ", shard: " << tabletId << ", "
-            << "write point " << DebugPrintPoint(tableInfo.KeyColumnTypes, keyCells, *AppData()->TypeRegistry));
+        YDB_LOG_TRACE("Table write point",
+            {"tablePath", tableInfo.Path},
+            {"shard", tabletId},
+            {"writePoint", DebugPrintPoint(tableInfo.KeyColumnTypes, keyCells, *AppData()->TypeRegistry)});
 
         TTableRange tableRange(keyCells);
         keyValidator.AddWriteRange(TableId, tableRange, tableInfo.KeyColumnTypes, columnsWrites, isErase);
@@ -513,7 +550,9 @@ void TWriteOperation::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& 
     LocksCache().Locks.clear();
     ArtifactFlags = 0;
 
-    LOG_D("tx " << GetTxId() << " at " << TabletId << " released its data");
+    YDB_LOG_DEBUG("Tx at tablet released its data",
+        {"txId", GetTxId()},
+        {"tabletId", TabletId});
 }
 
 void TWriteOperation::DbStoreLocksAccessLog(NTable::TDatabase& txcDb)
@@ -534,7 +573,10 @@ void TWriteOperation::DbStoreLocksAccessLog(NTable::TDatabase& txcDb)
     TStringBuf vecData(vecDataStart, vecDataSize);
     db.Table<Schema::TxArtifacts>().Key(GetTxId()).Update(NIceDb::TUpdate<Schema::TxArtifacts::Locks>(vecData));
 
-    LOG_T("Storing " << vec.size() << " locks for txid=" << GetTxId() << " at " << TabletId);
+    YDB_LOG_TRACE("Storing locks",
+        {"locksCount", vec.size()},
+        {"txId", GetTxId()},
+        {"tabletId", TabletId});
 }
 
 void TWriteOperation::DbStoreArtifactFlags(NTable::TDatabase& txcDb)
@@ -544,7 +586,10 @@ void TWriteOperation::DbStoreArtifactFlags(NTable::TDatabase& txcDb)
     NIceDb::TNiceDb db(txcDb);
     db.Table<Schema::TxArtifacts>().Key(GetTxId()).Update<Schema::TxArtifacts::Flags>(ArtifactFlags);
 
-    LOG_T("Storing artifactflags=" << ArtifactFlags << " for txid=" << GetTxId() << " at " << TabletId);
+    YDB_LOG_TRACE("Storing artifactflags for tx",
+        {"artifactflags", ArtifactFlags},
+        {"txId", GetTxId()},
+        {"tabletId", TabletId});
 }
 
 ui64 TWriteOperation::GetMemoryConsumption() const {
@@ -607,7 +652,9 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, NTable::TDat
 
     ReleasedTxDataSize = 0;
 
-    LOG_D("tx " << GetTxId() << " at " << self->TabletID() << " restored its data");
+    YDB_LOG_DEBUG("Tx at tablet restored its data",
+        {"txId", GetTxId()},
+        {"tabletId", self->TabletID()});
 
     return ERestoreDataStatus::Ok;
 }
@@ -745,7 +792,8 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
                                    << " is restarting";
 
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), rejectStatus, rejectReason);
-            LOG_N(rejectReason);
+            YDB_LOG_NOTICE("Reject tx",
+                {"rejectReason", rejectReason});
 
             ctx.Send(GetTarget(), result.release(), 0, GetCookie());
 
@@ -811,7 +859,10 @@ void TWriteOperation::UntrackMemory() const {
 void TWriteOperation::SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
     SetAbortedFlag();
     WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), status, errorMsg);
-    LOG_I("Write transaction " << GetTxId() << " at " << TabletId << " has an error: " << errorMsg);
+    YDB_LOG_INFO("Write transaction has an error",
+        {"txId", GetTxId()},
+        {"tabletId", TabletId},
+        {"error", errorMsg});
 }
 
 void TWriteOperation::SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult) {
@@ -824,3 +875,7 @@ void TWriteOperation::SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWr
 Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TWriteOperation, stream, tx) {
     stream << '[' << tx.GetStep() << ':' << tx.GetTxId() << ']';
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

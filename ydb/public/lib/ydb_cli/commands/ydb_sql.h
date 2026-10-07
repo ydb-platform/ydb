@@ -26,6 +26,7 @@ private:
     TString Query;
     TString QueryFile;
     TString Progress;
+    TString ResourcePool;
     TExecuteGenericQuery::TSettings ExecSettings;
 };
 

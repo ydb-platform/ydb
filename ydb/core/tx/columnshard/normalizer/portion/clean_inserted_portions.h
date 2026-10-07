@@ -18,7 +18,8 @@ public:
     }
 
 private:
-    static inline TFactory::TRegistrator<TCleanInsertedPortionsNormalizer> Registrator = TFactory::TRegistrator<TCleanInsertedPortionsNormalizer>(GetClassNameStatic());
+    static inline TFactory::TRegistrator<TCleanInsertedPortionsNormalizer> Registrator =
+        TFactory::TRegistrator<TCleanInsertedPortionsNormalizer>(GetClassNameStatic());
 
 public:
     class TNormalizerResult;
@@ -33,7 +34,8 @@ public:
     }
 
     TCleanInsertedPortionsNormalizer(const TNormalizationController::TInitContext& info)
-        : TPortionsNormalizerBase(info) {
+        : TPortionsNormalizerBase(info)
+    {
     }
 
     virtual std::set<ui32> GetColumnsFilter(const ISnapshotSchema::TPtr& /*schema*/) const override {

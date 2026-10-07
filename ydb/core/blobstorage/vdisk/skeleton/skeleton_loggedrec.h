@@ -3,9 +3,11 @@
 #include "skeleton_vmultiput_actor.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_output_estimate.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
@@ -41,6 +43,10 @@ namespace NKikimr {
 
         const TLsnSeg Seg;
         const bool ConfirmSyncLogAlso;
+        // The part of its operation's Fresh admission this record accounts for: what replaying it adds to Fresh.
+        // It counts as in flight until the record has been replayed, so an operation writing several records
+        // stays in flight until the last of them is in Fresh.
+        TFreshAdmission FreshAdmission;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -65,7 +71,7 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         TActorId Recipient;
         ui64 RecipientCookie;
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
         NKikimrBlobStorage::EPutHandleClass HandleClass;
     };
 
@@ -91,7 +97,7 @@ namespace NKikimr {
         std::unique_ptr<TEvVMultiPutItemResult> Result;
         TActorId Recipient;
         ui64 RecipientCookie;
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -107,7 +113,7 @@ namespace NKikimr {
     private:
         const TActorId HugeKeeperId;
         TEvHullLogHugeBlob::TPtr Ev;
-        NWilson::TSpan Span;
+        TLazyRetroSpan Span;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////

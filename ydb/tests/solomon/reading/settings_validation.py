@@ -28,7 +28,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
     def test_settings_validation_solomon_selectors(self):
         data_source_query = f"""
             CREATE EXTERNAL DATA SOURCE local_solomon WITH (
-                SOURCE_TYPE     = "Solomon",
+                SOURCE_TYPE     = "Monium.Metrics",
                 LOCATION        = "{self.solomon_http_endpoint}",
                 GRPC_LOCATION   = "{self.solomon_grpc_endpoint}",
                 AUTH_METHOD     = "NONE",
@@ -185,7 +185,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
     def test_settings_validation_solomon_program(self):
         data_source_query = f"""
             CREATE EXTERNAL DATA SOURCE local_solomon WITH (
-                SOURCE_TYPE     = "Solomon",
+                SOURCE_TYPE     = "Monium.Metrics",
                 LOCATION        = "{self.solomon_http_endpoint}",
                 GRPC_LOCATION   = "{self.solomon_grpc_endpoint}",
                 AUTH_METHOD     = "NONE",
@@ -306,7 +306,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
     def test_settings_validation_monitoring_selectors(self):
         data_source_query = f"""
             CREATE EXTERNAL DATA SOURCE local_monitoring WITH (
-                SOURCE_TYPE     = "Solomon",
+                SOURCE_TYPE     = "Monium.Metrics",
                 LOCATION        = "{self.solomon_http_endpoint}",
                 GRPC_LOCATION   = "{self.solomon_grpc_endpoint}",
                 PROJECT         = "settings_validation",
@@ -453,7 +453,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
     def test_settings_validation_monitoring_program(self):
         data_source_query = f"""
             CREATE EXTERNAL DATA SOURCE local_monitoring WITH (
-                SOURCE_TYPE     = "Solomon",
+                SOURCE_TYPE     = "Monium.Metrics",
                 LOCATION        = "{self.solomon_http_endpoint}",
                 GRPC_LOCATION   = "{self.solomon_grpc_endpoint}",
                 PROJECT         = "settings_validation",

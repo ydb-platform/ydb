@@ -1,0 +1,38 @@
+use plato;
+pragma yt.JoinEnableStarJoin="true";
+
+-- additional sort by value
+select
+    a.k1,
+    a.v1,
+    b.k2,
+    b.v2,
+    c.key,
+    c.value
+from Input1 as a
+join /*+ star() */ any Input2 as b on a.v1 = b.v2
+join any Input3 as c on a.v1 = c.value;
+
+-- additional sort by (key, value)
+select
+    a.k1,
+    a.v1,
+    b.k2,
+    b.v2,
+    c.key,
+    c.value
+from Input1 as a
+join /*+ star() */ any Input2 as b on a.k1 = b.k2 and a.v1 = b.v2
+join any Input3 as c on a.k1 = c.key and a.v1 = c.value;
+
+-- NativeYtTypeFlags remap + additional sort for InputNative
+select
+    a.k1,
+    a.v1,
+    b.k2,
+    b.v2,
+    c.key,
+    c.subkey
+from Input1 as a
+join /*+ star() */ any Input2 as b on a.k1 = b.k2
+join any InputNative as c on a.k1 = c.key;

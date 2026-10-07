@@ -12,7 +12,7 @@ std::unique_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::Build
         GetCommonContext()->IsReverse(), IIndexInfo::GetSnapshotColumnNames(), std::nullopt, std::nullopt);
 }
 
-ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources) {
+ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_ptr<const IDataSource>>& sources) {
     ui64 result = 0;
     for (auto&& i : sources) {
         AFL_VERIFY(i.second->GetIntervalsCount());
@@ -25,8 +25,8 @@ ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_p
 }
 
 std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
-    const std::shared_ptr<NCommon::IDataSource>& sourceExt, const bool /*isFinalSyncPoint*/) {
-    auto source = std::static_pointer_cast<IDataSource>(sourceExt);
+    const NCommon::IDataSource& sourceExt, const bool /*isFinalSyncPoint*/) {
+    const auto* source = sourceExt.GetAs<IDataSource>();
     if (source->NeedAccessorsFetching()) {
         if (!AskAccumulatorsScript) {
             NCommon::TFetchingScriptBuilder acc(*this);
@@ -62,7 +62,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
     }
     {
         auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
-                                          [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0];
+                                           [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0];
         if (result.NeedInitialization()) {
             TGuard<TMutex> g(Mutex);
             if (auto gInit = result.StartInitialization()) {
@@ -111,7 +111,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (!exclusiveSource) {
             acc.AddFetchingStep(*GetMergeColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);
         } else {
-            if (acc.GetAddedFetchingColumns().GetColumnsCount() == 1 && GetSpecColumns()->Contains(acc.GetAddedFetchingColumns()) && !hasFilterSharding) {
+            if (acc.GetAddedFetchingColumns().GetColumnsCount() == 1 && GetSpecColumns()->Contains(acc.GetAddedFetchingColumns()) &&
+                !hasFilterSharding) {
                 return nullptr;
             }
         }
@@ -194,7 +195,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 }
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-    : TBase(commonContext) {
+    : TBase(commonContext)
+{
 }
 
 TString TSpecialReadContext::ProfileDebugString() const {

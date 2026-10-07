@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_files_box.cpp
@@ -21,11 +21,11 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/log
     yql/essentials/core
+    yql/essentials/core/url_preprocessing/interface
     yql/essentials/providers/common/mkql
     yql/essentials/providers/common/proto
+    yql/essentials/minikql/runtime_settings
     yql/essentials/providers/common/schema/expr
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

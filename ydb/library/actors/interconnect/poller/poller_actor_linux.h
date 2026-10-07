@@ -16,8 +16,8 @@ namespace NActors {
         int EpollDescriptor;
 
     public:
-        TEpollThread(TActorSystem *actorSystem)
-            : TPollerThreadBase(actorSystem)
+        TEpollThread(TActorSystem *actorSystem, NMonitoring::THistogramPtr syncOperationTimeHistogram)
+            : TPollerThreadBase(actorSystem, std::move(syncOperationTimeHistogram))
         {
             EpollDescriptor = epoll_create1(EPOLL_CLOEXEC);
             Y_ABORT_UNLESS(EpollDescriptor != -1, "epoll_create1() failed with %s", strerror(errno));

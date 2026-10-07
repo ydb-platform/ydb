@@ -3,6 +3,8 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 std::shared_ptr<NDataLocks::ILock> TRemovePortionsChange::DoBuildDataLock(
@@ -17,11 +19,13 @@ std::shared_ptr<NDataLocks::ILock> TRemovePortionsChange::DoBuildDataLock(
 void TRemovePortionsChange::DoApplyOnExecute(
     NColumnShard::TColumnShard* /* self */, TWriteIndexContext& context, const TDataAccessorsResult& fetchedDataAccessors) {
     if (fetchedDataAccessors.HasErrors()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + fetchedDataAccessors.GetErrorMessage());
+        YDB_LOG_ERROR("",
+            {"error", "Data accessor result with errors " + fetchedDataAccessors.GetErrorMessage()});
     }
-    
+
     if (fetchedDataAccessors.HasRemovedData()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder{} << "Data accessor result with removed data, " << fetchedDataAccessors.GetRemovedData().size());
+        YDB_LOG_DEBUG("",
+            {"error", TStringBuilder{} << "Data accessor result with removed data, " << fetchedDataAccessors.GetRemovedData().size()});
     }
 
     THashSet<ui64> usedPortionIds;
@@ -32,9 +36,8 @@ void TRemovePortionsChange::DoApplyOnExecute(
         const auto pred = [&](TPortionInfo& portionCopy) {
             portionCopy.SetRemoveSnapshot(context.Snapshot);
         };
-        context.EngineLogs.GetGranuleVerified(i->GetPathId())
-            .ModifyPortionOnExecute(context.DBWrapper, fetchedDataAccessors.GetPortionAccessorVerified(i->GetPortionId()), pred,
-                schemaPtr->GetIndexInfo().GetPKFirstColumnId());
+        context.EngineLogs.GetGranuleVerified(i->GetPathId()).ModifyPortionOnExecute(context.DBWrapper,
+            fetchedDataAccessors.GetPortionAccessorVerified(i->GetPortionId()), pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
     }
 }
 

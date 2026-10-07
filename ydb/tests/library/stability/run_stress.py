@@ -3,6 +3,7 @@ import traceback
 import uuid
 import allure
 import logging
+import random
 import time as time_module
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -21,13 +22,20 @@ from ydb.tests.library.stability.deploy import StressUtilDeployer
 from ydb.tests.library.stability.utils.remote_execution import execute_command
 
 
+_FAILED_RUN_RETRY_DELAY_SECONDS = 10
+_WORKLOAD_TIMEOUT_GRACE_SECONDS = 60
+_PRE_POST_COMMAND_TIMEOUT_SECONDS = 300
+
+
 class StressRunExecutor:
-    def __init__(self, ignore_stderr_content, event_process_mode, database):
+    def __init__(self, ignore_stderr_content, event_process_mode, database, nodes):
         self.database = database
         self._ignore_stderr_content = ignore_stderr_content
         self.event_process_mode = event_process_mode
         self.run_counter_lock = threading.Lock()
         self.run_counter = 0
+        self.nodes = nodes
+        self.test_run_uuid = uuid.uuid4().hex[:8]
 
     def __substitute_variables_in_template(
         self,
@@ -40,12 +48,14 @@ class StressRunExecutor:
 
         Supported variables:
         - {node_host} - node host
+        - {slot_kafka_port} - kafka proxy port of a random compute slot on the same host
         - {iteration_num} - iteration number
         - {thread_id} - thread ID (usually node host)
         - {run_id} - unique run ID
         - {timestamp} - run timestamp
         - {database} - run database without leading '/'
         - {uuid} - short UUID
+        - {test_run_uuid} - stable UUID shared across all nodes for this test run
 
         Args:
             command_args_template: Command line arguments template
@@ -67,7 +77,6 @@ class StressRunExecutor:
         # Create unique run_id
         run_id = f"{node_host}_{iteration_num}_{timestamp}"
 
-        # Substitution dictionary
         substitutions = {
             "{node_host}": node_host,
             "{database}": database,
@@ -77,7 +86,16 @@ class StressRunExecutor:
             "{timestamp}": str(timestamp),
             "{uuid}": short_uuid,
             "{global_run_id}": str(self.run_counter),
+            "{test_run_uuid}": self.test_run_uuid or "",
         }
+
+        if "{slot_kafka_port}" in command_args_template:
+            kafka_ports = [
+                dyn_node.kafka_port
+                for dyn_node in self.nodes
+                if dyn_node.host == node_host and dyn_node.role == YdbCluster.Node.Role.COMPUTE
+            ]
+            substitutions["{slot_kafka_port}"] = str(random.choice(kafka_ports or [0]))
 
         # Perform substitutions
         result = command_args_template
@@ -221,18 +239,27 @@ class StressRunExecutor:
 
                             # Update node statistics
                             node_result.total_execution_time += execution_time
-                            sleep_between_runs = 240
                             if success:
                                 logging.info(
                                     f"Run {current_iteration} on {node_host} completed successfully"
                                 )
-                                remaining_time = planned_end_time - time_module.time()
-                                if remaining_time > 0:
-                                    time_module.sleep(min(sleep_between_runs, remaining_time))
                             else:
                                 logging.warning(
-                                    f"Run {current_iteration} on {node_host} failed. Continuing after {sleep_between_runs}s delay")
-                                time_module.sleep(sleep_between_runs)
+                                    f"Run {current_iteration} on {node_host} failed. "
+                                    f"Continuing after {_FAILED_RUN_RETRY_DELAY_SECONDS}s delay"
+                                )
+
+                            remaining_time = planned_end_time - time_module.time()
+                            if remaining_time > 0:
+                                retry_delay = (
+                                    remaining_time
+                                    if success
+                                    else min(
+                                        _FAILED_RUN_RETRY_DELAY_SECONDS,
+                                        remaining_time,
+                                    )
+                                )
+                                time_module.sleep(retry_delay)
                             current_iteration += 1
                             run_duration = planned_end_time - time_module.time()
 
@@ -300,6 +327,150 @@ class StressRunExecutor:
                     "deployed_nodes": deployed_nodes,
                 }
 
+    def run_pre_nemesis_commands(
+        self,
+        workload_params: dict,
+        deployed_nodes: dict,
+    ) -> None:
+        """Run pre-nemesis commands (e.g. data import) synchronously on all nodes.
+
+        Collects workloads that have 'pre_nemesis_args', runs them in parallel,
+        and waits for all to complete before returning.  Failures are logged but
+        do not abort the test.
+        """
+        tasks = []
+        for name, workload_config in workload_params.items():
+            if 'pre_nemesis_args' not in workload_config:
+                continue
+            if name not in deployed_nodes:
+                continue
+            for node in deployed_nodes[name].nodes:
+                tasks.append((name, workload_config, node))
+
+        if not tasks:
+            return
+
+        unique_hosts = set(node['node'].host for _, _, node in tasks)
+        logging.info(f"Running pre-nemesis commands for {len(tasks)} node(s)")
+
+        def run_one(name, workload_config, node):
+            node_host = node['node'].host
+            run_config = {
+                "iteration_num": 0,
+                "node_host": node_host,
+                "duration": _PRE_POST_COMMAND_TIMEOUT_SECONDS,
+                "database": self.database,
+            }
+            run_name = f"{name}_{node_host}_pre_nemesis"
+            with allure.step(f"Execute pre-nemesis for workload {name} on {node_host}"):
+                success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
+                    node['binary_path'],
+                    node['node'],
+                    run_name,
+                    ' '.join(workload_config['pre_nemesis_args']),
+                    None,
+                    run_config,
+                )
+                result_dict = {
+                    "name": name, "host": node_host,
+                    "success": success, "execution_time": round(execution_time, 2),
+                    "is_timeout": is_timeout,
+                    "command": run_config.get("run_command", ""),
+                    "stdout": stdout, "stderr": stderr,
+                }
+                allure.attach(json.dumps(result_dict, indent=2), "Execution summary",
+                              attachment_type=allure.attachment_type.JSON)
+                if not success:
+                    raise RuntimeError(
+                        f"Pre-nemesis command for {name} on {node_host} failed "
+                        f"(timeout={is_timeout}): {stderr[:200]}"
+                    )
+                else:
+                    logging.info(f"Pre-nemesis command for {name} on {node_host} succeeded")
+
+        with allure.step(f"Execute pre-nemesis commands on {len(unique_hosts)} nodes"):
+            with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+                futures = [executor.submit(run_one, name, wc, node) for name, wc, node in tasks]
+                for future in as_completed(futures):
+                    try:
+                        future.result()
+                    except Exception as e:
+                        logging.warning(f"Pre-nemesis command raised exception: {e}")
+
+        logging.info("Pre-nemesis commands completed")
+
+    def run_post_nemesis_commands(
+        self,
+        workload_params: dict,
+        deployed_nodes: dict,
+    ) -> None:
+        """Run post-nemesis commands (e.g. clean) synchronously on all nodes.
+
+        Collects workloads that have 'post_nemesis_args', runs them in parallel,
+        and waits for all to complete before returning.  Failures are logged but
+        do not abort the test.
+        """
+        tasks = []
+        for name, workload_config in workload_params.items():
+            if 'post_nemesis_args' not in workload_config:
+                continue
+            if name not in deployed_nodes:
+                continue
+            for node in deployed_nodes[name].nodes:
+                tasks.append((name, workload_config, node))
+
+        if not tasks:
+            return
+
+        unique_hosts = set(node['node'].host for _, _, node in tasks)
+        logging.info(f"Running post-nemesis commands for {len(tasks)} node(s)")
+
+        def run_one(name, workload_config, node):
+            node_host = node['node'].host
+            run_config = {
+                "iteration_num": 0,
+                "node_host": node_host,
+                "duration": _PRE_POST_COMMAND_TIMEOUT_SECONDS,
+                "database": self.database,
+            }
+            run_name = f"{name}_{node_host}_post_nemesis"
+            with allure.step(f"Execute post-nemesis for workload {name} on {node_host}"):
+                success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
+                    node['binary_path'],
+                    node['node'],
+                    run_name,
+                    ' '.join(workload_config['post_nemesis_args']),
+                    None,
+                    run_config,
+                )
+                result_dict = {
+                    "name": name, "host": node_host,
+                    "success": success, "execution_time": round(execution_time, 2),
+                    "is_timeout": is_timeout,
+                    "command": run_config.get("run_command", ""),
+                    "stdout": stdout, "stderr": stderr,
+                }
+                allure.attach(json.dumps(result_dict, indent=2), "Execution summary",
+                              attachment_type=allure.attachment_type.JSON)
+                if not success:
+                    raise RuntimeError(
+                        f"Post-nemesis command for {name} on {node_host} failed "
+                        f"(timeout={is_timeout}): {stderr[:200]}"
+                    )
+                else:
+                    logging.info(f"Post-nemesis command for {name} on {node_host} succeeded")
+
+        with allure.step(f"Execute post-nemesis commands on {len(unique_hosts)} nodes"):
+            with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+                futures = [executor.submit(run_one, name, wc, node) for name, wc, node in tasks]
+                for future in as_completed(futures):
+                    try:
+                        future.result()
+                    except Exception as e:
+                        logging.warning(f"Post-nemesis command raised exception: {e}")
+
+        logging.info("Post-nemesis commands completed")
+
     def _execute_single_workload_run(
         self,
         deployed_binary_path: str,
@@ -358,13 +529,16 @@ class StressRunExecutor:
 
         try:
             # Disable buffering to ensure output capture
-            event_prefix = ''
+            env_exports = ['export YDB_STRESS_EXTENDED_RETRIES=1']
             if self.event_process_mode is not None:
-                event_prefix = f'export YDB_STRESS_UTIL_EVENT_PROCESS_MODE={self.event_process_mode};'
-            cmd = f"{event_prefix}stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
+                env_exports.append(
+                    f'export YDB_STRESS_UTIL_EVENT_PROCESS_MODE={self.event_process_mode}'
+                )
+            env_prefix = ''.join(f'{e};' for e in env_exports)
+            cmd = f"{env_prefix}stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
             run_config['run_command'] = cmd
             run_timeout = (
-                run_config["duration"] + 600
+                run_config["duration"] + _WORKLOAD_TIMEOUT_GRACE_SECONDS
             )  # Add buffer for completion
 
             execution_result = execute_command(

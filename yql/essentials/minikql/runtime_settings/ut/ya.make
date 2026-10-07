@@ -1,6 +1,7 @@
 UNITTEST_FOR(yql/essentials/minikql/runtime_settings)
 
 SRCS(
+    runtime_settings_hash_ut.cpp
     runtime_settings_serialization_ut.cpp
 )
 
@@ -8,6 +9,7 @@ PEERDIR(
     yql/essentials/public/udf/service/stub
     yql/essentials/public/udf
     yql/essentials/core/credentials
+    yql/essentials/core/qplayer/storage/memory
     yql/essentials/providers/common/activation
 )
 

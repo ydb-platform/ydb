@@ -10,7 +10,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TIntOpt = TSentinelOptional<int, TValueSentinel<-1>>;
+YT_DEFINE_SENTINEL_OPTIONAL(TIntOpt, int, -1);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -153,7 +153,7 @@ TEST(TSentinelOptionalTest, ConstAccess)
 ////////////////////////////////////////////////////////////////////////////////
 // Pointer sentinel.
 
-using TPtrOpt = TSentinelOptional<int*, TValueSentinel<nullptr>>;
+YT_DEFINE_SENTINEL_OPTIONAL(TPtrOpt, int*, nullptr);
 
 TEST(TSentinelOptionalTest, PointerSentinel)
 {
@@ -178,7 +178,7 @@ enum class EColor
     Unknown,
 };
 
-using TColorOpt = TSentinelOptional<EColor, TValueSentinel<EColor::Unknown>>;
+YT_DEFINE_SENTINEL_OPTIONAL(TColorOpt, EColor, EColor::Unknown);
 
 TEST(TSentinelOptionalTest, EnumSentinel)
 {

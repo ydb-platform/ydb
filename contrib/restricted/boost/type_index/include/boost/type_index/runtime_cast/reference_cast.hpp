@@ -20,8 +20,10 @@
 #include <boost/type_index/runtime_cast/detail/runtime_cast_impl.hpp>
 
 #if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+#ifndef BOOST_TYPE_INDEX_USE_IMPORT_STD
 #include <memory>
 #include <type_traits>
+#endif
 
 #include <boost/throw_exception.hpp>
 #endif
@@ -46,7 +48,7 @@ struct BOOST_SYMBOL_VISIBLE bad_runtime_cast : std::exception
 /// suitably offset from u. If no such conversion exists, throws boost::typeindex::bad_runtime_cast.
 template<typename T, typename U>
 typename std::add_lvalue_reference<T>::type runtime_cast(U& u) {
-    typedef typename std::remove_reference<T>::type impl_type;
+    using impl_type = typename std::remove_reference<T>::type;
     impl_type* value = detail::runtime_cast_impl<impl_type>(
         std::addressof(u), std::is_base_of<T, U>());
     if(!value)
@@ -61,7 +63,7 @@ typename std::add_lvalue_reference<T>::type runtime_cast(U& u) {
 /// suitably offset from u. If no such conversion exists, throws boost::typeindex::bad_runtime_cast.
 template<typename T, typename U>
 typename std::add_lvalue_reference<const T>::type runtime_cast(U const& u) {
-    typedef typename std::remove_reference<T>::type impl_type;
+    using impl_type = typename std::remove_reference<T>::type;
     impl_type* value = detail::runtime_cast_impl<impl_type>(
         std::addressof(u), std::is_base_of<T, U>());
     if(!value)

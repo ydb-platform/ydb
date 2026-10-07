@@ -1,0 +1,6 @@
+/* custom error: DQ cannot execute the query. Cause: disabled for cluster plato */
+
+PRAGMA DqEngine = 'force';
+
+SELECT *
+FROM plato.Input;

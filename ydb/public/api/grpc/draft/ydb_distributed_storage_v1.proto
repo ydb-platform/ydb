@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package Ydb.DistributedStorage.V1;
+
+option java_package = "com.yandex.ydb.distributed_storage.v1";
+option java_outer_classname = "DistributedStorageGrpc";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/draft/ydb_distributed_storage.proto";
+
+// Scenario-oriented interface for the distributed storage configuration.
+// Successor of the legacy msgbus/grpc BlobStorageConfig interface.
+service DistributedStorageService {
+    // Streams a consistent snapshot of the cluster storage state and
+    // configuration. The snapshot is split into bounded response parts.
+    rpc StreamStorageState(Ydb.DistributedStorage.StorageStateRequest) returns (stream Ydb.DistributedStorage.StorageStateResponse);
+
+    // Starts relocation of a dynamic or static VDisk.
+    rpc ReassignVDisk(Ydb.DistributedStorage.ReassignVDiskRequest) returns (Ydb.DistributedStorage.ReassignVDiskResponse);
+}

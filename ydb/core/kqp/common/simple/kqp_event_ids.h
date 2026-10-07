@@ -54,6 +54,9 @@ struct TKqpEvents {
         EvListCompileCacheQueriesResponse,
         EvWarmupComplete,
         EvStartWarmup,
+        EvCurrentQueryStats,
+        EvKillSessionRequest,
+        EvKillSessionResponse,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
@@ -70,7 +73,9 @@ struct TKqpExecuterEvents {
         EvStreamDataAck,
         EvTableResolveStatus,
         EvShardsResolveStatus,
-        EvDelayedExecution
+        EvDelayedExecution,
+        EvPqTopicResolveStatus,
+        EvCurrentExecutionStats,
     };
 };
 
@@ -100,6 +105,7 @@ struct TKqpComputeEvents {
         EvRemoteScanData,
         EvRemoteScanDataAck,
         EvScanPing,
+        EvScanWarning,
     };
 
     static_assert(Unused0 == EventSpaceBegin(TKikimrEvents::ES_KQP) + 200);
@@ -165,7 +171,6 @@ struct TKqpScriptExecutionEvents {
         EvScriptFinalizeRequest,
         EvScriptFinalizeResponse,
         EvSaveScriptFinalStatusResponse,
-        EvGetScriptExecutionOperationQueryResponse,
         EvDescribeSecretsResponse,
         EvSaveScriptResultPartFinished,
         EvScriptExecutionsTableCreationFinished,
@@ -190,17 +195,7 @@ struct TKqpResourceInfoExchangerEvents {
     };
 };
 
-struct TKqpWorkloadServiceEvents {
-    enum EKqpWorkloadServiceEvents {
-        EvPlaceRequestIntoPool = EventSpaceBegin(TKikimrEvents::ES_KQP) + 700,
-        EvContinueRequest,
-        EvCleanupRequest,
-        EvCleanupResponse,
-        EvUpdatePoolInfo,
-        EvSubscribeOnPoolChanges,
-        EvFetchDatabaseResponse,
-    };
-};
+
 
 struct TKqpBufferWriterEvents {
     enum EKqpBufferWriterEvents {

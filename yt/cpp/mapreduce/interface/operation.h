@@ -3087,6 +3087,14 @@ struct TJobAttributes
     ///
     /// @brief Infos for core dumps produced by job.
     TMaybe<TVector<TCoreInfo>> CoreInfos;
+
+    ///
+    /// @brief Job exec attributes.
+    TMaybe<TNode> ExecAttributes;
+
+    ///
+    /// @brief Job cookie.
+    TMaybe<ui64> Cookie;
 };
 
 ///

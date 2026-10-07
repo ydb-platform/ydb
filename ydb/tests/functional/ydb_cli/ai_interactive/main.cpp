@@ -94,9 +94,9 @@ int NewTestClient(int argc, char** argv) {
 
 TVector<NYdb::NTopic::ECodec> InitAllowedCodecs() {
     return TVector<NYdb::NTopic::ECodec>{
-            NYdb::NTopic::ECodec::RAW,
-            NYdb::NTopic::ECodec::ZSTD,
-            NYdb::NTopic::ECodec::GZIP,
+        NYdb::NTopic::ECodec::RAW,
+        NYdb::NTopic::ECodec::ZSTD,
+        NYdb::NTopic::ECodec::GZIP,
     };
 }
 
@@ -106,7 +106,8 @@ int main(int argc, char **argv) {
     try {
         return NYdb::NConsoleClient::NewTestClient(argc, argv);
     } catch (const std::exception& e) {
-        Cerr << e.what() << Endl;
+        Cerr << "Finished with unexpected exception: " << e.what() << "\nCall stack:" << Endl;
+        TBackTrace::FromCurrentException().PrintTo(Cerr);
         return EXIT_FAILURE;
     }
 }

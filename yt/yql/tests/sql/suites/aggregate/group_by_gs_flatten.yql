@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 use plato;
 
 $input = select a.*, [1,2] as lst from Input as a;

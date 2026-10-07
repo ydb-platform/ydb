@@ -26,6 +26,8 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
 
         if tables_format != 0:
             return
+        if self._is_topic_migration_stage():
+            return
         # break a queue and check failure
         self._break_queue(self._username, self.queue_name, is_fifo)
 
@@ -95,6 +97,8 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         assert_that(len([] if msgs is None else msgs), equal_to(0))
 
         if tables_format != 0:
+            return
+        if self._is_topic_migration_stage():
             return
         # break a queue and check failure
         self._break_queue(self._username, self.queue_name, is_fifo)
@@ -230,7 +234,6 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
                 not_(has_item('SequenceNumber'))
             )
 
-        counters = self._get_sqs_counters()
         send_counter_labels = {
             'subsystem': 'core',
             'user': self._username,
@@ -243,8 +246,34 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             'queue': self.queue_name,
             'sensor': 'ReceiveMessage_Count',
         }
-        assert_that(self._get_counter_value(counters, send_counter_labels, 0), equal_to(1))
-        assert_that(self._get_counter_value(counters, receive_counter_labels, 0), equal_to(1))
+        self._wait_for_counter_value(send_counter_labels, 1, default_value=0)
+        self._wait_for_counter_value(receive_counter_labels, 1, default_value=0)
+
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_standard_queue_ignores_message_deduplication_id(self, tables_format):
+        self._init_with_params(is_fifo=False, tables_format=tables_format)
+        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=False)
+
+        body = 'standard body with ignored deduplication id'
+        message_id = self._send_message_and_assert(
+            created_queue_url, body, seq_no='deduplication-id-1'
+        )
+        read_message_result = self._read_while_not_empty(created_queue_url, 1)
+
+        assert_that(
+            read_message_result, ReadResponseMatcher().with_message_ids([message_id])
+        )
+
+        # MessageDeduplicationId is FIFO-only: ignored for standard queues and not returned on receive.
+        attributes = read_message_result[0].get('Attribute')
+        if attributes is not None:
+            attributes_by_name = {}
+            for a in attributes if isinstance(attributes, list) else [attributes]:
+                attributes_by_name[a['Name']] = a
+            assert_that(
+                attributes_by_name,
+                not_(has_item('MessageDeduplicationId'))
+            )
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_validates_message_attributes(self, tables_format):
@@ -415,7 +444,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             read_ids = set(extract_message_ids(read_result))
             assert_that(read_ids, not_(has_item(already_read_id)))
 
-        time.sleep(visibility_timeout + 0.1)
+        self._sleep_for_visibility_timeout(visibility_timeout)
         self._read_messages_and_assert(
             self.queue_url, messages_count=10, visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids(self.message_ids).with_messages_data(msg_data)
@@ -488,7 +517,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
                 raise
 
         if changed:
-            time.sleep(receive_visibility_timeout + 0.1)
+            self._sleep_for_visibility_timeout(receive_visibility_timeout)
             self._read_messages_and_assert(
                 self.queue_url, messages_count=1, visibility_timeout=100, wait_timeout=0,
                 matcher=ReadResponseMatcher().with_n_messages(0)
@@ -619,7 +648,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         )
         receipt_handle = self.read_result[0]['ReceiptHandle']
         logging.debug('Received receipt handle: {}'.format(receipt_handle))
-        time.sleep(2)
+        time.sleep(8)
 
         def call_change_visibility():
             self._sqs_api.change_message_visibility(self.queue_url, receipt_handle, 1000)
@@ -690,6 +719,9 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         assert_that(self._get_counter_value(counters, delete_counter_labels, 0), equal_to(1))
 
         if tables_format != 0:
+            return
+
+        if self._is_topic_migration_stage():
             return
 
         # break a queue and check failure
@@ -829,7 +861,8 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             matcher=ReadResponseMatcher().with_these_or_more_message_ids(message_ids).with_n_or_more_messages(6),
         )
         remaining_time = visibility_timeout - (time.time() - begin_time)  # for first pack read
-        time.sleep(max(remaining_time + 0.1, visibility_timeout_2 + 0.1, 0))
+        grace = self._visibility_timeout_unlock_grace_sec()
+        time.sleep(max(remaining_time + 0.1 + grace, visibility_timeout_2 + 0.1 + grace, 0))
         self._read_messages_and_assert(
             self.queue_url, messages_count=10, visibility_timeout=1000, matcher=ReadResponseMatcher().with_message_ids(
                 first_pack_ids + second_pack_ids
@@ -850,7 +883,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             self._sqs_api.delete_message(self.queue_url, handle),
             not_none()
         )
-        time.sleep(6)
+        self._sleep_for_visibility_timeout(5, extra=1)
         self._read_messages_and_assert(
             self.queue_url, messages_count=10, visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids(self.message_ids)
@@ -918,7 +951,10 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         ))
         assert_that(attributes['ReceiveMessageWaitTimeSeconds'], equal_to('0'))
         if is_fifo:
+            assert_that(attributes['FifoQueue'], equal_to('true'))
             assert_that(attributes['ContentBasedDeduplication'], equal_to('false'))
+            fifo_only = self._sqs_api.get_queue_attributes(queue_url, attributes=['FifoQueue'])
+            assert_that(fifo_only, equal_to({'FifoQueue': 'true'}))
 
         self._sqs_api.set_queue_attributes(queue_url, {'ReceiveMessageWaitTimeSeconds': '10', 'MaximumMessageSize': '111111'})
         attributes = self._sqs_api.get_queue_attributes(queue_url)
@@ -966,8 +1002,16 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         assert_that(int(attributes['ApproximateNumberOfMessagesDelayed']), equal_to(0))
 
         self._send_message_and_assert(queue_url, 'test', delay_seconds=900, seq_no='1' if is_fifo else None, group_id='group' if is_fifo else None)
-        attributes = self._sqs_api.get_queue_attributes(queue_url, ['ApproximateNumberOfMessagesDelayed'])
-        assert_that(int(attributes['ApproximateNumberOfMessagesDelayed']), equal_to(1))
+        attempts = 10
+        while attempts:
+            attempts -= 1
+            attributes = self._sqs_api.get_queue_attributes(queue_url, ['ApproximateNumberOfMessagesDelayed'])
+            delayed_count = int(attributes['ApproximateNumberOfMessagesDelayed'])
+            if delayed_count != 1 and attempts:
+                time.sleep(0.5)
+                continue
+            assert_that(delayed_count, equal_to(1))
+            break
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)

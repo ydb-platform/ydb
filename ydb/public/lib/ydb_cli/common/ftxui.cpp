@@ -601,7 +601,9 @@ void PrintFtxuiMessage(std::optional<ftxui::Element> message, const TString& tit
     }
 
     auto document = ftxui::vbox(elements) | ftxui::bgcolor(ftxui::Color::Grey11);
-    auto screen = ftxui::Screen::Create(ftxui::Dimension::Full(), ftxui::Dimension::Fit(document));
+    // extend_beyond_screen lets the message be taller than the terminal; otherwise Fit clamps it
+    // to the terminal height and long agent answers / query previews get visually truncated.
+    auto screen = ftxui::Screen::Create(ftxui::Dimension::Full(), ftxui::Dimension::Fit(document, /* extend_beyond_screen */ true));
     ftxui::Render(screen, document);
 
     Cout << Endl;

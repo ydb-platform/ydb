@@ -369,6 +369,28 @@ TMultiTablePartitions TClientBase::GetTablePartitions(
         });
 }
 
+TFilePartitions TClientBase::GetFilePartitions(
+    const TYPath& path,
+    const TVector<TFileReadRange>& ranges,
+    const TGetFilePartitionsOptions& options)
+{
+    return RequestWithRetry<TFilePartitions>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &path, &ranges, &options] (TMutationId /*mutationId*/) {
+            return RawClient_->GetFilePartitions(TransactionId_, path, ranges, options);
+        });
+}
+
+void TClient::CheckClusterLiveness(const TCheckClusterLivenessOptions& options)
+{
+    CheckShutdown();
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForCheckClusterLiveness(),
+        [this, &options] (TMutationId /*mutationId*/) {
+            RawClient_->CheckClusterLiveness(options);
+        });
+}
+
 TMaybe<TYPath> TClientBase::GetFileFromCache(
     const TString& md5Signature,
     const TYPath& cachePath,
@@ -422,6 +444,13 @@ IFileReaderPtr TClientBase::CreateFileReader(
         Context_,
         TransactionId_,
         options);
+}
+
+IFileReaderPtr TClientBase::CreateFilePartitionReader(
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options)
+{
+    return NDetail::CreateFilePartitionReader(RawClient_, ClientRetryPolicy_->CreatePolicyForReaderRequest(), cookie, options);
 }
 
 IFileWriterPtr TClientBase::CreateFileWriter(
@@ -1185,9 +1214,9 @@ void TTransaction::Unlock(
         });
 }
 
-void TTransaction::Commit()
+void TTransaction::Commit(const TCommitTransactionOptions& options)
 {
-    PingableTx_->Commit();
+    PingableTx_->Commit(options);
 }
 
 void TTransaction::Abort()
@@ -1694,7 +1723,7 @@ ITransactionPingerPtr TClient::GetTransactionPinger()
 {
     auto g = Guard(Lock_);
     if (!TransactionPinger_) {
-        TransactionPinger_ = CreateTransactionPinger(Context_.Config);
+        TransactionPinger_ = CreateTransactionPinger(Context_.Config, RawClient_);
     }
     return TransactionPinger_;
 }
@@ -1732,10 +1761,9 @@ const TNode::TMapType& TClient::GetDynamicConfiguration(const TString& configPro
         TNode clusterConfigNode;
 
         TYPath clusterConfigPath = Context_.Config->ConfigRemotePatchPath + "/" + configProfile;
-        YT_LOG_DEBUG(
-            "Fetching cluster config (ConfigPath: %v, ConfigProfile: %v)",
-            Context_.Config->ConfigRemotePatchPath,
-            configProfile);
+        YT_TLOG_DEBUG("Fetching cluster config")
+            .With("ConfigPath", Context_.Config->ConfigRemotePatchPath)
+            .With("ConfigProfile", configProfile);
 
         try {
             TExpectedErrorGuard guard(IsResolveError);
@@ -1746,25 +1774,22 @@ const TNode::TMapType& TClient::GetDynamicConfiguration(const TString& configPro
             }
 
             ClusterConfig_.emplace();
-            YT_LOG_WARNING(
-                "Could not resolve, saved empty cluster config (ConfigPath: %v, ConfigProfile: %v)",
-                Context_.Config->ConfigRemotePatchPath,
-                configProfile);
+            YT_TLOG_WARNING("Could not resolve; saved empty cluster config")
+                .With("ConfigPath", Context_.Config->ConfigRemotePatchPath)
+                .With("ConfigProfile", configProfile);
         }
 
         if (clusterConfigNode.IsMap()) {
             ClusterConfig_ = clusterConfigNode.UncheckedAsMap();
-            YT_LOG_DEBUG(
-                "Saved cluster config (ConfigPath: %v, ConfigProfile: %v)",
-                Context_.Config->ConfigRemotePatchPath,
-                configProfile);
+            YT_TLOG_DEBUG("Saved cluster config")
+                .With("ConfigPath", Context_.Config->ConfigRemotePatchPath)
+                .With("ConfigProfile", configProfile);
         } else if (!ClusterConfig_.has_value()) {
             ClusterConfig_.emplace();
-            YT_LOG_WARNING(
-                "Config node has incorrect type, saved empty cluster config (NodeType: %v, ConfigPath: %v, ConfigProfile: %v)",
-                clusterConfigNode.GetType(),
-                Context_.Config->ConfigRemotePatchPath,
-                configProfile);
+            YT_TLOG_WARNING("Config node has incorrect type; saved empty cluster config")
+                .With("NodeType", clusterConfigNode.GetType())
+                .With("ConfigPath", Context_.Config->ConfigRemotePatchPath)
+                .With("ConfigProfile", configProfile);
         }
     }
 
@@ -1790,7 +1815,8 @@ void SetupClusterContext(
     static constexpr char httpsUrlSchema[] = "https://";
 
     if (!context.UseTLS) {
-        context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema);
+        context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema) ||
+                         (context.Config->PreferHttps && !context.ServerName.StartsWith(httpUrlSchema));
     }
 
     if (context.ServerName.StartsWith(httpUrlSchema)) {
@@ -1828,6 +1854,8 @@ TClientContext CreateClientContext(
 
     if (options.UseTLS_) {
         context.UseTLS = *options.UseTLS_;
+    } else {
+        context.UseTLS = context.Config->UseTLS;
     }
 
     SetupClusterContext(context, serverName);

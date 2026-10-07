@@ -34,22 +34,23 @@ private:
             return 0;
         }
 
-        // When using WaitFor, we protect ourselves from TFiberCancelledException by
+        // When using SuspendFiber, we protect ourselves from TFiberCancelledException by
         // introducing our own read buffer and additional data copying. In case of
-        // Get, there are no means of cancellation, so reading directly to the destination
+        // BlockThread, there are no means of cancellation, so reading directly to the destination
         // buffer is just fine.
         TSharedMutableRef readBuffer;
-        if (Strategy_ == EWaitForStrategy::WaitFor) {
+        if (Strategy_ == EWaitForStrategy::SuspendFiber) {
             struct TSyncInputStreamAdapterIntermediateBufferTag { };
-            readBuffer = TSharedMutableRef::Allocate<TSyncInputStreamAdapterIntermediateBufferTag>(length);
+            readBuffer = TSharedMutableRef::Allocate<TSyncInputStreamAdapterIntermediateBufferTag>(length, {.InitializeStorage = false});
         } else {
             readBuffer = TSharedMutableRef(buffer, length, /*holder*/ nullptr);
         }
 
-        auto bytesRead = WaitForWithStrategy(UnderlyingStream_->Read(readBuffer), Strategy_)
-            .ValueOrThrow();
+        auto readFuture = UnderlyingStream_->Read(readBuffer);
+        WaitUntilSet(readFuture.AsVoid(), {.Strategy = Strategy_});
+        auto bytesRead = readFuture.GetOrCrash().ValueOrThrow();
 
-        if (Strategy_ == EWaitForStrategy::WaitFor) {
+        if (Strategy_ == EWaitForStrategy::SuspendFiber) {
             memcpy(buffer, readBuffer.Begin(), bytesRead);
         }
 
@@ -90,8 +91,9 @@ private:
     size_t DoNext(const void** ptr, size_t len) override
     {
         if (Buffer_.Empty() && !Eos_) {
-            Buffer_ = WaitForWithStrategy(UnderlyingStream_->Read(), Strategy_)
-                .ValueOrThrow();
+            auto readFuture = UnderlyingStream_->Read();
+            WaitUntilSet(readFuture.AsVoid(), {.Strategy = Strategy_});
+            Buffer_ = readFuture.GetOrCrash().ValueOrThrow();
             if (!Buffer_) {
                 Eos_ = true;
             } else {
@@ -191,7 +193,7 @@ private:
     void Reset()
     {
         CurrentBufferSize_ = 0;
-        Buffer_ = TSharedMutableRef::Allocate<TBufferTag>(BufferCapacity_);
+        Buffer_ = TSharedMutableRef::Allocate<TBufferTag>(BufferCapacity_, {.InitializeStorage = false});
     }
 
     void* WriteToBuffer(const void* data, size_t length)
@@ -207,8 +209,8 @@ private:
     {
         auto sharedBuffer = TSharedRef::MakeCopy<TBufferTag>(TRef(data, length));
         auto future = UnderlyingStream_->Write(std::move(sharedBuffer));
-        WaitForWithStrategy(std::move(future), Strategy_)
-            .ThrowOnError();
+        WaitUntilSet(future, {.Strategy = Strategy_});
+        future.GetOrCrash().ThrowOnError();
     }
 
     size_t GetBufferSpaceLeft() const
@@ -259,8 +261,8 @@ protected:
             return;
         }
         auto writeFuture = UnderlyingStream_->Write(Buffer_.Slice(0, CurrentBufferSize_));
-        WaitForWithStrategy(std::move(writeFuture), Strategy_)
-            .ThrowOnError();
+        WaitUntilSet(writeFuture, {.Strategy = Strategy_});
+        writeFuture.GetOrCrash().ThrowOnError();
         Reset();
     }
 };
@@ -537,7 +539,7 @@ private:
         TPromise<void> Promise;
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::queue<TEntry> Queue_;
     TError Error_;
     bool Closed_ = false;
@@ -691,14 +693,14 @@ private:
     const IAsyncZeroCopyInputStreamPtr UnderlyingStream_;
     const size_t WindowSize_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TError Error_;
     std::queue<TSharedRef> PrefetchedBlocks_;
     size_t PrefetchedSize_ = 0;
     TFuture<void> OutstandingResult_;
 
 
-    TFuture<void> Prefetch(TGuard<NThreading::TSpinLock>* guard)
+    TFuture<void> Prefetch(TGuard<TSpinLock>* guard)
     {
         if (OutstandingResult_) {
             return OutstandingResult_;
@@ -728,7 +730,7 @@ private:
         return PopBlock(&guard);
     }
 
-    void PushBlock(TGuard<NThreading::TSpinLock>* guard, const TErrorOr<TSharedRef>& result)
+    void PushBlock(TGuard<TSpinLock>* guard, const TErrorOr<TSharedRef>& result)
     {
         YT_ASSERT(OutstandingResult_);
         OutstandingResult_.Reset();
@@ -744,7 +746,7 @@ private:
         }
     }
 
-    TSharedRef PopBlock(TGuard<NThreading::TSpinLock>* guard)
+    TSharedRef PopBlock(TGuard<TSpinLock>* guard)
     {
         YT_ASSERT(!PrefetchedBlocks_.empty());
         auto block = PrefetchedBlocks_.front();
@@ -805,7 +807,7 @@ private:
     const IAsyncInputStreamPtr UnderlyingStream_;
     const size_t WindowSize_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TError Error_;
     TSharedMutableRef Prefetched_;
     TSharedMutableRef Buffer_;
@@ -813,7 +815,7 @@ private:
     bool EndOfStream_ = false;
     TFuture<void> OutstandingResult_;
 
-    TFuture<void> Prefetch(TGuard<NThreading::TSpinLock>* guard)
+    TFuture<void> Prefetch(TGuard<TSpinLock>* guard)
     {
         if (OutstandingResult_) {
             return OutstandingResult_;
@@ -848,7 +850,7 @@ private:
         return TSharedRef();
     }
 
-    void AppendPrefetched(TGuard<NThreading::TSpinLock>* guard, const TErrorOr<size_t>& result)
+    void AppendPrefetched(TGuard<TSpinLock>* guard, const TErrorOr<size_t>& result)
     {
         YT_ASSERT(OutstandingResult_);
         OutstandingResult_.Reset();
@@ -876,7 +878,7 @@ private:
         }
     }
 
-    TSharedRef CopyPrefetched(TGuard<NThreading::TSpinLock>* guard)
+    TSharedRef CopyPrefetched(TGuard<TSpinLock>* guard)
     {
         YT_ASSERT(PrefetchedSize_ != 0);
         auto block = Prefetched_.Slice(0, PrefetchedSize_);
@@ -945,7 +947,7 @@ private:
     const IAsyncZeroCopyInputStreamPtr UnderlyingStream_;
     const TDuration Timeout_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
 
     bool Fetching_ = false;
     std::optional<TErrorOr<TSharedRef>> PendingBlock_;
@@ -985,7 +987,7 @@ private:
                 error = TError(NYT::EErrorCode::Canceled, "Operation aborted");
             } else {
                 error = TError(NYT::EErrorCode::Timeout, "Operation timed out")
-                    << TErrorAttribute("timeout", Timeout_);
+                    .With("timeout", Timeout_);
             }
             promise.Set(error);
         }
@@ -1045,7 +1047,7 @@ public:
 private:
     const IAsyncZeroCopyInputStreamPtr UnderlyingStream_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
 
     bool Fetching_ = false;
     std::optional<TErrorOr<TSharedRef>> PendingBlock_;

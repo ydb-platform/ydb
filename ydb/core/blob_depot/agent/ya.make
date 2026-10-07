@@ -4,6 +4,9 @@ LIBRARY()
         CFLAGS(
             -DKIKIMR_DISABLE_S3_OPS
         )
+        SRCS(
+            s3_windows_stub.cpp
+        )
     ELSE()
         SRCS(
             s3.cpp

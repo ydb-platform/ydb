@@ -6,6 +6,11 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 
+namespace NKikimrScheme {
+class TEvModifySchemeTransaction;
+class TEvModifySchemeTransactionResult;
+}
+
 namespace NKikimr::NSchemeShard {
 
 class PQGroupReserve {
@@ -20,27 +25,20 @@ public:
     ui64 Throughput;
 };
 
-void ScheduleSendTopicCloudEvent(
+void SendTopicCloudEvent(
     const NKikimrSchemeOp::TModifyScheme& operation,
-    TOperationContext& context,
+    TSchemeShard* ss,
+    const TActorContext& ctx,
     NKikimrScheme::EStatus status,
-    const TString& reason);
+    const TString& reason,
+    const TString& userSID,
+    const TString& peerName);
 
-void FinishWithError(
-    TProposeResponse* result,
-    const NKikimrSchemeOp::TModifyScheme& operation,
-    NKikimrScheme::EStatus status,
-    const TString& errStr,
-    TOperationContext& context);
-
-class TPQDoneWithCloudEvents : public TDone {
-public:
-    explicit TPQDoneWithCloudEvents(const TOperationId& id, const TTxTransaction& tx);
-
-    bool ProgressState(TOperationContext&) override;
-
-private:
-    const TTxTransaction Transaction;
-};
+void SendTopicCloudEventIfNeeded(
+    const NKikimrScheme::TEvModifySchemeTransaction& record,
+    const NKikimrScheme::TEvModifySchemeTransactionResult& response,
+    TSchemeShard* ss,
+    const TString& peerName,
+    const TString& userSID);
 
 } // NKikimr::NSchemeShard

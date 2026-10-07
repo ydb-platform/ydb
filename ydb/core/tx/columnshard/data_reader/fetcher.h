@@ -2,6 +2,7 @@
 #include "contexts.h"
 #include "fetching_executor.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
@@ -11,6 +12,7 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/signals/states.h>
 
 namespace NKikimr::NOlap::NDataFetcher {
@@ -37,7 +39,8 @@ private:
 
 public:
     TCounters()
-        : TBase("data_fetcher") {
+        : TBase("data_fetcher")
+    {
     }
 
     std::shared_ptr<TClassCounters> GetClassCounters(const TString& className) {
@@ -68,8 +71,8 @@ public:
             CurrentContext.GetMemoryProcessId(), CurrentContext.GetMemoryScopeId(), CurrentContext.GetMemoryGroupId(), { task }, 0);
     }
 
-    ui64 GetNecessaryDataMemory(
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const {
+    ui64 GetNecessaryDataMemory(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds,
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const {
         return Callback->GetNecessaryDataMemory(columnIds, acc);
     }
 
@@ -140,8 +143,11 @@ public:
     }
 
     void OnError(const TString& errMessage) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "on_error")("consumer", Input.GetConsumer())(
-            "task_id", Input.GetExternalTaskId())("script", Script.GetScriptClassName());
+        YDB_LOG_CREATE_CONTEXT(
+            {"event", "on_error"},
+            {"consumer", Input.GetConsumer()},
+            {"taskId", Input.GetExternalTaskId()},
+            {"script", Script.GetScriptClassName()});
         AFL_VERIFY(!IsFinishedFlag);
         IsFinishedFlag = true;
         SetStage(EFetchingStage::Error);
@@ -149,8 +155,11 @@ public:
     }
 
     void OnFinished() {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "on_finished")("consumer", Input.GetConsumer())(
-            "task_id", Input.GetExternalTaskId())("script", Script.GetScriptClassName());
+        YDB_LOG_CREATE_CONTEXT(
+            {"event", "on_finished"},
+            {"consumer", Input.GetConsumer()},
+            {"taskId", Input.GetExternalTaskId()},
+            {"script", Script.GetScriptClassName()});
         AFL_VERIFY(!IsFinishedFlag);
         IsFinishedFlag = true;
         SetStage(EFetchingStage::Finished);
@@ -165,7 +174,10 @@ public:
         if (IsFinishedFlag) {
             return false;
         }
-        NConveyorComposite::TServiceOperator::SendTaskToExecute(std::make_shared<TFetchingExecutor>(selfPtr), ConveyorCategory, 0);
+        const bool useBatchPool = ConveyorCategory == NConveyorComposite::ESpecialTaskCategory::Compaction && HasAppData() &&
+                                  AppDataVerified().ColumnShardConfig.HasCompactionDefaultPool() &&
+                                  AppDataVerified().ColumnShardConfig.GetCompactionDefaultPool() == "Batch";
+        NConveyorComposite::TServiceOperator::SendTaskToExecute(std::make_shared<TFetchingExecutor>(selfPtr), ConveyorCategory, 0, useBatchPool);
         return true;
     }
 };

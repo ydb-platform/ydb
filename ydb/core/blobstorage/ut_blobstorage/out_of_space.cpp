@@ -1,0 +1,73 @@
+#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/util/lz4_data_generator.h>
+
+Y_UNIT_TEST_SUITE(OutOfSpace) {
+
+    Y_UNIT_TEST(HugeBlobWriteError) {
+        TEnvironmentSetup env{{
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .PDiskSize = 2_GB,
+        }};
+        auto& runtime = env.Runtime;
+
+        if (runtime->GetNode(1)->AppData->FeatureFlags.GetEnableTinyDisks()) {
+            // TODO: rewrite test for new huge blob sizes
+            return;
+        }
+
+        env.CreateBoxAndPool(1, 1, 1, NKikimrBlobStorage::EPDiskType::NVME, std::nullopt);
+        env.Sim(TDuration::Seconds(30));
+
+        const ui32 groupId = env.GetGroups().front();
+        auto info = env.GetGroupInfo(groupId);
+
+        const TActorId edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        size_t size = 65536;
+        bool writeError = false;
+        std::vector<TLogoBlobID> success;
+        while (size <= 10_MB) {
+            Cerr << size << Endl;
+            TString buffer = FastGenDataForLZ4(size);
+            TLogoBlobID id(1, 1, 1, 0, size, 0);
+            runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max()));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+            // Fresh reservations change how many huge blobs fit before space runs out.
+            if (res->Get()->Status == NKikimrProto::OK) {
+                success.push_back(id);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::ERROR);
+                writeError = true;
+            }
+            size = size * 9 / 8;
+        }
+        UNIT_ASSERT_C(!success.empty(), "No blob was written before running out of space");
+        UNIT_ASSERT_C(writeError, "Disk did not run out of space");
+
+        auto checkReadable = [&] {
+            for (const TLogoBlobID& id : success) {
+                runtime->WrapInActorContext(edge, [&] {
+                    SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead));
+                });
+                auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::OK);
+                UNIT_ASSERT_EQUAL(res->Get()->Responses[0].Buffer.ConvertToString(), FastGenDataForLZ4(id.BlobSize()));
+            }
+        };
+
+        checkReadable();
+
+        const TActorId vdiskActorId = info->GetActorId(0);
+        runtime->Send(new IEventHandle(vdiskActorId, edge, new TEvBlobStorage::TEvVCompact(info->GetVDiskId(0),
+            NKikimrBlobStorage::TEvVCompact::ASYNC)), edge.NodeId());
+        env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVCompactResult>(edge, false);
+        env.Sim(TDuration::MilliSeconds(1));
+
+        checkReadable();
+    }
+
+}

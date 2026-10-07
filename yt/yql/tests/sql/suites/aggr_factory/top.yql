@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 $t = AsList(
     AsStruct(7 as a),
     AsStruct(4 as a),

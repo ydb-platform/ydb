@@ -152,7 +152,6 @@ class TTopKeeperWrapperBase {
 protected:
     TTopKeeperContainer<TUnboxedValue, TCompare, TUnboxedValue::TAllocator> Keeper_;
 
-protected:
     explicit TTopKeeperWrapperBase(TCompare compare)
         : Keeper_(compare)
     {
@@ -221,7 +220,6 @@ class TTopKeeperPairWrapperBase {
 protected:
     TTopKeeperContainer<TUnboxedValuePair, TCompare, TStdAllocatorForUdf<TUnboxedValuePair>> Keeper_;
 
-protected:
     explicit TTopKeeperPairWrapperBase(TCompare compare)
         : Keeper_(compare)
     {
@@ -752,12 +750,12 @@ RESOURCE_GENERIC(true, true)
         }                           \
     }
 
-static const auto CreateName = TStringRef::Of("Create");
-static const auto AddValueName = TStringRef::Of("AddValue");
-static const auto SerializeName = TStringRef::Of("Serialize");
-static const auto DeserializeName = TStringRef::Of("Deserialize");
-static const auto MergeName = TStringRef::Of("Merge");
-static const auto GetResultName = TStringRef::Of("GetResult");
+const auto CreateName = TStringRef::Of("Create");
+const auto AddValueName = TStringRef::Of("AddValue");
+const auto SerializeName = TStringRef::Of("Serialize");
+const auto DeserializeName = TStringRef::Of("Deserialize");
+const auto MergeName = TStringRef::Of("Merge");
+const auto GetResultName = TStringRef::Of("GetResult");
 
 class TTopModule: public IUdfModule {
 public:

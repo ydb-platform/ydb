@@ -9,6 +9,7 @@
 #include "log.h"
 #include "proxy_actor.h"
 #include "serviceid.h"
+#include "topic_pqrb_metrics.h"
 #include "schema.h"
 
 #include <ydb/core/audit/audit_log.h>
@@ -18,6 +19,7 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/ymq/base/action.h>
 #include <ydb/core/ymq/base/acl.h>
+#include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/query_id.h>
 #include <ydb/core/ymq/base/security.h>
@@ -32,8 +34,6 @@
 #include <util/string/join.h>
 
 namespace NKikimr::NSQS {
-
-constexpr char const ConsumerName[] = "sqs_consumer";
 
 class TMigrationFeatureFlags
 {
@@ -297,6 +297,112 @@ protected:
         return Join("/", root, UserName_, DoGetQueueName(), TStringBuilder() << "v" << QueueVersion_, "streamImpl");
     }
 
+    void SetBalancerTabletId(ui64 balancerTabletId) {
+        if (balancerTabletId != 0) {
+            BalancerTabletId_ = balancerTabletId;
+        }
+    }
+
+    bool ShouldReportTopicActionMetricsToPqrb() const {
+        if (!IsTopicCreated()) {
+            return false;
+        }
+        if (!FeatureFlags_.EnableSQSMigrationCompatibility_ && !FeatureFlags_.EnableSQSMigrationFinished_) {
+            return false;
+        }
+        if (!IsActionForQueue(Action_) && !IsActionForQueueYMQ(Action_)) {
+            return false;
+        }
+        if (!IsActionForMessage(Action_) && (!QueueCounters_ || !QueueCounters_->NeedToShowDetailedCounters())) {
+            return false;
+        }
+        return true;
+    }
+
+    void ReportTopicActionMetricsToPqrb(size_t errors, TDuration duration, TDuration workingDuration) {
+        if (!ShouldReportTopicActionMetricsToPqrb()) {
+            return;
+        }
+
+        NKikimrPQ::TEvTopicSqsActionMetrics metrics;
+        const ui32 errorsCount = static_cast<ui32>(errors);
+        const ui64 durationMs = duration.MilliSeconds();
+        const ui64 workingDurationMs = workingDuration.MilliSeconds();
+
+        auto fillProxyAction = [&](NKikimrPQ::TEvTopicSqsActionMetrics::TTopicSqsProxyActionMetrics* action) {
+            action->SetErrorsCount(errorsCount);
+            action->SetDurationMs(durationMs);
+        };
+
+        switch (Action_) {
+        case EAction::ChangeMessageVisibility:
+            fillProxyAction(metrics.MutableChangeMessageVisibility());
+            break;
+        case EAction::ChangeMessageVisibilityBatch:
+            fillProxyAction(metrics.MutableChangeMessageVisibilityBatch());
+            break;
+        case EAction::DeleteMessage: {
+            auto* action = metrics.MutableDeleteMessage();
+            action->SetErrorsCount(errorsCount);
+            action->SetDurationMs(durationMs);
+            break;
+        }
+        case EAction::DeleteMessageBatch: {
+            auto* action = metrics.MutableDeleteMessageBatch();
+            action->SetErrorsCount(errorsCount);
+            action->SetDurationMs(durationMs);
+            break;
+        }
+        case EAction::GetQueueAttributes:
+            fillProxyAction(metrics.MutableGetQueueAttributes());
+            break;
+        case EAction::GetQueueUrl:
+            fillProxyAction(metrics.MutableGetQueueUrl());
+            break;
+        case EAction::PurgeQueue:
+            fillProxyAction(metrics.MutablePurgeQueue());
+            break;
+        case EAction::ReceiveMessage: {
+            auto* action = metrics.MutableReceiveMessage();
+            action->SetErrorsCount(errorsCount);
+            action->SetDurationMs(durationMs);
+            action->SetWorkingDurationMs(workingDurationMs);
+            break;
+        }
+        case EAction::SendMessage: {
+            auto* action = metrics.MutableSendMessage();
+            action->SetErrorsCount(errorsCount);
+            action->SetDurationMs(durationMs);
+            break;
+        }
+        case EAction::SendMessageBatch: {
+            auto* action = metrics.MutableSendMessageBatch();
+            action->SetErrorsCount(errorsCount);
+            action->SetDurationMs(durationMs);
+            break;
+        }
+        case EAction::SetQueueAttributes:
+            fillProxyAction(metrics.MutableSetQueueAttributes());
+            break;
+        case EAction::ListDeadLetterSourceQueues:
+            fillProxyAction(metrics.MutableListDeadLetterSourceQueues());
+            break;
+        case EAction::ListQueueTags:
+            fillProxyAction(metrics.MutableListQueueTags());
+            break;
+        case EAction::TagQueue:
+            fillProxyAction(metrics.MutableTagQueue());
+            break;
+        case EAction::UntagQueue:
+            fillProxyAction(metrics.MutableUntagQueue());
+            break;
+        default:
+            return;
+        }
+
+        SendTopicPqrbMetrics(BalancerTabletId_, GetDatabaseName(), GetTopicName(), std::move(metrics));
+    }
+
     void SendReplyAndDie() {
         RLOG_SQS_TRACE("SendReplyAndDie from action actor " << Response_);
         auto* detailedCounters = UserCounters_ ? UserCounters_->GetDetailedCounters() : nullptr;
@@ -306,7 +412,8 @@ protected:
 
         const TDuration duration = GetRequestDuration();
         const TDuration workingDuration = GetRequestWorkingDuration();
-        if (QueueLeader_ && (IsActionForQueue(Action_) || IsActionForQueueYMQ(Action_))) {
+        if (QueueLeader_ && (IsActionForQueue(Action_) || IsActionForQueueYMQ(Action_))
+            && !ShouldReportTopicActionMetricsToPqrb()) {
             auto counterChangedEvent = MakeHolder<TSqsEvents::TEvActionCounterChanged>();
             counterChangedEvent->Record.set_action(Action_);
             counterChangedEvent->Record.set_durationms(duration.MilliSeconds());
@@ -338,6 +445,8 @@ protected:
                 COLLECT_HISTOGRAM_COUNTER_COUPLE(userCounters, WorkingDuration, workingDuration.MilliSeconds());
             }
         }
+
+        ReportTopicActionMetricsToPqrb(errors, duration, workingDuration);
 
         if (IsRequestSlow()) {
             PrintSlowRequestWarning();
@@ -615,6 +724,14 @@ private:
         MaskedToken_ = request.GetAuth().GetMaskedToken();
         AuthType_ = request.GetAuth().GetAuthType();
 
+        if (request.GetAuth().HasSourceAddress()) {
+            SourceAddress_ = request.GetAuth().GetSourceAddress();
+        } else if constexpr (requires { request.GetSourceAddress(); }) {
+            SourceAddress_ = request.GetSourceAddress();
+        } else {
+            SourceAddress_.clear();
+        }
+
         if (IsCloud() && !FolderId_) {
             auto items = ParseCloudSecurityToken(SecurityToken_);
             UserName_ = std::get<0>(items);
@@ -647,7 +764,10 @@ private:
     }
 
     void RequestTicketParser() {
-        this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(SecurityToken_));
+        this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = SecurityToken_,
+            .TraceContext = {SourceAddress_, RequestId_},
+        }));
     }
 
     bool IsACLProtectedAccount(const TString& accountName) const {
@@ -783,10 +903,14 @@ private:
     void HandleTicketParserResponse(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
         if (result.HasError()) {
-            RLOG_SQS_ERROR("Got ticket parser error: " << result.Error << ". " << Action_ << " was rejected");
-            MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
-            SendReplyAndDie();
-            return;
+            if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+                RLOG_SQS_ERROR("Got ticket parser error: " << result.Error << ". " << Action_ << " was rejected");
+                MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
+                SendReplyAndDie();
+                return;
+            }
+
+            UserToken_ = nullptr;
         } else {
             UserToken_ = ev->Get()->Token;
             Y_ABORT_UNLESS(UserToken_);
@@ -799,18 +923,20 @@ private:
         --SecurityCheckRequestsToWaitFor_;
 
         if (SecurityCheckRequestsToWaitFor_ == 0) {
-            const TString& actionName = ToString(Action_);
-            const ui32 requiredAccess = GetActionRequiredAccess(actionName);
-            UserSID_ = UserToken_->GetUserSID();
-            if (requiredAccess != 0 && SecurityObject_ && !SecurityObject_->CheckAccess(requiredAccess, *UserToken_)) {
-                if (Action_ == EAction::ModifyPermissions) {
-                    // do not spam for other actions
-                    RLOG_SQS_WARN("User " << UserSID_ << " tried to modify ACL for " << GetActionACLSourcePath() << ". Access denied");
+            if (UserToken_) {
+                const TString& actionName = ToString(Action_);
+                const ui32 requiredAccess = GetActionRequiredAccess(actionName);
+                UserSID_ = UserToken_->GetUserSID();
+                if (requiredAccess != 0 && SecurityObject_ && !SecurityObject_->CheckAccess(requiredAccess, *UserToken_)) {
+                    if (Action_ == EAction::ModifyPermissions) {
+                        // do not spam for other actions
+                        RLOG_SQS_WARN("User " << UserSID_ << " tried to modify ACL for " << GetActionACLSourcePath() << ". Access denied");
+                    }
+                    MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED, Sprintf("%s on %s was denied for %s due to missing permission %s.",
+                            actionName.c_str(), SanitizeNodePath(GetActionACLSourcePath()).c_str(), UserSID_.c_str(), GetActionMatchingACE(actionName).c_str()));
+                    SendReplyAndDie();
+                    return;
                 }
-                MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED, Sprintf("%s on %s was denied for %s due to missing permission %s.",
-                          actionName.c_str(), SanitizeNodePath(GetActionACLSourcePath()).c_str(), UserSID_.c_str(), GetActionMatchingACE(actionName).c_str()));
-                SendReplyAndDie();
-                return;
             }
 
             DoGetQuotaAndProcess();
@@ -925,6 +1051,7 @@ protected:
     TString  RootUrl_;
     TString  UserName_;
     TString  SecurityToken_;
+    TString  SourceAddress_;
     TString  FolderId_;
     size_t SecurityCheckRequestsToWaitFor_ = 2;
     TIntrusivePtr<TSecurityObject> SecurityObject_;
@@ -958,6 +1085,7 @@ protected:
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
     bool NeedReportSqsActionInflyCounter = false;
     bool NeedReportYmqActionInflyCounter = false;
+    ui64 BalancerTabletId_ = 0;
     TSchedulerCookieHolder TimeoutCookie_;
     NKikimrClient::TSqsRequest SourceSqsRequest_;
 

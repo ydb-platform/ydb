@@ -247,6 +247,13 @@ class YamlConfigState {
                 this.config = data.Response.config[0];
             }
 
+            // Highlight unknown/deprecated fields (cached by console at upload time).
+            // GetAllConfigs serializes proto field names as-is (PascalCase) -> normalize.
+            this.unknownFields = (data.MainConfigUnknownFields || []).map(function(f) {
+                return { path: f.Path, name: f.Name, proto: f.Proto, deprecated: !!f.Deprecated };
+            });
+            highlightUnknownFields(this.codeMirror, document.getElementById('yaml-unknown-fields'), this.unknownFields);
+
             if (data.Response.volatile_configs === undefined) {
                 data.Response.volatile_configs = [];
             }

@@ -38,6 +38,10 @@ void TDriverConfig::Register(TRegistrar registrar)
     registrar.Parameter("write_buffer_size", &TThis::WriteBufferSize)
         .Default(1_MB);
 
+    registrar.Parameter("max_attachment_size", &TThis::MaxAttachmentSize)
+        .GreaterThan(0)
+        .Default(4_MB);
+
     registrar.Parameter("client_cache", &TThis::ClientCache)
         .DefaultNew();
 
@@ -66,6 +70,9 @@ void TDriverConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("require_password_in_authentication_commands", &TThis::RequirePasswordInAuthenticationCommands)
         .Default(true);
+
+    registrar.Parameter("abandon_master_transactions_on_failed_commit", &TThis::AbandonMasterTransactionsOnFailedCommit)
+        .Default(false);
 
     registrar.Preprocessor([] (TThis* config) {
         config->ClientCache->Capacity = 1024_KB;

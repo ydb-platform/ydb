@@ -21,10 +21,10 @@ TEST_SRCS(
     numpy/lib/tests/test__datasource.py
     numpy/lib/tests/test__iotools.py
     numpy/lib/tests/test__version.py
+    numpy/lib/tests/test_array_utils.py
     numpy/lib/tests/test_arraypad.py
     numpy/lib/tests/test_arraysetops.py
     numpy/lib/tests/test_arrayterator.py
-    numpy/lib/tests/test_financial_expired.py
     numpy/lib/tests/test_format.py
     numpy/lib/tests/test_function_base.py
     numpy/lib/tests/test_histograms.py

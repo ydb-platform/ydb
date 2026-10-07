@@ -22,7 +22,7 @@ private:
     void SendResponseOkAndDie(const TString& host, i32 port, ui64 nodeId, const NActors::TActorContext& ctx);
     void SendResponseFailAndDie(EKafkaErrors error, const TString& message, const NActors::TActorContext& ctx);
 
-    TString LogPrefix();
+    NActors::NStructuredLog::TStructuredMessage LogPrefix();
 
 private:
     const TContext::TPtr Context;

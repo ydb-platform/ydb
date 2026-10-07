@@ -47,7 +47,8 @@ TWorkerGraph::TWorkerGraph(
     ui64 nativeYtTypeFlags,
     TMaybe<ui64> deterministicTimeProviderSeed,
     TLangVersion langver,
-    bool insideEvaluation)
+    bool insideEvaluation,
+    NYql::TRuntimeSettings::TConstPtr runtimeSettings)
     : ScopedAlloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
     , Env(ScopedAlloc)
     , FuncRegistry(funcRegistry)
@@ -55,6 +56,7 @@ TWorkerGraph::TWorkerGraph(
     , TimeProvider(deterministicTimeProviderSeed ? CreateDeterministicTimeProvider(*deterministicTimeProviderSeed) : CreateDefaultTimeProvider())
     , LLVMSettings(LLVMSettings)
     , NativeYtTypeFlags(nativeYtTypeFlags)
+    , RuntimeSettings(std::move(runtimeSettings))
 {
     // Build the root MKQL node
     NCommon::TMemoizedTypesMap typeMemoization;
@@ -77,7 +79,7 @@ TWorkerGraph::TWorkerGraph(
 
     // Setup struct types
 
-    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env, FuncRegistry, false, langver);
+    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env, FuncRegistry, /*voidWithEffects=*/false, langver);
     for (ui32 i = 0; i < inputsCount; ++i) {
         const auto* type = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *inputTypes[i], pgmBuilder, typeMemoization));
         const auto* originalType = type;
@@ -156,11 +158,12 @@ TWorkerGraph::TWorkerGraph(
         NKikimr::NUdf::EValidatePolicy::Exception,
         LLVMSettings,
         NKikimr::NMiniKQL::EGraphPerProcess::Multi,
-        nullptr,
+        /*stats=*/nullptr,
         countersProvider,
-        nullptr,
-        nullptr,
-        langver);
+        /*secureParamsProvider=*/nullptr,
+        /*logProvider=*/nullptr,
+        langver,
+        RuntimeSettings);
 
     ComputationPattern = NKikimr::NMiniKQL::MakeComputationPattern(
         explorer,
@@ -218,11 +221,13 @@ TWorker<TBase>::TWorker(
     NKikimr::NUdf::ICountersProvider* countersProvider,
     ui64 nativeYtTypeFlags,
     TMaybe<ui64> deterministicTimeProviderSeed,
-    TLangVersion langver)
+    TLangVersion langver,
+    NYql::TRuntimeSettings::TConstPtr runtimeSettings)
     : WorkerFactory_(std::move(factory))
     , Graph_(exprRoot, exprCtx, serializedProgram, funcRegistry, userData,
              inputTypes, originalInputTypes, rawInputTypes, outputType, rawOutputType,
-             LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver, false)
+             LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver, /*insideEvaluation=*/false,
+             std::move(runtimeSettings))
 {
 }
 
@@ -536,7 +541,6 @@ private:
 public:
     using TCustomListValue::TCustomListValue;
 
-public:
     void SetValue(NKikimr::NUdf::TUnboxedValue&& value) {
         Value_ = std::move(value);
         HasValue_ = true;
@@ -644,7 +648,7 @@ void TPushStreamWorker::OnFinish() {
 
 void TPushStreamWorker::Release() {
     with_lock (GetScopedAlloc()) {
-        Consumer_.Destroy();
+        Consumer_.reset();
         if (SelfNode_) {
             SelfNode_->SetValue(Graph_.ComputationGraph->GetContext(), NKikimr::NUdf::TUnboxedValue::Invalid());
         }

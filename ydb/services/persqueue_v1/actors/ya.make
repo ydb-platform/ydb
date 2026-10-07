@@ -9,10 +9,14 @@ PEERDIR(
     ydb/core/base
     ydb/core/grpc_services
     ydb/core/persqueue/common
+    ydb/core/persqueue/deferred_publish
     ydb/core/persqueue/events
     ydb/core/persqueue/public
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/cluster_tracker
+    ydb/core/persqueue/public/dataplane
+    ydb/core/persqueue/public/reset_offset
+    ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/scheme_cache
@@ -20,6 +24,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/persqueue
     ydb/library/persqueue/topic_parser
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/library/cloud_permissions
     ydb/public/api/protos
     ydb/public/lib/base
@@ -34,6 +39,8 @@ SRCS(
     codecs.cpp
     commit_offset_actor.h
     commit_offset_actor.cpp
+    reset_offset_actor.h
+    reset_offset_actor.cpp
     distributed_commit_helper.h
     distributed_commit_helper.cpp
     events.h
@@ -41,6 +48,8 @@ SRCS(
     persqueue_utils.cpp
     helpers.h
     helpers.cpp
+    fill_batched_data_offset.h
+    fill_batched_data.h
     partition_actor.h
     partition_actor.cpp
     partition_id.h
@@ -57,10 +66,10 @@ SRCS(
     schema_actors.h
     schema_actors.cpp
     update_offsets_in_transaction_actor.cpp
-    partition_writer.h
-    partition_writer.cpp
-    partition_writer_cache_actor.h
-    partition_writer_cache_actor.cpp
 )
 
 END()
+
+RECURSE(
+    schema
+)

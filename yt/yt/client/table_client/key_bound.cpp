@@ -15,7 +15,7 @@ using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Used only for YT_LOG_FATAL below.
+//! Used only for YT_TLOG_FATAL below.
 [[maybe_unused]] constinit const auto Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -78,7 +78,8 @@ TKeyBound TKeyBoundImpl<TRow, TKeyBound>::FromRowUnchecked(const TRow& row, bool
     try {
         ValidateValueTypes(row);
     } catch (const std::exception& ex) {
-        YT_LOG_FATAL(ex, "Unexpected exception while building key bound from row");
+        YT_TLOG_FATAL("Unexpected exception while building key bound from row")
+            .With(ex);
     }
 #endif
 
@@ -98,7 +99,8 @@ TKeyBound TKeyBoundImpl<TRow, TKeyBound>::FromRowUnchecked(TRow&& row, bool isIn
     try {
         ValidateValueTypes(row);
     } catch (const std::exception& ex) {
-        YT_LOG_FATAL(ex, "Unexpected exception while building key bound from row");
+        YT_TLOG_FATAL("Unexpected exception while building key bound from row")
+            .With(ex);
     }
 #endif
 
@@ -315,7 +317,7 @@ void Deserialize(TOwningKeyBound& keyBound, const NYTree::INodePtr& node)
                 relationNode->GetType());
         }
 
-        auto relation = relationNode->GetValue<TString>();
+        auto relation = relationNode->GetValue<std::string>();
         auto [isInclusive, isUpper] = NDetail::RelationToIsUpperAndIsInclusive(relation);
 
         TUnversionedOwningRow row;

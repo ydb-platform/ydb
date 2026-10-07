@@ -5,9 +5,13 @@
 #include "extstorage_usage_config.h"
 #include "import_common.h"
 #include "import_s3.h"
+#include "import_s3_engine.h"
+
+#include <ydb/core/tablet_flat/flat_direct_part_writer.h>
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/datashard_config.pb.h>
@@ -19,34 +23,19 @@
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/s3_storage.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
-#include <ydb/core/io_formats/ydb_dump/csv_ydb_dump.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <contrib/libs/zstd/include/zstd.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <util/generic/buffer.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/memory/pool.h>
 #include <util/string/builder.h>
 
-namespace {
-
-    struct DestroyZCtx {
-        static void Destroy(::ZSTD_DCtx* p) noexcept {
-            ZSTD_freeDCtx(p);
-        }
-    };
-
-    constexpr ui64 SumWithSaturation(ui64 a, ui64 b) {
-        return Max<ui64>() - a < b ? Max<ui64>() : a + b;
-    }
-
-} // anonymous
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DATASHARD_RESTORE
 
 namespace NKikimr {
 namespace NDataShard {
@@ -60,377 +49,171 @@ using namespace NWrappers;
 using namespace Aws::S3;
 using namespace Aws;
 
+// Encapsulates the direct part import (EnableDataShardDirectPartImport): owns the
+// TDirectPartWriter, feeds parsed rows to it, tracks blob-write backpressure, and
+// produces the finished part. The S3 read loop and the DataShard messaging
+// (begin/finish/abort) stay in TS3Downloader, which drives this as a passive
+// builder. The lifecycle is a small state machine:
+//
+//   Pending --SetWriter--> Writing <--Resume--/--Pause--> Paused
+//                             |                              |
+//                          Finalize                       Finalize
+//                             v                              v
+//                         Finalizing --(all puts acked)--> Complete --ExtractResult--> HandedOff
+//
+// Any writer error moves to Failed.
+class TDirectImportWriter {
+    using TDirectPartWriter = NTabletFlatExecutor::TDirectPartWriter;
+    using TDirectPartResult = NTabletFlatExecutor::TDirectPartResult;
+
+public:
+    enum class EState {
+        Pending,     // reserved on the shard; awaiting the writer (begin in flight)
+        Writing,     // accepting rows
+        Paused,      // backpressure: waiting for blob puts to drain before more rows
+        Finalizing,  // all rows fed; draining the remaining blob puts
+        Complete,    // all puts acked; the part can be extracted
+        HandedOff,   // result extracted and handed to the finish transaction
+        Failed,      // the writer reported an error
+    };
+
+    TDirectImportWriter(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme) {
+        // Value column ids (tags) in the order ParseLine emits `values`, i.e. the
+        // non-key columns in table-description order; the writer maps each to its
+        // column position. Key cells are passed in key order (the writer derives
+        // their positions from its own scheme).
+        TVector<TString> columnNames;
+        columnNames.reserve(scheme.GetColumns().size());
+        for (const auto& column : scheme.GetColumns()) {
+            columnNames.push_back(column.GetName());
+        }
+        ValueColumnIds = tableInfo.GetValueColumnIds(columnNames);
+    }
+
+    EState State() const { return State_; }
+    bool IsFailed() const { return State_ == EState::Failed; }
+    bool IsComplete() const { return State_ == EState::Complete; }
+    bool IsPaused() const { return State_ == EState::Paused; }
+    TString Error() const { return Writer ? Writer->Error() : TString(); }
+    ui32 Step() const { return Step_; }
+
+    // True while a GC barrier is held on the shard that we still own: it must be
+    // released with TEvS3DirectWriteAbort if the write will not be committed.
+    bool NeedsAbort() const { return Step_ != Max<ui32>() && State_ != EState::HandedOff; }
+
+    // Hand over the reserved writer (received in TEvS3DirectWriteBeginResult).
+    void SetWriter(THolder<TDirectPartWriter> writer, ui32 step) {
+        Y_ENSURE(State_ == EState::Pending);
+        Writer = std::move(writer);
+        Step_ = step;
+        State_ = EState::Writing;
+    }
+
+    bool CanFeed() const { return Writer && Writer->CanFeed(); }
+    void Pause() { if (State_ == EState::Writing) State_ = EState::Paused; }
+    void Resume() { if (State_ == EState::Paused) State_ = EState::Writing; }
+
+    // Feed one parsed row. Returns false if the writer rejected it (keys not
+    // strictly ascending); the whole import then fails (backup dumps are sorted).
+    bool FeedRow(const TVector<TCell>& keys, const TVector<TCell>& values,
+                 TRowVersion version, const TActorContext& ctx) {
+        Y_ENSURE(Writer, "FeedRow before the writer is set");
+        return Writer->AddRow(keys, values, ValueColumnIds, version, ctx);
+    }
+
+    // Signal that all rows have been fed. May reach Complete immediately if there
+    // are no outstanding blob puts.
+    void Finalize(const TActorContext& ctx) {
+        Y_ENSURE(Writer);
+        if (!Writer->Finalize(ctx)) {
+            State_ = EState::Failed;
+            return;
+        }
+        State_ = Writer->IsComplete() ? EState::Complete : EState::Finalizing;
+    }
+
+    // Account a finished blob put; transitions Finalizing -> Complete once drained.
+    void OnPutResult(TEvBlobStorage::TEvPutResult& msg, const TActorContext& ctx) {
+        if (!Writer) {
+            return;
+        }
+        Writer->Handle(msg, ctx);
+        if (Writer->HasError()) {
+            State_ = EState::Failed;
+        } else if (State_ == EState::Finalizing && Writer->IsComplete()) {
+            State_ = EState::Complete;
+        }
+    }
+
+    // Build the final part(s). Valid only once Complete; moves to HandedOff.
+    THolder<TDirectPartResult> ExtractResult(const TActorContext& ctx) {
+        Y_ENSURE(State_ == EState::Complete, "ExtractResult before the part is complete");
+        auto result = Writer->ExtractResult(ctx);
+        Writer.Reset();
+        State_ = EState::HandedOff;
+        return result;
+    }
+
+private:
+    THolder<TDirectPartWriter> Writer;
+    ui32 Step_ = Max<ui32>();
+    EState State_ = EState::Pending;
+    TVector<ui32> ValueColumnIds;
+};
+
 template <typename TSettings>
 class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     using TThis = TS3Downloader<TSettings>;
-    // IReadController
-    //
-    // Work cycle:
-    // 1. RestoreFromState() - optional. State was made from Confirm() call
-    // 2. NextRange()
-    // 3. Feed()
-    // 4. while (TryGetData() == READY_DATA) {
-    //       4.a. Add ReadyBytes() to current processed bytes state
-    //       4.b. Confirm() - update state
-    //    }
-    // 5. Repeat from 1. until the whole file is processed
-    class IReadController {
-    public:
-        enum EDataStatus {
-            READY_DATA = 0,
-            NOT_ENOUGH_DATA = 1,
-            ERROR = 2,
-        };
 
-    public:
-        virtual ~IReadController() = default;
-        virtual void Feed(TString&& portion, bool last) = 0;
-        // Returns data (points to internal buffer) or error
-        virtual EDataStatus TryGetData(TStringBuf& data, TString& error) = 0;
-        // Clears internal buffer & makes it ready for another Feed() and TryGetData()
-        virtual void Confirm(NKikimrBackup::TS3DownloadState& state) = 0;
-        // Bytes that were read from S3 and put into controller. In terms of input bytes
-        virtual ui64 PendingBytes() const = 0;
-        // Bytes that controller has given to processing. In terms of input bytes
-        virtual ui64 ReadyBytes() const = 0;
-        virtual std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const = 0;
-        virtual bool RestoreFromState(const NKikimrBackup::TS3DownloadState& state, TString& error) = 0;
+    enum EWakeupTag: ui64 {
+        RestartTag = 0,
+        ProcessTag = 1,
     };
 
-    class TReadController: public IReadController {
+    // Columns that take no NULL, by the cell's place: keys in key order, values in scheme order.
+    class TNotNullColumns {
     public:
-        explicit TReadController(ui32 rangeSize, ui64 bufferSizeLimit)
-            : RangeSize(rangeSize)
-            , BufferSizeLimit(bufferSizeLimit)
-        {
-            // able to contain at least one range
-            Buffer.Reserve(RangeSize);
-        }
+        TNotNullColumns(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme) {
+            const auto name = [&tableInfo](ui32 id) -> TMaybe<TString> {
+                const auto& column = tableInfo.GetColumn(id);
+                // a column that is being set NOT NULL takes no NULL either
+                return column.NotNull || column.SetNotNullInProgress ? MakeMaybe(column.Name) : Nothing();
+            };
 
-        std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const override {
-            Y_ENSURE(contentLength > 0);
-            Y_ENSURE(processedBytes < contentLength);
-
-            const ui64 start = processedBytes + this->PendingBytes();
-            const ui64 end = Min(SumWithSaturation(start, RangeSize), contentLength) - 1;
-            return std::make_pair(start, end);
-        }
-
-        bool RestoreFromState(const NKikimrBackup::TS3DownloadState&, TString&) override {
-            return true;
-        }
-
-    protected:
-        bool CanIncreaseBuffer(size_t size, size_t delta, TString& reason) const {
-            if ((size + delta) >= BufferSizeLimit) {
-                reason = "reached buffer size limit";
-                return false;
+            for (const ui32 id : tableInfo.GetKeyColumnIds()) {
+                Keys.push_back(name(id));
             }
 
-            return true;
+            TVector<TString> columnNames;
+            for (const auto& column : scheme.GetColumns()) {
+                columnNames.push_back(column.GetName());
+            }
+            for (const ui32 id : tableInfo.GetValueColumnIds(columnNames)) {
+                Values.push_back(name(id));
+            }
         }
 
-        bool CanRequestNextRange(size_t size, TString& reason) const {
-            return CanIncreaseBuffer(size, RangeSize, reason);
-        }
-
-        TStringBuf AsStringBuf(size_t size) const {
-            return TStringBuf(Buffer.Data(), size);
+        // The column of the row that holds NULL and must not, if there is one.
+        const TString* FindNull(const TVector<TCell>& keys, const TVector<TCell>& values) const {
+            if (const auto* column = FindNull(keys, Keys)) {
+                return column;
+            }
+            return FindNull(values, Values);
         }
 
     private:
-        const ui32 RangeSize;
-        const ui64 BufferSizeLimit;
-
-    protected:
-        TBuffer Buffer;
-
-    }; // TReadController
-
-    class TReadControllerRaw: public TReadController {
-    public:
-        using TReadController::TReadController;
-
-        void Feed(TString&& portion, bool /* last */) override {
-            this->Buffer.Append(portion.data(), portion.size());
-        }
-
-        IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
-            Y_ENSURE(Pos == 0);
-
-            const ui64 pos = this->AsStringBuf(this->Buffer.Size()).rfind('\n');
-            if (TString::npos == pos) {
-                if (!this->CanRequestNextRange(this->Buffer.Size(), error)) {
-                    return IReadController::ERROR;
-                } else {
-                    return IReadController::NOT_ENOUGH_DATA;
+        static const TString* FindNull(const TVector<TCell>& cells, const TVector<TMaybe<TString>>& columns) {
+            for (size_t i = 0; i < Min(cells.size(), columns.size()); ++i) {
+                if (columns[i] && cells[i].IsNull()) {
+                    return columns[i].Get();
                 }
             }
-
-            Pos = pos + 1 /* \n */;
-            data = this->AsStringBuf(Pos);
-
-            return IReadController::READY_DATA;
-        }
-
-        void Confirm(NKikimrBackup::TS3DownloadState&) override {
-            this->Buffer.ChopHead(Pos);
-            Pos = 0;
-        }
-
-        ui64 PendingBytes() const override {
-            return this->Buffer.Size();
-        }
-
-        ui64 ReadyBytes() const override {
-            return Pos;
+            return nullptr;
         }
 
     private:
-        ui64 Pos = 0;
-    };
-
-    class TReadControllerZstd: public TReadController {
-        void Reset() {
-            ZSTD_DCtx_reset(Context.Get(), ZSTD_reset_session_only);
-            ZSTD_DCtx_refDDict(Context.Get(), NULL);
-        }
-
-    public:
-        explicit TReadControllerZstd(ui32 rangeSize, ui64 bufferSizeLimit)
-            : TReadController(rangeSize, bufferSizeLimit)
-            , Context(ZSTD_createDCtx())
-        {
-            Reset();
-            // able to contain at least one block
-            // take effect if RangeSize < BlockSize
-            this->Buffer.Reserve(AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX));
-        }
-
-        void Feed(TString&& portion, bool /* last */) override {
-            Y_ENSURE(Portion.Empty());
-            Portion.Assign(portion.data(), portion.size());
-        }
-
-        IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
-            Y_ENSURE(ReadyInputBytes == 0 && ReadyOutputPos == 0);
-
-            auto input = ZSTD_inBuffer{Portion.Data(), Portion.Size(), 0};
-            size_t decompressionResult = 0;
-            while (!ReadyOutputPos) {
-                PendingInputBytes -= input.pos; // dec before decompress
-
-                auto output = ZSTD_outBuffer{this->Buffer.Data(), this->Buffer.Capacity(), this->Buffer.Size()};
-                decompressionResult = ZSTD_decompressStream(Context.Get(), &output, &input);
-
-                if (ZSTD_isError(decompressionResult)) {
-                    error = ZSTD_getErrorName(decompressionResult);
-                    return IReadController::ERROR;
-                }
-
-                PendingInputBytes += input.pos; // inc after decompress
-                this->Buffer.Proceed(output.pos);
-
-                if (decompressionResult == 0) {
-                    // end of frame
-                    if (this->Buffer.Size() > 0 && this->AsStringBuf(this->Buffer.Size()).back() != '\n') { // Handle also a special case: theoretically it is possible to have nonempty zstd block with empty output data (we created a new block and have not added any data yet)
-                        error = "cannot find new line symbol";
-                        return IReadController::ERROR;
-                    }
-
-                    ReadyInputBytes = PendingInputBytes;
-                    ReadyOutputPos = this->Buffer.Size();
-                    Reset();
-                } else {
-                    // try to find complete row
-                    const ui64 pos = this->AsStringBuf(this->Buffer.Size()).rfind('\n');
-                    if (TString::npos != pos) {
-                        ReadyOutputPos = pos + 1 /* \n */;
-                    }
-                }
-
-                if (input.pos >= input.size) {
-                    // end of input
-                    break;
-                }
-
-                if (!ReadyOutputPos && output.pos == output.size) {
-                    const auto blockSize = AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX);
-                    if (this->CanIncreaseBuffer(this->Buffer.Size(), blockSize, error)) {
-                        this->Buffer.Reserve(this->Buffer.Size() + blockSize);
-                    } else {
-                        return IReadController::ERROR;
-                    }
-                }
-            }
-
-            Portion.ChopHead(input.pos);
-
-            if (!ReadyOutputPos && decompressionResult != 0) {
-                if (!this->CanRequestNextRange(this->Buffer.Size(), error)) {
-                    return IReadController::ERROR;
-                } else {
-                    return IReadController::NOT_ENOUGH_DATA;
-                }
-            }
-
-            if (ReadyOutputPos) {
-                data = this->AsStringBuf(ReadyOutputPos);
-            } else {
-                data = TStringBuf();
-            }
-            return IReadController::READY_DATA;
-        }
-
-        void Confirm(NKikimrBackup::TS3DownloadState&) override {
-            this->Buffer.ChopHead(ReadyOutputPos);
-            ReadyOutputPos = 0;
-
-            PendingInputBytes -= ReadyInputBytes;
-            ReadyInputBytes = 0;
-        }
-
-        ui64 PendingBytes() const override {
-            return PendingInputBytes;
-        }
-
-        ui64 ReadyBytes() const override {
-            return ReadyInputBytes;
-        }
-
-    private:
-        THolder<::ZSTD_DCtx, DestroyZCtx> Context;
-        TBuffer Portion;
-        ui64 PendingInputBytes = 0;
-        ui64 ReadyInputBytes = 0;
-        ui64 ReadyOutputPos = 0;
-    };
-
-    class TEncryptionDeserializerController: public IReadController {
-    public:
-        TEncryptionDeserializerController(
-                NBackup::TEncryptionKey key,
-                NBackup::TEncryptionIV expectedIV,
-                THolder<IReadController> deserializedDataController,
-                ui64 readBatchSize)
-            : Deserializer(std::move(key), std::move(expectedIV))
-            , DataController(std::move(deserializedDataController))
-            , ReadBatchSize(readBatchSize)
-        {
-        }
-
-        void Feed(TString&& portion, bool last) override {
-            if (!portion.empty() || last) {
-                NewData = true;
-            }
-            Last = last;
-            FeedUnprocessedBytes += portion.size();
-            Deserializer.AddData(TBuffer(portion.data(), portion.size()), last);
-        }
-
-        IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
-            if (BytesFedToChild) {
-                auto status = TryGetDataFromChildController(data, error);
-                if (status != IReadController::NOT_ENOUGH_DATA || !NewData) {
-                    return status;
-                }
-            }
-            bool lastEmptyBlock = false; // The case of empty file
-            if (NewData) {
-                try {
-                    NewData = false;
-                    const ui64 processedBefore = Deserializer.GetProcessedInputBytes();
-                    TMaybe<TBuffer> block = Deserializer.GetNextBlock(); // Returns at least one encrypted block
-                    const ui64 processedAfter = Deserializer.GetProcessedInputBytes();
-                    Y_ENSURE(processedAfter - processedBefore <= FeedUnprocessedBytes);
-                    ReadyInputBytes += processedAfter - processedBefore;
-                    if (block) {
-                        if (block->Size()) {
-                            // Data is read by blocks from encrypted file.
-                            // Each block contains at least one row of data with '\n',
-                            // so we will always get some data from DataController.
-                            DataController->Feed(TString(block->Data(), block->Size()), Last);
-                            BytesFedToChild += block->Size();
-                        } else {
-                            lastEmptyBlock = Last;
-                        }
-                    }
-                } catch (const std::exception& ex) {
-                    error = ex.what();
-                    return IReadController::ERROR;
-                }
-            }
-
-            if (BytesFedToChild) {
-                return TryGetDataFromChildController(data, error);
-            }
-            if (lastEmptyBlock) {
-                data.Clear();
-                return IReadController::READY_DATA;
-            }
-            return IReadController::NOT_ENOUGH_DATA;
-        }
-
-        IReadController::EDataStatus TryGetDataFromChildController(TStringBuf& data, TString& error) {
-            const auto status = DataController->TryGetData(data, error);
-            if (status == IReadController::READY_DATA) {
-                if (ui64 ready = DataController->ReadyBytes()) {
-                    BytesFedToChild -= ready;
-                    Y_ENSURE(BytesFedToChild >= 0);
-                }
-            }
-            return status;
-        }
-
-        void Confirm(NKikimrBackup::TS3DownloadState& state) override {
-            state.SetEncryptedDeserializerState(Deserializer.GetState());
-            if (ui64 readyBytes = ReadyBytes()) {
-                FeedUnprocessedBytes -= readyBytes;
-                ReadyInputBytes = 0;
-            }
-            DataController->Confirm(state);
-        }
-
-        ui64 PendingBytes() const override {
-            return FeedUnprocessedBytes;
-        }
-
-        ui64 ReadyBytes() const override {
-            return BytesFedToChild == 0 ? ReadyInputBytes : 0;
-        }
-
-        std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const override {
-            Y_ENSURE(contentLength > 0);
-            Y_ENSURE(processedBytes < contentLength);
-
-            const ui64 start = processedBytes + this->PendingBytes();
-            const ui64 end = Min(SumWithSaturation(start, ReadBatchSize), contentLength) - 1;
-            return std::make_pair(start, end);
-        }
-
-        bool RestoreFromState(const NKikimrBackup::TS3DownloadState& state, TString& error) override {
-            if (const TString& deserializerState = state.GetEncryptedDeserializerState()) {
-                try {
-                    Deserializer = NBackup::TEncryptedFileDeserializer::RestoreFromState(deserializerState);
-                    FeedUnprocessedBytes = 0;
-                    ReadyInputBytes = 0;
-                } catch (const std::exception& ex) {
-                    error = ex.what();
-                    return false;
-                }
-            }
-            return DataController->RestoreFromState(state, error);
-        }
-
-    private:
-        bool Last = false;
-        ui64 FeedUnprocessedBytes = 0;
-        ui64 ReadyInputBytes = 0;
-        bool NewData = false;
-        ui64 BytesFedToChild = 0;
-        NBackup::TEncryptedFileDeserializer Deserializer;
-        THolder<IReadController> DataController;
-        const ui64 ReadBatchSize;
+        TVector<TMaybe<TString>> Keys;
+        TVector<TMaybe<TString>> Values;
     };
 
     class TUploadRowsRequestBuilder {
@@ -526,7 +309,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void AllocateResource() {
-        IMPORT_LOG_D("AllocateResource");
+        YDB_LOG_DEBUG("[Import] Submitting resource broker task",
+            {"logPrefix", LogPrefix()});
 
         const auto* appData = AppData();
         this->Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvSubmitTask(
@@ -541,17 +325,42 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Handle(TEvResourceBroker::TEvResourceAllocated::TPtr& ev) {
-        IMPORT_LOG_I("Handle TEvResourceBroker::TEvResourceAllocated {"
-            << " TaskId: " << ev->Get()->TaskId
-        << " }");
+        YDB_LOG_INFO("[Import] Resource broker task allocated",
+            {"logPrefix", LogPrefix()},
+            {"taskId", ev->Get()->TaskId});
 
         TaskId = ev->Get()->TaskId;
         Restart();
     }
 
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        switch (ev->Get()->Tag) {
+        case RestartTag:
+            Restart();
+            break;
+        case ProcessTag:
+            Process();
+            break;
+        }
+    }
+
+    void HandleChecksum(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == RestartTag) {
+            Restart();
+        }
+    }
+
     void Restart() {
-        IMPORT_LOG_N("Restart"
-            << ": attempt# " << Attempt);
+        YDB_LOG_NOTICE("[Import] Restarting import",
+            {"logPrefix", LogPrefix()},
+            {"attempt", Attempt});
+
+        // At most one storage request is outstanding and Restart() runs after its response,
+        // so no stale reply can arrive.
+        Y_DEBUG_ABORT_UNLESS(!ActiveHeadKey && !ActiveGetKey && !ActiveGetRange);
+        ActiveHeadKey.Clear();
+        ActiveGetKey.Clear();
+        ActiveGetRange.Clear();
 
         if (const TActorId client = std::exchange(Client, TActorId())) {
             this->Send(client, new TEvents::TEvPoisonPill());
@@ -564,9 +373,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void HeadObject(const TString& key) {
-        IMPORT_LOG_D("HeadObject"
-            << ": key# " << key);
+        YDB_LOG_DEBUG("[Import] Sending HeadObject request",
+            {"logPrefix", LogPrefix()},
+            {"key", key});
 
+        ActiveHeadKey = key;
         auto request = Model::HeadObjectRequest()
             .WithKey(key);
 
@@ -574,10 +385,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void GetObject(const TString& key, const std::pair<ui64, ui64>& range) {
-        IMPORT_LOG_D("GetObject"
-            << ": key# " << key
-            << ", range# " << range.first << "-" << range.second);
+        YDB_LOG_DEBUG("[Import] Sending GetObject request",
+            {"logPrefix", LogPrefix()},
+            {"key", key},
+            {"range", range.first},
+            {"rangeEnd", range.second});
 
+        ActiveGetKey = key;
+        ActiveGetRange = TImportRange{range.first, range.second - range.first + 1};
         auto request = Model::GetObjectRequest()
             .WithKey(key)
             .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
@@ -585,23 +400,91 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         this->Send(Client, new TEvExternalStorage::TEvGetObjectRequest(request));
     }
 
+    bool AcceptHeadResponse(const TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto* msg = ev->Get();
+        const bool matches = ActiveHeadKey
+            && (!msg->Key || *msg->Key == *ActiveHeadKey);
+        if (!matches) {
+            YDB_LOG_WARN("[Import] Ignoring stale HeadObject response",
+                {"logPrefix", LogPrefix()},
+                {"sender", ev->Sender},
+                {"currentClient", Client},
+                {"key", msg->Key ? *msg->Key : TString("<unknown>")});
+            return false;
+        }
+
+        ActiveHeadKey.Clear();
+        return true;
+    }
+
+    TMaybe<TImportRange> AcceptGetResponse(
+        const TEvExternalStorage::TEvGetObjectResponse::TPtr& ev)
+    {
+        const auto* msg = ev->Get();
+        const auto& interval = msg->GetReadInterval();
+        const TImportRange range{interval.first, msg->GetReadIntervalLength()};
+        // A failed reply may carry the (0, 0) sentinel; it still belongs to the only outstanding
+        // request.
+        const bool sentinelInterval = interval.first == 0 && interval.second == 0;
+        const bool matches = ActiveGetKey && ActiveGetRange
+            && (!msg->Key || *msg->Key == *ActiveGetKey)
+            && (range == *ActiveGetRange || (!msg->Result.IsSuccess() && sentinelInterval));
+        if (!matches) {
+            YDB_LOG_WARN("[Import] Ignoring stale GetObject response",
+                {"logPrefix", LogPrefix()},
+                {"sender", ev->Sender},
+                {"currentClient", Client},
+                {"key", msg->Key ? *msg->Key : TString("<unknown>")},
+                {"rangeStart", range.Offset},
+                {"rangeLength", range.Length});
+            return Nothing();
+        }
+
+        const TImportRange requestedRange = *ActiveGetRange;
+        ActiveGetKey.Clear();
+        ActiveGetRange.Clear();
+        return requestedRange;
+    }
+
     void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
-        IMPORT_LOG_D("Handle " << ev->Get()->ToString());
+        if (!AcceptHeadResponse(ev)) {
+            return;
+        }
+
+        YDB_LOG_DEBUG("[Import] Received HeadObject response",
+            {"logPrefix", LogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
+            const auto dataKey = Settings.GetDataKey(DataFormat, CompressionCodec);
             switch (result.GetError().GetErrorType()) {
             case S3Errors::RESOURCE_NOT_FOUND:
             case S3Errors::NO_SUCH_KEY:
                 break;
             default:
-                IMPORT_LOG_E("Error at 'HeadObject'"
-                    << ": error# " << result);
-                return RetryOrFinish(result.GetError());
+                YDB_LOG_ERROR("[Import] HeadObject request failed",
+                    {"logPrefix", LogPrefix()},
+                    {"key", dataKey},
+                    {"error", result});
+                return RetryOrFinish(result.GetError(), dataKey);
             }
 
-            CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
-            if (CompressionCodec == NBackupRestoreTraits::ECompressionCodec::Invalid) {
+            if (DataFormatSelected) {
+                return RetryOrFinish(result.GetError(), dataKey);
+            }
+
+            if (DataFormat == NBackupRestoreTraits::EDataFormat::Parquet) {
+                DataFormat = NBackupRestoreTraits::NextDataFormat(DataFormat);
+            } else {
+                CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
+                if (CompressionCodec == NBackupRestoreTraits::ECompressionCodec::Invalid) {
+                    DataFormat = NBackupRestoreTraits::NextDataFormat(DataFormat);
+                    CompressionCodec = NBackupRestoreTraits::ECompressionCodec::None;
+                }
+            }
+
+            if (DataFormat == NBackupRestoreTraits::EDataFormat::Invalid) {
                 return Finish(false, TStringBuilder() << "Cannot find any supported data file with prefix"
                     << ": " << Settings.GetObjectKeyPattern());
             }
@@ -609,44 +492,41 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
         }
 
-        THolder<IReadController> reader;
-        switch (CompressionCodec) {
-        case NBackupRestoreTraits::ECompressionCodec::None:
-            reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
-            break;
-        case NBackupRestoreTraits::ECompressionCodec::Zstd:
-            reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
-            break;
-        case NBackupRestoreTraits::ECompressionCodec::Invalid:
-            Y_ENSURE(false, "unreachable");
+        DataFormatSelected = true;
+        if (DataFormat == NBackupRestoreTraits::EDataFormat::Parquet
+            && !AppData()->FeatureFlags.GetEnableImportInParquet()) {
+            return Finish(false, "Parquet import is disabled by feature flag EnableImportInParquet");
         }
 
-        if (Settings.EncryptionSettings.EncryptedBackup) {
-            NBackup::TEncryptionIV expectedIV = NBackup::TEncryptionIV::Combine(
-                *Settings.EncryptionSettings.IV,
-                NBackup::EBackupFileType::TableData,
-                0 /* already combined */,
-                Settings.Shard
-            );
-            Reader = MakeHolder<TEncryptionDeserializerController>(
-                *Settings.EncryptionSettings.Key,
-                expectedIV,
-                std::move(reader),
-                ReadBatchSize
-            );
-        } else {
-            Reader = std::move(reader);
-        }
-
+        const TString previousETag = ETag;
+        const ui64 previousContentLength = ContentLength;
         ETag = result.GetResult().GetETag();
         ContentLength = result.GetResult().GetContentLength();
+
+        // The object may have been replaced since the engine was made for it: with nothing
+        // done yet the engine is made anew, otherwise the import fails here.
+        if (Engine && (ETag != previousETag || ContentLength != previousContentLength)) {
+            if (Engine->HasLiveState()
+                || (DirectImport && DirectImport->State() != TDirectImportWriter::EState::Pending))
+            {
+                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": the data file has changed during the import");
+            }
+            Engine.Reset();
+        }
 
         if (!ContentLength && Settings.EncryptionSettings.EncryptedBackup) {
             // Encrypted file can not have zero length
             const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
                 << ": file is corrupted";
-            IMPORT_LOG_E(error);
+            YDB_LOG_ERROR("[Import] Import data file is corrupted",
+                {"logPrefix", LogPrefix()},
+                {"error", error});
             return Finish(false, error);
+        }
+
+        if (!PrepareDataImport()) {
+            return;
         }
 
         if (Checksum) {
@@ -658,9 +538,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Handle(TEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
-        IMPORT_LOG_D("Handle " << ev->Get()->ToString());
-
         const auto& info = ev->Get()->Info;
+        YDB_LOG_DEBUG("[Import] Received S3 download info",
+            {"logPrefix", LogPrefix()},
+            {"ev", ev->Get()->ToString()});
         if (!info.DataETag) {
             this->Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
                 ETag, ProcessedBytes, WrittenBytes, WrittenRows, ProcessedChecksumState, DownloadState
@@ -672,32 +553,44 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void ProcessDownloadInfo(const TS3Download& info, const TStringBuf marker, bool loadState = false) {
-        IMPORT_LOG_N("Process download info at '" << marker << "'"
-            << ": info# " << info);
+        YDB_LOG_NOTICE("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"marker", marker},
+            {"info", info});
 
         Y_ENSURE(info.DataETag);
         if (!CheckETag(*info.DataETag, ETag, marker)) {
             return;
         }
 
-        DownloadState = info.DownloadState;
-        if (loadState) {
-            if (Checksum) {
+        const bool preserveLiveDirectState = loadState && DirectPartImportEnabled && DirectImport
+            && DirectImport->State() != TDirectImportWriter::EState::Pending;
+        const bool preserveLiveEngineState = loadState && Engine->HasLiveState();
+
+        if (loadState && !preserveLiveDirectState) {
+            DownloadState = info.DownloadState;
+            // The live engine is kept on purpose: it may hold checksum state past the last
+            // restartable boundary.
+            if (Checksum && !preserveLiveEngineState) {
                 Checksum->SetState(info.ProcessedChecksumState);
             }
-            if (TString restoreErr; !Reader->RestoreFromState(DownloadState, restoreErr)) {
+            if (auto result = Engine->RestoreFromState(info.ProcessedBytes, DownloadState); !result) {
                 const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                    << ": failed to restore reader state: " << restoreErr;
-                IMPORT_LOG_E(error);
+                    << ": failed to restore import engine state: " << result.error();
+                YDB_LOG_ERROR("[Import]",
+                    {"logPrefix", LogPrefix()},
+                    {"error", error});
                 return Finish(false, error);
             }
         }
 
-        ProcessedBytes = info.ProcessedBytes;
-        ProcessedChecksumState = info.ProcessedChecksumState;
-        ReadBytes = ProcessedBytes + Reader->PendingBytes();
-        WrittenBytes = info.WrittenBytes;
-        WrittenRows = info.WrittenRows;
+        if (!preserveLiveDirectState) {
+            ProcessedBytes = info.ProcessedBytes;
+            ProcessedChecksumState = info.ProcessedChecksumState;
+            ReadBytes = ProcessedBytes + Engine->PendingBytes();
+            WrittenBytes = info.WrittenBytes;
+            WrittenRows = info.WrittenRows;
+        }
 
         if (!ContentLength || ProcessedBytes >= ContentLength) {
             if (!CheckChecksum()) {
@@ -706,17 +599,37 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return Finish();
         }
 
+        if (DirectPartImportEnabled && DirectImport->State() == TDirectImportWriter::EState::Pending) {
+            return BeginDirectImport();
+        }
+
         Process();
     }
 
     void Handle(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
-        IMPORT_LOG_D("Handle " << ev->Get()->ToString());
+        auto requestedRange = AcceptGetResponse(ev);
+        if (!requestedRange) {
+            return;
+        }
+
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         auto& msg = *ev->Get();
         const auto& result = msg.Result;
         const TStringBuf marker = "GetObject";
 
-        if (!CheckResult(result, marker)) {
+        if (!result.IsSuccess()) {
+            if (Engine) {
+                if (auto failResult = Engine->FailRange(*requestedRange); !failResult) {
+                    YDB_LOG_WARN("[Import] Failed to release import-engine range",
+                        {"logPrefix", LogPrefix()},
+                        {"error", failResult.error()});
+                }
+            }
+
+            CheckResult(result, marker, Settings.GetDataKey(DataFormat, CompressionCodec));
             return;
         }
 
@@ -724,40 +637,59 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return;
         }
 
-        IMPORT_LOG_T("Content size"
-            << ": processed-bytes# " << ProcessedBytes
-            << ", content-length# " << ContentLength
-            << ", body-size# " << msg.Body.size());
+        YDB_LOG_TRACE("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"processedBytes", ProcessedBytes},
+            {"contentLength", ContentLength},
+            {"bodySize", msg.Body.size()});
 
         *Counters.BytesReceived += msg.Body.size();
         Counters.LatencyRead.Finish(Now());
 
         ReadBytes += msg.Body.size();
-        Reader->Feed(std::move(msg.Body), ReadBytes >= ContentLength);
+        if (auto putResult = Engine->PutRange(*requestedRange, std::move(msg.Body)); !putResult) {
+            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": cannot accept source range: " << putResult.error());
+        }
         Process();
     }
 
     void HandleChecksum(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
-        IMPORT_LOG_D("HandleChecksum " << ev->Get()->ToString());
+        if (!AcceptHeadResponse(ev)) {
+            return;
+        }
+
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
 
-        if (!CheckResult(result, "HeadObject")) {
+        const auto checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
+        if (!CheckResult(result, "HeadObject", checksumKey)) {
             return;
         }
 
         const auto contentLength = result.GetResult().GetContentLength();
-        const auto checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
+        if (!contentLength) {
+            return Finish(false, TStringBuilder() << checksumKey << ": checksum file is empty");
+        }
         GetObject(checksumKey, std::make_pair(0, contentLength - 1));
     }
 
     void HandleChecksum(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
-        IMPORT_LOG_D("HandleChecksum " << ev->Get()->ToString());
+        if (!AcceptGetResponse(ev)) {
+            return;
+        }
+
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        if (!CheckResult(result, "GetObject")) {
+        if (!CheckResult(result, "GetObject", ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None)))) {
             return;
         }
 
@@ -768,113 +700,265 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Process() {
-        TStringBuf data;
-        TString error;
-
-        switch (Reader->TryGetData(data, error)) {
-        case IReadController::READY_DATA:
-            break;
-
-        case IReadController::NOT_ENOUGH_DATA:
-            if (SumWithSaturation(ProcessedBytes, Reader->PendingBytes()) < ContentLength) {
-                Counters.LatencyRead.Start(Now());
-                return GetObject(Settings.GetDataKey(DataFormat, CompressionCodec),
-                    Reader->NextRange(ContentLength, ProcessedBytes));
-            } else {
-                error = "reached end of file";
-            }
-            [[fallthrough]];
-
-        default: // ERROR
-            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                << ": cannot process data: " << error);
-        }
-
         Counters.LatencyProcess.Start(Now());
 
-        RequestBuilder.New(TableInfo, Scheme);
-
-        // Special case:
-        // in encrypted file we have nonzero bytes on input, but can still have zero bytes on output
-        // In this case TryGetData() returns READY_DATA
-        if (data) {
-            if (Checksum) {
-                Checksum->AddData(data);
-            }
-
-            TMemoryPool pool(256);
-            while (ProcessData(data, pool));
+        if (!DirectPartImportEnabled) {
+            RequestBuilder.New(TableInfo, Scheme);
+        }
+        if (!NotNullColumns) {
+            NotNullColumns.ConstructInPlace(TableInfo, Scheme);
         }
 
-        if (const auto processed = Reader->ReadyBytes()) { // has progress
-            ProcessedBytes += processed;
-            if (Checksum) {
+        // A row is rejected here, where the table is known; the parser adds its place in the file.
+        auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
+            if (keys.empty()) {
+                return std::unexpected("row has no key columns");
+            }
+
+            if (const auto* column = NotNullColumns->FindNull(keys, values)) {
+                return std::unexpected(TStringBuilder() << "column '" << *column
+                    << "' has a NULL value but is NOT NULL");
+            }
+
+            if (!TableInfo.IsMyKey(keys)) {
+                return std::unexpected("key is out of range");
+            }
+
+            if (DirectPartImportEnabled) {
+                auto ctx = TActivationContext::AsActorContext();
+                if (!DirectImport->FeedRow(keys, values, TRowVersion::Min(), ctx)) {
+                    TString error = DirectImport->Error();
+                    return std::unexpected(error.empty()
+                        ? TString("failed to add row to direct import writer")
+                        : std::move(error));
+                }
+            } else {
+                RequestBuilder.AddRow(keys, values);
+            }
+
+            return {};
+        };
+
+        IImportS3Engine::TAddChecksumChunkFn addChecksumChunk;
+        if (Checksum) {
+            addChecksumChunk = [&](TStringBuf chunk) {
+                Checksum->AddData(chunk);
+            };
+        }
+
+        TMemoryPool pool(256);
+        auto result = Engine->GetData(pool, addRow, addChecksumChunk);
+        Counters.LatencyProcess.Finish(Now());
+
+        if (!result) {
+            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": cannot process data: " << result.error());
+        }
+
+        switch (result->Status) {
+        case IImportS3Engine::EDataStatus::Ready: {
+            Y_ENSURE(!PendingBatchId, "new import batch while another batch is in flight");
+            ProcessedBytes = result->Batch.ProcessedBytesAfter;
+            DownloadState = std::move(result->Batch.DownloadStateAfter);
+            WrittenBytes += result->Batch.DataBytes;
+            WrittenRows += result->Batch.Rows;
+            PendingBatchId = result->Batch.Id;
+            if (Checksum && result->Batch.Checkpoint) {
                 ProcessedChecksumState = Checksum->GetState();
             }
 
-            WrittenBytes += std::exchange(PendingBytes, 0);
-            WrittenRows += std::exchange(PendingRows, 0);
-        }
-
-        DownloadState.Clear();
-        Reader->Confirm(DownloadState);
-        UploadRows();
-    }
-
-    bool ProcessData(TStringBuf& data, TMemoryPool& pool) {
-        pool.Clear();
-
-        TStringBuf line = data.NextTok('\n');
-        const TStringBuf origLine = line;
-
-        if (!line) {
-            if (data) {
-                return true; // skip empty line
+            if (DirectPartImportEnabled) {
+                // Direct mode persists nothing until the final attach, so Commit() only releases
+                // the batch; a restart replays the whole file.
+                if (auto commitResult = Engine->Commit(std::exchange(PendingBatchId, 0)); !commitResult) {
+                    return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                        << ": cannot commit import-engine batch: " << commitResult.error());
+                }
+                return ContinueDirectImport();
             }
 
-            return false;
+            PendingBatchDataBytes = result->Batch.DataBytes;
+            PendingBatchRows = result->Batch.Rows;
+            return UploadRows();
         }
 
-        std::vector<std::pair<i32, NScheme::TTypeInfo>> columnOrderTypes; // {keyOrder, PType}
-        columnOrderTypes.reserve(Scheme.GetColumns().size());
+        case IImportS3Engine::EDataStatus::NeedInput: {
+            auto next = Engine->NextRange();
+            if (!next) {
+                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": cannot request source range: " << next.error());
+            }
 
-        for (const auto& column : Scheme.GetColumns()) {
-            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
-                column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-            columnOrderTypes.emplace_back(TableInfo.KeyOrder(column.GetName()), typeInfoMod.TypeInfo);
+            switch (next->Status) {
+            case IImportS3Engine::ENextRangeStatus::Ready:
+                Y_ENSURE(next->Range.Length > 0);
+                Counters.LatencyRead.Start(Now());
+                return GetObject(Settings.GetDataKey(DataFormat, CompressionCodec), {
+                    next->Range.Offset,
+                    next->Range.End() - 1,
+                });
+            case IImportS3Engine::ENextRangeStatus::Blocked:
+                return;
+            case IImportS3Engine::ENextRangeStatus::Exhausted:
+                break;
+            }
+
+            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": cannot request source range: import engine needs input after exhausting source ranges");
         }
 
-        TVector<TCell> keys;
-        TVector<TCell> values;
-        TString strError;
+        case IImportS3Engine::EDataStatus::WaitingForCommit:
+            return;
 
-        if (!NFormats::TYdbDump::ParseLine(line, columnOrderTypes, pool, keys, values, strError, PendingBytes)) {
-            Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                << ": " << strError << " on line: " << origLine);
-            return false;
+        case IImportS3Engine::EDataStatus::Finished:
+            if (DirectPartImportEnabled) {
+                return ContinueDirectImport();
+            }
+            if (!CheckChecksum()) {
+                return;
+            }
+            return Finish();
         }
 
-        Y_ENSURE(!keys.empty());
-        if (!TableInfo.IsMyKey(keys) /* TODO: maybe skip */) {
-            Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                << ": key is out of range on line: " << origLine);
-            return false;
+        Y_ENSURE(false, "unreachable import-engine state");
+    }
+
+    // --- Direct part import (EnableDataShardDirectPartImport) ---
+
+    void BeginDirectImport() {
+        YDB_LOG_INFO("[Import] Beginning direct import",
+            {"logPrefix", LogPrefix()});
+        this->Send(DataShard, new TEvDataShard::TEvS3DirectWriteBegin(TxId, TableInfo.GetId()));
+    }
+
+    void Handle(TEvDataShard::TEvS3DirectWriteBeginResult::TPtr& ev) {
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"ev", ev->Get()->ToString()});
+
+        auto* msg = ev->Get();
+        if (!msg->Success) {
+            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": cannot begin direct part write: " << msg->Error);
         }
 
-        RequestBuilder.AddRow(keys, values);
-        ++PendingRows;
+        DirectImport->SetWriter(std::move(msg->Writer), msg->Step);
+        Process();
+    }
 
-        return true;
+    // Decide what to do after a chunk was fed to the writer: finalize at EOF,
+    // fetch the next chunk, or pause for blob-write backpressure.
+    void ContinueDirectImport() {
+        if (DirectImport->IsFailed()) {
+            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": " << DirectImport->Error());
+        }
+
+        if (ProcessedBytes >= ContentLength) {
+            // All data has been read. Verify the checksum before committing the
+            // part, then finalize and wait for the remaining blobs to be acked.
+            if (!CheckChecksum()) {
+                return;
+            }
+
+            auto ctx = TActivationContext::AsActorContext();
+            DirectImport->Finalize(ctx);
+            if (DirectImport->IsFailed()) {
+                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": " << DirectImport->Error());
+            }
+            if (DirectImport->IsComplete()) {
+                CompleteDirectImport();
+            }
+            return;
+        }
+
+        if (DirectImport->CanFeed()) {
+            // fetches/parses the next chunk
+            this->Send(this->SelfId(), new TEvents::TEvWakeup(ProcessTag));
+        } else {
+            DirectImport->Pause(); // resumed on TEvPutResult
+        }
+    }
+
+    // The part is built and all blobs are durable: hand it to the DataShard to be
+    // attached, together with the final progress to persist atomically (so a
+    // restart after the commit resumes to completion instead of writing again).
+    void CompleteDirectImport() {
+        auto ctx = TActivationContext::AsActorContext();
+        auto result = DirectImport->ExtractResult(ctx);
+
+        NDataShard::TS3Download info;
+        info.DataETag = ETag;
+        info.ProcessedBytes = ContentLength;
+        info.WrittenBytes = WrittenBytes;
+        info.WrittenRows = WrittenRows;
+        info.ProcessedChecksumState = ProcessedChecksumState;
+        info.DownloadState = DownloadState;
+
+        YDB_LOG_INFO("[Import] Direct import completed",
+            {"logPrefix", LogPrefix()},
+            {"writtenBytes", WrittenBytes},
+            {"writtenRows", WrittenRows});
+
+        this->Send(DataShard, new TEvDataShard::TEvS3DirectWriteFinish(
+            TxId, TableInfo.GetId(), std::move(result), info));
+    }
+
+    void Handle(TEvDataShard::TEvS3DirectWriteFinishResult::TPtr& ev) {
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"ev", ev->Get()->ToString()});
+
+        auto* msg = ev->Get();
+        if (!msg->Success) {
+            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": cannot attach direct part: " << msg->Error);
+        }
+
+        Finish(true);
+    }
+
+    void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev) {
+        if (!DirectImport) {
+            YDB_LOG_ERROR("[Import] Unexpected EvPutResult without DirectImport",
+                {"logPrefix", LogPrefix()},
+                {"ev", ev->Get()->Print(/*isFull=*/true)});
+            return;
+        }
+
+        auto ctx = TActivationContext::AsActorContext();
+        DirectImport->OnPutResult(*ev->Get(), ctx);
+
+        if (DirectImport->IsFailed()) {
+            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": " << DirectImport->Error());
+        }
+
+        if (DirectImport->IsComplete()) {
+            CompleteDirectImport();
+        } else if (DirectImport->IsPaused() && DirectImport->CanFeed()) {
+            DirectImport->Resume();
+            Process();
+        }
+    }
+
+    // Release the reserved write's GC barrier if we own it and never handed it off.
+    void AbortDirectImportIfNeeded() {
+        if (DirectImport && DirectImport->NeedsAbort()) {
+            this->Send(DataShard, new TEvDataShard::TEvS3DirectWriteAbort(TxId, DirectImport->Step()));
+        }
+        DirectImport.Reset();
     }
 
     void UploadRows() {
         const auto& record = RequestBuilder.GetRecord();
 
-        IMPORT_LOG_I("Upload rows"
-            << ": count# " << record->RowsSize()
-            << ", size# " << record->ByteSizeLong());
+        YDB_LOG_INFO("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"count", record->RowsSize()},
+            {"size", record->ByteSizeLong()});
 
-        Counters.LatencyProcess.Finish(Now());
         Counters.LatencyWrite.Start(Now());
 
         this->Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
@@ -883,32 +967,64 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Handle(TEvDataShard::TEvS3UploadRowsResponse::TPtr& ev) {
-        IMPORT_LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
-        *Counters.BytesWritten += RequestBuilder.GetCellBytes();
+        if (!PendingBatchId) {
+            YDB_LOG_WARN("[Import] Ignoring stale upload response",
+                {"logPrefix", LogPrefix()},
+                {"cookie", ev->Cookie});
+            return;
+        }
+
         Counters.LatencyWrite.Finish(Now());
 
         const auto& record = ev->Get()->Record;
 
         if (record.GetStatus() == NKikimrTxDataShard::TError::OK) {
+            *Counters.BytesWritten += RequestBuilder.GetCellBytes();
+            if (auto commitResult = Engine->Commit(std::exchange(PendingBatchId, 0)); !commitResult) {
+                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": cannot commit import-engine batch: " << commitResult.error());
+            }
+            PendingBatchDataBytes = 0;
+            PendingBatchRows = 0;
             return ProcessDownloadInfo(ev->Get()->Info, TStringBuf("UploadResponse"));
         } else if (ev->Get()->IsRetriableError()) {
+            // The parser may be past the uncommitted batch: recreate it from the last checkpoint.
+            RollbackPendingBatchProgress();
+            Engine.Reset();
             return RetryOrFinish(record.GetErrorDescription());
         } else {
+            RollbackPendingBatchProgress();
             return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
                 << ": " << record.GetErrorDescription());
         }
     }
 
+    void RollbackPendingBatchProgress() {
+        Y_ENSURE(WrittenBytes >= PendingBatchDataBytes);
+        Y_ENSURE(WrittenRows >= PendingBatchRows);
+        WrittenBytes -= PendingBatchDataBytes;
+        WrittenRows -= PendingBatchRows;
+        PendingBatchDataBytes = 0;
+        PendingBatchRows = 0;
+        PendingBatchId = 0;
+    }
+
     template <typename TResult>
-    bool CheckResult(const TResult& result, const TStringBuf marker) {
+    bool CheckResult(const TResult& result, const TStringBuf marker, const TString& key) {
         if (result.IsSuccess()) {
             return true;
         }
 
-        IMPORT_LOG_E("Error at '" << marker << "'"
-            << ": error# " << result);
-        RetryOrFinish(result.GetError());
+        YDB_LOG_ERROR("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"marker", marker},
+            {"key", key},
+            {"error", result});
+        RetryOrFinish(result.GetError(), key);
 
         return false;
     }
@@ -923,7 +1039,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             << ": expected '" << expected << "'"
             << ", got '" << got << "'";
 
-        IMPORT_LOG_E(error);
+        YDB_LOG_ERROR("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"error", error});
         Finish(false, error);
 
         return false;
@@ -931,7 +1049,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
     bool CheckScheme() {
         auto finish = [this](const TString& error) -> bool {
-            IMPORT_LOG_E(error);
+            YDB_LOG_ERROR("[Import]",
+                {"logPrefix", LogPrefix()},
+                {"error", error});
             Finish(false, error);
 
             return false;
@@ -991,7 +1111,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             << ": expected '" << ExpectedChecksum << "'"
             << ", got '" << gotChecksum << "'";
 
-        IMPORT_LOG_E(error);
+        YDB_LOG_ERROR("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"error", error});
         Finish(false, error);
 
         return false;
@@ -1013,30 +1135,40 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void Retry() {
         Delay = Min(Delay * ++Attempt, MaxDelay);
         const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
-        this->Schedule(Delay + random, new TEvents::TEvWakeup());
+        this->Schedule(Delay + random, new TEvents::TEvWakeup(RestartTag));
     }
 
     template <typename T>
     void RetryOrFinish(const T& error) {
+        RetryOrFinish(error, Settings.GetDataKey(DataFormat, CompressionCodec));
+    }
+
+    template <typename T>
+    void RetryOrFinish(const T& error, const TString& key) {
         if (CanRetry(error)) {
             Retry();
         } else {
             if constexpr (std::is_same_v<T, Aws::S3::S3Error>) {
-                Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                    << ": S3 error: " << error);
+                Finish(false, TStringBuilder() << key
+                    << ": " << PartLogPrefix() << " error: " << error);
             } else {
-                Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                Finish(false, TStringBuilder() << key
                     << ": " << error);
             }
         }
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
-        IMPORT_LOG_N("Finish"
-            << ": success# " << success
-            << ", error# " << error
-            << ", writtenBytes# " << WrittenBytes
-            << ", writtenRows# " << WrittenRows);
+        YDB_LOG_NOTICE("[Import]",
+            {"logPrefix", LogPrefix()},
+            {"success", success},
+            {"error", error},
+            {"writtenBytes", WrittenBytes},
+            {"writtenRows", WrittenRows});
+
+        // If a direct part write was reserved but never handed off, drop its barrier
+        // so the uncommitted blobs get garbage collected.
+        AbortDirectImportIfNeeded();
 
         TAutoPtr<IDestructable> prod = new TImportJobProduct(success, error, WrittenBytes, WrittenRows);
         this->Send(DataShard, new TEvDataShard::TEvAsyncJobComplete(prod), 0, TxId);
@@ -1048,6 +1180,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void NotifyDied() {
+        AbortDirectImportIfNeeded();
         this->Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvNotifyActorDied());
         PassAway();
     }
@@ -1065,8 +1198,16 @@ public:
         return NKikimrServices::TActivity::IMPORT_S3_DOWNLOADER_ACTOR;
     }
 
-    TStringBuf LogPrefix() const {
-        return LogPrefix_;
+    static constexpr TStringBuf PartLogPrefix() {
+        return NBackup::NFieldsWrappers::GetStorageName<TSettings>();
+    }
+
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "S3Downloader"},
+            {"selfId", this->SelfId()},
+            {"txId", TxId},
+            {"storageName", NBackup::NFieldsWrappers::GetStorageName<TSettings>()});
     }
 
     static TSettings GetSettings(const NKikimrSchemeOp::TRestoreTask& task);
@@ -1080,23 +1221,24 @@ public:
         , DataShard(dataShard)
         , TxId(txId)
         , Settings(TStorageSettings::FromRestoreTask<TSettings>(task))
-        , DataFormat(NBackupRestoreTraits::EDataFormat::Csv)
+        , DataFormat(NBackupRestoreTraits::EDataFormat::YdbDump)
         , CompressionCodec(NBackupRestoreTraits::ECompressionCodec::None)
         , TableInfo(tableInfo)
         , Scheme(task.GetTableDescription())
-        , LogPrefix_(TStringBuilder() << "s3:" << TxId)
         , Retries(task.GetNumberOfRetries())
         , ReadBatchSize(GetReadBatchSize(task))
         , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
         , Checksum(task.GetValidateChecksums() ? CreateChecksum() : nullptr)
         , ProcessedChecksumState(Checksum ? Checksum->GetState() : NKikimrBackup::TChecksumState())
         , Counters(GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "import"))
+        , DirectPartImportEnabled(AppData()->FeatureFlags.GetEnableDataShardDirectPartImport())
     {
     }
 
     void Bootstrap() {
-        IMPORT_LOG_D("Bootstrap"
-            << ": attempt# " << Attempt);
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
+        YDB_LOG_DEBUG("[Import]",
+            {"attempt", Attempt});
 
         if (!CheckScheme()) {
             return;
@@ -1106,6 +1248,8 @@ public:
     }
 
     STATEFN(StateAllocateResource) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateAllocateResource"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
             sFunc(TEvents::TEvPoisonPill, NotifyDied);
@@ -1113,6 +1257,8 @@ public:
     }
 
     STATEFN(StateDownloadData) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateDownloadData"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, Handle);
@@ -1120,31 +1266,78 @@ public:
             hFunc(TEvDataShard::TEvS3DownloadInfo, Handle);
             hFunc(TEvDataShard::TEvS3UploadRowsResponse, Handle);
 
-            sFunc(TEvents::TEvWakeup, Restart);
+            hFunc(TEvDataShard::TEvS3DirectWriteBeginResult, Handle);
+            hFunc(TEvDataShard::TEvS3DirectWriteFinishResult, Handle);
+            hFunc(TEvBlobStorage::TEvPutResult, Handle);
+
+            hFunc(TEvents::TEvWakeup, Handle);
             sFunc(TEvents::TEvPoisonPill, NotifyDied);
         }
     }
 
     STATEFN(StateDownloadChecksum) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateDownloadChecksum"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleChecksum);
             hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleChecksum);
 
-            sFunc(TEvents::TEvWakeup, Restart);
+            hFunc(TEvents::TEvWakeup, HandleChecksum);
             sFunc(TEvents::TEvPoisonPill, NotifyDied);
         }
     }
 
 private:
+    bool PrepareDataImport() {
+        if (Engine) {
+            return true;
+        }
+
+        TImportS3EngineSettings engineSettings;
+        engineSettings.DataFormat = DataFormat;
+        engineSettings.CompressionCodec = CompressionCodec;
+        engineSettings.ContentLength = ContentLength;
+        engineSettings.ReadBatchSize = ReadBatchSize;
+        engineSettings.BufferSizeLimit = ReadBufferSizeLimit;
+        engineSettings.ZstdBlockSize = AppData()->ZstdBlockSizeForTest.GetOrElse(0);
+        engineSettings.ValidateChecksum = static_cast<bool>(Checksum);
+
+        if (Settings.EncryptionSettings.EncryptedBackup) {
+            engineSettings.EncryptionKey = *Settings.EncryptionSettings.Key;
+            engineSettings.EncryptionIV = NBackup::TEncryptionIV::Combine(
+                *Settings.EncryptionSettings.IV,
+                NBackup::EBackupFileType::TableData,
+                0 /* already combined */,
+                Settings.Shard);
+        }
+
+        auto engineResult = CreateImportS3Engine(engineSettings, TableInfo, Scheme);
+        if (!engineResult) {
+            Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                << ": failed to create import engine: " << engineResult.error());
+            return false;
+        }
+        Engine = std::move(*engineResult);
+
+        // Every engine feeds rows in the exporter's key order, which is what the direct-part
+        // writer needs.
+        if (DirectPartImportEnabled && !DirectImport) {
+            DirectImport = MakeHolder<TDirectImportWriter>(TableInfo, Scheme);
+        }
+
+        return true;
+    }
+
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     const TActorId DataShard;
     const ui64 TxId;
     const TStorageSettings Settings;
-    const NBackupRestoreTraits::EDataFormat DataFormat;
+    NBackupRestoreTraits::EDataFormat DataFormat;
     NBackupRestoreTraits::ECompressionCodec CompressionCodec;
+    bool DataFormatSelected = false;
     const TTableInfo TableInfo;
     const NKikimrSchemeOp::TTableDescription Scheme;
-    const TString LogPrefix_;
+    TMaybe<TNotNullColumns> NotNullColumns; // set by the first row: the scheme is checked by then
 
     const ui32 Retries;
     ui32 Attempt = 0;
@@ -1154,6 +1347,9 @@ private:
 
     ui64 TaskId = 0;
     TActorId Client;
+    TMaybe<TString> ActiveHeadKey;
+    TMaybe<TString> ActiveGetKey;
+    TMaybe<TImportRange> ActiveGetRange;
 
     TString ETag;
     ui64 ContentLength = 0;
@@ -1161,13 +1357,14 @@ private:
     ui64 ReadBytes = 0;
     ui64 WrittenBytes = 0;
     ui64 WrittenRows = 0;
-    ui64 PendingBytes = 0;
-    ui64 PendingRows = 0;
     NKikimrBackup::TS3DownloadState DownloadState;
 
     const ui32 ReadBatchSize;
     const ui64 ReadBufferSizeLimit;
-    THolder<IReadController> Reader;
+    IImportS3Engine::TPtr Engine;
+    ui64 PendingBatchId = 0;
+    ui64 PendingBatchDataBytes = 0;
+    ui64 PendingBatchRows = 0;
     TUploadRowsRequestBuilder RequestBuilder;
 
     NBackup::IChecksum::TPtr Checksum;
@@ -1175,6 +1372,9 @@ private:
     TString ExpectedChecksum;
 
     TCounters Counters;
+
+    bool DirectPartImportEnabled;
+    THolder<TDirectImportWriter> DirectImport; // set iff DirectPartImportEnabled
 
 }; // TS3Downloader
 
@@ -1217,3 +1417,6 @@ IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSc
 } // NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

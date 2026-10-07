@@ -1,5 +1,4 @@
 PRAGMA DisableSimpleColumns;
-/* postgres can not */
 SELECT A.*, C.subkey as goal,B.*
 FROM plato.A
 JOIN plato.B ON A.key == B.key

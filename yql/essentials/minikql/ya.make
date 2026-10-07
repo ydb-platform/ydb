@@ -1,14 +1,14 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
-    aligned_page_pool.cpp
-    aligned_page_pool.h
     compact_hash.cpp
     compact_hash.h
     defs.h
     mkql_alloc.cpp
     mkql_block_map_join_utils.cpp
     mkql_block_map_join_utils.h
+    mkql_bridge_mode.cpp
+    mkql_bridge_mode.h
     mkql_buffer.cpp
     mkql_buffer.h
     mkql_date_scaler.cpp
@@ -60,6 +60,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/minikql/aligned_page_pool
     contrib/libs/apache/arrow
     contrib/libs/cctz/tzdata
     library/cpp/deprecated/enum_codegen
@@ -73,6 +74,7 @@ PEERDIR(
     yql/essentials/core/sql_types
     yql/essentials/core/issue
     yql/essentials/minikql/dom
+    yql/essentials/minikql/datetime
     yql/essentials/parser/pg_catalog
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/issue
@@ -82,6 +84,7 @@ PEERDIR(
     yql/essentials/types/dynumber
     yql/essentials/types/uuid
     yql/essentials/utils
+    yql/essentials/utils/meta
     yql/essentials/utils/memory_profiling
 )
 
@@ -91,11 +94,10 @@ IF (MKQL_RUNTIME_VERSION)
     )
 ENDIF()
 
-YQL_LAST_ABI_VERSION()
-
 END()
 
 RECURSE(
+    aligned_page_pool
     arrow
     codegen
     comp_nodes
@@ -113,4 +115,5 @@ RECURSE_FOR_TESTS(
     benchmark
     ut
     sanitizer_ut
+    udf_value_test_support
 )

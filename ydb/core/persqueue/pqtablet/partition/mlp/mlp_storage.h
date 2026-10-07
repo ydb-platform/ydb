@@ -3,8 +3,8 @@
 #include "mlp.h"
 #include "mlp_common.h"
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 #include <library/cpp/iterator/iterate_keys.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -20,8 +20,31 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+    class TOrderedMessageGroupIdHash: public TIntrusiveListItem<TOrderedMessageGroupIdHash> {
+        ui32 GroupIdHash;
+
+    public:
+
+        /* implicit */ TOrderedMessageGroupIdHash(ui32 groupIdHash);
+
+        explicit operator ui32() const;
+
+        TOrderedMessageGroupIdHash(const TOrderedMessageGroupIdHash& other) = delete;
+        TOrderedMessageGroupIdHash(TOrderedMessageGroupIdHash&& other);
+        TOrderedMessageGroupIdHash& operator=(const TOrderedMessageGroupIdHash& other) = delete;
+        TOrderedMessageGroupIdHash& operator=(TOrderedMessageGroupIdHash&& other) = delete;
+
+        bool operator==(const TOrderedMessageGroupIdHash& other) const;
+
+        template <typename H>
+        friend H AbslHashValue(H h, const TOrderedMessageGroupIdHash& c) {
+            return H::combine(std::move(h), c.GroupIdHash);
+        }
+    };
+
+
 class TStorage {
-    static constexpr size_t MAX_MESSAGES = 48000;
+    static constexpr size_t MAX_MESSAGES = 120000;
     static constexpr size_t MIN_MESSAGES = 100;
     static constexpr size_t MAX_PROCESSING_COUNT = 1023;
     static constexpr TDuration VACUUM_INTERVAL = TDuration::Seconds(1);
@@ -93,6 +116,7 @@ public:
         explicit TMessage(const TMessageData& data)
             : TMessageData(data)
             , NextMessageGroupIdOffset_(LastMessageGroupIdOffsetSentinel)
+            , PrevMessageGroupIdOffset_(LastMessageGroupIdOffsetSentinel)
         {
         }
 
@@ -111,8 +135,24 @@ public:
             NextMessageGroupIdOffset_ = offset;
         }
 
+        TMaybe<ui64> PrevMessageGroupIdOffset() const {
+            if (!HasMessageGroupId || PrevMessageGroupIdOffset_ == LastMessageGroupIdOffsetSentinel) {
+                return Nothing();
+            }
+            return PrevMessageGroupIdOffset_;
+        }
+
+        void RelinkNextMessageGroupIdOffset(TMaybe<ui64> offset) {
+            NextMessageGroupIdOffset_ = offset.GetOrElse(LastMessageGroupIdOffsetSentinel);
+        }
+
+        void RelinkPrevMessageGroupIdOffset(TMaybe<ui64> offset) {
+            PrevMessageGroupIdOffset_ = offset.GetOrElse(LastMessageGroupIdOffsetSentinel);
+        }
+
     private:
         ui64 NextMessageGroupIdOffset_; // not serialized
+        ui64 PrevMessageGroupIdOffset_; // not serialized, STD only
         static constexpr ui64 LastMessageGroupIdOffsetSentinel = Max<ui64>();
     };
 
@@ -145,6 +185,11 @@ public:
 
     friend struct TMessageIterator;
 
+    struct TReceiveAttempt {
+        std::vector<ui64> Offsets;
+        TInstant Expiry;
+    };
+
     struct TBatch {
         friend class TStorage;
 
@@ -167,6 +212,8 @@ public:
         void DeleteFromSlow(ui64 offset);
         void SetPurged();
         void SetUpdateExternalLockedMessageGroupsId(ui32 parentPartitionId);
+        void AddReceiveAttemptUpsert(const TString& receiveAttemptId, const TReceiveAttempt& attempt);
+        void AddReceiveAttemptDelete(const TString& receiveAttemptId);
 
         void Compacted(size_t count);
         void MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp);
@@ -184,6 +231,9 @@ public:
         bool Purged = false;
         absl::flat_hash_set<ui32> UpdateExternalLockedMessageGroupsId;
 
+        THashMap<TString, TReceiveAttempt> ReceiveAttemptUpserts;
+        THashSet<TString> ReceiveAttemptDeletes;
+
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;
     };
@@ -199,6 +249,7 @@ public:
 
     void SetMaxMessageProcessingCount(ui32 MaxMessageProcessingCount);
     void SetRetentionPeriod(std::optional<TDuration> retentionPeriod);
+    void SetReceiveAttemptIdPeriod(TDuration receiveAttemptIdPeriod);
     void SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy> deadLetterPolicy);
 
     ui64 GetFirstOffset() const;
@@ -231,14 +282,26 @@ public:
     // deadline - time for processing visibility
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
+    // When no inflight message belongs to a group, the oldest available offset is returned.
+    // Otherwise a group that has waited longest is chosen
     std::optional<TReadMessage> Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups = {});
-    bool Commit(ui64 message);
-    bool Unlock(ui64 message);
+    // Read up to maxCount messages. When receiveAttemptId is set, repeated reads with the same
+    // attempt id within ReceiveAttemptIdPeriod replay the same message set (SQS FIFO semantics).
+    std::deque<TReadMessage> Read(
+        TInstant now,
+        TInstant visibilityDeadline,
+        TPosition& position,
+        const absl::flat_hash_set<ui32>& skipMessageGroups,
+        size_t maxCount,
+        const TString& receiveAttemptId
+    );
+    EOperationResult Commit(ui64 message);
+    EOperationResult Unlock(ui64 message);
     // For SQS compatibility
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
-    bool ChangeMessageDeadline(ui64 message, TInstant deadline);
+    EOperationResult ChangeMessageDeadline(ui64 message, TInstant deadline);
     bool Purge(ui64 endOffset);
-    bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay = TDuration::Zero());
+    bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay = TDuration::Zero(), ui64 logicalMessageCount = 1);
     bool MarkDLQMoved(TDLQMessage message);
     bool WakeUpDLQ();
     struct TUpdateExternalLockedMessageGroupsResult {
@@ -277,8 +340,8 @@ private:
     ui64 NormalizeDeadline(TInstant deadline);
 
     ui64 DoLock(ui64 offset, TMessage& message, TInstant deadline);
-    bool DoCommit(ui64 offset, size_t& totalMetrics);
-    bool DoUnlock(ui64 offset);
+    EOperationResult DoCommit(ui64 offset, size_t& totalMetrics);
+    EOperationResult DoUnlock(ui64 offset);
     void DoUnlock(ui64 offset, TMessage& message);
     bool DoUndelay(ui64 offset);
     TUpdateExternalLockedMessageGroupsResult DoUpdateExternalLockedMessageGroupsId(const NKikimrPQ::TExternalLockedMessageGroupsId&, bool loadState);
@@ -297,6 +360,7 @@ private:
     TSlowMessagesMap::iterator RemoveMessageFromSlowZone(TSlowMessagesMap::iterator it);
     void RemoveMessageFromSlowZone(ui64 offset);
     void RemoveFirstMessageFromFastZone();
+    void MoveFirstMessageFromFastZoneToSlowZone();
     void UpdateMessageMetrics(const TMessage& message);
 
     std::optional<ui32> GetRetentionDeadlineDelta() const;
@@ -311,6 +375,37 @@ private:
     template <class Fn>
     void IterateAllMessagesInOrder(Fn&& fn);
 
+    TReadMessage ConvertToReadMessage(ui64 offset, const TMessage& message) const;
+    bool IsMessageGroupLocked(const TMessage& message, const absl::flat_hash_set<ui32>& skipMessageGroups) const;
+
+    std::optional<TReadMessage> ReadForReplay(ui64 offset, TInstant deadline);
+    void MarkReceiveAttemptOffsetInvalid(ui64 offset);
+    void CleanupReceiveAttempts(TInstant now);
+    void ClearReceiveAttempts();
+    void RecordReceiveAttemptUpsert(const TString& receiveAttemptId, const TReceiveAttempt& attempt);
+    void RecordReceiveAttemptDelete(const TString& receiveAttemptId);
+
+    THashMap<TString, TReceiveAttempt> ReceiveAttempts_;
+    absl::flat_hash_set<ui64> InvalidatedReceiveAttemptOffsets_;
+    // The window during which a repeated read with the same receive-request-attempt-id replays
+    // the same messages (SQS FIFO semantics). Overridden from consumer config on actor init.
+    TDuration ReceiveAttemptIdPeriod = TDuration::MilliSeconds(NKikimrPQ::TPQTabletConfig::TConsumer().GetReadRequestAttemptIdPeriodMs());
+
+    struct TNextMessageResult {
+        TMessage* Message; // nullable
+        ui64 Offset;
+        TIntrusiveList<TOrderedMessageGroupIdHash>::iterator OrderIterator;
+    };
+
+    struct TTryGetMessageResult {
+        TMessage* Message; // not null
+        bool TryNextInGroup;
+        bool Usable;
+    };
+
+    TTryGetMessageResult TryGetMessage(ui64 offset, const std::optional<ui32> retentionDeadlineDelta, const absl::flat_hash_set<ui32>& skipMessageGroups, const char* caseDescription);
+    TNextMessageResult SearchForEligibleMessage(const std::optional<ui32> retentionDeadlineDelta, const absl::flat_hash_set<ui32>& skipMessageGroups);
+
 private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;
 
@@ -324,6 +419,8 @@ private:
     ui64 FirstOffset = 0;
     ui64 FirstUncommittedOffset = 0;
     ui64 FirstUnlockedOffset = 0;
+    // Incremented on each fairness Next. IntHash of this value chooses which class is tried first.
+    ui32 FairnessClassTurn = 0;
 
     TInstant BaseDeadline;
     TInstant BaseWriteTimestamp;
@@ -354,19 +451,41 @@ private:
     };
     struct TSingleMessageGroupIdInfo {
         ui32 Size = 0;
+        ui32 UnprocessedCount = 0; // Messages in the group whose status is Unprocessed. STD keeps the group eligible for Next while this is > 0.
         TLockedGroup Locked;
         ui64 FirstOffset; // exclude DLQ
         ui64 LastOffset;
     };
 
-    struct TMessageGroups {
+    void PushBackToMessageGroupList(ui64 offset, TMessage& message, TSingleMessageGroupIdInfo& group, bool firstMessageInGroup);
+    void UnlinkFromMessageGroupList(ui64 offset, const TMessage& message, TSingleMessageGroupIdInfo& group);
+    // STD: move the prefix through the message just returned to the tail, so the next search starts at its successor.
+    void RotateStdMessageGroupPastReturned(ui64 offset, TMessage& returned);
+
+    class TMessageGroups {
+    public:
+        bool UnlockedMessageGroupsIdContains(const ui32 messageGroupIdHash) const;
+        size_t UnlockedMessageGroupsIdSize() const;
+        bool UnlockedMessageGroupsIdErase(const ui32 messageGroupIdHash);
+        void UpdateLockedMaps(const TLockedGroup& locked, ui32 messageGroupIdHash);
+        void SetUnlockedEligibility(ui32 messageGroupIdHash, bool eligible);
+        const TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder() const;
+        TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder();
+        // Move groups from the front to the back of the fairness order.
+        void RotateGroupsOrder(TIntrusiveList<TOrderedMessageGroupIdHash>::iterator cutAfter);
+        void Clear();
+        ~TMessageGroups();
+
+    public:
         absl::flat_hash_map<ui32, TSingleMessageGroupIdInfo> Groups;
-        absl::flat_hash_set<ui32> UnlockedMessageGroupsId; // without parents
         absl::flat_hash_set<ui32> LockedMessageGroupsId; // without parents
         absl::flat_hash_set<ui64> UnorderedOffsets; // Groupless
 
-        void Clear();
+    private:
+        absl::flat_hash_set<TOrderedMessageGroupIdHash> UnlockedMessageGroupsId; // without parents
+        TIntrusiveList<TOrderedMessageGroupIdHash> UnlockedMessageGroupsIdViewOrder;
     };
+
     TMessageGroups MessageGroups;
 
     std::deque<TDLQMessage> DLQQueue;

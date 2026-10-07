@@ -1,14 +1,15 @@
 #pragma once
 
-#include "const.h"
+#include <ydb/core/local_indexes/bloom/const.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 
 #include <optional>
 
-#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
-
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
+
+using namespace NKikimr::NLocalIndex::NBloom;
 
 class TIndexMeta: public TSkipBitmapIndex {
 public:
@@ -29,7 +30,8 @@ private:
     [[nodiscard]] bool Initialize() {
         AFL_VERIFY(!ResultSchema);
         if (auto c = ValidateRequest(); c.IsFail()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("index_init", c.GetErrorMessage());
+            YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"indexInit", c.GetErrorMessage()});
             return false;
         }
 
@@ -68,8 +70,7 @@ protected:
             return TConclusionStatus::Fail("new bloom ngram index parameters are invalid: " + nextValidation.GetErrorMessage());
         }
 
-        if (Request.IsOldSizingMode() &&
-            Request.ResolvedFalsePositiveProbability() != bMeta->Request.ResolvedFalsePositiveProbability()) {
+        if (Request.IsOldSizingMode() && Request.ResolvedFalsePositiveProbability() != bMeta->Request.ResolvedFalsePositiveProbability()) {
             return TConclusionStatus::Fail(
                 "cannot change false_positive_probability on a bloom ngram index created with deprecated sizing "
                 "(filter_size_bytes/hashes_count/records_count); drop and recreate the index instead");
@@ -83,6 +84,7 @@ protected:
 
         return TBase::CheckSameColumnsForModification(newMeta);
     }
+
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
@@ -94,7 +96,8 @@ protected:
         {
             auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
             if (conclusion.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"indexParsing", conclusion.GetErrorMessage()});
                 return false;
             }
         }
@@ -109,7 +112,8 @@ protected:
 
         Request = TRequestSettings::FromProtoFilter(bFilter);
         if (auto c = ValidateRequest(); c.IsFail()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("index_parsing", c.GetErrorMessage());
+            YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"indexParsing", c.GetErrorMessage()});
             return false;
         }
 

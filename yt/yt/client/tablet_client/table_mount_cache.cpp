@@ -63,7 +63,7 @@ bool TTableMountInfo::IsChaosReplica() const
     return TypeFromId(UpstreamReplicaId) == EObjectType::ChaosTableReplica;
 }
 
-TTabletInfoPtr TTableMountInfo::GetTabletByIndexOrThrow(int tabletIndex) const
+TTabletInfoPtr TTableMountInfo::GetTabletByIndexOrThrow(i64 tabletIndex) const
 {
     if (tabletIndex < 0 || tabletIndex >= std::ssize(Tablets)) {
         if (Tablets.empty()) {
@@ -80,6 +80,17 @@ TTabletInfoPtr TTableMountInfo::GetTabletByIndexOrThrow(int tabletIndex) const
             tabletIndex);
     }
     return Tablets[tabletIndex];
+}
+
+TTabletInfoPtr TTableMountInfo::FindTabletById(TTabletId id) const
+{
+    for (const auto& tablet : Tablets) {
+        if (tablet->TabletId == id) {
+            return tablet;
+        }
+    }
+
+    return {};
 }
 
 int TTableMountInfo::GetTabletIndexForKey(TUnversionedValueRange key) const
@@ -132,7 +143,7 @@ TErrorOr<TTabletInfoPtr> TTableMountInfo::GetRandomMountedTablet() const
             IsHunkStorage() ? PhysicalPath : Path);
         if (!Tablets.empty()) {
             // NB: For cache invalidation.
-            error <<= TErrorAttribute("tablet_id", Tablets[0]->TabletId);
+            error.Add("tablet_id", Tablets[0]->TabletId);
         }
 
         return error;
@@ -233,16 +244,6 @@ void TTabletRedirectionHint::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("reshard_redirection_hint", &TThis::ReshardRedirectionHint)
         .Default();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TUnfoldedColumns::Persist(const TStreamPersistenceContext& context)
-{
-    using NYT::Persist;
-
-    Persist(context, TableColumn);
-    Persist(context, IndexColumn);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

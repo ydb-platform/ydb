@@ -60,8 +60,8 @@ int TCommandNodeConfigInit::Run(TConfig& config) {
 
     if (SeedNodeEndpoint) {
         config.Address = SeedNodeEndpoint;
-        auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-        auto client = NYdb::NConfig::TConfigClient(*driver);
+        auto driver = CreateDriver(config);
+        auto client = NYdb::NConfig::TConfigClient(driver);
 
         auto result = client.FetchAllConfigs().GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);

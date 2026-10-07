@@ -3,6 +3,7 @@ package NKikimrSysView;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/core/protos/labeled_counters.proto";
+import "ydb/core/protos/table_metrics_settings.proto";
 import "ydb/core/protos/tablet.proto";
 
 message TPartitionStatsKey {
@@ -123,6 +124,7 @@ message TQueryStats {
     optional uint64 RequestUnits = 17;
     optional uint64 LocksBrokenAsBreaker = 18;
     optional uint64 LocksBrokenAsVictim = 19;
+    optional string TraceId = 20;
 }
 
 message TTopQueryStats {
@@ -192,6 +194,9 @@ message TPDiskInfo {
     optional uint32 SlotSizeInUnits = 20; // either inferred or user-defined
     reserved 21;
     optional string MaintenanceStatus = 22;
+    optional uint64 ExpectedSlotSize = 23; // either inferred or user-defined, 0 if not set
+    optional uint64 UserChunkPoolSize = 24; // physical upper bound for one owner's quota, in bytes
+    optional uint32 StaticSlotUsage = 25; // reserved static slots; static groups are single-unit
     // metrics ?
     // physical location ?
     // config ?
@@ -239,6 +244,8 @@ message TVSlotInfo {
     optional string State = 17;
     optional bool IsThrottling = 18;
     optional uint32 ThrottlingRate = 19;
+    optional bool PhantomOnly = 20;
+    optional bool DDisk = 21;
 }
 
 message TVSlotEntry {
@@ -298,6 +305,8 @@ message TGroupInfo {
     optional uint64 BridgeSyncFirstErrorTimestamp = 27; // first error timestamp
     optional uint32 BridgeSyncErrorCount = 28; // number of errors reported during this stage
     optional bool BridgeSyncRunning = 29; // is the syncer running right now?
+    optional bool DDisk = 30; // is this a Direct Block Group?
+    optional string SpaceColor = 31; // space color of the group (the worst one among its VDisks)
 }
 
 message TGroupEntry {
@@ -337,6 +346,9 @@ message TStoragePoolInfo {
     optional string PDiskFilter = 13;
     optional bytes PDiskFilterData = 14;
     optional uint32 DefaultGroupSizeInUnits = 15;
+    optional string BestSpaceColor = 16; // the best space color among groups of the pool
+    optional string WorstSpaceColor = 17; // the worst space color among groups of the pool
+    optional bool SpaceExhausted = 18; // the pool blocks writes to its database (see DatabaseSpaceBlockColor)
     // metrics ?
 }
 
@@ -364,8 +376,17 @@ message TStorageStatsEntry {
     optional uint32 CurrentGroupsCreated = 4;
     optional uint64 CurrentAllocatedSize = 5;
     optional uint64 CurrentAvailableSize = 6;
+
+    // estimated number of groups BSC is able to create if DriveStatus and MaintenanceStatus are ignored
     optional uint32 AvailableGroupsToCreate = 7;
-    optional uint64 AvailableSizeToCreate = 8; // total space of newly created groups, if they would've been created
+    // estimated total space of groups BSC is able to create if DriveStatus and MaintenanceStatus are ignored
+    optional uint64 AvailableSizeToCreate = 8;
+
+    // estimated number of groups BSC is able to create
+    optional uint32 ImmediateGroupsToCreate = 10;
+    // estimated total space of groups BSC is able to create
+    optional uint64 ImmediateSizeToCreate = 11;
+
     optional bytes PDiskFilterData = 9;
 }
 
@@ -450,6 +471,8 @@ message TEvIntervalQuerySummary {
     optional TQuerySet TopByReadBytes = 6;
     optional TQuerySet TopByCpuTime = 7;
     optional TQuerySet TopByRequestUnits = 8;
+    optional uint64 QueryMetricsTotalCpuTimeUs = 9;
+    optional uint64 QueryMetricsRetainedCpuTimeUs = 10;
 }
 
 // sysview processor tablet -> node
@@ -532,12 +555,23 @@ message TEvGetQueryStatsResponse {
 
 // generic set of counters with stable enumeration order in each category
 // simple values are absolute
-// cumulative and histogram values may be absolute or diffs depending on the context
+// cumulative and histogram values may be absolute or diffs depending on the context,
+// except a histogram marked NonDerivative, which always holds full values
 // only index-value pairs with non-zero values are stored in diff mode
+// On the detailed metrics channel (TDetailedTableCounters) slot i is the enum value i of the public
+// metrics of the tablet type (counters_detailed_<type>.proto): Simple is dense, Cumulative holds
+// (slot, delta) pairs, every histogram metric is present, a non-derivative one marked NonDerivative
 message TDbCounters {
     message THistogram {
         repeated uint64 Buckets = 1;
         optional uint64 BucketsCount = 2; // total number of buckets in diff mode
+        // Set for a non-derivative histogram (an Integral percentile counter or a HIST(x)
+        // aggregate, published as monlib HIST): bucket counts go up and down, so Buckets hold
+        // the full current value of every non-empty bucket rather than a delta, and the receiver
+        // replaces its copy instead of adding. Set by the detailed metrics channel only.
+        // Unset: Buckets are a delta to add (derivative histograms, monlib HIST_RATE, and every
+        // histogram of the regular tablet counters channel)
+        optional bool NonDerivative = 3;
     }
 
     repeated uint64 Simple = 1;
@@ -552,6 +586,32 @@ message TDbTabletCounters {
     optional TDbCounters AppCounters = 3;
     optional TDbCounters MaxExecutorCounters = 4;
     optional TDbCounters MaxAppCounters = 5;
+}
+
+message TDetailedTableCounters {
+    message TLeaf {
+        reserved 3;
+        reserved "Counters";
+
+        optional uint64 TabletId = 1;
+        optional uint32 FollowerId = 2;
+        optional TDbCounters Metrics = 4;
+    }
+
+    reserved 5;
+    reserved "TableCounters";
+
+    optional string TablePath = 3;
+    optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel Level = 4;
+
+    // Set iff Level == MetricsLevelPartition
+    repeated TLeaf Leaves = 6;
+
+    // Set iff Level == MetricsLevelTable
+    optional TDbCounters TableMetrics = 7;
+
+    // Defines the slots of TableMetrics and TLeaf.Metrics, an entry without it is ignored
+    optional NKikimrTabletBase.TTabletTypes.EType TabletType = 8;
 }
 
 message TDbGRpcCounters {
@@ -584,6 +644,7 @@ enum EDbCountersService {
     LABELED = 5;
     RESERVED_3 = 6;
     RESERVED_4 = 7;
+    TABLETS_FOLLOWERS = 8;
 }
 
 // node -> sysview processor tablet
@@ -593,9 +654,16 @@ message TEvSendDbCountersRequest {
         optional EDbCountersService Service = 1;
         optional TDbServiceCounters Counters = 2;
     }
+
+    message TDetailedCounters {
+        optional EDbCountersService Service = 1;
+        repeated TDetailedTableCounters Tables = 2;
+    }
+
     repeated TServiceCounters ServiceCounters = 1;
     optional uint64 NodeId = 2;
     optional uint64 Generation = 3;
+    repeated TDetailedCounters DetailedCounters = 4;
 }
 
 message TEvSendDbCountersResponse {

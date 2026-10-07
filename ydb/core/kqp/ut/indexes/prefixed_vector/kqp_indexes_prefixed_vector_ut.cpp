@@ -402,12 +402,20 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         }
     }
 
-    void DoTestOrderByCosine(ui32 indexLevels, int flags) {
+    void DoTestOrderByCosine(ui32 indexLevels, int flags, bool enableVectorSearchActor) {
+        // The same scenario is run through both the legacy StreamLookup lowering and the specialized
+        // vector search actor (TableServiceConfig.EnableVectorSearchActor), selected via
+        // enableVectorSearchActor, so both read paths are verified identically against the same
+        // brute-force ground truth.
+        Cerr << "DoTestOrderByCosine: indexLevels=" << indexLevels << " flags=" << flags
+             << " enableVectorSearchActor=" << enableVectorSearchActor << Endl;
+
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -453,36 +461,36 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(OrderByCosineLevel1, Nullable, UseSimilarity) {
-        DoTestOrderByCosine(1, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0));
+    Y_UNIT_TEST_OCTET(OrderByCosineLevel1, Nullable, UseSimilarity, EnableVectorSearchActor) {
+        DoTestOrderByCosine(1, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0), EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithOverlap, Nullable, Covered) {
-        DoTestOrderByCosine(1, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    Y_UNIT_TEST_OCTET(OrderByCosineLevel1WithOverlap, Nullable, Covered, EnableVectorSearchActor) {
+        DoTestOrderByCosine(1, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST_QUAD(OrderByCosineLevel2, Nullable, UseSimilarity) {
-        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0));
+    Y_UNIT_TEST_OCTET(OrderByCosineLevel2, Nullable, UseSimilarity, EnableVectorSearchActor) {
+        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0), EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST_QUAD(OrderByCosineLevel2WithOverlap, Nullable, Covered) {
-        DoTestOrderByCosine(2, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    Y_UNIT_TEST_OCTET(OrderByCosineLevel2WithOverlap, Nullable, Covered, EnableVectorSearchActor) {
+        DoTestOrderByCosine(2, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3) {
-        DoTestOrderByCosine(3, 0);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel3, EnableVectorSearchActor) {
+        DoTestOrderByCosine(3, 0, EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3WithOverlap) {
-        DoTestOrderByCosine(3, F_OVERLAP);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel3WithOverlap, EnableVectorSearchActor) {
+        DoTestOrderByCosine(3, F_OVERLAP, EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel4) {
-        DoTestOrderByCosine(4, 0);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel4, EnableVectorSearchActor) {
+        DoTestOrderByCosine(4, 0, EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST_TWIN(OrderByCosineDistanceWithCover, Nullable) {
-        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING);
+    Y_UNIT_TEST_QUAD(OrderByCosineDistanceWithCover, Nullable, EnableVectorSearchActor) {
+        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING, EnableVectorSearchActor);
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineOnlyVectorCovered, Nullable, Overlap) {
@@ -513,12 +521,12 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, 0);
     }
 
-    Y_UNIT_TEST_QUAD(CosineDistanceWithPkSuffix, Nullable, Covered) {
-        DoTestOrderByCosine(2, F_SUFFIX_PK | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    Y_UNIT_TEST_OCTET(CosineDistanceWithPkSuffix, Nullable, Covered, EnableVectorSearchActor) {
+        DoTestOrderByCosine(2, F_SUFFIX_PK | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST_TWIN(CosineDistanceWithPkSuffixWithOverlap, Covered) {
-        DoTestOrderByCosine(2, F_SUFFIX_PK | F_OVERLAP | (Covered ? F_COVERING : 0));
+    Y_UNIT_TEST_QUAD(CosineDistanceWithPkSuffixWithOverlap, Covered, EnableVectorSearchActor) {
+        DoTestOrderByCosine(2, F_SUFFIX_PK | F_OVERLAP | (Covered ? F_COVERING : 0), EnableVectorSearchActor);
     }
 
     Y_UNIT_TEST(SubPrefix) {
@@ -1133,22 +1141,26 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
                 int shardType = actorTypes[ev->GetRecipientRewrite()];
                 auto & read = ev->Get<TEvDataShard::TEvRead>()->Record;
-                if (shardType == (Covered ? mainType : postingType)) {
-                    // Non-covering index does topK on main table, covering does it on posting
+                if (shardType == prefixType) {
+                    // Prefix table reads never use VectorTopK:
+                    // the prefix filter is applied as a regular WHERE predicate.
                     UNIT_ASSERT(!read.HasVectorTopK());
-                } else if (shardType != prefixType) {
-                    UNIT_ASSERT(shardType != 0);
+                } else if (shardType == levelType) {
+                    // First level lookup uses VectorTopK with budget scaled by number of prefix groups.
+                    // Subsequent levels use plain stream lookups with global TCoTop.
+                    if (read.HasVectorTopK()) {
+                        auto & topK = read.GetVectorTopK();
+                        UNIT_ASSERT(topK.GetTargetVector() == "\x67\x71\x02");
+                        // Equal to KMeansTreeSearchTopSize pragma value (2) * numPrefixGroups (1)
+                        UNIT_ASSERT(topK.GetLimit() == 2);
+                    }
+                } else if (shardType == (Covered ? postingType : mainType)) {
+                    // Final vector topK is pushed down to the posting/main table
                     UNIT_ASSERT(read.HasVectorTopK());
                     auto & topK = read.GetVectorTopK();
-                    // Check that target and limit are pushed down
                     UNIT_ASSERT(topK.GetTargetVector() == "\x67\x71\x02");
-                    if (shardType == levelType) {
-                        // Equal to pragma
-                        UNIT_ASSERT(topK.GetLimit() == 2);
-                    } else if (shardType == (Covered ? postingType : mainType)) {
-                        // Equal to LIMIT
-                        UNIT_ASSERT(topK.GetLimit() == 3);
-                    }
+                    // Equal to LIMIT
+                    UNIT_ASSERT(topK.GetLimit() == 3);
                 }
             }
             return false;
@@ -1175,7 +1187,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(PrefixedVectorIndexTruncateTable, Covered, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         auto serverSettings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -1243,14 +1254,8 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             const TString query1(Q_(R"(
                 UPSERT INTO `/Root/TestTable` (pk, user, emb, data) VALUES)"
                 "( 1, \"user_a\", \"\", \"10\"),"
-                "( 2, \"user_a\", \"1\", \"11\"),"
-                "( 3, \"user_a\", \"40\", \"12\"),"
-                "( 4, \"user_a\", \"abcd\", \"13\"),"
 
                 "(11, \"user_b\", \"\", \"20\"),"
-                "(12, \"user_b\", \"1\", \"21\"),"
-                "(13, \"user_b\", \"40\", \"22\"),"
-                "(14, \"user_b\", \"abcd\", \"23\"),"
                 "(15, \"user_b\", \"\x03\x30\x02\", \"24\"),"
                 "(16, \"user_b\", \"\x13\x31\x02\", \"25\"),"
                 "(17, \"user_b\", \"\x23\x32\x02\", \"26\"),"
@@ -1313,7 +1318,325 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[5u;5u;[5];1u;[5]]]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[4u;4u;[4];1u;[4]]]");
+        }
+    }
+
+    // Test that OR predicate on prefix column returns results from all matching prefix groups.
+    // Regression test for bug: prefix vector index query with OR returns only results from one prefix value.
+    Y_UNIT_TEST_TWIN(OrPrefixLevel1, Covered) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db);
+        DoCreatePrefixedVectorIndex(session, 1, Covered ? F_COVERING : 0);
+
+        // Plain query without index for reference
+        const TString plainQuery(Q_(R"(
+            $target = "\x67\x68\x02";
+            SELECT pk FROM `/Root/TestTable`
+            WHERE user = "user_a" OR user = "user_b"
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+        // Index query with OR on prefix column - must return results from BOTH user_a and user_b.
+        // Use TopSize=1: each prefix gets at most 1 centroid, so with 2 prefixes and LIMIT=6
+        // we must get results from both. Before the fix, TopSize=1 caused all centroid slots
+        // to be taken by one prefix, returning results only from that prefix.
+        const TString indexQuery(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "1";
+            $target = "\x67\x68\x02";
+            SELECT pk FROM `/Root/TestTable` VIEW index
+            WHERE user = "user_a" OR user = "user_b"
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+
+        auto mainResults = DoPositiveQueryVectorIndex(session, plainQuery);
+        absl::c_sort(mainResults);
+        UNIT_ASSERT_EQUAL(mainResults.size(), 6u);
+
+        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery, Covered ? F_COVERING : 0);
+        absl::c_sort(indexResults);
+        UNIT_ASSERT_EQUAL_C(indexResults.size(), 6u,
+            "Expected 6 results (3 from user_a + 3 from user_b), got " << indexResults.size());
+
+        // Verify results come from both prefix groups (user_a: odd pks, user_b: even pks)
+        bool hasUserA = false, hasUserB = false;
+        for (auto pk : indexResults) {
+            if (pk % 2 == 1) hasUserA = true;
+            if (pk % 2 == 0) hasUserB = true;
+        }
+        UNIT_ASSERT_C(hasUserA, "Index OR query returned no results from user_a");
+        UNIT_ASSERT_C(hasUserB, "Index OR query returned no results from user_b");
+
+        UNIT_ASSERT_VALUES_EQUAL(mainResults, indexResults);
+    }
+
+    Y_UNIT_TEST_TWIN(OrPrefixLevel2, Covered) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db);
+        DoCreatePrefixedVectorIndex(session, 2, Covered ? F_COVERING : 0);
+
+        // Plain query without index for reference
+        const TString plainQuery(Q_(R"(
+            $target = "\x67\x68\x02";
+            SELECT pk FROM `/Root/TestTable`
+            WHERE user = "user_a" OR user = "user_b"
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+        // Index query with OR on prefix column - must return results from BOTH user_a and user_b.
+        // Use TopSize=1: each prefix gets at most 1 centroid per level, so with 2 prefixes
+        // and LIMIT=6 we must get results from both. Before the fix, TopSize=1 caused all
+        // centroid slots to be taken by one prefix, returning results only from that prefix.
+        const TString indexQuery(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "1";
+            $target = "\x67\x68\x02";
+            SELECT pk FROM `/Root/TestTable` VIEW index
+            WHERE user = "user_a" OR user = "user_b"
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+
+        auto mainResults = DoPositiveQueryVectorIndex(session, plainQuery);
+        absl::c_sort(mainResults);
+        UNIT_ASSERT_EQUAL(mainResults.size(), 6u);
+
+        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery, Covered ? F_COVERING : 0);
+        absl::c_sort(indexResults);
+        UNIT_ASSERT_EQUAL_C(indexResults.size(), 6u,
+            "Expected 6 results (3 from user_a + 3 from user_b), got " << indexResults.size());
+
+        // Verify results come from both prefix groups (user_a: odd pks, user_b: even pks)
+        bool hasUserA = false, hasUserB = false;
+        for (auto pk : indexResults) {
+            if (pk % 2 == 1) hasUserA = true;
+            if (pk % 2 == 0) hasUserB = true;
+        }
+        UNIT_ASSERT_C(hasUserA, "Index OR query returned no results from user_a");
+        UNIT_ASSERT_C(hasUserB, "Index OR query returned no results from user_b");
+
+        UNIT_ASSERT_VALUES_EQUAL(mainResults, indexResults);
+    }
+
+    Y_UNIT_TEST_TWIN(InPrefixLevel1, Covered) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db);
+        DoCreatePrefixedVectorIndex(session, 1, Covered ? F_COVERING : 0);
+
+        const TString plainQuery(Q_(R"(
+            $target = "\x67\x68\x02";
+            SELECT pk FROM `/Root/TestTable`
+            WHERE user IN ("user_a", "user_b")
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+        const TString indexQuery(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "1";
+            $target = "\x67\x68\x02";
+            SELECT pk FROM `/Root/TestTable` VIEW index
+            WHERE user IN ("user_a", "user_b")
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+
+        auto mainResults = DoPositiveQueryVectorIndex(session, plainQuery);
+        absl::c_sort(mainResults);
+        UNIT_ASSERT_EQUAL(mainResults.size(), 6u);
+
+        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery, Covered ? F_COVERING : 0);
+        absl::c_sort(indexResults);
+        UNIT_ASSERT_EQUAL_C(indexResults.size(), 6u,
+            "Expected 6 results (3 from user_a + 3 from user_b), got " << indexResults.size());
+
+        bool hasUserA = false, hasUserB = false;
+        for (auto pk : indexResults) {
+            if (pk % 2 == 1) hasUserA = true;
+            if (pk % 2 == 0) hasUserB = true;
+        }
+        UNIT_ASSERT_C(hasUserA, "Index IN query returned no results from user_a");
+        UNIT_ASSERT_C(hasUserB, "Index IN query returned no results from user_b");
+
+        UNIT_ASSERT_VALUES_EQUAL(mainResults, indexResults);
+    }
+
+    Y_UNIT_TEST_TWIN(InPrefixLevel2, Covered) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db);
+        DoCreatePrefixedVectorIndex(session, 2, Covered ? F_COVERING : 0);
+
+        const TString plainQuery(Q_(R"(
+            $target = "\x67\x68\x02";
+            SELECT pk FROM `/Root/TestTable`
+            WHERE user IN ("user_a", "user_b")
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+        const TString indexQuery(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "1";
+            $target = "\x67\x68\x02";
+            SELECT pk FROM `/Root/TestTable` VIEW index
+            WHERE user IN ("user_a", "user_b")
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+
+        auto mainResults = DoPositiveQueryVectorIndex(session, plainQuery);
+        absl::c_sort(mainResults);
+        UNIT_ASSERT_EQUAL(mainResults.size(), 6u);
+
+        auto indexResults = DoPositiveQueryVectorIndex(session, indexQuery, Covered ? F_COVERING : 0);
+        absl::c_sort(indexResults);
+        UNIT_ASSERT_EQUAL_C(indexResults.size(), 6u,
+            "Expected 6 results (3 from user_a + 3 from user_b), got " << indexResults.size());
+
+        bool hasUserA = false, hasUserB = false;
+        for (auto pk : indexResults) {
+            if (pk % 2 == 1) hasUserA = true;
+            if (pk % 2 == 0) hasUserB = true;
+        }
+        UNIT_ASSERT_C(hasUserA, "Index IN query returned no results from user_a");
+        UNIT_ASSERT_C(hasUserB, "Index IN query returned no results from user_b");
+
+        UNIT_ASSERT_VALUES_EQUAL(mainResults, indexResults);
+    }
+
+    Y_UNIT_TEST_TWIN(InParamPrefixLevel1, Covered) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10);
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db);
+        DoCreatePrefixedVectorIndex(session, 1, Covered ? F_COVERING : 0);
+
+        const TString plainQuery(Q_(R"(
+            DECLARE $users AS List<String>;
+            DECLARE $target AS String;
+            SELECT pk FROM `/Root/TestTable`
+            WHERE user IN $users
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+        const TString indexQuery(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "1";
+            DECLARE $users AS List<String>;
+            DECLARE $target AS String;
+            SELECT pk FROM `/Root/TestTable` VIEW index
+            WHERE user IN $users
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 6;
+        )"));
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$users")
+                .BeginList()
+                .AddListItem().String("user_a")
+                .AddListItem().String("user_b")
+                .EndList()
+                .Build()
+            .AddParam("$target")
+                .String("\x67\x68\x02")
+                .Build()
+            .Build();
+
+        {
+            auto result = session.ExecuteDataQuery(plainQuery,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                params
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "Failed to execute: `" << plainQuery << "` with " << result.GetIssues().ToString());
+
+            std::vector<i64> mainResults;
+            auto sets = result.GetResultSets();
+            for (const auto& set : sets) {
+                TResultSetParser parser{set};
+                while (parser.TryNextRow()) {
+                    auto value = parser.GetValue("pk");
+                    UNIT_ASSERT_C(value.GetProto().has_int64_value(), value.GetProto().ShortUtf8DebugString());
+                    mainResults.push_back(value.GetProto().int64_value());
+                }
+            }
+            absl::c_sort(mainResults);
+            UNIT_ASSERT_EQUAL(mainResults.size(), 6u);
+
+            auto result2 = session.ExecuteDataQuery(indexQuery,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                params
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result2.IsSuccess(),
+                "Failed to execute: `" << indexQuery << "` with " << result2.GetIssues().ToString());
+
+            std::vector<i64> indexResults;
+            auto sets2 = result2.GetResultSets();
+            for (const auto& set : sets2) {
+                TResultSetParser parser{set};
+                while (parser.TryNextRow()) {
+                    auto value = parser.GetValue("pk");
+                    UNIT_ASSERT_C(value.GetProto().has_int64_value(), value.GetProto().ShortUtf8DebugString());
+                    indexResults.push_back(value.GetProto().int64_value());
+                }
+            }
+            absl::c_sort(indexResults);
+            UNIT_ASSERT_EQUAL_C(indexResults.size(), 6u,
+                "Expected 6 results (3 from user_a + 3 from user_b), got " << indexResults.size());
+
+            bool hasUserA = false, hasUserB = false;
+            for (auto pk : indexResults) {
+                if (pk % 2 == 1) hasUserA = true;
+                if (pk % 2 == 0) hasUserB = true;
+            }
+            UNIT_ASSERT_C(hasUserA, "Index IN $param query returned no results from user_a");
+            UNIT_ASSERT_C(hasUserB, "Index IN $param query returned no results from user_b");
+
+            UNIT_ASSERT_VALUES_EQUAL(mainResults, indexResults);
         }
     }
 }

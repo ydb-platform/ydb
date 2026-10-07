@@ -1,7 +1,17 @@
 #include "write_controller.h"
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 
 namespace NKikimr::NColumnShard {
+
+void IWriteController::UpdateChannelApproximateFreeSpace(const TEvBlobStorage::TEvPutResult& result) {
+    NOlap::TUnifiedBlobId blobId(result.GroupId, result.Id);
+    auto it = WaitingActions.find(result.StorageId ? result.StorageId : NOlap::IStoragesManager::DefaultStorageId);
+    if (it == WaitingActions.end()) {
+        return;
+    }
+    it->second->UpdateChannelApproximateFreeSpace(blobId, result.ApproximateFreeSpaceShare);
+}
 
 void IWriteController::OnBlobWriteResult(const TEvBlobStorage::TEvPutResult& result) {
     NOlap::TUnifiedBlobId blobId(result.GroupId, result.Id);
@@ -22,4 +32,4 @@ NKikimr::NOlap::TBlobWriteInfo& IWriteController::AddWriteTask(NOlap::TBlobWrite
     return WriteTasks.back();
 }
 
-}
+}   // namespace NKikimr::NColumnShard

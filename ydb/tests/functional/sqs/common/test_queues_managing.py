@@ -113,6 +113,8 @@ class QueuesManagingTest(KikimrSqsTestBase):
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_delete_queue(self, is_fifo, tables_format):
+        if self._is_topic_migration_stage():
+            pytest.skip('Legacy table checks are not applicable after topic migration')
         self._init_with_params(is_fifo, tables_format)
 
         another_queue_std_name = self.queue_name.replace('.', '_') + '_another_std'
@@ -347,7 +349,14 @@ class QueuesManagingTest(KikimrSqsTestBase):
                 master_is_updated = True
                 break
             except RuntimeError as ex:
-                assert str(ex).find('master session error') != -1 or str(ex).find('failed because of an unknown error, exception or failure') != -1
+                # After delete+create, a stale leader may briefly hit a missing migration
+                # topic and return NonExistentQueue (or older InternalFailure / master errors).
+                msg = str(ex)
+                assert (
+                    'master session error' in msg
+                    or 'failed because of an unknown error, exception or failure' in msg
+                    or 'NonExistentQueue' in msg
+                ), msg
                 time.sleep(0.5)  # wait master update time
 
         assert_that(master_is_updated)

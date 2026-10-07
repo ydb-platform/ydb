@@ -12,6 +12,7 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_utils.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/public/udf/udf_log.h>
 #include <yql/essentials/utils/time_provider.h>
 
@@ -178,8 +179,9 @@ void ResolveUDFs() {
             }
 
             TFunctionTypeInfo funcInfo;
-            auto status = newRegistry->FindFunctionTypeInfo(udf.GetLangVer(), env, typeInfoHelper, nullptr,
-                                                            udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, logProvider.Get(), &funcInfo);
+            auto runtimeSettings = NYql::DeserializeRuntimeSettingsFromProto(udf.GetRuntimeSettings());
+            auto status = newRegistry->FindFunctionTypeInfo(udf.GetLangVer(), *runtimeSettings, env, typeInfoHelper, /*countersProvider=*/nullptr,
+                                                            udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), /*secureParamsProvider=*/nullptr, logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {
                 udfRes->SetError(TStringBuilder() << "Failed to find UDF function: " << udf.GetName()
                                                   << ", reason: " << status.GetError());
@@ -213,7 +215,7 @@ void ResolveUDFs() {
 void ListModules(const TString& dir) {
     TVector<TString> udfPaths;
     NMiniKQL::FindUdfsInDir(dir, &udfPaths);
-    auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, IBuiltinFunctionRegistry::TPtr(), false, udfPaths,
+    auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, IBuiltinFunctionRegistry::TPtr(), /*allowUdfPatch=*/false, udfPaths,
                                                NUdf::IRegistrator::TFlags::TypesOnly);
 
     for (auto& m : funcRegistry->GetAllModuleNames()) {

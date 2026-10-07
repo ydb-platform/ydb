@@ -8,11 +8,21 @@
 
 #include <yt/yt/core/ytree/public.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NHiveClient {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TClusterDirectoryUpdateResult
+{
+    //! \note Errors already contain cluster name in description, so you can use them directly instead of wrapping in an error with the cluster name.
+    THashMap<std::string, TError> ClusterToErrorMapping;
+
+    TError GetCumulativeError() const;
+};
+
+/////////////////////////////////////////////////////////////////////////////////
 
 //! Maintains a map for a bunch of cluster connections.
 /*!
@@ -53,22 +63,41 @@ public:
     //! Drops all directory entries.
     void Clear();
 
-    //! Updates the configuration of a cluster with a given #name,
-    //! recreates the connection if configuration changes.
-    void UpdateCluster(const std::string& name, const NYTree::INodePtr& connectionConfig);
-
-    //! Updates configuration of all clusters given in #protoDirectory.
+    //! Tries to update configuration of all clusters given in #protoDirectory independently, i.e. failure to update one cluster does not affect the update of other clusters.
     //! Removes all clusters that are currently known but are missing in #protoDirectory.
+    //! Returns the result of the update for each cluster.
+    TClusterDirectoryUpdateResult TryUpdateDirectory(const NProto::TClusterDirectory& protoDirectory);
+
+    //! Tries to update configuration of all clusters given in #config independently, i.e. failure to update one cluster does not affect the update of other clusters.
+    //! Removes all clusters that are currently known but are missing in #config.
+    //! Returns the result of the update for each cluster.
+    TClusterDirectoryUpdateResult TryUpdateDirectory(const TClusterDirectoryConfigPtr& config);
+
+    //! Tries to update the configuration of a cluster with a given #name,
+    //! recreates the connection if configuration changes.
+    //! Returns an error if the update fails.
+    TError TryUpdateCluster(const std::string& name, const NYTree::INodePtr& connectionConfig);
+
+    //! Updates configuration of all clusters given in #protoDirectory independently, i.e. failure to update one cluster does not affect the update of other clusters.
+    //! Removes all clusters that are currently known but are missing in #protoDirectory.
+    //! Throws before return if any cluster update fails.
     void UpdateDirectory(const NProto::TClusterDirectory& protoDirectory);
 
-    //! Updates configuration of all clusters given in #config.
+    //! Updates configuration of all clusters given in #config independently, i.e. failure to update one cluster does not affect the update of other clusters.
     //! Removes all clusters that are currently known but are missing in #config.
+    //! Throws before return if any cluster update fails.
     void UpdateDirectory(const TClusterDirectoryConfigPtr& config);
 
     //! Returns true if there is a cluster with corresponding TVM id in the directory.
     bool HasTvmId(NAuth::TTvmId tvmId) const;
 
+    //! Returns the time of the last completed directory update.
+    std::optional<TInstant> GetLastSuccessfulUpdateTime() const;
+
+    // NB: subscribers to these signals have to be executed synchronously
+    // because old connection can be terminated after this signal is fired.
     DEFINE_SIGNAL(void(const std::string&, NYTree::INodePtr), OnClusterUpdated);
+    DEFINE_SIGNAL(void(const std::string&), OnClusterUnregistered);
 
 protected:
     struct TCluster
@@ -80,16 +109,19 @@ protected:
 
     const TConnection::TConnectionOptions ConnectionOptions_;
 
+    std::optional<TCluster> FindCluster(const std::string& name) const;
+
     virtual TConnectionPtr CreateConnection(const std::string& name, const NYTree::INodePtr& connectionConfig) = 0;
     virtual NObjectClient::TCellTagList GetCellTags(const TCluster& cluster);
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     THashMap<NApi::TClusterTag, TCluster> CellTagToCluster_;
     THashMap<std::string, TCluster> NameToCluster_;
     THashMultiSet<NAuth::TTvmId> ClusterTvmIds_;
+    std::optional<TInstant> LastSuccessfulUpdateTime_;
 
-    void UpdateDirectory(const THashMap<std::string, NYTree::INodePtr>& nameToConfig);
+    TClusterDirectoryUpdateResult TryUpdateDirectory(const THashMap<std::string, NYTree::INodePtr>& nameToConfig);
     TCluster CreateCluster(const std::string& name, const NYTree::INodePtr& connectionConfig);
 };
 

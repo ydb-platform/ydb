@@ -1,5 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/testlib/actors/wait_events.h>  // for TWaitForFirstEvent
+#include <ydb/core/testlib/actors/block_events.h>  // for TBlockEvents
 
 #include <ydb/public/lib/value/value.h>
 
@@ -1027,6 +1028,42 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         );
     }
 
+    Y_UNIT_TEST_FLAG(AlterCantChangeExternalWasmCompileController, AlterDatabaseCreateHiveFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "USER_0")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Minimally correct ExtSubDomain settings
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalSchemeShard: true
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                StoragePools {
+                  Name: "pool-1"
+                  Kind: "hdd"
+                }
+
+                ExternalWasmCompileController: true
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalWasmCompileController: false
+            )",
+            {{NKikimrScheme::StatusInvalidParameter, "WasmCompileController could only be added, not removed"}}
+        );
+    }
+
     Y_UNIT_TEST_FLAG(AlterCantChangeSetParams, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
@@ -1695,6 +1732,88 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         }
     }
 
+    // Regression test for a bug where dropping a tenant while AlterUserAttributes is
+    // in-flight (after Propose, before the coordinator plan is applied) left orphaned
+    // UserAttributesAlterData rows in the local database.
+    // On schemeshard restart, ReadEverything hit Y_VERIFY_S(PathsById.contains(pathId)) and crashed.
+    Y_UNIT_TEST_FLAG(DropWhileAlteringUserAttrs, ExternalHive) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Prepare phase.
+        // Create extsubdomain
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
+        );
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0")
+        });
+
+        // Alter user attrs but hang it at the right moment.
+        // Intercept TEvTxProcessing::TEvPlanStep for the upcoming AlterUserAttrs to keep it in
+        // Propose state (UserAttributesAlterData written to DB, but not yet applied).
+        const ui64 alterTxId = ++txId;
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime, [alterTxId](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            for (const auto& tx : record.GetTransactions()) {
+                if (tx.GetTxId() == alterTxId) {
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        // Send AlterUserAttrs — this writes UserAttributesAlterData rows to the DB.
+        TestUserAttrs(runtime, alterTxId, "/MyRoot", "USER_0", AlterUserAttrs({{"key", "value"}}));
+
+        // Wait until the plan is blocked (alter is in Propose, AlterData is persisted).
+        runtime.WaitFor("blocked plan", [&] { return !blockedPlan.empty(); });
+
+        // Test body.
+        // Drop extsubdomain while alter user attrs is still in progress
+
+        TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
+
+        // Unblock the intercepted plan so the runtime does not stall
+        blockedPlan.Unblock().Stop();
+
+        env.TestWaitNotification(runtime, {alterTxId, txId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {NLs::PathNotExist});
+
+        // Reboot root schemeshard.
+        // Without the fix, ReadEverything crashes here with Y_VERIFY_S(PathsById.contains(pathId))
+        // on the orphaned AlterData rows
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Verify schemeshard is alive after restart
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {NLs::PathExist});
+    }
+
     Y_UNIT_TEST_FLAGS(CreateAndAlterThenDropChangesParent, AlterDatabaseCreateHiveFirst, ExternalHive) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
@@ -1958,6 +2077,146 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                             NLs::ExtractTenantStatisticsAggregator(&tenantSAOnTSS)});
 
         UNIT_ASSERT_EQUAL(tenantSA, tenantSAOnTSS);
+    }
+
+    Y_UNIT_TEST_FLAG(WasmCompileControllerSync, AlterDatabaseCreateHiveFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                StoragePools {
+                    Name: "/dc-1/users/tenant-1:hdd"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalWasmCompileController: true
+            )"
+        );
+
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        ui64 tenantWCC = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                           {NLs::PathExist,
+                            NLs::IsExternalSubDomain("USER_0"),
+                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+                            NLs::ExtractTenantWasmCompileController(&tenantWCC)});
+
+        UNIT_ASSERT(tenantSchemeShard != 0
+                    && tenantSchemeShard != (ui64)-1
+                    && tenantSchemeShard != TTestTxConfig::SchemeShard);
+
+        UNIT_ASSERT(tenantWCC != 0 && tenantWCC != (ui64)-1);
+
+        // The tenant schemeshard has to learn the id too: discovery on a dinode
+        // reads it from there, not from the root.
+        ui64 tenantWCCOnTSS = 0;
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
+                           {NLs::PathExist,
+                            NLs::ExtractTenantWasmCompileController(&tenantWCCOnTSS)});
+
+        UNIT_ASSERT_EQUAL(tenantWCC, tenantWCCOnTSS);
+
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
+                           {NLs::PathExist,
+                            NLs::ExtractTenantWasmCompileController(&tenantWCCOnTSS)});
+
+        UNIT_ASSERT_EQUAL(tenantWCC, tenantWCCOnTSS);
+    }
+
+    Y_UNIT_TEST_FLAG(WasmCompileControllerMigration, AlterDatabaseCreateHiveFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        ui64 txId = 100;
+
+        // A database set up the way it was before the controller existed: the
+        // alter says nothing about ExternalWasmCompileController.
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                StoragePools {
+                    Name: "/dc-1/users/tenant-1:hdd"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        ui64 tenantSchemeShard = 0;
+        ui64 tenantWCC = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                           {NLs::PathExist,
+                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+                            NLs::ExtractTenantWasmCompileController(&tenantWCC)});
+
+        // This zero is exactly what discovery on a dinode sees on an unmigrated
+        // tenant, and why the migration below has to exist at all.
+        UNIT_ASSERT_VALUES_EQUAL(tenantWCC, 0u);
+
+        // The flag is read from AppData when the tablet starts, so turning it on
+        // only takes effect on the restart, same as on a real cluster.
+        runtime.GetAppData().FeatureFlags.SetEnableWasmCompileController(true);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // TTabletMigrator sits idle for a while before its first alter so as not
+        // to compete with the rest of the startup traffic.
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                           {NLs::PathExist,
+                            NLs::ExtractTenantWasmCompileController(&tenantWCC)});
+
+        UNIT_ASSERT(tenantWCC != 0 && tenantWCC != (ui64)-1);
+
+        // As on the create path, the id has to reach the tenant schemeshard.
+        ui64 tenantWCCOnTSS = 0;
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"),
+                           {NLs::PathExist,
+                            NLs::ExtractTenantWasmCompileController(&tenantWCCOnTSS)});
+
+        UNIT_ASSERT_VALUES_EQUAL(tenantWCC, tenantWCCOnTSS);
+
+        // Idempotence: every later start re-checks the id and leaves an already
+        // migrated database alone instead of creating a second tablet.
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        ui64 tenantWCCAfterRestart = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                           {NLs::PathExist,
+                            NLs::ExtractTenantWasmCompileController(&tenantWCCAfterRestart)});
+
+        UNIT_ASSERT_VALUES_EQUAL(tenantWCC, tenantWCCAfterRestart);
     }
 
     Y_UNIT_TEST_FLAG(SchemeQuotas, AlterDatabaseCreateHiveFirst) {
@@ -2342,5 +2601,81 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                 NLs::SchemeLimits(directlySetLimits.AsProto())
             });
         }
+    }
+
+    Y_UNIT_TEST(ConnectDatabaseRightInheritanceRules) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Grant connect on the root database
+        {
+            NACLib::TDiffACL diffACL;
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "user@builtin",
+                NACLib::DefaultInheritanceType);
+            TestModifyACL(runtime, ++txId, "/", "MyRoot", diffACL.SerializeAsString(), "");
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // Create a tenant with its own SchemeShard.
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", R"(Name: "USER_0")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot",
+            R"(
+                Name: "USER_0"
+                ExternalSchemeShard: true
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+        UNIT_ASSERT(tenantSchemeShard != 0
+            && tenantSchemeShard != (ui64)-1
+            && tenantSchemeShard != TTestTxConfig::SchemeShard);
+
+
+        const TString connectRight = "+(ConnDB):user@builtin";
+
+        const auto extractEffectiveACL = [](const NKikimrScheme::TEvDescribeSchemeResult& record) -> TString {
+            return record.GetPathDescription().GetSelf().GetEffectiveACL();
+        };
+
+        // Describe the tenant root from BOTH SchemeShards.
+        const auto describeFromDomain = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/USER_0");
+        const auto describeFromTenant = DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0");
+
+        const TString effAclDomainSide = extractEffectiveACL(describeFromDomain);
+        const TString effAclTenantSide = extractEffectiveACL(describeFromTenant);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            NACLib::TACL(effAclDomainSide).DebugString(),
+            NACLib::TACL(effAclTenantSide).DebugString(),
+            "Tenant root EffectiveAcl must be the same from the domain SchemeShard and the tenant SchemeShard");
+
+        TestDescribeResult(describeFromDomain, {NLs::HasEffectiveRight(connectRight)});
+        TestDescribeResult(describeFromTenant, {NLs::HasEffectiveRight(connectRight)});
+
+        // Create an object INSIDE the tenant and verify connect is NOT inherited into it.
+        TestMkDir(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", "InsideDir");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/InsideDir"), {
+            NLs::PathExist,
+            NLs::HasNoEffectiveRight(connectRight),
+        });
     }
 }

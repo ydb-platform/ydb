@@ -13,6 +13,7 @@
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_watermark_generator_tracker.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
@@ -235,6 +236,7 @@ struct TDqTaskRunnerMemoryLimits {
     ui32 ChunkSizeLimit = 48_MB;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
     TMaybe<size_t> BufferPageAllocSize;
+    IMemoryQuotaManager::TPtr ChannelQuotaManager;
 };
 
 NUdf::TUnboxedValue DqBuildInputValue(
@@ -458,7 +460,9 @@ public:
 
     virtual void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx,
-        TDqComputeActorWatermarks* watermarksTracker = nullptr) = 0;
+        TDqComputeActorWatermarks* watermarksTracker = nullptr,
+        TDqWatermarkGeneratorTracker* sourceWatermarksTracker = nullptr
+    ) = 0;
     virtual ERunStatus Run() = 0;
 
     virtual bool HasEffects() const = 0;

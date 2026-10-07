@@ -27,6 +27,7 @@ struct TJoinColumn {
     std::optional<TString> OriginalRelName{};
     std::optional<ui32> EquivalenceClass{};
     bool IsConstant = false;
+    bool EqualNulls = false;
 
     TJoinColumn() = default;
 
@@ -51,6 +52,10 @@ struct TJoinColumn {
 };
 
 bool operator<(const TJoinColumn& c1, const TJoinColumn& c2);
+
+inline bool IsEqualNullsKey(const TJoinColumn& lhs, const TJoinColumn& rhs) {
+    return lhs.EqualNulls || rhs.EqualNulls;
+}
 
 struct TOrdering {
     enum EType: uint32_t {
@@ -368,6 +373,47 @@ private:
 public:
     using TFDSet = std::bitset<MaxFDCount>;
 
+    struct TDebugNFSMNode {
+        TOrdering Ordering;
+        bool IsInteresting = false;
+        i64 InterestingOrderingIdx = -1;
+        TString Details;
+    };
+
+    struct TDebugNFSMEdge {
+        std::size_t SrcNodeIdx = 0;
+        std::size_t DstNodeIdx = 0;
+        i64 FdIdx = -1;
+    };
+
+    struct TDebugDFSMNode {
+        std::vector<std::size_t> NFSMNodes;
+        std::vector<std::size_t> InterestingOrderingIdxes;
+        std::vector<std::size_t> OutgoingFDIdxes;
+        TString Details;
+    };
+
+    struct TDebugDFSMEdge {
+        std::size_t SrcNodeIdx = 0;
+        std::size_t DstNodeIdx = 0;
+        i64 FdIdx = -1;
+    };
+
+    struct TDebugInitState {
+        std::size_t StateIdx = 0;
+        std::size_t ShuffleHashFuncArgsCount = 0;
+    };
+
+    struct TDebugView {
+        const TFDStorage* Storage = nullptr;
+        const std::vector<TFunctionalDependency>* ProcessedFDs = nullptr;
+        TVector<TDebugNFSMNode> NFSMNodes;
+        TVector<TDebugNFSMEdge> NFSMEdges;
+        TVector<TDebugDFSMNode> DFSMNodes;
+        TVector<TDebugDFSMEdge> DFSMEdges;
+        TVector<TDebugInitState> InitStates;
+    };
+
     /*
      * This class represents a state of the FSM (node idx in the DFSM and some metadata).
      */
@@ -444,6 +490,7 @@ public:
     TFDSet GetFDSet(i64 fdIdx);
     TFDSet GetFDSet(const std::vector<std::size_t>& fdIdxes);
     TString ToString() const;
+    TDebugView DebugView() const;
 
 private:
     void Build(
@@ -460,6 +507,7 @@ private:
      */
     class TNFSM {
     public:
+        friend class TOrderingsStateMachine;
         friend class TDFSM;
 
         struct TNode {
@@ -535,6 +583,7 @@ private:
      */
     class TDFSM {
     public:
+        friend class TOrderingsStateMachine;
         friend class TLogicalOrderings;
         friend class TStateMachineBuilder;
 
@@ -604,6 +653,7 @@ private:
     TNFSM Nfsm_;
     TSimpleSharedPtr<TDFSM> Dfsm_; // it is important to have sharedptr here, otherwise all logicalorderings will invalidate after copying of FSM
 
+    std::vector<TFunctionalDependency> ProcessedFDs_;
     std::vector<i64> FdMapping_; // We to remap FD idxes after the pruning
     std::vector<TItemInfo> ItemInfo_;
     bool Built_ = false;

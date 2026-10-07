@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/datetime/base.h>
+#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/stream/output.h>
 
@@ -13,6 +14,13 @@ namespace NKikimr::NKqp::NScheduler {
         using TQueryId = ui64;
         using TPoolId = TString;
         using TDatabaseId = TPoolId;
+
+        struct TFullPoolId {
+            TDatabaseId DatabaseId;
+            TPoolId PoolId;
+
+            bool operator==(const TFullPoolId&) const = default;
+        };
 
         using TId = std::variant<TQueryId, TPoolId>;
 
@@ -31,12 +39,6 @@ namespace NKikimr::NKqp::NScheduler {
         } // namespace NDynamic
 
         namespace NSnapshot {
-            enum class ELeafFairShare : ui8 {
-                DEFAULT_FIFO = 0,
-                ALLOW_OVERLIMIT = 1,
-                EQUAL_TO_PARENT = 2,
-            };
-
             struct TTreeElement;
 
             class TQuery;
@@ -55,6 +57,11 @@ namespace NKikimr::NKqp::NScheduler {
     using TSchedulableTaskPtr = std::shared_ptr<TSchedulableTask>;
     using TSchedulableTaskList = std::list<std::pair<TSchedulableTaskPtr::weak_type, std::atomic<bool> /* isThrottled */>>;
 
+    struct TSchedulableRead;
+    class TSchedulableReadFactory;
+    using TSchedulableReadPtr = std::shared_ptr<TSchedulableRead>;
+    using TSchedulableReadFactoryPtr = std::unique_ptr<TSchedulableReadFactory>;
+
     // These params are used when calculating delay for schedulable task, but are taken from the scheduler configuration.
     struct TDelayParams {
         const TDuration MaxDelay;
@@ -63,7 +70,19 @@ namespace NKikimr::NKqp::NScheduler {
         const TDuration MaxRandomDelay;
     };
 
+    struct TOptions {
+        bool Enabled = true;
+        TDelayParams DelayParams;
+    };
+
 } // namespace NKikimr::NKqp::NScheduler
+
+template <>
+struct THash<NKikimr::NKqp::NScheduler::NHdrf::TFullPoolId> {
+    size_t operator()(const NKikimr::NKqp::NScheduler::NHdrf::TFullPoolId& id) const {
+        return CombineHashes(THash<TString>{}(id.DatabaseId), THash<TString>{}(id.PoolId));
+    }
+};
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NKqp::NScheduler::NHdrf::TId, out, id) {
     if (id.index() == 0) {

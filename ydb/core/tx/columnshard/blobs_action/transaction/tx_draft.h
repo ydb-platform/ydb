@@ -9,6 +9,7 @@ class TTxWriteDraft: public TTransactionBase<TColumnShard> {
 private:
     bool Completed = false;
     const IWriteController::TPtr WriteController;
+
 public:
     ~TTxWriteDraft() {
         if (!Completed) {
@@ -18,13 +19,17 @@ public:
 
     TTxWriteDraft(TColumnShard* self, const IWriteController::TPtr writeController)
         : TBase(self)
-        , WriteController(writeController) {
+        , WriteController(writeController)
+    {
         AFL_VERIFY(WriteController);
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override;
     void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_WRITE_DRAFT; }
+
+    TTxType GetTxType() const override {
+        return TXTYPE_WRITE_DRAFT;
+    }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

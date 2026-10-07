@@ -1,86 +1,115 @@
 #include "kqp_rbo_statistics.h"
 #include "kqp_operator.h"
+#include <ydb/core/kqp/common/kqp_yql.h>
 
 namespace NKikimr {
 namespace NKqp {
 
-
-void TColumnLineage::AddMapping(const TInfoUnit& unit, const TColumnLineageEntry& entry) {
-    const auto rawAlias = entry.GetRawAlias();
-
-    if (entry.DuplicateNo != 0) {
-        int duplicateId = entry.DuplicateNo;
-        if (MaxDuplicateId.contains(rawAlias)) {
-            int maxId = MaxDuplicateId.at(rawAlias);
-            if (maxId > duplicateId) {
-                duplicateId = maxId;
-            }
-        }
-        Mapping.insert({unit, entry});
-        MaxDuplicateId.insert({rawAlias, duplicateId});
-    } else {
-        Mapping.insert({unit, entry});
-        MaxDuplicateId.insert({rawAlias, 0});
-    }
-    ReverseMapping.insert({TInfoUnit(entry.GetCannonicalAlias(), entry.ColumnName), unit});
+const TColumnLineageEntry* FindSourceStatistics(const IOperator& op, TInfoUnitId id, const TColumnLineage& lineage) {
+    return op.Props.Metadata && op.Props.Metadata->SourceStatsColumns.Contains(id) ? lineage.Find(id) : nullptr;
 }
 
-int TColumnLineage::AddAlias(const TString& alias, const TString& tableName) {
-    const auto rawAlias = alias != "" ? alias : tableName;
-    int duplicateId = 0;
-    if (MaxDuplicateId.contains(rawAlias)) {
-        duplicateId = MaxDuplicateId.at(rawAlias) + 1;
-    }
-    MaxDuplicateId.insert({rawAlias, duplicateId});
-    return duplicateId;
-}
-
-void TColumnLineage::Merge(const TColumnLineage& other) {
-    // We'll be adding mappings one by one, so MaxDuplicateId will be
-    // changing. Thus we save here before we start merging to detect
-    // conficts correctly
-    auto currDuplicates = MaxDuplicateId;
-
-    for (auto [iu, entry] : other.Mapping) {
-        auto rawAlias = entry.GetRawAlias();
-        if (currDuplicates.contains(rawAlias)) {
-            entry.DuplicateNo = currDuplicates.at(rawAlias) + 1;
-        }
-        AddMapping(iu, entry);
-    }
-}
-
-TInfoUnit TRBOMetadata::MapColumn(const TInfoUnit& key) {
-    if (ColumnLineage.Mapping.contains(key)) {
-        return ColumnLineage.Mapping.at(key).GetInfoUnit();
-    } else {
-        return key;
-    }
-}
-
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool withStatsAndCosts) {
-    TVector<TInfoUnit> keyColumns;
-    return BuildOptimizerStatistics(props, withStatsAndCosts, keyColumns);
-}
-
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool withStatsAndCosts, const TVector<TInfoUnit>& keyColumns) {
+TOptimizerStatistics BuildOptimizerStatistics(IOperator& op, const TColumnLineage& lineage, bool withStatsAndCosts, const NYql::TTypeAnnotationContext& typeCtx) {
+    auto& props = op.Props;
+    const auto& outputIUs = op.GetOutputIUs();
     TVector<TString> keyColumnNames;
-    for (const auto& iu: (keyColumns.empty() ? props.Metadata->KeyColumns : keyColumns)) {
-        keyColumnNames.push_back(iu.GetColumnName());
+
+    for (const auto id : props.Metadata->KeyColumns.Items()) {
+        keyColumnNames.push_back(ToString(id));
     }
 
     const double cost = props.Cost.has_value() ? *props.Cost : 0.0;
 
-    return TOptimizerStatistics(props.Metadata->Type, 
-        withStatsAndCosts ? props.Statistics->EBytes : 0.0,
+    // Build column statistics for the set of IUs
+    // Use lineage table to obtain table and column names, look up table names in the
+    // type annotation context and place them in the local map. If there are multiple tables - 
+    // then its a result of join or set operation, don't create column statistics
+    TString table;
+    THashSet<TString> attributes;
+
+    for (const auto id : outputIUs) {
+        const auto* lineageEntry = lineage.Find(id);
+        if (!lineageEntry) {
+            continue;
+        }
+        // Columns without source statistics take an empty table name, as
+        // computed columns (e.g. aggregate results) have no source table.
+        const TString sourceTable = props.Metadata->SourceStatsColumns.Contains(id) ? lineageEntry->TableName : TString{};
+        if (table != "" && table != sourceTable) {
+            attributes.clear();
+            break;
+        }
+        table = sourceTable;
+        attributes.insert(lineageEntry->ColumnName);
+    }
+
+    TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> ColumnStatistics;
+
+    THashMap<TString, TColumnStatistics> columnStatsMap;
+    THashMap<TString, TMultiColumnStatistics> multiColumnStatsMap;
+
+    if (attributes.size() && typeCtx.ColumnStatisticsByTableName.contains(table)) {
+        const auto& globalStats = *typeCtx.ColumnStatisticsByTableName.at(table);
+        const auto& globalMap = globalStats.Data;
+
+        // The statistics consumer sees the same decimal IDs as expression ASTs.
+        // Multiple bindings of one storage field each receive its statistics.
+        THashMap<TString, TString> idByColumnName;
+        for (const auto id : outputIUs) {
+            const auto* source = FindSourceStatistics(op, id, lineage);
+            if (!source) {
+                continue;
+            }
+            idByColumnName[source->ColumnName] = ToString(id);
+            if (const auto it = globalMap.find(source->ColumnName); it != globalMap.end()) {
+                columnStatsMap.emplace(ToString(id), it->second);
+            }
+        }
+
+        for (const auto& [_, multiColumnStats] : globalStats.MultiData) {
+            TVector<TString> translatedColumns;
+            for (const auto& column : multiColumnStats.Columns) {
+                const auto it = idByColumnName.find(column);
+                if (it == idByColumnName.end()) {
+                    translatedColumns.clear();
+                    break;
+                }
+                translatedColumns.push_back(it->second);
+            }
+
+            if (translatedColumns.empty()) {
+                continue;
+            }
+
+            TMultiColumnStatistics translated(multiColumnStats);
+            translated.Columns = translatedColumns;
+            multiColumnStatsMap[MakeMultiColumnKey(translatedColumns)] = std::move(translated);
+        }
+
+        if (columnStatsMap.size() || multiColumnStatsMap.size()) {
+            ColumnStatistics = MakeIntrusive<TOptimizerStatistics::TColumnStatMap>(
+                std::move(columnStatsMap), std::move(multiColumnStatsMap));
+        }
+    }
+
+    TOptimizerStatistics stats(props.Metadata->Type,
+        withStatsAndCosts ? props.Statistics->ERows : 0.0,
         props.Metadata->ColumnsCount,
         withStatsAndCosts ? props.Statistics->EBytes : 0.0,
         withStatsAndCosts ? cost : 0.0,
         TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(
-            new TOptimizerStatistics::TKeyColumns(keyColumnNames)));
+            new TOptimizerStatistics::TKeyColumns(keyColumnNames)),
+        ColumnStatistics
+        );
+
+    if (withStatsAndCosts && props.Statistics.has_value()) {
+        stats.Selectivity = props.Statistics->Selectivity;
+    }
+
+    return stats;
 }
 
-TString TRBOMetadata::ToString(ui32 printOptions) {
+TString TRBOMetadata::ToString(ui32 printOptions, const TInfoUnitRegistry& registry) {
     TStringBuilder builder;
 
     if (printOptions & (EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintFullMetadata)) {
@@ -95,6 +124,9 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
                 break;
             case EStatisticsType::ManyManyJoin:
                 metadataType = "ManyManyJoin";
+                break;
+            case EStatisticsType::Constant:
+                metadataType = "Constant";
                 break;
         default:
             Y_ENSURE(false,"Unknown EStatisticsType");
@@ -118,26 +150,14 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
 
         builder << ", ColumnsCount: " << ColumnsCount << ", Storage: " << storageType << ", KeyCols: [";
 
-        for (size_t i = 0; i < KeyColumns.size(); i++) {
-            builder << KeyColumns[i].GetAlias() << "." << KeyColumns[i].GetColumnName();
-            if (i != KeyColumns.size() - 1) {
+        for (size_t i = 0; i < KeyColumns.Items().size(); i++) {
+            builder << registry.GetDebugName(KeyColumns.Items()[i]);
+            if (i != KeyColumns.Items().size() - 1) {
                 builder << ", ";
             }
         }
 
         builder << "]";
-    }
-
-    if (printOptions & EPrintPlanOptions::PrintFullMetadata) {
-        builder << ", Lineage: {";
-        for (const auto &[k, v] : ColumnLineage.Mapping) {
-            builder << k.GetFullName() << ": <ColName: " << v.ColumnName 
-                << ", Alias: " << v.SourceAlias 
-                << ", Table: " << v.TableName
-                << ", DuplicateNo: " << v.DuplicateNo
-                << ">, ";
-        }
-        builder << "}";
     }
 
     return builder;

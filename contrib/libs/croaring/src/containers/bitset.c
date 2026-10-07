@@ -59,8 +59,7 @@ void bitset_container_set_all(bitset_container_t *bitset) {
     bitset->cardinality = (1 << 16);
 }
 
-/* Create a new bitset. Return NULL in case of failure. */
-bitset_container_t *bitset_container_create(void) {
+static bitset_container_t *bitset_container_allocate(void) {
     bitset_container_t *bitset =
         (bitset_container_t *)roaring_malloc(sizeof(bitset_container_t));
 
@@ -85,7 +84,23 @@ bitset_container_t *bitset_container_create(void) {
         roaring_free(bitset);
         return NULL;
     }
-    bitset_container_clear(bitset);
+    return bitset;
+}
+
+/* Create a new bitset. Return NULL in case of failure. */
+bitset_container_t *bitset_container_create(void) {
+    bitset_container_t *bitset = bitset_container_allocate();
+    if (bitset) {
+        bitset_container_clear(bitset);
+    }
+    return bitset;
+}
+
+bitset_container_t *bitset_container_create_uninitialized(void) {
+    bitset_container_t *bitset = bitset_container_allocate();
+    if (bitset) {
+        bitset->cardinality = 0;
+    }
     return bitset;
 }
 
@@ -510,36 +525,36 @@ CROARING_UNTARGET_AVX512
          i < BITSET_CONTAINER_SIZE_IN_WORDS / (CROARING_WORDS_IN_AVX2_REG);             \
          i += innerloop) {                                                     \
       __m256i A1, A2, AO;                                                      \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1));                     \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2));                     \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1));                     \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2));                     \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)out, AO);                                 \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 32));                \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 32));                \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 32));                \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 32));                \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 32), AO);                          \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 64));                \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 64));                \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 64));                \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 64));                \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 64), AO);                          \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 96));                \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 96));                \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 96));                \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 96));                \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 96), AO);                          \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 128));               \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 128));               \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 128));               \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 128));               \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 128), AO);                         \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 160));               \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 160));               \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 160));               \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 160));               \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 160), AO);                         \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 192));               \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 192));               \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 192));               \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 192));               \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 192), AO);                         \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 224));               \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 224));               \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 224));               \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 224));               \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 224), AO);                         \
       out += 256;                                                              \
@@ -937,7 +952,11 @@ int bitset_container_to_uint32_array(
 #if CROARING_IS_X64
    int support = croaring_hardware_support();
 #if CROARING_COMPILER_SUPPORTS_AVX512
-   if(( support & ROARING_SUPPORTS_AVX512 ) &&  (bc->cardinality >= 8192))  // heuristic
+   // Unlike the AVX2 kernel, the AVX-512 one needs no cardinality heuristic:
+   // it skips empty words and only stores the blocks that carry a value, so it
+   // beat the scalar loop at every cardinality measured from 16 to 65536 (on
+   // an Emerald Rapids Xeon, 1.3x at 512 values, 6x at 4096, 7.5x at 8192).
+   if( support & ROARING_SUPPORTS_AVX512 )
 		return (int) bitset_extract_setbits_avx512(bc->words,
                 BITSET_CONTAINER_SIZE_IN_WORDS, out, bc->cardinality, base);
    else
@@ -1048,7 +1067,14 @@ int bitset_container_number_of_runs(bitset_container_t *bc) {
 
 int32_t bitset_container_write(const bitset_container_t *container,
                                   char *buf) {
+#if CROARING_IS_BIG_ENDIAN
+	for (int32_t i = 0; i < BITSET_CONTAINER_SIZE_IN_WORDS; ++i) {
+		uint64_t w_le = croaring_htole64(container->words[i]);
+		memcpy(buf + i * sizeof(uint64_t), &w_le, sizeof(uint64_t));
+	}
+#else
 	memcpy(buf, container->words, BITSET_CONTAINER_SIZE_IN_WORDS * sizeof(uint64_t));
+#endif
 	return bitset_container_size_in_bytes(container);
 }
 
@@ -1056,7 +1082,15 @@ int32_t bitset_container_write(const bitset_container_t *container,
 int32_t bitset_container_read(int32_t cardinality, bitset_container_t *container,
 		const char *buf)  {
 	container->cardinality = cardinality;
+#if CROARING_IS_BIG_ENDIAN
+	for (int32_t i = 0; i < BITSET_CONTAINER_SIZE_IN_WORDS; ++i) {
+		uint64_t w_le;
+		memcpy(&w_le, buf + i * sizeof(uint64_t), sizeof(uint64_t));
+		container->words[i] = croaring_letoh64(w_le);
+	}
+#else
 	memcpy(container->words, buf, BITSET_CONTAINER_SIZE_IN_WORDS * sizeof(uint64_t));
+#endif
 	return bitset_container_size_in_bytes(container);
 }
 

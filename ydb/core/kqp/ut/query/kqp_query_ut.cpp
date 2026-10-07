@@ -50,6 +50,90 @@ static auto ExecuteQueryAndCheckResultSets(NYdb::NQuery::TQueryClient& db, const
 }
 
 Y_UNIT_TEST_SUITE(KqpQuery) {
+    Y_UNIT_TEST_TWIN(SqlPathAliasesWithNewRbo, NewRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
+        auto* rule = appConfig.MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc("/kfront");
+        rule->SetDst("/Root");
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/kfront/Source` (Key Uint64 NOT NULL, PRIMARY KEY (Key));
+            CREATE TABLE `/kfront/TableTarget` (Key Uint64 NOT NULL, PRIMARY KEY (Key));
+            CREATE TABLE `/kfront/QueryTarget` (Key Uint64 NOT NULL, PRIMARY KEY (Key));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        auto rows = TValueBuilder().BeginList()
+            .AddListItem().BeginStruct().AddMember("Key").Uint64(1).EndStruct()
+            .EndList().Build();
+        auto upsertResult = tableClient.BulkUpsert("/Root/Source", std::move(rows)).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto prepareResult = session.PrepareDataQuery(R"(
+            PRAGMA TablePathPrefix = "/kfront";
+            INSERT INTO TableTarget SELECT Key FROM Source;
+        )").GetValueSync();
+        UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        auto preparedQuery = prepareResult.GetQuery();
+        auto tableWriteResult = preparedQuery.Execute(TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(tableWriteResult.IsSuccess(), tableWriteResult.GetIssues().ToString());
+
+        auto tableReadResult = session.ExecuteDataQuery(R"(
+            PRAGMA TablePathPrefix = "/kfront";
+            SELECT Key FROM TableTarget;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(tableReadResult.IsSuccess(), tableReadResult.GetIssues().ToString());
+        CompareYson(R"([[1u]])", FormatResultSetYson(tableReadResult.GetResultSet(0)));
+
+        auto queryWriteResult = queryClient.ExecuteQuery(R"(
+            INSERT INTO `/kfront/QueryTarget` SELECT Key FROM `/kfront/Source`;
+        )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(queryWriteResult.IsSuccess(), queryWriteResult.GetIssues().ToString());
+
+        auto queryReadResult = queryClient.ExecuteQuery(R"(
+            SELECT Key FROM `/Root/QueryTarget`;
+        )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(queryReadResult.IsSuccess(), queryReadResult.GetIssues().ToString());
+        CompareYson(R"([[1u]])", FormatResultSetYson(queryReadResult.GetResultSet(0)));
+
+        TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        UNIT_ASSERT_VALUES_EQUAL(
+            counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Success")->Val() > 0, NewRbo);
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed")->Val(), 0);
+
+        for (const auto& query : {
+            R"(
+                CREATE VIEW `/kfront/InnerView` WITH (security_invoker = true) AS
+                    SELECT Key FROM `/kfront/Source`;
+            )",
+            R"(
+                CREATE VIEW `/kfront/OuterView` WITH (security_invoker = true) AS
+                    SELECT Key FROM `/kfront/InnerView`;
+            )",
+        }) {
+            auto result = queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString viewQuery = R"(SELECT Key FROM `/kfront/OuterView`;)";
+        auto tableViewResult = session.ExecuteDataQuery(
+            viewQuery, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(tableViewResult.IsSuccess(), tableViewResult.GetIssues().ToString());
+        CompareYson(R"([[1u]])", FormatResultSetYson(tableViewResult.GetResultSet(0)));
+
+        auto queryViewResult = queryClient.ExecuteQuery(
+            viewQuery, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(queryViewResult.IsSuccess(), queryViewResult.GetIssues().ToString());
+        CompareYson(R"([[1u]])", FormatResultSetYson(queryViewResult.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(PreparedQueryInvalidate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1013,28 +1097,48 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1001);
     }
 
-    Y_UNIT_TEST(YqlSyntaxV0) {
+    Y_UNIT_TEST(YqlSyntaxV0Rejected) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v0
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        result = session.ExecuteDataQuery(R"(
-            --!syntax_v1
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(!result.IsSuccess());
 
         result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
             SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
+        result = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+    }
+
+    Y_UNIT_TEST(LegacySqlVersionConfigIsIgnored) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetSqlVersion(0);
+        appConfig.MutableTableServiceConfig()->SetEnforceSqlVersionV1(false);
+
+        TKikimrRunner kikimr{TKikimrSettings(appConfig)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(R"(
+            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
     }
 
     Y_UNIT_TEST(YqlTableSample) {
@@ -3502,6 +3606,70 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             CompareYson(output, R"([[1u;1u]])");
         }
     }
+
+    Y_UNIT_TEST(RejectSyntaxPgMarker) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        auto result = client.ExecuteQuery(
+            "--!syntax_pg\nSELECT 1 AS result;",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "PostgreSQL syntax is not supported", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(RejectSyntaxPgProto) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::Pg);
+
+        auto result = client.ExecuteQuery(
+            "SELECT 1 AS result",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            settings
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "PostgreSQL syntax is not supported", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(RejectSyntaxPgMarkerStream) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        auto it = client.StreamExecuteQuery(
+            "--!syntax_pg\nSELECT 1 AS result;",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        auto streamPart = it.ReadNext().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::BAD_REQUEST, streamPart.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(streamPart.GetIssues().ToString(), "PostgreSQL syntax is not supported", streamPart.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(RejectSyntaxPgProtoStream) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::Pg);
+
+        auto it = client.StreamExecuteQuery(
+            "SELECT 1 AS result",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            settings
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        auto streamPart = it.ReadNext().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::BAD_REQUEST, streamPart.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(streamPart.GetIssues().ToString(), "PostgreSQL syntax is not supported", streamPart.GetIssues().ToString());
+    }
 }
 Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
     TKikimrRunner CreateKikimrWithDiscardSelect(bool useRealThreads = true) {
@@ -3776,6 +3944,83 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
                 "DISCARD");
         }
 
+    }
+
+    Y_UNIT_TEST(DiscardSelectCrossTransactionDependency) {
+        // $data is produced before the DISCARD statement and consumed after it.
+        // The DISCARD of the middle statement must not cause $data's result to be dropped.
+        auto kikimr = CreateKikimrWithDiscardSelect();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            $data = SELECT Key FROM `/Root/EightShard` WHERE Key < 200;
+            DISCARD SELECT COUNT(*) FROM `/Root/TwoShard`;
+            SELECT Key FROM $data ORDER BY Key;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 1,
+            "Expected 1 result set: DISCARD suppresses second statement");
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT_C(parser.TryNextRow(), "Result from $data must not be empty");
+        UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(0).GetOptionalUint64(), 101u);
+        UNIT_ASSERT_C(parser.TryNextRow(), "Expected second row");
+        UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(0).GetOptionalUint64(), 102u);
+        UNIT_ASSERT_C(parser.TryNextRow(), "Expected third row");
+        UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(0).GetOptionalUint64(), 103u);
+        UNIT_ASSERT_C(!parser.TryNextRow(), "Expected exactly 3 rows");
+    }
+
+    Y_UNIT_TEST(DiscardSelectWithDml) {
+        auto kikimr = CreateKikimrWithDiscardSelect();
+        auto db = kikimr.GetQueryClient();
+
+        const ui64 upsertKey = 42;
+        const ui64 insertKey = 43;
+        const TString upsertedValue = "Upserted";
+        const TString insertedValue = "Inserted";
+
+        // DML then DISCARD SELECT: UPSERT writes data, DISCARD SELECT returns nothing.
+        {
+            auto result = db.ExecuteQuery(Sprintf(R"(
+                UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES (%lluu, "%s");
+                DISCARD SELECT * FROM `/Root/TwoShard` WHERE Key = %llu;
+            )", upsertKey, upsertedValue.c_str(), upsertKey),
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            AssertSuccessResult(result);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "Expected 0 result sets: UPSERT and DISCARD SELECT both produce no output");
+        }
+        {
+            auto result = db.ExecuteQuery(Sprintf(R"(
+                SELECT Value1 FROM `/Root/TwoShard` WHERE Key = %llu;
+            )", upsertKey), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+            CompareYson(Sprintf(R"([[["%s"]]])", upsertedValue.c_str()),
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = db.ExecuteQuery(Sprintf(R"(
+                DISCARD SELECT Ensure(0, COUNT(*) < 100, "Table too large") FROM `/Root/EightShard`;
+                INSERT INTO `/Root/TwoShard` (Key, Value1) VALUES (%lluu, "%s");
+            )", insertKey, insertedValue.c_str()),
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            AssertSuccessResult(result);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "Expected 0 result sets: DISCARD and INSERT both produce no output");
+        }
+        {
+            auto result = db.ExecuteQuery(Sprintf(R"(
+                SELECT Value1 FROM `/Root/TwoShard` WHERE Key = %llu;
+            )", insertKey), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            AssertSuccessResult(result);
+            CompareYson(Sprintf(R"([[["%s"]]])", insertedValue.c_str()),
+                FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 }
 

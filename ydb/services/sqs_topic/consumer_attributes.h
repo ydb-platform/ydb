@@ -14,14 +14,18 @@
 namespace NKikimr::NSqsTopic::V1 {
 
     struct TQueueAttributes {
-        NKikimrPQ::TPQTabletConfig::TConsumer Consumer;
+        TMaybe<TDuration> DefaultProcessingTimeout;
         TMaybe<TDuration> MessageRetentionPeriod;
         TMaybe<TDuration> ReceiveMessageDelay;
+        TMaybe<TDuration> ReceiveMessageWaitTime;
         TMaybe<ui32> MaximumMessageSize;
         TMaybe<TString> KmsMasterKeyId;
         TMaybe<TDuration> KmsDataKeyReusePeriodSeconds;
         TMaybe<bool> SqsManagedSseEnabled;
         TMaybe<bool> ContentBasedDeduplication;
+        TMaybe<ui32> MaxReceiveCount;
+        TMaybe<TString> DeadLetterQueue;
+        bool FifoQueue = false;
     };
 
     enum class EConsumerAttributeUsageTarget {

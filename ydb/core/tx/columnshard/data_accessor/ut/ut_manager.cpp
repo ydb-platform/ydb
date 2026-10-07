@@ -1,22 +1,22 @@
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/special_keys.h>
+#include <ydb/core/tx/columnshard/common/blob.h>
+#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/data_accessor/request.h>
-#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
-#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor_portion.h>
-#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
-#include <ydb/core/tx/columnshard/test_helper/helper.h>
-#include <ydb/core/tx/general_cache/usage/service.h>
-#include <ydb/core/tx/general_cache/usage/events.h>
-#include <ydb/core/formats/arrow/special_keys.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/snapshot_scheme.h>
-#include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
-#include <ydb/core/tx/columnshard/common/blob.h>
-
-#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/helper.h>
+#include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
+#include <ydb/core/tx/general_cache/usage/events.h>
+#include <ydb/core/tx/general_cache/usage/service.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NOlap;
@@ -44,7 +44,8 @@ private:
 
 public:
     TTestSubscriber()
-        : AbortionFlag(std::make_shared<TAtomicCounter>(0)) {
+        : AbortionFlag(std::make_shared<TAtomicCounter>(0))
+    {
     }
 
     bool IsFinished() const {
@@ -65,7 +66,8 @@ private:
 public:
     TMockCacheService(bool withRemovedAddresses)
         : TBase(&TMockCacheService::StateWork)
-        , WithRemovedAddresses(withRemovedAddresses) {
+        , WithRemovedAddresses(withRemovedAddresses)
+    {
     }
 
     STFUNC(StateWork) {
@@ -105,10 +107,10 @@ private:
     std::shared_ptr<TDataAccessorsRequest> Request;
 
 public:
-    TTestActor(std::shared_ptr<TActorAccessorsManager> manager, 
-               std::shared_ptr<TDataAccessorsRequest> request)
+    TTestActor(std::shared_ptr<TActorAccessorsManager> manager, std::shared_ptr<TDataAccessorsRequest> request)
         : Manager(std::move(manager))
-        , Request(std::move(request)) {
+        , Request(std::move(request))
+    {
     }
 
     void Bootstrap() {
@@ -119,66 +121,12 @@ public:
 
 // Helper to create a test portion with minimal required fields
 TPortionInfo::TConstPtr MakeTestPortion(TInternalPathId pathId, ui64 portionId) {
-    // Create a minimal TIndexInfo for testing
-    THashMap<ui32, NTable::TColumn> columns = {
-        { 0, NTable::TColumn("pk", 0, NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), "") }
-    };
-    
-    std::vector<ui32> pkIds = { 0 };
-    
-    for (ui64 i = 0; i < pkIds.size(); ++i) {
-        TValidator::CheckNotNull(columns.FindPtr(pkIds[i]))->KeyOrder = i;
-    }
-
-    TIndexInfo indexInfo = TIndexInfo::BuildDefault(1, TTestStoragesManager::GetInstance(), columns, pkIds);
-    
-    // Create a minimal schema with special columns
-    const auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector(
-        { std::make_shared<arrow::Field>("pk", arrow::uint64()) }));
-    
-    // Create a batch with special columns
-    auto batch = NArrow::MakeEmptyBatch(schema, 1);
-    
-    // Serialize the batch to bytes for PrimaryKeyBorders
-    TString serialized = NArrow::SerializeBatchNoCompression(batch);
-    
-    // Create the proto meta
-    NKikimrTxColumnShard::TIndexPortionMeta metaProto;
-    metaProto.SetIsCompacted(true);
-    metaProto.SetPrimaryKeyBorders(serialized);
-    metaProto.MutableRecordSnapshotMin()->SetPlanStep(0);
-    metaProto.MutableRecordSnapshotMin()->SetTxId(0);
-    metaProto.MutableRecordSnapshotMax()->SetPlanStep(0);
-    metaProto.MutableRecordSnapshotMax()->SetTxId(0);
-    metaProto.SetDeletionsCount(0);
-    metaProto.SetCompactionLevel(0);
-    metaProto.SetRecordsCount(1);
-    metaProto.SetColumnRawBytes(100);
-    metaProto.SetColumnBlobBytes(100);
-    metaProto.SetIndexRawBytes(0);
-    metaProto.SetIndexBlobBytes(0);
-    metaProto.SetNumSlices(1);
-    metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetPlanStep(0);
-    metaProto.MutableCompactedPortion()->MutableAppearanceSnapshot()->SetTxId(0);
-    
-    // Load metadata from proto
-    TPortionMetaConstructor metaConstructor;
-    TFakeGroupSelector groupSelector;
-    AFL_VERIFY(metaConstructor.LoadMetadata(metaProto, indexInfo, groupSelector));
-    
-    // Use the constructor to set the private fields
-    TCompactedPortionInfoConstructor constructor(pathId, portionId);
-    constructor.SetSchemaVersion(1);
-    constructor.SetAppearanceSnapshot(TSnapshot(0, 0));
-    constructor.MutableMeta() = metaConstructor;
-    
-    return constructor.Build();
+    return NTest::MakeTestCompactedPortion(pathId, portionId, 0, 0, 1, TSnapshot(0, 0), std::nullopt);
 }
 
-}  // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TActorAccessorsManagerTests) {
-
     Y_UNIT_TEST(AskDataHandlesNonEmptyRemovedAddresses) {
         // Test that TActorAccessorsManager handles non-empty removedAddresses without crashing
         // This verifies the fix where AFL_VERIFY(removedAddresses.empty()) was removed
@@ -187,7 +135,8 @@ Y_UNIT_TEST_SUITE(TActorAccessorsManagerTests) {
         TTester::Setup(runtime);
 
         // Register mock cache service that returns non-empty removedAddresses
-        NActors::TActorId mockServiceId = NKikimr::NGeneralCache::TServiceOperator<TPortionsMetadataCachePolicy>::MakeServiceId(runtime.GetNodeId(0));
+        NActors::TActorId mockServiceId =
+            NKikimr::NGeneralCache::TServiceOperator<TPortionsMetadataCachePolicy>::MakeServiceId(runtime.GetNodeId(0));
         runtime.RegisterService(mockServiceId, runtime.Register(new TMockCacheService(true)));
 
         NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
@@ -197,7 +146,7 @@ Y_UNIT_TEST_SUITE(TActorAccessorsManagerTests) {
         auto subscriber = std::make_shared<TTestSubscriber>();
         auto request = std::make_shared<TDataAccessorsRequest>(TPortionsMetadataCachePolicy::DefaultConsumer());
         request->RegisterSubscriber(subscriber);
-        
+
         // Add a test portion so BuildAddresses returns non-empty
         auto testPortion = MakeTestPortion(TInternalPathId::FromRawValue(1), 1);
         request->AddPortion(testPortion);
@@ -223,7 +172,8 @@ Y_UNIT_TEST_SUITE(TActorAccessorsManagerTests) {
         TTester::Setup(runtime);
 
         // Register mock cache service that returns empty removedAddresses
-        NActors::TActorId mockServiceId = NKikimr::NGeneralCache::TServiceOperator<TPortionsMetadataCachePolicy>::MakeServiceId(runtime.GetNodeId(0));
+        NActors::TActorId mockServiceId =
+            NKikimr::NGeneralCache::TServiceOperator<TPortionsMetadataCachePolicy>::MakeServiceId(runtime.GetNodeId(0));
         runtime.RegisterService(mockServiceId, runtime.Register(new TMockCacheService(false)));
 
         NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
@@ -233,7 +183,7 @@ Y_UNIT_TEST_SUITE(TActorAccessorsManagerTests) {
         auto subscriber = std::make_shared<TTestSubscriber>();
         auto request = std::make_shared<TDataAccessorsRequest>(TPortionsMetadataCachePolicy::DefaultConsumer());
         request->RegisterSubscriber(subscriber);
-        
+
         // Add a test portion so BuildAddresses returns non-empty
         auto testPortion = MakeTestPortion(TInternalPathId::FromRawValue(1), 1);
         request->AddPortion(testPortion);

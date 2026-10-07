@@ -5,6 +5,8 @@
 #include "ydb/core/tx/datashard/datashard_write_operation.h"
 #include <ydb/core/tablet/tablet_exception.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -57,8 +59,11 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
     // Check if we are out of space and tx wants to update user
     // or system table.
+    // Unsafe truncate is exempt: it only frees space, and it is needed most exactly when the shard
+    // has run out of it.
     if (DataShard.IsAnyChannelYellowStop()
-        && (writeTx->HasWrites() || !op->IsImmediate())) {
+        && (writeTx->HasWrites() || !op->IsImmediate())
+        && !writeTx->HasUnsafeTruncate()) {
         TString err = TStringBuilder()
             << "Cannot perform transaction: out of disk space at tablet "
             << DataShard.TabletID() << " txId " << op->GetTxId();
@@ -70,8 +75,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
         DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);
 
-        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
-
+        if (DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute).Kick()) {
+            YDB_LOG_ERROR_CTX(ctx, err);
+        }
         return EExecutionStatus::Executed;
     }
 
@@ -96,7 +102,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
                             DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);
 
-                            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
+                            if (DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckWriteUnit_Execute).Kick()) {
+                               YDB_LOG_ERROR_CTX(ctx, err);
+                            }
 
                             return EExecutionStatus::Executed;
                         }
@@ -118,7 +126,8 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+            YDB_LOG_NOTICE_CTX(ctx, "TCheckWriteUnit::Execute: cannot propose tx at blocked shard",
+                {"errorMessage", err});
 
             return EExecutionStatus::Executed;
         }
@@ -132,7 +141,9 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                 DataShard.GetProcessingParams() ? DataShard.GetProcessingParams()->GetCoordinators() : google::protobuf::RepeatedField<ui64>{}
             }
             ));
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Prepared write transaction " << *op << " at tablet " << DataShard.TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TCheckWriteUnit::Execute: prepared write transaction",
+            {"operation", *op},
+            {"tabletId", DataShard.TabletID()});
     }
 
     return EExecutionStatus::Executed;
@@ -149,3 +160,7 @@ THolder<TExecutionUnit> CreateCheckWriteUnit(TDataShard &dataShard, TPipeline &p
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

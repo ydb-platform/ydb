@@ -6,7 +6,8 @@
 
 #include <yt/yt/core/rpc/public.h>
 
-#include <yt/yt/core/misc/mpl.h>
+#include <library/cpp/yt/mpl/concepts.h>
+#include <library/cpp/yt/mpl/type_traits.h>
 
 namespace NYT::NYTree {
 
@@ -34,9 +35,6 @@ struct TYsonStructTraverseContext {
     const IYsonStructParameter* Parameter;
 };
 using TYsonStructParameterVisitor = std::function<void(const TYsonStructTraverseContext&)>;
-
-template <class T>
-concept CEnum = TEnumTraits<T>::IsEnum;
 
 template <class T>
 concept CNullable = NMpl::IsSpecialization<T, std::unique_ptr> ||
@@ -102,7 +100,7 @@ DECLARE_REFCOUNTED_STRUCT(IYPathService)
 DECLARE_REFCOUNTED_STRUCT(IYPathServiceContext)
 DECLARE_REFCOUNTED_STRUCT(ICachedYPathService)
 DECLARE_REFCOUNTED_STRUCT(IServiceCombiner)
-DECLARE_REFCOUNTED_CLASS(TCompositeMapService)
+DECLARE_REFCOUNTED_STRUCT(ICompositeMapService)
 
 DECLARE_REFCOUNTED_CLASS(TYPathRequest)
 DECLARE_REFCOUNTED_CLASS(TYPathResponse)
@@ -142,7 +140,7 @@ using TTypedYPathServiceContext = NRpc::TGenericTypedServiceContext<
 
 //! A static node type.
 DEFINE_ENUM(ENodeType,
-    // Node contains a string (TString).
+    // Node contains a string (std::string).
     (String)
     // Node contains an int64 number (i64).
     (Int64)
@@ -170,6 +168,7 @@ YT_DEFINE_ERROR_ENUM(
     ((MaxAttributeSizeViolation)           (504))
     ((MaxKeyLengthViolation)               (505))
     ((CannotRemoveNonemptyCompositeNode)   (506))
+    ((NoSuchYPathMethod)                   (507))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

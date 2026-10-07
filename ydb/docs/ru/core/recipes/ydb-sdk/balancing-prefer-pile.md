@@ -8,27 +8,37 @@
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferablePileState(NYdb::EPileState::PRIMARY));
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
+
 - Go
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-- С++
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
-
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferablePileState(NYdb::EPileState::PRIMARY));
-
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
 
 - Python
 
@@ -49,6 +59,8 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#491](https://github.com/ydb-platform/ydb-rs-sdk/issues/491)
 
 - PHP
 

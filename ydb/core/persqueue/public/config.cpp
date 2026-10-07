@@ -2,9 +2,10 @@
 #include "constants.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+
 #include <util/generic/hash_set.h>
 #include <util/string/printf.h>
-#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr {
 
@@ -73,6 +74,12 @@ const NKikimrPQ::TPQTabletConfig_TPartition* GetPartitionConfigFromAllPartitions
     }
     return nullptr;
 }
+
+bool IsTopicMessagesBatchingEnabled(const NActors::TActorContext& ctx) {
+    return AppData(ctx)->FeatureFlags.GetEnableTopicMessagesBatching() &&
+        AppData(ctx)->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys();
 }
 
-} // NKikimr
+} // namespace NPQ
+
+} // namespace NKikimr

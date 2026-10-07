@@ -1,9 +1,9 @@
-//           Copyright Maksym Zhelyenzyakov 2025-2026.
+//           Copyright Maksym Zhelyeznyakov 2025-2026.
 // Distributed under the Boost Software License, Version 1.0.
 //      (See accompanying file LICENSE_1_0.txt or copy at
 //           https://www.boost.org/LICENSE_1_0.txt)
-#ifndef BOOST_MATH_DIFFERENTIATION_AUTODIFF_HPP
-#define BOOST_MATH_DIFFERENTIATION_AUTODIFF_HPP
+#ifndef BOOST_MATH_DIFFERENTIATION_AUTODIFF_REVERSE_HPP
+#define BOOST_MATH_DIFFERENTIATION_AUTODIFF_REVERSE_HPP
 
 #include <boost/math/constants/constants.hpp>
 
@@ -580,6 +580,8 @@ public:
         }
         it->backward();
     }
+
+    void set_item(RealType value) { value_ = inner_t(value); }
 };
 
 template<typename RealType, size_t DerivativeOrder>

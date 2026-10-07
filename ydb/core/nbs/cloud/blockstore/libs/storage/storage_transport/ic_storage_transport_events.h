@@ -1,5 +1,7 @@
 #pragma once
 
+#include "storage_transport.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/kikimr/events.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
@@ -7,6 +9,8 @@
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
+
+#include <functional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
@@ -20,8 +24,14 @@ struct TEvTransportPrivate
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
-        NThreading::TPromise<TResult> Promise =
+        // Retain session credentials until PB registration has been verified.
+        TResult ConnectionResult;
+        NThreading::TPromise<TResult> ConnectPromise =
             NThreading::NewPromise<TResult>();
+        NThreading::TPromise<ui32> DisconnectPromise =
+            NThreading::NewPromise<ui32>();
+        // Issued by the PB once; reuse on BUSY/OVERLOADED retries.
+        ui64 RegistrationToken = 0;
 
         TConnect(
             const NActors::TActorId& serviceId,
@@ -44,6 +54,8 @@ struct TEvTransportPrivate
         const ui64 Lsn;
         const NKikimr::NDDisk::TWriteInstruction Instruction;
         const TGuardedSgList Data;
+        // Checksums of Data. Empty means the transport computes them.
+        const TBlockChecksums Checksums;
         NWilson::TTraceId TraceId;
         NThreading::TPromise<TResult> Promise =
             NThreading::NewPromise<TResult>();
@@ -55,6 +67,7 @@ struct TEvTransportPrivate
             const ui64 lsn,
             const NKikimr::NDDisk::TWriteInstruction instruction,
             const TGuardedSgList& data,
+            const TBlockChecksums& checksums,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
@@ -62,6 +75,7 @@ struct TEvTransportPrivate
             , Lsn(lsn)
             , Instruction(instruction)
             , Data(data)
+            , Checksums(checksums)
             , TraceId(std::move(traceId))
 
         {}
@@ -78,6 +92,8 @@ struct TEvTransportPrivate
         const NKikimr::NDDisk::TBlockSelector Selector;
         const NKikimr::NDDisk::TWriteInstruction Instruction;
         const TGuardedSgList Data;
+        // Checksums of Data. Empty means the transport computes them.
+        const TBlockChecksums Checksums;
         NWilson::TTraceId TraceId;
         NThreading::TPromise<TResult> Promise =
             NThreading::NewPromise<TResult>();
@@ -88,12 +104,14 @@ struct TEvTransportPrivate
             const NKikimr::NDDisk::TBlockSelector& selector,
             const NKikimr::NDDisk::TWriteInstruction instruction,
             const TGuardedSgList& data,
+            const TBlockChecksums& checksums,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selector(selector)
             , Instruction(instruction)
             , Data(data)
+            , Checksums(checksums)
             , TraceId(std::move(traceId))
 
         {}
@@ -101,33 +119,56 @@ struct TEvTransportPrivate
         ~TWriteToDDisk();
     };
 
-    struct TEraseFromPBuffer: TDisableCopyMove
+    struct TBatchEraseFromPBuffer: TDisableCopyMove
     {
         using TResult =
             NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
-        const TVector<NKikimr::NDDisk::TBlockSelector> Selectors;
-        const TVector<ui64> Lsns;
+        const TVector<TPBufferKey> PBufferKeys;
         NWilson::TTraceId TraceId;
         NThreading::TPromise<TResult> Promise =
             NThreading::NewPromise<TResult>();
 
-        TEraseFromPBuffer(
+        TBatchEraseFromPBuffer(
             const NActors::TActorId serviceId,
             const NKikimr::NDDisk::TQueryCredentials& credentials,
-            TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-            TVector<ui64> lsns,
+            TVector<TPBufferKey> pBufferKeys,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
-            , Selectors(std::move(selectors))
-            , Lsns(std::move(lsns))
+            , PBufferKeys(std::move(pBufferKeys))
             , TraceId(std::move(traceId))
         {}
 
-        ~TEraseFromPBuffer();
+        ~TBatchEraseFromPBuffer();
+    };
+
+    struct TBarrierEraseFromPBuffer: TDisableCopyMove
+    {
+        using TResult =
+            NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
+
+        const NActors::TActorId ServiceId;
+        const NKikimr::NDDisk::TQueryCredentials Credentials;
+        const ui64 Lsn;
+        NWilson::TTraceId TraceId;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
+
+        TBarrierEraseFromPBuffer(
+            const NActors::TActorId serviceId,
+            const NKikimr::NDDisk::TQueryCredentials& credentials,
+            ui64 lsn,
+            NWilson::TTraceId traceId)
+            : ServiceId(serviceId)
+            , Credentials(credentials)
+            , Lsn(lsn)
+            , TraceId(std::move(traceId))
+        {}
+
+        ~TBarrierEraseFromPBuffer();
     };
 
     struct TReadFromPBuffer: TDisableCopyMove
@@ -138,7 +179,7 @@ struct TEvTransportPrivate
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
         const NKikimr::NDDisk::TBlockSelector Selector;
-        const ui64 Lsn;
+        const TPBufferKey PBufferKey;
         const NKikimr::NDDisk::TReadInstruction Instruction;
         TGuardedSgList Data;
         NWilson::TTraceId TraceId;
@@ -149,14 +190,14 @@ struct TEvTransportPrivate
             const NActors::TActorId serviceId,
             const NKikimr::NDDisk::TQueryCredentials& credentials,
             const NKikimr::NDDisk::TBlockSelector& selector,
-            const ui64 lsn,
+            const TPBufferKey pBufferKey,
             const NKikimr::NDDisk::TReadInstruction instruction,
             const TGuardedSgList& data,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selector(selector)
-            , Lsn(lsn)
+            , PBufferKey(pBufferKey)
             , Instruction(instruction)
             , Data(data)
             , TraceId(std::move(traceId))
@@ -199,13 +240,12 @@ struct TEvTransportPrivate
 
     struct TSyncWithPBuffer: TDisableCopyMove
     {
-        using TResult =
-            NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
+        using TResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
         const TVector<NKikimr::NDDisk::TBlockSelector> Selectors;
-        const TVector<ui64> Lsns;
+        const TVector<TPBufferKey> PBufferKeys;
         const NKikimr::NBsController::TDDiskId PBufferId;
         const NKikimr::NDDisk::TQueryCredentials PBufferCredentials;
         NWilson::TTraceId TraceId;
@@ -216,14 +256,14 @@ struct TEvTransportPrivate
             const NActors::TActorId serviceId,
             const NKikimr::NDDisk::TQueryCredentials& credentials,
             TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-            TVector<ui64> lsns,
+            TVector<TPBufferKey> pBufferKeys,
             const NKikimr::NBsController::TDDiskId& pBufferId,
             const NKikimr::NDDisk::TQueryCredentials& pBufferCredentials,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selectors(std::move(selectors))
-            , Lsns(std::move(lsns))
+            , PBufferKeys(std::move(pBufferKeys))
             , PBufferId(pBufferId)
             , PBufferCredentials(pBufferCredentials)
             , TraceId(std::move(traceId))
@@ -252,6 +292,25 @@ struct TEvTransportPrivate
         ~TListPBufferEntries();
     };
 
+    struct TDeleteTabletChunks: TDisableCopyMove
+    {
+        using TResult = NKikimrBlobStorage::NDDisk::TEvDeleteTabletChunksResult;
+
+        const NActors::TActorId ServiceId;
+        const NKikimr::NDDisk::TQueryCredentials Credentials;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
+
+        TDeleteTabletChunks(
+            const NActors::TActorId serviceId,
+            const NKikimr::NDDisk::TQueryCredentials& credentials)
+            : ServiceId(serviceId)
+            , Credentials(credentials)
+        {}
+
+        ~TDeleteTabletChunks();
+    };
+
     // TODO delete this 'using' after name's fix on the YDB's side.
     using TProtoEvWriteToManyPersistentBuffersResult =
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
@@ -261,6 +320,7 @@ struct TEvTransportPrivate
     struct TWriteToManyPBuffers: TDisableCopyMove
     {
         using TResult = TProtoEvWriteToManyPersistentBuffersResult;
+        using TCallback = std::function<void(const TResult&)>;
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
@@ -271,9 +331,12 @@ struct TEvTransportPrivate
         const TDuration ReplyTimeout;
 
         const TGuardedSgList Data;
+        // Checksums of Data. Empty means the transport computes them.
+        const TBlockChecksums Checksums;
+        const TCallback Callback;
+
         NWilson::TTraceId TraceId;
-        NThreading::TPromise<TResult> Promise =
-            NThreading::NewPromise<TResult>();
+        size_t CallbackCallCount = 0;
 
         TWriteToManyPBuffers(
             const NActors::TActorId serviceId,
@@ -284,6 +347,8 @@ struct TEvTransportPrivate
             TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
             const TDuration replyTimeout,
             const TGuardedSgList& data,
+            const TBlockChecksums& checksums,
+            TCallback callback,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
@@ -293,11 +358,16 @@ struct TEvTransportPrivate
             , PersistentBufferIds(std::move(persistentBufferIds))
             , ReplyTimeout(replyTimeout)
             , Data(data)
+            , Checksums(checksums)
+            , Callback(std::move(callback))
             , TraceId(std::move(traceId))
-
-        {}
+        {
+            Y_ABORT_UNLESS(Callback);
+        }
 
         ~TWriteToManyPBuffers();
+
+        void Reply(const TResult& result);
     };
 
     enum EEvents
@@ -305,12 +375,14 @@ struct TEvTransportPrivate
         EvConnect,
         EvWriteToPBuffer,
         EvWriteToDDisk,
-        EvEraseFromPBuffer,
+        EvBatchEraseFromPBuffer,
+        EvBarrierEraseFromPBuffer,
         EvReadFromPBuffer,
         EvReadFromDDisk,
         EvSyncWithPBuffer,
         EvListPBufferEntries,
         EvWriteToManyPBuffers,
+        EvDeleteTabletChunks,
     };
 
     using TEvConnect = TRequestEvent<TConnect, EEvents::EvConnect>;
@@ -330,14 +402,21 @@ struct TEvTransportPrivate
     using TEvSyncWithPBuffer =
         TRequestEvent<TSyncWithPBuffer, EEvents::EvSyncWithPBuffer>;
 
-    using TEvEraseFromPBuffer =
-        TRequestEvent<TEraseFromPBuffer, EEvents::EvEraseFromPBuffer>;
+    using TEvBatchEraseFromPBuffer =
+        TRequestEvent<TBatchEraseFromPBuffer, EEvents::EvBatchEraseFromPBuffer>;
+
+    using TEvBarrierEraseFromPBuffer = TRequestEvent<
+        TBarrierEraseFromPBuffer,
+        EEvents::EvBarrierEraseFromPBuffer>;
 
     using TEvListPBufferEntries =
         TRequestEvent<TListPBufferEntries, EEvents::EvListPBufferEntries>;
 
     using TEvWriteToManyPBuffers =
         TRequestEvent<TWriteToManyPBuffers, EEvents::EvWriteToManyPBuffers>;
+
+    using TEvDeleteTabletChunks =
+        TRequestEvent<TDeleteTabletChunks, EEvents::EvDeleteTabletChunks>;
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

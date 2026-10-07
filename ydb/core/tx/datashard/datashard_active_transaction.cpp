@@ -7,7 +7,10 @@
 #include "key_conflicts.h"
 
 #include <ydb/core/tx/locks/locks.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/util/memory_track.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -19,7 +22,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    TInstant receivedAt,
                                    const TString &txBody,
                                    bool usesMvccSnapshot,
-                                   NACLib::TUserContext::TPtr userCtx,
+                                   TIntrusivePtr<NACLib::TUserContext> userCtx,
                                    bool)
     : StepTxId_(stepTxId)
     , TxBody(txBody)
@@ -78,8 +81,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     } else {
         Y_ENSURE(Tx.HasMiniKQL());
         if (Tx.GetLlvmRuntime()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "Using LLVM runtime to execute transaction: " << StepTxId_.TxId);
+            YDB_LOG_DEBUG_CTX(ctx, "Using LLVM runtime to execute transaction",
+                {"txId", StepTxId_.TxId});
             EngineBay.SetUseLlvmRuntime(true);
         }
         if (Tx.HasPerShardKeysSizeLimitBytes()) {
@@ -170,7 +173,9 @@ bool TValidatedDataTx::CheckCancelled(ui64 tabletId) {
     Cancelled = Cancelled || gCancelTxFailPoint.Check(tabletId, GetTxId());
 
     if (Cancelled) {
-        LOG_NOTICE_S(*TActivationContext::ActorSystem(), NKikimrServices::TX_DATASHARD, "CANCELLED TxId " << GetTxId() << " at " << tabletId);
+        YDB_LOG_NOTICE_CTX(*TActivationContext::ActorSystem(), "CANCELLED transaction",
+            {"txId", GetTxId()},
+            {"tabletId", tabletId});
     }
     return Cancelled;
 }
@@ -232,7 +237,7 @@ void TActiveTransaction::FillTxData(TDataShard *self,
                                     const TString &txBody,
                                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                                     ui64 artifactFlags,
-                                    NACLib::TUserContext::TPtr userCtx)
+                                    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     UntrackMemory();
 
@@ -270,7 +275,7 @@ void TActiveTransaction::FillTxData(TDataShard *self,
 void TActiveTransaction::FillVolatileTxData(TDataShard *self,
                                             TTransactionContext &txc,
                                             const TActorContext &ctx,
-                                            NACLib::TUserContext::TPtr userCtx)
+                                            TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     UntrackMemory();
 
@@ -298,7 +303,7 @@ void TActiveTransaction::FillVolatileTxData(TDataShard *self,
 TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
                                                        TTransactionContext &txc,
                                                        const TActorContext &ctx,
-                                                       NACLib::TUserContext::TPtr userCtx,
+                                                       TIntrusivePtr<NACLib::TUserContext> userCtx,
                                                        bool isPropose)
 {
     Y_ENSURE(IsDataTx() || IsReadTable());
@@ -414,11 +419,6 @@ bool TActiveTransaction::BuildSchemeTx()
         count++;
     }
 
-    if (SchemeTx->HasCreateIncrementalRestoreSrc()) {
-        SchemeTxType = TSchemaOperation::ETypeCreateIncrementalRestoreSrc;
-        count++;
-    }
-
     if (SchemeTx->HasCreateIncrementalBackupSrc()) {
         SchemeTxType = TSchemaOperation::ETypeCreateIncrementalBackupSrc;
         count++;
@@ -501,7 +501,8 @@ void TActiveTransaction::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBas
     LocksCache().Locks.clear();
     ArtifactFlags = 0;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "tx " << GetTxId() << " released its data");
+    YDB_LOG_DEBUG_CTX(ctx, "Tx released its data",
+        {"txId", GetTxId()});
 }
 
 void TActiveTransaction::DbStoreLocksAccessLog(ui64 tabletId,
@@ -525,9 +526,10 @@ void TActiveTransaction::DbStoreLocksAccessLog(ui64 tabletId,
     db.Table<Schema::TxArtifacts>().Key(GetTxId())
         .Update(NIceDb::TUpdate<Schema::TxArtifacts::Locks>(vecData));
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Storing " << vec.size() << " locks for txid=" << GetTxId()
-                << " in " << tabletId);
+    YDB_LOG_TRACE_CTX(ctx, "Storing locks",
+        {"locksCount", vec.size()},
+        {"txId", GetTxId()},
+        {"tabletId", tabletId});
 }
 
 void TActiveTransaction::DbStoreArtifactFlags(ui64 tabletId,
@@ -540,9 +542,10 @@ void TActiveTransaction::DbStoreArtifactFlags(ui64 tabletId,
     db.Table<Schema::TxArtifacts>().Key(GetTxId())
         .Update<Schema::TxArtifacts::Flags>(ArtifactFlags);
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Storing artifactflags=" << ArtifactFlags << " for txid=" << GetTxId()
-                << " in " << tabletId);
+    YDB_LOG_TRACE_CTX(ctx, "Storing artifactflags for tx",
+        {"artifactflags", ArtifactFlags},
+        {"txId", GetTxId()},
+        {"tabletId", tabletId});
 }
 
 ui64 TActiveTransaction::GetMemoryConsumption() const {
@@ -557,7 +560,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
         TDataShard *self,
         TTransactionContext &txc,
         const TActorContext &ctx,
-        NACLib::TUserContext::TPtr userCtx)
+        TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     UserCtx = userCtx;
     if (!DataTx) {
@@ -602,8 +605,9 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
     ReleasedTxDataSize = 0;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "tx " << GetTxId() << " at "
-                << self->TabletID() << " restored its data");
+    YDB_LOG_DEBUG_CTX(ctx, "Tx restored its data",
+        {"txId", GetTxId()},
+        {"tabletId", self->TabletID()});
 
     return ERestoreDataStatus::Ok;
 }
@@ -816,7 +820,6 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::AlterCdcStream);
         plan.push_back(EExecutionUnitKind::DropCdcStream);
         plan.push_back(EExecutionUnitKind::RotateCdcStream);
-        plan.push_back(EExecutionUnitKind::CreateIncrementalRestoreSrc);
         plan.push_back(EExecutionUnitKind::Truncate);
         plan.push_back(EExecutionUnitKind::CompleteOperation);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
@@ -874,7 +877,8 @@ bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) 
             auto result = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(
                     kind, self.TabletID(), GetTxId(), rejectStatus);
             result->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectReason);
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, rejectReason);
+            YDB_LOG_NOTICE_CTX(ctx, "Reject tx",
+                {"rejectReason", rejectReason});
 
             ctx.Send(GetTarget(), result.release(), 0, GetCookie());
 
@@ -947,3 +951,7 @@ void TActiveTransaction::OnCleanup(TDataShard& self, std::vector<std::unique_ptr
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

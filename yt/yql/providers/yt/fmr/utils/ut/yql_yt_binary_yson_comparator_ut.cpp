@@ -1,4 +1,5 @@
 #include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_comparator.h>
+#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
 #include <yt/yql/providers/yt/fmr/test_tools/yson/yql_yt_yson_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -280,7 +281,8 @@ Y_UNIT_TEST_SUITE(TBinaryYsonComparatorTests) {
         UNIT_ASSERT(result < 0);  // Alice < Bob
     }
 
-    Y_UNIT_TEST(CompareWithComplexTypes) {
+    Y_UNIT_TEST(CompareWithListKeyThrows) {
+        // Yson lists are not supported as sort key values.
         TString textYson = "{tags=[\"a\";\"b\"];id=1};{tags=[\"a\";\"c\"];id=2}";
         TString binaryYson = GetBinaryYson(textYson);
 
@@ -294,8 +296,7 @@ Y_UNIT_TEST_SUITE(TBinaryYsonComparatorTests) {
         TVector<ESortOrder> sortOrders = {ESortOrder::Ascending, ESortOrder::Ascending};
         TBinaryYsonComparator comparator(binaryYson, sortOrders);
 
-        int result = comparator.CompareRows(rows[0], rows[1]);
-        UNIT_ASSERT(result < 0);  // [a,b] < [a,c]
+        UNIT_ASSERT_EXCEPTION_CONTAINS(comparator.CompareRows(rows[0], rows[1]), yexception, "Unknown YSON marker");
     }
 
     Y_UNIT_TEST(CompareMixedSortOrders) {
@@ -322,6 +323,23 @@ Y_UNIT_TEST_SUITE(TBinaryYsonComparatorTests) {
         // A,10 vs B,10
         result = comparator.CompareRows(rows[0], rows[2]);
         UNIT_ASSERT(result < 0);  // A < B
+    }
+
+    Y_UNIT_TEST(CompareExtractedKeysNullVsString) {
+        // A null key (Small = monostate, empty RawYson, as produced for an
+        // absent/invalid column) must compare correctly against a string key
+        // (Small = Nothing(), since strings aren't "small"), instead of falling
+        // through to CompareYsonValuesImpl on an empty RawYson.
+        TString stringYson = GetBinaryYson("\"abc\"", NYson::EYsonType::Node);
+        TExtractedKey nullKey{TSmallKeyValue{std::monostate{}}, TStringBuf{}};
+        TExtractedKey stringKey{TryExtractSmallYsonValue(stringYson), stringYson};
+        UNIT_ASSERT(!stringKey.Small.Defined());
+
+        UNIT_ASSERT_VALUES_EQUAL(CompareExtractedKeys(nullKey, stringKey), -1);
+        UNIT_ASSERT_VALUES_EQUAL(CompareExtractedKeys(stringKey, nullKey), 1);
+
+        TExtractedKey otherNullKey{TSmallKeyValue{std::monostate{}}, TStringBuf{}};
+        UNIT_ASSERT_VALUES_EQUAL(CompareExtractedKeys(nullKey, otherNullKey), 0);
     }
 }
 

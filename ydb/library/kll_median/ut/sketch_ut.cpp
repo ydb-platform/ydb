@@ -206,13 +206,42 @@ Y_UNIT_TEST_SUITE(TDynamicKllSketchTest) {
         UNIT_ASSERT(median.StartsWith("k"));
     }
 
-    Y_UNIT_TEST(MergeWithDifferentInitialWeightThrows) {
-        TDynamicKllSketch<TString> base(40, 42u, 1);
-        TDynamicKllSketch<TString> other(40, 777u, 2);
+    Y_UNIT_TEST(MergeWithDifferentInitialWeightAlignsLevels) {
+        constexpr size_t k = 100;
+        constexpr int lowKeys = 7;
+        constexpr int highKeys = 11;
 
-        other.Add(TString{"x"}, 2);
+        auto addKeys = [](auto& sketch, TStringBuf prefix, int count) {
+            for (int i = 0; i < count; ++i) {
+                sketch.Add(TStringBuilder() << prefix << (i < 10 ? "0" : "") << i, 4);
+            }
+        };
 
-        UNIT_ASSERT_EXCEPTION(base.Merge(other), yexception);
+        {
+            TDynamicKllSketch<TString> base(k, 42u, 1);
+            TDynamicKllSketch<TString> other(k, 777u, 4);
+
+            addKeys(base, "a", lowKeys);
+            addKeys(other, "z", highKeys);
+
+            UNIT_ASSERT_NO_EXCEPTION(base.Merge(other));
+            UNIT_ASSERT_VALUES_EQUAL(base.GetLevels().front().Weight, 4);
+            UNIT_ASSERT_VALUES_EQUAL(base.GetLevels().front().Items.size(), lowKeys + highKeys);
+            UNIT_ASSERT_VALUES_EQUAL(base.Median(), TString{"z01"});
+        }
+
+        {
+            TDynamicKllSketch<TString> base(k, 42u, 4);
+            TDynamicKllSketch<TString> other(k, 777u, 1);
+
+            addKeys(base, "a", lowKeys);
+            addKeys(other, "z", highKeys);
+
+            UNIT_ASSERT_NO_EXCEPTION(base.Merge(other));
+            UNIT_ASSERT_VALUES_EQUAL(base.GetLevels().front().Weight, 4);
+            UNIT_ASSERT_VALUES_EQUAL(base.GetLevels().front().Items.size(), lowKeys + highKeys);
+            UNIT_ASSERT_VALUES_EQUAL(base.Median(), TString{"z01"});
+        }
     }
 
     Y_UNIT_TEST(StreamingLexPaddedKeysApproxCentral) {

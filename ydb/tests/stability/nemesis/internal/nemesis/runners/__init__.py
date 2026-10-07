@@ -21,7 +21,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_hive import (
 from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_node import (
     ClusterKillNodeDaemonNemesis,
     ClusterKillSlotDaemonNemesis,
-    ClusterRollingUpdateNemesis,
+    ClusterRollingRestartNemesis,
     ClusterSerialKillNodeNemesis,
     ClusterSerialKillSlotsNemesis,
     ClusterStopStartNodeNemesis,
@@ -50,6 +50,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners.datacenter import (
     ClusterDataCenterStopNodesNemesis,
 )
 from ydb.tests.stability.nemesis.internal.nemesis.runners.network import (
+    DnsNemesis,
     NetworkNemesis,
     TimeSkewNemesis,
 )
@@ -70,7 +71,7 @@ __all__ = [
     # cluster_node
     "ClusterKillNodeDaemonNemesis",
     "ClusterKillSlotDaemonNemesis",
-    "ClusterRollingUpdateNemesis",
+    "ClusterRollingRestartNemesis",
     "ClusterSerialKillNodeNemesis",
     "ClusterSerialKillSlotsNemesis",
     "ClusterStopStartNodeNemesis",
@@ -96,6 +97,7 @@ __all__ = [
     "ClusterDataCenterRouteUnreachableNemesis",
     "ClusterDataCenterStopNodesNemesis",
     # network
+    "DnsNemesis",
     "NetworkNemesis",
     "TimeSkewNemesis",
     # cluster_host

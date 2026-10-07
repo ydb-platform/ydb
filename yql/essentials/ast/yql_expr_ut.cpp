@@ -15,7 +15,7 @@ TAstParseResult ParseAstWithCheck(const TStringBuf& s) {
 }
 
 void CompileExprWithCheck(TAstNode& root, TExprNode::TPtr& exprRoot, TExprContext& exprCtx, ui32 typeAnnotationIndex = Max<ui32>()) {
-    const bool success = CompileExpr(root, exprRoot, exprCtx, nullptr, nullptr, typeAnnotationIndex != Max<ui32>(), typeAnnotationIndex);
+    const bool success = CompileExpr(root, exprRoot, exprCtx, /*resolver=*/nullptr, /*urlListerManager=*/nullptr, typeAnnotationIndex != Max<ui32>(), typeAnnotationIndex);
     exprCtx.IssueManager.GetIssues().PrintTo(Cout);
 
     UNIT_ASSERT(success);
@@ -33,7 +33,7 @@ bool ParseAndCompile(const TString& program) {
     TAstParseResult astRes = ParseAstWithCheck(program);
     TExprContext exprCtx;
     TExprNode::TPtr exprRoot;
-    bool result = CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr);
+    bool result = CompileExpr(*astRes.Root, exprRoot, exprCtx, /*resolver=*/nullptr, /*urlListerManager=*/nullptr);
     exprCtx.IssueManager.GetIssues().PrintTo(Cout);
     return result;
 }
@@ -131,7 +131,7 @@ Y_UNIT_TEST(TestArbitraryAtom) {
     UNIT_ASSERT_STRINGS_EQUAL(HexEncode(exprRoot->Content()), "0123456789ABCDEF");
     UNIT_ASSERT(exprRoot->Flags() & TNodeFlags::ArbitraryContent);
 
-    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     TAstNode* xValue = ast.Root->GetChild(0)->GetChild(1)->GetChild(1);
     UNIT_ASSERT_STRINGS_EQUAL(HexEncode(xValue->GetContent()), "0123456789ABCDEF");
     UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::ArbitraryContent);
@@ -151,7 +151,7 @@ Y_UNIT_TEST(TestBinaryAtom) {
     UNIT_ASSERT_STRINGS_EQUAL(HexEncode(exprRoot->Content()), "FEDCBA9876543210");
     UNIT_ASSERT(exprRoot->Flags() & TNodeFlags::BinaryContent);
 
-    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     TAstNode* xValue = ast.Root->GetChild(0)->GetChild(2)->GetChild(1);
     UNIT_ASSERT_STRINGS_EQUAL(HexEncode(xValue->GetContent()), "FEDCBA9876543210");
     UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::BinaryContent);
@@ -904,12 +904,12 @@ TString CompileAndDisassemble(const TString& program, bool expectEqualExprs = tr
     UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
     UNIT_ASSERT(exprRoot);
 
-    const auto convRes = ConvertToAst(*exprRoot, exprCtx, 0, true);
+    const auto convRes = ConvertToAst(*exprRoot, exprCtx, 0, /*refAtoms=*/true);
     UNIT_ASSERT(convRes.IsOk());
 
     TExprContext exprCtx2;
     TExprNode::TPtr exprRoot2;
-    auto compileOk = CompileExpr(*convRes.Root, exprRoot2, exprCtx2, nullptr, nullptr);
+    auto compileOk = CompileExpr(*convRes.Root, exprRoot2, exprCtx2, /*resolver=*/nullptr, /*urlListerManager=*/nullptr);
     exprCtx2.IssueManager.GetIssues().PrintTo(Cout);
     UNIT_ASSERT(compileOk);
     UNIT_ASSERT(exprRoot2);
@@ -1217,7 +1217,7 @@ Y_UNIT_TEST(ParametersDifferentTypes) {
         )
         )";
 
-    const auto disassembled = CompileAndDisassemble(program, false);
+    const auto disassembled = CompileAndDisassemble(program, /*expectEqualExprs=*/false);
     UNIT_ASSERT(TString::npos != disassembled.find("(declare $Group (DataType 'Uint32))"));
     UNIT_ASSERT(TString::npos != disassembled.find("(declare $Name (OptionalType (DataType 'String)))"));
 }

@@ -2,8 +2,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -15,30 +14,30 @@ public:
     TIfPresentWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* optional, IComputationExternalNode* item, IComputationNode* presentBranch,
                       IComputationNode* missingBranch)
         : TBaseComputation(mutables, kind)
-        , Optional(optional)
-        , Item(item)
-        , PresentBranch(presentBranch)
-        , MissingBranch(missingBranch)
+        , Optional_(optional)
+        , Item_(item)
+        , PresentBranch_(presentBranch)
+        , MissingBranch_(missingBranch)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        if (const auto& previous = Item->GetValue(ctx); previous.IsInvalid()) {
-            const auto optional = Optional->GetValue(ctx);
+        if (const auto& previous = Item_->GetValue(ctx); previous.IsInvalid()) {
+            const auto optional = Optional_->GetValue(ctx);
             if (optional) {
-                Item->SetValue(ctx, optional.GetOptionalValueIf<IsMultiOptional>());
+                Item_->SetValue(ctx, optional.GetOptionalValueIf<IsMultiOptional>());
             }
 
-            return (optional ? PresentBranch : MissingBranch)->GetValue(ctx).Release();
+            return (optional ? PresentBranch_ : MissingBranch_)->GetValue(ctx).Release();
         } else {
-            return (previous ? PresentBranch : MissingBranch)->GetValue(ctx).Release();
+            return (previous ? PresentBranch_ : MissingBranch_)->GetValue(ctx).Release();
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
+        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
         const auto previous = codegenItem->CreateGetValue(ctx, block);
 
@@ -56,7 +55,7 @@ public:
 
         block = slow;
 
-        const auto value = GetNodeValue(Optional, ctx, block);
+        const auto value = GetNodeValue(Optional_, ctx, block);
         BranchInst::Create(pres, miss, IsExists(value, block, context), block);
 
         block = pres;
@@ -64,12 +63,12 @@ public:
         BranchInst::Create(fast, block);
 
         block = fast;
-        const auto left = GetNodeValue(PresentBranch, ctx, block);
+        const auto left = GetNodeValue(PresentBranch_, ctx, block);
         result->addIncoming(left, block);
         BranchInst::Create(done, block);
 
         block = miss;
-        const auto right = GetNodeValue(MissingBranch, ctx, block);
+        const auto right = GetNodeValue(MissingBranch_, ctx, block);
         result->addIncoming(right, block);
         BranchInst::Create(done, block);
 
@@ -79,17 +78,17 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Optional);
-        this->DependsOn(MissingBranch);
-        Optional->AddDependent(Item);
-        this->Own(Item);
-        this->DependsOn(PresentBranch);
+        this->DependsOn(Optional_);
+        this->DependsOn(MissingBranch_);
+        Optional_->AddDependent(Item_);
+        this->Own(Item_);
+        this->DependsOn(PresentBranch_);
     }
 
-    IComputationNode* const Optional;
-    IComputationExternalNode* const Item;
-    IComputationNode* const PresentBranch;
-    IComputationNode* const MissingBranch;
+    IComputationNode* const Optional_;
+    IComputationExternalNode* const Item_;
+    IComputationNode* const PresentBranch_;
+    IComputationNode* const MissingBranch_;
 };
 
 template <bool IsMultiOptional>
@@ -99,31 +98,31 @@ class TFlowIfPresentWrapper: public TStatelessFlowCodegeneratorNode<TFlowIfPrese
 public:
     TFlowIfPresentWrapper(EValueRepresentation kind, IComputationNode* optional, IComputationExternalNode* item, IComputationNode* presentBranch,
                           IComputationNode* missingBranch)
-        : TBaseComputation(nullptr, kind)
-        , Optional(optional)
-        , Item(item)
-        , PresentBranch(presentBranch)
-        , MissingBranch(missingBranch)
+        : TBaseComputation(/*source=*/nullptr, kind)
+        , Optional_(optional)
+        , Item_(item)
+        , PresentBranch_(presentBranch)
+        , MissingBranch_(missingBranch)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        if (const auto& previous = Item->GetValue(ctx); previous.IsInvalid()) {
-            const auto optional = Optional->GetValue(ctx);
+        if (const auto& previous = Item_->GetValue(ctx); previous.IsInvalid()) {
+            const auto optional = Optional_->GetValue(ctx);
             if (optional) {
-                Item->SetValue(ctx, optional.GetOptionalValueIf<IsMultiOptional>());
+                Item_->SetValue(ctx, optional.GetOptionalValueIf<IsMultiOptional>());
             }
 
-            return (optional ? PresentBranch : MissingBranch)->GetValue(ctx).Release();
+            return (optional ? PresentBranch_ : MissingBranch_)->GetValue(ctx).Release();
         } else {
-            return (previous ? PresentBranch : MissingBranch)->GetValue(ctx).Release();
+            return (previous ? PresentBranch_ : MissingBranch_)->GetValue(ctx).Release();
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
+        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
         const auto previous = codegenItem->CreateGetValue(ctx, block);
 
@@ -141,7 +140,7 @@ public:
 
         block = slow;
 
-        const auto value = GetNodeValue(Optional, ctx, block);
+        const auto value = GetNodeValue(Optional_, ctx, block);
         BranchInst::Create(pres, miss, IsExists(value, block, context), block);
 
         block = pres;
@@ -149,12 +148,12 @@ public:
         BranchInst::Create(fast, block);
 
         block = fast;
-        const auto left = GetNodeValue(PresentBranch, ctx, block);
+        const auto left = GetNodeValue(PresentBranch_, ctx, block);
         result->addIncoming(left, block);
         BranchInst::Create(done, block);
 
         block = miss;
-        const auto right = GetNodeValue(MissingBranch, ctx, block);
+        const auto right = GetNodeValue(MissingBranch_, ctx, block);
         result->addIncoming(right, block);
         BranchInst::Create(done, block);
 
@@ -164,17 +163,17 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOnBoth(PresentBranch, MissingBranch)) {
-            this->DependsOn(flow, Optional);
-            this->Own(flow, Item);
+        if (const auto flow = this->FlowDependsOnBoth(PresentBranch_, MissingBranch_)) {
+            this->DependsOn(flow, Optional_);
+            this->Own(flow, Item_);
         }
-        Optional->AddDependent(Item);
+        Optional_->AddDependent(Item_);
     }
 
-    IComputationNode* const Optional;
-    IComputationExternalNode* const Item;
-    IComputationNode* const PresentBranch;
-    IComputationNode* const MissingBranch;
+    IComputationNode* const Optional_;
+    IComputationExternalNode* const Item_;
+    IComputationNode* const PresentBranch_;
+    IComputationNode* const MissingBranch_;
 };
 
 template <bool IsMultiOptional>
@@ -185,30 +184,30 @@ public:
     TWideIfPresentWrapper(IComputationNode* optional, IComputationExternalNode* item, IComputationWideFlowNode* presentBranch,
                           IComputationWideFlowNode* missingBranch)
         : TBaseComputation(nullptr)
-        , Optional(optional)
-        , Item(item)
-        , PresentBranch(presentBranch)
-        , MissingBranch(missingBranch)
+        , Optional_(optional)
+        , Item_(item)
+        , PresentBranch_(presentBranch)
+        , MissingBranch_(missingBranch)
     {
     }
 
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
-        if (const auto& previous = Item->GetValue(ctx); previous.IsInvalid()) {
-            const auto optional = Optional->GetValue(ctx);
+        if (const auto& previous = Item_->GetValue(ctx); previous.IsInvalid()) {
+            const auto optional = Optional_->GetValue(ctx);
             if (optional) {
-                Item->SetValue(ctx, optional.GetOptionalValueIf<IsMultiOptional>());
+                Item_->SetValue(ctx, optional.GetOptionalValueIf<IsMultiOptional>());
             }
 
-            return (optional ? PresentBranch : MissingBranch)->FetchValues(ctx, output);
+            return (optional ? PresentBranch_ : MissingBranch_)->FetchValues(ctx, output);
         } else {
-            return (previous ? PresentBranch : MissingBranch)->FetchValues(ctx, output);
+            return (previous ? PresentBranch_ : MissingBranch_)->FetchValues(ctx, output);
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
+        const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item_);
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
         const auto previous = codegenItem->CreateGetValue(ctx, block);
 
@@ -226,7 +225,7 @@ public:
 
         block = init;
 
-        const auto value = GetNodeValue(Optional, ctx, block);
+        const auto value = GetNodeValue(Optional_, ctx, block);
         BranchInst::Create(good, miss, IsExists(value, block, context), block);
 
         block = good;
@@ -236,12 +235,12 @@ public:
         BranchInst::Create(pres, block);
 
         block = pres;
-        const auto left = GetNodeValues(PresentBranch, ctx, block);
+        const auto left = GetNodeValues(PresentBranch_, ctx, block);
         result->addIncoming(left.first, block);
         BranchInst::Create(done, block);
 
         block = miss;
-        const auto right = GetNodeValues(MissingBranch, ctx, block);
+        const auto right = GetNodeValues(MissingBranch_, ctx, block);
         result->addIncoming(right.first, block);
         BranchInst::Create(done, block);
 
@@ -284,17 +283,17 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = this->FlowDependsOnBoth(PresentBranch, MissingBranch)) {
-            this->DependsOn(flow, Optional);
-            this->Own(flow, Item);
+        if (const auto flow = this->FlowDependsOnBoth(PresentBranch_, MissingBranch_)) {
+            this->DependsOn(flow, Optional_);
+            this->Own(flow, Item_);
         }
-        Optional->AddDependent(Item);
+        Optional_->AddDependent(Item_);
     }
 
-    IComputationNode* const Optional;
-    IComputationExternalNode* const Item;
-    IComputationWideFlowNode* const PresentBranch;
-    IComputationWideFlowNode* const MissingBranch;
+    IComputationNode* const Optional_;
+    IComputationExternalNode* const Item_;
+    IComputationWideFlowNode* const PresentBranch_;
+    IComputationWideFlowNode* const MissingBranch_;
 };
 
 } // namespace
@@ -334,5 +333,4 @@ IComputationNode* WrapIfPresent(TCallable& callable, const TComputationNodeFacto
     THROW yexception() << "Wrong signature.";
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -4,7 +4,7 @@ LICENSE(Apache-2.0)
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(2025-01-30)
+VERSION(2025-02-22)
 
 NO_COMPILER_WARNINGS()
 
@@ -12,6 +12,7 @@ SRCDIR(contrib/libs/tcmalloc/tcmalloc)
 
 PEERDIR(
     contrib/libs/tcmalloc/tcmalloc/internal
+    contrib/libs/tcmalloc/internal_utils
     contrib/restricted/abseil-cpp
     contrib/libs/protobuf
 )

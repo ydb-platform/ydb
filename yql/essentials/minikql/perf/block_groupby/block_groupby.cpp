@@ -114,12 +114,12 @@ public:
         : Aggs_(aggs)
         , Rh_(sizeof(i64))
     {
-        Cells_.resize(1u << 8);
+        Cells_.resize(1U << 8);
     }
 
     void AddBatch(arrow::Datum keys, arrow::Datum payloads) {
-        auto arrKeys = keys.array();
-        auto arrPayloads = payloads.array();
+        const auto& arrKeys = keys.array();
+        const auto& arrPayloads = payloads.array();
         auto len = arrKeys->length;
         const i32* ptrKeys = arrKeys->GetValues<i32>(1);
         const i32* ptrPayloads = arrPayloads->GetValues<i32>(1);

@@ -1,110 +1,16 @@
-/* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
- * All rights reserved.
- *
- * This package is an SSL implementation written
- * by Eric Young (eay@cryptsoft.com).
- * The implementation was written so as to conform with Netscapes SSL.
- *
- * This library is free for commercial and non-commercial use as long as
- * the following conditions are aheared to.  The following conditions
- * apply to all code found in this distribution, be it the RC4, RSA,
- * lhash, DES, etc., code; not just the SSL code.  The SSL documentation
- * included with this distribution is covered by the same copyright terms
- * except that the holder is Tim Hudson (tjh@cryptsoft.com).
- *
- * Copyright remains Eric Young's, and as such any Copyright notices in
- * the code are not to be removed.
- * If this package is used in a product, Eric Young should be given attribution
- * as the author of the parts of the library used.
- * This can be in the form of a textual message at program startup or
- * in documentation (online or textual) provided with the package.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *    "This product includes cryptographic software written by
- *     Eric Young (eay@cryptsoft.com)"
- *    The word 'cryptographic' can be left out if the rouines from the library
- *    being used are not cryptographic related :-).
- * 4. If you include any Windows specific code (or a derivative thereof) from
- *    the apps directory (application code) you must include an acknowledgement:
- *    "This product includes software written by Tim Hudson (tjh@cryptsoft.com)"
- *
- * THIS SOFTWARE IS PROVIDED BY ERIC YOUNG ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * The licence and distribution terms for any publically available version or
- * derivative of this code cannot be changed.  i.e. this code cannot simply be
- * copied and put under another distribution licence
- * [including the GNU Public Licence.]
- */
-/* ====================================================================
- * Copyright (c) 1998-2002 The OpenSSL Project.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *
- * 3. All advertising materials mentioning features or use of this
- *    software must display the following acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit. (http://www.openssl.org/)"
- *
- * 4. The names "OpenSSL Toolkit" and "OpenSSL Project" must not be used to
- *    endorse or promote products derived from this software without
- *    prior written permission. For written permission, please contact
- *    openssl-core@openssl.org.
- *
- * 5. Products derived from this software may not be called "OpenSSL"
- *    nor may "OpenSSL" appear in their names without prior written
- *    permission of the OpenSSL Project.
- *
- * 6. Redistributions of any form whatsoever must retain the following
- *    acknowledgment:
- *    "This product includes software developed by the OpenSSL Project
- *    for use in the OpenSSL Toolkit (http://www.openssl.org/)"
- *
- * THIS SOFTWARE IS PROVIDED BY THE OpenSSL PROJECT ``AS IS'' AND ANY
- * EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE OpenSSL PROJECT OR
- * ITS CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
- * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
- * OF THE POSSIBILITY OF SUCH DAMAGE.
- * ====================================================================
- *
- * This product includes cryptographic software written by Eric Young
- * (eay@cryptsoft.com).  This product includes software written by Tim
- * Hudson (tjh@cryptsoft.com). */
+// Copyright 1995-2016 The OpenSSL Project Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <contrib/restricted/google/boringssl/include/openssl/ssl.h>
 
@@ -115,8 +21,8 @@
 #include <contrib/restricted/google/boringssl/include/openssl/err.h>
 #include <contrib/restricted/google/boringssl/include/openssl/mem.h>
 
-#include "internal.h"
 #include "../crypto/internal.h"
+#include "internal.h"
 
 
 BSSL_NAMESPACE_BEGIN
@@ -140,40 +46,17 @@ static const uint8_t kMaxWarningAlerts = 4;
 
 // ssl_needs_record_splitting returns one if |ssl|'s current outgoing cipher
 // state needs record-splitting and zero otherwise.
-static bool ssl_needs_record_splitting(const SSL *ssl) {
-#if !defined(BORINGSSL_UNSAFE_FUZZER_MODE)
-  return !ssl->s3->aead_write_ctx->is_null_cipher() &&
-         ssl->s3->aead_write_ctx->ProtocolVersion() < TLS1_1_VERSION &&
+bool ssl_needs_record_splitting(const SSL *ssl) {
+  return !CRYPTO_fuzzer_mode_enabled() &&
+         !ssl->s3->aead_write_ctx->is_null_cipher() &&
+         ssl_protocol_version(ssl) < TLS1_1_VERSION &&
          (ssl->mode & SSL_MODE_CBC_RECORD_SPLITTING) != 0 &&
          SSL_CIPHER_is_block_cipher(ssl->s3->aead_write_ctx->cipher());
-#else
-  return false;
-#endif
 }
 
 size_t ssl_record_prefix_len(const SSL *ssl) {
-  size_t header_len;
-  if (SSL_is_dtls(ssl)) {
-    header_len = DTLS1_RT_HEADER_LENGTH;
-  } else {
-    header_len = SSL3_RT_HEADER_LENGTH;
-  }
-
-  return header_len + ssl->s3->aead_read_ctx->ExplicitNonceLen();
-}
-
-size_t ssl_seal_align_prefix_len(const SSL *ssl) {
-  if (SSL_is_dtls(ssl)) {
-    return DTLS1_RT_HEADER_LENGTH + ssl->s3->aead_write_ctx->ExplicitNonceLen();
-  }
-
-  size_t ret =
-      SSL3_RT_HEADER_LENGTH + ssl->s3->aead_write_ctx->ExplicitNonceLen();
-  if (ssl_needs_record_splitting(ssl)) {
-    ret += SSL3_RT_HEADER_LENGTH;
-    ret += ssl_cipher_get_record_split_len(ssl->s3->aead_write_ctx->cipher());
-  }
-  return ret;
+  assert(!SSL_is_dtls(ssl));
+  return SSL3_RT_HEADER_LENGTH + ssl->s3->aead_read_ctx->ExplicitNonceLen();
 }
 
 static ssl_open_record_t skip_early_data(SSL *ssl, uint8_t *out_alert,
@@ -190,6 +73,19 @@ static ssl_open_record_t skip_early_data(SSL *ssl, uint8_t *out_alert,
   }
 
   return ssl_open_record_discard;
+}
+
+static uint16_t tls_record_version(const SSL *ssl) {
+  if (ssl->s3->version == 0) {
+    // Before the version is determined, outgoing records use TLS 1.0 for
+    // historical compatibility requirements.
+    return TLS1_VERSION;
+  }
+
+  // TLS 1.3 freezes the record version at TLS 1.2. Previous ones use the
+  // version itself.
+  return ssl_protocol_version(ssl) >= TLS1_3_VERSION ? TLS1_2_VERSION
+                                                     : ssl->s3->version;
 }
 
 ssl_open_record_t tls_open_record(SSL *ssl, uint8_t *out_type,
@@ -211,8 +107,8 @@ ssl_open_record_t tls_open_record(SSL *ssl, uint8_t *out_type,
   // Decode the record header.
   uint8_t type;
   uint16_t version, ciphertext_len;
-  if (!CBS_get_u8(&cbs, &type) ||
-      !CBS_get_u16(&cbs, &version) ||
+  if (!CBS_get_u8(&cbs, &type) ||      //
+      !CBS_get_u16(&cbs, &version) ||  //
       !CBS_get_u16(&cbs, &ciphertext_len)) {
     *out_consumed = SSL3_RT_HEADER_LENGTH;
     return ssl_open_record_partial;
@@ -224,7 +120,7 @@ ssl_open_record_t tls_open_record(SSL *ssl, uint8_t *out_type,
     // version negotiation failure alerts.
     version_ok = (version >> 8) == SSL3_VERSION_MAJOR;
   } else {
-    version_ok = version == ssl->s3->aead_read_ctx->RecordVersion();
+    version_ok = version == tls_record_version(ssl);
   }
 
   if (!version_ok) {
@@ -247,17 +143,17 @@ ssl_open_record_t tls_open_record(SSL *ssl, uint8_t *out_type,
     return ssl_open_record_partial;
   }
 
-  Span<const uint8_t> header = in.subspan(0, SSL3_RT_HEADER_LENGTH);
+  auto header = in.first(SSL3_RT_HEADER_LENGTH);
   ssl_do_msg_callback(ssl, 0 /* read */, SSL3_RT_HEADER, header);
 
   *out_consumed = in.size() - CBS_len(&cbs);
 
-  if (ssl->s3->have_version &&
-      ssl_protocol_version(ssl) >= TLS1_3_VERSION &&
-      SSL_in_init(ssl) &&
+  // In TLS 1.3, during the handshake, skip ChangeCipherSpec records.
+  static const uint8_t kChangeCipherSpec[] = {SSL3_MT_CCS};
+  if (ssl_has_final_version(ssl) &&
+      ssl_protocol_version(ssl) >= TLS1_3_VERSION && SSL_in_init(ssl) &&
       type == SSL3_RT_CHANGE_CIPHER_SPEC &&
-      ciphertext_len == 1 &&
-      CBS_data(&body)[0] == 1) {
+      Span<const uint8_t>(body) == kChangeCipherSpec) {
     ssl->s3->empty_record_count++;
     if (ssl->s3->empty_record_count > kMaxEmptyRecords) {
       OPENSSL_PUT_ERROR(SSL, SSL_R_TOO_MANY_EMPTY_FRAGMENTS);
@@ -269,8 +165,8 @@ ssl_open_record_t tls_open_record(SSL *ssl, uint8_t *out_type,
 
   // Skip early data received when expecting a second ClientHello if we rejected
   // 0RTT.
-  if (ssl->s3->skip_early_data &&
-      ssl->s3->aead_read_ctx->is_null_cipher() &&
+  if (ssl->s3->skip_early_data &&                  //
+      ssl->s3->aead_read_ctx->is_null_cipher() &&  //
       type == SSL3_RT_APPLICATION_DATA) {
     return skip_early_data(ssl, out_alert, *out_consumed);
   }
@@ -285,7 +181,7 @@ ssl_open_record_t tls_open_record(SSL *ssl, uint8_t *out_type,
   // Decrypt the body in-place.
   if (!ssl->s3->aead_read_ctx->Open(
           out, type, version, ssl->s3->read_sequence, header,
-          MakeSpan(const_cast<uint8_t *>(CBS_data(&body)), CBS_len(&body)))) {
+          Span(const_cast<uint8_t *>(CBS_data(&body)), CBS_len(&body)))) {
     if (ssl->s3->skip_early_data && !ssl->s3->aead_read_ctx->is_null_cipher()) {
       ERR_clear_error();
       return skip_early_data(ssl, out_alert, *out_consumed);
@@ -300,9 +196,8 @@ ssl_open_record_t tls_open_record(SSL *ssl, uint8_t *out_type,
   ssl->s3->read_sequence++;
 
   // TLS 1.3 hides the record type inside the encrypted data.
-  bool has_padding =
-      !ssl->s3->aead_read_ctx->is_null_cipher() &&
-      ssl->s3->aead_read_ctx->ProtocolVersion() >= TLS1_3_VERSION;
+  bool has_padding = !ssl->s3->aead_read_ctx->is_null_cipher() &&
+                     ssl_protocol_version(ssl) >= TLS1_3_VERSION;
 
   // If there is padding, the plaintext limit includes the padding, but includes
   // extra room for the inner content type.
@@ -352,7 +247,7 @@ ssl_open_record_t tls_open_record(SSL *ssl, uint8_t *out_type,
   }
 
   // Handshake messages may not interleave with any other record type.
-  if (type != SSL3_RT_HANDSHAKE &&
+  if (type != SSL3_RT_HANDSHAKE &&  //
       tls_has_unprocessed_handshake_data(ssl)) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_UNEXPECTED_RECORD);
     *out_alert = SSL_AD_UNEXPECTED_MESSAGE;
@@ -369,10 +264,9 @@ static bool do_seal_record(SSL *ssl, uint8_t *out_prefix, uint8_t *out,
                            uint8_t *out_suffix, uint8_t type, const uint8_t *in,
                            const size_t in_len) {
   SSLAEADContext *aead = ssl->s3->aead_write_ctx.get();
-  uint8_t *extra_in = NULL;
+  uint8_t *extra_in = nullptr;
   size_t extra_in_len = 0;
-  if (!aead->is_null_cipher() &&
-      aead->ProtocolVersion() >= TLS1_3_VERSION) {
+  if (!aead->is_null_cipher() && ssl_protocol_version(ssl) >= TLS1_3_VERSION) {
     // TLS 1.3 hides the actual record type inside the encrypted data.
     extra_in = &type;
     extra_in_len = 1;
@@ -395,13 +289,12 @@ static bool do_seal_record(SSL *ssl, uint8_t *out_prefix, uint8_t *out,
     out_prefix[0] = type;
   }
 
-  uint16_t record_version = aead->RecordVersion();
-
+  uint16_t record_version = tls_record_version(ssl);
   out_prefix[1] = record_version >> 8;
   out_prefix[2] = record_version & 0xff;
   out_prefix[3] = ciphertext_len >> 8;
   out_prefix[4] = ciphertext_len & 0xff;
-  Span<const uint8_t> header = MakeSpan(out_prefix, SSL3_RT_HEADER_LENGTH);
+  Span<const uint8_t> header = Span(out_prefix, SSL3_RT_HEADER_LENGTH);
 
   // Ensure the sequence number update does not overflow.
   if (ssl->s3->write_sequence + 1 == 0) {
@@ -441,7 +334,7 @@ static bool tls_seal_scatter_suffix_len(const SSL *ssl, size_t *out_suffix_len,
                                         uint8_t type, size_t in_len) {
   size_t extra_in_len = 0;
   if (!ssl->s3->aead_write_ctx->is_null_cipher() &&
-      ssl->s3->aead_write_ctx->ProtocolVersion() >= TLS1_3_VERSION) {
+      ssl_protocol_version(ssl) >= TLS1_3_VERSION) {
     // TLS 1.3 adds an extra byte for encrypted record type.
     extra_in_len = 1;
   }
@@ -454,7 +347,8 @@ static bool tls_seal_scatter_suffix_len(const SSL *ssl, size_t *out_suffix_len,
     in_len -= 1;
   }
   // clang-format on
-  return ssl->s3->aead_write_ctx->SuffixLen(out_suffix_len, in_len, extra_in_len);
+  return ssl->s3->aead_write_ctx->SuffixLen(out_suffix_len, in_len,
+                                            extra_in_len);
 }
 
 // tls_seal_scatter_record seals a new record of type |type| and body |in| and
@@ -571,7 +465,7 @@ enum ssl_open_record_t ssl_process_alert(SSL *ssl, uint8_t *out_alert,
     // without specifying how to handle it. JDK11 misuses it to signal
     // full-duplex connection close after the handshake. As a workaround, skip
     // user_canceled as in TLS 1.2. This matches NSS and OpenSSL.
-    if (ssl->s3->have_version &&
+    if (ssl_has_final_version(ssl) &&
         ssl_protocol_version(ssl) >= TLS1_3_VERSION &&
         alert_descr != SSL_AD_USER_CANCELLED) {
       *out_alert = SSL_AD_DECODE_ERROR;
@@ -606,14 +500,15 @@ using namespace bssl;
 
 size_t SSL_max_seal_overhead(const SSL *ssl) {
   if (SSL_is_dtls(ssl)) {
-    return dtls_max_seal_overhead(ssl, dtls1_use_current_epoch);
+    // TODO(crbug.com/381113363): Use the 0-RTT epoch if writing 0-RTT.
+    return dtls_max_seal_overhead(ssl, ssl->d1->write_epoch.epoch());
   }
 
   size_t ret = SSL3_RT_HEADER_LENGTH;
   ret += ssl->s3->aead_write_ctx->MaxOverhead();
   // TLS 1.3 needs an extra byte for the encrypted record type.
   if (!ssl->s3->aead_write_ctx->is_null_cipher() &&
-      ssl->s3->aead_write_ctx->ProtocolVersion() >= TLS1_3_VERSION) {
+      ssl_protocol_version(ssl) >= TLS1_3_VERSION) {
     ret += 1;
   }
   if (ssl_needs_record_splitting(ssl)) {

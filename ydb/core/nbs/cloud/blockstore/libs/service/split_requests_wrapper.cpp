@@ -106,6 +106,11 @@ public:
                 .Error = MakeError(E_CANCELLED, "failed to acquire sglist")});
         }
 
+        // Acquire the future before subscribing to sub-request callbacks.
+        // A sub-request can be completed synchronously and swapped with another
+        // Promise inside the OnSubResponse() function.
+        auto future = Promise.GetFuture();
+
         for (const auto& subRequest: SubRequests) {
             auto subFuture =
                 TStorageAdapter::Execute(storage, callContext, subRequest);
@@ -117,7 +122,7 @@ public:
                 });
         }
 
-        return Promise.GetFuture();
+        return future;
     }
 
 private:

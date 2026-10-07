@@ -2,7 +2,19 @@
 
 #include <ydb/public/lib/base/msgbus_status.h>
 
+#include <cmath>
+
 namespace NKikimr::NPQ::NMLP {
+
+size_t EstimateFetchCountForNewGroups(size_t inflightMessageCount, size_t inflightGroupCount, size_t desiredNewGroups) {
+    if (inflightMessageCount == 0 || desiredNewGroups == 0 || inflightGroupCount == 0 || inflightMessageCount <= inflightGroupCount) {
+        return desiredNewGroups;
+    }
+    const float messagesPerGroup = static_cast<float>(inflightMessageCount) / inflightGroupCount;
+    const float messages = desiredNewGroups * messagesPerGroup;
+    const size_t result = std::ceil(messages);
+    return result;
+}
 
 std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(
     const TString& consumerName,
@@ -18,38 +30,12 @@ std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(
     read->SetClientId(consumerName);
     read->SetOffset(startOffset);
     read->SetTimeoutMs(0);
+    read->SetCanReadBatches(true);
     if (count) {
         read->SetCount(count.value());
     }
 
     return request;
-}
-
-std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
-    const TActorId& selfId,
-    const TString& consumerName,
-    ui64 startOffset,
-    ui64 count,
-    ui64 cookie,
-    ui64 nextPartNo
-) {
-    return std::make_unique<TEvPQ::TEvRead>(
-        cookie,
-        startOffset,
-        startOffset + count,
-        nextPartNo,
-        count,
-        TString{},
-        consumerName,
-        0,
-        8_MB,
-        0,
-        0,
-        "unknown",
-        false,
-        TActorId{},
-        selfId
-    );
 }
 
 std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(

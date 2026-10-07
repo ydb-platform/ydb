@@ -4,7 +4,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(FUSION_MAKE_DEQUE_01272013_1401)
+#ifndef FUSION_MAKE_DEQUE_01272013_1401
 #define FUSION_MAKE_DEQUE_01272013_1401
 
 #include <boost/fusion/support/config.hpp>

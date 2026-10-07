@@ -6,37 +6,23 @@ namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 namespace {
 
-std::shared_ptr<FormatConfig> MakeCsvConfig(const THashMap<TString, TString>& params) {
-    auto config = std::make_shared<CsvConfig>();
+void ConfigureCsv(FormatConfig& config, const THashMap<TString, TString>& params) {
     if (auto delimiter = params.FindPtr("csvdelimiter"); delimiter) {
         if (delimiter->size() != 1) {
             throw yexception() << "invalid parameter: csv_delimiter must be single character";
         }
-        config->ParseOpts.delimiter = (*delimiter)[0];
+        config.CsvParseOpts.delimiter = (*delimiter)[0];
     }
-    config->ConvOpts.timestamp_parsers.push_back(arrow::TimestampParser::MakeStrptime("\%Y-\%m-\%d \%H:\%M:\%S"));
-    return config;
+    config.CsvConvOpts.timestamp_parsers.push_back(arrow::TimestampParser::MakeStrptime("\%Y-\%m-\%d \%H:\%M:\%S"));
 }
 
-std::shared_ptr<FormatConfig> MakeTsvConfig(const THashMap<TString, TString>&) {
-    auto config = std::make_shared<TsvConfig>();
-    config->ParseOpts.delimiter = '\t';
-    config->ConvOpts.timestamp_parsers.push_back(arrow::TimestampParser::MakeStrptime("\%Y-\%m-\%d \%H:\%M:\%S"));
-    return config;
+void ConfigureTsv(FormatConfig& config) {
+    config.CsvParseOpts.delimiter = '\t';
+    config.CsvConvOpts.timestamp_parsers.push_back(arrow::TimestampParser::MakeStrptime("\%Y-\%m-\%d \%H:\%M:\%S"));
 }
 
-std::shared_ptr<FormatConfig> MakeParquetConfig(const THashMap<TString, TString>&) {
-    return std::make_shared<ParquetConfig>();
-}
-
-std::shared_ptr<FormatConfig> MakeJsonEachRowConfig(const THashMap<TString, TString>&) {
-    auto config = std::make_shared<JsonConfig>();
-    config->ParseOpts.newlines_in_values = true;
-    return config;
-}
-
-std::shared_ptr<FormatConfig> MakeJsonListConfig(const THashMap<TString, TString>&) {
-    return std::make_shared<JsonConfig>();
+void ConfigureJsonEachRow(FormatConfig& config) {
+    config.JsonParseOpts.newlines_in_values = true;
 }
 
 }
@@ -63,37 +49,39 @@ std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>&
     } else {
         throw yexception() << "format unspecified, use format parameter with type inferring";
     }
-    
+
     if (auto delimiter = params.FindPtr("csvdelimiter"); delimiter) {
-        if (format != EFileFormat::CsvWithNames) {
-            throw yexception() << "invalid parameter: csv_delimiter should only be specified for 'csv_with_names' format";
+        if (format != EFileFormat::CsvWithNames && format != EFileFormat::Csv) {
+            throw yexception() << "invalid parameter: csv_delimiter should only be specified for 'csv_with_names' or 'csv' format";
         }
     }
 
-    std::shared_ptr<FormatConfig> config;
+    auto config = std::make_shared<FormatConfig>();
+    config->Format = format;
+    config->ShouldMakeOptional = true;
+
     switch (format) {
     case EFileFormat::CsvWithNames:
-        config = MakeCsvConfig(params);
+    case EFileFormat::Csv:
+        ConfigureCsv(*config, params);
         break;
     case EFileFormat::TsvWithNames:
-        config = MakeTsvConfig(params);
+        ConfigureTsv(*config);
         break;
     case EFileFormat::Parquet:
-        config = MakeParquetConfig(params);
+        // No configuration needed.
         break;
     case EFileFormat::JsonEachRow:
-        config = MakeJsonEachRowConfig(params);
+        ConfigureJsonEachRow(*config);
         break;
     case EFileFormat::JsonList:
-        config = MakeJsonListConfig(params);
+        // Defaults are sufficient.
         break;
     case EFileFormat::Undefined:
     default:
         throw yexception() << "invalid parameter: unknown format specified";
     }
 
-    config->Format = format;
-    config->ShouldMakeOptional = true;
     return config;
 }
 

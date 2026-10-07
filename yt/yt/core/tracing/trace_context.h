@@ -12,8 +12,10 @@
 
 #include <yt/yt/core/concurrency/public.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/logging/tag.h>
+
+#include <library/cpp/yt/system/rw_spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
@@ -41,6 +43,12 @@ struct TSpanContext
 };
 
 void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStringBuf spec);
+
+//! Formats a span context as a W3C traceparent value.
+std::string FormatTraceParent(const TSpanContext& spanContext);
+
+//! Parses a W3C traceparent value into a span context.
+bool TryParseTraceParent(TStringBuf traceParent, TSpanContext& spanContext);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -136,12 +144,18 @@ public:
     std::optional<T> SetAllocationTag(const TAllocationTagKey& key, const T& value);
     void RemoveAllocationTag(const TAllocationTagKey& key);
 
+    const NLogging::TLoggingTagList& GetLoggingTags() const;
     //! Sets logging tag.
     /*!
      *  Not thread-safe.
      */
-    void SetLoggingTag(const std::string& loggingTag);
-    const std::string& GetLoggingTag() const;
+    void SetLoggingTags(NLogging::TLoggingTagList loggingTags);
+
+    //! Appends a tag to those inherited from the parent context.
+    template <class TValue>
+    void AddLoggingTag(NLogging::TLoggingTagKey key, const TValue& value);
+    template <class... TArgs>
+    void AddLoggingTagFormat(NLogging::TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args);
 
     TInstant GetStartTime() const;
 
@@ -242,7 +256,7 @@ private:
     const std::string SpanName_;
     TRequestId RequestId_;
     std::optional<std::string> TargetEndpoint_;
-    std::string LoggingTag_;
+    NLogging::TLoggingTagList LoggingTags_;
     const NProfiling::TCpuInstant StartTime_;
     std::atomic<NProfiling::TCpuInstant> LeakDeadline_;
 
@@ -251,7 +265,7 @@ private:
     std::atomic<NProfiling::TCpuInstant> FinishTime_ = 0;
     std::atomic<NProfiling::TCpuDuration> ElapsedCpuTime_ = 0;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     TTagList Tags_;
     TLogList Logs_;
     TAsyncChildrenList AsyncChildren_;
@@ -260,7 +274,7 @@ private:
     std::vector<std::pair<std::string, TProfilingTagValue>> ProfilingTags_;
 
     // Must NOT allocate memory while modifying AllocationTagList_ to avoid deadlock with allocator.
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, AllocationTagsLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, AllocationTagsLock_);
     TAtomicIntrusivePtr<TAllocationTagList> AllocationTagList_;
 
     std::atomic<bool> LeakDetected_;

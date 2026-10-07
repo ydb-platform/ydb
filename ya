@@ -32,6 +32,13 @@ def add_stage_start_to_environ(stage_name):
 RETRIES = 5
 HASH_PREFIX = 10
 
+# Matches devtools/ya/core/error/__init__.py ExitCodes.INFRASTRUCTURE_ERROR
+YA_BIN_DOWNLOAD_ERROR_EXIT_CODE = 12
+
+
+class YaBinDownloadError(Exception):
+    """Network-related failure while downloading ya-bin (DNS, connection, timeout, HTTP error, corrupted transfer)."""
+
 REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://devtools-registry.s3.yandex.net")
 
 # Please do not change this dict, it is updated automatically
@@ -39,33 +46,33 @@ REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://devtools-reg
 PLATFORM_MAP = {
     "data": {
         "win32": {
-            "md5": "2fb2d28269e3c911802238f63b1e89ea",
+            "md5": "72d693e0178ccadff56a4ce00819c58c",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/11779429875"
+                f"{REGISTRY_ENDPOINT}/13945881580"
             ]
         },
         "darwin": {
-            "md5": "53dc7f3663fd7559a7910e0ecb408ee1",
+            "md5": "45bc2cda1051001bf9fcebedd73549d7",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/11779428239"
+                f"{REGISTRY_ENDPOINT}/13945879781"
             ]
         },
         "darwin-arm64": {
-            "md5": "fe0b2486b97bfd53c30fd189fe2dbab4",
+            "md5": "b2daeca04879f587843b4978d40e38bd",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/11779426012"
+                f"{REGISTRY_ENDPOINT}/13945878396"
             ]
         },
         "linux-aarch64": {
-            "md5": "1d290430ec33bb864c4ae8214e0ffb95",
+            "md5": "d7af3e3f5b6817b8d44e3e2ec16a316a",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/11779424023"
+                f"{REGISTRY_ENDPOINT}/13945877150"
             ]
         },
         "linux": {
-            "md5": "638f33a7faaab0967894dfbbf7afed0b",
+            "md5": "e9bd23d72ab8f20c56ee3ceb2b18ed27",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/11779431573"
+                f"{REGISTRY_ENDPOINT}/13945882988"
             ]
         }
     }
@@ -180,13 +187,19 @@ def _fetch(url, into):
     md5 = hashlib.md5()
     sys.stderr.write('Downloading %s ' % url)
     sys.stderr.flush()
-    conn = urlopen(request, timeout=10)
+    try:
+        conn = urlopen(request, timeout=10)
+    except Exception as e:
+        raise YaBinDownloadError('Failed to connect to {}: {}'.format(url, e))
     sys.stderr.write('[')
     sys.stderr.flush()
     try:
         with open(into, 'wb') as f:
             while True:
-                block = conn.read(1024 * 1024)
+                try:
+                    block = conn.read(1024 * 1024)
+                except Exception as e:
+                    raise YaBinDownloadError('Failed to download {}: {}'.format(url, e))
                 sys.stderr.write('.')
                 sys.stderr.flush()
                 if block:
@@ -206,8 +219,17 @@ def _atomic_fetch(url, into, md5):
     try:
         real_md5 = _fetch(url, tmp_dest)
         if real_md5 != md5:
-            raise Exception('MD5 mismatched: %s differs from %s' % (real_md5, md5))
-        os.rename(tmp_dest, into)
+            # Treat checksum mismatch as a network problem: it means the transfer was corrupted or truncated
+            raise YaBinDownloadError('MD5 mismatched: %s differs from %s' % (real_md5, md5))
+        try:
+            os.rename(tmp_dest, into)
+        except OSError as e:
+            import errno
+            # EEXIST - windows: a concurrent ya has already fetched the same file.
+            # The name is the md5 of the content, so the existing file is identical - keep it.
+            # On POSIX rename() replaces the target silently and never gets here.
+            if e.errno != errno.EEXIST:
+                raise
         sys.stderr.write('OK\n')
     except Exception as e:
         sys.stderr.write('ERROR: ' + str(e) + '\n')
@@ -284,8 +306,8 @@ def _get_dir(urls, md5, ya_name):
             os.rename(tmp_dir, dest_dir)
         except OSError as e:
             import errno
-
-            if e.errno != errno.ENOTEMPTY:
+            # EEXIST - windows, ENOTEMPTY - linux, EEXIST is also permitted by POSIX
+            if e.errno not in (errno.ENOTEMPTY, errno.EEXIST):
                 raise
 
         return dest_dir
@@ -375,6 +397,9 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+    except YaBinDownloadError as e:
+        sys.stderr.write('ERROR: ' + str(e) + '\n')
+        sys.exit(YA_BIN_DOWNLOAD_ERROR_EXIT_CODE)
     except Exception as e:
         sys.stderr.write('ERROR: ' + str(e) + '\n')
         from traceback import format_exc

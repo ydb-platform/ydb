@@ -76,6 +76,7 @@ public:
         using TRequestType = decltype(typename TCallType::TRequestEventType().Request);
         using TResponseType = decltype(typename TCallType::TResponseEventType().Response);
         const auto& requestId = ev->Get()->RequestId;
+        const auto& peerName = ev->Get()->PeerName;
         if (!Connection) {
             TString schema;
             if (!Config.UseXds) {
@@ -96,6 +97,9 @@ public:
         }
         if (requestId) {
             meta.Aux.push_back({"x-request-id", requestId});
+        }
+        if (peerName) {
+            meta.Aux.push_back({"x-user-ip", peerName});
         }
         for (const auto& [k, v] : ev->Get()->Headers) {
             meta.Aux.push_back({k, v});
@@ -128,6 +132,7 @@ public:
         const TDuration requestTimeout = TDuration::MilliSeconds(settings.RequestTimeoutMs);
         NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, requestTimeout, NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
         config.EnableSsl = settings.EnableSsl;
+        config.UserAgentPrefix = settings.UserAgentPrefix;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = settings.GrpcKeepAliveTimeMs;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = settings.GrpcKeepAliveTimeoutMs;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS] = 1;

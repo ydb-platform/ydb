@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     o1 XOR o2 AS xor,
     o1 XOR o1 AS xor_same_o1,

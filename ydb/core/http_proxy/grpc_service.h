@@ -1,14 +1,11 @@
 #pragma once
 
-#include <ydb/core/http_proxy/events.h>
-
-#include <ydb/library/actors/core/actorsystem.h>
-
-#include <ydb/library/grpc/server/grpc_server.h>
-#include <ydb/library/actors/core/actor.h>
+#include "events.h"
 
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
-
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/grpc/server/grpc_server.h>
 
 namespace NKikimr::NHttpProxy {
 
@@ -16,8 +13,7 @@ class TGRpcDiscoveryService
     : public NYdbGrpc::TGrpcServiceBase<Ydb::Discovery::V1::DiscoveryService>
 {
 public:
-    TGRpcDiscoveryService(NActors::TActorSystem* system, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
-                 TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
+    TGRpcDiscoveryService(NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
 
@@ -27,8 +23,7 @@ private:
     NActors::TActorSystem* ActorSystem_;
     grpc::ServerCompletionQueue* CQ_;
 
-    std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider_;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
 };
 
-} // namespace NKikimr
+} // namespace NKikimr::NHttpProxy

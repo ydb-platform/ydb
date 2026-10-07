@@ -4,6 +4,7 @@ SRCS(
     background_controller.cpp
     blob.cpp
     blob_cache.cpp
+    columnshard_find_empty_history_intervals.cpp
     columnshard.cpp
     columnshard__init.cpp
     columnshard__locks.cpp
@@ -14,7 +15,6 @@ SRCS(
     columnshard__propose_cancel.cpp
     columnshard__propose_transaction.cpp
     columnshard__scan.cpp
-    columnshard__statistics.cpp
     columnshard__tx_abort.cpp
     columnshard__write.cpp
     columnshard__write_index.cpp
@@ -26,6 +26,7 @@ SRCS(
     counters.cpp
     defs.cpp
     inflight_request_tracker.cpp
+    scan_snapshot_guard.cpp
     tables_manager.cpp
     write_actor.cpp
 )
@@ -34,8 +35,10 @@ GENERATE_ENUM_SERIALIZATION(columnshard.h)
 GENERATE_ENUM_SERIALIZATION(columnshard_impl.h)
 
 PEERDIR(
+    library/cpp/monlib/service/pages
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/cms/console
     ydb/core/control/lib
     ydb/core/formats
     ydb/core/kqp
@@ -62,6 +65,7 @@ PEERDIR(
     ydb/core/tx/columnshard/normalizer
     ydb/core/tx/columnshard/operations
     ydb/core/tx/columnshard/overload_manager
+    ydb/core/tx/columnshard/flow_control_manager
     ydb/core/tx/columnshard/resource_subscriber
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/subscriber
@@ -71,16 +75,17 @@ PEERDIR(
     ydb/core/tx/columnshard/transactions/operators
     ydb/core/tx/columnshard/tx_reader
     ydb/core/tx/conveyor/usage
-    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/general_cache/usage
     ydb/core/tx/long_tx_service/public
-    ydb/core/tx/priorities/service
+    ydb/core/tx/priorities/usage
     ydb/core/tx/tiering
     ydb/core/tx/time_cast
     ydb/core/tx/tracing
     ydb/core/util
     ydb/library/actors/core
     ydb/library/chunks_limiter
+    ydb/library/slide_limiter/usage
     ydb/library/yql/dq/actors/compute
     ydb/public/api/protos
 )
@@ -103,6 +108,10 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    ut_cut_history
     ut_rw
     ut_schema
+    backup
+    data_accessor
+    export
 )

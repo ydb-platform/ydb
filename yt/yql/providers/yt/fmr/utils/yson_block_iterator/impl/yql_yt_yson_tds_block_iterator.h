@@ -24,10 +24,17 @@ public:
         std::vector<TString> neededColumns,
         TString serializedColumnGroupsSpec = {},
         TMaybe<bool> isFirstRowKeysInclusive = Nothing(),
+        TMaybe<bool> isLastRowKeysInclusive = Nothing(),
         TMaybe<TString> firstRowKeys = Nothing(),
         TMaybe<TString> lastRowKeys = Nothing(),
-        ui64 readAheadChunks = 4
-
+        ui64 readAheadChunks = 4,
+        // How many leading keyColumns actually define a reduce group (e.g. _yql_key_hash +
+        // reduceBy, excluding a join's _yql_sort tiebreaker). Boundary comparisons stop after
+        // this many columns instead of running to the end of keyColumns - see the comment on
+        // CompareRowToBoundaryPrefix for why relying on the boundary blob happening to omit
+        // trailing columns is not safe. Defaults to comparing every column in keyColumns, which
+        // is correct whenever keyColumns has no trailing tiebreaker (e.g. non-reduce contexts).
+        TMaybe<size_t> numBoundaryKeyColumns = Nothing()
     );
 
     ~TTableDataServiceBlockIterator() final;
@@ -67,10 +74,12 @@ private:
     TMaybe<TFmrTableKeysBoundary> FirstBoundary_;
     TMaybe<TFmrTableKeysBoundary> LastBoundary_;
     bool IsFirstBoundInclusive_ = true;
+    bool IsLastBoundInclusive_ = true;
 
     std::vector<TString> GroupNamesToRead_;
 
     ui64 ReadAheadChunks_ = 4;
+    const size_t NumBoundaryKeyColumns_;
     std::deque<TPrefetchEntry> PrefetchQueue_;
 };
 

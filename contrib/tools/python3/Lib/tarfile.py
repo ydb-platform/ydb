@@ -259,6 +259,32 @@ def copyfileobj(src, dst, length=None, exception=OSError, bufsize=None):
         dst.write(buf)
     return
 
+# Maximum number of bytes read in a single call when reading a member's
+# extended header (a GNU long name/link or a pax header).  The size of such
+# a header is taken from the archive and is not trustworthy, so it is read in
+# bounded chunks to avoid a huge up-front allocation when a crafted or
+# truncated archive claims far more data than the file actually contains
+# (gh-151497).
+_EXTHEADER_READ_CHUNK = 1024 * 1024  # 1 MiB
+
+def _safe_read(fileobj, size):
+    """Read up to *size* bytes from *fileobj* in bounded chunks.
+
+    Returns the same bytes as ``fileobj.read(size)`` would (including a short
+    result at end of file), but limits pre-allocation, so an
+    oversized size field in a crafted header cannot force a huge allocation.
+    """
+    if size <= _EXTHEADER_READ_CHUNK:
+        return fileobj.read(size)
+    chunks = []
+    while size > 0:
+        chunk = fileobj.read(min(size, _EXTHEADER_READ_CHUNK))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        size -= len(chunk)
+    return b"".join(chunks)
+
 def _safe_print(s):
     encoding = getattr(sys.stdout, 'encoding', None)
     if encoding is not None:
@@ -489,7 +515,7 @@ class _Stream:
 
         if flag & 4:
             xlen = ord(self.__read(1)) + 256 * ord(self.__read(1))
-            self.read(xlen)
+            self.__read(xlen)
         if flag & 8:
             while True:
                 s = self.__read(1)
@@ -515,7 +541,9 @@ class _Stream:
         if pos - self.pos >= 0:
             blocks, remainder = divmod(pos - self.pos, self.bufsize)
             for i in range(blocks):
-                self.read(self.bufsize)
+                data = self.read(self.bufsize)
+                if not data:
+                    break
             self.read(remainder)
         else:
             raise StreamError("seeking backwards is not allowed")
@@ -819,16 +847,22 @@ def _get_filtered_attrs(member, dest_path, for_data=True):
         if member.islnk() or member.issym():
             if os.path.isabs(member.linkname):
                 raise AbsoluteLinkError(member)
+            # A link member that resolves to the destination directory itself
+            # would replace it with a (sym)link, redirecting the destination
+            # for all subsequent members.
+            if target_path == dest_path:
+                raise OutsideDestinationError(member, target_path)
             normalized = os.path.normpath(member.linkname)
             if normalized != member.linkname:
                 new_attrs['linkname'] = normalized
             if member.issym():
-                target_path = os.path.join(dest_path,
-                                           os.path.dirname(name),
-                                           member.linkname)
+                # The symlink is created at `name` with trailing separators
+                # stripped, so its target is relative to the directory
+                # containing that path.
+                link_dir = os.path.dirname(name.rstrip('/' + os.sep))
+                target_path = os.path.join(dest_path, link_dir, normalized)
             else:
-                target_path = os.path.join(dest_path,
-                                           member.linkname)
+                target_path = os.path.join(dest_path, normalized)
             target_path = os.path.realpath(target_path,
                                            strict=os.path.ALLOW_MISSING)
             if os.path.commonpath([target_path, dest_path]) != dest_path:
@@ -882,11 +916,14 @@ class TarInfo(object):
         size = 'Size in bytes.',
         mtime = 'Time of last modification.',
         chksum = 'Header checksum.',
-        type = ('File type. type is usually one of these constants: '
-                'REGTYPE, AREGTYPE, LNKTYPE, SYMTYPE, DIRTYPE, FIFOTYPE, '
-                'CONTTYPE, CHRTYPE, BLKTYPE, GNUTYPE_SPARSE.'),
+        type = ('File type.  type is usually one of these constants: '
+                'REGTYPE,\n'
+                'AREGTYPE, LNKTYPE, SYMTYPE, DIRTYPE, FIFOTYPE, '
+                'CONTTYPE, CHRTYPE,\n'
+                'BLKTYPE, GNUTYPE_SPARSE.'),
         linkname = ('Name of the target file name, which is only present '
-                    'in TarInfo objects of type LNKTYPE and SYMTYPE.'),
+                    'in TarInfo\n'
+                    'objects of type LNKTYPE and SYMTYPE.'),
         uname = 'User name.',
         gname = 'Group name.',
         devmajor = 'Device major number.',
@@ -894,7 +931,8 @@ class TarInfo(object):
         offset = 'The tar header starts here.',
         offset_data = "The file's data starts here.",
         pax_headers = ('A dictionary containing key-value pairs of an '
-                       'associated pax extended header.'),
+                       'associated pax\n'
+                       'extended header.'),
         sparse = 'Sparse member information.',
         _tarfile = None,
         _sparse_structs = None,
@@ -1267,6 +1305,20 @@ class TarInfo(object):
     @classmethod
     def frombuf(cls, buf, encoding, errors):
         """Construct a TarInfo object from a 512 byte bytes object.
+
+        To support the old v7 tar format AREGTYPE headers are
+        transformed to DIRTYPE headers if their name ends in '/'.
+        """
+        return cls._frombuf(buf, encoding, errors)
+
+    @classmethod
+    def _frombuf(cls, buf, encoding, errors, *, dircheck=True):
+        """Construct a TarInfo object from a 512 byte bytes object.
+
+        If ``dircheck`` is set to ``True`` then ``AREGTYPE`` headers will
+        be normalized to ``DIRTYPE`` if the name ends in a trailing slash.
+        ``dircheck`` must be set to ``False`` if this function is called
+        on a follow-up header such as ``GNUTYPE_LONGNAME``.
         """
         if len(buf) == 0:
             raise EmptyHeaderError("empty header")
@@ -1297,7 +1349,7 @@ class TarInfo(object):
 
         # Old V7 tar format represents a directory as a regular
         # file with a trailing slash.
-        if obj.type == AREGTYPE and obj.name.endswith("/"):
+        if dircheck and obj.type == AREGTYPE and obj.name.endswith("/"):
             obj.type = DIRTYPE
 
         # The old GNU sparse format occupies some of the unused
@@ -1332,8 +1384,15 @@ class TarInfo(object):
         """Return the next TarInfo object from TarFile object
            tarfile.
         """
+        return cls._fromtarfile(tarfile)
+
+    @classmethod
+    def _fromtarfile(cls, tarfile, *, dircheck=True):
+        """
+        See dircheck documentation in _frombuf().
+        """
         buf = tarfile.fileobj.read(BLOCKSIZE)
-        obj = cls.frombuf(buf, tarfile.encoding, tarfile.errors)
+        obj = cls._frombuf(buf, tarfile.encoding, tarfile.errors, dircheck=dircheck)
         obj.offset = tarfile.fileobj.tell() - BLOCKSIZE
         return obj._proc_member(tarfile)
 
@@ -1387,11 +1446,11 @@ class TarInfo(object):
         """Process the blocks that hold a GNU longname
            or longlink member.
         """
-        buf = tarfile.fileobj.read(self._block(self.size))
+        buf = _safe_read(tarfile.fileobj, self._block(self.size))
 
         # Fetch the next header and process it.
         try:
-            next = self.fromtarfile(tarfile)
+            next = self._fromtarfile(tarfile, dircheck=False)
         except HeaderError as e:
             raise SubsequentHeaderError(str(e)) from None
 
@@ -1443,7 +1502,7 @@ class TarInfo(object):
            POSIX.1-2008.
         """
         # Read the header information.
-        buf = tarfile.fileobj.read(self._block(self.size))
+        buf = _safe_read(tarfile.fileobj, self._block(self.size))
 
         # A pax header stores supplemental information for either
         # the following file (extended) or all following files
@@ -1526,7 +1585,7 @@ class TarInfo(object):
 
         # Fetch the next header.
         try:
-            next = self.fromtarfile(tarfile)
+            next = self._fromtarfile(tarfile, dircheck=False)
         except HeaderError as e:
             raise SubsequentHeaderError(str(e)) from None
 
@@ -2177,10 +2236,11 @@ class TarFile(object):
         return tarinfo
 
     def list(self, verbose=True, *, members=None):
-        """Print a table of contents to sys.stdout. If `verbose' is False, only
-           the names of the members are printed. If it is True, an `ls -l'-like
-           output is produced. `members' is optional and must be a subset of the
-           list returned by getmembers().
+        """Print a table of contents to sys.stdout.
+
+        If `verbose' is False, only the names of the members are printed.
+        If it is True, an `ls -l'-like output is produced. `members' is
+        optional and must be a subset of the list returned by getmembers().
         """
         # Convert tarinfo type to stat type.
         type2mode = {REGTYPE: stat.S_IFREG, SYMTYPE: stat.S_IFLNK,
@@ -2271,10 +2331,12 @@ class TarFile(object):
             self.addfile(tarinfo)
 
     def addfile(self, tarinfo, fileobj=None):
-        """Add the TarInfo object `tarinfo' to the archive. If `tarinfo' represents
-           a non zero-size regular file, the `fileobj' argument should be a binary file,
-           and tarinfo.size bytes are read from it and added to the archive.
-           You can create TarInfo objects directly, or by using gettarinfo().
+        """Add the TarInfo object `tarinfo' to the archive.
+
+        If `tarinfo' represents a non zero-size regular file, the `fileobj'
+        argument should be a binary file, and tarinfo.size bytes are read
+        from it and added to the archive. You can create TarInfo objects
+        directly, or by using gettarinfo().
         """
         self._check("awx")
 
@@ -2413,7 +2475,8 @@ class TarFile(object):
         tarinfo, unfiltered = self._get_extract_tarinfo(
             member, filter_function, path)
         if tarinfo is not None:
-            self._extract_one(tarinfo, path, set_attrs, numeric_owner)
+            self._extract_one(tarinfo, path, set_attrs, numeric_owner,
+                              filter_function=filter_function)
 
     def _get_extract_tarinfo(self, member, filter_function, path):
         """Get (filtered, unfiltered) TarInfos from *member*
@@ -2685,6 +2748,9 @@ class TarFile(object):
                     "makelink_with_filter: if filter_function is not None, "
                     + "extraction_root must also not be None")
             try:
+                filter_function(
+                    unfiltered.replace(name=tarinfo.name, deep=False),
+                    extraction_root)
                 filtered = filter_function(unfiltered, extraction_root)
             except _FILTER_ERRORS as cause:
                 raise LinkFallbackError(tarinfo, unfiltered.name) from cause

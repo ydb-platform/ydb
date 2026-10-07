@@ -23,6 +23,16 @@ namespace {
 std::function<TAiPresets()> PresetsInit;
 std::optional<TAiPresets> Presets;
 
+// No-op base config used for in-memory profiles built directly from a preset.
+// Such profiles never persist their changes — OnConfigChanged is a no-op,
+// so SetString/SetInt mutate only the local YAML node and never trigger Flush.
+class TNoOpYamlConfig final : public TYamlConfigBase {
+protected:
+    void OnConfigChanged() final {}
+};
+
+const TYamlConfigBase::TPtr NoOpBaseConfig = std::make_shared<TNoOpYamlConfig>();
+
 template <typename TInfo>
 std::vector<std::pair<TString, TInfo>> GetOrderedInfo(const std::unordered_map<TString, TInfo>& info) {
     std::vector<std::pair<TString, TInfo>> orderedInfo;
@@ -230,6 +240,16 @@ std::optional<EEnum> EnumFromYaml(const YAML::Node& config, const TString& key) 
     return std::nullopt;
 }
 
+bool BoolFromYaml(const YAML::Node& config, const TString& key, bool defaultValue) {
+    if (auto keyNode = config[key]) {
+        auto keyValue = keyNode.as<bool>(defaultValue);
+        return keyValue;
+    }
+
+    YDB_CLI_LOG(Debug, "YAML config has no bool key: " << key);
+    return defaultValue;
+}
+
 template <typename TValue>
 TString JoinOptionDesc(const TString& info, const TValue& currentValue) {
     if (const TString valueStr = ToString(currentValue)) {
@@ -344,7 +364,7 @@ std::optional<TString> TAiModelConfig::GetApiToken(bool allowEnv) {
             YDB_CLI_LOG(Debug, "Fetched token from env: " << BlurSecret(token));
             return token;
         }
-    
+
         YDB_CLI_LOG(Debug, "No token found");
         return "";
     }
@@ -778,6 +798,18 @@ TInteractiveConfigurationManager::~TInteractiveConfigurationManager() {
     Flush();
 }
 
+bool TInteractiveConfigurationManager::IsSystemPromptEnabled() const {
+    return BoolFromYaml(Config, SYSTEM_PROMPT_ENABLED_PROPERTY, /* defaultValue */ true);
+}
+
+TInteractiveConfigurationManager::EToolAutoAction TInteractiveConfigurationManager::GetToolAutoAction(const TString& toolName) {
+    const auto& tools = Config[TOOL_AUTO_ACTION_PROPERTY];
+    if (!tools) {
+        return EToolAutoAction::Ask;
+    }
+    return EnumFromYaml<EToolAutoAction>(tools, toolName).value_or(EToolAutoAction::Ask);
+}
+
 TString TInteractiveConfigurationManager::GetActiveAiProfileId() const {
     return StringFromYaml(Config, CURRENT_PROFILE_PROPERTY);
 }
@@ -862,7 +894,13 @@ TAiModelConfig::TPtr TInteractiveConfigurationManager::ActivateAiProfile(const T
 
     if (const auto& defaultPreset = GetAiPresets().GetMetaInfo().DefaultPreset) {
         welcomeMessagePrinter(TStringBuilder() << "Using model: " << TLogger::EntityName(GetAiPresets().GetPreset(defaultPreset)->Info));
-        return CreateAiProfile(defaultPreset);
+        // The returned profile is in-memory (empty Id). Heal a possible stale
+        // current_profile pointing to a no-longer-existing profile, so the
+        // AiModel.Id == YAML.current_profile invariant holds.
+        if (StringFromYaml(Config, CURRENT_PROFILE_PROPERTY)) {
+            ChangeActiveAiProfile("");
+        }
+        return CreateInMemoryProfileFromPreset(defaultPreset);
     }
 
     welcomeMessagePrinter("Please setup your first model to continue.");
@@ -924,6 +962,12 @@ TAiModelConfig::TPtr TInteractiveConfigurationManager::SelectAiProfile() {
 
 void TInteractiveConfigurationManager::RemoveAiProfile(const TString& id) {
     Config[AI_PROFILES_PROPERTY].remove(id);
+    // If we removed the currently active profile, drop current_profile too —
+    // otherwise it dangles to a non-existing profile and breaks the
+    // AiModel.Id == YAML.current_profile invariant on the next session.
+    if (StringFromYaml(Config, CURRENT_PROFILE_PROPERTY) == id) {
+        Config[CURRENT_PROFILE_PROPERTY] = "";
+    }
     OnConfigChanged();
     Flush();
 }
@@ -981,18 +1025,44 @@ TAiModelConfig::TPtr TInteractiveConfigurationManager::CreateAiProfile(const TSt
         return nullptr;
     }
 
+    return PersistProfile(profile.GetConfig(), profile.GetName());
+}
+
+TAiModelConfig::TPtr TInteractiveConfigurationManager::PromoteInMemoryProfile(TAiModelConfig::TPtr profile) {
+    Y_VALIDATE(profile, "Profile must not be null");
+    Y_VALIDATE(profile->GetId().empty(), "Profile is already persisted (Id is non-empty)");
+
+    return PersistProfile(profile->GetConfig(), profile->GetName());
+}
+
+TAiModelConfig::TPtr TInteractiveConfigurationManager::PersistProfile(YAML::Node config, const TString& preferredName) {
     const auto& existingAiProfiles = ListAiProfiles();
-    auto id = profile.GetName();
+    auto id = preferredName;
     TString suffix;
     for (ui64 i = 0; existingAiProfiles.find(id + suffix) != existingAiProfiles.end(); ++i) {
         suffix = TStringBuilder() << "_" << i;
     }
     id += suffix;
 
-    Config[AI_PROFILES_PROPERTY][id] = profile.GetConfig();
+    Config[AI_PROFILES_PROPERTY][id] = std::move(config);
     ChangeActiveAiProfile(id);
 
     return std::make_shared<TAiModelConfig>(Config[AI_PROFILES_PROPERTY][id], shared_from_this(), id);
+}
+
+TAiModelConfig::TPtr TInteractiveConfigurationManager::CreateInMemoryProfileFromPreset(const TString& presetId) {
+    const auto preset = GetAiPresets().GetPreset(presetId);
+    Y_VALIDATE(preset, "No preset configured with id: " << presetId);
+
+    YAML::Node node;
+    node[TAiModelConfig::PRESET_ID_PROPERTY] = presetId;
+    if (preset->Info) {
+        node[TAiModelConfig::NAME_PROPERTY] = preset->Info;
+    }
+
+    // Empty Id marks this profile as in-memory only: it is not present in
+    // ai_profiles section of the YAML config, and current_profile is not set.
+    return std::make_shared<TAiModelConfig>(std::move(node), NoOpBaseConfig, TString{});
 }
 
 void TInteractiveConfigurationManager::LoadProfile() {
@@ -1016,6 +1086,14 @@ void TInteractiveConfigurationManager::LoadProfile() {
         Config[AI_PROFILES_PROPERTY] = YAML::Node();
         OnConfigChanged();
     }
+
+    if (auto tools = Config[TOOL_AUTO_ACTION_PROPERTY]; tools && !tools.IsMap()) {
+        YDB_CLI_LOG(Notice, "$.tool_auto_action section has unexpected type " << static_cast<ui64>(tools.Type()) << ", changed to map and cleared");
+        Config[TOOL_AUTO_ACTION_PROPERTY] = YAML::Node();
+        OnConfigChanged();
+    }
+
+    Flush();
 }
 
 } // namespace NYdb::NConsoleClient

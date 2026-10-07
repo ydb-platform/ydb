@@ -295,7 +295,7 @@ private:
             const ui64 mask1 = MASK(0x20) | MASK(0x0a) | MASK(0x0d) | MASK(0x09) | MASK(0x22) | MASK(0x23) | MASK(0x28) | MASK(0x29) | MASK(0x27);
             const ui64 mask2 = MASK(0x00) | MASK(0x38);
 #undef MASK
-            if (!(c & 0x80) && ((1ull << (c & 0x3f)) & (c <= 0x3f ? mask1 : mask2))) {
+            if (!(c & 0x80) && ((1ULL << (c & 0x3f)) & (c <= 0x3f ? mask1 : mask2))) {
                 if (IsWhitespace(c) || IsListStart(c) || IsListEnd(c)) {
                     break;
                 }
@@ -444,7 +444,6 @@ private:
         return true;
     }
 
-private:
     TAstParserContext Ctx_;
     TIssues Issues_;
 };
@@ -614,17 +613,6 @@ void PrettyPrintNode(
     }
 }
 
-void DestroyNode(TAstNode* node) {
-    if (node->IsList()) {
-        for (ui32 i = 0; i < node->GetChildrenCount(); ++i) {
-            DestroyNode(node->GetChild(i));
-        }
-    }
-
-    if (node != &TAstNode::QuoteAtom) {
-        node->Destroy();
-    }
-}
 } // namespace
 
 TAstParseResult::~TAstParseResult() {
@@ -653,10 +641,7 @@ TAstParseResult& TAstParseResult::operator=(TAstParseResult&& other) {
 }
 
 void TAstParseResult::Destroy() {
-    if (Root) {
-        DestroyNode(Root);
-        Root = nullptr;
-    }
+    Root = nullptr;
 }
 
 TAstParseResult ParseAst(const TStringBuf& str, TMemoryPool* externalPool, const TString& file)
@@ -673,21 +658,21 @@ void TAstNode::PrettyPrintTo(IOutputStream& out, ui32 flags) const {
     PrettyPrintNode(out, *this, 0, 0, 0, flags);
 }
 
-TAstNode TAstNode::QuoteAtom(TPosition(0, 0), TStringBuf("quote"), TNodeFlags::Default);
+TAstNode TAstNode::QuoteAtom(0, 0, TStringBuf(), TStringBuf("quote"), TNodeFlags::Default);
 
 } // namespace NYql
 
 template <>
-void Out<NYql::TAstNode::EType>(class IOutputStream& o, NYql::TAstNode::EType x) {
+void Out<NYql::TAstNode::EType>(class IOutputStream& out, NYql::TAstNode::EType value) {
 #define YQL_AST_NODE_TYPE_MAP_TO_STRING_IMPL(name, ...) \
     case ::NYql::TAstNode::name:                        \
-        o << #name;                                     \
+        out << #name;                                   \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_AST_NODE_TYPE_MAP(YQL_AST_NODE_TYPE_MAP_TO_STRING_IMPL)
         default:
-            o << static_cast<int>(x);
+            out << static_cast<int>(value);
             return;
     }
 }

@@ -300,6 +300,7 @@ struct TContext {
                 return Expr.MakeType<TStreamExprType>(r);
             } else if (content == TStringBuf("Struct")) {
                 TVector<const TItemExprType*> children;
+                children.reserve(node.GetChildrenCount());
                 for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
                     auto r = CompileTypeAnnotationNode(*node.GetChild(index));
                     if (!r) {
@@ -322,6 +323,7 @@ struct TContext {
                 return ann;
             } else if (content == TStringBuf("Multi")) {
                 TTypeAnnotationNode::TListType children;
+                children.reserve(node.GetChildrenCount());
                 for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
                     auto r = CompileTypeAnnotationNode(*node.GetChild(index));
                     if (!r) {
@@ -339,6 +341,7 @@ struct TContext {
                 return ann;
             } else if (content == TStringBuf("Tuple")) {
                 TTypeAnnotationNode::TListType children;
+                children.reserve(node.GetChildrenCount());
                 for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
                     auto r = CompileTypeAnnotationNode(*node.GetChild(index));
                     if (!r) {
@@ -419,6 +422,7 @@ struct TContext {
                 }
 
                 TVector<TCallableExprType::TArgumentInfo> args;
+                args.reserve(node.GetChildrenCount());
                 size_t optCount = 0;
                 TString payload;
                 if (!node.GetChild(1)->IsList()) {
@@ -673,6 +677,7 @@ TAstNode* ConvertTypeAnnotationToAst(const TTypeAnnotationNode& annotation, TMem
         case ETypeAnnotationKind::Tuple: {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Tuple"), pool);
             TSmallVec<TAstNode*> children;
+            children.reserve(annotation.Cast<TTupleExprType>()->GetItems().size() + 1U);
             children.push_back(self);
             for (auto& child : annotation.Cast<TTupleExprType>()->GetItems()) {
                 children.push_back(ConvertTypeAnnotationToAst(*child, pool, refAtoms));
@@ -684,6 +689,7 @@ TAstNode* ConvertTypeAnnotationToAst(const TTypeAnnotationNode& annotation, TMem
         case ETypeAnnotationKind::Struct: {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Struct"), pool);
             TSmallVec<TAstNode*> children;
+            children.reserve(annotation.Cast<TStructExprType>()->GetItems().size() + 1U);
             children.push_back(self);
             for (auto& child : annotation.Cast<TStructExprType>()->GetItems()) {
                 children.push_back(ConvertTypeAnnotationToAst(*child, pool, refAtoms));
@@ -774,6 +780,7 @@ TAstNode* ConvertTypeAnnotationToAst(const TTypeAnnotationNode& annotation, TMem
             }
 
             TSmallVec<TAstNode*> children;
+            children.reserve(callable->GetArguments().size() + 3U);
             children.push_back(self);
 
             children.push_back(TAstNode::NewList(TPosition(), mainSettings.data(), mainSettings.size(), pool));
@@ -849,6 +856,7 @@ TAstNode* ConvertTypeAnnotationToAst(const TTypeAnnotationNode& annotation, TMem
         case ETypeAnnotationKind::Multi: {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Multi"), pool);
             TSmallVec<TAstNode*> children;
+            children.reserve(annotation.Cast<TMultiExprType>()->GetItems().size() + 1U);
             children.push_back(self);
             for (auto& child : annotation.Cast<TMultiExprType>()->GetItems()) {
                 children.push_back(ConvertTypeAnnotationToAst(*child, pool, refAtoms));
@@ -951,7 +959,10 @@ TExprNode::TListType Compile(const TAstNode& node, TContext& ctx);
 
 TExprNode::TPtr CompileQuote(const TAstNode& node, TContext& ctx) {
     if (node.IsAtom()) {
-        return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), node.GetContent(), node.GetFlags()));
+        ui32 flags = node.GetFlags();
+        flags &= ~TAstNodeFlags::UnstableFormat;
+
+        return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), node.GetContent(), flags));
     } else {
         TExprNode::TListType children;
         children.reserve(node.GetChildrenCount());
@@ -991,6 +1002,7 @@ TExprNode::TListType CompileLambda(const TAstNode& node, TContext& ctx) {
 
     ctx.PushFrame();
     TExprNode::TListType argNodes;
+    argNodes.reserve(params->GetChildrenCount());
     for (ui32 index = 0; index < params->GetChildrenCount(); ++index) {
         auto arg = params->GetChild(index);
         auto lambdaArg = ctx.ProcessNode(*arg, ctx.Expr.NewArgument(arg->GetPosition(), arg->GetContent()));
@@ -1099,7 +1111,7 @@ TExprNode::TPtr CompileBind(const TAstNode& node, TContext& ctx) {
             return nullptr;
         }
 
-        return ctx.Expr.DeepCopy(*ex->second, exportsPtr->ExprCtx(), ctx.DeepClones, true, false);
+        return ctx.Expr.DeepCopy(*ex->second, exportsPtr->ExprCtx(), ctx.DeepClones, /*internStrings=*/true, /*copyTypes=*/false);
     } else {
         /* clang-format off */
         const auto stub = ctx.Expr.NewCallable(node.GetPosition(), "InstanceOf",
@@ -1465,7 +1477,7 @@ TExprNode::TListType CompileFunction(const TAstNode& root, TContext& ctx, bool t
                     return {};
                 }
             } else if (firstChild->GetContent() == TStringBuf("declare")) {
-                if (!CompileDeclare(*node, ctx, false)) {
+                if (!CompileDeclare(*node, ctx, /*checkOnly=*/false)) {
                     return {};
                 }
             } else if (firstChild->GetContent() == TStringBuf("package")) {
@@ -1530,7 +1542,7 @@ TExprNode::TListType CompileFunction(const TAstNode& root, TContext& ctx, bool t
                 return {};
             }
 
-            if (!CompileDeclare(*node, ctx, true)) {
+            if (!CompileDeclare(*node, ctx, /*checkOnly=*/true)) {
                 return {};
             }
 
@@ -1624,7 +1636,7 @@ bool CompileLibrary(const TAstNode& root, TContext& ctx) {
 
 TExprNode::TListType Compile(const TAstNode& node, TContext& ctx) {
     if (node.IsAtom()) {
-        const auto foundNode = ctx.FindBinding(node.GetContent());
+        auto foundNode = ctx.FindBinding(node.GetContent());
         if (foundNode.empty()) {
             ctx.AddError(node, TStringBuilder() << "Name not found: " << node.GetContent());
             return {};
@@ -1707,14 +1719,14 @@ template <typename T>
 using TVectorIAllocator = std::vector<T, TStdIAllocator<T>>;
 
 template <typename K, typename V>
-using TMapIAllocator = std::map<K, V, std::less<K>, TStdIAllocator<std::pair<const K, V>>>;
+using TMapIAllocator = std::map<K, V, std::less<>, TStdIAllocator<std::pair<const K, V>>>;
 
 template <typename K, typename V>
-using TUnorderedMapIAllocator = std::unordered_map<K, V, std::hash<K>, std::equal_to<K>, TStdIAllocator<std::pair<const K, V>>>;
+using TUnorderedMapIAllocator = std::unordered_map<K, V, std::hash<K>, std::equal_to<>, TStdIAllocator<std::pair<const K, V>>>;
 
 struct TFrameContext {
     explicit TFrameContext(IAllocator* allocator)
-        : Nodes(std::less<size_t>(), allocator)
+        : Nodes(std::less<>(), allocator)
         , TopoSortedNodes(allocator)
         , Bindings(0, allocator)
     {
@@ -1734,7 +1746,7 @@ struct TVisitNodeContext {
         , FreeArgs(0, allocator)
         , Frames(allocator)
         , LambdaFrames(0, allocator)
-        , Parameters(std::less<TStringBuf>(), allocator)
+        , Parameters(std::less<>(), allocator)
         , References(0, allocator)
     {
     }
@@ -1876,7 +1888,7 @@ TAstNode* BuildValueNode(const TExprNode& node, TVisitNodeContext& ctx, const TS
     } else {
         switch (node.Type()) {
             case TExprNode::Atom: {
-                auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms);
+                auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms);
                 auto flags = ctx.NormalizeAtomFlags ? TNodeFlags::ArbitraryContent : node.Flags();
                 auto content = AnnotateAstNode(
                     ctx.RefAtoms ? TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, flags) : TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, flags),
@@ -1888,11 +1900,12 @@ TAstNode* BuildValueNode(const TExprNode& node, TVisitNodeContext& ctx, const TS
 
             case TExprNode::List: {
                 TSmallVec<TAstNode*> values;
+                values.reserve(node.ChildrenSize());
                 for (const auto& child : node.Children()) {
                     values.push_back(BuildValueNode(*child, ctx, topLevelName, annotationFlags, pool, useBindings));
                 }
 
-                auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms);
+                auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms);
                 auto list = AnnotateAstNode(TAstNode::NewList(
                                                 ctx.Expr.GetPosition(node.Pos()), values.data(), values.size(), pool), &node, annotationFlags, pool, ctx.RefAtoms);
 
@@ -1919,9 +1932,9 @@ TAstNode* BuildValueNode(const TExprNode& node, TVisitNodeContext& ctx, const TS
                                         : TAstNode::NewAtom(ctx.Expr.GetPosition(nameNode.Pos()), nameNode.Content(), pool);
 
                     TSmallVec<TAstNode*> children;
-                    children.push_back(AnnotateAstNode(declareAtom, nullptr, annotationFlags, pool, ctx.RefAtoms));
-                    children.push_back(AnnotateAstNode(nameAtom, nullptr, annotationFlags, pool, ctx.RefAtoms));
-                    children.push_back(BuildValueNode(typeNode, ctx, topLevelName, annotationFlags, pool, false));
+                    children.push_back(AnnotateAstNode(declareAtom, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms));
+                    children.push_back(AnnotateAstNode(nameAtom, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms));
+                    children.push_back(BuildValueNode(typeNode, ctx, topLevelName, annotationFlags, pool, /*useBindings=*/false));
                     auto declareNode = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), children.data(), children.size(), pool);
                     declareNode = AnnotateAstNode(declareNode, &node, annotationFlags, pool, ctx.RefAtoms);
 
@@ -1931,9 +1944,10 @@ TAstNode* BuildValueNode(const TExprNode& node, TVisitNodeContext& ctx, const TS
                 }
 
                 TSmallVec<TAstNode*> children;
+                children.reserve(node.ChildrenSize() + 1U);
                 children.push_back(AnnotateAstNode(
                     ctx.RefAtoms ? TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool) : TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool),
-                    nullptr, annotationFlags, pool, ctx.RefAtoms));
+                    /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms));
                 for (const auto& child : node.Children()) {
                     children.push_back(BuildValueNode(*child, ctx, topLevelName, annotationFlags, pool, useBindings));
                 }
@@ -1958,8 +1972,8 @@ TAstNode* BuildValueNode(const TExprNode& node, TVisitNodeContext& ctx, const TS
 
                 auto argsNode = TAstNode::NewList(ctx.Expr.GetPosition(args.Pos()), argsChildren.data(), argsChildren.size(), pool);
                 auto argsContainer = TAstNode::NewList(ctx.Expr.GetPosition(args.Pos()), pool,
-                                                       AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms),
-                                                       AnnotateAstNode(argsNode, nullptr, annotationFlags, pool, ctx.RefAtoms));
+                                                       AnnotateAstNode(&TAstNode::QuoteAtom, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms),
+                                                       AnnotateAstNode(argsNode, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms));
 
                 const bool block = ctx.CurrentFrame->Bindings.cend() != std::find_if(ctx.CurrentFrame->Bindings.cbegin(), ctx.CurrentFrame->Bindings.cend(),
                                                                                      [](const auto& bind) { return bind.first->Type() != TExprNode::Argument; });
@@ -1971,18 +1985,18 @@ TAstNode* BuildValueNode(const TExprNode& node, TVisitNodeContext& ctx, const TS
                     }
                     const auto blockNode = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("block"), pool);
                     const auto quotedListNode = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool,
-                                                                  AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms),
+                                                                  AnnotateAstNode(&TAstNode::QuoteAtom, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms),
                                                                   ConvertFunction(node.Pos(), body, ctx, annotationFlags, pool));
 
                     const auto blockBody = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool,
-                                                             AnnotateAstNode(blockNode, nullptr, annotationFlags, pool, ctx.RefAtoms),
-                                                             AnnotateAstNode(quotedListNode, nullptr, annotationFlags, pool, ctx.RefAtoms));
-                    res = AnnotateAstNode(blockBody, nullptr, annotationFlags, pool, ctx.RefAtoms);
+                                                             AnnotateAstNode(blockNode, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms),
+                                                             AnnotateAstNode(quotedListNode, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms));
+                    res = AnnotateAstNode(blockBody, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms);
 
                     ctx.CurrentFrame = prevFrame;
                     res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool,
                                             AnnotateAstNode(TAstNode::NewLiteralAtom(
-                                                                ctx.Expr.GetPosition(node.Pos()), TStringBuf("lambda"), pool), nullptr, annotationFlags, pool, ctx.RefAtoms),
+                                                                ctx.Expr.GetPosition(node.Pos()), TStringBuf("lambda"), pool), /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms),
                                             AnnotateAstNode(argsContainer, &args, annotationFlags, pool, ctx.RefAtoms),
                                             res);
                 } else {
@@ -1993,7 +2007,7 @@ TAstNode* BuildValueNode(const TExprNode& node, TVisitNodeContext& ctx, const TS
 
                     ctx.CurrentFrame = prevFrame;
                     children[0] = AnnotateAstNode(TAstNode::NewLiteralAtom(
-                                                      ctx.Expr.GetPosition(node.Pos()), TStringBuf("lambda"), pool), nullptr, annotationFlags, pool, ctx.RefAtoms);
+                                                      ctx.Expr.GetPosition(node.Pos()), TStringBuf("lambda"), pool), /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms);
                     children[1] = AnnotateAstNode(argsContainer, &args, annotationFlags, pool, ctx.RefAtoms);
                     res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), children.data(), children.size(), pool);
                 }
@@ -2028,21 +2042,21 @@ TAstNode* ConvertFunction(TPositionHandle position, const TRoots& roots, TVisitN
 
         const auto letAtom = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node->Pos()), TStringBuf("let"), pool);
         const auto nameAtom = TAstNode::NewAtom(ctx.Expr.GetPosition(node->Pos()), name, pool);
-        const auto valueNode = BuildValueNode(*node, ctx, name, annotationFlags, pool, true);
+        const auto valueNode = BuildValueNode(*node, ctx, name, annotationFlags, pool, /*useBindings=*/true);
 
         const auto letNode = TAstNode::NewList(ctx.Expr.GetPosition(node->Pos()), pool,
-                                               AnnotateAstNode(letAtom, nullptr, annotationFlags, pool, ctx.RefAtoms),
-                                               AnnotateAstNode(nameAtom, nullptr, annotationFlags, pool, ctx.RefAtoms),
+                                               AnnotateAstNode(letAtom, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms),
+                                               AnnotateAstNode(nameAtom, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms),
                                                valueNode);
-        children.push_back(AnnotateAstNode(letNode, nullptr, annotationFlags, pool, ctx.RefAtoms));
+        children.push_back(AnnotateAstNode(letNode, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms));
     }
 
     const auto returnAtom = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(position), TStringBuf("return"), pool);
     TSmallVec<TAstNode*> returnChildren;
     returnChildren.reserve(roots.size() + 1U);
-    returnChildren.emplace_back(AnnotateAstNode(returnAtom, nullptr, annotationFlags, pool, ctx.RefAtoms));
+    returnChildren.emplace_back(AnnotateAstNode(returnAtom, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms));
     for (const auto root : roots) {
-        returnChildren.emplace_back(BuildValueNode(*root, ctx, TString(), annotationFlags, pool, true));
+        returnChildren.emplace_back(BuildValueNode(*root, ctx, TString(), annotationFlags, pool, /*useBindings=*/true));
     }
     const auto returnList = TAstNode::NewList(ctx.Expr.GetPosition(position), returnChildren.data(), returnChildren.size(), pool);
     children.emplace_back(AnnotateAstNode(returnList, 1U == roots.size() ? roots.front() : nullptr, annotationFlags, pool, ctx.RefAtoms));
@@ -2059,7 +2073,7 @@ TAstNode* ConvertFunction(TPositionHandle position, const TRoots& roots, TVisitN
     }
 
     const auto res = TAstNode::NewList(ctx.Expr.GetPosition(position), children.data(), children.size(), pool);
-    return AnnotateAstNode(res, nullptr, annotationFlags, pool, ctx.RefAtoms);
+    return AnnotateAstNode(res, /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms);
 }
 
 bool InlineNode(const TExprNode& node, size_t references, size_t neighbors, const TConvertToAstSettings& settings) {
@@ -2339,7 +2353,7 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
     }
 
     compileCtx.Frames.back().Bindings[TStringBuf("world")] = {std::move(world)};
-    auto ret = CompileFunction(*cleanRoot, compileCtx, true);
+    auto ret = CompileFunction(*cleanRoot, compileCtx, /*topLevel=*/true);
     if (1U != ret.size()) {
         return false;
     }
@@ -2362,14 +2376,14 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
     return CompileExpr(astRoot, exprRoot, ctx, resolver, urlListerManager, hasAnnotations, typeAnnotationIndex, syntaxVersion);
 }
 
-bool CompileExpr(TAstNode& astRoot, TLibraryCohesion& library, TExprContext& ctx, ui16 syntaxVersion) {
+bool CompileExpr(TAstNode& astRoot, TLibraryCohesion& cohesion, TExprContext& ctx, ui16 syntaxVersion) {
     const TAstNode* cleanRoot = &astRoot;
     TContext compileCtx(ctx);
     compileCtx.Annotations = nullptr;
     compileCtx.TypeAnnotationIndex = Max<ui32>();
     compileCtx.SyntaxVersion = syntaxVersion;
     const bool ok = CompileLibrary(*cleanRoot, compileCtx);
-    library = compileCtx.Cohesion;
+    cohesion = compileCtx.Cohesion;
     return ok;
 }
 
@@ -2727,6 +2741,7 @@ void CheckArguments(const TExprNode& root) {
         auto rootUnresolved = CollectUnresolvedArgs(root, unresolvedArgsMap, allArgs, 0);
         if (rootUnresolved && !rootUnresolved->empty()) {
             TVector<ui64> ids;
+            ids.reserve(rootUnresolved->size());
             for (auto& i : *rootUnresolved) {
                 ids.push_back(i->UniqueId());
             }
@@ -2741,27 +2756,27 @@ void CheckArguments(const TExprNode& root) {
     }
 }
 
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, const TConvertToAstSettings& settings) {
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings) {
 #ifdef _DEBUG
     CheckArguments(root);
 #endif
-    TVisitNodeContext ctx(exprContext, settings.Allocator);
-    ctx.RefAtoms = settings.RefAtoms;
-    ctx.AllowFreeArgs = settings.AllowFreeArgs;
-    ctx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
-    ctx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.Allocator);
-    ctx.Frames.push_back(TFrameContext(settings.Allocator));
-    ctx.CurrentFrame = &ctx.Frames.front();
-    VisitNode(root, 0ULL, ctx, 0);
+    TVisitNodeContext visitCtx(ctx, settings.Allocator);
+    visitCtx.RefAtoms = settings.RefAtoms;
+    visitCtx.AllowFreeArgs = settings.AllowFreeArgs;
+    visitCtx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
+    visitCtx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.Allocator);
+    visitCtx.Frames.emplace_back(settings.Allocator);
+    visitCtx.CurrentFrame = &visitCtx.Frames.front();
+    VisitNode(root, 0ULL, visitCtx, 0);
     ui32 uniqueNum = 0;
 
-    for (auto& frame : ctx.Frames) {
-        ctx.CurrentFrame = &frame;
+    for (auto& frame : visitCtx.Frames) {
+        visitCtx.CurrentFrame = &frame;
         frame.TopoSortedNodes.reserve(frame.Nodes.size());
         for (const auto& node : frame.Nodes) {
-            const auto name = ctx.FindBinding(node.second);
+            const auto name = visitCtx.FindBinding(node.second);
             if (name.empty()) {
-                const auto& ref = ctx.References[node.second];
+                const auto& ref = visitCtx.References[node.second];
                 if (!InlineNode(*node.second, ref.References, ref.Neighbors, settings)) {
                     if (settings.PrintArguments && node.second->IsArgument()) {
                         auto buffer = TStringBuilder() << "$" << ++uniqueNum
@@ -2779,18 +2794,18 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
         }
     }
 
-    ctx.CurrentFrame = &ctx.Frames.front();
+    visitCtx.CurrentFrame = &visitCtx.Frames.front();
     TAstParseResult result;
-    result.Root = ConvertFunction(exprContext.AppendPosition(TPosition(1, 1)), {&root}, ctx, settings.AnnotationFlags, *ctx.Pool);
-    result.Pool = std::move(ctx.Pool);
+    result.Root = ConvertFunction(ctx.AppendPosition(TPosition(1, 1)), {&root}, visitCtx, settings.AnnotationFlags, *visitCtx.Pool);
+    result.Pool = std::move(visitCtx.Pool);
     return result;
 }
 
-TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, ui32 annotationFlags, bool refAtoms) {
+TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, ui32 annotationFlags, bool refAtoms) {
     TConvertToAstSettings settings;
     settings.AnnotationFlags = annotationFlags;
     settings.RefAtoms = refAtoms;
-    return ConvertToAst(root, exprContext, settings);
+    return ConvertToAst(root, ctx, settings);
 }
 
 TExprNode::~TExprNode() {
@@ -2920,17 +2935,17 @@ TExprNode::TPtr TExprContext::ExactShallowCopy(const TExprNode& node) {
     return newNode;
 }
 
-TExprNode::TListType GetLambdaBody(const TExprNode& node) {
-    switch (node.ChildrenSize()) {
+TExprNode::TListType GetLambdaBody(const TExprNode& lambda) {
+    switch (lambda.ChildrenSize()) {
         case 1U:
             return {};
         case 2U:
-            return {node.TailPtr()};
+            return {lambda.TailPtr()};
         default:
             break;
     }
 
-    auto body = node.ChildrenList();
+    auto body = lambda.ChildrenList();
     body.erase(body.cbegin());
     return body;
 }
@@ -3037,7 +3052,7 @@ TExprNode::TPtr TExprContext::FuseLambdas(const TExprNode& outer, const TExprNod
     return NewLambda(outer.Pos(), NewArguments(inner.Head().Pos(), std::move(newArgNodes)), std::move(newBody));
 }
 
-TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& nodeCtx, TNodeOnNodeOwnedMap& deepClones,
+TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& nodeContext, TNodeOnNodeOwnedMap& deepClones,
                                        bool internStrings, bool copyTypes, bool copyResult, TCustomDeepCopier customCopier)
 {
     const auto ins = deepClones.emplace(&node, nullptr);
@@ -3048,12 +3063,12 @@ TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& node
         if (customCopier && customCopier(node, children)) {
         } else {
             node.ForEachChild([&](const TExprNode& child) {
-                children.emplace_back(DeepCopy(child, nodeCtx, deepClones, internStrings, copyTypes, copyResult, customCopier));
+                children.emplace_back(DeepCopy(child, nodeContext, deepClones, internStrings, copyTypes, copyResult, customCopier));
             });
         }
 
         ++NodeAllocationCounter;
-        auto newNode = TExprNode::NewNode(AppendPosition(nodeCtx.GetPosition(node.Pos())), node.Type(),
+        auto newNode = TExprNode::NewNode(AppendPosition(nodeContext.GetPosition(node.Pos())), node.Type(),
                                           std::move(children), internStrings ? AppendString(node.Content()) : node.Content(), node.Flags(),
                                           AllocateNextUniqueId());
 
@@ -3062,7 +3077,7 @@ TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& node
         }
 
         if (copyResult && node.IsCallable() && node.HasResult()) {
-            newNode->SetResult(nodeCtx.ShallowCopy(node.GetResult()));
+            newNode->SetResult(nodeContext.ShallowCopy(node.GetResult()));
         }
 
         ins.first->second = newNode;
@@ -3090,6 +3105,7 @@ TConstraintSet TExprContext::MakeConstraintSet(const NYT::TNode& serializedConst
         {TUniqueConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TUniqueConstraintNode, const NYT::TNode&>)},
         {TDistinctConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TDistinctConstraintNode, const NYT::TNode&>)},
         {TEmptyConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TEmptyConstraintNode, const NYT::TNode&>)},
+        {TStreamingConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TStreamingConstraintNode, const NYT::TNode&>)},
         {TVarIndexConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TVarIndexConstraintNode, const NYT::TNode&>)},
         {TMultiConstraintNode::Name(), std::mem_fn(&TExprContext::MakeConstraint<TMultiConstraintNode, const NYT::TNode&>)},
     };
@@ -3442,7 +3458,7 @@ ui64 MakePgExtensionMask(ui32 extensionIndex) {
     }
 
     YQL_ENSURE(extensionIndex <= 64);
-    return 1ull << (extensionIndex - 1);
+    return 1ULL << (extensionIndex - 1);
 }
 
 TExprCycleDetector::TExprCycleDetector(ui64 maxQueueSize)
@@ -3452,19 +3468,22 @@ TExprCycleDetector::TExprCycleDetector(ui64 maxQueueSize)
 
 void TExprCycleDetector::Reset() {
     Queue_.clear();
-    Set_.clear();
+    Map_.clear();
 }
 
-void TExprCycleDetector::AddNode(const TExprNode& node) {
+void TExprCycleDetector::AddNode(const TExprNode& node, ui64 repeatTransformCount) {
     auto hash = MakeCacheKey(node);
-    if (!Set_.insert(hash).second) {
-        throw yexception() << "Graph cycle detected";
+    auto [it, inserted] = Map_.emplace(hash, repeatTransformCount);
+    if (!inserted) {
+        YQL_CLOG(ERROR, Core) << "Old node at " << it->second << "\n";
+        YQL_CLOG(ERROR, Core) << "New node at " << repeatTransformCount << "\n";
+        throw TErrorException(0) << "Graph cycle detected";
     }
 
     Queue_.push(hash);
     if (Queue_.size() > MaxQueueSize_) {
         auto prevHash = Queue_.front();
-        Set_.erase(prevHash);
+        Map_.erase(prevHash);
         Queue_.pop();
     }
 }
@@ -3913,7 +3932,6 @@ private:
         }
     }
 
-private:
     SHA256_CTX Sha_;
     TNodeMap<ui64> Visited_;
 };
@@ -4003,31 +4021,31 @@ TString SubstParameters(const TString& str, const TMaybe<NYT::TNode>& params, TS
     }
 }
 
-const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* type) {
-    if (!type) {
+const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* seq) {
+    if (!seq) {
         return nullptr;
     }
 
-    switch (type->GetKind()) {
+    switch (seq->GetKind()) {
         case ETypeAnnotationKind::List:
-            return type->Cast<TListExprType>()->GetItemType();
+            return seq->Cast<TListExprType>()->GetItemType();
         case ETypeAnnotationKind::Flow:
-            return type->Cast<TFlowExprType>()->GetItemType();
+            return seq->Cast<TFlowExprType>()->GetItemType();
         case ETypeAnnotationKind::Stream:
-            return type->Cast<TStreamExprType>()->GetItemType();
+            return seq->Cast<TStreamExprType>()->GetItemType();
         case ETypeAnnotationKind::Optional:
-            return type->Cast<TOptionalExprType>()->GetItemType();
+            return seq->Cast<TOptionalExprType>()->GetItemType();
         default:
             break;
     }
     return nullptr;
 }
 
-const TTypeAnnotationNode& GetSeqItemType(const TTypeAnnotationNode& type) {
-    if (const auto itemType = GetSeqItemType(&type)) {
+const TTypeAnnotationNode& GetSeqItemType(const TTypeAnnotationNode& seq) {
+    if (const auto itemType = GetSeqItemType(&seq)) {
         return *itemType;
     }
-    throw yexception() << "Impossible to get item type from " << type;
+    throw yexception() << "Impossible to get item type from " << seq;
 }
 
 const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type) {
@@ -4181,31 +4199,31 @@ bool TErrorTypeVisitor::HasErrors() const {
 } // namespace NYql
 
 template <>
-void Out<NYql::TExprNode::EType>(class IOutputStream& o, NYql::TExprNode::EType x) {
+void Out<NYql::TExprNode::EType>(class IOutputStream& out, NYql::TExprNode::EType value) {
 #define YQL_EXPR_NODE_TYPE_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::TExprNode::name:                          \
-        o << #name;                                      \
+        out << #name;                                    \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_EXPR_NODE_TYPE_MAP(YQL_EXPR_NODE_TYPE_MAP_TO_STRING_IMPL)
         default:
-            o << static_cast<int>(x);
+            out << static_cast<int>(value);
             return;
     }
 }
 
 template <>
-void Out<NYql::TExprNode::EState>(class IOutputStream& o, NYql::TExprNode::EState x) {
+void Out<NYql::TExprNode::EState>(class IOutputStream& out, NYql::TExprNode::EState value) {
 #define YQL_EXPR_NODE_STATE_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::TExprNode::EState::name:                   \
-        o << #name;                                       \
+        out << #name;                                     \
         return;
 
-    switch (x) {
+    switch (value) {
         YQL_EXPR_NODE_STATE_MAP(YQL_EXPR_NODE_STATE_MAP_TO_STRING_IMPL)
         default:
-            o << static_cast<int>(x);
+            out << static_cast<int>(value);
             return;
     }
 }

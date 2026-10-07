@@ -13,7 +13,7 @@ from helpers.tiering_helper import (
     ObjectStorageParams,
     CreateExternalDataSource,
     DropExternalDataSource,
-    UpsertSecret,
+    CreateSecret,
     DropSecret,
 )
 import helpers.data_generators as dg
@@ -29,6 +29,7 @@ import library.python.port_manager
 from moto.server import ThreadedMotoServer
 
 import boto3
+from botocore.exceptions import ClientError
 import datetime
 import random
 import os
@@ -82,10 +83,36 @@ class S3:
             bucket_config.secret_key,
             bucket_config.endpoint,
         )
-        s3.create_bucket(
-            Bucket=bucket_config.bucket,
-            CreateBucketConfiguration={'LocationConstraint': 'ru-central1'},
+        try:
+            s3.create_bucket(
+                Bucket=bucket_config.bucket,
+                CreateBucketConfiguration={'LocationConstraint': 'ru-central1'},
+            )
+        except ClientError as e:
+            # Creating test buckets should be idempotent between retries/reruns.
+            code = e.response.get('Error', {}).get('Code', '')
+            if code not in {'BucketAlreadyOwnedByYou', 'BucketAlreadyExists'}:
+                raise
+
+    def recreate_bucket(self, bucket_config: ObjectStorageParams):
+        s3 = self._make_s3_resource(
+            bucket_config.access_key,
+            bucket_config.secret_key,
+            bucket_config.endpoint,
         )
+        bucket = s3.Bucket(bucket_config.bucket)
+
+        try:
+            # Remove all object versions first to support versioned buckets.
+            bucket.object_versions.delete()
+            bucket.objects.all().delete()
+            bucket.delete()
+        except ClientError as e:
+            code = e.response.get('Error', {}).get('Code', '')
+            if code not in {'NoSuchBucket', '404'}:
+                raise
+
+        self.create_bucket(bucket_config)
 
     def count_objects(self, bucket_config: ObjectStorageParams):
         s3 = self._make_s3_resource(
@@ -158,24 +185,25 @@ class TieringTestBase(BaseTestSet):
 
         self.access_key_secret = self._get_test_prefix() + '_access_key'
         self.secret_key_secret = self._get_test_prefix() + '_secret_key'
-        sth.execute_scheme_query(UpsertSecret(self.access_key_secret, self.s3_access_key))
-        sth.execute_scheme_query(UpsertSecret(self.secret_key_secret, self.s3_secret_key))
+        self._drop_secret_if_exists(sth, self.access_key_secret)
+        self._drop_secret_if_exists(sth, self.secret_key_secret)
+        sth.execute_scheme_query(CreateSecret(self.access_key_secret, self.s3_access_key))
+        sth.execute_scheme_query(CreateSecret(self.secret_key_secret, self.s3_secret_key))
 
         self.s3_configs = [
             ObjectStorageParams(
                 endpoint=self.s3_endpoint,
                 bucket=bucket,
-                access_key_secret=self.access_key_secret,
-                secret_key_secret=self.secret_key_secret,
+                access_key_secret=sth.get_full_path(self.access_key_secret),
+                secret_key_secret=sth.get_full_path(self.secret_key_secret),
                 access_key=self.s3_access_key,
                 secret_key=self.s3_secret_key,
             )
             for bucket in self.s3_buckets
         ]
 
-        if self.s3.is_server_started():
-            for config in self.s3_configs:
-                self.s3.create_bucket(config)
+        for config in self.s3_configs:
+            self.s3.recreate_bucket(config)
 
         self.sources: list[str] = []
         for i, s3_config in enumerate(self.s3_configs):
@@ -197,6 +225,12 @@ class TieringTestBase(BaseTestSet):
 
     def _override_external_data_source(self, sth, path, config):
         sth.execute_scheme_query(CreateExternalDataSource(path, config, True))
+
+    def _drop_secret_if_exists(self, sth: ScenarioTestHelper, secret_name: str):
+        sth.execute_scheme_query(
+            DropSecret(secret_name),
+            expected_status={StatusCode.SUCCESS, StatusCode.SCHEME_ERROR},
+        )
 
     def _get_test_duration(self, test_class: str) -> datetime.timedelta:
         class_to_duration = {

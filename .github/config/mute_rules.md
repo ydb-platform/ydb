@@ -31,6 +31,12 @@
 
 ---
 
+### New stable branch grace
+
+For **7 days** after a branch first appears in [stable_tests_branches.json](./stable_tests_branches.json) (date from git history; `main` excluded), inherited `muted_ya` lines are kept and not dropped via zero-run delete. Unmute/mute rules still apply when monitor data exists. Grace length is its own setting: `stable_branch_grace_days`.
+
+---
+
 ### Fast track — start (manual fast-unmute)
 - Fixed the tests → **close the mute issue as Completed**.
 - Only a **human** close counts (not a bot). How it works in full: [Manual fast-unmute](#manual-fast-unmute-close-issue-shortcut) below.

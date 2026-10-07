@@ -69,8 +69,6 @@ struct TAlienTimestampProviderConfig
 
 DEFINE_REFCOUNTED_TYPE(TAlienTimestampProviderConfig)
 
-DECLARE_REFCOUNTED_STRUCT(TAlienTimestampProviderConfig)
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTransactionClient

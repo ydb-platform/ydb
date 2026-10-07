@@ -1,7 +1,7 @@
 RECURSE_FOR_TESTS(
 )
 
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     build_index__cancel.cpp
@@ -16,6 +16,8 @@ SRCS(
     build_index__progress.cpp
     build_index_tx_base.cpp
     build_index_tx_base.h
+    common.h
+    common.cpp
     index_build_info.cpp
     index_build_info.h
     index_utils.cpp
@@ -46,7 +48,5 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/datashard
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

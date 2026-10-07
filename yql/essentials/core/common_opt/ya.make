@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ENABLE(SKIP_YQL_STYLE_CPP)
 
@@ -10,6 +10,7 @@ SRCS(
     yql_co_finalizers.cpp
     yql_co_flow1.cpp
     yql_co_flow2.cpp
+    yql_co_flow3.cpp
     yql_co_flowidaw1.cpp
     yql_co_last.cpp
     yql_co_pgselect.cpp
@@ -23,12 +24,11 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/ast
     yql/essentials/core
     yql/essentials/core/expr_nodes
     yql/essentials/parser/pg_catalog
     library/cpp/disjoint_sets
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

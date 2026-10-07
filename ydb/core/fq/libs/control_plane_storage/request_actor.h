@@ -54,7 +54,8 @@ public:
     }
 
     void Bootstrap() {
-        CPS_LOG_T(RequestLogString());
+        YDB_LOG_TRACE_COMP(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "Dump request",
+            {"request", RequestLogString()});
 
         AsDerived()->Start();
     }
@@ -143,10 +144,15 @@ protected:
 
         std::unique_ptr<TResponseEvent> event;
         if (issues) {
-            CPS_LOG_W(name << ": {" << TrimForLogs(Request->Get()->Request.DebugString()) << "} ERROR: " << internalIssues.ToOneLineString());
+            YDB_LOG_WARN_COMP(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "",
+                {"name", name},
+                {"request", TrimForLogs(Request->Get()->Request.DebugString())},
+                {"ERROR", internalIssues.ToOneLineString()});
             event = std::make_unique<TResponseEvent>(issues);
         } else {
-            CPS_LOG_W(name << ": {" << TrimForLogs(Request->Get()->Request.DebugString()) << "} SUCCESS");
+            YDB_LOG_WARN_COMP(::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "SUCCESS",
+                {"name", name},
+                {"request", TrimForLogs(Request->Get()->Request.DebugString())});
             if constexpr (TResponseEvent::Auditable) {
                 event = std::make_unique<TResponseEvent>(result, auditDetails);
             } else {

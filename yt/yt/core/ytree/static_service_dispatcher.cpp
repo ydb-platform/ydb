@@ -28,7 +28,7 @@ void TStaticServiceDispatcher::ListSelf(
     TRspList* response,
     const TCtxListPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     auto result = BuildYsonStringFluently()
         .DoListFor(

@@ -1,5 +1,7 @@
 #include "kqp_opt_log_impl.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
+
 #include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -320,7 +322,68 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableRangesBase read, TE
     };
 }
 
-} // namespace
+} // anonymous namespace
+
+TMaybe<TString> ChooseIndexForLookupJoin(
+    const TKikimrTableDescription& mainTableDesc,
+    const THashSet<TString>& rightJoinKeys)
+{
+    const auto& meta = *mainTableDesc.Metadata;
+
+    if (!meta.KeyColumnNames.empty() && rightJoinKeys.contains(meta.KeyColumnNames[0])) {
+        return Nothing();
+    }
+
+    TMaybe<TString> best;
+    size_t bestPrefix = 0;
+    for (const auto& index : meta.Indexes) {
+        if (index.Type == TIndexDescription::EType::GlobalAsync
+            || index.Type == TIndexDescription::EType::GlobalJson
+            || index.Type == TIndexDescription::EType::GlobalJsonCompact)
+        {
+            continue;
+        }
+
+        if (index.State != TIndexDescription::EIndexState::Ready) {
+            continue;
+        }
+
+        size_t prefix = 0;
+        for (const auto& keyCol : index.KeyColumns) {
+            if (!rightJoinKeys.contains(keyCol)) {
+                break;
+            }
+            ++prefix;
+        }
+
+        // Better prefix wins and ties broken alphabetically by index name.
+        if (prefix > bestPrefix || (prefix == bestPrefix && prefix > 0 && index.Name < best)) {
+            bestPrefix = prefix;
+            best = index.Name;
+        }
+    }
+
+    return best;
+}
+
+TExprBase RedirectReadToIndex(TExprBase read, const TString& indexName, TExprContext& ctx) {
+    auto maybeRanges = read.Maybe<TKqlReadTableRanges>();
+    if (!maybeRanges) {
+        return read;
+    }
+
+    auto src = maybeRanges.Cast();
+    const auto pos = src.Pos();
+
+    return Build<TKqlReadTableIndexRanges>(ctx, pos)
+        .Table(src.Table())
+        .Ranges(src.Ranges())
+        .Columns(src.Columns())
+        .Settings(src.Settings())
+        .ExplainPrompt(src.ExplainPrompt())
+        .Index(Build<TCoAtom>(ctx, pos).Value(indexName).Done())
+        .Done();
+}
 
 TCoLambda MakeFilterForRange(TKqlKeyRange range, TExprContext& ctx, TPositionHandle pos, TVector<TString> keyColumns) {
     size_t prefix = 0;
@@ -534,10 +597,11 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TExprBase read, TExprContext& ct
         return {};
     }
     if (auto readTable = read.Maybe<TKqlReadTableBase>()) {
+        YQL_ENSURE(!TKqpReadTableSettings::Parse(readTable.Cast()).Sampling, "Sampling is not supported for lookups");
         return RewriteReadToPrefixLookup(readTable.Cast(), ctx, kqpCtx);
     } else {
         auto readRanges = read.Maybe<TKqlReadTableRangesBase>();
-        YQL_ENSURE(readRanges);
+        YQL_ENSURE(!TKqpReadTableSettings::Parse(readRanges.Cast()).Sampling, "Sampling is not supported for lookups");
         return RewriteReadToPrefixLookup(readRanges.Cast(), ctx, kqpCtx, maxKeys);
     }
 }

@@ -70,6 +70,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
     ydb/library/actors/core
+    ydb/library/aws_init
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/src/client/types/operation
     ydb/services/metadata

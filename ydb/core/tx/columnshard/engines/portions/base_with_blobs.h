@@ -6,4 +6,4 @@ class TBasePortionInfoWithBlobs {
 public:
 };
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

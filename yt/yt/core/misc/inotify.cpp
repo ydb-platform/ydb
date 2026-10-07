@@ -16,7 +16,7 @@ namespace NYT::NFS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Inotify");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Inotify");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -26,7 +26,7 @@ TInotifyHandle::TInotifyHandle()
     FD_ = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
     if (FD_ < 0) {
         THROW_ERROR_EXCEPTION("Error creating inotify descriptor")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 #endif
 }
@@ -48,10 +48,9 @@ std::optional<TInotifyHandle::TPollResult> TInotifyHandle::Poll()
     ssize_t rv = HandleEintr(::read, FD_, buffer.data(), buffer.size());
     if (rv < 0) {
         if (errno != EAGAIN) {
-            YT_LOG_ERROR(
-                TError::FromSystem(errno),
-                "Error polling inotify descriptor (FD: %v)",
-                FD_);
+            YT_TLOG_ERROR("Error polling inotify descriptor")
+                .With("FD", FD_)
+                .With(TError::FromSystem(errno));
         }
     } else if (rv > 0) {
         YT_VERIFY(rv >= static_cast<ssize_t>(sizeof(struct inotify_event)));
@@ -60,10 +59,9 @@ std::optional<TInotifyHandle::TPollResult> TInotifyHandle::Poll()
             .WD = event->wd,
             .Events = static_cast<EInotifyWatchEvents>(event->mask),
         };
-        YT_LOG_DEBUG(
-            "Watch was triggered (WD: %v, Events: %v)",
-            result.WD,
-            result.Events);
+        YT_TLOG_DEBUG("Watch was triggered")
+            .With("WD", result.WD)
+            .With("Events", result.Events);
         return result;
     } else {
         // Do nothing.
@@ -91,11 +89,11 @@ TInotifyWatch::TInotifyWatch(
         WD_ = -1;
         THROW_ERROR_EXCEPTION("Error registering watch for %v",
             Path_)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
-    YT_LOG_DEBUG("Watch registered (WD: %v, Path: %v)",
-        WD_,
-        Path_);
+    YT_TLOG_DEBUG("Watch registered")
+        .With("WD", WD_)
+        .With("Path", Path_);
 #endif
 }
 
@@ -103,9 +101,9 @@ TInotifyWatch::~TInotifyWatch()
 {
 #ifdef _linux_
     if (WD_ > 0) {
-        YT_LOG_DEBUG("Watch unregistered (WD: %v, Path: %v)",
-            WD_,
-            Path_);
+        YT_TLOG_DEBUG("Watch unregistered")
+            .With("WD", WD_)
+            .With("Path", Path_);
         inotify_rm_watch(FD_, WD_);
     }
 #endif

@@ -7,6 +7,8 @@ TDuplicateFilteringCounters::TDuplicateFilteringCounters()
     , MergeRowsRejected(TBase::GetDeriviative("DuplicateFiltering/SourcesMerging/RowsRejected"))
     , MergeRowsBulkAccepted(TBase::GetDeriviative("DuplicateFiltering/SourcesMerging/RowsBulkAccepted"))
     , MergeQueue(TBase::GetValue("DuplicateFiltering/SourcesMerging/Queue"))
+    , MergeInflight(TBase::GetValue("DuplicateFiltering/SourcesMerging/Inflight"))
+    , FetchInflight(TBase::GetValue("DuplicateFiltering/Fetching/Inflight"))
     , LeftBorders(TBase::GetValue("DuplicateFiltering/Borders/Left"))
     , WaitingBorders(TBase::GetValue("DuplicateFiltering/Borders/Waiting"))
     , ReadyBorders(TBase::GetValue("DuplicateFiltering/Borders/Ready"))
@@ -19,6 +21,17 @@ TDuplicateFilteringCounters::TDuplicateFilteringCounters()
     , ExclusiveFilters(TBase::GetValue("DuplicateFiltering/Filters/Exclusive"))
     , ReadyFiltersCount(TBase::GetValue("DuplicateFiltering/Filters/ReadyFiltersCount"))
     , ReadyFiltersSize(TBase::GetValue("DuplicateFiltering/Filters/ReadyFiltersSize"))
+{
+}
+
+TSimpleDuplicateFilteringCounters::TSimpleDuplicateFilteringCounters()
+    : TBase("DuplicateFiltering")
+    , MergeRowsAccepted(TBase::GetDeriviative("DuplicateFiltering/SourcesMerging/RowsAccepted"))
+    , MergeRowsRejected(TBase::GetDeriviative("DuplicateFiltering/SourcesMerging/RowsRejected"))
+    , MergeRowsBulkAccepted(TBase::GetDeriviative("DuplicateFiltering/SourcesMerging/RowsBulkAccepted"))
+    , IntersectingPortionsPerRequest(TBase::GetHistogram("DuplicateFiltering/IntersectingPortions", NMonitoring::ExponentialHistogram(18, 2, 1)))
+    , FilterCacheHits(TBase::GetDeriviative("DuplicateFiltering/FilterCache/Hits"))
+    , FilterCacheMisses(TBase::GetDeriviative("DuplicateFiltering/FilterCache/Misses"))
 {
 }
 }   // namespace NKikimr::NColumnShard

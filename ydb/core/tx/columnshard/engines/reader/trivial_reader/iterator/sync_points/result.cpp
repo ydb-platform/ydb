@@ -1,0 +1,70 @@
+#include "result.h"
+
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/plain_read_data.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
+namespace NKikimr::NOlap::NReader::NTrivial {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
+
+bool TSyncPointResult::IsSourcePrepared(const NCommon::IDataSource& source) const {
+    if (!Next) {
+        return source.IsSyncSection() && source.HasStageResult() &&
+               (source.GetStageResult().HasResultChunk() || source.GetStageResult().IsEmpty());
+    } else if (source.IsSyncSection()) {
+        AFL_VERIFY(source.HasStageData() || (source.HasStageResult() && source.GetStageResult().IsEmpty()));
+        return true;
+    } else {
+        return false;
+    }
+}
+
+ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const NCommon::TDataSourceLease& lease, TPlainReadData& reader) {
+    auto& source = lease.GetSource();
+    const ui32 resultChunkRowsCount =
+        (source.HasStageResult() && !source.GetStageResult().IsEmpty()) ? source.GetStageResult().GetResultChunkRowsCount() : 0;
+    LWTRACK(ResultSyncPoint, source.GetDataSourceOrbit(), source.GetRawPathId(), source.GetTabletId(), source.GetTxId(), source.GetSourceId(),
+        GetPointName(), source.GetFilteredRowsCount(), resultChunkRowsCount, source.GetReservedMemory(),
+        source.GetSourcesAheadQueueWaitDuration(), source.GetSourcesAhead(), DebugString());
+    if (Next) {
+        if (source.HasStageResult() && source.GetStageResult().IsEmpty()) {
+            return ESourceAction::Finish;
+        }
+        if (source.HasStageData() && !source.GetStageData().GetTable().HasSomeUsefulInfo()) {
+            return ESourceAction::Finish;
+        }
+        return ESourceAction::ProvideNext;
+    } else {
+        if (source.GetStageResult().IsEmpty()) {
+            return ESourceAction::Finish;
+        }
+        auto resultChunk = source.MutableStageResult().ExtractResultChunk();
+        const bool isFinished = source.GetStageResult().IsFinished();
+        const bool hasData = resultChunk && resultChunk->HasData();
+        if (hasData) {
+            std::optional<TPartialSourceAddress> partialSourceAddress;
+            if (!isFinished) {
+                partialSourceAddress = TPartialSourceAddress(source.GetSourceIdx(), GetPointIndex());
+            }
+            YDB_LOG_DEBUG("",
+                {"event", "has_result"},
+                {"sourceIdx", source.GetSourceIdx()},
+                {"table", resultChunk->GetTable()->num_rows()},
+                {"isFinished", isFinished});
+            auto cursor = Collection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount(),
+                Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
+            reader.OnIntervalResult(
+                std::make_unique<TPartialReadResult>(source.GetResourceGuards(), source.MutableAs<IDataSource>()->GetGroupGuard(),
+                    resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress, source.GetSourceId()));
+        }
+        if (!isFinished) {
+            return hasData ? ESourceAction::Wait : ESourceAction::Continue;
+        }
+        source.MutableAs<IDataSource>()->ClearResult();
+        return ESourceAction::ProvideNext;
+    }
+}
+
+}   // namespace NKikimr::NOlap::NReader::NTrivial

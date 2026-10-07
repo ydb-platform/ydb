@@ -25,9 +25,13 @@ Distributed under the [Boost Software License, Version 1.0](https://boost.org/LI
 
 
 ====================COPYRIGHT====================
+// Copyright Antony Polukhin, 2021-2026.
+
+
+====================COPYRIGHT====================
 // Copyright Kevlin Henney, 2000-2005.
 // Copyright Alexander Nasonov, 2006-2010.
-// Copyright Antony Polukhin, 2011-2025.
+// Copyright Antony Polukhin, 2011-2026.
 
 
 ====================COPYRIGHT====================

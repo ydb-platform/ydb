@@ -26,6 +26,7 @@ SRCS(
     actions/invoker_util.cpp
 
     bus/public.cpp
+    bus/helpers.cpp
 
     bus/tcp/connection.cpp
     bus/tcp/dispatcher.cpp
@@ -44,7 +45,6 @@ SRCS(
     compression/stream.cpp
     compression/lz.cpp
     compression/lzma.cpp
-    compression/public.cpp
     compression/snappy.cpp
     compression/zlib.cpp
     compression/zstd.cpp
@@ -72,6 +72,7 @@ SRCS(
     concurrency/fiber.cpp
     concurrency/fiber_manager.cpp
     concurrency/fls.cpp
+    concurrency/helpers.cpp
     concurrency/invoker_alarm.cpp
     concurrency/invoker_queue.cpp
     concurrency/lease_manager.cpp
@@ -82,7 +83,6 @@ SRCS(
     concurrency/pooled_execution_stack.cpp
     concurrency/pollable_detail.cpp
     concurrency/prioritized_invoker.cpp
-    concurrency/profiling_helpers.cpp
     concurrency/propagating_storage.cpp
     concurrency/quantized_executor.cpp
     concurrency/scheduler_thread.cpp
@@ -103,6 +103,7 @@ SRCS(
 
     crypto/config.cpp
     crypto/crypto.cpp
+    crypto/helpers.cpp
     crypto/tls.cpp
 
     logging/appendable_compressed_file.cpp
@@ -122,6 +123,7 @@ SRCS(
     logging/random_access_gzip.cpp
     logging/zstd_log_codec.cpp
 
+    misc/absolute_normalized_path.cpp
     misc/arithmetic_formula.cpp
     misc/backtrace.cpp
     misc/backoff_strategy.cpp
@@ -194,13 +196,13 @@ SRCS(
 
     phoenix/context.cpp
     phoenix/descriptors.cpp
-    phoenix/load.cpp
     phoenix/schemas.cpp
     phoenix/type_def.cpp
     phoenix/type_registry.cpp
 
     rpc/authentication_identity.cpp
     rpc/authenticator.cpp
+    rpc/backend.cpp
     rpc/balancing_channel.cpp
     rpc/caching_channel_factory.cpp
     rpc/channel_detail.cpp
@@ -209,6 +211,8 @@ SRCS(
     GLOBAL rpc/configure_dispatcher.cpp
     rpc/dispatcher.cpp
     rpc/dynamic_channel_pool.cpp
+    rpc/dynamic_channel_pool_provider.cpp
+    rpc/endpoint_address.cpp
     rpc/hedging_channel.cpp
     rpc/helpers.cpp
     rpc/local_channel.cpp
@@ -235,9 +239,13 @@ SRCS(
     rpc/stream.cpp
     rpc/throttling_channel.cpp
     rpc/viable_peer_registry.cpp
+    rpc/multi_protocol_channel_factory.cpp
+    rpc/multi_protocol_server.cpp
 
     rpc/bus/server.cpp
     rpc/bus/channel.cpp
+    GLOBAL rpc/bus/tcp_backend.cpp
+    GLOBAL rpc/bus/uds_backend.cpp
 
     service_discovery/service_discovery.cpp
 
@@ -291,6 +299,7 @@ SRCS(
     yson/attributes_stripper.cpp
 
     ytree/attribute_consumer.cpp
+    ytree/composite_map.cpp
     ytree/helpers.cpp
     ytree/attributes.cpp
     ytree/attribute_filter.cpp
@@ -361,6 +370,7 @@ PEERDIR(
     library/cpp/yt/logging
     library/cpp/yt/logging/plain_text_formatter
     library/cpp/yt/misc
+    library/cpp/yt/mpl
     library/cpp/yt/memory
     library/cpp/yt/string
     library/cpp/yt/yson
@@ -415,22 +425,39 @@ END()
 RECURSE(
     http
     test_framework
+    yaml
 )
 
 IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         benchmarks
+        actions/benchmarks
         concurrency/benchmarks
         bus/benchmarks
+        logging/benchmark
+        phoenix/benchmarks
+        rpc/benchmark
         ypath/benchmarks
         yson/benchmark
         ytree/benchmarks
     )
 ENDIF()
 
+IF (NOT OPENSOURCE AND OS_LINUX)
+    RECURSE(
+        bus/ucx
+        rpc/ucx
+    )
+
+    RECURSE_FOR_TESTS(
+        bus/ucx/unittests
+    )
+ENDIF()
+
 RECURSE_FOR_TESTS(
     actions/unittests
     concurrency/unittests
+    dns/unittests
     http/unittests
     misc/unittests
     net/unittests
@@ -447,13 +474,16 @@ IF (NOT OS_WINDOWS)
     )
 
     RECURSE_FOR_TESTS(
-        bus/unittests
+        bus/tcp/unittests
+        rpc/bus/unittests
         compression/unittests
         crypto/unittests
         json/unittests
         logging/unittests
         phoenix/unittests
         profiling/unittests
+        rpc/grpc/unittests
+        rpc/http/unittests
         rpc/unittests
         ypath/unittests
         ytree/unittests

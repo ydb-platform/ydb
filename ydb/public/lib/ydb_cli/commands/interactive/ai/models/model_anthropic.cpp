@@ -17,7 +17,7 @@ namespace {
 class TModelAnthropic final : public TModelBase {
     using TBlase = TModelBase;
 
-    static constexpr ui64 MAX_COMPLETION_TOKENS = 1024;
+    static constexpr ui64 MAX_COMPLETION_TOKENS = 8192;
 
 public:
     explicit TModelAnthropic(const TAnthropicModelSettings& settings)
@@ -78,6 +78,18 @@ protected:
         TJsonParser parser(response);
         if (auto child = parser.MaybeKey("response")) {
             parser = std::move(*child);
+        }
+
+        if (auto usage = parser.MaybeKey("usage")) {
+            if (auto inputTokens = usage->MaybeKey("input_tokens")) {
+                result.Usage.InputTokens = inputTokens->GetValue().GetUIntegerSafe();
+            }
+            if (auto outputTokens = usage->MaybeKey("output_tokens")) {
+                result.Usage.OutputTokens = outputTokens->GetValue().GetUIntegerSafe();
+            }
+            if (auto cachedTokens = usage->MaybeKey("cache_read_input_tokens")) {
+                result.Usage.CachedInputTokens = cachedTokens->GetValue().GetUIntegerSafe();
+            }
         }
 
         parser = parser.GetKey("content");

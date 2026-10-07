@@ -92,8 +92,8 @@ TEST(TYTreeSizeTest, Simple)
 
 TEST(TYTreeSizeTest, Serialize)
 {
-    EXPECT_EQ(ToString(TSize(1)), TString{"1"});
-    EXPECT_EQ(Format("|%v|", TSize(42)), TString{"|42|"});
+    EXPECT_EQ(ToString(TSize(1)), std::string{"1"});
+    EXPECT_EQ(Format("|%v|", TSize(42)), std::string{"|42|"});
 
     {
         TSize v;

@@ -1,5 +1,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 
+#include <ydb/public/api/protos/ydb_scheme.pb.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/str.h>
@@ -246,5 +248,79 @@ Y_UNIT_TEST_SUITE(PrintPermissionsTests) {
         permissions.push_back(perm);
         PrintPermissions(permissions, ss);
         UNIT_ASSERT_STRINGS_EQUAL(ss.Str(), "user@domain:read,write\n");
+    }
+}
+
+Y_UNIT_TEST_SUITE(PrintAllPermissionsTests) {
+    Y_UNIT_TEST(InterruptInheritanceOmittedWhenFalse) {
+        TStringStream ss;
+        PrintAllPermissions("root", {}, {}, false, ss);
+        UNIT_ASSERT_STRINGS_EQUAL(
+            ss.Str(),
+            "Owner: root\n"
+            "\n"
+            "Permissions: \n"
+            "none\n"
+            "\n"
+            "Effective permissions: \n"
+            "none\n"
+        );
+    }
+
+    Y_UNIT_TEST(InterruptInheritanceTrue) {
+        TStringStream ss;
+        PrintAllPermissions("root", {}, {}, true, ss);
+        UNIT_ASSERT_STRINGS_EQUAL(
+            ss.Str(),
+            "Owner: root\n"
+            "\n"
+            "Permissions: \n"
+            "none\n"
+            "\n"
+            "Is permission inheritance interrupted: true\n"
+            "\n"
+            "Effective permissions: \n"
+            "none\n"
+        );
+    }
+
+    Y_UNIT_TEST(WithPermissions) {
+        TStringStream ss;
+        const std::vector<NYdb::NScheme::TPermissions> permissions = {
+            NYdb::NScheme::TPermissions("database", {"ydb.generic.full"}),
+        };
+        const std::vector<NYdb::NScheme::TPermissions> effectivePermissions = {
+            NYdb::NScheme::TPermissions("USERS", {"ydb.database.connect"}),
+        };
+        PrintAllPermissions("root", permissions, effectivePermissions, true, ss);
+        UNIT_ASSERT_STRINGS_EQUAL(
+            ss.Str(),
+            "Owner: root\n"
+            "\n"
+            "Permissions: \n"
+            "database:ydb.generic.full\n"
+            "\n"
+            "Is permission inheritance interrupted: true\n"
+            "\n"
+            "Effective permissions: \n"
+            "USERS:ydb.database.connect\n"
+        );
+    }
+}
+
+Y_UNIT_TEST_SUITE(TSchemeEntryInterruptInheritanceTests) {
+    Y_UNIT_TEST(FromProto) {
+        Ydb::Scheme::Entry proto;
+        proto.set_interrupt_permission_inheritance(true);
+
+        const NYdb::NScheme::TSchemeEntry entry(proto);
+        UNIT_ASSERT_VALUES_EQUAL(entry.InterruptInheritance, true);
+    }
+
+    Y_UNIT_TEST(DefaultFromProto) {
+        Ydb::Scheme::Entry proto;
+
+        const NYdb::NScheme::TSchemeEntry entry(proto);
+        UNIT_ASSERT_VALUES_EQUAL(entry.InterruptInheritance, false);
     }
 }

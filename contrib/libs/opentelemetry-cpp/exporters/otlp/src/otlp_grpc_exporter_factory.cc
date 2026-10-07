@@ -8,6 +8,7 @@
 
 #include <memory>
 
+#include "opentelemetry/exporters/otlp/otlp_grpc_client.h"
 #include "opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h"
 #include "opentelemetry/exporters/otlp/otlp_grpc_exporter_options.h"
 #include "opentelemetry/sdk/trace/exporter.h"
@@ -28,17 +29,14 @@ std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> OtlpGrpcExporterFactory
 std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> OtlpGrpcExporterFactory::Create(
     const OtlpGrpcExporterOptions &options)
 {
-  std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> exporter(new OtlpGrpcExporter(options));
-  return exporter;
+  return std::make_unique<OtlpGrpcExporter>(options);
 }
 
 std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> OtlpGrpcExporterFactory::Create(
     const OtlpGrpcExporterOptions &options,
     const std::shared_ptr<OtlpGrpcClient> &client)
 {
-  std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> exporter(
-      new OtlpGrpcExporter(options, client));
-  return exporter;
+  return std::make_unique<OtlpGrpcExporter>(options, client);
 }
 
 }  // namespace otlp

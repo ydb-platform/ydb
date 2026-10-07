@@ -584,10 +584,14 @@ TDocumentNodeIterator& TDocumentNodeIterator::operator++() {
 }
 
 TDocument::TDocument(TString str, fy_document* doc, fy_diag* diag)
+    : TDocument(MakeSimpleShared<TString>(std::move(str)), doc, diag)
+{}
+
+TDocument::TDocument(TSimpleSharedPtr<TString> str, fy_document* doc, fy_diag* diag)
     : Document_(doc, fy_document_destroy)
     , Diag_(diag, fy_diag_destroy)
 {
-    auto* userdata = new THashSet<TSimpleSharedPtr<TString>, TStringPtrHashT>({MakeSimpleShared<TString>(std::move(str))});
+    auto* userdata = new THashSet<TSimpleSharedPtr<TString>, TStringPtrHashT>({std::move(str)});
     fy_document_set_userdata(doc, userdata);
     fy_document_register_on_destroy(doc, &DestroyDocumentStrings);
     RegisterUserDataCleanup();
@@ -601,7 +605,9 @@ TDocument::TDocument(fy_document* doc, fy_diag* diag)
 }
 
 TDocument TDocument::Parse(TString str) {
-    const char* cstr = str.empty() ? zstr : str.cbegin();
+    // the buffer the parser reads from is the one the document will own
+    auto holder = MakeSimpleShared<TString>(std::move(str));
+    const char* cstr = holder->empty() ? zstr : holder->cbegin();
     fy_diag_cfg dcfg;
     fy_diag_cfg_default(&dcfg);
     std::unique_ptr<fy_diag, void(*)(fy_diag*)> diag(fy_diag_create(&dcfg), fy_diag_destroy);
@@ -618,7 +624,7 @@ TDocument TDocument::Parse(TString str) {
         NDetail::ThrowAllExceptionsIfAny(diag.get());
         ythrow TFyamlEx("Failed to build YAML document from string");
     }
-    return TDocument(std::move(str), doc, diag.release());
+    return TDocument(std::move(holder), doc, diag.release());
 }
 
 TDocument TDocument::Clone() const {
@@ -751,7 +757,7 @@ std::unique_ptr<char, void(*)(char*)> TJsonEmitter::EmitToCharArray() const {
     return res;
 }
 
-TParser::TParser(TString rawStream, fy_parser* parser, fy_diag* diag)
+TParser::TParser(TSimpleSharedPtr<TString> rawStream, fy_parser* parser, fy_diag* diag)
     : RawDocumentStream_(std::move(rawStream))
     , Parser_(parser, fy_parser_destroy)
     , Diag_(diag, fy_diag_destroy)
@@ -759,7 +765,8 @@ TParser::TParser(TString rawStream, fy_parser* parser, fy_diag* diag)
 
 TParser TParser::Create(TString str)
 {
-    const char* stream = str.empty() ? zstr : str.cbegin();
+    auto holder = MakeSimpleShared<TString>(std::move(str));
+    const char* stream = holder->empty() ? zstr : holder->cbegin();
     fy_diag_cfg dcfg;
     fy_diag_cfg_default(&dcfg);
     std::unique_ptr<fy_diag, void(*)(fy_diag*)> diag(fy_diag_create(&dcfg), fy_diag_destroy);
@@ -778,7 +785,7 @@ TParser TParser::Create(TString str)
 
     fy_parser_set_string(parser, stream, -1);
 
-    return TParser(std::move(str), parser, diag.release());
+    return TParser(std::move(holder), parser, diag.release());
 }
 
 std::optional<TDocument> TParser::NextDocument() {
@@ -989,7 +996,7 @@ std::optional<TString> TNodeOpsBase::Tag(fy_node* node) const {
 void TNodeOpsBase::SetTag(fy_node* node, const TString& tag) {
     ENSURE_NODE_NOT_EMPTY(node);
     auto* str = new TString(std::move(tag));
-    auto* data = new TUserDataHolder(UserData(node), str);
+    auto* data = new TUserDataHolder(str);
     SetUserData(node, data);
     RethrowOnError(fy_node_set_tag(node, str->c_str(), str->length()), node);
 }
@@ -1008,7 +1015,7 @@ bool TNodeOpsBase::HasAnchor(fy_node* node) const {
 
 void TNodeOpsBase::SetAnchor(fy_node* node, const TString& anchor) {
     auto* str = new TString(anchor);
-    auto* data = new TUserDataHolder(UserData(node), str);
+    auto* data = new TUserDataHolder(str);
     SetUserData(node, data);
     RethrowOnError(fy_node_set_anchor(node, str->c_str(), str->length()), node);
 }

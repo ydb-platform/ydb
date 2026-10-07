@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
@@ -202,6 +202,42 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         const auto creationResult = session.ExecuteSchemeQuery(creationQuery).ExtractValueSync();
         UNIT_ASSERT(!creationResult.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(creationResult.GetIssues().ToString(), "Error: Cannot divide type String and String");
+    }
+
+    void InvalidRef(const char* createTableQuery, const char* selectTableQuery) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(createTableQuery, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), "Failed to CREATE TABLE: " << result.GetIssues().ToOneLineString());
+        }
+        {
+            auto result = session.ExecuteQuery(std::format("CREATE VIEW `View` WITH (security_invoker = true) AS {}", selectTableQuery),
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), "CREATE VIEW executed successfully");
+        }
+    }
+
+    Y_UNIT_TEST(InvalidTableRef) {
+        InvalidRef(
+            "CREATE TABLE `Table` (key Int32, PRIMARY KEY (key))",
+            "SELECT `key` FROM `MissingTable`"
+        );
+    }
+
+    Y_UNIT_TEST(InvalidColumnRef) {
+        InvalidRef(
+            "CREATE TABLE `Table` (key Int32, PRIMARY KEY (key))",
+            "SELECT `MissingColumn` FROM `Table`"
+        );
+    }
+
+    Y_UNIT_TEST(InvalidIndexRef) {
+        InvalidRef(
+            "CREATE TABLE `Table` (key Int32, value Int32, PRIMARY KEY (key), INDEX `Index` GLOBAL ON (value))",
+            "SELECT `value` FROM `Table` VIEW `MissingIndex`"
+        );
     }
 
     Y_UNIT_TEST(ParsingSecurityInvoker) {
@@ -418,7 +454,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         ).ExtractValueSync();
 
         UNIT_ASSERT(!dropResult.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path does not exist");
+        UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path `/Root/NonexistingView` does not exist");
     }
 
     Y_UNIT_TEST(CallDropViewOnTable) {
@@ -467,7 +503,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         {
             const auto dropResult = session.ExecuteSchemeQuery(dropQuery).GetValueSync();
             UNIT_ASSERT(!dropResult.IsSuccess());
-            UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path does not exist");
+            UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path `/Root/TheView` does not exist");
         }
     }
 

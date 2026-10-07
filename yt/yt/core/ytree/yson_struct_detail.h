@@ -35,11 +35,11 @@ struct TYsonSourceTraits
     static void Advance(T& source)
         requires false;
 
-    template <CStdVector TVector, class TFiller>
+    template <NMpl::CStdVector TVector, class TFiller>
     static void FillVector(T& source, TVector& vector, TFiller filler)
         requires false;
 
-    template <CAnyMap TMap, class TFiller>
+    template <NMpl::CMapping TMap, class TFiller>
     static void FillMap(T& source, TMap& map, TFiller filler)
         requires false;
 };

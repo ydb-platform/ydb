@@ -2,17 +2,18 @@
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/data_accessor/request.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+
 #include <library/cpp/cache/cache.h>
 
 namespace NKikimr::NOlap {
 class TGranuleMeta;
 class TPortionInfo;
-}
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap {
 class TGranuleMeta;
 class TPortionInfo;
-}
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 class IAccessorCallback {
@@ -27,6 +28,7 @@ private:
 
 public:
     void AddPortion(const std::shared_ptr<const TPortionInfo>& p);
+
     void AddPortion(const ui64 portionId) {
         PortionIds.emplace_back(portionId);
     }
@@ -87,7 +89,9 @@ public:
         }
     };
 
-    using TSharedMetadataAccessorCache = TLRUCache<std::tuple<TActorId, TInternalPathId, ui64>, TPortionDataAccessor, TNoopDelete, IGranuleDataAccessor::TMetadataSizeProvider>;
+    using TSharedMetadataAccessorCache =
+        TLRUCache<std::tuple<TActorId, TInternalPathId, ui64>, TPortionDataAccessor, TNoopDelete, IGranuleDataAccessor::TMetadataSizeProvider>;
+
 private:
     const TInternalPathId PathId;
 
@@ -98,7 +102,6 @@ private:
     virtual void DoSetOwner(const TActorId& owner) = 0;
 
 public:
-
     virtual ~IGranuleDataAccessor() = default;
 
     TInternalPathId GetPathId() const {
@@ -106,17 +109,21 @@ public:
     }
 
     IGranuleDataAccessor(const TInternalPathId pathId)
-        : PathId(pathId) {
+        : PathId(pathId)
+    {
     }
 
     void AskData(THashMap<TInternalPathId, TPortionsByConsumer>&& portions, const std::shared_ptr<IAccessorCallback>& callback);
     TDataCategorized AnalyzeData(const TPortionsByConsumer& portions);
+
     void ModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) {
         return DoModifyPortions(add, remove);
     }
+
     void SetCache(std::shared_ptr<TSharedMetadataAccessorCache> cache) {
         DoSetCache(cache);
     }
+
     void SetOwner(const TActorId& owner) {
         DoSetOwner(owner);
     }

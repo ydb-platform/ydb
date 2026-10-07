@@ -18,7 +18,7 @@ TTestComplexKey TTestComplexKey::FromString(TStringBuf string)
     return key;
 }
 
-TString TTestComplexKey::ToString() const
+std::string TTestComplexKey::ToString() const
 {
     return Format("%v/%v", First, Second);
 }

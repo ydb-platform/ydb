@@ -6,6 +6,8 @@
 
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NDataSharing {
 
 void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index) {
@@ -169,7 +171,8 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
         SchemeHistory.emplace_back(i);
     }
     if (PathPortionHashes.empty()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "empty static cursor");
+        YDB_LOG_ERROR("",
+            {"problem", "empty static cursor"});
     } else {
         IsStaticSaved = true;
     }
@@ -179,7 +182,8 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
 TSourceCursor::TSourceCursor(const TTabletId selfTabletId, const std::set<TInternalPathId>& pathIds, const TTransferContext transferContext)
     : SelfTabletId(selfTabletId)
     , TransferContext(transferContext)
-    , PathIds(pathIds) {
+    , PathIds(pathIds)
+{
 }
 
 void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId) {
@@ -194,7 +198,8 @@ void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId
 }
 
 bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManager,
-    THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index) {
+    THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions,
+    std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index) {
     SchemeHistory = std::move(schemeHistory);
     AFL_VERIFY(!IsStartedFlag);
     std::map<TInternalPathId, std::map<ui32, std::shared_ptr<TPortionDataAccessor>>> local;
@@ -237,4 +242,4 @@ bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManag
     IsStartedFlag = true;
     return true;
 }
-} // namespace NKikimr::NOlap::NDataSharing
+}   // namespace NKikimr::NOlap::NDataSharing

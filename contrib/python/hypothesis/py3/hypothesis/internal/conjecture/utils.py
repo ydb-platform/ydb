@@ -77,6 +77,19 @@ def identity(v: T) -> T:
     return v
 
 
+def fisher_yates_shuffle(data: "ConjectureData", ls: list[T]) -> None:
+    """Shuffle ``ls`` in place, drawing from ``data``.
+
+    Reversed Fisher-Yates shuffle: swap each element with itself or with a
+    later element.  This shrinks i==j for each element, i.e. towards no change,
+    so a shuffled sequence shrinks back to its original order.  We don't
+    consider the last element as it's always a no-op.
+    """
+    for i in range(len(ls) - 1):
+        j = data.draw_integer(i, len(ls) - 1)
+        ls[i], ls[j] = ls[j], ls[i]
+
+
 def check_sample(
     values: type[enum.Enum] | Sequence[T], strategy_name: str
 ) -> Sequence[T]:
@@ -243,10 +256,6 @@ class Sampler:
         else:
             assert forced is None or base == forced, (forced, base)
             return base
-
-
-INT_SIZES = (8, 16, 32, 64, 128)
-INT_SIZES_SAMPLER = Sampler((4.0, 8.0, 1.0, 1.0, 0.5), observe=False)
 
 
 class many:

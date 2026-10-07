@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     collection.cpp
@@ -6,6 +6,7 @@ SRCS(
     settings.cpp
     type_ann.cpp
     physical_opt.cpp
+    intervals_converter.cpp
 )
 
 PEERDIR(
@@ -15,7 +16,5 @@ PEERDIR(
     yql/essentials/core/expr_nodes_gen
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

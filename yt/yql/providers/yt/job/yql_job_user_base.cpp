@@ -149,12 +149,17 @@ void TYqlUserJobBase::ChangeMkqlIOSpecIfNeeded() {
 
 }
 
+void TYqlUserJobBase::PostInitMkqlIOSpec() {
+
+}
+
 void TYqlUserJobBase::DoImpl() {
     TYqlJobBase::Init();
 
     TLambdaBuilder builder(FunctionRegistry.Get(), *Alloc,
         Env.Get(), RandomProvider.Get(), TimeProvider.Get(), JobStats.Get(), &JobCountersProvider,
-        SecureParamsProvider.Get(), LogProvider.Get(), LangVer);
+        SecureParamsProvider.Get(), LogProvider.Get(), LangVer, RuntimeSettings,
+        BridgeMode, BridgeMode == NKikimr::NUdf::EBridgeMode::OutProcess ? TString("./udf_bridge") : TString());
 
     TType* itemType = nullptr;
     if (InputType) {
@@ -176,12 +181,14 @@ void TYqlUserJobBase::DoImpl() {
     if (UseBlockInput) {
         MkqlIOSpecs->SetUseBlockInput();
         MkqlIOSpecs->SetInputBlockRepresentation(TMkqlIOSpecs::EBlockRepresentation::WideBlock);
+        MkqlIOSpecs->SetDatumValidationMode(RuntimeSettings->DatumValidation.Get());
     }
     if (UseBlockOutput) {
         MkqlIOSpecs->SetUseBlockOutput();
     }
     ChangeMkqlIOSpecIfNeeded();
     MkqlIOSpecs->Init(*CodecCtx, InputSpec, InputGroups, TableNames, itemType, AuxColumns, OutSpec, JobStats.Get());
+    PostInitMkqlIOSpec();
     if (!RowOffsets.empty()) {
         MkqlIOSpecs->SetTableOffsets(RowOffsets);
     }
@@ -258,7 +265,7 @@ void TYqlUserJobBase::DoImpl() {
     mkqlWriter.Drop();
 
     MkqlIOSpecs->Clear();
-    MkqlIOSpecs.Destroy();
+    MkqlIOSpecs.reset();
 }
 
 void TYqlUserJobBase::Do() {

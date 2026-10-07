@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -76,7 +77,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     const TActorId Sender;
     const TLocalMiniKQLProgram SourceProgram;
     const TMiniKQLFactory* const Factory;
-    NACLib::TUserContext::TPtr UserCtx;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     TString SerializedMiniKQLProgram;
     TString SerializedMiniKQLParams;
@@ -367,7 +368,7 @@ public:
             TActorId sender,
             const TLocalMiniKQLProgram &program,
             const TMiniKQLFactory* factory,
-            NACLib::TUserContext::TPtr userCtx)
+            TIntrusivePtr<NACLib::TUserContext> userCtx)
         : Sender(sender)
         , SourceProgram(program)
         , Factory(factory)

@@ -37,15 +37,15 @@ Y_UNIT_TEST(EmptyVisitor) {
     v.OnUint32(1);
     v.OnInt64(1);
     v.OnUint64(1);
-    v.OnFloat(1.2f);
-    v.OnDouble(1.2f);
-    v.OnString("foo", true);
+    v.OnFloat(1.2F);
+    v.OnDouble(1.2F);
+    v.OnString("foo", /*isUtf8=*/true);
     v.OnUtf8("foo");
-    v.OnYson("foo", true);
+    v.OnYson("foo", /*isUtf8=*/true);
     v.OnJson("foo");
     v.OnJsonDocument("foo");
-    v.OnUuid("foo", true);
-    v.OnDyNumber("foo", true);
+    v.OnUuid("foo", /*isUtf8=*/true);
+    v.OnDyNumber("foo", /*isUtf8=*/true);
     v.OnDate(1);
     v.OnDatetime(1);
     v.OnTimestamp(1);
@@ -88,7 +88,7 @@ Y_UNIT_TEST(EmptyVisitor) {
     v.OnEndDict();
     v.OnBeginVariant(0);
     v.OnEndVariant();
-    v.OnPg("foo", true);
+    v.OnPg("foo", /*isUtf8=*/true);
 }
 
 Y_UNIT_TEST(ThrowingVisitor) {
@@ -106,8 +106,8 @@ Y_UNIT_TEST(ThrowingVisitor) {
     UNIT_ASSERT_EXCEPTION(v.OnUint32(1), TUnsupportedException);
     UNIT_ASSERT_EXCEPTION(v.OnInt64(1), TUnsupportedException);
     UNIT_ASSERT_EXCEPTION(v.OnUint64(1), TUnsupportedException);
-    UNIT_ASSERT_EXCEPTION(v.OnFloat(1.2f), TUnsupportedException);
-    UNIT_ASSERT_EXCEPTION(v.OnDouble(1.2f), TUnsupportedException);
+    UNIT_ASSERT_EXCEPTION(v.OnFloat(1.2F), TUnsupportedException);
+    UNIT_ASSERT_EXCEPTION(v.OnDouble(1.2F), TUnsupportedException);
     UNIT_ASSERT_EXCEPTION(v.OnString("foo", true), TUnsupportedException);
     UNIT_ASSERT_EXCEPTION(v.OnUtf8("foo"), TUnsupportedException);
     UNIT_ASSERT_EXCEPTION(v.OnYson("foo", true), TUnsupportedException);

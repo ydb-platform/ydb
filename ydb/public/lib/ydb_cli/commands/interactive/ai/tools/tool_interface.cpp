@@ -24,4 +24,8 @@ ITool::TResponse::TResponse(const TString& result, const TString& userMessage, b
     , IsSuccess(isSuccess)
 {}
 
+void ITool::SetAutoAction(TInteractiveConfigurationManager::EToolAutoAction autoAction) {
+    Y_UNUSED(autoAction);
+}
+
 } // namespace NYdb::NConsoleClient::NAi

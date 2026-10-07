@@ -12,7 +12,6 @@ private:
     ui64 Depth_;
     ui64 ElementCount_;
 
-private:
     static ui64 Hash(const char* data, size_t size, size_t hashIndex);
 
     const ui32* Buckets() const {

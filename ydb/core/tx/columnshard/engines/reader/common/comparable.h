@@ -5,10 +5,12 @@
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
+
 namespace NReader {
 class TReadMetadataBase;
-}
-}
+enum class ERequestSorting;
+}   // namespace NReader
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -18,22 +20,25 @@ private:
     NArrow::TSimpleRow Value;
 
 public:
-    static TReplaceKeyAdapter BuildStart(const TPortionInfo& portion, const TReadMetadataBase& readMetadata);
-    static TReplaceKeyAdapter BuildFinish(const TPortionInfo& portion, const TReadMetadataBase& readMetadata);
+    static TReplaceKeyAdapter BuildStart(const TPortionInfo& portion, const ERequestSorting sorting);
+    static TReplaceKeyAdapter BuildFinish(const TPortionInfo& portion, const ERequestSorting sorting);
 
     const NArrow::TSimpleRow& GetValue() const {
         return Value;
     }
+
     NArrow::TSimpleRow CopyValue() const {
         return Value;
     }
+
     NArrow::TSimpleRow&& ExtractValue() && {
         return std::move(Value);
     }
 
     explicit TReplaceKeyAdapter(NArrow::TSimpleRow&& rk, const bool reverse)
         : Reverse(reverse)
-        , Value(std::move(rk)) {
+        , Value(std::move(rk))
+    {
     }
 
     std::partial_ordering Compare(const TReplaceKeyAdapter& item) const;
@@ -41,7 +46,7 @@ public:
     bool operator<(const TReplaceKeyAdapter& item) const {
         return Compare(item) == std::partial_ordering::less;
     }
-    
+
     bool operator<=(const TReplaceKeyAdapter& item) const {
         auto compareResult = Compare(item);
         return compareResult == std::partial_ordering::less || compareResult == std::partial_ordering::equivalent;

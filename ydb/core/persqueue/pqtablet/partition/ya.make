@@ -15,6 +15,7 @@ SRCS(
     partition_mlp.cpp
     partition_monitoring.cpp
     partition_read.cpp
+    partition_reset_offset.cpp
     partition_sourcemanager.cpp
     partition_write.cpp
     sourceid.cpp
@@ -25,7 +26,7 @@ SRCS(
 
 
 PEERDIR(
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     library/cpp/sliding_window
     ydb/core/backup/impl
     ydb/core/base

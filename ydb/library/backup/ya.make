@@ -7,6 +7,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     yql/essentials/types/dynumber
     yql/essentials/sql/v1/format
+    ydb/library/backup/proto
     ydb/public/api/protos
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump/util
@@ -17,6 +18,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/rate_limiter
     ydb/public/sdk/cpp/src/client/result
     ydb/public/sdk/cpp/src/client/table

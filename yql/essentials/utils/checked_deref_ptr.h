@@ -55,7 +55,7 @@ public:
         return Ptr_ != nullptr;
     }
 
-    constexpr T* Get() const noexcept {
+    [[nodiscard]] constexpr T* Get() const noexcept {
         return Ptr_;
     }
 

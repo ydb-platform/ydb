@@ -1,9 +1,6 @@
 #pragma once
 #include "fetching.h"
 
-#include <util/system/guard.h>
-#include <util/system/spinlock.h>
-
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
@@ -11,6 +8,9 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+
+#include <util/system/guard.h>
+#include <util/system/spinlock.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -26,22 +26,22 @@ private:
     using TBase = NCommon::TSpecialReadContext;
     mutable TSpinLock DuplicatesManagerLock;
     NActors::TActorId DuplicatesManager = NActors::TActorId();
+    const std::shared_ptr<TAtomicCounter> DuplicatesAbortionFlag = std::make_shared<TAtomicCounter>(0);
+    ui64 DuplicateFilterPortionCount = 0;
 
 private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
-        const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion,
-        const bool needFilterDuplicates, const bool isFinalSyncPoint) const;
+        const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion, const bool needFilterDuplicates,
+        const bool isFinalSyncPoint) const;
     TMutex Mutex;
     std::array<std::array<std::array<std::array<std::array<std::array<NCommon::TFetchingScriptOwner, 2>, 2>, 2>, 2>, 2>, 2> CacheFetchingScripts;
 
-    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(
-        const std::shared_ptr<NCommon::IDataSource>& source, const bool isFinalSyncPoint) override;
+    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const NCommon::IDataSource& source, const bool isFinalSyncPoint) override;
     mutable std::optional<std::shared_ptr<TFetchingScript>> SourcesAggregationScript;
     mutable std::optional<std::shared_ptr<TFetchingScript>> RestoreResultScript;
 
     bool NeedDuplicateFiltering() const {
-        return GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES &&
-               GetReadMetadata()->TableMetadataAccessor->NeedDuplicateFiltering();
+        return GetReadMetadata()->NeedDuplicateFiltering();
     }
 
 public:
@@ -76,17 +76,25 @@ public:
 
     virtual TString ProfileDebugString() const override;
 
-    void RegisterActors(const NCommon::ISourcesConstructor& sources);
+    void RegisterActors(NCommon::ISourcesConstructor& sources);
     void UnregisterActors();
 
-    NActors::TActorId GetDuplicatesManagerVerified() const {
+    const std::shared_ptr<TAtomicCounter>& GetDuplicatesAbortionFlag() const {
+        return DuplicatesAbortionFlag;
+    }
+
+    NActors::TActorId GetDuplicatesManager() const {
         TGuard<TSpinLock> g(DuplicatesManagerLock);
-        AFL_VERIFY(DuplicatesManager);
         return DuplicatesManager;
     }
 
+    ui64 GetDuplicateFilterPortionCount() const {
+        return DuplicateFilterPortionCount;
+    }
+
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-        : TBase(commonContext) {
+        : TBase(commonContext)
+    {
     }
 
     ~TSpecialReadContext() {

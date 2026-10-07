@@ -7,6 +7,8 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication {
 
 namespace NController {
@@ -14,7 +16,7 @@ namespace NController {
 TController::TController(const TActorId& tablet, TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-    , LogPrefix(this)
+    , LogPrefix(CreateTabletLogPrefix(this))
     , TabletCountersPtr(new TProtobufTabletCounters<
              ESimpleCounters_descriptor,
              ECumulativeCounters_descriptor,
@@ -26,19 +28,22 @@ TController::TController(const TActorId& tablet, TTabletStorageInfo* info)
 }
 
 void TController::OnDetach(const TActorContext& ctx) {
-    CLOG_T(ctx, "OnDetach");
+    YDB_LOG_CREATE_CONTEXT(LogPrefix);
+    YDB_LOG_TRACE_CTX(ctx, "OnDetach");
     Cleanup(ctx);
     Die(ctx);
 }
 
 void TController::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext& ctx) {
-    CLOG_T(ctx, "OnTabletDead");
+    YDB_LOG_CREATE_CONTEXT(LogPrefix);
+    YDB_LOG_TRACE_CTX(ctx, "OnTabletDead");
     Cleanup(ctx);
     Die(ctx);
 }
 
 void TController::OnActivateExecutor(const TActorContext& ctx) {
-    CLOG_T(ctx, "OnActivateExecutor");
+    YDB_LOG_CREATE_CONTEXT(LogPrefix);
+    YDB_LOG_TRACE_CTX(ctx, "OnActivateExecutor");
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
     RunTxInitSchema(ctx);
 }
@@ -48,10 +53,14 @@ void TController::DefaultSignalTabletActive(const TActorContext&) {
 }
 
 STFUNC(TController::StateInit) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        {"actorState", "StateInit"});
     StateInitImpl(ev, SelfId());
 }
 
 STFUNC(TController::StateDatabaseResolve) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        {"actorState", "StateDatabaseResolve"});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvResolveTenantResult, HandleDatabaseResolve);
     default:
@@ -60,6 +69,8 @@ STFUNC(TController::StateDatabaseResolve) {
 }
 
 STFUNC(TController::StateWork) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        {"actorState", "StateWork"});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvController::TEvCreateReplication, Handle);
         HFunc(TEvController::TEvAlterReplication, Handle);
@@ -71,7 +82,10 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvCreateStreamResult, Handle);
         HFunc(TEvPrivate::TEvDropStreamResult, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
+        HFunc(TEvPrivate::TEvPrepareAttachDst, Handle);
         HFunc(TEvPrivate::TEvAlterDstResult, Handle);
+        HFunc(TEvPrivate::TEvSchemaChangeDstAlterResult, Handle);
+        HFunc(TEvPrivate::TEvSchemaChangeDstAlterTxId, Handle);
         HFunc(TEvPrivate::TEvDropDstResult, Handle);
         HFunc(TEvPrivate::TEvResolveSecretResult, Handle);
         HFunc(TEvPrivate::TEvResolveResourceIdResult, Handle);
@@ -79,6 +93,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvPrivate::TEvProcessQueues, Handle);
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
+        HFunc(TEvPrivate::TEvCompleteWorkerSet, Handle);
+        HFunc(TEvPrivate::TEvResumeDeferredAlter, Handle);
         HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
         HFunc(TEvPrivate::TEvRequestCreateStream, Handle);
         HFunc(TEvPrivate::TEvRequestDropStream, Handle);
@@ -90,6 +106,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvWorkerDataEnd, Handle);
         HFunc(TEvService::TEvGetTxId, Handle);
         HFunc(TEvService::TEvHeartbeat, Handle);
+        HFunc(TEvService::TEvIndexBuildProgress, Handle);
+        HFunc(TEvService::TEvSchemaChangeReport, Handle);
         HFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
         HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -102,6 +120,15 @@ void TController::Cleanup(const TActorContext& ctx) {
     for (auto& [_, replication] : Replications) {
         replication->Shutdown(ctx);
     }
+
+    for (const auto& [_, actorId] : SchemaChangeDstAlterers) {
+        Send(actorId, new TEvents::TEvPoison());
+    }
+    SchemaChangeDstAlterers.clear();
+    for (const auto& [_, actorId] : IndexReadyActors) {
+        Send(actorId, new TEvents::TEvPoison());
+    }
+    IndexReadyActors.clear();
 
     if (auto actorId = std::exchange(DiscoveryCache, {})) {
         Send(actorId, new TEvents::TEvPoison());
@@ -119,13 +146,13 @@ void TController::Cleanup(const TActorContext& ctx) {
 }
 
 void TController::SwitchToDatabaseResolve(const TActorContext& ctx) {
-    CLOG_T(ctx, "SwitchToDatabaseResolve");
+    YDB_LOG_TRACE_CTX(ctx, "SwitchToDatabaseResolve");
 
     Become(&TThis::StateDatabaseResolve);
 }
 
 void TController::SwitchToWork(const TActorContext& ctx) {
-    CLOG_T(ctx, "SwitchToWork");
+    YDB_LOG_TRACE_CTX(ctx, "SwitchToWork");
 
     SignalTabletActive(ctx);
     Become(&TThis::StateWork);
@@ -143,7 +170,8 @@ void TController::SwitchToWork(const TActorContext& ctx) {
         const auto& tenant = replication->GetDatabase();
         if (tenant) {
             if (!NodesManager.HasTenant(tenant)) {
-                CLOG_I(ctx, "Discover tenant nodes: tenant# " << tenant);
+                YDB_LOG_INFO_CTX(ctx, "Discover tenant nodes",
+                    {"tenant", tenant});
                 NodesManager.DiscoverNodes(tenant, DiscoveryCache, ctx);
             }
         } else {
@@ -151,6 +179,20 @@ void TController::SwitchToWork(const TActorContext& ctx) {
         }
 
         replication->Progress(ctx);
+    }
+
+    for (const auto& [key, barrier] : SchemaBarriers) {
+        if (barrier.Phase == ESchemaBarrierPhase::FlushingTarget) {
+            StartSchemaChangeTargetFlush(key, ctx);
+        } else if (barrier.Phase == ESchemaBarrierPhase::Altering) {
+            StartSchemaChangeDstAlter(key, ctx);
+        }
+    }
+    RunTxIndexBuild(ctx);
+    for (const auto replicationId : DeferredAlters) {
+        if (!HasPendingAlter(replicationId)) {
+            ctx.Send(SelfId(), new TEvPrivate::TEvResumeDeferredAlter(replicationId));
+        }
     }
 
     TabletCounters->Simple()[COUNTER_UNRESOLVED_DATABASE_REPLICATIONS] = unresolvedDatabaseReplications;
@@ -162,48 +204,91 @@ void TController::Reset() {
     ReplicationsByPathId.clear();
     UnresolvedDatabaseReplications.clear();
     AssignedTxIds.clear();
+    CommittedVersions.clear();
     Workers.clear();
     WorkersWithHeartbeat.clear();
     WorkersByHeartbeat.clear();
+    CompleteWorkerSets.clear();
+    SchemaBarriers.clear();
+    DeferredAlters.clear();
+    SchemaTargetFlushes.clear();
+    ActiveSchemaTargetFlush.reset();
+    IndexBuilds.clear();
+    IndexBuildProgress.clear();
+    IndexCommits.clear();
+    CompletedIndexCommits.clear();
+    IndexReadyActors.clear();
+    PendingIndexTxIds.clear();
+    PendingIndexBuildProgress.clear();
+    IndexBuildTxInFlight = false;
+}
+
+bool TController::HasActiveSchemaBarrier(ui64 replicationId) const {
+    return AnyOf(SchemaBarriers, [replicationId](const auto& item) {
+        return item.first.first == replicationId && item.second.IsActive();
+    });
+}
+
+bool TController::HasPendingAlter(ui64 replicationId) const {
+    if (HasActiveSchemaBarrier(replicationId)) {
+        return true;
+    }
+
+    const auto replication = Find(replicationId);
+    return replication
+        && replication->GetDesiredState() == TReplication::EState::Done
+        && AnyOf(IndexBuilds, [replicationId](const auto& item) {
+            return item.first.first == replicationId
+                && item.second.GetPhase() != NKikimrReplication::TIndexBuildState::READY
+                && item.second.GetPhase() != NKikimrReplication::TIndexBuildState::CANCELLED;
+        });
 }
 
 void TController::Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxCreateReplication(ev, ctx);
 }
 
 void TController::Handle(TEvController::TEvAlterReplication::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxAlterReplication(ev, ctx);
 }
 
 void TController::Handle(TEvController::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxDropReplication(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDropReplication::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxDropReplication(ev, ctx);
 }
 
 void TController::Handle(TEvController::TEvDescribeReplication::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxDescribeReplication(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxDescribeReplication(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxDiscoveryTargetsResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvAssignStreamName::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxAssignStreamName(ev, ctx);
 }
 
@@ -218,24 +303,26 @@ void ProcessLimiterQueue(TDeque<TActorId>& requested, THashSet<TActorId>& inflig
 }
 
 void TController::ProcessCreateStreamQueue(const TActorContext& ctx) {
-    const auto& limits = AppData()->ReplicationConfig.GetSchemeOperationLimits();
-    ProcessLimiterQueue<TEvPrivate::TEvAllowCreateStream>(RequestedCreateStream, InflightCreateStream, limits.GetInflightCreateStreamLimit(), ctx);
+    const auto limit = AppData()->ReplicationConfig.GetSchemeOperationLimits().GetInflightCreateStreamLimit();
+    ProcessLimiterQueue<TEvPrivate::TEvAllowCreateStream>(RequestedCreateStream, InflightCreateStream, limit, ctx);
 }
 
 void TController::ProcessDropStreamQueue(const TActorContext& ctx) {
-    const auto& limits = AppData()->ReplicationConfig.GetSchemeOperationLimits();
-    ProcessLimiterQueue<TEvPrivate::TEvAllowDropStream>(RequestedDropStream, InflightDropStream, limits.GetInflightDropStreamLimit(), ctx);
+    const auto limit = AppData()->ReplicationConfig.GetSchemeOperationLimits().GetInflightDropStreamLimit();
+    ProcessLimiterQueue<TEvPrivate::TEvAllowDropStream>(RequestedDropStream, InflightDropStream, limit, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     RequestedCreateStream.push_back(ev->Sender);
     ProcessCreateStreamQueue(ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     InflightCreateStream.erase(ev->Sender);
     ProcessCreateStreamQueue(ctx);
@@ -243,14 +330,16 @@ void TController::Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TAct
 }
 
 void TController::Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     RequestedDropStream.push_back(ev->Sender);
     ProcessDropStreamQueue(ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     InflightDropStream.erase(ev->Sender);
     ProcessDropStreamQueue(ctx);
@@ -258,61 +347,72 @@ void TController::Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActor
 }
 
 void TController::Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxCreateDstResult(ev, ctx);
 }
 
+void TController::Handle(TEvPrivate::TEvPrepareAttachDst::TPtr& ev, const TActorContext& ctx) {
+    RunTxPrepareAttachDst(ev, ctx);
+}
+
 void TController::Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxAlterDstResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxDropDstResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxResolveSecretResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxResolveResourceIdResult(ev, ctx);
 }
 
 void TController::HandleDatabaseResolve(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     RunTxResolveDatabaseResult(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     const auto rid = ev->Get()->ReplicationId;
     const auto& tenant = ev->Get()->Tenant;
 
     auto replication = Find(rid);
     if (!replication) {
-        CLOG_W(ctx, "Unknown replication"
-            << ": rid# " << rid);
+        YDB_LOG_WARN_CTX(ctx, "Unknown replication",
+            {"rid", rid});
         return;
     }
 
     if (ev->Get()->IsSuccess()) {
-        CLOG_N(ctx, "Database resolved"
-            << ": rid# " << rid
-            << ", database# " << tenant);
+        YDB_LOG_NOTICE_CTX(ctx, "Database resolved",
+            {"rid", rid},
+            {"database", tenant});
 
         if (!NodesManager.HasTenant(tenant)) {
-            CLOG_I(ctx, "Discover tenant nodes"
-                << ": tenant# " << tenant);
+            YDB_LOG_INFO_CTX(ctx, "Discover tenant nodes",
+                {"tenant", tenant});
             NodesManager.DiscoverNodes(tenant, DiscoveryCache, ctx);
         }
     } else {
-        CLOG_E(ctx, "Resolve database error"
-            << ": rid# " << rid);
+        YDB_LOG_ERROR_CTX(ctx, "Resolve database error",
+            {"rid", rid});
         Y_ABORT_UNLESS(!tenant);
     }
 
@@ -321,18 +421,20 @@ void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TAc
 }
 
 void TController::Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     const auto& tenant = ev->Get()->Tenant;
     if (NodesManager.HasTenant(tenant)) {
-        CLOG_I(ctx, "Discover tenant nodes"
-            << ": tenant# " << tenant);
+        YDB_LOG_INFO_CTX(ctx, "Discover tenant nodes",
+            {"tenant", tenant});
         NodesManager.DiscoverNodes(tenant, DiscoveryCache, ctx);
     }
 }
 
 void TController::Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     auto result = NodesManager.ProcessResponse(ev, ctx);
 
@@ -350,13 +452,14 @@ void TController::Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorC
 }
 
 void TController::Handle(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
     NodesManager.ProcessResponse(ev, ctx);
 }
 
 void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
-    CLOG_D(ctx, "Create session"
-        << ": nodeId# " << nodeId);
+    YDB_LOG_DEBUG_CTX(ctx, "Create session",
+        {"nodeId", nodeId});
     TabletCounters->Cumulative()[COUNTER_CREATE_SESSION] += 1;
 
     Y_ABORT_UNLESS(!Sessions.contains(nodeId));
@@ -364,6 +467,7 @@ void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
     TabletCounters->Simple()[COUNTER_SESSIONS] = Sessions.size();
 
     auto ev = MakeHolder<TEvService::TEvHandshake>(TabletID(), Executor()->Generation());
+    ev->Record.SetSupportsIndexMetadata(true);
     ui32 flags = 0;
     if (SelfId().NodeId() != nodeId) {
         flags = IEventHandle::FlagSubscribeOnSession;
@@ -373,8 +477,8 @@ void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
 }
 
 void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
-    CLOG_D(ctx, "Delete session"
-        << ": nodeId# " << nodeId);
+    YDB_LOG_DEBUG_CTX(ctx, "Delete session",
+        {"nodeId", nodeId});
     TabletCounters->Cumulative()[COUNTER_DELETE_SESSION] += 1;
 
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
@@ -402,8 +506,8 @@ void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
 }
 
 void TController::CloseSession(ui32 nodeId, const TActorContext& ctx) {
-    CLOG_T(ctx, "Close session"
-        << ": nodeId# " << nodeId);
+    YDB_LOG_TRACE_CTX(ctx, "Close session",
+        {"nodeId", nodeId});
 
     if (SelfId().NodeId() != nodeId) {
         Send(ctx.InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
@@ -411,7 +515,8 @@ void TController::CloseSession(ui32 nodeId, const TActorContext& ctx) {
 }
 
 void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     const auto nodeId = ev->Sender.NodeId();
     if (!Sessions.contains(nodeId)) {
@@ -439,13 +544,15 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
 
         session.AttachWorker(id);
         worker->AttachSession(nodeId);
+        ReplaySchemaChangeRecovery(nodeId, id);
     }
 
     ScheduleProcessQueues();
 }
 
 void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     const auto nodeId = ev->Sender.NodeId();
     if (!Sessions.contains(nodeId)) {
@@ -466,6 +573,7 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
             UpdateStats(id, record.GetStats());
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ACK) {
             UpdateStats(id, record.GetStatus());
+            ReplaySchemaChangeRecovery(nodeId, id);
         }
         break;
     case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
@@ -475,10 +583,12 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
                 RunTxWorkerError(id, record.GetErrorDescription(), ctx);
             } else {
                 session.DetachWorker(id);
-                if (IsValidWorker(id)) {
-                    auto* worker = GetOrCreateWorker(id);
-                    worker->ClearSession();
-                    if (worker->HasCommand()) {
+                const auto worker = Workers.find(id);
+                if (worker != Workers.end()) {
+                    if (worker->second.HasSession() && worker->second.GetSession() == nodeId) {
+                        worker->second.ClearSession();
+                    }
+                    if (IsValidWorker(id) && !worker->second.HasSession() && worker->second.HasCommand()) {
                         BootQueue.insert(id);
                     }
                 }
@@ -486,8 +596,8 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
         }
         break;
     default:
-        CLOG_W(ctx, "Unknown worker status"
-            << ": value# " << static_cast<int>(record.GetStatus()));
+        YDB_LOG_WARN_CTX(ctx, "Unknown worker status",
+            {"value", static_cast<int>(record.GetStatus())});
         break;
     }
 
@@ -538,31 +648,9 @@ void TController::UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorker
     target->WorkerStatusChanged(id.WorkerId(), status);
 }
 
-void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
-
-    auto& record = ev->Get()->Record;
-    const auto id = TWorkerId::Parse(record.GetWorker());
-    auto* cmd = record.MutableCommand();
-
-    if (!IsValidWorker(id)) {
-        return;
-    }
-
-    auto* worker = GetOrCreateWorker(id, cmd);
-    if (!worker->HasCommand()) {
-        worker->SetCommand(cmd);
-    }
-
-    if (!worker->HasSession()) {
-        BootQueue.insert(id);
-    }
-
-    ScheduleProcessQueues();
-}
-
 void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     const auto nodeId = ev->Sender.NodeId();
     if (!Sessions.contains(nodeId)) {
@@ -588,7 +676,9 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
 
         if (!target) {
             Y_VERIFY_DEBUG(target);
-            CLOG_E(ctx, "Resolve target error " << id.TargetId() << ": " << ev->Get()->ToString());
+            YDB_LOG_ERROR_CTX(ctx, "Resolve target error",
+                {"targetId", id.TargetId()},
+                {"ev", ev->Get()->ToString()});
             return;
         }
         for (auto partitionId : record.GetChildPartitionsIds()) {
@@ -624,6 +714,16 @@ bool TController::IsValidWorker(const TWorkerId& id) const {
     return true;
 }
 
+bool TController::HasWorkerSession(const TWorkerId& id, ui32 nodeId) const {
+    const auto it = Workers.find(id);
+    if (it == Workers.end()) {
+        return false;
+    }
+
+    return it->second.HasSession()
+        && it->second.GetSession() == nodeId;
+}
+
 TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd) {
     auto it = Workers.find(id);
     if (it == Workers.end()) {
@@ -654,9 +754,9 @@ void TController::ScheduleProcessQueues() {
 }
 
 void TController::Handle(TEvPrivate::TEvProcessQueues::TPtr&, const TActorContext& ctx) {
-    CLOG_D(ctx, "Process queues"
-        << ": boot# " << BootQueue.size()
-        << ": stop# " << StopQueue.size());
+    YDB_LOG_DEBUG_CTX(ctx, "Process queues",
+        {"boot", BootQueue.size()},
+        {"stop", StopQueue.size()});
 
     ProcessBootQueue(ctx);
     ProcessStopQueue(ctx);
@@ -689,6 +789,17 @@ void TController::ProcessBootQueue(const TActorContext&) {
         auto replication = Find(id.ReplicationId());
         Y_ABORT_UNLESS(replication);
 
+        const auto* target = replication->FindTarget(id.TargetId());
+        const auto* base = replication->FindBaseTableTarget(*target);
+        const bool awaitingBaseStream = base && base->GetStreamState() == TReplication::EStreamState::Creating;
+        const bool awaitingBaseCapabilities = base && !base->GetStreamSchemaChanges().has_value();
+        if (awaitingBaseStream || awaitingBaseCapabilities) {
+            // Wait for the persisted base-stream capability before starting
+            // an index reader, which may encounter a concurrent source DROP.
+            ++iter;
+            continue;
+        }
+
         const auto& tenant = replication->GetDatabase();
         if (!tenant || !NodesManager.HasTenant(tenant) || !NodesManager.HasNodes(tenant)) {
             ++iter;
@@ -711,9 +822,9 @@ void TController::ProcessBootQueue(const TActorContext&) {
 }
 
 void TController::BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd) {
-    LOG_D("Boot worker"
-        << ": nodeId# " << nodeId
-        << ", workerId# " << id);
+    YDB_LOG_DEBUG("Boot worker",
+        {"nodeId", nodeId},
+        {"workerId", id});
 
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
     auto& session = Sessions[nodeId];
@@ -727,8 +838,61 @@ void TController::BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrRepl
     id.Serialize(*record.MutableWorker());
     record.MutableCommand()->CopyFrom(cmd);
 
+    if (const auto build = IndexBuilds.find({id.ReplicationId(), id.TargetId()}); build != IndexBuilds.end()) {
+        auto& settings = *record.MutableCommand()->MutableLocalTableWriter();
+        settings.SetIndexBuild(true);
+        if (const auto progress = IndexBuildProgress.find(id); progress != IndexBuildProgress.end()) {
+            settings.MutableIndexBuildProgress()->CopyFrom(progress->second);
+        } else if (build->second.GetPhase() != NKikimrReplication::TIndexBuildState::FILLING) {
+            // A new partition after the scan has joined must never resume
+            // immediate writes. Existing partitions keep their checkpoint.
+            settings.MutableIndexBuildProgress()->SetSwitchOffset(0);
+        }
+    }
+
+    const auto replication = Find(id.ReplicationId());
+    const auto* target = replication->FindTarget(id.TargetId());
+    const auto* base = replication->FindBaseTableTarget(*target);
+    record.MutableCommand()->MutableRemoteTopicReader()->SetRetryOnSchemeError(
+        base && base->GetStreamSchemaChanges().value_or(false));
+
     Send(MakeReplicationServiceId(nodeId), std::move(ev));
     session.AttachWorker(id);
+}
+
+void TController::ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id) {
+    const auto barrier = SchemaBarriers.find({id.ReplicationId(), id.TargetId()});
+    if (barrier == SchemaBarriers.end() || !barrier->second.IsDestinationSchemaReady()) {
+        return;
+    }
+
+    const auto& state = barrier->second;
+    if (!state.AppliedWorkers.contains(id) || state.CompletedWorkers.contains(id)) {
+        return;
+    }
+
+    const auto offset = state.WorkerOffsets.find(id);
+    if (offset == state.WorkerOffsets.end()) {
+        YDB_LOG_ERROR("Applied schema barrier has no worker offset",
+            {"workerId", id});
+        return;
+    }
+
+    auto result = MakeHolder<TEvService::TEvSchemaChangeResult>();
+    id.Serialize(*result->Record.MutableWorker());
+    result->Record.MutableSchema()->CopyFrom(barrier->second.Schema);
+    if (!barrier->second.IndexMetadataWorkers.contains(id)) {
+        result->Record.MutableSchema()->ClearIndexes();
+    }
+
+    result->Record.SetOffset(offset->second);
+
+    auto& controller = *result->Record.MutableController();
+    controller.SetTabletId(TabletID());
+    controller.SetGeneration(Executor()->Generation());
+    result->Record.SetApplied(true);
+
+    Send(MakeReplicationServiceId(nodeId), result.Release());
 }
 
 void TController::ProcessStopQueue(const TActorContext& ctx) {
@@ -751,9 +915,9 @@ void TController::ProcessStopQueue(const TActorContext& ctx) {
 }
 
 void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
-    LOG_D("Stop worker"
-        << ": nodeId# " << nodeId
-        << ", workerId# " << id);
+    YDB_LOG_DEBUG("Stop worker",
+        {"nodeId", nodeId},
+        {"workerId", id});
 
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
     auto& session = Sessions[nodeId];
@@ -771,7 +935,8 @@ void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
 }
 
 void TController::Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     const auto& id = ev->Get()->Id;
     RemoveQueue.insert(id);
@@ -791,27 +956,11 @@ void TController::Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorCont
 }
 
 void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
-    LOG_D("Remove worker"
-        << ": workerId# " << id);
+    YDB_LOG_DEBUG("Remove worker",
+        {"workerId", id});
 
     Y_ABORT_UNLESS(RemoveQueue.contains(id));
-
-    RemoveQueue.erase(id);
-    Workers.erase(id);
-    TabletCounters->Simple()[COUNTER_WORKERS] = Workers.size();
-
-    auto replication = Find(id.ReplicationId());
-    if (!replication) {
-        return;
-    }
-
-    auto* target = replication->FindTarget(id.TargetId());
-    if (!target) {
-        return;
-    }
-
-    target->RemoveWorker(id.WorkerId());
-    target->Progress(ctx);
+    RunTxRemoveWorker(id, ctx);
 }
 
 bool TController::MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
@@ -824,7 +973,8 @@ bool TController::MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ct
 }
 
 void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     const auto nodeId = ev->Sender.NodeId();
     if (!Sessions.contains(nodeId)) {
@@ -833,7 +983,8 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
 
     auto replication = GetSingle();
     if (!replication) {
-        CLOG_E(ctx, "Cannot assign tx id: ambiguous replication instance");
+        YDB_LOG_ERROR_CTX(ctx, "Cannot assign tx id",
+            {"reason", "ambiguous replication instance"});
         return;
     }
 
@@ -842,7 +993,19 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
     case NKikimrReplication::TConsistencySettings::kGlobal:
         break;
     default:
-        CLOG_E(ctx, "Cannot assign tx id: consistency level is not global");
+        YDB_LOG_ERROR_CTX(ctx, "Cannot assign tx id",
+            {"reason", "consistency level is not global"});
+        return;
+    }
+
+    if (ev->Get()->Record.HasWorker()) {
+        const auto id = TWorkerId::Parse(ev->Get()->Record.GetWorker());
+        const auto* target = FindTarget(id);
+        if (target && target->IsIndexBuild() && HasWorkerSession(id, nodeId)) {
+            PendingIndexTxIds.push_back(std::move(ev));
+            RunTxIndexBuild(ctx);
+        }
+
         return;
     }
 
@@ -858,7 +1021,8 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
 }
 
 void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     const auto nodeId = ev->Sender.NodeId();
     if (!Sessions.contains(nodeId)) {
@@ -874,11 +1038,46 @@ void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext
     RunTxHeartbeat(ctx);
 }
 
+void TController::Handle(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx) {
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
+
+    const auto nodeId = ev->Sender.NodeId();
+    if (!Sessions.contains(nodeId)) {
+        return;
+    }
+
+    const auto id = TWorkerId::Parse(ev->Get()->Record.GetWorker());
+    if (!Sessions[nodeId].HasWorker(id) || !IsValidWorker(id)) {
+        YDB_LOG_WARN_CTX(ctx, "Ignore schema report from unknown worker",
+            {"worker", id});
+        return;
+    }
+
+    RunTxSchemaChangeReport(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx) {
+    if (IndexReadyActors.contains({ev->Get()->ReplicationId, ev->Get()->TargetId})) {
+        RunTxIndexReadyTxId(ev, ctx);
+    } else {
+        RunTxSchemaChangeDstAlterTxId(ev, ctx);
+    }
+}
+
+void TController::Handle(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx) {
+    if (IndexReadyActors.contains({ev->Get()->ReplicationId, ev->Get()->TargetId})) {
+        RunTxIndexReadyResult(ev, ctx);
+    } else {
+        RunTxSchemaChangeDstAlterResult(ev, ctx);
+    }
+}
+
 void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) {
     const ui32 nodeId = ev->Get()->NodeId;
 
-    CLOG_I(ctx, "Node disconnected"
-        << ": nodeId# " << nodeId);
+    YDB_LOG_INFO_CTX(ctx, "Node disconnected",
+        {"nodeId", nodeId});
 
     if (Sessions.contains(nodeId)) {
         DeleteSession(nodeId, ctx);

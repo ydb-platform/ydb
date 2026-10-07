@@ -60,8 +60,8 @@ Y_UNIT_TEST(Rem) {
 }
 
 Y_UNIT_TEST(NearbyInt) {
-    const i64 maxV = 9223372036854774784ll;
-    const i64 minV = -9223372036854774784ll;
+    const i64 maxV = 9223372036854774784LL;
+    const i64 minV = -9223372036854774784LL;
     UNIT_ASSERT_VALUES_EQUAL((i64)(double)(maxV), maxV);
     UNIT_ASSERT_VALUES_EQUAL((i64)(double)(minV), minV);
 

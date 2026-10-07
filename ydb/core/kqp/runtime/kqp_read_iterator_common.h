@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -11,7 +12,7 @@ struct TIteratorReadBackoffSettings : TAtomicRefCount<TIteratorReadBackoffSettin
     TDuration StartRetryDelay = TDuration::MilliSeconds(5);
     size_t MaxShardAttempts = 10;
     size_t MaxShardResolves = 3;
-    double UnsertaintyRatio = 0.5;
+    double UncertaintyRatio = 0.5;
     double Multiplier = 2.0;
     TDuration MaxRetryDelay = TDuration::Seconds(1);
 
@@ -21,6 +22,7 @@ struct TIteratorReadBackoffSettings : TAtomicRefCount<TIteratorReadBackoffSettin
     ui64 MaxTotalBytesQuotaStreamLookup = 5_MB * 512;
     ui64 MaxInFlightReadsStreamLookup = 50;
     ui64 MaxBytesPerFetchStreamLookup = 256_MB;
+    ui64 MaxInFlightLocksStreamLookup = 50;
 };
 
 struct TEvReadSettings : public TAtomicRefCount<TEvReadSettings> {
@@ -36,6 +38,21 @@ struct TEvReadSettings : public TAtomicRefCount<TEvReadSettings> {
     NKikimrTxDataShard::TEvReadAck Ack;
 };
 
+struct TReadLockInfo {
+    TVector<NKikimrDataEvents::TLock> Locks;
+    TVector<NKikimrDataEvents::TLock> BrokenLocks;
+    struct TDeferredBreakerInfo {
+        ui64 QuerySpanId = 0;
+        ui32 NodeId = 0;
+    };
+    TVector<TDeferredBreakerInfo> DeferredBreakers;
+    ui64 DeferredVictimQuerySpanId = 0;
+
+    void Add(const NKikimrTxDataShard::TEvReadResult& record);
+    NKikimrTxDataShard::TEvKqpInputActorResultInfo GetExtraData();
+    void FillExtraStats(NYql::NDqProto::TDqTaskStats* stats);
+};
+
 void SetReadIteratorBackoffSettings(TIntrusivePtr<TIteratorReadBackoffSettings>);
 TDuration CalcDelay(size_t attempt, bool allowInstantRetry);
 size_t MaxShardResolves();
@@ -46,6 +63,7 @@ size_t MaxRowsProcessingStreamLookup();
 ui64 MaxTotalBytesQuotaStreamLookup();
 ui64 MaxInFlightReadsStreamLookup();
 ui64 MaxBytesPerFetchStreamLookup();
+ui64 MaxInFlightLocksStreamLookup();
 
 void SetDefaultIteratorQuotaSettings(ui32 rows, ui32 bytes);
 THolder<NKikimr::TEvDataShard::TEvRead> GetDefaultReadSettings();

@@ -99,6 +99,13 @@ struct IResponseKeeper
      *  Thread affinity: any
      */
     virtual bool IsWarmingUp() const = 0;
+
+    //! Returns |true| if the keeper stores responses persistently.
+    /*!
+     *  \note
+     *  Thread affinity: any
+     */
+    virtual bool IsPersistent() const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IResponseKeeper)

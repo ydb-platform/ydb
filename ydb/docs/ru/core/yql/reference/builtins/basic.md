@@ -1203,6 +1203,15 @@ SELECT EvaluateExpr(
 * Проверка на приводимость литерала к требуемому типу происходит на этапе валидации;
 * Результат не является optional.
 
+Аргумент `<строка>` должен быть строковым литералом. Выражения, включая переменные, колонки, параметры запроса и результаты функций, не поддерживаются. Для преобразования значения во время выполнения запроса используйте `CAST(выражение AS <Простой тип>)`. Например, вычисляемое значение `String` следует преобразовывать в `Uuid` через `CAST(выражение AS Uuid)`, а не через `Uuid(выражение)`.
+
+```yql
+$uuid = Uuid("550e8400-e29b-41d4-a716-446655440000");
+$uuidAsString = CAST($uuid AS String);
+
+SELECT CAST($uuidAsString AS Uuid) = $uuid; -- true
+```
+
 Для типов данных `Date`, `Datetime`, `Timestamp` и `Interval` поддерживаются литералы только в формате, соответствующем [ISO 8601](https://ru.wikipedia.org/wiki/ISO_8601). У `Interval` есть следующие отличия от стандарта:
 
 * поддерживается отрицательный знак для сдвигов в прошлое;
@@ -1473,6 +1482,7 @@ Unpickle(Type<T>, String)->T
 
 ### Примеры
 
+{% if feature_tablesample==true %}
 ```yql
 SELECT *
 FROM my_table
@@ -1483,6 +1493,18 @@ WHERE Digest::MurMurHash32(
 $buf = Pickle(123);
 SELECT Unpickle(Int32, $buf);
 ```
+{% else %}
+```yql
+SELECT *
+FROM my_table
+WHERE Digest::MurMurHash32(
+        Pickle(TableRow())
+    ) % 10 == 0;
+
+$buf = Pickle(123);
+SELECT Unpickle(Int32, $buf);
+```
+{% endif %}
 
 
 ## StaticMap

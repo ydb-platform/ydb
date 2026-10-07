@@ -1,11 +1,12 @@
 #pragma once
 
-#include <optional>
-#include <utility>
+#include <ydb/library/conclusion/status.h>
 
 #include <library/cpp/json/writer/json_value.h>
 #include <util/generic/strbuf.h>
-#include <ydb/library/conclusion/status.h>
+
+#include <optional>
+#include <utility>
 
 namespace NKikimr::NOlap::NIndexes::NIndexParameters {
 
@@ -25,8 +26,7 @@ inline constexpr const char* RecordsCount = "records_count";
 template <class TValue, class TCheckType, class TGetter>
 class TOptionalJsonField {
 public:
-    TOptionalJsonField(const TStringBuf key, std::optional<TValue>& target, TCheckType&& checkType, TGetter&& getter,
-        const TStringBuf typeError)
+    TOptionalJsonField(const TStringBuf key, std::optional<TValue>& target, TCheckType&& checkType, TGetter&& getter, const TStringBuf typeError)
         : Key(key)
         , Target(target)
         , CheckType(std::forward<TCheckType>(checkType))
@@ -66,25 +66,34 @@ TOptionalJsonField<TValue, std::decay_t<TCheckType>, std::decay_t<TGetter>> Make
 inline auto MakeOptionalDoubleField(const TStringBuf key, std::optional<double>& target, const TStringBuf typeError) {
     return MakeOptionalJsonField<double>(
         key, target,
-        [](const NJson::TJsonValue& v) { return v.IsDouble(); },
-        [](const NJson::TJsonValue& v) { return v.GetDouble(); },
-        typeError);
+        [](const NJson::TJsonValue& v) {
+            return v.IsDouble();
+        },
+        [](const NJson::TJsonValue& v) {
+            return v.GetDouble();
+        }, typeError);
 }
 
 inline auto MakeOptionalUintField(const TStringBuf key, std::optional<ui32>& target, const TStringBuf typeError) {
     return MakeOptionalJsonField<ui32>(
         key, target,
-        [](const NJson::TJsonValue& v) { return v.IsUInteger(); },
-        [](const NJson::TJsonValue& v) { return v.GetUInteger(); },
-        typeError);
+        [](const NJson::TJsonValue& v) {
+            return v.IsUInteger();
+        },
+        [](const NJson::TJsonValue& v) {
+            return v.GetUInteger();
+        }, typeError);
 }
 
 inline auto MakeOptionalBoolField(const TStringBuf key, std::optional<bool>& target, const TStringBuf typeError) {
     return MakeOptionalJsonField<bool>(
         key, target,
-        [](const NJson::TJsonValue& v) { return v.IsBoolean(); },
-        [](const NJson::TJsonValue& v) { return v.GetBoolean(); },
-        typeError);
+        [](const NJson::TJsonValue& v) {
+            return v.IsBoolean();
+        },
+        [](const NJson::TJsonValue& v) {
+            return v.GetBoolean();
+        }, typeError);
 }
 
 template <class... TFields>

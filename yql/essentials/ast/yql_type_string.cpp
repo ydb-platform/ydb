@@ -508,7 +508,7 @@ private:
                        Token_ == TOKEN_IDENTIFIER ||
                        Token_ == TOKEN_ESCAPED_IDENTIFIER)
             {
-                TStringBuf argName;
+                TString argName;
                 ui32 argNameFlags = TNodeFlags::Default;
 
                 if (LookaheadNonSpaceChar() == ':') {
@@ -1123,6 +1123,7 @@ private:
 
     TAstNode* MakeStructType(const TMap<TString, TAstNode*>& members) {
         TSmallVec<TAstNode*> items;
+        items.reserve(members.size() + 1U);
         items.push_back(MakeLiteralAtom(TStringBuf("StructType")));
 
         for (const auto& member : members) {
@@ -1328,7 +1329,6 @@ private:
         return nullptr;
     }
 
-private:
     TStringBuf Str_;
     TIssues& Issues_;
     TPosition TokenBegin_, Position_;
@@ -1677,7 +1677,6 @@ private:
         Out_ << '>';
     }
 
-private:
     IOutputStream& Out_;
     bool TopLevel_ = true;
 };

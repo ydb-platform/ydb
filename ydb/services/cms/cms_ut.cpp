@@ -518,7 +518,9 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
     }
 
     Y_UNIT_TEST(RemoveWithAnotherTokenTest) {
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableHiveConfig()->SetDataCenterChangeReactionPeriod(0);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::CMS_TENANTS, NLog::PRI_TRACE);
         ui16 grpc = server.GetPort();
         TString id;

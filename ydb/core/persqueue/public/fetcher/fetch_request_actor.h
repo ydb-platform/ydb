@@ -2,8 +2,8 @@
 
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
-#include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NKikimr::NPQ {
 
@@ -33,6 +33,7 @@ struct TFetchRequestSettings {
     ui64 TotalMaxBytes = 0;
 
     bool RuPerRequest = false;
+    bool CanReadBatches = false;
     ui64 RequestId = 0;
 
     TRlContext RlCtx = {};

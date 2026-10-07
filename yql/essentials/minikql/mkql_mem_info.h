@@ -113,12 +113,12 @@ private:
 #ifndef NDEBUG
 inline void Take(TMemoryUsageInfo& memInfo, const void* mem, ui64 size, TMkqlLocation location)
 {
-    memInfo.Take(mem, size, std::move(location));
+    memInfo.Take(mem, size, location);
 }
 
 inline void Take(TMemoryUsageInfo* memInfo, const void* mem, ui64 size, TMkqlLocation location)
 {
-    memInfo->Take(mem, size, std::move(location));
+    memInfo->Take(mem, size, location);
 }
 
 inline void Return(TMemoryUsageInfo& memInfo, const void* mem, ui64 size)
@@ -147,7 +147,7 @@ inline void Return(TMemoryUsageInfo* memInfo, const void* mem)
 template <>
 inline void Out<NKikimr::NMiniKQL::TMemoryUsageInfo>(
     IOutputStream& out,
-    const NKikimr::NMiniKQL::TMemoryUsageInfo& memInfo)
+    const NKikimr::NMiniKQL::TMemoryUsageInfo& value)
 {
-    memInfo.PrintTo(out);
+    value.PrintTo(out);
 }

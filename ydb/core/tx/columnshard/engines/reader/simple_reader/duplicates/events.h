@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
 #include <ydb/library/actors/core/event_local.h>
@@ -23,6 +23,7 @@ public:
 
 class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, NColumnShard::TEvPrivate::EvRequestFilter> {
 private:
+    YDB_READONLY_DEF(TString, ExternalTaskId);
     NArrow::TSimpleRow MinPK;
     NArrow::TSimpleRow MaxPK;
     YDB_READONLY_DEF(ui64, PortionId);
@@ -34,12 +35,30 @@ private:
 public:
     TEvRequestFilter(const TPortionDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber);
 
-    // Test-only constructor that doesn't require TPortionDataSource
-    TEvRequestFilter(const NArrow::TSimpleRow& minPK, const NArrow::TSimpleRow& maxPK, const ui64 portionId,
-        const ui64 recordsCount, const TSnapshot& maxVersion, const std::shared_ptr<IFilterSubscriber>& subscriber,
-        const std::shared_ptr<const TAtomicCounter>& abortionFlag);
+    TSnapshot GetMaxVersion() const {
+        return MaxVersion;
+    }
+};
 
-    TSnapshot GetMaxVersion() const;
+class TEvFilterConstructionResult
+    : public NActors::TEventLocal<TEvFilterConstructionResult, NColumnShard::TEvPrivate::EvFilterConstructionResult> {
+private:
+    using TFilters = THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>;
+    TConclusion<TFilters> Result;
+
+public:
+    TEvFilterConstructionResult(TConclusion<TFilters>&& result)
+        : Result(std::move(result))
+    {
+    }
+
+    const TConclusion<TFilters>& GetConclusion() const {
+        return Result;
+    }
+
+    TFilters&& ExtractResult() {
+        return Result.DetachResult();
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

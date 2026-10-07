@@ -1,0 +1,7 @@
+#pragma once
+
+#ifdef USE_PYTHON3
+#include <contrib/tools/python3/Include/internal/pycore_long.h>
+#else
+#error "No <internal/pycore_long.h> in Python2"
+#endif

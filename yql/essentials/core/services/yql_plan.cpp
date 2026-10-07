@@ -77,10 +77,12 @@ struct TPinKey {
 struct TBasicLink {
     const ui64 Source;
     const ui64 Target;
+    const TString Name;
 
-    TBasicLink(ui64 source, ui64 target)
+    TBasicLink(ui64 source, ui64 target, TString name = TString())
         : Source(source)
         , Target(target)
+        , Name(std::move(name))
     {
     }
 };
@@ -322,6 +324,10 @@ public:
             writer.OnUint64Scalar(basicLink.Source);
             writer.OnKeyedItem("target");
             writer.OnUint64Scalar(basicLink.Target);
+            if (basicLink.Name) {
+                writer.OnKeyedItem("name");
+                writer.OnStringScalar(basicLink.Name);
+            }
             writer.OnEndMap();
         }
 
@@ -364,26 +370,18 @@ public:
             auto datasource = Types_.DataSourceMap.FindPtr(dataSourceName);
             YQL_ENSURE(datasource);
             info.Provider = (*datasource).Get();
-            info.IsVisible = (*datasource)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+            info.IsVisible = (*datasource)->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
         } else if (node->ChildrenSize() >= 2 && node->Child(1)->IsCallable("DataSink")) {
             auto dataSinkName = node->Child(1)->Child(0)->Content();
             auto datasink = Types_.DataSinkMap.FindPtr(dataSinkName);
             YQL_ENSURE(datasink);
             info.Provider = (*datasink).Get();
-            info.IsVisible = (*datasink)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
-        } else if (node->IsCallable("DqStage") ||
-                   node->IsCallable("DqPhyStage") ||
-                   node->IsCallable("DqQuery!") ||
-                   node->ChildrenSize() >= 1 && node->Child(0)->IsCallable("TDqOutput")) {
-            auto provider = Types_.DataSinkMap.FindPtr(DqProviderName);
-            YQL_ENSURE(provider);
-            info.Provider = (*provider).Get();
-            info.IsVisible = (*provider)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+            info.IsVisible = (*datasink)->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
         } else {
             for (auto dataSource : Types_.DataSources) {
                 if (dataSource->GetPlanFormatter().HasCustomPlan(*node)) {
                     info.Provider = dataSource.Get();
-                    info.IsVisible = dataSource->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+                    info.IsVisible = dataSource->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
                     break;
                 }
             }
@@ -392,7 +390,7 @@ public:
                 for (auto dataSink : Types_.DataSinks) {
                     if (dataSink->GetPlanFormatter().HasCustomPlan(*node)) {
                         info.Provider = dataSink.Get();
-                        info.IsVisible = dataSink->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+                        info.IsVisible = dataSink->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
                         break;
                     }
                 }
@@ -401,7 +399,7 @@ public:
             if (!info.Provider) {
                 info.IsVisible = false;
                 for (auto& child : node->Children()) {
-                    dependencies.push_back(child.Get());
+                    dependencies.emplace_back(child.Get());
                 }
             }
         }
@@ -457,12 +455,18 @@ public:
         ui32 root, TVector<TBasicNode>& basicNodes, TVector<TBasicLink>& basicLinks) {
         THashMap<TPinKey, ui32, TPinKey::THash> allInputs;
         THashMap<TPinKey, ui32, TPinKey::THash> allOutputs;
+        THashMap<ui64, const TExprNode*> idToNode;
+
         for (auto node : order) {
             const auto found = nodes.find(node.Get());
             YQL_ENSURE(found != nodes.cend());
             auto& info = found->second;
             if (!info.IsVisible) {
                 continue;
+            }
+
+            if (Types_.ShowLinksInPlan) {
+                idToNode[info.NodeId] = info.Node;
             }
 
             if (info.Provider) {
@@ -561,7 +565,13 @@ public:
             }
 
             for (auto& prevOp : dependsOn) {
-                basicLinks.push_back(TBasicLink(prevOp, info.NodeId));
+                TString name;
+                if (Types_.ShowLinksInPlan) {
+                    if (auto srcNode = idToNode.FindPtr(prevOp)) {
+                        name = info.Provider->GetPlanFormatter().GetLinkDisplayName(**srcNode, *info.Node);
+                    }
+                }
+                basicLinks.push_back(TBasicLink(prevOp, info.NodeId, std::move(name)));
             }
         }
 

@@ -36,7 +36,8 @@ public:
 
     explicit TPlanCompactionInfo(const TInternalPathId pathId, const TString& taskId)
         : PathId(pathId)
-        , TaskId(taskId) {
+        , TaskId(taskId)
+    {
     }
 
     TInternalPathId GetPathId() const {

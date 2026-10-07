@@ -1,5 +1,4 @@
-// Copyright (c) 2010 Google Inc.
-// All rights reserved.
+// Copyright 2010 Google LLC
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -11,7 +10,7 @@
 // copyright notice, this list of conditions and the following disclaimer
 // in the documentation and/or other materials provided with the
 // distribution.
-//     * Neither the name of Google Inc. nor the names of its
+//     * Neither the name of Google LLC nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
@@ -37,6 +36,7 @@
 
 #include <assert.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <string.h>
 #include <time.h>
@@ -101,6 +101,10 @@ bool IsContextSizeUnique(uint32_t context_size) {
   if (context_size == sizeof(MDRawContextARM64_Old))
     num_matching_contexts++;
   if (context_size == sizeof(MDRawContextMIPS))
+    num_matching_contexts++;
+  if (context_size == sizeof(MDRawContextRISCV))
+    num_matching_contexts++;
+  if (context_size == sizeof(MDRawContextRISCV64))
     num_matching_contexts++;
   return num_matching_contexts == 1;
 }
@@ -216,6 +220,12 @@ inline void Swap(MDXStateConfigFeatureMscInfo* xstate_feature_info) {
 inline void Swap(MDRawSimpleStringDictionaryEntry* entry) {
   Swap(&entry->key);
   Swap(&entry->value);
+}
+
+inline void Swap(MDRawCrashpadAnnotation* annotation) {
+  Swap(&annotation->name);
+  Swap(&annotation->type);
+  Swap(&annotation->value);
 }
 
 inline void Swap(uint16_t* data, size_t size_in_bytes) {
@@ -1176,6 +1186,163 @@ bool MinidumpContext::Read(uint32_t expected_size) {
         break;
       }
 
+      case MD_CONTEXT_RISCV: {
+        if (expected_size != sizeof(MDRawContextRISCV)) {
+          BPLOG(ERROR) << "MinidumpContext RISCV size mismatch, "
+                       << expected_size
+                       << " != "
+                       << sizeof(MDRawContextRISCV);
+          return false;
+        }
+
+        scoped_ptr<MDRawContextRISCV> context_riscv(new MDRawContextRISCV());
+
+        // Set the context_flags member, which has already been read, and
+        // read the rest of the structure beginning with the first member
+        // after context_flags.
+        context_riscv->context_flags = context_flags;
+
+        size_t flags_size = sizeof(context_riscv->context_flags);
+        uint8_t* context_after_flags =
+            reinterpret_cast<uint8_t*>(context_riscv.get()) + flags_size;
+        if (!minidump_->ReadBytes(context_after_flags,
+                                  sizeof(MDRawContextRISCV) - flags_size)) {
+          BPLOG(ERROR) << "MinidumpContext could not read RISCV context";
+          return false;
+        }
+
+        // Do this after reading the entire MDRawContext structure because
+        // GetSystemInfo may seek minidump to a new position.
+        if (!CheckAgainstSystemInfo(cpu_type)) {
+          BPLOG(ERROR) << "MinidumpContext RISCV does not match system info";
+          return false;
+        }
+
+        if (minidump_->swap()) {
+          Swap(&context_riscv->pc);
+          Swap(&context_riscv->ra);
+          Swap(&context_riscv->sp);
+          Swap(&context_riscv->gp);
+          Swap(&context_riscv->tp);
+          Swap(&context_riscv->t0);
+          Swap(&context_riscv->t1);
+          Swap(&context_riscv->t2);
+          Swap(&context_riscv->s0);
+          Swap(&context_riscv->s1);
+          Swap(&context_riscv->a0);
+          Swap(&context_riscv->a1);
+          Swap(&context_riscv->a2);
+          Swap(&context_riscv->a3);
+          Swap(&context_riscv->a4);
+          Swap(&context_riscv->a5);
+          Swap(&context_riscv->a6);
+          Swap(&context_riscv->a7);
+          Swap(&context_riscv->s2);
+          Swap(&context_riscv->s3);
+          Swap(&context_riscv->s4);
+          Swap(&context_riscv->s5);
+          Swap(&context_riscv->s6);
+          Swap(&context_riscv->s7);
+          Swap(&context_riscv->s8);
+          Swap(&context_riscv->s9);
+          Swap(&context_riscv->s10);
+          Swap(&context_riscv->s11);
+          Swap(&context_riscv->t3);
+          Swap(&context_riscv->t4);
+          Swap(&context_riscv->t5);
+          Swap(&context_riscv->t6);
+
+          for (int fpr_index = 0;
+               fpr_index < MD_FLOATINGSAVEAREA_RISCV_FPR_COUNT;
+               ++fpr_index) {
+            Swap(&context_riscv->float_save.regs[fpr_index]);
+          }
+          Swap(&context_riscv->float_save.fpcsr);
+        }
+        SetContextRISCV(context_riscv.release());
+
+        break;
+      }
+
+      case MD_CONTEXT_RISCV64: {
+        if (expected_size != sizeof(MDRawContextRISCV64)) {
+          BPLOG(ERROR) << "MinidumpContext RISCV64 size mismatch, "
+                       << expected_size
+                       << " != "
+                       << sizeof(MDRawContextRISCV64);
+          return false;
+        }
+
+        scoped_ptr<MDRawContextRISCV64> context_riscv64(
+            new MDRawContextRISCV64());
+
+        // Set the context_flags member, which has already been read, and
+        // read the rest of the structure beginning with the first member
+        // after context_flags.
+        context_riscv64->context_flags = context_flags;
+
+        size_t flags_size = sizeof(context_riscv64->context_flags);
+        uint8_t* context_after_flags =
+            reinterpret_cast<uint8_t*>(context_riscv64.get()) + flags_size;
+        if (!minidump_->ReadBytes(context_after_flags,
+                                  sizeof(MDRawContextRISCV64) - flags_size)) {
+          BPLOG(ERROR) << "MinidumpContext could not read RISCV context";
+          return false;
+        }
+
+        // Do this after reading the entire MDRawContext structure because
+        // GetSystemInfo may seek minidump to a new position.
+        if (!CheckAgainstSystemInfo(cpu_type)) {
+          BPLOG(ERROR) << "MinidumpContext RISCV does not match system info";
+          return false;
+        }
+
+        if (minidump_->swap()) {
+          Swap(&context_riscv64->pc);
+          Swap(&context_riscv64->ra);
+          Swap(&context_riscv64->sp);
+          Swap(&context_riscv64->gp);
+          Swap(&context_riscv64->tp);
+          Swap(&context_riscv64->t0);
+          Swap(&context_riscv64->t1);
+          Swap(&context_riscv64->t2);
+          Swap(&context_riscv64->s0);
+          Swap(&context_riscv64->s1);
+          Swap(&context_riscv64->a0);
+          Swap(&context_riscv64->a1);
+          Swap(&context_riscv64->a2);
+          Swap(&context_riscv64->a3);
+          Swap(&context_riscv64->a4);
+          Swap(&context_riscv64->a5);
+          Swap(&context_riscv64->a6);
+          Swap(&context_riscv64->a7);
+          Swap(&context_riscv64->s2);
+          Swap(&context_riscv64->s3);
+          Swap(&context_riscv64->s4);
+          Swap(&context_riscv64->s5);
+          Swap(&context_riscv64->s6);
+          Swap(&context_riscv64->s7);
+          Swap(&context_riscv64->s8);
+          Swap(&context_riscv64->s9);
+          Swap(&context_riscv64->s10);
+          Swap(&context_riscv64->s11);
+          Swap(&context_riscv64->t3);
+          Swap(&context_riscv64->t4);
+          Swap(&context_riscv64->t5);
+          Swap(&context_riscv64->t6);
+
+          for (int fpr_index = 0;
+               fpr_index < MD_FLOATINGSAVEAREA_RISCV_FPR_COUNT;
+               ++fpr_index) {
+            Swap(&context_riscv64->float_save.regs[fpr_index]);
+          }
+          Swap(&context_riscv64->float_save.fpcsr);
+        }
+        SetContextRISCV64(context_riscv64.release());
+
+        break;
+      }
+
       default: {
         // Unknown context type - Don't log as an error yet. Let the
         // caller work that out.
@@ -1266,6 +1433,16 @@ bool MinidumpContext::CheckAgainstSystemInfo(uint32_t context_cpu_type) {
 
     case MD_CONTEXT_MIPS64:
       if (system_info_cpu_type == MD_CPU_ARCHITECTURE_MIPS64)
+        return_value = true;
+      break;
+
+    case MD_CONTEXT_RISCV:
+      if (system_info_cpu_type == MD_CPU_ARCHITECTURE_RISCV)
+       return_value = true;
+      break;
+
+    case MD_CONTEXT_RISCV64:
+      if (system_info_cpu_type == MD_CPU_ARCHITECTURE_RISCV64)
         return_value = true;
       break;
   }
@@ -3779,6 +3956,14 @@ string MinidumpSystemInfo::GetCPU() {
       cpu = "arm64";
       break;
 
+    case MD_CPU_ARCHITECTURE_RISCV:
+      cpu = "riscv";
+      break;
+
+    case MD_CPU_ARCHITECTURE_RISCV64:
+      cpu = "riscv64";
+      break;
+
     default:
       BPLOG(ERROR) << "MinidumpSystemInfo unknown CPU for architecture " <<
                       HexString(system_info_.processor_architecture);
@@ -5182,6 +5367,7 @@ MinidumpCrashpadInfo::MinidumpCrashpadInfo(Minidump* minidump)
       module_crashpad_info_(),
       module_crashpad_info_list_annotations_(),
       module_crashpad_info_simple_annotations_(),
+      module_crashpad_info_annotation_objects_(),
       simple_annotations_() {
 }
 
@@ -5189,15 +5375,51 @@ MinidumpCrashpadInfo::MinidumpCrashpadInfo(Minidump* minidump)
 bool MinidumpCrashpadInfo::Read(uint32_t expected_size) {
   valid_ = false;
 
-  if (expected_size != sizeof(crashpad_info_)) {
-    BPLOG(ERROR) << "MinidumpCrashpadInfo size mismatch, " << expected_size <<
-                    " != " << sizeof(crashpad_info_);
+  // Support old minidumps that do not implement newer crashpad_info_
+  // fields, currently limited to the address mask.
+  static_assert(sizeof(crashpad_info_) == 64,
+                "Updated ::Read for new crashpad_info field.");
+
+  constexpr size_t crashpad_info_min_size =
+      offsetof(decltype(crashpad_info_), reserved);
+  if (expected_size < crashpad_info_min_size) {
+    BPLOG(ERROR) << "MinidumpCrashpadInfo size mismatch, " << expected_size
+                 << " < " << crashpad_info_min_size;
     return false;
   }
 
-  if (!minidump_->ReadBytes(&crashpad_info_, sizeof(crashpad_info_))) {
+  if (!minidump_->ReadBytes(&crashpad_info_, crashpad_info_min_size)) {
     BPLOG(ERROR) << "MinidumpCrashpadInfo cannot read Crashpad info";
     return false;
+  }
+  expected_size -= crashpad_info_min_size;
+
+  // Read `reserved` if available.
+  size_t crashpad_reserved_size = sizeof(crashpad_info_.reserved);
+  if (expected_size >= crashpad_reserved_size) {
+    if (!minidump_->ReadBytes(
+            &crashpad_info_.reserved,
+            crashpad_reserved_size)) {
+      BPLOG(ERROR) << "MinidumpCrashpadInfo cannot read reserved";
+      return false;
+    }
+    expected_size -= crashpad_reserved_size;
+  } else {
+    crashpad_info_.reserved = 0;
+  }
+
+  // Read `address_mask` if available.
+  size_t crashpad_address_mask_size = sizeof(crashpad_info_.address_mask);
+  if (expected_size >= crashpad_address_mask_size) {
+    if (!minidump_->ReadBytes(
+            &crashpad_info_.address_mask,
+            crashpad_address_mask_size)) {
+      BPLOG(ERROR) << "MinidumpCrashpadInfo cannot read address mask";
+      return false;
+    }
+    expected_size -= crashpad_address_mask_size;
+  } else {
+    crashpad_info_.address_mask = 0;
   }
 
   if (minidump_->swap()) {
@@ -5206,6 +5428,8 @@ bool MinidumpCrashpadInfo::Read(uint32_t expected_size) {
     Swap(&crashpad_info_.client_id);
     Swap(&crashpad_info_.simple_annotations);
     Swap(&crashpad_info_.module_list);
+    Swap(&crashpad_info_.reserved);
+    Swap(&crashpad_info_.address_mask);
   }
 
   if (crashpad_info_.simple_annotations.data_size) {
@@ -5269,6 +5493,7 @@ bool MinidumpCrashpadInfo::Read(uint32_t expected_size) {
         Swap(&module_crashpad_info.version);
         Swap(&module_crashpad_info.list_annotations);
         Swap(&module_crashpad_info.simple_annotations);
+        Swap(&module_crashpad_info.annotation_objects);
       }
 
       std::vector<std::string> list_annotations;
@@ -5293,11 +5518,23 @@ bool MinidumpCrashpadInfo::Read(uint32_t expected_size) {
         }
       }
 
+      std::vector<MinidumpCrashpadInfo::AnnotationObject> annotation_objects;
+      if (module_crashpad_info.annotation_objects.data_size) {
+        if (!minidump_->ReadCrashpadAnnotationsList(
+                module_crashpad_info.annotation_objects.rva,
+                &annotation_objects)) {
+          BPLOG(ERROR)
+              << "MinidumpCrashpadInfo cannot read Crashpad annotations list";
+          return false;
+        }
+      }
+
       module_crashpad_info_links_.push_back(
           module_crashpad_info_links[index].minidump_module_list_index);
       module_crashpad_info_.push_back(module_crashpad_info);
       module_crashpad_info_list_annotations_.push_back(list_annotations);
       module_crashpad_info_simple_annotations_.push_back(simple_annotations);
+      module_crashpad_info_annotation_objects_.push_back(annotation_objects);
     }
   }
 
@@ -5342,6 +5579,7 @@ void MinidumpCrashpadInfo::Print() {
       printf("  module_list[%d].simple_annotations[\"%s\"] = %s\n",
              module_index, annot.first.c_str(), annot.second.c_str());
     }
+    printf("  address_mask = %" PRIu64 "\n", crashpad_info_.address_mask);
   }
 
   printf("\n");
@@ -5481,6 +5719,12 @@ bool Minidump::GetContextCPUFlagsFromSystemInfo(uint32_t* context_cpu_flags) {
         break;
       case MD_CPU_ARCHITECTURE_SPARC:
         *context_cpu_flags = MD_CONTEXT_SPARC;
+        break;
+      case MD_CPU_ARCHITECTURE_RISCV:
+        *context_cpu_flags = MD_CONTEXT_RISCV;
+        break;
+      case MD_CPU_ARCHITECTURE_RISCV64:
+        *context_cpu_flags = MD_CONTEXT_RISCV64;
         break;
       case MD_CPU_ARCHITECTURE_UNKNOWN:
         *context_cpu_flags = 0;
@@ -6147,6 +6391,73 @@ bool Minidump::ReadSimpleStringDictionary(
   return true;
 }
 
+bool Minidump::ReadCrashpadAnnotationsList(
+    off_t offset,
+    std::vector<MinidumpCrashpadInfo::AnnotationObject>* annotations_list) {
+  annotations_list->clear();
+
+  if (!SeekSet(offset)) {
+    BPLOG(ERROR) << "Minidump cannot seek to annotations_list";
+    return false;
+  }
+
+  uint32_t count;
+  if (!ReadBytes(&count, sizeof(count))) {
+    BPLOG(ERROR) << "Minidump cannot read annotations_list count";
+    return false;
+  }
+
+  if (swap_) {
+    Swap(&count);
+  }
+
+  scoped_array<MDRawCrashpadAnnotation> objects(
+      new MDRawCrashpadAnnotation[count]);
+
+  // Read the entire array in one fell swoop, instead of reading one entry
+  // at a time in the loop.
+  if (!ReadBytes(&objects[0], sizeof(MDRawCrashpadAnnotation) * count)) {
+    BPLOG(ERROR) << "Minidump could not read annotations_list";
+    return false;
+  }
+
+  for (uint32_t index = 0; index < count; ++index) {
+    MDRawCrashpadAnnotation annotation = objects[index];
+
+    if (swap_) {
+      Swap(&annotation);
+    }
+
+    string name;
+    if (!ReadUTF8String(annotation.name, &name)) {
+      BPLOG(ERROR) << "Minidump could not read annotation name";
+      return false;
+    }
+
+    if (!SeekSet(annotation.value)) {
+      BPLOG(ERROR) << "Minidump cannot seek to annotations value";
+      return false;
+    }
+
+    uint32_t value_length;
+    if (!ReadBytes(&value_length, sizeof(value_length))) {
+      BPLOG(ERROR) << "Minidump could not read annotation value length";
+      return false;
+    }
+
+    std::vector<uint8_t> value_data(value_length);
+    if (!ReadBytes(value_data.data(), value_length)) {
+      BPLOG(ERROR) << "Minidump could not read annotation value";
+      return false;
+    }
+
+    MinidumpCrashpadInfo::AnnotationObject object = {annotation.type, name,
+                                                     value_data};
+    annotations_list->push_back(object);
+  }
+
+  return true;
+}
 
 bool Minidump::SeekToStreamType(uint32_t  stream_type,
                                 uint32_t* stream_length) {

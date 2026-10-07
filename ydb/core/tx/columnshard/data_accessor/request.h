@@ -91,7 +91,7 @@ public:
     bool HasRemovedData() const {
         return !RemovedAddresses.empty();
     }
-    
+
     const THashSet<NGeneralCache::TGlobalPortionAddress>& GetRemovedData() const {
         return RemovedAddresses;
     }
@@ -144,6 +144,7 @@ public:
             OnRequestsFinished(std::move(*Result));
         }
     }
+
     const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
         return DoGetAbortionFlag();
     }
@@ -156,6 +157,7 @@ private:
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
         return Default<std::shared_ptr<const TAtomicCounter>>();
     }
+
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& /*result*/) override {
     }
 };
@@ -193,7 +195,8 @@ public:
     }
 
     TDataAccessorsRequest(const NGeneralCache::TPortionsMetadataCachePolicy::EConsumer consumer)
-        : Consumer(consumer) {
+        : Consumer(consumer)
+    {
     }
 
     ui64 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
@@ -221,6 +224,15 @@ public:
 
     ui32 GetSize() const {
         return Portions.size();
+    }
+
+    std::vector<ui64> GetPortionIds() const {
+        std::vector<ui64> result;
+        result.reserve(Portions.size());
+        for (auto&& [id, _] : Portions) {
+            result.emplace_back(id);
+        }
+        return result;
     }
 
     bool IsEmpty() const {

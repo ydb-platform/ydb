@@ -1,10 +1,11 @@
 #pragma once
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <util/string/vector.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 
@@ -62,7 +63,7 @@ TString GetSerializedData(const NKikimrPQClient::TDataChunk& init, TArgs&...args
 
     TString str;
     bool res = proto.SerializeToString(&str);
-    Y_ENSURE(res);
+    AFL_ENSURE(res);
     return str;
 }
 
@@ -71,5 +72,4 @@ TString GetSerializedData(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEv
 
 NKikimrPQClient::TDataChunk GetDeserializedData(const TString& string);
 
-} // NKikimr
-
+} // namespace NKikimr

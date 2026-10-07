@@ -51,6 +51,12 @@ message TExternalLockedMessageGroupsId {
     }
 }
 
+message TMLPReceiveAttempt {
+    optional string ReceiveAttemptId = 1;
+    repeated uint64 Offsets = 2 [packed = true];
+    optional uint64 ExpirySeconds = 3;
+}
+
 message TMLPStorageSnapshot {
     message TConfiguration {
         optional string ConsumerName = 1;
@@ -78,6 +84,8 @@ message TMLPStorageSnapshot {
     optional bytes DLQMessages = 8;
 
     repeated TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 9;
+
+    repeated TMLPReceiveAttempt ReceiveAttempts = 10;
 }
 
 message TMLPStorageWAL {
@@ -103,6 +111,9 @@ message TMLPStorageWAL {
     optional uint64 FirstDLQSeqNo = 15;
 
     repeated TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 16;
+
+    repeated TMLPReceiveAttempt ReceiveAttemptUpserts = 17;
+    repeated string ReceiveAttemptDeletes = 18;
 }
 
 message TMessageDeduplicationIdWAL {

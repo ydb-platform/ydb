@@ -32,18 +32,18 @@ def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: 
     log('Checkout base commit...')
     exec(f'git checkout {base_commit}')
     log('Build graph for base commit...')
-    exec(f'{ya_make_command} ydb -k --cache-tests --save-graph-to {workdir}/graph_base.json --save-context-to {workdir}/context_base.json')
+    exec(f'{ya_make_command} ydb --cache-tests --save-graph-to {workdir}/graph_base.json --save-context-to {workdir}/context_base.json')
 
     log('Checkout head commit...')
     exec(f'git checkout {head_commit}')
     log('Build graph for head commit...')
-    exec(f'{ya_make_command} ydb -k --cache-tests --save-graph-to {workdir}/graph_head.json --save-context-to {workdir}/context_head.json')
+    exec(f'{ya_make_command} ydb --cache-tests --save-graph-to {workdir}/graph_head.json --save-context-to {workdir}/context_head.json')
 
     log('Generate diff graph...')
     exec(f'{ya} tool ygdiff --old {workdir}/graph_base.json --new {workdir}/graph_head.json --cut {graph_path} --dump-uids {workdir}/uids.json')
 
     log('Generate diff context...')
-    exec(f'{ya} tool context_difference {workdir}/context_base.json {workdir}/context_head.json {context_path} {workdir}/uids.json')
+    exec(f'{ya} tool contexts_difference {workdir}/context_base.json {workdir}/context_head.json {context_path} {workdir}/uids.json')
 
 
 if __name__ == '__main__':

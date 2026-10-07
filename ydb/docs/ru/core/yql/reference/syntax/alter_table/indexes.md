@@ -1,4 +1,4 @@
-# Добавление, удаление и переименование индекса
+# Управление индексами
 
 ## Добавление индекса {#add-index}
 
@@ -8,6 +8,7 @@
 ALTER TABLE `<table_name>`
   ADD INDEX `<index_name>`
     [GLOBAL|LOCAL]
+    [UNIQUE]
     [SYNC|ASYNC]
     [USING <index_type>]
     ON ( <index_columns> )
@@ -18,21 +19,65 @@ ALTER TABLE `<table_name>`
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
-Параметры, специфичные для векторных индексов:
-
-{% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
-
-Параметры, специфичные для полнотекстовых индексов:
-
-{% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
-
 {% if backend_name == "YDB" and oss == true %}
 
 Также добавить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI.
 
 {% endif %}
 
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+Параметры для всех типов индексов:
+
+* `parallel` - максимальное число параллельных обработчиков на основе [партиций](../../../../concepts/glossary.md#partition), задействованных в построении индекса (целое число между `1` и `MaxBuildIndexShardsInFlight` из `SchemeShardConfig`).
+  - Если параметр не указан, сейчас используется значение по умолчанию `32` или `MaxBuildIndexShardsInFlight`, если это значение меньше. `MaxBuildIndexShardsInFlight` по умолчанию равен `1000`. В будущих версиях логика выбора параллелизма по умолчанию может быть изменена.
+  - Вы можете установить меньший лимит, чтобы снизить влияние построения индекса на производительность базы данных.
+  - Вы также можете установить больший лимит, чтобы ускорить построение индекса, если у вас достаточно аппаратных ресурсов.
+
+Параметры, специфичные для векторных индексов:
+
+{% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
+
+{% note info %}
+
+Для векторных индексов параметры `vector_type` и `vector_dimension` можно не указывать, если таблица не пуста — они определяются автоматически по содержимому строк. Параметры `levels` и `clusters` также определяются автоматически, и для них таблица может быть пустой, но делать это крайне не рекоммендуется так как дефолтные значения в этом случае `levels`=1, `clusters`=2, гораздо лучше создавать индекс по таблице куда уже загруженны данные, чтобы значения могли правильно определиться.
+
+{% endnote %}
+
+
+Параметры, специфичные для полнотекстовых индексов:
+
+{% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
+
+### Параметры локальных блум-индексов {#local-bloom}
+
+{% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
+
+### Параметры локального min_max-индекса {#local-min-max}
+
+{% include [min_max_index_parameters.md](../_includes/min_max_index_parameters.md) %}
+
+### Ограничения
+
+Операция `ADD INDEX` для создания глобальных вторичных (`GLOBAL`, `UNIQUE` и т.п.) и векторных индексов поддерживается только для строковых таблиц. Для [колоночных таблиц](../../../../concepts/datamodel/table.md#column-oriented-tables) через `ADD INDEX` поддерживаются только локальные индексы: [блум-индекс](#local-bloom) и [min_max-индекс](#local-min-max).
+
+Особенности локальных блум-индексов:
+
+{% include [bloom_skip_index_features.md](../_includes/bloom_skip_index_features.md) %}
+
+{% note info "Ограничения" %}
+
+{% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
+
+{% endnote %}
+
+Особенности локального min_max-индекса:
+
+{% include [min_max_index_features.md](../_includes/min_max_index_features.md) %}
+
+{% note info "Ограничения" %}
+
+{% include [min_max_index_limitations.md](../_includes/min_max_index_limitations.md) %}
+
+{% endnote %}
 
 ### Примеры
 
@@ -51,12 +96,7 @@ ALTER TABLE `series`
   ADD INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
   ON (embedding) COVER (title)
   WITH (
-    distance="cosine",
-    vector_type="float",
-    vector_dimension=512,
-    clusters=128,
-    levels=2,
-    overlap_clusters=3
+    distance="cosine", vector_type="float", vector_dimension=512
   );
 ```
 
@@ -67,6 +107,44 @@ ALTER TABLE `series`
   ADD INDEX ft_idx GLOBAL USING fulltext_plain
   ON (title)
   WITH (tokenizer=standard, use_filter_lowercase=true);
+```
+
+[JSON-индекс](../../../../dev/json-indexes.md):
+
+```yql
+ALTER TABLE `series`
+  ADD INDEX json_idx GLOBAL USING json
+  ON (metadata);
+```
+
+[Блум-индекс](../../../../dev/bloom-skip-indexes.md):
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_bloom LOCAL USING bloom_filter
+  ON (resource_id)
+  WITH (false_positive_probability = 0.01);
+```
+
+Блум n-граммный индекс:
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+  ON (message)
+  WITH (
+    ngram_size = 3,
+    false_positive_probability = 0.01,
+    case_sensitive = true
+  );
+```
+
+min_max-индекс:
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_created_at LOCAL USING min_max
+  ON (created_at);
 ```
 
 ## Изменение параметров индекса {#alter-index}
@@ -86,18 +164,23 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 
 * `<table_name>` - имя таблицы, индекс которой нужно изменить.
 * `<index_name>` - имя индекса, который нужно изменить.
-* `<setting_name>` - имя изменяемого параметра, который должен быть одним из следующих:
+* `<setting_name>` - имя изменяемого параметра. Набор допустимых параметров зависит от типа индекса:
+  * для глобальных вторичных индексов:
 
-  * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
-  * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
-  * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
-  * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
-  * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
-  * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
+    * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
+    * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
+    * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
+    * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
+    * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
+    * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
+  * для локальных блум-индексов (см. [Параметры локальных блум-индексов](#local-bloom)):
+    * `FALSE_POSITIVE_PROBABILITY`
+    * `NGRAM_SIZE` и `CASE_SENSITIVE` (только для `bloom_ngram_filter`)
+  * min_max-индекс не поддерживает `ALTER INDEX`.
 
 {% note info %}
 
-Эти настройки нельзя вернуть к исходным.
+Операция `RESET` для `ALTER INDEX` не поддерживается.
 
 {% endnote %}
 
@@ -106,6 +189,9 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
   * `ENABLED` или `DISABLED` для параметров `AUTO_PARTITIONING_BY_SIZE` и `AUTO_PARTITIONING_BY_LOAD`
   * `"PER_AZ:<count>"` или `"ANY_AZ:<count>"` где `<count>` — число реплик для `READ_REPLICAS_SETTINGS`
   * для остальных параметров — целое число типа `Uint64`
+  * для `FALSE_POSITIVE_PROBABILITY` — число с плавающей точкой в диапазоне `(0, 1)`; меньшее значение обычно уменьшает число ложноположительных срабатываний, но увеличивает размер индекса
+  * для `NGRAM_SIZE` — целое число в диапазоне от `3` до `8` (обычно рекомендуется начинать с `3`)
+  * для `CASE_SENSITIVE` — `true` или `false`
 
 ### Пример
 
@@ -118,6 +204,60 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
     READ_REPLICAS_SETTINGS = "PER_AZ:1"
 );
 ```
+
+Для локальных блум-индексов можно также менять специфичные для них параметры, например:
+
+```yql
+ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (
+    ngram_size = 4,
+    false_positive_probability = 0.005,
+    case_sensitive = false
+);
+```
+
+## Перестроение векторного индекса {#rebuild-index}
+
+`REBUILD INDEX` создаёт новую версию существующего [векторного индекса](../../../../dev/vector-indexes.md) по данным таблицы и атомарно заменяет старый индекс с сохранением имени. Используйте команду для пересчёта кластеров после изменения распределения данных или для изменения параметров кластеризации.
+
+Операция поддерживает только индексы `vector_kmeans_tree`, включая индексы с фильтрацией и покрывающие индексы. Индекс должен существовать и находиться в состоянии `Ready`, то есть его предыдущее построение должно быть завершено. Проверить наличие и тип индекса можно командой [scheme describe](../../../../reference/ydb-cli/commands/scheme-describe.md).
+
+Чтобы перестроить индекс с текущими настройками, выполните:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_vector_index`;
+```
+
+Чтобы изменить параметры кластеризации при перестроении, добавьте `WITH`:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_vector_index`
+WITH (clusters = 128, levels = 2);
+```
+
+В `WITH` можно указать следующие параметры:
+
+| Параметр | Описание |
+| --- | --- |
+| `clusters` | Количество кластеров. Целое число от `2` до `2048`. |
+| `levels` | Количество уровней дерева. Целое число от `1` до `16`. |
+| `overlap_clusters` | Количество ближайших кластеров последнего уровня, в которые добавляется каждый вектор. Если параметр задан, допустимо целое число от `2` до `2048`, но не больше значения `clusters`. Если не задан, сохраняется текущее значение; при отсутствии значения в существующем индексе используется `1`. |
+| `overlap_ratio` | Неотрицательный порог отношения расстояний, ограничивающий добавление вектора в дополнительные кластеры; значение `0` отключает порог. |
+| `adaptive_clusters` | Автоматический выбор количества кластеров для каждого значения фильтруемой колонки в индексе с фильтрацией. Принимает `true` или `false`. |
+| `parallel` | Максимальное число обработчиков партиций, участвующих в перестроении. Ограничения и значение по умолчанию совпадают с [`ADD INDEX`](#add-index). |
+
+Параметры кластеризации, не указанные в `WITH`, сохраняют текущие значения. В частности, если не указать `clusters` и `levels`, новые значения для текущего размера таблицы не будут подобраны автоматически. При перестроении действуют те же [ограничения параметров векторного индекса](#add-index), что и при создании.
+
+Индекс сохраняет набор индексируемых и покрываемых колонок. Функция расстояния или сходства, тип элементов вектора и размерность вектора наследуются от существующего индекса. Не указывайте `distance`, `similarity`, `vector_type` или `vector_dimension` в `WITH`: команда отклоняет эти параметры, даже если их значения совпадают с текущими. Для их изменения создайте отдельный индекс.
+
+Существующий индекс остаётся доступным для запросов и продолжает получать обновления таблицы, пока строится новая версия. После успешного построения {{ ydb-short-name }} атомарно переключается на новую версию. Запросы продолжают использовать прежнее имя индекса. Если перестроение завершится ошибкой или будет отменено до замены, старый индекс останется доступным. Перестроение может продолжиться после перезапуска таблетки управления схемой.
+
+Замена индекса может сделать кешированные планы запросов неактуальными. Во время переключения запрос к индексу может получить временный статус `ABORTED`. Если это происходит при завершении [операции перестроения](../../../../reference/ydb-cli/operation-list.md), повторите запрос целиком с помощью стандартного [механизма повторных попыток SDK](../../../../recipes/ydb-sdk/retry.md).
+
+{% note warning %}
+
+Новая версия строится по снимку данных и наследует [ограничение консистентности при построении векторных индексов](../../../../dev/vector-indexes.md#build-consistency). Обновления таблицы во время перестроения могут не попасть в новый индекс. Если требуется полная консистентность, [приостановите запись из приложений и дождитесь успешного завершения перестроения](../../../../dev/vector-indexes.md#rebuild). Это временное ограничение планируется устранить в одной из следующих версий {{ ydb-short-name }}.
+
+{% endnote %}
 
 ## Удаление индекса {#drop-index}
 
@@ -140,6 +280,8 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 {% if backend_name == "YDB" and oss == true %}
 
 Возможность атомарной замены индекса под нагрузкой поддерживается командой [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) {{ ydb-short-name }} CLI и специализированными методами {{ ydb-short-name }} SDK.
+
+Это относится к глобальным вторичным индексам (скрытая индексная таблица и режим `--replace`). Локальные блум-индексы к такой атомарной замене под нагрузкой не применимы.
 
 {% endif %}
 

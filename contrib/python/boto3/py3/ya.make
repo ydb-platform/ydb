@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.34.89)
+VERSION(1.42.97)
 
 LICENSE(Apache-2.0)
 
@@ -77,7 +77,6 @@ RESOURCE_FILES(
     boto3/data/ec2/2016-11-15/resources-1.json
     boto3/data/glacier/2012-06-01/resources-1.json
     boto3/data/iam/2010-05-08/resources-1.json
-    boto3/data/opsworks/2013-02-18/resources-1.json
     boto3/data/s3/2006-03-01/resources-1.json
     boto3/data/sns/2010-03-31/resources-1.json
     boto3/data/sqs/2012-11-05/resources-1.json

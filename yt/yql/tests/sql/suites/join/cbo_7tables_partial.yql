@@ -7,6 +7,7 @@ PRAGMA yt.LookupJoinLimit = '1000';
 PRAGMA yt.LookupJoinMaxRows = '100';
 PRAGMA yt.ExtendedStatsMaxChunkCount = '0';
 PRAGMA yt.JoinMergeTablesLimit = '100';
+pragma yt.OptimizeFor="scan";
 
 SELECT
     InputA.Key1 AS a_k1,

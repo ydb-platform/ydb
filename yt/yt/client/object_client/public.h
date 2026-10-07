@@ -4,13 +4,13 @@
 
 #include <yt/yt/client/job_tracker_client/public.h>
 
+#include <library/cpp/yt/compact_containers/compact_flat_set.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
+
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/guid.h>
 #include <library/cpp/yt/misc/hash.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
-
-#include <library/cpp/yt/compact_containers/compact_vector.h>
-#include <library/cpp/yt/compact_containers/compact_flat_set.h>
 
 #include <library/cpp/yt/string/string_builder.h>
 
@@ -288,6 +288,8 @@ DEFINE_ENUM(EObjectType,
     ((Master)                                       (600))
     ((MasterCell)                                   (601))
     ((SysNode)                                      (602))
+    ((MasterCellGroup)                              (603))
+    ((MasterCellGroupMap)                           (604))
     // Next two types would end with 'a' and 'b' in hex.
     ((AliceAvenueEndpoint)                          (618))
     ((BobAvenueEndpoint)                            (619))
@@ -368,6 +370,7 @@ DEFINE_ENUM(EObjectType,
     // Queue stuff
     ((QueueConsumer)                               (1700))
     ((QueueProducer)                               (1701))
+    ((QueueMultiConsumer)                          (1702))
 );
 
 //! A bit mask marking schema types.
@@ -418,15 +421,6 @@ struct TVersionedObjectId
 
     static TVersionedObjectId FromString(TStringBuf str);
 };
-
-//! Formats id into a string (for debugging and logging purposes mainly).
-void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStringBuf spec);
-
-//! Compares TVersionedNodeId s for equality.
-bool operator==(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
-
-//! Compares TVersionedNodeId s for "less than".
-bool operator <  (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
 
 class TObjectServiceProxy;
 

@@ -1,6 +1,6 @@
 # Чекпоинты
 
-Чекпоинт — это сохранённое состояние работающего [потокового запроса](../../concepts/streaming-query.md), необходимое для восстановления после сбоев обработки. {{ ydb-short-name }} периодически сохраняет чекпоинты всех запущенных потоковых запросов.
+Чекпоинт — это сохранённое состояние работающего [потокового запроса](../../concepts/streaming-query/streaming-query.md), необходимое для восстановления после сбоев обработки. {{ ydb-short-name }} периодически сохраняет чекпоинты всех запущенных потоковых запросов.
 
 ## Содержимое чекпоинта {#contents}
 
@@ -80,11 +80,11 @@ DO BEGIN
 PRAGMA ydb.DisableCheckpoints = "TRUE";
 
 INSERT INTO
-    ydb_source.output_topic
+    output_topic
 SELECT
     *
 FROM
-    ydb_source.input_topic;
+    input_topic;
 
 END DO
 ```
@@ -92,4 +92,4 @@ END DO
 ## См. также
 
 - [{#T}](guarantees.md) — гарантии доставки данных и наблюдаемые аномалии.
-- [{#T}](../../concepts/streaming-query.md) — общее описание потоковых запросов.
+- [{#T}](../../concepts/streaming-query/streaming-query.md) — общее описание потоковых запросов.

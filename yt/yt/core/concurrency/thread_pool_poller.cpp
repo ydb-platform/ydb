@@ -7,11 +7,10 @@
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/system/notification_handle.h>
+#include <library/cpp/yt/system/tscp.h>
 
 #include <yt/yt/core/threading/thread.h>
-
-#include <library/cpp/yt/threading/notification_handle.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
@@ -201,7 +200,7 @@ public:
         TStringBuf threadNamePrefix,
         TDuration pollingPeriod)
         : TThread(Format("%v:%v", threadNamePrefix, "Poll"))
-        , Logger(ConcurrencyLogger().WithTag("ThreadNamePrefix: %v", threadNamePrefix))
+        , Logger(ConcurrencyLogger().WithTag("ThreadNamePrefix", threadNamePrefix))
     {
         // Register auxilary notifictation handle to wake up poller thread when deregistering
         // pollables and on shutdown.
@@ -227,7 +226,7 @@ public:
         FairShareThreadPool_->SetPollingPeriod(pollingPeriod);
     }
 
-    bool TryRegister(const IPollablePtr& pollable, const std::string poolName) override
+    bool TryRegister(const IPollablePtr& pollable, const std::string& poolName) override
     {
         // FIXME(lukyan): Enqueueing in register queue may happen after stopping.
         // Create cookie when dequeueing from register queue?
@@ -242,8 +241,8 @@ public:
 
         RegisterQueue_.Enqueue(pollable);
 
-        YT_LOG_DEBUG("Pollable registered (%v)",
-            pollable->GetLoggingTag());
+        YT_TLOG_DEBUG("Pollable registered")
+            .With(pollable->GetLoggingTags());
 
         return true;
     }
@@ -269,18 +268,18 @@ public:
 
     void Arm(TFileDescriptor fd, const IPollablePtr& pollable, EPollControl control) override
     {
-        YT_LOG_TRACE("Arming poller (FD: %v, Control: %v, %v)",
-            fd,
-            control,
-            pollable->GetLoggingTag());
+        YT_TLOG_TRACE("Arming poller")
+            .With("FD", fd)
+            .With("Control", control)
+            .With(pollable->GetLoggingTags());
 
         PollerImpl_.Set(pollable.Get(), fd, ToImplControl(control));
     }
 
     void Unarm(TFileDescriptor fd, const IPollablePtr&) override
     {
-        YT_LOG_TRACE("Unarming poller (FD: %v)",
-            fd);
+        YT_TLOG_TRACE("Unarming poller")
+            .With("FD", fd);
         PollerImpl_.Remove(fd);
     }
 
@@ -431,8 +430,8 @@ private:
 
     void DoUnregister(const IPollablePtr& pollable)
     {
-        YT_LOG_DEBUG("Requesting pollable unregistration (%v)",
-            pollable->GetLoggingTag());
+        YT_TLOG_DEBUG("Requesting pollable unregistration")
+            .With(pollable->GetLoggingTags());
 
         auto* cookie = TPollableCookie::TryFromPollable(pollable.Get());
         YT_VERIFY(cookie);
@@ -460,9 +459,9 @@ private:
                 continue;
             }
 
-            YT_LOG_TRACE("Got pollable event (Pollable: %v, Control: %v)",
-                pollable->GetLoggingTag(),
-                control);
+            YT_TLOG_TRACE("Got pollable event")
+                .With(pollable->GetLoggingTags())
+                .With("Control", control);
 
             ScheduleEvent(pollable, control);
         }
@@ -476,8 +475,8 @@ private:
         std::vector<IPollablePtr> unregisterItems;
 
         try {
-            YT_LOG_DEBUG("Thread started (Name: %v)",
-                GetThreadName());
+            YT_TLOG_DEBUG("Thread started")
+                .With("Name", GetThreadName());
 
             while (true) {
                 int eventCount = PollerImpl_.Wait(PooledImplEvents_.data(), PooledImplEvents_.size(), PollerThreadQuantum.MicroSeconds());
@@ -514,11 +513,12 @@ private:
                 }
             }
 
-            YT_LOG_DEBUG("Thread stopped (Name: %v)",
-                GetThreadName());
+            YT_TLOG_DEBUG("Thread stopped")
+                .With("Name", GetThreadName());
         } catch (const std::exception& ex) {
-            YT_LOG_FATAL(ex, "Unhandled exception in executor thread (Name: %v)",
-                GetThreadName());
+            YT_TLOG_FATAL("Unhandled exception in executor thread")
+                .With("Name", GetThreadName())
+                .With(ex);
         }
 
         RegisterQueue_.DequeueAll(false, [&] (const auto&) { });
@@ -569,9 +569,9 @@ public:
         Poller_->Shutdown();
     }
 
-    bool TryRegister(const IPollablePtr& pollable, const std::string poolName = "default") override
+    bool TryRegister(const IPollablePtr& pollable, const std::string& poolName = "default") override
     {
-        return Poller_->TryRegister(pollable, std::move(poolName));
+        return Poller_->TryRegister(pollable, poolName);
     }
 
     void SetExecutionPool(const IPollablePtr& pollable, const std::string& poolName) override

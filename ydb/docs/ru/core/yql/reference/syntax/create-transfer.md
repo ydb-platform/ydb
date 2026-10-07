@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD009 -->
 # CREATE TRANSFER
 
 Создает [трансфер](../../../concepts/transfer.md) из [топика](../../../concepts/datamodel/topic.md) в [таблицу](../../../concepts/datamodel/table.md).
@@ -5,7 +6,7 @@
 Синтаксис:
 
 ```yql
-CREATE TRANSFER transfer_name 
+CREATE TRANSFER transfer_name
 FROM topic_name TO table_name USING lambda
 WITH (option = value[, ...])
 ```
@@ -24,8 +25,6 @@ WITH (option = value[, ...])
   * `CONSUMER` — имя [читателя](../../../concepts/datamodel/topic.md#consumer) топика-источника. Если имя задано, то в топике уже должен [существовать](alter-topic.md#add-consumer) читатель с указанным именем, и трансфер начнёт обрабатывать сообщения, начиная с первого незакоммиченного сообщения в топике. Если имя не задано, то читатель будет добавлен в топик автоматически, и трансфер начнёт обрабатывать сообщения, начиная с первого хранящегося сообщения в топике. Имя автоматически созданного читателя можно получить из [описания](../../../reference/ydb-cli/commands/scheme-describe.md) экземпляра трансфера.
 
   * {% include [x](../_includes/transfer_flush.md) %}
-
-  * {% include [x](../_includes/transfer_metrics_level_internal.md) %}
 
 ## Разрешения
 

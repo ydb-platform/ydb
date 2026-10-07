@@ -188,7 +188,7 @@ public:
         : TPerfTest(cfg)
         , QueueDepth(testProto.GetQueueDepth() != 0 ? FastClp2(testProto.GetQueueDepth()) : 4)
         , IoContext(NPDisk::CreateAsyncIoContextReal(cfg.Path, 0, 0))
-        , FlightControl(CountTrailingZeroBits(QueueDepth))
+        , FlightControl(QueueDepth)
         , DurationSec(testProto.GetDurationSeconds() != 0 ? testProto.GetDurationSeconds() : 180)
         , PrepareDurationSec(DurationSec >= 60 ? 30 : DurationSec / 2)
         , BuffSize(testProto.GetRequestSize() != 0 ? testProto.GetRequestSize() : 4096)

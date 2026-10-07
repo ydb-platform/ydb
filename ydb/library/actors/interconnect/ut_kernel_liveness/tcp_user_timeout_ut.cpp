@@ -224,11 +224,7 @@ private:
     bool FloodStarted = false;
 };
 
-} // namespace
-
-Y_UNIT_TEST_SUITE(InterconnectKernelLiveness) {
-
-    Y_UNIT_TEST(TcpUserTimeoutBlackholeDisconnectsSession) {
+void RunTcpUserTimeoutBlackholeDisconnectsSession(TTestICCluster::Flags flags) {
         constexpr size_t messages = 512;
         constexpr size_t payloadSize = 64 * 1024;
         constexpr TDuration userTimeout = TDuration::Seconds(3);
@@ -250,7 +246,7 @@ Y_UNIT_TEST_SUITE(InterconnectKernelLiveness) {
             .Disconnect = false,
         };
 
-        TTestICCluster cluster(2, TChannelsConfig(), &interrupterSettings, nullptr, TTestICCluster::DISABLE_RDMA,
+        TTestICCluster cluster(2, TChannelsConfig(), &interrupterSettings, nullptr, flags,
             {}, TDuration::Seconds(30), 128 * 1024 * 1024, settingsCustomizer);
 
         auto* recipient12 = new TDropRecipientActor;
@@ -264,14 +260,12 @@ Y_UNIT_TEST_SUITE(InterconnectKernelLiveness) {
         const TActorId sender21Id = cluster.RegisterActor(sender21, 1);
 
         WaitForCondition(TDuration::Seconds(20), [&] {
-            // NodeConnected notifications can briefly flap around reconnect races.
-            // Require that each sender has observed at least one connect and the current
-            // interconnect sockets are established on both directions.
-            return sender12->GetConnects() > 0 &&
-                sender21->GetConnects() > 0 &&
-                TryGetSessionSocketFd(cluster, 1, 2) >= 0 &&
+            // NodeConnected notifications can briefly flap around simultaneous handshake races.
+            // The flood itself does not depend on these subscriptions, so wait for the actual
+            // interconnect sockets that will be blackholed below.
+            return TryGetSessionSocketFd(cluster, 1, 2) >= 0 &&
                 TryGetSessionSocketFd(cluster, 2, 1) >= 0;
-        }, "senders connected to peer");
+        }, "interconnect sockets connected to peer");
 
         UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), 1ULL);
         UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 1ULL);
@@ -344,6 +338,19 @@ Y_UNIT_TEST_SUITE(InterconnectKernelLiveness) {
         UNIT_ASSERT_VALUES_EQUAL(sender21->GetObservedUnion(), messages);
         UNIT_ASSERT_C(sender12->GetUndelivered() > 0 || sender21->GetUndelivered() > 0,
             "expected at least one undelivered event after forced termination");
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(InterconnectKernelLiveness) {
+
+    Y_UNIT_TEST(TcpUserTimeoutBlackholeDisconnectsSession) {
+        RunTcpUserTimeoutBlackholeDisconnectsSession(TTestICCluster::DISABLE_RDMA);
+    }
+
+    Y_UNIT_TEST(TcpUserTimeoutBlackholeDisconnectsSessionWithTls) {
+        RunTcpUserTimeoutBlackholeDisconnectsSession(
+            TTestICCluster::Flags(TTestICCluster::USE_TLS | TTestICCluster::DISABLE_RDMA));
     }
 
     Y_UNIT_TEST(TcpUserTimeoutNoReconnectGeneratesUndelivered) {

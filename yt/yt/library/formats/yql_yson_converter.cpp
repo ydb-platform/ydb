@@ -636,6 +636,10 @@ static TWeightLimitedYsonToYqlConverter CreateWeightLimitedYsonToYqlConverter(
             return CreateWeightLimitedYsonToYqlConverter(
                 logicalType->AsTaggedTypeRef().GetElement(),
                 std::move(config));
+        case ELogicalMetatype::AggregateState:
+            return CreateWeightLimitedYsonToYqlConverter(
+                logicalType->AsAggregateStateTypeRef().GetElement(),
+                std::move(config));
     }
     YT_ABORT();
 }
@@ -754,7 +758,7 @@ public:
                 EValueType::Composite,
                 value.Type);
         }
-        TMemoryInput input(value.Data.String, value.Length);
+        TMemoryInput input(value.AsStringBuf());
         TYsonPullParser parser(&input, EYsonType::Node);
         TYsonPullParserCursor cursor(&parser);
         Converter_(&cursor, consumer, totalLimit);
@@ -824,6 +828,7 @@ static TWeightLimitedUnversionedValueToYqlConverter CreateWeightLimitedUnversion
         case ELogicalMetatype::Dict:
             return TComplexUnversionedValueToYqlConverter(logicalType, std::move(config));
         case ELogicalMetatype::Tagged:
+        case ELogicalMetatype::AggregateState:
             // DenullifyLogicalType should have cleaned type of tagged types.
             Y_ABORT();
     }

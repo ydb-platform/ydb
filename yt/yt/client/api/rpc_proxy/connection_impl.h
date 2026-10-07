@@ -15,7 +15,7 @@
 
 #include <yt/yt/core/misc/backoff_strategy.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -35,7 +35,7 @@ public:
 
     // IConnection implementation.
     TClusterTag GetClusterTag() const override;
-    const std::string& GetLoggingTag() const override;
+    const NLogging::TLoggingTagList& GetLoggingTags() const override;
     const std::string& GetClusterId() const override;
     const std::optional<std::string>& GetClusterName() const override;
     const std::optional<NAuth::TTvmId>& GetTvmId() const override;
@@ -67,7 +67,7 @@ private:
     std::atomic<bool> ProxyListUpdateStarted_ = false;
 
     const TGuid ConnectionId_;
-    const std::string LoggingTag_;
+    const NLogging::TLoggingTagList LoggingTags_;
     const std::string ClusterId_;
     const NLogging::TLogger Logger;
     const NRpc::IChannelFactoryPtr ChannelFactory_;
@@ -82,7 +82,7 @@ private:
     const NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
 
     // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-    NThreading::TAtomicObject<std::string> DiscoveryToken_;
+    TAtomicObject<std::string> DiscoveryToken_;
 
     std::vector<std::string> DiscoverProxiesViaHttp();
     std::vector<std::string> DiscoverProxiesViaServiceDiscovery();

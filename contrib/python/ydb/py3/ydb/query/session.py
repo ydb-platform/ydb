@@ -1,4 +1,5 @@
 import abc
+import asyncio
 import json
 import logging
 import threading
@@ -18,6 +19,8 @@ from . import base
 from .base import QueryExplainResultFormat
 
 from .. import _apis, issues, _utilities
+from ..observability.tracing import SpanName, create_ydb_span, set_peer_attributes, span_finish_callback
+from ..observability.metrics import SessionMetrics, _NOOP_SESSION_METRICS, create_session_metrics
 from ..settings import BaseRequestSettings
 from ..connection import _RpcState as RpcState, EndpointKey
 from .._grpc.grpcwrapper import common_utils
@@ -30,7 +33,7 @@ from .transaction import QueryTxContext
 from .._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT, DEFAULT_LONG_STREAM_TIMEOUT
 
 if TYPE_CHECKING:
-    from ..driver import Driver as SyncDriver
+    from ..driver import Driver as SyncDriver, DriverConfig
     from ..aio.driver import Driver as AsyncDriver
 
 
@@ -46,7 +49,28 @@ def wrapper_create_session(
     issues._process_response(message.status)
     session._session_id = message.session_id
     session._node_id = message.node_id
+    session._peer = _resolve_peer(session._driver, message.node_id)
     return session
+
+
+def _resolve_peer(driver, node_id):
+    """Look up network.peer.* / ydb.node.dc for a node in the driver's endpoint map."""
+    if node_id is None:
+        return None
+    store = getattr(driver, "_store", None)
+    if store is None:
+        return None
+    by_node = getattr(store, "connections_by_node_id", None)
+    if not by_node:
+        return None
+    connection = by_node.get(node_id)
+    if connection is None:
+        return None
+    return (
+        getattr(connection, "peer_address", None),
+        getattr(connection, "peer_port", None),
+        getattr(connection, "peer_location", None),
+    )
 
 
 def wrapper_delete_session(
@@ -56,7 +80,6 @@ def wrapper_delete_session(
 ) -> "BaseQuerySession":
     message = _ydb_query.DeleteSessionResponse.from_proto(response_pb)
     issues._process_response(message.status)
-    session._closed = True
     return session
 
 
@@ -70,7 +93,10 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
     # Session data
     _session_id: Optional[str] = None
     _node_id: Optional[int] = None
+    _peer: Optional[tuple] = None
     _closed: bool = False
+    _invalidated: bool = False
+    _session_metrics: SessionMetrics = _NOOP_SESSION_METRICS
 
     def __init__(self, driver: DriverT, settings: Optional[base.QueryClientSettings] = None):
         self._driver = driver
@@ -83,6 +109,11 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         )
 
         self._last_query_stats = None
+        self._session_metrics = create_session_metrics()
+
+    @property
+    def _driver_config(self) -> Optional["DriverConfig"]:
+        return getattr(self._driver, "_driver_config", None)
 
     @property
     def session_id(self) -> Optional[str]:
@@ -122,12 +153,37 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         return base.QueryClientSettings()
 
     def _check_session_ready_to_use(self) -> None:
-        if not self.is_active:
+        if self._session_id is None:
+            raise RuntimeError("Session is not initialized")
+        if self._invalidated:
+            raise issues.BadSession(f"Session is not active, session_id: {self._session_id}, closed: {self._closed}")
+        if self._closed:
             raise RuntimeError(f"Session is not active, session_id: {self._session_id}, closed: {self._closed}")
 
-    def _invalidate(self) -> None:
+    def _attach_stream_wrapper(self, response_pb):
+        """Map attach-stream protobuf frames to ServerStatus and handle session hints."""
+        self._handle_attach_session_state(response_pb)
+        return common_utils.ServerStatus.from_proto(response_pb)
+
+    def _handle_attach_session_state(self, response_pb) -> None:
+        """Retire the session when the server sends a shutdown hint on the attach stream."""
+        if response_pb is None:
+            return
+
+        match response_pb.WhichOneof("session_hint"):
+            case "node_shutdown":
+                if self._node_id is not None:
+                    self._driver._pessimize_node(self._node_id)
+                self._close_session(invalidate=True, reason="node_shutdown")
+            case "session_shutdown":
+                self._close_session(invalidate=True, reason="session_shutdown")
+
+    def _close_session(self, invalidate: bool = False, reason: Optional[str] = None) -> None:
         if self._closed:
             return
+        self._session_metrics.count_closed(reason)
+        if invalidate:
+            self._invalidated = True
         self._closed = True
 
         if self._stream is not None:
@@ -136,22 +192,60 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
             except Exception:
                 pass
 
-    def _on_execute_stream_error(self, e: Exception) -> None:
-        if isinstance(e, issues.DeadlineExceed):
-            self._invalidate()
+    def _on_attach_stream_status_error(self, e: BaseException) -> None:
+        reason: Optional[str]
+        match e:
+            case issues.BadSession() | issues.SessionExpired():
+                reason = "bad_session"
+            case issues.SessionBusy():
+                reason = "session_busy"
+            case issues.Unavailable() | issues.ConnectionError():
+                reason = "transport_error"
+            case _:
+                reason = None
+        self._close_session(invalidate=True, reason=reason)
+
+    def _on_execute_stream_error(self, e: BaseException) -> None:
+        # The execute stream is a single gRPC call that carries all of a
+        # query's response parts. If any of these errors surface while reading
+        # it, the server-side stream is either known-dead (BadSession,
+        # ConnectionError, DeadlineExceed) or undrained and un-resumable
+        # (SessionBusy: server thinks this session still has the previous
+        # query running; Cancelled: the call has been torn down mid-flight),
+        # which means a subsequent query on the same session can race the
+        # stragglers and get a spurious SessionBusy back. Drop the session so
+        # the pool creates a fresh one on the next acquire.
+        #
+        # Accepts BaseException so that asyncio.CancelledError (not an
+        # issues.Error subclass) — the case documented in the bug report —
+        # also invalidates here.
+        match e:
+            case issues.DeadlineExceed():
+                reason = "client_timeout"
+            case issues.Cancelled() | asyncio.CancelledError():
+                reason = "client_cancelled"
+            case issues.SessionBusy():
+                reason = "session_busy"
+            case issues.BadSession() | issues.SessionExpired():
+                reason = "bad_session"
+            case issues.Unavailable() | issues.ConnectionError():
+                reason = "transport_error"
+            case issues.Error():
+                return
+            case _:
+                reason = "transport_error"
+        self._close_session(invalidate=True, reason=reason)
 
     # Overloads for _create_call
     @overload
     def _create_call(
         self: "BaseQuerySession[SyncDriver]", settings: Optional[BaseRequestSettings] = None
-    ) -> "BaseQuerySession[SyncDriver]":
-        ...
+    ) -> "BaseQuerySession[SyncDriver]": ...
 
     @overload
     def _create_call(
         self: "BaseQuerySession[AsyncDriver]", settings: Optional[BaseRequestSettings] = None
-    ) -> Awaitable["BaseQuerySession[AsyncDriver]"]:
-        ...
+    ) -> Awaitable["BaseQuerySession[AsyncDriver]"]: ...
 
     def _create_call(
         self, settings: Optional[BaseRequestSettings] = None
@@ -170,14 +264,12 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
     @overload
     def _delete_call(
         self: "BaseQuerySession[SyncDriver]", settings: Optional[BaseRequestSettings] = None
-    ) -> "BaseQuerySession[SyncDriver]":
-        ...
+    ) -> "BaseQuerySession[SyncDriver]": ...
 
     @overload
     def _delete_call(
         self: "BaseQuerySession[AsyncDriver]", settings: Optional[BaseRequestSettings] = None
-    ) -> Awaitable["BaseQuerySession[AsyncDriver]"]:
-        ...
+    ) -> Awaitable["BaseQuerySession[AsyncDriver]"]: ...
 
     def _delete_call(
         self, settings: Optional[BaseRequestSettings] = None
@@ -197,14 +289,12 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
     @overload
     def _attach_call(
         self: "BaseQuerySession[SyncDriver]",
-    ) -> GrpcStreamCall[_apis.ydb_query.SessionState]:
-        ...
+    ) -> GrpcStreamCall[_apis.ydb_query.SessionState]: ...
 
     @overload
     def _attach_call(
         self: "BaseQuerySession[AsyncDriver]",
-    ) -> Awaitable[GrpcStreamCall[_apis.ydb_query.SessionState]]:
-        ...
+    ) -> Awaitable[GrpcStreamCall[_apis.ydb_query.SessionState]]: ...
 
     def _attach_call(
         self,
@@ -233,8 +323,8 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
-    ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]:
-        ...
+        pool_id: Optional[str] = None,
+    ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]: ...
 
     @overload
     def _execute_call(
@@ -250,8 +340,8 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
-    ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]:
-        ...
+        pool_id: Optional[str] = None,
+    ) -> Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]]: ...
 
     def _execute_call(
         self,
@@ -266,6 +356,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> Union[
         Iterable[_apis.ydb_query.ExecuteQueryResponsePart],
         Awaitable[Iterable[_apis.ydb_query.ExecuteQueryResponsePart]],
@@ -289,6 +380,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
             result_set_format=result_set_format,
             arrow_format_settings=arrow_format_settings,
             concurrent_result_sets=concurrent_result_sets,
+            pool_id=pool_id,
         )
 
         return self._driver(
@@ -309,21 +401,25 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
         super().__init__(driver, settings)
 
     def _attach(self, first_resp_timeout: int = DEFAULT_INITIAL_RESPONSE_TIMEOUT) -> None:
-        self._stream = self._attach_call()
-        status_stream = _utilities.SyncResponseIterator(
-            self._stream,
-            lambda response: common_utils.ServerStatus.from_proto(response),
-        )
-
         try:
+            self._stream = self._attach_call()
+            status_stream = _utilities.SyncResponseIterator(
+                self._stream,
+                self._attach_stream_wrapper,
+            )
+
             first_response = _utilities.get_first_message_with_timeout(
                 status_stream,
                 first_resp_timeout,
             )
             issues._process_response(first_response)
-        except Exception as e:
-            self._invalidate()
-            raise e
+            if not self._closed:
+                self._session_metrics.count_open()
+        except BaseException:
+            # BaseException, not Exception: an interrupted attach must tear the stream
+            # down too, otherwise the half-attached session is orphaned server-side.
+            self._close_session(invalidate=True)
+            raise
 
         threading.Thread(
             target=self._check_session_status_loop,
@@ -335,11 +431,17 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
     def _check_session_status_loop(self, status_stream: _utilities.SyncResponseIterator) -> None:
         try:
             for status in status_stream:
-                issues._process_response(status)
+                try:
+                    issues._process_response(status)
+                except Exception as e:
+                    logger.debug("Attach stream status error: %s, session_id: %s", e, self._session_id)
+                    self._on_attach_stream_status_error(e)
+                    return
             logger.debug("Attach stream closed, session_id: %s", self._session_id)
+            self._close_session(invalidate=True, reason="attach_closed")
         except Exception as e:
-            logger.debug("Attach stream error: %s, session_id: %s", e, self._session_id)
-            self._invalidate()
+            logger.debug("Attach stream transport error: %s, session_id: %s", e, self._session_id)
+            self._close_session(invalidate=True, reason="transport_error")
 
     def delete(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """Deletes a Session of Query Service on server side and releases resources.
@@ -349,13 +451,13 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
         if self._closed:
             return
 
+        self._close_session()
+
         if self._session_id:
             try:
                 self._delete_call(settings=settings)
             except Exception:
                 pass
-
-        self._invalidate()
 
     def create(self, settings: Optional[BaseRequestSettings] = None) -> "QuerySession":
         """Creates a Session of Query Service on server side and attaches it.
@@ -368,8 +470,10 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
         if self._closed:
             raise RuntimeError("Session is already closed.")
 
-        self._create_call(settings=settings)
-        self._attach()
+        with create_ydb_span(SpanName.CREATE_SESSION, self._driver_config).attach_context() as span:
+            self._create_call(settings=settings)
+            set_peer_attributes(span, self._peer)
+            self._attach()
 
         return self
 
@@ -399,9 +503,9 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
     def execute(
         self,
         query: str,
-        parameters: dict = None,
-        syntax: base.QuerySyntax = None,
-        exec_mode: base.QueryExecMode = None,
+        parameters: Optional[dict] = None,
+        syntax: Optional[base.QuerySyntax] = None,
+        exec_mode: Optional[base.QueryExecMode] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
         *,
@@ -409,6 +513,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
         schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
         result_set_format: Optional[base.QueryResultSetFormat] = None,
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> base.SyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -430,25 +535,34 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
          1) QueryResultSetFormat.VALUE, which is default;
          2) QueryResultSetFormat.ARROW.
         :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
+        :param pool_id: Optional resource pool ID for routing the query to a specific compute pool.
 
         :return: Iterator with result sets
         """
         self._check_session_ready_to_use()
 
-        stream_it = self._execute_call(
-            query=query,
-            parameters=parameters,
-            commit_tx=True,
-            syntax=syntax,
-            exec_mode=exec_mode,
-            stats_mode=stats_mode,
-            schema_inclusion_mode=schema_inclusion_mode,
-            result_set_format=result_set_format,
-            arrow_format_settings=arrow_format_settings,
-            concurrent_result_sets=concurrent_result_sets,
-            settings=settings,
+        span = create_ydb_span(
+            SpanName.EXECUTE_QUERY,
+            self._driver_config,
+            node_id=self._node_id,
+            peer=self._peer,
         )
 
+        with span.attach_context(end_on_exit=False):
+            stream_it = self._execute_call(
+                query=query,
+                parameters=parameters,
+                commit_tx=True,
+                syntax=syntax,
+                exec_mode=exec_mode,
+                stats_mode=stats_mode,
+                schema_inclusion_mode=schema_inclusion_mode,
+                result_set_format=result_set_format,
+                arrow_format_settings=arrow_format_settings,
+                concurrent_result_sets=concurrent_result_sets,
+                settings=settings,
+                pool_id=pool_id,
+            )
         return base.SyncResponseContextIterator(
             stream_it,
             lambda resp: base.wrap_execute_query_response(
@@ -458,12 +572,13 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
                 settings=self._settings,
             ),
             on_error=self._on_execute_stream_error,
+            on_finish=span_finish_callback(span),
         )
 
     def explain(
         self,
         query: str,
-        parameters: dict = None,
+        parameters: Optional[dict] = None,
         *,
         result_format: QueryExplainResultFormat = QueryExplainResultFormat.STR,
     ) -> Union[str, Dict[str, Any]]:

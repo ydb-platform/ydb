@@ -44,7 +44,8 @@ struct TOperation: TSimpleRefCount<TOperation> {
     TDeque<TProposeShards> ShardsProposes;
 
     using TPublishPath = std::pair<TPathId, ui64>;
-    TSet<TPublishPath> Publications;
+    using TPublicationPaths = TMap<TPublishPath, TPathDbRef>;
+    TPublicationPaths Publications;
 
     TSet<TSubTxId> ReadyToProposeParts;
     THashSet<TSubTxId> ReadyToNotifyParts;
@@ -85,7 +86,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     TVector<ISubOperation::TPtr> ConstructParts(const TTxTransaction& tx, TOperationContext& context) const;
     void AddPart(ISubOperation::TPtr part);
 
-    bool AddPublishingPath(TPathId pathId, ui64 version);
+    bool AddPublishingPath(TSchemeShard* ss, TPathId pathId, ui64 version);
     bool IsPublished() const;
 
     void ReadyToNotifyPart(TSubTxId partId);
@@ -143,6 +144,10 @@ struct TOperation: TSimpleRefCount<TOperation> {
         Y_ABORT_UNLESS(IsDoneBarrier());
         Y_ABORT_UNLESS(Barriers.begin()->first == name);
         Barriers.erase(name);
+    }
+
+    void ForceClearBarriers() {
+        Barriers.clear();
     }
 
     TOperationId NextPartId() const {

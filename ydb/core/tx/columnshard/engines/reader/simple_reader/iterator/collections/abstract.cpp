@@ -10,7 +10,8 @@ namespace NKikimr::NOlap::NReader::NSimple {
 ISourcesCollection::ISourcesCollection(
     const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
     : Context(context)
-    , SourcesConstructor(std::move(sourcesConstructor)) {
+    , SourcesConstructor(std::move(sourcesConstructor))
+{
     if (HasAppData() && AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
         MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
     }
@@ -29,13 +30,12 @@ TString ISourcesCollection::DebugString() const {
 }
 
 std::shared_ptr<IScanCursor> ISourcesCollection::BuildCursor(
-    const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords, const ui64 tabletId) const {
-    AFL_VERIFY(source);
-    AFL_VERIFY(readyRecords <= source->GetRecordsCount())("count", source->GetRecordsCount())("ready", readyRecords);
-    auto result = DoBuildCursor(source, readyRecords);
-    AFL_VERIFY(result);
-    result->SetTabletId(tabletId);
+    const NCommon::IDataSource& source, const ui32 readyRecords, const ui64 tabletId) const {
     AFL_VERIFY(tabletId);
+    AFL_VERIFY(readyRecords <= source.GetRecordsCount())("count", source.GetRecordsCount())("ready", readyRecords);
+    auto result = std::make_shared<TSourceIndexScanCursor>(SourcesSortingToProto(Context->GetReadMetadata()->GetSourcesSorting()),
+        DoGetSourceStartPK(source), source.GetSourceIdx(), readyRecords, source.GetPortionIdOptional());
+    result->SetTabletId(tabletId);
     return result;
 }
 

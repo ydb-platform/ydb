@@ -1,5 +1,6 @@
 #include "ydb_admin.h"
 
+#include "ydb_database_attribute.h"
 #include "ydb_dynamic_config.h"
 #include "ydb_node_config.h"
 #include "ydb_storage_config.h"
@@ -36,6 +37,7 @@ public:
         AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(false));
         AddCommand(std::make_unique<TCommandDatabaseDump>());
         AddCommand(std::make_unique<TCommandDatabaseRestore>());
+        AddCommand(std::make_unique<TCommandDatabaseAttribute>());
     }
 };
 
@@ -62,7 +64,8 @@ int TCommandDatabaseDump::Run(TConfig& config) {
     auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.DumpDatabase(config.Database, FilePath));
 
     return EXIT_SUCCESS;
@@ -98,7 +101,8 @@ int TCommandDatabaseRestore::Run(TConfig& config) {
         .WaitNodesDuration(WaitNodesDuration)
         .Database(config.Database);
 
-    NDump::TClient client(CreateDriver(config), std::move(log));
+    auto driver = CreateDriver(config);
+    NDump::TClient client(driver, std::move(log));
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.RestoreDatabase(FilePath, settings));
 
     return EXIT_SUCCESS;

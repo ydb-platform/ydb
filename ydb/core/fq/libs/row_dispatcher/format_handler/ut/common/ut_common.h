@@ -65,14 +65,14 @@ public:
 public:
     void CheckMessageBatch(TRope serializedBatch, const TBatch& expectedBatch) const;
 
-    static NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage GetMessage(ui64 offset, const TString& data);
+    static TMessageStreamRecord GetRecord(ui64 offset, const TString& data);
 
 public:
     NKikimr::NMiniKQL::TMemoryUsageInfo MemoryInfo;
     std::unique_ptr<NKikimr::NMiniKQL::THolderFactory> HolderFactory;
 };
 
-NActors::IActor* CreatePurecalcCompileServiceMock(NActors::TActorId owner);
+NActors::IActor* CreatePurecalcCompileServiceMock(NActors::TActorId owner, const TDuration& responseDelay = {});
 
 void CheckSuccess(const TStatus& status);
 void CheckError(const TStatus& status, TStatusCode expectedStatusCode, const TString& expectedMessage);

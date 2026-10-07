@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_worker_impl.cpp
@@ -6,15 +6,19 @@ SRCS(
 
 PEERDIR(
     library/cpp/random_provider
+    library/cpp/resource
     library/cpp/threading/future
+    library/cpp/yson/node
     yt/yql/providers/yt/fmr/coordinator/interface
-    yt/yql/providers/yt/fmr/job_factory/interface
+    yt/yql/providers/yt/fmr/job_factory/impl
     yt/yql/providers/yt/fmr/worker/interface
     yql/essentials/utils
     yql/essentials/utils/log
 )
 
-YQL_LAST_ABI_VERSION()
+RESOURCE(
+    default_worker_settings.yson default_worker_settings.yson
+)
 
 GENERATE_ENUM_SERIALIZATION(yql_yt_worker_impl.h)
 

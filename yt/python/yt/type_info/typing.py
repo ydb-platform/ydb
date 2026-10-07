@@ -11,10 +11,7 @@ try:
 except ImportError:
     _TI_SERIALIZATION_AVAILABLE = False
 
-import six
 
-
-@six.python_2_unicode_compatible
 class _SingleArgumentGenericAlias(type_base.Type):
     REQUIRED_ATTRS = type_base.Type.REQUIRED_ATTRS + ["item"]
 
@@ -56,7 +53,6 @@ def _make_tuple_attrs(items, type_name, yt_type_name):
     return attrs
 
 
-@six.python_2_unicode_compatible
 class _TupleAlias(type_base.Type):
     REQUIRED_ATTRS = type_base.Type.REQUIRED_ATTRS + ["items"]
 
@@ -92,7 +88,6 @@ class _GenericTuple(type_base.Generic):
         return self.__getitem__(tuple(params))
 
 
-@six.python_2_unicode_compatible
 class _DictAlias(type_base.Type):
     REQUIRED_ATTRS = type_base.Type.REQUIRED_ATTRS + ["key", "value"]
 
@@ -165,7 +160,6 @@ def _make_struct_attrs(params, type_name, yt_type_name):
     return attrs
 
 
-@six.python_2_unicode_compatible
 class _StructAlias(type_base.Type):
     REQUIRED_ATTRS = type_base.Type.REQUIRED_ATTRS + ["items"]
 
@@ -241,7 +235,6 @@ class _GenericVariant(type_base.Generic):
         return cls
 
 
-@six.python_2_unicode_compatible
 class _TaggedAlias(type_base.Type):
     REQUIRED_ATTRS = type_base.Type.REQUIRED_ATTRS + ["item", "tag"]
 
@@ -263,7 +256,7 @@ class _GenericTagged(type_base.Generic):
             isinstance(params, tuple) and
             len(params) == 2 and
             type_base.is_valid_type(params[0]) and
-            (isinstance(params[1], six.string_types) or isinstance(params[1], bytes))
+            isinstance(params[1], (str, bytes))
         ):
             raise ValueError("Expected type and tag, but got {}".format(type_base._with_type(params)))
         item, tag = params
@@ -291,7 +284,6 @@ class _GenericTagged(type_base.Generic):
         return self.__getitem__((item, tag,))
 
 
-@six.python_2_unicode_compatible
 class _DecimalAlias(type_base.Type):
     REQUIRED_ATTRS = type_base.Type.REQUIRED_ATTRS + ["precision", "scale"]
 
@@ -309,10 +301,10 @@ class _DecimalAlias(type_base.Type):
 
 class _GenericDecimal(type_base.Generic):
     def _create_alias(self, precision, scale):
-        if not isinstance(precision, six.integer_types):
+        if not isinstance(precision, int):
             raise ValueError("Expected integer, but got {}".format(type_base._with_type(precision)))
 
-        if not isinstance(scale, six.integer_types):
+        if not isinstance(scale, int):
             raise ValueError("Expected integer, but got {}".format(type_base._with_type(scale)))
 
         attrs = {
@@ -404,7 +396,7 @@ def _validate_contains(dict, key):
 
 
 def _parse_type(type_description):
-    if isinstance(type_description, six.string_types):
+    if isinstance(type_description, str):
         _validate(type_description in PRIMITIVES_V3, "unknown type \"{}\"".format(type_description))
         return PRIMITIVES_V3[type_description]
 
@@ -414,7 +406,7 @@ def _parse_type(type_description):
     _validate_contains(type_description, "type_name")
 
     type_name = type_description["type_name"]
-    _validate(isinstance(type_name, six.string_types), "\"type_name\" must contain a string")
+    _validate(isinstance(type_name, str), "\"type_name\" must contain a string")
 
     _validate(type_name in PRIMITIVES_V3 or type_name in GENERICS, "unknown type \"{}\"".format(type_name))
 
@@ -426,7 +418,7 @@ def _parse_type(type_description):
 
 def _parse_type_v1(type_description, required):
     if required or type_description in [Null.yt_type_name_v1, Void.yt_type_name_v1]:
-        _validate(isinstance(type_description, six.string_types), "\"type_description\" must be a string for v1 type")
+        _validate(isinstance(type_description, str), "\"type_description\" must be a string for v1 type")
         _validate(type_description in PRIMITIVES_V1, "unknown type \"{}\"".format(type_description))
         return PRIMITIVES_V1[type_description]
     else:
@@ -451,24 +443,24 @@ def serialize_yson(type_, human_readable=False):
 def deserialize_yson(yson):
     _check_serialization_available()
 
-    if type(yson) is six.text_type and six.PY3:
+    if type(yson) is str:
         yson = yson.encode("utf-8")
 
     try:
         type_description = yt.yson.loads(yson)
         return _parse_type(type_description)
     except (ValueError, yt.yson.YsonError) as e:
-        six.raise_from(ValueError("deserialization failed: {}".format(e)), e)
+        raise ValueError("deserialization failed: {}".format(e)) from e
 
 
 def deserialize_yson_v1(yson, required):
     _check_serialization_available()
 
-    if type(yson) is six.text_type and six.PY3:
+    if type(yson) is str:
         yson = yson.encode("utf-8")
 
     try:
         type_description = yt.yson.loads(yson)
         return _parse_type_v1(type_description, required)
     except (ValueError, yt.yson.YsonError) as e:
-        six.raise_from(ValueError("deserialization failed: {}".format(e)), e)
+        raise ValueError("deserialization failed: {}".format(e)) from e

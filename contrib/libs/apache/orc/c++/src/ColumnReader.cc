@@ -323,7 +323,12 @@ namespace orc {
             nanoBuffer[i] *= 10;
           }
         }
+
         int64_t writerTime = secsBuffer[i] + epochOffset_;
+        if (writerTime < 0 && nanoBuffer[i] > 999999) {
+          writerTime -= 1;
+        }
+
         if (!sameTimezone_) {
           // adjust timestamp value to same wall clock time if writer and reader
           // time zones have different rules, which is required for Apache Orc.
@@ -338,9 +343,6 @@ namespace orc {
           }
         }
         secsBuffer[i] = writerTime;
-        if (secsBuffer[i] < 0 && nanoBuffer[i] > 999999) {
-          secsBuffer[i] -= 1;
-        }
       }
     }
   }
@@ -691,15 +693,29 @@ namespace orc {
   size_t StringDirectColumnReader::computeSize(const int64_t* lengths, const char* notNull,
                                                uint64_t numValues) {
     size_t totalLength = 0;
+    auto addLength = [&](int64_t length) {
+      if (length < 0) {
+        std::stringstream ss;
+        ss << "Negative string length in StringDirectColumnReader for column " << columnId;
+        throw ParseError(ss.str());
+      }
+      size_t len = static_cast<size_t>(length);
+      if (totalLength > std::numeric_limits<size_t>::max() - len) {
+        std::stringstream ss;
+        ss << "String length overflow in StringDirectColumnReader for column " << columnId;
+        throw ParseError(ss.str());
+      }
+      totalLength += len;
+    };
     if (notNull) {
       for (size_t i = 0; i < numValues; ++i) {
         if (notNull[i]) {
-          totalLength += static_cast<size_t>(lengths[i]);
+          addLength(lengths[i]);
         }
       }
     } else {
       for (size_t i = 0; i < numValues; ++i) {
-        totalLength += static_cast<size_t>(lengths[i]);
+        addLength(lengths[i]);
       }
     }
     return totalLength;
@@ -1128,6 +1144,16 @@ namespace orc {
     }
   }
 
+  size_t getCheckedUnionTag(unsigned char tag, uint64_t numChildren) {
+    size_t child = static_cast<size_t>(tag);
+    if (child >= numChildren) {
+      throw ParseError("Invalid union tag " + to_string(static_cast<int64_t>(child)) +
+                       " for union with " + to_string(static_cast<int64_t>(numChildren)) +
+                       " children");
+    }
+    return child;
+  }
+
   class UnionColumnReader : public ColumnReader {
    private:
     std::unique_ptr<ByteRleDecoder> rle_;
@@ -1178,15 +1204,15 @@ namespace orc {
   uint64_t UnionColumnReader::skip(uint64_t numValues) {
     numValues = ColumnReader::skip(numValues);
     const uint64_t BUFFER_SIZE = 1024;
-    char buffer[BUFFER_SIZE];
+    unsigned char buffer[BUFFER_SIZE];
     uint64_t lengthsRead = 0;
     int64_t* counts = childrenCounts_.data();
     memset(counts, 0, sizeof(int64_t) * numChildren_);
     while (lengthsRead < numValues) {
       uint64_t chunk = std::min(numValues - lengthsRead, BUFFER_SIZE);
-      rle_->next(buffer, chunk, nullptr);
+      rle_->next(reinterpret_cast<char*>(buffer), chunk, nullptr);
       for (size_t i = 0; i < chunk; ++i) {
-        counts[static_cast<size_t>(buffer[i])] += 1;
+        counts[getCheckedUnionTag(buffer[i], numChildren_)] += 1;
       }
       lengthsRead += chunk;
     }
@@ -1222,12 +1248,14 @@ namespace orc {
     if (notNull) {
       for (size_t i = 0; i < numValues; ++i) {
         if (notNull[i]) {
-          offsets[i] = static_cast<uint64_t>(counts[static_cast<size_t>(tags[i])]++);
+          size_t tag = getCheckedUnionTag(tags[i], numChildren_);
+          offsets[i] = static_cast<uint64_t>(counts[tag]++);
         }
       }
     } else {
       for (size_t i = 0; i < numValues; ++i) {
-        offsets[i] = static_cast<uint64_t>(counts[static_cast<size_t>(tags[i])]++);
+        size_t tag = getCheckedUnionTag(tags[i], numChildren_);
+        offsets[i] = static_cast<uint64_t>(counts[tag]++);
       }
     }
     // read the right number of each child column

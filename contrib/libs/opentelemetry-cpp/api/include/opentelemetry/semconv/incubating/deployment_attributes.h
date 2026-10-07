@@ -44,7 +44,7 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kDeploymentEnvironment =
 static constexpr const char *kDeploymentEnvironmentName = "deployment.environment.name";
 
 /**
-  The id of the deployment.
+  The ID of the deployment.
  */
 static constexpr const char *kDeploymentId = "deployment.id";
 
@@ -57,6 +57,30 @@ static constexpr const char *kDeploymentName = "deployment.name";
   The status of the deployment.
  */
 static constexpr const char *kDeploymentStatus = "deployment.status";
+
+namespace DeploymentEnvironmentNameValues
+{
+/**
+  Production environment
+ */
+static constexpr const char *kProduction = "production";
+
+/**
+  Staging environment
+ */
+static constexpr const char *kStaging = "staging";
+
+/**
+  Testing environment
+ */
+static constexpr const char *kTest = "test";
+
+/**
+  Development environment
+ */
+static constexpr const char *kDevelopment = "development";
+
+}  // namespace DeploymentEnvironmentNameValues
 
 namespace DeploymentStatusValues
 {

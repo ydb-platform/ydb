@@ -14,6 +14,8 @@
 
 //#include <util/generic/cast.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -202,6 +204,31 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
     return true;
 }
 
+bool AddRowToYdbResultSet(
+    Ydb::ResultSet& resultSet,
+    TConstArrayRef<NScheme::TTypeInfo> types,
+    TConstArrayRef<TCell> cells,
+    TString& error)
+{
+    if (types.size() != cells.size()) {
+        error = TStringBuilder()
+            << "Types count " << types.size()
+            << " does not match cells count " << cells.size();
+        return false;
+    }
+
+    auto* protoRow = resultSet.add_rows();
+    protoRow->mutable_items()->Reserve(cells.size());
+    for (size_t i = 0; i < cells.size(); ++i) {
+        if (!AddCell(*protoRow, types[i], cells[i], error)) {
+            resultSet.mutable_rows()->RemoveLast();
+            return false;
+        }
+    }
+
+    return true;
+}
+
 class TRowsToResult {
 public:
     TRowsToResult(const NKikimrTxDataShard::TReadTableTransaction &request)
@@ -329,14 +356,9 @@ public:
 private:
     bool DoPutRow(const NTable::TRowState& row, TString& err) override
     {
-        auto &protoRow = *YdbResultSet.add_rows();
-        auto cells = *row;
-
-        for (size_t col = 0; col < cells.size(); ++col) {
-            if (!AddCell(protoRow, ColTypes[col], cells[col], err))
-                return false;
+        if (!AddRowToYdbResultSet(YdbResultSet, ColTypes, *row, err)) {
+            return false;
         }
-
         YdbResultSet.SerializeToArcadiaStream(&ResultStream);
         YdbResultSet.Clear();
         return true;
@@ -439,9 +461,9 @@ public:
             HFunc(TEvDataShard::TEvGetReadTableScanStateRequest, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
         default:
-            LOG_ERROR(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                      "TReadTableScan: StateWork unexpected event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->ToString().data());
+            YDB_LOG_ERROR_CTX(*TlsActivationContext, "TReadTableScan: StateWork unexpected event",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString().data()});
         }
     }
 
@@ -456,8 +478,8 @@ private:
 
     void Undelivered(TEvents::TEvUndelivered::TPtr &, const TActorContext &ctx)
     {
-        LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD,
-                  "TReadTableScan: undelivered event TxId: %" PRIu64, TxId);
+        YDB_LOG_ERROR_CTX(ctx, "TReadTableScan: undelivered event",
+            {"txId", TxId});
 
         Error = "cannot reach sink actor";
         Driver->Touch(EScan::Final);
@@ -465,8 +487,8 @@ private:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &, const TActorContext &ctx)
     {
-        LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD,
-                  "TReadTableScan: disconnect TxId: %" PRIu64, TxId);
+        YDB_LOG_ERROR_CTX(ctx, "TReadTableScan: disconnect",
+            {"txId", TxId});
 
         Error = "cannot reach sink actor";
         Driver->Touch(EScan::Final);
@@ -477,10 +499,10 @@ private:
         Y_ENSURE(PendingAcks);
         --PendingAcks;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Got stream data ack ShardId: " << ShardId
-                    << ", TxId: " << TxId
-                    << ", PendingAcks: " << PendingAcks);
+        YDB_LOG_DEBUG_CTX(ctx, "Got stream data ack",
+            {"shardId", ShardId},
+            {"txId", TxId},
+            {"pendingAcks", PendingAcks});
 
         if (Finished && !PendingAcks)
             Driver->Touch(EScan::Feed);
@@ -488,8 +510,8 @@ private:
 
     void Handle(TEvTxProcessing::TEvStreamIsDead::TPtr &ev, const TActorContext &ctx)
     {
-        LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
-                 "TReadTableScan: stream disconnect TxId: %" PRIu64, TxId);
+        YDB_LOG_INFO_CTX(ctx, "TReadTableScan: stream disconnect",
+            {"txId", TxId});
 
         Error = "got dead stream notification";
         Driver->Touch(EScan::Final);
@@ -508,10 +530,10 @@ private:
 
         Writer->Reserve(MessageSizeLimit);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Got quota for read table scan ShardId: " << ShardId
-                    << ", TxId: " << TxId
-                    << ", MessageQuota: " << MessageQuota);
+        YDB_LOG_DEBUG_CTX(ctx, "Got quota for read table scan",
+            {"shardId", ShardId},
+            {"txId", TxId},
+            {"messageQuota", MessageQuota});
 
         CheckQuota(ctx);
 
@@ -653,13 +675,13 @@ private:
         ++PendingAcks;
         --MessageQuota;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Send response data ShardId: " << ShardId
-                    << ", TxId: " << TxId
-                    << ", Size: " << Writer->GetMessageSize()
-                    << ", Rows: " << Writer->GetMessageRows()
-                    << ", PendingAcks: " << PendingAcks
-                    << ", MessageQuota: " << MessageQuota);
+        YDB_LOG_DEBUG_CTX(ctx, "Send response data",
+            {"shardId", ShardId},
+            {"txId", TxId},
+            {"size", Writer->GetMessageSize()},
+            {"rows", Writer->GetMessageRows()},
+            {"pendingAcks", PendingAcks},
+            {"messageQuota", MessageQuota});
 
         if (RowLimit) {
             RowLimit -= rows;
@@ -678,7 +700,8 @@ private:
         Y_DEBUG_ABORT_UNLESS(DebugCheckKeyInRange(key));
 
         if (!Writer->PutRow(row, Error)) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got scan fatal error: " << Error);
+            YDB_LOG_ERROR("Got scan fatal",
+                {"error", Error});
             IsFatalError = true;
             return EScan::Final;
         }
@@ -712,10 +735,10 @@ private:
             ctx.Send(Sink, request.Release());
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Finish scan ShardId: " << ShardId
-                    << ", TxId: " << TxId
-                    << ", MessageQuota: " << MessageQuota);
+        YDB_LOG_DEBUG_CTX(ctx, "Finish scan",
+            {"shardId", ShardId},
+            {"txId", TxId},
+            {"messageQuota", MessageQuota});
 
         Driver = nullptr;
 
@@ -767,3 +790,7 @@ TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

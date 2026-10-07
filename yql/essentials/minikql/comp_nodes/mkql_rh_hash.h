@@ -5,11 +5,12 @@
 #include <util/system/types.h>
 #include <util/generic/bitops.h>
 #include <util/generic/yexception.h>
+#include <array>
 #include <vector>
 #include <span>
 
 #include <yql/essentials/minikql/mkql_rh_hash_utils.h>
-#include <yql/essentials/utils/is_pod.h>
+#include <yql/essentials/utils/meta/struct.h>
 #include <yql/essentials/utils/prefetch.h>
 
 #include <util/digest/city.h>
@@ -27,14 +28,14 @@ struct TRobinHoodDefaultSettings {
 template <typename TKey>
 struct TRobinHoodBatchRequestItem {
     // input
-    alignas(TKey) char KeyStorage[sizeof(TKey)];
+    alignas(TKey) std::array<char, sizeof(TKey)> KeyStorage;
 
     const TKey& GetKey() const {
-        return *reinterpret_cast<const TKey*>(KeyStorage);
+        return *reinterpret_cast<const TKey*>(KeyStorage.data());
     }
 
     void ConstructKey(const TKey& key) {
-        new (KeyStorage) TKey(key);
+        new (KeyStorage.data()) TKey(key);
     }
 
     // intermediate data
@@ -110,12 +111,12 @@ protected:
         }
     }
 
+public:
     TRobinHoodHashBase(const TRobinHoodHashBase&) = delete;
     TRobinHoodHashBase(TRobinHoodHashBase&&) = delete;
     void operator=(const TRobinHoodHashBase&) = delete;
     void operator=(TRobinHoodHashBase&&) = delete;
 
-public:
     // returns iterator
     Y_FORCE_INLINE char* Insert(TKey key, bool& isNew) {
         auto hash = HashLocal_(key);
@@ -268,7 +269,7 @@ private:
 
     Y_FORCE_INLINE char* MakeIterator(const ui64 hash, char* data, ui64 capacityShift) {
         // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
-        ui64 bucket = ((SelfHash_ ^ hash) * 11400714819323198485llu) >> capacityShift;
+        ui64 bucket = ((SelfHash_ ^ hash) * 11400714819323198485LLU) >> capacityShift;
         char* ptr = data + AsDeriv().GetCellSize() * bucket;
         return ptr;
     }
@@ -430,15 +431,15 @@ private:
         }
     }
 
-    void AdvancePointer(char*& ptr, char* begin, char* end) const {
+    void AdvancePointer(char*& ptr, char* begin, const char* end) const {
         ptr += AsDeriv().GetCellSize();
         ptr = (ptr == end) ? begin : ptr;
     }
 
     static ui64 GetSelfHash(void* self) {
-        char buf[sizeof(void*)];
-        WriteUnaligned<void*>(buf, self);
-        return CityHash64(buf, sizeof(buf));
+        std::array<char, sizeof(void*)> buf;
+        WriteUnaligned<void*>(buf.data(), self);
+        return CityHash64(buf.data(), buf.size());
     }
 
 protected:
@@ -466,7 +467,6 @@ private:
         return static_cast<TDeriv&>(*this);
     }
 
-private:
     ui64 Size_ = 0;
     ui64 Capacity_;
     ui64 CapacityShift_;
@@ -483,7 +483,7 @@ public:
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
     using TPayloadStore = int;
 
-    explicit TRobinHoodHashMap(ui32 payloadSize, ui64 initialCapacity = 1u << 8)
+    explicit TRobinHoodHashMap(ui32 payloadSize, ui64 initialCapacity = 1U << 8)
         : TBase(initialCapacity, THash(), TEqual())
         , CellSize_(sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + payloadSize)
         , PayloadSize_(payloadSize)
@@ -493,7 +493,7 @@ public:
         TBase::Init();
     }
 
-    explicit TRobinHoodHashMap(ui32 payloadSize, const THash& hash, const TEqual& equal, ui64 initialCapacity = 1u << 8)
+    explicit TRobinHoodHashMap(ui32 payloadSize, const THash& hash, const TEqual& equal, ui64 initialCapacity = 1U << 8)
         : TBase(initialCapacity, hash, equal)
         , CellSize_(sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + payloadSize)
         , PayloadSize_(payloadSize)
@@ -554,13 +554,13 @@ public:
 
     static_assert(NYql::IsPod<TPayload>, "Expected POD value type");
 
-    explicit TRobinHoodHashFixedMap(ui64 initialCapacity = 1u << 8)
+    explicit TRobinHoodHashFixedMap(ui64 initialCapacity = 1U << 8)
         : TBase(initialCapacity, THash(), TEqual())
     {
         TBase::Init();
     }
 
-    explicit TRobinHoodHashFixedMap(const THash& hash, const TEqual& equal, ui64 initialCapacity = 1u << 8)
+    explicit TRobinHoodHashFixedMap(const THash& hash, const TEqual& equal, ui64 initialCapacity = 1U << 8)
         : TBase(initialCapacity, hash, equal)
     {
         TBase::Init();
@@ -606,13 +606,13 @@ public:
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
     using TPayloadStore = int;
 
-    explicit TRobinHoodHashSet(THash hash, TEqual equal, ui64 initialCapacity = 1u << 8)
+    explicit TRobinHoodHashSet(THash hash, TEqual equal, ui64 initialCapacity = 1U << 8)
         : TBase(initialCapacity, hash, equal)
     {
         TBase::Init();
     }
 
-    explicit TRobinHoodHashSet(ui64 initialCapacity = 1u << 8)
+    explicit TRobinHoodHashSet(ui64 initialCapacity = 1U << 8)
         : TBase(initialCapacity, THash(), TEqual())
     {
         TBase::Init();

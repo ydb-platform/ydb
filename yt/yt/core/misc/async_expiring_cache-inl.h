@@ -109,8 +109,8 @@ typename TAsyncExpiringCache<TKey, TValue>::TExtendedGetResult TAsyncExpiringCac
                 HitCounter_.Increment();
                 entry->AccessDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
                 if (!entry->Future.IsSet()) {
-                    YT_LOG_DEBUG("Waiting for cache entry (Key: %v)",
-                        key);
+                    YT_TLOG_DEBUG("Waiting for cache entry")
+                        .With("Key", key);
                 }
                 return {entry->Future, false};
             }
@@ -129,8 +129,8 @@ typename TAsyncExpiringCache<TKey, TValue>::TExtendedGetResult TAsyncExpiringCac
                 HitCounter_.Increment();
                 entry->AccessDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
                 if (!entry->Future.IsSet()) {
-                    YT_LOG_DEBUG("Waiting for cache entry (Key: %v)",
-                        key);
+                    YT_TLOG_DEBUG("Waiting for cache entry")
+                        .With("Key", key);
                 }
                 return {entry->Future, false};
             }
@@ -142,8 +142,8 @@ typename TAsyncExpiringCache<TKey, TValue>::TExtendedGetResult TAsyncExpiringCac
         auto future = entry->Future;
         Add(map, key, entry);
         guard.Release();
-        YT_LOG_DEBUG("Populating cache entry (Key: %v)",
-            key);
+        YT_TLOG_DEBUG("Populating cache entry")
+            .With("Key", key);
 
         DoGet(key, nullptr, EUpdateReason::InitialFetch)
             .Subscribe(BIND([=, weakEntry = MakeWeak(entry), this, this_ = MakeStrong(this)] (const TErrorOr<TValue>& valueOrError) {
@@ -240,14 +240,12 @@ TFuture<std::vector<TErrorOr<TValue>>> TAsyncExpiringCache<TKey, TValue>::GetMan
             keysToPopulate.push_back(keys[index]);
         }
 
-        YT_LOG_DEBUG_UNLESS(
-            keysToWaitFor.empty(),
-            "Waiting for cache entries (Keys: %v)",
-            keysToWaitFor);
+        YT_TLOG_DEBUG_UNLESS(keysToWaitFor.empty(), "Waiting for cache entries")
+            .With("Keys", keysToWaitFor);
 
         if (!keysToPopulate.empty()) {
-            YT_LOG_DEBUG("Populating cache entries (Keys: %v)",
-                keysToPopulate);
+            YT_TLOG_DEBUG("Populating cache entries")
+                .With("Keys", keysToPopulate);
             InvokeGetMany(entriesToPopulate, keysToPopulate, /*periodicRefreshTime*/ std::nullopt);
         }
     }
@@ -257,6 +255,13 @@ TFuture<std::vector<TErrorOr<TValue>>> TAsyncExpiringCache<TKey, TValue>::GetMan
 
 template <class TKey, class TValue>
 std::optional<TErrorOr<TValue>> TAsyncExpiringCache<TKey, TValue>::Find(const TKey& key)
+{
+    return Find<TKey>(key);
+}
+
+template <class TKey, class TValue>
+template <class THeterogenousKey>
+std::optional<TErrorOr<TValue>> TAsyncExpiringCache<TKey, TValue>::Find(const THeterogenousKey& key)
 {
     EnsureStarted();
 
@@ -270,7 +275,7 @@ std::optional<TErrorOr<TValue>> TAsyncExpiringCache<TKey, TValue>::Find(const TK
         if (!entry->IsExpired(now) && entry->Promise.IsSet()) {
             HitCounter_.Increment();
             entry->AccessDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
-            return entry->Future.GetOrCrash();
+            return entry->Promise.GetOrCrash();
         }
     }
 
@@ -298,7 +303,7 @@ std::vector<std::optional<TErrorOr<TValue>>> TAsyncExpiringCache<TKey, TValue>::
                 const auto& entry = it->second;
                 if (!entry->IsExpired(now) && entry->Promise.IsSet()) {
                     HitCounter_.Increment();
-                    results[requestIndex] = entry->Future.GetOrCrash();
+                    results[requestIndex] = entry->Promise.GetOrCrash();
                     entry->AccessDeadline.store(now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime));
                 } else {
                     MissedCounter_.Increment();
@@ -390,7 +395,7 @@ void TAsyncExpiringCache<TKey, TValue>::Ping(const TKey& key)
 {
     auto config = GetConfig();
     auto now = NProfiling::GetCpuInstant();
-    auto [guard, map] = LockAndGetReadableShardForKey(key);
+    auto [guard, map] = LockAndGetWritableShardForKey(key);
 
     if (auto it = map.find(key); it != map.end() && it->second->Promise.IsSet()) {
         const auto& entry = it->second;
@@ -411,14 +416,17 @@ void TAsyncExpiringCache<TKey, TValue>::Set(const TKey& key, TErrorOr<TValue> va
 {
     EnsureStarted();
 
-    auto isValueOK = valueOrError.IsOK();
+    bool isValueOK = valueOrError.IsOK();
+    bool canRefreshError = !isValueOK && CanRefreshError(valueOrError);
     auto config = GetConfig();
     auto now = NProfiling::GetCpuInstant();
 
     TPromise<TValue> promise;
 
     auto accessDeadline = now + NProfiling::DurationToCpuDuration(config->ExpireAfterAccessTime);
-    auto expirationTime = isValueOK ? config->ExpireAfterSuccessfulUpdateTime : config->ExpireAfterFailedUpdateTime;
+    auto expirationTime = isValueOK || canRefreshError
+        ? config->ExpireAfterSuccessfulUpdateTime
+        : config->ExpireAfterFailedUpdateTime;
     auto updateDeadline = now + NProfiling::DurationToCpuDuration(expirationTime);
 
     auto [guard, map] = LockAndGetWritableShardForKey(key);
@@ -443,7 +451,7 @@ void TAsyncExpiringCache<TKey, TValue>::Set(const TKey& key, TErrorOr<TValue> va
         entry->Future = entry->Promise.ToFuture();
         Add(map, key, entry);
 
-        if (isValueOK && !config->BatchUpdate) {
+        if ((isValueOK || canRefreshError) && !config->BatchUpdate) {
             ScheduleEntryUpdate(entry, key, config);
         }
     }
@@ -566,7 +574,8 @@ void TAsyncExpiringCache<TKey, TValue>::SetResult(
         return;
     }
 
-    auto canCacheEntry = valueOrError.IsOK() || CanCacheError(valueOrError);
+    bool canCacheEntry = valueOrError.IsOK() || CanCacheError(valueOrError);
+    bool canRefreshError = !valueOrError.IsOK() && CanRefreshError(valueOrError);
 
     auto promise = GetPromise(key, entry);
     auto entryUpdated = promise.TrySet(valueOrError);
@@ -593,7 +602,7 @@ void TAsyncExpiringCache<TKey, TValue>::SetResult(
 
     auto expirationTime = TDuration::Zero();
     if (canCacheEntry) {
-        expirationTime = valueOrError.IsOK()
+        expirationTime = valueOrError.IsOK() || canRefreshError
             ? config->ExpireAfterSuccessfulUpdateTime
             : config->ExpireAfterFailedUpdateTime;
     }
@@ -609,7 +618,7 @@ void TAsyncExpiringCache<TKey, TValue>::SetResult(
         return;
     }
 
-    if (valueOrError.IsOK() && !config->BatchUpdate) {
+    if ((valueOrError.IsOK() || canRefreshError) && !config->BatchUpdate) {
         ScheduleEntryUpdate(entry, key, config);
     }
 }
@@ -749,6 +758,12 @@ bool TAsyncExpiringCache<TKey, TValue>::CanCacheError(const TError& /*error*/) n
 }
 
 template <class TKey, class TValue>
+bool TAsyncExpiringCache<TKey, TValue>::CanRefreshError(const TError& /*error*/) noexcept
+{
+    return false;
+}
+
+template <class TKey, class TValue>
 TPromise<TValue> TAsyncExpiringCache<TKey, TValue>::GetPromise(const TKey& key, const TEntryPtr& entry) noexcept
 {
     auto guard = MakeReaderGuardForKey(key);
@@ -809,7 +824,10 @@ void TAsyncExpiringCache<TKey, TValue>::RefreshAllItems()
             auto [guard, map] = LockAndGetReadableShard(shardIndex);
             for (const auto& [key, entry] : map) {
                 if (entry->Promise.IsSet()) {
-                    if (now < entry->AccessDeadline.load() && entry->Promise.GetOrCrash().IsOK()) {
+                    const auto& valueOrError = entry->Promise.GetOrCrash();
+                    if (now < entry->AccessDeadline.load() &&
+                        (valueOrError.IsOK() || CanRefreshError(valueOrError)))
+                    {
                         keys.push_back(key);
                         entries.push_back(MakeWeak(entry));
                     }
@@ -891,44 +909,46 @@ std::vector<std::vector<typename TAsyncExpiringCache<TKey, TValue>::TItem>> TAsy
 }
 
 template <class TKey, class TValue>
-int TAsyncExpiringCache<TKey, TValue>::GetShardIndex(const TKey& key) const
+template <class THeterogenousKey>
+int TAsyncExpiringCache<TKey, TValue>::GetShardIndex(const THeterogenousKey& key) const
 {
     return ShardKeyHash_(key) % ShardCount_;
 }
 
 template <class TKey, class TValue>
-NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock> TAsyncExpiringCache<TKey, TValue>::MakeReaderGuardForKey(const TKey& key)
+TReaderGuard<TReaderWriterSpinLock> TAsyncExpiringCache<TKey, TValue>::MakeReaderGuardForKey(const TKey& key)
 {
     auto shardIndex = GetShardIndex(key);
     const auto& shard = MapShards_[shardIndex];
-    return NThreading::ReaderGuard(shard.EntryMapSpinLock);
+    return ReaderGuard(shard.EntryMapSpinLock);
 }
 
 template <class TKey, class TValue>
-std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
+std::pair<TReaderGuard<TReaderWriterSpinLock>, const typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
 TAsyncExpiringCache<TKey, TValue>::LockAndGetReadableShard(int shardIndex)
 {
     const auto& shard = MapShards_[shardIndex];
-    return {NThreading::ReaderGuard(shard.EntryMapSpinLock), shard.EntryMap};
+    return {ReaderGuard(shard.EntryMapSpinLock), shard.EntryMap};
 }
 
 template <class TKey, class TValue>
-std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
-TAsyncExpiringCache<TKey, TValue>::LockAndGetReadableShardForKey(const TKey& key)
+template <class THeterogenousKey>
+std::pair<TReaderGuard<TReaderWriterSpinLock>, const typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
+TAsyncExpiringCache<TKey, TValue>::LockAndGetReadableShardForKey(const THeterogenousKey& key)
 {
     return LockAndGetReadableShard(GetShardIndex(key));
 }
 
 template <class TKey, class TValue>
-std::pair<NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>, typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
+std::pair<TWriterGuard<TReaderWriterSpinLock>, typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
 TAsyncExpiringCache<TKey, TValue>::LockAndGetWritableShard(int shardIndex)
 {
     auto& shard = MapShards_[shardIndex];
-    return {NThreading::WriterGuard(shard.EntryMapSpinLock), shard.EntryMap};
+    return {WriterGuard(shard.EntryMapSpinLock), shard.EntryMap};
 }
 
 template <class TKey, class TValue>
-std::pair<NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>, typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
+std::pair<TWriterGuard<TReaderWriterSpinLock>, typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
 TAsyncExpiringCache<TKey, TValue>::LockAndGetWritableShardForKey(const TKey& key)
 {
     return LockAndGetWritableShard(GetShardIndex(key));

@@ -12,7 +12,7 @@ void TUrlPreprocessing::Configure(bool restrictedUser, const TGatewaysConfig& cf
 
     try {
         if (cfg.HasFs()) {
-            const auto fsCfg = cfg.GetFs();
+            const auto& fsCfg = cfg.GetFs();
             for (auto& s : fsCfg.GetCustomSchemes()) {
                 Mapper_.AddMapping(s.GetPattern(), s.GetTargetUrl());
             }

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <yql/essentials/public/udf/udf_value_builder.h>
-#include <yql/essentials/minikql/mkql_type_ops.h>
 
 #include <library/cpp/type_info/tz/tz.h>
 
@@ -11,6 +10,9 @@
 namespace NYql::NDateTime {
 
 constexpr size_t MAX_TIMEZONE_NAME_LEN = 64;
+
+bool IsLeapYear(i32 year);
+ui32 GetMonthLength(ui32 month, bool isLeap);
 
 struct TTMStorage {
     unsigned int Year : 12;
@@ -76,7 +78,7 @@ struct TTMStorage {
             if (!builder.MakeDatetime(Year, Month, Day, local ? 0 : Hour, local ? 0 : Minute, local ? 0 : Second, datetime, TimezoneId)) {
                 ythrow yexception() << "Error in MakeDatetime";
             }
-            return datetime / 86400u;
+            return datetime / 86400U;
         } else {
             ui16 date;
             if (!builder.MakeDate(Year, Month, Day, date)) {
@@ -125,13 +127,13 @@ struct TTMStorage {
     }
 
     inline void FromTimestamp(const NUdf::IDateBuilder& builder, ui64 value, ui16 timezoneId = 0) {
-        const ui32 seconds = value / 1000000ull;
+        const ui32 seconds = value / 1000000ULL;
         FromDatetime(builder, seconds, timezoneId);
-        Microsecond = value - seconds * 1000000ull;
+        Microsecond = value - seconds * 1000000ULL;
     }
 
     inline ui64 ToTimestamp(const NUdf::IDateBuilder& builder) const {
-        return ToDatetime(builder) * 1000000ull + Microsecond;
+        return ToDatetime(builder) * 1000000ULL + Microsecond;
     }
 
     inline bool Validate(const NUdf::IDateBuilder& builder, TMaybe<i16> timezoneOffset = Nothing()) {
@@ -183,16 +185,16 @@ struct TTMStorage {
     }
 
     inline void FromTimeOfDay(ui64 value) {
-        Hour = value / 3600000000ull;
-        value -= Hour * 3600000000ull;
-        Minute = value / 60000000ull;
-        value -= Minute * 60000000ull;
-        Second = value / 1000000ull;
-        Microsecond = value - Second * 1000000ull;
+        Hour = value / 3600000000ULL;
+        value -= Hour * 3600000000ULL;
+        Minute = value / 60000000ULL;
+        value -= Minute * 60000000ULL;
+        Second = value / 1000000ULL;
+        Microsecond = value - Second * 1000000ULL;
     }
 
     inline ui64 ToTimeOfDay() const {
-        return ((Hour * 60ull + Minute) * 60ull + Second) * 1000000ull + Microsecond;
+        return ((Hour * 60ULL + Minute) * 60ULL + Second) * 1000000ULL + Microsecond;
     }
 
     TString ToString() const {
@@ -222,8 +224,8 @@ bool DoAddMonths(TStorage& storage, i64 months, const NUdf::IDateBuilder& builde
         }
     }
     storage.Month = newMonth;
-    bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year);
-    ui32 monthLength = NKikimr::NMiniKQL::GetMonthLength(storage.Month, isLeap);
+    bool isLeap = IsLeapYear(storage.Year);
+    ui32 monthLength = GetMonthLength(storage.Month, isLeap);
     storage.Day = std::min(monthLength, storage.Day);
     return storage.Validate(builder);
 }
@@ -239,7 +241,7 @@ bool DoAddYears(TStorage& storage, i64 years, const NUdf::IDateBuilder& builder)
         }
     }
     if (storage.Month == 2 && storage.Day == 29) {
-        bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year);
+        bool isLeap = IsLeapYear(storage.Year);
         if (!isLeap) {
             storage.Day--;
         }

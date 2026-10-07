@@ -1,8 +1,29 @@
 #include "kqp_rules_include.h"
 
+#include "decorrelation/dependent_join_pushdown.h"
+
 namespace NKikimr {
 namespace NKqp {
-    
+
+bool TInlineSimpleInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const {
+    if (input->Kind != EOperator::Filter || props.Subplans.Empty()) {
+        return false;
+    }
+
+    for (const auto& iu : input->GetSubplanIUs(props.Subplans)) {
+        const auto type = props.Subplans.At(iu).Type;
+        if (type == ESubplanType::IN_SUBPLAN || type == ESubplanType::EXISTS) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool TInlineSimpleInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter;
+}
+
 TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Filter || props.PgSyntax) {
         return input;
@@ -10,34 +31,36 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
 
     // Check that the filter lambda is a conjunction of one or more elements
     auto filter = CastOperator<TOpFilter>(input);
-    auto lambdaBody = filter->FilterExpr.Node->ChildPtr(1);
+    auto lambdaBody = filter->GetFilterExpression().Node->ChildPtr(1);
 
     if (!TCoAnd::Match(lambdaBody.Get()) && !TCoNot::Match(lambdaBody.Get()) && !TCoMember::Match(lambdaBody.Get())) {
         return input;
     }
 
     // Decompose the conjunction into individual conjuncts
-    auto conjuncts = filter->FilterExpr.SplitConjunct();
+    auto conjuncts = filter->GetFilterExpression().SplitConjunct();
 
     // Find the first conjunct that is a simple in or exists subplan
     bool negated = false;
-    TInfoUnit iu;
-    TSubplanEntry subplanEntry;
+    TInfoUnitId iu = 0;
+    const TSubplanEntry* subplanEntry = nullptr;
     size_t conjunctIdx;
 
     for (conjunctIdx = 0; conjunctIdx < conjuncts.size(); conjunctIdx++) {
         auto maybeSubplan = conjuncts[conjunctIdx].GetExpressionBody();
 
+        bool conjunctNegated = false;
         if (TCoNot::Match(maybeSubplan.Get())) {
             maybeSubplan = maybeSubplan->ChildPtr(0);
-            negated = true;
+            conjunctNegated = true;
         }
-        if (TCoMember::Match(maybeSubplan.Get())) {
-            auto name = TString(maybeSubplan->ChildPtr(1)->Content());
-            iu = TInfoUnit(name);
-            if (props.Subplans.PlanMap.contains(iu)) {
-                subplanEntry = props.Subplans.PlanMap.at(iu);
-                if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || subplanEntry.Type == ESubplanType::EXISTS) {
+        // Only a member of the row argument names an IU.
+        if (TCoMember::Match(maybeSubplan.Get()) && maybeSubplan->HeadPtr().Get() == &conjuncts[conjunctIdx].Node->Head().Head()) {
+            iu = GetMemberId(*maybeSubplan);
+            if (const auto* entry = props.Subplans.Find(iu)) {
+                if (entry->Type == ESubplanType::IN_SUBPLAN || entry->Type == ESubplanType::EXISTS) {
+                    subplanEntry = entry;
+                    negated = conjunctNegated;
                     break;
                 }
             }
@@ -48,86 +71,91 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
         return input;
     }
 
+    // The join consumes the call. If another conjunct needs its value, leave
+    // the call to the mark-join path, which materializes that value.
+    for (size_t i = 0; i < conjuncts.size(); i++) {
+        if (i != conjunctIdx && conjuncts[i].GetRawInputIUs().Contains(iu)) {
+            return input;
+        }
+    }
+
     TIntrusivePtr<IOperator> join;
-    TVector<std::pair<TInfoUnit, TInfoUnit>> extraJoinKeys;
-    auto uncorrSubplan = CastOperator<IOperator>(subplanEntry.Plan);
-    const auto subPlanKind = uncorrSubplan->Kind;
-    TVector<TExpression> joinFilters;
+    Y_ENSURE(subplanEntry);
+    auto subplan = CastOperator<IOperator>(subplanEntry->Plan);
+    const bool useDependentJoin = HasFreeCorrelation(subplan, subplanEntry->DependentIUs);
 
+    // If `NOT` and optional column the result could be nothing.
+    if (negated && subplanEntry->Type == ESubplanType::IN_SUBPLAN && subplanEntry->Tuple.Items().size() == 1) {
+        const auto& leftInput = filter->GetInput();
+        if (!subplanEntry->ResultIU || IsNullableIU(leftInput, subplanEntry->Tuple.Items()[0], ctx.ExprCtx) || IsNullableIU(subplan, *subplanEntry->ResultIU, ctx.ExprCtx)) {
+            return input;
+        }
+    }
 
-    // If its a correlated subplan with filters pulled up, build join conditions from the pulled up filter
-    if (subPlanKind == EOperator::Filter && CastOperator<TOpFilter>(uncorrSubplan)->GetInput()->Kind == EOperator::AddDependencies) {
-        auto subplanFilter = CastOperator<TOpFilter>(subplanEntry.Plan);
-        auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
-        uncorrSubplan = addDeps->GetInput();
-        auto subplanConjuncts = subplanFilter->FilterExpr.SplitConjunct();
+    // Simple rewrite into left only/ left semi.
+    if (subplanEntry->Type == ESubplanType::IN_SUBPLAN || useDependentJoin) {
+        TIntrusivePtr<IOperator> leftJoinInput = filter->GetInput();
+        auto joinKind = negated ? "LeftOnly" : "LeftSemi";
+        TJoinIUs tupleJoinKeys;
 
-        for (const auto& conj : subplanConjuncts) {
-            if (conj.MaybeEquiJoinCondition()) {
+        for (size_t i = 0; i < subplanEntry->Tuple.Items().size(); i++) {
+            Y_ENSURE(i == 0 && subplanEntry->ResultIU, "IN requires one result binding");
+            tupleJoinKeys.Add(subplanEntry->Tuple.Items()[i], *subplanEntry->ResultIU);
+        }
 
-                auto jc = TEquiJoinCondition(conj);
-                if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), jc.GetLeftIU()) != addDeps->Dependencies.end()) {
-                    extraJoinKeys.push_back(std::make_pair(jc.GetLeftIU(), jc.GetRightIU()));
-                } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), jc.GetRightIU()) != addDeps->Dependencies.end()) {
-                    extraJoinKeys.push_back(std::make_pair(jc.GetRightIU(), jc.GetLeftIU()));
-                } else {
-                    Y_ENSURE(false, "Correlated filter missing join condition");
-                }
-            } else {
-                joinFilters.push_back(conj);
+        if (useDependentJoin) {
+            const auto outerIUs = leftJoinInput->GetOutputIUs();
+            for (const auto& dependency : subplanEntry->DependentIUs) {
+                Y_ENSURE(outerIUs.Contains(dependency),
+                         TStringBuilder() << "Correlation column " << props.InfoUnitRegistry.GetDebugName(dependency) << " is not produced by the outer plan");
             }
 
-        }
-    }
+            // (Domain dependent join leftInput)
+            // The outer plan and the domain read leftInput through a Replicate, the domain under fresh IDs.
+            auto domain = MakeSubplanDomain(leftJoinInput, subplanEntry->DependentIUs, filter->Pos, props);
+            TJoinIUs joinKeys = domain.Keys;
+            TIntrusivePtr<IOperator> rightInput = std::move(domain).Bind(subplan, filter->Pos);
 
-    // If we have a correlated subplan where pull up didn't succeed, throw an exception
-    else if (subPlanKind == EOperator::Filter && subplanEntry.DependentIUs.size()) {
-        Y_ENSURE(false, "Decorrelation via filter pull up didn't succeed");
-    }
+            // Add domain keys for join keys.
+            joinKeys = MakeNullSafeJoinKeys(leftJoinInput, rightInput, joinKeys, filter->Pos, ctx, props);
+            for (const auto& key : tupleJoinKeys.Items()) {
+                joinKeys.Add(key);
+            }
 
-    // We build a semi-join or a left-only join when processing IN subplan
-    if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || !extraJoinKeys.empty()) {
-        auto leftJoinInput = filter->GetInput();
-        auto joinKind = negated ? "LeftOnly" : "LeftSemi";
-
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-
-        auto planIUs = uncorrSubplan->GetOutputIUs();
-
-        for (size_t i = 0; i < subplanEntry.Tuple.size(); i++) {
-            joinKeys.push_back(std::make_pair(subplanEntry.Tuple[i], planIUs[i]));
+            join = MakeIntrusive<TOpJoin>(leftJoinInput, rightInput, input->Pos, joinKind, joinKeys);
+        } else {
+            join = MakeIntrusive<TOpJoin>(leftJoinInput, subplan, input->Pos, joinKind, tupleJoinKeys);
         }
 
-        joinKeys.insert(joinKeys.begin(), extraJoinKeys.begin(), extraJoinKeys.end());
-
-        join = MakeIntrusive<TOpJoin>(leftJoinInput, uncorrSubplan, input->Pos, joinKind, joinKeys, joinFilters);
         conjuncts.erase(conjuncts.begin() + conjunctIdx);
     }
     // EXISTS and NOT EXISTS
     else {
-        auto limit = MakeIntrusive<TOpLimit>(uncorrSubplan, filter->Pos, MakeConstant("Uint64", "1", filter->Pos, &ctx.ExprCtx), EOpPhase::Undefined);
+        auto limit = MakeIntrusive<TOpLimit>(subplan, filter->Pos, MakeConstant("Uint64", "1", filter->Pos, &ctx.ExprCtx), EOpPhase::Undefined);
 
-        auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
-        TVector<TMapElement> countMapElements;
+        // The counted rows and their count are distinct IUs.
+        auto countInput = props.InfoUnitRegistry.AddGenerated("row");
+        auto countResult = props.InfoUnitRegistry.AddGenerated("row_count");
+        TMapIUs countMapElements;
         auto zero = MakeConstant("Uint64", "0", filter->Pos, &ctx.ExprCtx);
-        countMapElements.emplace_back(countResult, zero);
-        auto countMap = MakeIntrusive<TOpMap>(limit, filter->Pos, countMapElements, true);
+        countMapElements.Add(countInput, zero);
+        auto countMap = MakeIntrusive<TOpMap>(limit, filter->Pos, countMapElements);
 
-        TOpAggregationTraits aggFunction(countResult, "count", countResult);
-        TVector<TOpAggregationTraits> aggs = {aggFunction};
-        TVector<TInfoUnit> keyColumns;
+        TAggregationIUs aggs;
+        aggs.Add(countResult, TOpAggregationTraits{countInput, "count"});
+        TOrderedIUs<> keyColumns;
 
         auto agg = MakeIntrusive<TOpAggregate>(countMap, aggs, keyColumns, EOpPhase::Final, false, filter->Pos);
         const TString compareCallable = negated ? "==" : "!=";
 
         auto comparePredicate = MakeBinaryPredicate(compareCallable, MakeColumnAccess(countResult, filter->Pos, &ctx.ExprCtx, &props), zero);
-        TVector<TMapElement> mapElements;
-        auto compareResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
-        mapElements.emplace_back(compareResult, comparePredicate);
-        auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements, true);
+        TMapIUs mapElements;
+        auto compareResult = props.InfoUnitRegistry.AddGenerated("exists");
+        mapElements.Add(compareResult, comparePredicate);
+        auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements);
 
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-        join = MakeIntrusive<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys, joinFilters);
+        TJoinIUs joinKeys;
+        join = MakeIntrusive<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys);
 
         conjuncts[conjunctIdx] = MakeColumnAccess(compareResult, filter->Pos, &ctx.ExprCtx, &props);
     }

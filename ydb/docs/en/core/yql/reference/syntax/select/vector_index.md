@@ -30,7 +30,7 @@ A vector index supports a distance or similarity function [from the Knn extensio
 
 A vector index isn't automatically selected by the [optimizer](../../../../concepts/glossary.md#optimizer) and must be specified explicitly using the `VIEW IndexName` expression.
 
-If the `VIEW` expression is not used, the query will perform a full table scan with pairwise comparison of vectors. It is recommended to check the optimality of the written query using [query plan analysis](../../../../dev/query-plans-optimization.md). In particular, ensure there is no full scan of the main table.
+If the `VIEW` expression is not used, the query will perform a full table scan with pairwise comparison of vectors. It is recommended to check the optimality of the written query using [query plan analysis](../../../../dev/optimization/plans.md). In particular, ensure there is no full scan of the main table.
 
 {% endnote %}
 
@@ -40,16 +40,16 @@ If the `VIEW` expression is not used, the query will perform a full table scan w
 
 {% endnote %}
 
-## KMeansTreeSearchTopSize
+## KMeansTreeSearchTopSize {#KMeansTreeSearchTopSize}
 
 Indexed vector search is based on an approximate algorithm (ANN, Approximate Nearest Neighbors). That means that indexed search may produce a result that differs from a similar full-scan nearest neighbor search.
 
 Completeness of the indexed vector search is controlled by the following parameter: `PRAGMA ydb.KMeansTreeSearchTopSize`.
 
 This parameter controls the maximum number of scanned clusters nearest to the requested search vector at every level of the search tree.
-The parameter should be set explicitly for every search query.
+Set the parameter explicitly when tuning the balance between recall and query cost.
 
-The default value is 1. This means that only one nearest cluster is scanned at every level of the search tree by default. This parameter value maximizes search performance but results in minimum possible recall. To increase search recall (at the expense of slightly reduced search performance), you should increase the PRAGMA value, for example:
+The default value is 4 for an index with overlapping clusters (`overlap_clusters > 1`) and 10 for an index without overlap. The value 1 scans only one nearest cluster at each level and reduces query cost at the expense of recall. Increasing the value explores more clusters and can improve recall, but requires more reads and vector comparisons. For example:
 
 ```yql
 PRAGMA ydb.KMeansTreeSearchTopSize="10";
@@ -59,6 +59,12 @@ SELECT *
     ORDER BY Knn::CosineDistance(embedding, $target)
     LIMIT 10
 ```
+
+## Filtering with a prefixed vector index {#filtering}
+
+[Filtered vector indexes](../../../../dev/vector-indexes.md#filtered) support equality, `IN`, and `OR` predicates on prefix columns. For an index on `(user, embedding)`, use `WHERE user IN ("john", "jane")` to search several categories. A leading part of a multi-column prefix is also supported: an index on `(user, article_id, embedding)` accepts `WHERE user = "john"`.
+
+The final `ORDER BY` and `LIMIT` apply to the combined candidates. The cluster search budget scales with the number of matching prefix groups.
 
 ## Examples
 

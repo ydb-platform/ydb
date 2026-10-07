@@ -1,6 +1,7 @@
 #pragma once
 
 #include "propose_tx.h"
+
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/export/session/task.h>
 
@@ -22,24 +23,31 @@ private:
     THashSet<TActorId> NotifySubscribers;
     virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
     virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override;
+
     virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
     }
+
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
     }
+
     virtual TString DoGetOpType() const override {
         return "Sharing";
     }
+
     virtual bool DoIsAsync() const override {
         AFL_VERIFY(SharingTask);
         return !SharingTask->IsFinished();
     }
+
     virtual bool DoParse(TColumnShard& owner, const TString& data) override;
+
     virtual TString DoDebugString() const override {
         return "SHARING";
     }
 
 public:
     using TBase::TBase;
+
     virtual void RegisterSubscriber(const TActorId& actorId) override {
         NotifySubscribers.insert(actorId);
     }
@@ -52,4 +60,4 @@ public:
     virtual bool CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) override;
 };
 
-}
+}   // namespace NKikimr::NColumnShard

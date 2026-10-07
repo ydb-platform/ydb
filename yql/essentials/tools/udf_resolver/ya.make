@@ -1,36 +1,30 @@
-PROGRAM()
+SET(UDF_RESOLVER_RESOURCE None)
 
-SRCS(
-    udf_resolver.cpp
-    discover.cpp
-)
-
-IF (OS_LINUX)
-    # prevent external python extensions to lookup protobuf symbols (and maybe
-    # other common stuff) in main binary
-    EXPORTS_SCRIPT(${ARCADIA_ROOT}/yql/essentials/tools/exports.symlist)
-    PEERDIR(
-        contrib/libs/libc_compat
-    )
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+    IF (SANITIZER_TYPE == "address")
+        SET(UDF_RESOLVER_RESOURCE ${UDF_RESOLVER_RESOURCE_ASAN})
+    ELSEIF (SANITIZER_TYPE == "memory")
+        SET(UDF_RESOLVER_RESOURCE ${UDF_RESOLVER_RESOURCE_MSAN})
+    ELSEIF (SANITIZER_TYPE == "thread")
+        SET(UDF_RESOLVER_RESOURCE ${UDF_RESOLVER_RESOURCE_TSAN})
+    ELSEIF (SANITIZER_TYPE == "undefined")
+        SET(UDF_RESOLVER_RESOURCE ${UDF_RESOLVER_RESOURCE_UBSAN})
+    ELSE()
+        SET(UDF_RESOLVER_RESOURCE ${UDF_RESOLVER_RESOURCE_DEFAULT})
+    ENDIF()
 ENDIF()
 
-PEERDIR(
-    library/cpp/getopt
-    library/cpp/protobuf/util
-    library/cpp/yson
-    library/cpp/yson/node
-    yql/essentials/minikql
-    yql/essentials/public/udf/service/terminate_policy
-    yql/essentials/core
-    yql/essentials/core/poly_args
-    yql/essentials/providers/common/proto
-    yql/essentials/providers/common/schema/mkql
-    yql/essentials/utils/backtrace
-    yql/essentials/utils/sys
-    yql/essentials/sql/pg_dummy
-    yql/essentials/public/langver
-)
+IF (UDF_RESOLVER_RESOURCE != "None")
+    PACKAGE()
 
-YQL_LAST_ABI_VERSION()
+    FROM_SANDBOX(FILE ${UDF_RESOLVER_RESOURCE} RENAME RESOURCE OUT_NOAUTO udf_resolver)
 
-END()
+    END()
+ELSE()
+    PROGRAM(udf_resolver)
+
+    INCLUDE(ya.make.inc)
+
+    END()
+ENDIF()

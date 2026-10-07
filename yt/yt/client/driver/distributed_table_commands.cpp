@@ -98,9 +98,9 @@ void TFinishDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context
     auto validator = context->GetDriver()->GetSignatureValidator();
     std::vector<TFuture<bool>> validationFutures;
     validationFutures.reserve(1 + results.size());
-    validationFutures.emplace_back(validator->Validate(session.Underlying()));
+    validationFutures.push_back(validator->Validate(session.Underlying()));
     for (const auto& result : results) {
-        validationFutures.emplace_back(validator->Validate(result.Underlying()));
+        validationFutures.push_back(validator->Validate(result.Underlying()));
     }
 
     auto validationResults = WaitFor(AllSucceeded(std::move(validationFutures)))
@@ -123,6 +123,8 @@ void TFinishDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context
 void TWriteTableFragmentCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("cookie", &TThis::Cookie);
+    registrar.Parameter("table_writer", &TThis::TableWriter)
+        .Default();
     registrar.Parameter("max_row_buffer_size", &TThis::MaxRowBufferSize)
         .Default(1_MB);
 }
@@ -141,9 +143,13 @@ ITableFragmentWriterPtr TWriteTableFragmentCommand::CreateTableWriter(
 
         THROW_ERROR_EXCEPTION(
             "Signature validation failed for write table fragment")
-                << TErrorAttribute("session_id", concreteCookie.SessionId)
-                << TErrorAttribute("cookie_id", concreteCookie.CookieId);
+                .With("session_id", concreteCookie.SessionId)
+                .With("cookie_id", concreteCookie.CookieId);
     }
+
+    Options.Config = UpdateYsonStruct(
+        context->GetConfig()->TableWriter,
+        TableWriter);
 
     return WaitFor(context
         ->GetClient()

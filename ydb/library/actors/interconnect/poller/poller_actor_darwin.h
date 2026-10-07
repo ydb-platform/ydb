@@ -17,8 +17,8 @@ namespace NActors {
         }
 
     public:
-        TKqueueThread(TActorSystem *actorSystem)
-            : TPollerThreadBase(actorSystem)
+        TKqueueThread(TActorSystem *actorSystem, NMonitoring::THistogramPtr syncOperationTimeHistogram)
+            : TPollerThreadBase(actorSystem, std::move(syncOperationTimeHistogram))
         {
             // create kqueue
             KqDescriptor = kqueue();

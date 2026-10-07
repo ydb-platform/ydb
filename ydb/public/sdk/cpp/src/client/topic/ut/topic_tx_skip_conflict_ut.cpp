@@ -6,6 +6,7 @@
 
 #include <util/datetime/base.h>
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <variant>
@@ -20,8 +21,24 @@ enum class ETrackProducerIdInTxMeta {
     False,
 };
 
-class TFixtureTopicTxMatrixBase : public TFixtureTable {
+template <class FixtureBase>
+class TFixtureTopicTxMatrixBase : public FixtureBase {
 protected:
+    using typename FixtureBase::TTableRecord;
+    using FixtureBase::AugmentWriteSessionSettings;
+    using FixtureBase::CheckTabletKeys;
+    using FixtureBase::CloseTopicWriteSession;
+    using FixtureBase::CreateSession;
+    using FixtureBase::CreateTable;
+    using FixtureBase::CreateTopic;
+    using FixtureBase::GetDriver;
+    using FixtureBase::GetTableRecordsCount;
+    using FixtureBase::GetTopicUtPath;
+    using FixtureBase::ReadFromTopic;
+    using FixtureBase::UpsertToTable;
+    using FixtureBase::WaitForAcks;
+    using FixtureBase::WriteToTopic;
+
     size_t CountTableRowsWithKey(const std::string& tablePath, const std::string& key) {
         auto session = CreateSession();
         auto tx = session->BeginTx();
@@ -198,10 +215,107 @@ protected:
             break;
         }
     }
+
+    void RunRollbackCleanupTopicOnly() {
+        CreateTopic("topic_A", TEST_CONSUMER, 1);
+
+        auto session = CreateSession();
+        auto tx = session->BeginTx();
+
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "rollback-message-1", tx.get());
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "rollback-message-2", tx.get());
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+
+        session->RollbackTx(*tx, EStatus::SUCCESS);
+
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0u);
+
+        CheckTabletKeys("topic_A");
+        CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
+    }
+
+    void RunRollbackCleanupDistributed() {
+        static constexpr const char* kTable = "table_A";
+        const std::vector<TTableRecord> rows = {
+            {"dist_rb_tx_a", "v1"},
+            {"dist_rb_tx_b", "v2"},
+        };
+
+        CreateTopic("topic_A", TEST_CONSUMER, 1);
+        CreateTable("/Root/table_A");
+
+        auto session = CreateSession();
+        auto tx = session->BeginTx();
+
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "rollback-message-1", tx.get());
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, "rollback-message-2", tx.get());
+        WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
+        UpsertToTable(kTable, rows, *session, tx.get());
+
+        session->RollbackTx(*tx, EStatus::SUCCESS);
+
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetTableRecordsCount(kTable), 0u);
+
+        CheckTabletKeys("topic_A");
+        CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
+    }
+
+    void RunConcurrentDifferentProducersSamePartition() {
+        CreateTopic("topic_A", TEST_CONSUMER, 1);
+
+        const std::string producer1 = TEST_MESSAGE_GROUP_ID + "_1";
+        const std::string producer2 = TEST_MESSAGE_GROUP_ID + "_2";
+
+        auto makeSettings = [&](const std::string& producer) {
+            NTopic::TWriteSessionSettings options;
+            options.Path(GetTopicUtPath("topic_A"));
+            options.ProducerId(producer);
+            options.MessageGroupId(producer);
+            options.Codec(ECodec::RAW);
+            AugmentWriteSessionSettings(options);
+            return options;
+        };
+
+        NTopic::TTopicClient client(GetDriver());
+
+        auto session1 = CreateSession();
+        auto tx1 = session1->BeginTx();
+        {
+            auto ws1 = client.CreateSimpleBlockingWriteSession(makeSettings(producer1));
+            UNIT_ASSERT_C(ws1->Write(NTopic::TWriteMessage("p1-m1"), tx1.get()), "producer1 tx1 message1");
+            UNIT_ASSERT_C(ws1->Write(NTopic::TWriteMessage("p1-m2"), tx1.get()), "producer1 tx1 message2");
+            UNIT_ASSERT_C(ws1->Close(), "close producer1 write session");
+        }
+
+        auto session2 = CreateSession();
+        auto tx2 = session2->BeginTx();
+        {
+            auto ws2 = client.CreateSimpleBlockingWriteSession(makeSettings(producer2));
+            UNIT_ASSERT_C(ws2->Write(NTopic::TWriteMessage("p2-m1"), tx2.get()), "producer2 tx2 message1");
+            UNIT_ASSERT_C(ws2->Write(NTopic::TWriteMessage("p2-m2"), tx2.get()), "producer2 tx2 message2");
+            UNIT_ASSERT_C(ws2->Close(), "close producer2 write session");
+        }
+
+        session1->CommitTx(*tx1, EStatus::SUCCESS);
+        session2->CommitTx(*tx2, EStatus::SUCCESS);
+
+        auto messages = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4u);
+
+        std::sort(messages.begin(), messages.end());
+        std::vector<std::string> expected = {"p1-m1", "p1-m2", "p2-m1", "p2-m2"};
+        std::sort(expected.begin(), expected.end());
+        UNIT_ASSERT_VALUES_EQUAL(messages, expected);
+
+        CheckTabletKeys("topic_A");
+    }
 };
 
-template<bool EnableSkipConflictCheckForTopicsInTransaction, ETrackProducerIdInTxMeta TrackProducerIdInTxMeta>
-class TFixtureTopicTxMatrix : public TFixtureTopicTxMatrixBase {
+template <bool EnableSkipConflictCheckForTopicsInTransaction, ETrackProducerIdInTxMeta TrackProducerIdInTxMeta, class FixtureBase>
+class TFixtureTopicTxMatrix : public TFixtureTopicTxMatrixBase<FixtureBase> {
 protected:
     void AugmentServerSettings(NKikimr::Tests::TServerSettings& settings) override {
         settings.SetEnableSkipConflictCheckForTopicsInTransaction(EnableSkipConflictCheckForTopicsInTransaction);
@@ -215,102 +329,117 @@ protected:
     }
 };
 
-using TFixture_SkipConflictOff_MetaAbsent = TFixtureTopicTxMatrix<false, ETrackProducerIdInTxMeta::Absent>;
-using TFixture_SkipConflictOff_MetaTrue = TFixtureTopicTxMatrix<false, ETrackProducerIdInTxMeta::True>;
-using TFixture_SkipConflictOff_MetaFalse = TFixtureTopicTxMatrix<false, ETrackProducerIdInTxMeta::False>;
-using TFixture_SkipConflictOn_MetaAbsent = TFixtureTopicTxMatrix<true, ETrackProducerIdInTxMeta::Absent>;
-using TFixture_SkipConflictOn_MetaTrue = TFixtureTopicTxMatrix<true, ETrackProducerIdInTxMeta::True>;
-using TFixture_SkipConflictOn_MetaFalse = TFixtureTopicTxMatrix<true, ETrackProducerIdInTxMeta::False>;
+/// Rows: (skipConflictFlag, trackMetaEnum, fixtureSuffix, expectedSecondTxCommitStatus).
+/// Same expected status is used for topic-only and distributed (topic+table) SeqNo tests.
+#define FOR_EACH_TOPIC_TX_MATRIX_ROW(X)                                                                                \
+    X(false, Absent, SkipConflictOff_MetaAbsent, EStatus::ABORTED)                                                     \
+    X(false, True, SkipConflictOff_MetaTrue, EStatus::ABORTED)                                                         \
+    X(false, False, SkipConflictOff_MetaFalse, EStatus::ABORTED)                                                     \
+    X(true, Absent, SkipConflictOn_MetaAbsent, EStatus::ABORTED)                                                     \
+    X(true, True, SkipConflictOn_MetaTrue, EStatus::ABORTED)                                                           \
+    X(true, False, SkipConflictOn_MetaFalse, EStatus::SUCCESS)
+
+#define DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES(SkipBool, MetaEnumVal, Suffix)                                          \
+    using TFixture_##Suffix##_Table = TFixtureTopicTxMatrix<(SkipBool), ETrackProducerIdInTxMeta::MetaEnumVal, TFixtureTable>; \
+    using TFixture_##Suffix##_Query = TFixtureTopicTxMatrix<(SkipBool), ETrackProducerIdInTxMeta::MetaEnumVal, TFixtureQuery>;
+
+#define DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES_FOR_ROW(SkipBool, MetaEnumVal, Suffix, ExpectedStatus)                 \
+    DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES(SkipBool, MetaEnumVal, Suffix)
+
+FOR_EACH_TOPIC_TX_MATRIX_ROW(DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES_FOR_ROW)
+#undef DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES_FOR_ROW
+#undef DEFINE_TOPIC_TX_MATRIX_FIXTURE_ALIASES
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TopicTxSkipConflictAndProducerMeta) {
 
-Y_UNIT_TEST_F(SeqNoConflict_TwoWriteSessions_SkipConflictOff_MetaAbsent, TFixture_SkipConflictOff_MetaAbsent) {
-    RunSeqNoConflictTwoWriteSessionsSameProducer(EStatus::ABORTED);
-}
-
-Y_UNIT_TEST_F(SeqNoConflict_TwoWriteSessions_SkipConflictOff_MetaTrue, TFixture_SkipConflictOff_MetaTrue) {
-    RunSeqNoConflictTwoWriteSessionsSameProducer(EStatus::ABORTED);
-}
-
-Y_UNIT_TEST_F(SeqNoConflict_TwoWriteSessions_SkipConflictOff_MetaFalse, TFixture_SkipConflictOff_MetaFalse) {
-    RunSeqNoConflictTwoWriteSessionsSameProducer(EStatus::ABORTED);
-}
-
-Y_UNIT_TEST_F(SeqNoConflict_TwoWriteSessions_SkipConflictOn_MetaAbsent, TFixture_SkipConflictOn_MetaAbsent) {
-    RunSeqNoConflictTwoWriteSessionsSameProducer(EStatus::ABORTED);
-}
-
-Y_UNIT_TEST_F(SeqNoConflict_TwoWriteSessions_SkipConflictOn_MetaTrue, TFixture_SkipConflictOn_MetaTrue) {
-    RunSeqNoConflictTwoWriteSessionsSameProducer(EStatus::ABORTED);
-}
-
-Y_UNIT_TEST_F(SeqNoConflict_TwoWriteSessions_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse) {
-    RunSeqNoConflictTwoWriteSessionsSameProducer(EStatus::SUCCESS);
-}
-
-Y_UNIT_TEST_F(SeqNoConflict_Distributed_TwoWriteSessions_SkipConflictOff_MetaAbsent, TFixture_SkipConflictOff_MetaAbsent) {
-    RunSeqNoConflictTwoWriteSessionsSameProducerDistributed(EStatus::ABORTED);
-}
-
-Y_UNIT_TEST_F(SeqNoConflict_Distributed_TwoWriteSessions_SkipConflictOff_MetaTrue, TFixture_SkipConflictOff_MetaTrue) {
-    RunSeqNoConflictTwoWriteSessionsSameProducerDistributed(EStatus::ABORTED);
-}
-
-Y_UNIT_TEST_F(SeqNoConflict_Distributed_TwoWriteSessions_SkipConflictOff_MetaFalse, TFixture_SkipConflictOff_MetaFalse) {
-    RunSeqNoConflictTwoWriteSessionsSameProducerDistributed(EStatus::ABORTED);
-}
-
-Y_UNIT_TEST_F(SeqNoConflict_Distributed_TwoWriteSessions_SkipConflictOn_MetaAbsent, TFixture_SkipConflictOn_MetaAbsent) {
-    RunSeqNoConflictTwoWriteSessionsSameProducerDistributed(EStatus::ABORTED);
-}
-
-Y_UNIT_TEST_F(SeqNoConflict_Distributed_TwoWriteSessions_SkipConflictOn_MetaTrue, TFixture_SkipConflictOn_MetaTrue) {
-    RunSeqNoConflictTwoWriteSessionsSameProducerDistributed(EStatus::ABORTED);
-}
-
-Y_UNIT_TEST_F(SeqNoConflict_Distributed_TwoWriteSessions_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse) {
-    RunSeqNoConflictTwoWriteSessionsSameProducerDistributed(EStatus::SUCCESS);
-}
-
-Y_UNIT_TEST_F(InvalidWriteSessionAttributeTrackProducerIdInTx_RejectsInit, TFixtureTable) {
-    CreateTopic("topic_A", TEST_CONSUMER, 1);
-
-    NTopic::TTopicClient client(GetDriver());
-    NTopic::TWriteSessionSettings options;
-    options.Path(GetTopicUtPath("topic_A"));
-    options.ProducerId(TEST_MESSAGE_GROUP_ID);
-    options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
-    options.Codec(ECodec::RAW);
-    const auto& key = ::NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX;
-    options.AppendSessionMeta({key.data(), key.size()}, "not-a-bool");
-
-    auto ws = client.CreateWriteSession(options);
-
-    std::optional<NTopic::TSessionClosedEvent> closed;
-    const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
-    while (!closed.has_value()) {
-        UNIT_ASSERT_C(
-            TInstant::Now() < deadline,
-            "timed out waiting for write session close after invalid WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX");
-
-        if (auto ev = ws->GetEvent(false)) {
-            if (auto* c = std::get_if<NTopic::TSessionClosedEvent>(&*ev)) {
-                closed.emplace(*c);
-            }
-        } else {
-            Sleep(TDuration::MilliSeconds(50));
-        }
+#define REGISTER_TOPIC_TX_MATRIX_SEQNO_TESTS(SkipBool, MetaEnumVal, Suffix, ExpectedStatus)                           \
+    Y_UNIT_TEST_F(SeqNoConflict_TwoWriteSessions_Table_##Suffix, TFixture_##Suffix##_Table) {                          \
+        RunSeqNoConflictTwoWriteSessionsSameProducer(ExpectedStatus);                                                \
+    }                                                                                                                \
+    Y_UNIT_TEST_F(SeqNoConflict_TwoWriteSessions_Query_##Suffix, TFixture_##Suffix##_Query) {                          \
+        RunSeqNoConflictTwoWriteSessionsSameProducer(ExpectedStatus);                                                \
+    }                                                                                                                \
+    Y_UNIT_TEST_F(SeqNoConflict_Distributed_TwoWriteSessions_Table_##Suffix, TFixture_##Suffix##_Table) {            \
+        RunSeqNoConflictTwoWriteSessionsSameProducerDistributed(ExpectedStatus);                                     \
+    }                                                                                                                \
+    Y_UNIT_TEST_F(SeqNoConflict_Distributed_TwoWriteSessions_Query_##Suffix, TFixture_##Suffix##_Query) {              \
+        RunSeqNoConflictTwoWriteSessionsSameProducerDistributed(ExpectedStatus);                                   \
     }
-    UNIT_ASSERT_C(closed.has_value(), "session must close after invalid WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX");
-    UNIT_ASSERT_VALUES_EQUAL(closed->GetStatus(), EStatus::BAD_REQUEST);
-    const TString issues = closed->GetIssues().ToOneLineString();
-    UNIT_ASSERT_STRING_CONTAINS(issues, key);
-    UNIT_ASSERT_STRING_CONTAINS(issues, "not-a-bool");
 
-    ws->Close(TDuration::Seconds(5));
+FOR_EACH_TOPIC_TX_MATRIX_ROW(REGISTER_TOPIC_TX_MATRIX_SEQNO_TESTS)
+#undef REGISTER_TOPIC_TX_MATRIX_SEQNO_TESTS
+#undef FOR_EACH_TOPIC_TX_MATRIX_ROW
+
+Y_UNIT_TEST_F(RollbackCleanup_TopicOnly_Table_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Table) {
+    RunRollbackCleanupTopicOnly();
 }
+
+Y_UNIT_TEST_F(RollbackCleanup_TopicOnly_Query_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Query) {
+    RunRollbackCleanupTopicOnly();
+}
+
+Y_UNIT_TEST_F(RollbackCleanup_Distributed_Table_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Table) {
+    RunRollbackCleanupDistributed();
+}
+
+Y_UNIT_TEST_F(RollbackCleanup_Distributed_Query_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Query) {
+    RunRollbackCleanupDistributed();
+}
+
+Y_UNIT_TEST_F(DifferentProducersConcurrent_Table_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Table) {
+    RunConcurrentDifferentProducersSamePartition();
+}
+
+Y_UNIT_TEST_F(DifferentProducersConcurrent_Query_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse_Query) {
+    RunConcurrentDifferentProducersSamePartition();
+}
+
+// Must expand inside Y_UNIT_TEST_F body: uses TFixture protected helpers.
+#define INVALID_WRITE_SESSION_ATTR_TEST_BODY()                                                                       \
+    do {                                                                                                             \
+        CreateTopic("topic_A", TEST_CONSUMER, 1);                                                                    \
+        NTopic::TTopicClient client(GetDriver());                                                                    \
+        NTopic::TWriteSessionSettings options;                                                                       \
+        options.Path(GetTopicUtPath("topic_A"));                                                                     \
+        options.ProducerId(TEST_MESSAGE_GROUP_ID);                                                                   \
+        options.MessageGroupId(TEST_MESSAGE_GROUP_ID);                                                               \
+        options.Codec(ECodec::RAW);                                                                                  \
+        const auto& key = ::NPersQueue::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX;                             \
+        options.AppendSessionMeta({key.data(), key.size()}, "not-a-bool");                                          \
+        auto ws = client.CreateWriteSession(options);                                                                \
+        std::optional<NTopic::TSessionClosedEvent> closed;                                                           \
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);                                        \
+        while (!closed.has_value()) {                                                                                \
+            UNIT_ASSERT_C(                                                                                           \
+                TInstant::Now() < deadline,                                                                          \
+                "timed out waiting for write session close after invalid WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX"); \
+            if (auto ev = ws->GetEvent(false)) {                                                                     \
+                if (auto* c = std::get_if<NTopic::TSessionClosedEvent>(&*ev)) {                                      \
+                    closed.emplace(*c);                                                                              \
+                }                                                                                                    \
+            } else {                                                                                                 \
+                Sleep(TDuration::MilliSeconds(50));                                                                  \
+            }                                                                                                        \
+        }                                                                                                            \
+        UNIT_ASSERT_C(closed.has_value(), "session must close after invalid WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX"); \
+        UNIT_ASSERT_VALUES_EQUAL(closed->GetStatus(), EStatus::BAD_REQUEST);                                       \
+        const TString issues = closed->GetIssues().ToOneLineString();                                              \
+        UNIT_ASSERT_STRING_CONTAINS(issues, key);                                                                    \
+        UNIT_ASSERT_STRING_CONTAINS(issues, "not-a-bool");                                                           \
+        ws->Close(TDuration::Seconds(5));                                                                            \
+    } while (false)
+
+Y_UNIT_TEST_F(InvalidWriteSessionAttributeTrackProducerIdInTx_RejectsInit_Table, TFixtureTable) {
+    INVALID_WRITE_SESSION_ATTR_TEST_BODY();
+}
+
+Y_UNIT_TEST_F(InvalidWriteSessionAttributeTrackProducerIdInTx_RejectsInit_Query, TFixtureQuery) {
+    INVALID_WRITE_SESSION_ATTR_TEST_BODY();
+}
+
+#undef INVALID_WRITE_SESSION_ATTR_TEST_BODY
 
 } // Y_UNIT_TEST_SUITE(TopicTxSkipConflictAndProducerMeta)
 

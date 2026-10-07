@@ -27,9 +27,7 @@ class KiKiMRClusterInterface(object):
         self.__kv_client = None
         self.__scheme_client = None
         self.__config_client = None
-        self.__clients = None
         self.__monitors = None
-        self.__ready_timeout_seconds = 60
 
     @property
     def monitors(self):
@@ -121,6 +119,16 @@ class KiKiMRClusterInterface(object):
             self.__config_client = self._create_config_client()
         return self.__config_client
 
+    def reset_clients(self):
+        for client in (self.__client, self.__kv_client, self.__scheme_client, self.__config_client):
+            if client is not None:
+                client.close()
+
+        self.__client = None
+        self.__kv_client = None
+        self.__scheme_client = None
+        self.__config_client = None
+
     @abc.abstractmethod
     def _create_config_client(self):
         """
@@ -147,11 +155,47 @@ class KiKiMRClusterInterface(object):
         response.Response.operation.result.Unpack(result)
         return result
 
-    def wait_tenant_up(self, database_name, token=None):
+    def wait_tenant_up(self, database_name, token=None, endpoints_timeout_seconds=240):
         self.__wait_tenant_up(
             database_name,
             expected_computational_units=1,
             token=token,
+        )
+        # CMS marks tenant RUNNING before the dyn node publishes gRPC endpoints
+        # (further delayed by compile-cache warmup gating publication). Also
+        # covers serverless routing via hostel endpoints. Driver wait() is the
+        # only check that captures all of these uniformly.
+        self._wait_tenant_usable(
+            database_name, timeout_seconds=endpoints_timeout_seconds, token=token,
+        )
+
+    def _wait_tenant_usable(self, database_name, timeout_seconds=240, token=None):
+        entry_node = self.nodes[1]
+        driver_config = ydb.DriverConfig(
+            "%s:%d" % (entry_node.host, entry_node.grpc_port),
+            database_name,
+            auth_token=token,
+        )
+
+        deadline = time.time() + timeout_seconds
+        last_error = None
+        while time.time() < deadline:
+            driver = ydb.Driver(driver_config)
+            try:
+                try:
+                    # fail_fast=True: propagate real error instead of opaque timeout.
+                    driver.wait(timeout=5, fail_fast=True)
+                    return
+                except Exception as exc:
+                    last_error = exc
+            finally:
+                driver.stop()
+            time.sleep(0.5)
+
+        raise AssertionError(
+            "Tenant {} did not become usable within {}s; last error: {!r}".format(
+                database_name, timeout_seconds, last_error,
+            )
         )
 
     def __wait_tenant_up(
@@ -356,6 +400,40 @@ class KiKiMRClusterInterface(object):
         )
         return database_name
 
+    def alter_database(
+            self,
+            database_name,
+            storage_units_to_add=None,
+            storage_units_to_remove=None,
+            timeout_seconds=120,
+            token=None,
+    ):
+        req = AlterTenantRequest(database_name)
+
+        if token is not None:
+            req.set_user_token(token)
+
+        assert storage_units_to_add or storage_units_to_remove
+        if storage_units_to_add:
+            for pool_type, count in storage_units_to_add.items():
+                req.add_storage_groups_to_add(pool_type, count)
+
+        if storage_units_to_remove:
+            for pool_type, count in storage_units_to_remove.items():
+                req.add_storage_groups_to_remove(pool_type, count)
+
+        response = self.client.send_request(req.protobuf, method='ConsoleRequest')
+        operation = response.AlterTenantResponse.Response.operation
+        if not operation.ready and response.Status.Code != StatusIds.STATUS_CODE_UNSPECIFIED:
+            raise RuntimeError(
+                'alter_database_storage_units failed: %s: %s' % (response.Status.Code, response.Status.Reason)
+            )
+        if not operation.ready:
+            operation = self.__wait_console_op(operation.id, timeout_seconds=timeout_seconds, token=token)
+        if operation.status != StatusIds.SUCCESS:
+            raise RuntimeError('alter_database_storage_units failed: %s' % (operation.status,))
+        return database_name
+
     def remove_database(
             self,
             database_name,
@@ -364,28 +442,43 @@ class KiKiMRClusterInterface(object):
     ):
         logger.debug(database_name)
 
-        operation_id = self._remove_database_send_op(database_name, token=token)
+        operation_id = self._remove_database_send_op(
+            database_name, token=token, timeout_seconds=timeout_seconds)
         self._remove_database_wait_op(database_name, operation_id, timeout_seconds=timeout_seconds, token=token)
         self._remove_database_wait_tenant_gone(database_name, timeout_seconds=timeout_seconds, token=token)
 
         return database_name
 
-    def _remove_database_send_op(self, database_name, token=None):
+    def _remove_database_send_op(self, database_name, token=None, timeout_seconds=20):
         logger.debug('%s: send console operation, token %s', database_name, token)
 
-        req = RemoveTenantRequest(database_name)
+        # Console is briefly unavailable right after a rolling restart. The
+        # readiness failure used to surface as teardown "400050: Console is unavailable".
+        deadline = time.time() + timeout_seconds
+        while True:
+            req = RemoveTenantRequest(database_name)
 
-        if token is not None:
-            req.set_user_token(token)
+            if token is not None:
+                req.set_user_token(token)
 
-        response = self.client.send_request(req.protobuf, method='ConsoleRequest')
-        operation = response.RemoveTenantResponse.Response.operation
-        logger.debug('%s: response from console: %s', database_name, response)
+            response = self.client.send_request(req.protobuf, method='ConsoleRequest')
+            operation = response.RemoveTenantResponse.Response.operation
+            logger.debug('%s: response from console: %s', database_name, response)
 
-        if not operation.ready and response.Status.Code != StatusIds.STATUS_CODE_UNSPECIFIED:
-            raise RuntimeError('remove_database failed: %s: %s' % (response.Status.Code, response.Status.Reason))
+            status_code = response.Status.Code
+            if operation.ready or status_code == StatusIds.STATUS_CODE_UNSPECIFIED:
+                return operation.id
 
-        return operation.id
+            if status_code == StatusIds.UNAVAILABLE and time.time() < deadline:
+                logger.warning(
+                    '%s: console unavailable (%s), retrying remove_database',
+                    database_name,
+                    response.Status.Reason,
+                )
+                time.sleep(1)
+                continue
+
+            raise RuntimeError('remove_database failed: %s: %s' % (status_code, response.Status.Reason))
 
     def _remove_database_wait_op(self, database_name, operation_id, timeout_seconds=20, token=None):
         logger.debug('%s: wait console operation done', database_name)

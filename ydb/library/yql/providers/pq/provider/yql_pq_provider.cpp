@@ -1,14 +1,13 @@
 #include "yql_pq_provider.h"
-#include "yql_pq_provider_impl.h"
+#include "yql_pq_settings.h"
 #include "yql_pq_dq_integration.h"
-
 #include "yql_pq_ytflow_integration.h"
 #include "yql_pq_ytflow_optimize.h"
 
 #include <yql/essentials/core/yql_type_annotation.h>
-#include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/utils/log/context.h>
 
 namespace NYql {
 
@@ -20,8 +19,9 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     const std::vector<std::pair<TString, TString>>& taskSensorLabels,
     const std::vector<ui64>& nodeIds,
     bool useActorSystemThreadsInTopicClient,
-    bool useYtflowEngine) {
-    return [gateway, supportRtmrMode, dbResolver, disposition, taskSensorLabels, nodeIds, useActorSystemThreadsInTopicClient, useYtflowEngine] (
+    bool useYtflowEngine,
+    bool addTransparentPrefixToTransparentSystemColumns) {
+    return [=] (
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -41,9 +41,10 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             Y_UNUSED(hiddenAborter);
             Y_UNUSED(qContext);
 
-            auto state = MakeIntrusive<TPqState>(sessionId);
+            auto state = MakeIntrusive<TPqState>(sessionId, typeCtx->StrictConfigValidation);
             state->SupportRtmrMode = supportRtmrMode;
             state->UseActorSystemThreadsInTopicClient = useActorSystemThreadsInTopicClient;
+            state->AddTransparentPrefixToTransparentSystemColumns = addTransparentPrefixToTransparentSystemColumns;
             state->Types = typeCtx.Get();
             state->FunctionRegistry = functionRegistry;
             state->DbResolver = dbResolver;
@@ -84,6 +85,18 @@ TDataProviderInitializer GetPqDataProviderInitializer(
 
             return info;
         };
+}
+
+TPqState::TPqState(const TString& sessionId, bool strictConfigValidation)
+    : SessionId(sessionId)
+    , Configuration(MakeIntrusive<TPqConfiguration>(strictConfigValidation))
+{}
+
+bool TPqState::IsRtmrMode() const {
+    if (!SupportRtmrMode) {
+        return false;
+    }
+    return Configuration->PqReadByRtmrCluster_.Get() != "dq";
 }
 
 const TPqState::TTopicMeta* TPqState::FindTopicMeta(const TString& cluster, const TString& topicPath) const {

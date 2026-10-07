@@ -2,8 +2,9 @@
 
 #include "kqp_session_common.h"
 
-#include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
+#include <exception>
 
 namespace NYdb::inline Dev {
 
@@ -32,6 +33,28 @@ TStatus GetStatus(const TStatus& status);
 TDuration RandomizeThreshold(TDuration duration);
 bool IsSessionCloseRequested(const TStatus& status);
 
+struct TSessionCloseCommand {
+    std::string_view Reason;
+    std::function<bool(TKqpSessionCommon&)> Transition;
+
+    void Execute(TKqpSessionCommon& session, ISessionClient* client) const;
+};
+
+namespace NSessionCloseCommands {
+inline const TSessionCloseCommand PoolIdleTimeout{"pool_idle_timeout", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand PoolGracefulShutdown{"pool_graceful_shutdown", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand ClientTimeout{"client_timeout", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand ClientCancelled{"client_cancelled", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand AttachClosed{"attach_closed", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand TransportError{"transport_error", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand NodeShutdown{"node_shutdown", &TKqpSessionCommon::MarkAsClosing};
+inline const TSessionCloseCommand SessionShutdown{"session_shutdown", &TKqpSessionCommon::MarkAsClosing};
+inline const TSessionCloseCommand BadSession{"bad_session", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand SessionBusy{"session_busy", &TKqpSessionCommon::MarkBroken};
+
+const TSessionCloseCommand* FromStatus(const TStatus& status);
+}
+
 template<typename TResponse>
 NThreading::TFuture<TResponse> InjectSessionStatusInterception(
         std::shared_ptr<::NYdb::TKqpSessionCommon> impl, NThreading::TFuture<TResponse> asyncResponse,
@@ -41,6 +64,15 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
 {
     auto promise = NThreading::NewPromise<TResponse>();
     asyncResponse.Subscribe([impl, promise, cb, updateTimeout, timeout](NThreading::TFuture<TResponse> future) mutable {
+        try {
+            future.TryRethrow();
+        } catch (...) {
+            const auto client = impl->GetSessionClient();
+            NSessionCloseCommands::TransportError.Execute(*impl, client.get());
+            impl.reset();
+            promise.SetException(std::current_exception());
+            return;
+        }
         Y_ABORT_UNLESS(future.HasValue());
 
         // TResponse can hold refcounted user provided data (TSession for example)
@@ -50,19 +82,9 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
         TResponse value = std::move(future.ExtractValue());
 
         const TStatus& status = GetStatus(value);
-        // Exclude CLIENT_RESOURCE_EXHAUSTED from transport errors which can cause to session disconnect
-        // since we have guarantee this request wasn't been started to execute.
-
-        if (status.IsTransportError()
-            && status.GetStatus() != EStatus::CLIENT_RESOURCE_EXHAUSTED && status.GetStatus() != EStatus::CLIENT_OUT_OF_RANGE)
-        {
-            impl->MarkBroken();
-        } else if (status.GetStatus() == EStatus::SESSION_BUSY) {
-            impl->MarkBroken();
-        } else if (status.GetStatus() == EStatus::BAD_SESSION) {
-            impl->MarkBroken();
-        } else if (IsSessionCloseRequested(status)) {
-            impl->MarkAsClosing();
+        if (const auto* command = NSessionCloseCommands::FromStatus(status)) {
+            const auto client = impl->GetSessionClient();
+            command->Execute(*impl, client.get());
         } else {
             // NOTE: About GetState and lock
             // Simultanious call multiple requests on the same session make no sence, due to server limitation.
@@ -104,7 +126,7 @@ private:
 public:
     using TKeepAliveCmd = std::function<void(TKqpSessionCommon* s)>;
     using TDeletePredicate = std::function<bool(TKqpSessionCommon* s, size_t sessionsCount)>;
-    TSessionPool(std::uint32_t maxActiveSessions);
+    TSessionPool(std::uint32_t maxActiveSessions, std::uint32_t minPoolSize = 0);
 
     // Extracts session from pool or creates new one ising given ctx
     void GetSession(std::unique_ptr<IGetSessionCtx> ctx);
@@ -128,7 +150,11 @@ public:
     void Drain(std::function<bool(std::unique_ptr<TKqpSessionCommon>&&)> cb, bool close);
     void SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatCollector collector);
 
-    void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient> client) override;
+    void RecordConnectionCreateTime(double seconds);
+    void RecordSessionClosed(std::string_view reason);
+
+    void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>,
+        std::string_view) override;
 
 private:
     void UpdateStats();
@@ -142,10 +168,12 @@ private:
 
     std::int64_t ActiveSessions_;
     const std::uint32_t MaxActiveSessions_;
+    const std::uint32_t MinPoolSize_;
     NSdkStats::TSessionCounter ActiveSessionsCounter_;
     NSdkStats::TSessionCounter InPoolSessionsCounter_;
     NSdkStats::TSessionCounter SessionWaiterCounter_;
     NSdkStats::TAtomicCounter<::NMonitoring::TRate> FakeSessionsCounter_;
+    NSdkStats::TStatCollector::TSessionPoolStatCollector ExternalStatCollector_;
 };
 
 }

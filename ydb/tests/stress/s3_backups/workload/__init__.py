@@ -59,6 +59,22 @@ class WorkloadS3Export(WorkloadBase):
                 True
             )
 
+    def _create_column_tables(self, table_names: List[str]):
+        """Create several column-oriented tables with the same schema."""
+        for name in table_names:
+            self.client.query(
+                f"""
+                    CREATE TABLE `{name}` (
+                        id Uint32 NOT NULL,
+                        message Utf8,
+                        PRIMARY KEY (id)
+                    ) WITH (
+                        STORE = COLUMN
+                    );
+                """,
+                True
+            )
+
     def _create_topics(self, topic_names: List[str], consumers: Optional[Dict[str, List[str]]] = None):
         """Create several topics, optionally with consumers.
         consumers: {topic_name: [consumer1, consumer2, ...]}
@@ -92,6 +108,13 @@ class WorkloadS3Export(WorkloadBase):
         self._create_tables(tables)
         self._tables = tables
 
+    def _setup_column_tables(self):
+        tables = [
+            f"{self.prefix}/column_table{i}" for i in range(1, 10)
+        ]
+        self._create_column_tables(tables)
+        self._column_tables = tables
+
     def _setup_topics(self):
         topics = [
             f"{self.prefix}/topic{i}" for i in range(1, 10)
@@ -107,10 +130,17 @@ class WorkloadS3Export(WorkloadBase):
         self._consumers = consumers
 
     def _insert_rows(self):
-        # Insert 5 rows into each table
+        # Insert 5 rows into each row and column table
         for idx, table in enumerate(getattr(self, '_tables', []), 1):
             rows = [
                 {"id": row_id, "message": f"Table {idx} ({table}) row {row_id}"}
+                for row_id in range(1, 6)
+            ]
+            self._insert_into_table(table, rows)
+
+        for idx, table in enumerate(getattr(self, '_column_tables', []), 1):
+            rows = [
+                {"id": row_id, "message": f"Column table {idx} ({table}) row {row_id}"}
                 for row_id in range(1, 6)
             ]
             self._insert_into_table(table, rows)
@@ -165,6 +195,7 @@ class WorkloadS3Export(WorkloadBase):
                 .with_source_and_destination(self.prefix, self.prefix)
             )
             self._setup_tables()
+            self._setup_column_tables()
             self._setup_topics()
             self._insert_rows()
             self._export_to_s3()
@@ -187,7 +218,13 @@ class WorkloadRunner:
         s3_secret_key = "minio123"
         s3_bucket = "export_test_bucket"
 
-        resource = boto3.resource("s3", endpoint_url=s3_endpoint, aws_access_key_id=s3_access_key, aws_secret_access_key=s3_secret_key)
+        resource = boto3.resource(
+            "s3",
+            endpoint_url=s3_endpoint,
+            aws_access_key_id=s3_access_key,
+            aws_secret_access_key=s3_secret_key,
+            region_name="us-east-1",
+        )
 
         bucket = resource.Bucket(s3_bucket)
         if not bucket.creation_date:

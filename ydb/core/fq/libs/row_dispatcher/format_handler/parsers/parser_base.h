@@ -2,13 +2,16 @@
 
 #include "parser_abstract.h"
 
+#include <ydb/core/fq/libs/row_dispatcher/memory/memory_quota.h>
+
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NFq::NRowDispatcher {
 
 class TTypeParser {
 public:
-    TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters);
+    TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {}, TString memoryName = "ParserAlloc");
     virtual ~TTypeParser();
 
     TValueStatus<NKikimr::NMiniKQL::TType*> ParseTypeYson(const TString& typeYson) const;
@@ -18,6 +21,8 @@ protected:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     std::unique_ptr<NKikimr::NMiniKQL::TTypeEnvironment> TypeEnv;
     std::unique_ptr<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
+    NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
+    std::unique_ptr<NKikimr::NMiniKQL::THolderFactory> HolderFactory;
 };
 
 class TTopicParserBase : public ITopicParser, public TTypeParser {
@@ -35,7 +40,7 @@ public:
     using TPtr = TIntrusivePtr<TTopicParserBase>;
 
 public:
-    TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters);
+    TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {}, TString memoryName = "ParserAlloc");
     virtual ~TTopicParserBase() = default;
 
 public:

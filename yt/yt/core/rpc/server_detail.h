@@ -11,14 +11,14 @@
 
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(ERequestInfoState,
+DEFINE_ENUM(ERequestAnnotationState,
     (Missing)
     (Set)
     (Flushed)
@@ -99,17 +99,20 @@ public:
 
     std::vector<TSharedRef>& RequestAttachments() override;
     NConcurrency::IAsyncZeroCopyInputStreamPtr GetRequestAttachmentsStream() override;
+    IDirectPlacementTransferPtr TryGetRequestAttachmentsTransfer() override;
 
     std::vector<TSharedRef>& ResponseAttachments() override;
     NConcurrency::IAsyncZeroCopyOutputStreamPtr GetResponseAttachmentsStream() override;
+    std::optional<TAttachmentsOutputStreamStatistics> GetResponseAttachmentsStreamStatistics() override;
 
     const NProto::TRequestHeader& RequestHeader() const override;
     NProto::TRequestHeader& RequestHeader() override;
 
     bool IsLoggingEnabled() const override;
-    void SetRawRequestInfo(std::string info, bool incremental) override;
-    void SuppressMissingRequestInfoCheck() override;
-    void SetRawResponseInfo(std::string info, bool incremental) override;
+    void CommitRequestAnnotations(bool flush) override;
+    void SuppressMissingRequestAnnotationCheck() override;
+    NLogging::TLoggingTagList* GetRequestAnnotations() override;
+    NLogging::TLoggingTagList* GetResponseAnnotations() override;
 
     const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const override;
 
@@ -146,7 +149,14 @@ protected:
     TAuthenticationIdentity AuthenticationIdentity_;
 
     TSharedRef RequestBody_;
-    std::vector<TSharedRef> RequestAttachments_;
+    //! Holds the request attachments once they are available. Disengaged until
+    //! they are either lazily read from the request message (inline delivery) or
+    //! produced by running #RequestAttachmentsTransfer_ (direct placement transfer).
+    std::optional<std::vector<TSharedRef>> RequestAttachments_;
+    //! Non-null iff the request attachments are delivered via direct placement
+    //! transfer; the service must drive it to completion (see
+    //! #TryGetRequestAttachmentsTransfer) to make #RequestAttachments available.
+    IDirectPlacementTransferPtr RequestAttachmentsTransfer_;
 
     std::atomic<bool> Replied_ = false;
     TError Error_;
@@ -156,9 +166,9 @@ protected:
     TSharedRef ResponseBody_;
     std::vector<TSharedRef> ResponseAttachments_;
 
-    ERequestInfoState RequestInfoState_ = ERequestInfoState::Missing;
-    TCompactVector<std::string, 4> RequestInfos_;
-    TCompactVector<std::string, 4> ResponseInfos_;
+    ERequestAnnotationState RequestAnnotationState_ = ERequestAnnotationState::Missing;
+    NLogging::TLoggingTagList RequestLoggingTags_;
+    NLogging::TLoggingTagList ResponseLoggingTags_;
 
     NCompression::ECodec ResponseCodec_ = NCompression::ECodec::None;
     // COMPAT(danilalexeev): legacy RPC codecs
@@ -188,8 +198,16 @@ protected:
     virtual void LogRequest();
     virtual void LogResponse() = 0;
 
+    //! Tags identifying the request, spliced into the annotation alerts.
+    NLogging::TLoggingTagList MakeRequestAnnotationAlertTags() const;
+
+    //! Installs the request attachments direct placement transfer (adapting the
+    //! bus-layer one). Until the service drives it to completion, #RequestAttachments
+    //! aborts.
+    void SetRequestAttachmentsTransfer(NYT::NBus::IDirectPlacementTransferPtr transfer);
+
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ResponseLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, ResponseLock_);
     TSharedRefArray ResponseMessage_; // cached
     mutable TPromise<TSharedRefArray> AsyncResponseMessage_; // created on-demand
 
@@ -266,18 +284,21 @@ public:
 
     std::vector<TSharedRef>& RequestAttachments() override;
     NConcurrency::IAsyncZeroCopyInputStreamPtr GetRequestAttachmentsStream() override;
+    IDirectPlacementTransferPtr TryGetRequestAttachmentsTransfer() override;
 
     std::vector<TSharedRef>& ResponseAttachments() override;
     NConcurrency::IAsyncZeroCopyOutputStreamPtr GetResponseAttachmentsStream() override;
+    std::optional<TAttachmentsOutputStreamStatistics> GetResponseAttachmentsStreamStatistics() override;
 
     const NProto::TRequestHeader& RequestHeader() const override;
 
     NProto::TRequestHeader& RequestHeader() override;
 
     bool IsLoggingEnabled() const override;
-    void SetRawRequestInfo(std::string info, bool incremental) override;
-    void SuppressMissingRequestInfoCheck() override;
-    void SetRawResponseInfo(std::string info, bool incremental) override;
+    void CommitRequestAnnotations(bool flush) override;
+    void SuppressMissingRequestAnnotationCheck() override;
+    NLogging::TLoggingTagList* GetRequestAnnotations() override;
+    NLogging::TLoggingTagList* GetResponseAnnotations() override;
 
     const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const override;
 
@@ -321,7 +342,7 @@ protected:
 
     std::atomic<bool> Started_ = false;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ServicesLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, ServicesLock_);
     TServerConfigPtr StaticConfig_;
     TServerDynamicConfigPtr DynamicConfig_ = New<TServerDynamicConfig>();
     TServerConfigPtr AppliedConfig_;

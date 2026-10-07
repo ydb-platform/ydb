@@ -15,6 +15,7 @@
 namespace NKikimr::NKqp {
     struct TKqpFederatedQuerySetup;
     class TNodeState;
+    class IQueryQuotaManager;
 }
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -24,6 +25,8 @@ private:
     YDB_ACCESSOR_DEF(std::vector<NActors::TActorId>, ActorIds);
     YDB_ACCESSOR_DEF(NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta, Meta);
 public:
+    NWilson::TTraceId TraceId;
+
     explicit TMetaScan(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta)
         : Meta(meta)
     {
@@ -32,10 +35,14 @@ public:
 
 class TComputeStageInfo {
 private:
-    YDB_ACCESSOR_DEF(std::deque<TMetaScan>, MetaInfo);
+    std::deque<TMetaScan> MetaInfo;
     std::map<ui32, TMetaScan*> MetaWithIds;
 public:
     TComputeStageInfo() = default;
+
+    std::deque<TMetaScan>& MutableMetaInfo() {
+        return MetaInfo;
+    }
 
     bool GetMetaById(const ui32 metaId, NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& result) const {
         auto it = MetaWithIds.find(metaId);
@@ -100,6 +107,8 @@ struct IKqpNodeComputeActorFactory {
     virtual ~IKqpNodeComputeActorFactory() = default;
 
     std::atomic<bool> AccountDefaultPoolInScheduler = false;
+    std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
+    std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
 
 public:
     struct TCreateArgs {
@@ -110,6 +119,8 @@ public:
         const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
         NYql::NDqProto::TDqTask* Task;
         TIntrusivePtr<NRm::TTxState> TxInfo;
+        NYql::NDq::IMemoryQuotaManager::TPtr TaskQuotaManager;
+        NYql::NDq::IMemoryQuotaManager::TPtr ChannelQuotaManager;
         TMaybe<NYql::NDq::TReportStatsSettings> ReportStatsSettings;
         NWilson::TTraceId TraceId;
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
@@ -126,14 +137,19 @@ public:
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<TNodeState> State = nullptr;
+        // the execution unit and the initial memory limit (external memory) of the task are returned to it when the
+        // compute actor terminates, see IQueryQuotaManager::FreeTasks
+        std::shared_ptr<IQueryQuotaManager> QueryQuotaManager;
+        ui64 InitialMemoryLimit = 0;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
 
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
+
+        bool UseBatchPool = false;
     };
 
-    typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;
-    virtual TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) = 0;
+    virtual TActorId CreateKqpComputeActor(TCreateArgs&& args) = 0;
 
     virtual void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) = 0;
     virtual bool GetVerboseMemoryLimitException() = 0;

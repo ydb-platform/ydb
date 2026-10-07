@@ -20,7 +20,6 @@
 #include <ydb/core/util/evlog/log.h>
 
 #include <library/cpp/lwtrace/shuttle.h>
-
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -29,7 +28,10 @@ class IDataReader;
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+using TPKSortPermutation = std::vector<ui64>;
+
 class TFetchingScriptCursor;
+class TDataSourceLease;
 
 class TExecutionContext {
 private:
@@ -41,10 +43,29 @@ private:
     std::optional<TMonotonic> CurrentNodeStart;
 
     std::optional<TFetchingScriptCursor> CursorStep;
-    YDB_ACCESSOR_DEF(TString, PrevCategoryName);
-    YDB_ACCESSOR_DEF(TString, PrevExecutionResult);
 
 public:
+    struct TPrevNodeTracing {
+        TString CategoryName;
+        TString ExecutionResult;
+    };
+
+private:
+    TPrevNodeTracing PrevNode;
+
+public:
+    void SetPrevNodeTracing(const TString& categoryName, const TString& executionResult) {
+        PrevNode = TPrevNodeTracing{ .CategoryName = categoryName, .ExecutionResult = executionResult };
+    }
+
+    const TString& GetPrevCategoryName() const {
+        return PrevNode.CategoryName;
+    }
+
+    const TPrevNodeTracing& GetPrevNodeTracing() const {
+        return PrevNode;
+    }
+
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
 
     void OnFinishProgramStepExecution();
@@ -53,7 +74,7 @@ public:
         OnFinishProgramStepExecution();
     }
 
-    void Start(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program,
+    void Start(IDataSource& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program,
         const TFetchingScriptCursor& step);
 
     void Stop();
@@ -91,8 +112,8 @@ public:
 private:
     TAtomic SyncSectionFlag = 1;
     YDB_READONLY(EType, Type, EType::Undefined);
-    YDB_READONLY(ui32, SourceIdx, 0);
-    YDB_READONLY_DEF(ui64, DeprecatedPortionId);
+    ui32 SourceIdx = 0;
+    YDB_READONLY_DEF(ui64, SourceId);
     static inline TAtomicCounter MemoryGroupCounter = 0;
     YDB_READONLY(ui64, SequentialMemoryGroupIdx, MemoryGroupCounter.Inc());
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
@@ -101,34 +122,38 @@ private:
     std::optional<ui32> RecordsCountImpl;
     YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
     YDB_READONLY(bool, HasDeletions, false);
+    // A conflicting source is scanned only so TConflictDetector can detect a conflict and break the lock: it yields no
+    // rows and takes no part in the ordered stream
+    const bool ConflictingFlag;
     std::optional<ui64> MemoryGroupId;
     TExecutionContext ExecutionContext;
     virtual bool DoAddTxConflict() = 0;
 
-    virtual ui64 DoGetEntityId() const override {
+    virtual ui32 DoGetSourceIdx() const override {
         return SourceIdx;
     }
-    virtual ui64 DoGetDeprecatedPortionId() const override {
-        return DeprecatedPortionId;
+
+    virtual ui64 DoGetSourceId() const override {
+        return SourceId;
     }
 
-    virtual ui64 DoGetEntityRecordsCount() const override;
+    virtual ui64 DoGetSourceRecordsCount() const override;
 
     std::optional<bool> IsSourceInMemoryFlag;
+    bool InFlightReleasedFlag = false;
     TAtomic SourceFinishedSafeFlag = 0;
     TAtomic StageResultBuiltFlag = 0;
-    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) = 0;
-    virtual void DoBuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
-    virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) = 0;
+    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<TDataSourceLease> self) = 0;
+    virtual void DoBuildStageResult() = 0;
+    virtual void DoOnEmptyStageData() = 0;
 
-    virtual TConclusion<bool> DoStartFetchImpl(
+    virtual TConclusion<TExecutionResult> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchersExt) = 0;
 
-    virtual TConclusion<bool> DoStartFetch(const NArrow::NSSA::TProcessorContext& context,
+    virtual TConclusion<TExecutionResult> DoStartFetch(const NArrow::NSSA::TProcessorContext& context,
         const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
 
-    virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
+    virtual TExecutionResult DoStartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
     std::optional<NEvLog::TLogsThread> Events;
@@ -148,7 +173,6 @@ protected:
     virtual ui32 GetRecordsCountVirtual() const;
 
 public:
-
     ui64 GetReservedMemory() const;
 
     TDuration GetAndResetWaitDuration() {
@@ -309,9 +333,11 @@ public:
 
     virtual TString GetEntityStorageId(const ui32 /*entityId*/) const;
 
+    virtual TString GetIndexStorageId(const ui32 /*indexId*/) const;
+
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const;
 
-    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
+    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const bool isConflicting,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId);
 
@@ -324,6 +350,10 @@ public:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ExtractResourceGuards();
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
+
+    bool IsConflicting() const {
+        return ConflictingFlag;
+    }
 
     bool IsSourceInMemory() const;
 
@@ -340,30 +370,36 @@ public:
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const = 0;
 
     ui64 GetResourceGuardsMemory() const;
+
     void RegisterAllocationGuard(const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard) {
         ResourceGuards.emplace_back(guard);
     }
+
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const = 0;
 
     void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false);
 
-    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
-        return DoStartFetchingColumns(sourcePtr, step, columns);
+    TExecutionResult StartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
+        return DoStartFetchingColumns(step, columns);
+    }
+
+    bool IsInFlightReleased() const {
+        return InFlightReleasedFlag;
+    }
+
+    void SetInFlightReleased() {
+        AFL_VERIFY(!InFlightReleasedFlag);
+        InFlightReleasedFlag = true;
     }
 
     void ResetSourceFinishedFlag();
 
-    void OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr);
+    void OnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<TDataSourceLease> self);
 
-    void OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
+    void OnEmptyStageData();
 
-    template <class T>
-    void BuildStageResult(const std::shared_ptr<T>& sourcePtr) {
-        BuildStageResult(std::static_pointer_cast<IDataSource>(sourcePtr));
-    }
-
-    void BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr);
+    void BuildStageResult();
 
     bool AddTxConflict();
 
@@ -405,6 +441,32 @@ public:
 
     ui64 GetTxId() const {
         return GetContext()->GetCommonContext()->GetReadMetadata()->GetTxId();
+    }
+};
+
+class TDataSourceLease: TNonCopyable {
+private:
+    const std::shared_ptr<IDataSource> Source;
+
+public:
+    explicit TDataSourceLease(std::shared_ptr<IDataSource>&& source)
+        : Source(std::move(source))
+    {
+        AFL_VERIFY(Source);
+    }
+
+    IDataSource& GetSource() const {
+        return *Source;
+    }
+
+    std::shared_ptr<const IDataSource> ShareReadOnly() const {
+        return Source;
+    }
+
+    template <class T>
+    std::shared_ptr<const T> ShareReadOnlyAs() const {
+        AFL_VERIFY(T::CheckTypeCast(Source->GetType()))("type", Source->GetType());
+        return std::static_pointer_cast<const T>(Source);
     }
 };
 

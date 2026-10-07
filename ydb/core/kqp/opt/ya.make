@@ -1,10 +1,11 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_opt.cpp
     kqp_opt_build_phy_query.cpp
     kqp_opt_build_txs.cpp
     kqp_opt_effects.cpp
+    kqp_opt_generated_columns.cpp
     kqp_opt_kql.cpp
     kqp_opt_phase.cpp
     kqp_opt_phy_check.cpp
@@ -28,6 +29,7 @@ PEERDIR(
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
     ydb/core/kqp/opt/rbo
+    ydb/library/mkql_proto
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
@@ -36,9 +38,9 @@ PEERDIR(
     ydb/library/yql/utils/plan
     ydb/core/kqp/provider
     ydb/library/formats/arrow/protos
+    ydb/library/json_index
+    yql/essentials/providers/common/mkql
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(kqp_query_plan.h)
 
@@ -46,4 +48,5 @@ END()
 
 RECURSE(
     cbo
+    rbo
 )

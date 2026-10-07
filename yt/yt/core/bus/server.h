@@ -24,12 +24,6 @@ struct IBusServer
      */
     virtual void Start(IMessageHandlerPtr handler) = 0;
 
-    //! Apply new dynamic config.
-    /*
-     *  \param config New config.
-     */
-    virtual void OnDynamicConfigChanged(const NBus::TBusServerDynamicConfigPtr& config) = 0;
-
     //! Asynchronously stops the listener.
     /*!
      *  After this call the instance is no longer usable.

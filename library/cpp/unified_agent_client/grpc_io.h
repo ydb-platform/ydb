@@ -82,13 +82,18 @@ namespace NUnifiedAgent {
 
     class TGrpcTimer: private IIOCallback {
     public:
-        TGrpcTimer(grpc::CompletionQueue& completionQueue, THolder<IIOCallback>&& ioCallback);
+        /// `asyncJoiner` extends session lifetime until deferred Set/Cancel runs on the CQ thread (TryRef/UnRef).
+        TGrpcTimer(grpc::CompletionQueue& completionQueue, THolder<IIOCallback>&& ioCallback, TAsyncJoiner& asyncJoiner);
 
         void Set(TInstant triggerTime);
 
         void Cancel();
 
     private:
+        void ApplySet(TInstant triggerTime);
+
+        void ApplyCancel();
+
         IIOCallback* Ref() override;
 
         void OnIOCompleted(EIOStatus status) override;
@@ -96,6 +101,7 @@ namespace NUnifiedAgent {
     private:
         grpc::CompletionQueue& CompletionQueue;
         THolder<IIOCallback> IOCallback;
+        TAsyncJoiner& AsyncJoiner;
         grpc::Alarm Alarm;
         bool AlarmIsSet;
         TFMaybe<TInstant> NextTriggerTime;

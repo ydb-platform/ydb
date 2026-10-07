@@ -16,8 +16,7 @@ public:
 
     virtual void SetMemoryReportingCallbacks(ISpiller::TMemoryReportCallback reportAlloc, ISpiller::TMemoryReportCallback reportFree) = 0;
 
-    virtual ~ISpillerFactory() {
-    }
+    virtual ~ISpillerFactory() = default;
 };
 
 } // namespace NKikimr::NMiniKQL

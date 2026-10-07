@@ -1,3 +1,5 @@
+#pragma once
+
 #include <yt/yt/core/misc/guid.h>
 
 namespace NYT::NComplexTypes {

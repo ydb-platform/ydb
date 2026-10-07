@@ -12,7 +12,7 @@ using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NKikimr::NUdf;
 
-static const size_t LIST_SIZE = 5000000ul;
+static const size_t LIST_SIZE = 5000000UL;
 
 int main(int, char**) {
     try {
@@ -41,7 +41,7 @@ int main(int, char**) {
 
         TUnboxedValue list(holderFactory.VectorAsArray(listItems));
 
-        TValuePacker packer(true, listType);
+        TValuePacker packer(/*stable=*/true, listType);
 
         TSimpleTimer timer;
         TStringBuf packed = packer.Pack(list);

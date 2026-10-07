@@ -14,7 +14,8 @@ struct TClusterBalancingSettings {
     bool Enable = false;
     ui32 MaxReplicatingPDisks = 5;
     ui32 MaxReplicatingVDisks = 40;
-    ui32 IterationIntervalMs = 5000;
+    ui64 IterationIntervalMs = 5000;
+    ui32 MaxReassignAttemptsPerBucketPerIteration = 5;
     bool PreferLessOccupiedRack = false;
     bool WithAttentionToReplication = false;
 };

@@ -47,7 +47,7 @@ public:
     );
 
     virtual void Config(TConfig& config) override;
-    NYdb::NTable::TSession GetSession(TConfig& config);
+    NYdb::NTable::TSession GetSession(const TDriver& driver);
 };
 
 class TCommandCreateTable : public TTableCommand, public TCommandWithPath {

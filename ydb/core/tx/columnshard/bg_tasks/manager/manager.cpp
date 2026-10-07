@@ -1,14 +1,19 @@
 #include "manager.h"
+
+#include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
-#include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_save_state.h>
+#include <ydb/core/tx/columnshard/bg_tasks/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_add.h>
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_remove.h>
-#include <ydb/core/tx/columnshard/bg_tasks/protos/data.pb.h>
+#include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_save_state.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NBackground {
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyControl(const TSessionControlContainer& control) {
-    auto session = Storage->GetSession(control.GetLogicControlContainer()->GetSessionClassName(), control.GetLogicControlContainer()->GetSessionIdentifier());
+    auto session = Storage->GetSession(
+        control.GetLogicControlContainer()->GetSessionClassName(), control.GetLogicControlContainer()->GetSessionIdentifier());
     if (!session) {
         control.GetChannelContainer()->OnFail("session not exists");
         return nullptr;
@@ -27,7 +32,8 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyCont
     }
 }
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyControlFromProto(
+    const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto) {
     TSessionControlContainer control;
     auto conclusion = control.DeserializeFromProto(controlProto);
     if (conclusion.IsFail()) {
@@ -37,7 +43,8 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyCont
     return TxApplyControl(control);
 }
 
-std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::TxAddTaskFromProto(const NKikimrTxBackgroundProto::TTaskContainer& taskProto) {
+std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction> TSessionsManager::TxAddTaskFromProto(
+    const NKikimrTxBackgroundProto::TTaskContainer& taskProto) {
     TTask task;
     auto conclusion = task.DeserializeFromProto(taskProto);
     if (conclusion.IsFail()) {
@@ -74,10 +81,20 @@ bool TSessionsManager::LoadIdempotency(NTabletFlatExecutor::TTransactionContext&
     }
     auto storage = std::make_shared<TSessionsStorage>();
     while (records.size()) {
+        const TString className = records.front().GetClassName();
+        const TString identifier = records.front().GetIdentifier();
         std::shared_ptr<TSession> session = std::make_shared<TSession>();
-        session->DeserializeFromLocalDatabase(std::move(records.front())).Validate("on load from local database");
-        storage->AddSession(session);
+        TConclusionStatus status = session->DeserializeFromLocalDatabase(std::move(records.front()));
         records.pop_front();
+        if (status.IsFail()) {
+            YDB_LOG_CRIT("",
+                {"event", "skip_invalid_background_session"},
+                {"className", className},
+                {"identifier", identifier},
+                {"problem", status.GetErrorMessage()});
+            continue;
+        }
+        storage->AddSession(session).Validate("on load from local database");
     }
     Storage = storage;
     return true;
@@ -97,4 +114,13 @@ ISessionLogic::TStatus TSessionsManager::GetStatus(const TString& className, con
     return session->GetStatus();
 }
 
+bool TSessionsManager::IsSessionComplete(const TString& className, const TString& identifier) const {
+    auto session = Storage->GetSession(className, identifier);
+    if (!session) {
+        return true;
+    }
+    const auto& logic = session->GetLogicContainer();
+    return logic->IsFinished() || logic->IsReadyForRemoveOnFinished();
 }
+
+}   // namespace NKikimr::NOlap::NBackground

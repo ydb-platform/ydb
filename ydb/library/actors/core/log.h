@@ -20,6 +20,12 @@
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/svnversion/svnversion.h>
 
+#include <ydb/library/actors/struct_log/structured_message.h>
+#include <ydb/library/actors/struct_log/json_writer.h>
+#include <ydb/library/actors/struct_log/meta_writer.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/actors/struct_log/structured_message.h>
 #include <ydb/library/actors/memory_log/memlog.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -67,6 +73,15 @@
 #define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
 #define LOG_LOG_S(actorCtxOrSystem, priority, component, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)
 
+#define LOG_LOG_SOURCELESS_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                      \
+    do {                                                                                                                        \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, sampleBy)) {                                     \
+            ::NActors::MemLogAdapter(actorCtxOrSystem, priority, component, nullptr, 0, __VA_ARGS__);                           \
+        }                                                                                                                       \
+    } while (0) /**/
+
+#define LOG_LOG_SOURCELESS(actorCtxOrSystem, priority, component, ...) LOG_LOG_SOURCELESS_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
+
 // use these macros for logging via actor system or actor context
 #define LOG_EMERG(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, __VA_ARGS__)
 #define LOG_ALERT(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component, __VA_ARGS__)
@@ -78,6 +93,8 @@
 #define LOG_DEBUG(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, __VA_ARGS__)
 #define LOG_TRACE(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, __VA_ARGS__)
 
+#define LOG_NOTICE_SOURCELESS(actorCtxOrSystem, component, ...) LOG_LOG_SOURCELESS(actorCtxOrSystem, NActors::NLog::PRI_NOTICE, component, __VA_ARGS__)
+
 #define LOG_EMERG_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, stream)
 #define LOG_ALERT_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component, stream)
 #define LOG_CRIT_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_CRIT, component, stream)
@@ -87,16 +104,6 @@
 #define LOG_INFO_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_INFO, component, stream)
 #define LOG_DEBUG_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, stream)
 #define LOG_TRACE_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, stream)
-
-#define ALOG_EMERG(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_EMERG, component, stream)
-#define ALOG_ALERT(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_ALERT, component, stream)
-#define ALOG_CRIT(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_CRIT, component, stream)
-#define ALOG_ERROR(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_ERROR, component, stream)
-#define ALOG_WARN(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_WARN, component, stream)
-#define ALOG_NOTICE(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_NOTICE, component, stream)
-#define ALOG_INFO(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_INFO, component, stream)
-#define ALOG_DEBUG(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_DEBUG, component, stream)
-#define ALOG_TRACE(component, stream) LOG_LOG_S(*NActors::TlsActivationContext, NActors::NLog::PRI_TRACE, component, stream)
 
 #define LOG_EMERG_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, sampleBy, __VA_ARGS__)
 #define LOG_ALERT_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_ALERT, component, sampleBy, __VA_ARGS__)
@@ -118,31 +125,27 @@
 #define LOG_DEBUG_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, sampleBy, stream)
 #define LOG_TRACE_S_SAMPLED_BY(actorCtxOrSystem, component, sampleBy, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, sampleBy, stream)
 
-// Log Throttling
-#define LOG_LOG_THROTTLE(throttler, actorCtxOrSystem, priority, component, ...) \
-    do {                                                                        \
-        if ((throttler).Kick()) {                                               \
-            LOG_LOG(actorCtxOrSystem, priority, component, __VA_ARGS__);        \
-        }                                                                       \
-    } while (0) /**/
-
-#define LOG_LOG_S_THROTTLE(throttler, actorCtxOrSystem, priority, component, stream) \
-    do {                                                                             \
-        if ((throttler).Kick()) {                                                    \
-            LOG_LOG_S(actorCtxOrSystem, priority, component, stream);                \
-        }                                                                            \
-    } while (0) /**/
-
-#define TRACE_EVENT(component)                                                                                                         \
-    const auto& currentTracer = component;                                                                                             \
-    if (ev->HasEvent()) {                                                                                                              \
-        LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s: %s",                                  \
-                  __FUNCTION__, ev->Type, ev->Sender.ToString().data(), SelfId().ToString().data(), ev->ToString().substr(0, 1000).data()); \
-    } else {                                                                                                                           \
-        LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s",                                      \
-                  __FUNCTION__, ev->Type, ev->Sender.ToString().data(), ev->Recipient.ToString().data());                                          \
+#define TRACE_EVENT(component)                                                              \
+    const auto& currentTracer = component;                                                  \
+    if (ev->HasEvent()) {                                                                   \
+        YDB_LOG_TRACE_CTX_COMP(*TlsActivationContext, currentTracer, "Received event",      \
+            {"function", __FUNCTION__},                                                     \
+            {"eventType", ev->Type},                                                        \
+            {"sender", ev->Sender.ToString()},                                              \
+            {"recipient", SelfId().ToString()},                                             \
+            {"event", ev->ToString().substr(0, 1000)});                                     \
+    } else {                                                                                \
+        YDB_LOG_TRACE_CTX_COMP(*TlsActivationContext, currentTracer, "Received event",      \
+            {"function", __FUNCTION__},                                                     \
+            {"eventType", ev->Type},                                                        \
+            {"sender", ev->Sender.ToString()},                                              \
+            {"recipient", ev->Recipient.ToString()});                                       \
     }
-#define TRACE_EVENT_TYPE(eventType) LOG_TRACE(*TlsActivationContext, currentTracer, "%s, processing event %s", __FUNCTION__, eventType)
+
+#define TRACE_EVENT_TYPE(eventType)                                                         \
+    YDB_LOG_TRACE_CTX_COMP(*TlsActivationContext, currentTracer, "Processing event",        \
+        {"function", __FUNCTION__},                                                         \
+        {"eventType", eventType})
 
 class TLog;
 class TLogBackend;
@@ -256,6 +259,9 @@ namespace NActors {
         TDuration WakeupInterval{TDuration::Seconds(5)};
         std::unique_ptr<ILoggerMetrics> Metrics;
         TLogBuffer LogBuffer;
+        NActors::NStructuredLog::TJsonWriter StructuredJsonWriter;
+        NActors::NStructuredLog::TMetaWriter StructuredMetaWriter;
+        NActors::NStructuredLog::TTextWriter StructuredTextWriter;
 
         void BecomeDefunct();
         void FlushLogBufferMessageEvent(TFlushLogBuffer::TPtr& ev, const NActors::TActorContext& ctx);
@@ -272,7 +278,8 @@ namespace NActors {
             const char* fileName,
             ui64 lineNumber,
             const TString& formatted,
-            bool json) noexcept;
+            bool json,
+            const TMaybe<NActors::NStructuredLog::TStructuredMessage>&) noexcept;
         void RenderComponentPriorities(IOutputStream& str);
         void FlushLogBufferMessage();
         void WriteMessageStat(const NLog::TEvLog& ev);
@@ -372,6 +379,30 @@ namespace NActors {
                 json)));
     }
 
+    template <typename TCtx>
+    inline void DeliverLogMessage(
+        TCtx& ctx,
+        NLog::EPriority mPriority,
+        NLog::EComponent mComponent,
+        const char* fileName,
+        ui64 lineNumber,
+        TString&& str,
+        NActors::NStructuredLog::TStructuredMessage&& structuredMessage)
+    {
+        const NLog::TSettings *mSettings = ctx.LoggerSettings();
+        TLoggerActor::Throttle(*mSettings);
+        ctx.Send(new IEventHandle(
+            mSettings->LoggerActorId,
+            TActorId(),
+            new NLog::TEvLog(
+                mPriority,
+                mComponent,
+                fileName,
+                lineNumber,
+                std::move(str),
+                std::move(structuredMessage))));
+    }
+
     template <typename TCtx, typename... TArgs>
     inline void MemLogAdapter(
         TCtx& actorCtxOrSystem,
@@ -441,6 +472,27 @@ namespace NActors {
             lineNumber,
             std::move(str),
             json);
+    }
+
+    template <typename TCtx>
+    Y_WRAPPER inline void MemStructLogAdapter(
+        TCtx& actorCtxOrSystem,
+        NLog::EPriority mPriority,
+        NLog::EComponent mComponent,
+        const char* fileName,
+        ui64 lineNumber,
+        const TString& str,
+        NActors::NStructuredLog::TStructuredMessage&& structuredMessage = {}) {
+
+        MemLogWrite(str.data(), str.size(), true);
+        DeliverLogMessage(
+            actorCtxOrSystem,
+            mPriority,
+            mComponent,
+            fileName,
+            lineNumber,
+            TString(str),
+            std::move(structuredMessage));
     }
 
     class TRecordWriter: public TStringBuilder {
@@ -657,16 +709,6 @@ namespace NActors {
 #define ALS_ALERT(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_ALERT, component)
 #define ALS_EMERG(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_EMERG, component)
 
-#define AFL_TRACE(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, component)
-#define AFL_DEBUG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_DEBUG, component)
-#define AFL_INFO(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_INFO, component)
-#define AFL_NOTICE(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_NOTICE, component)
-#define AFL_WARN(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_WARN, component)
-#define AFL_ERROR(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ERROR, component)
-#define AFL_CRIT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_CRIT, component)
-#define AFL_ALERT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, component)
-#define AFL_EMERG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, component)
-
 #define DETECT_LOG_MACRO(_1, _2, NAME, ...) NAME
 
 #define BASE_CFL_TRACE2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
@@ -698,3 +740,90 @@ namespace NActors {
 #define ACFL_CRIT(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_CRIT2, BASE_CFL_CRIT1)(__VA_ARGS__)
 #define ACFL_ALERT(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_ALERT2, BASE_CFL_ALERT1)(__VA_ARGS__)
 #define ACFL_EMERG(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_EMERG2, BASE_CFL_EMERG1)(__VA_ARGS__)
+
+#define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \
+    do { \
+        auto& ydblogActorContext = (CTX); \
+        const auto ydblogPriority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
+        const auto ydblogComponent = [&]{ using namespace NKikimrServices; return (COMP); }(); \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(ydblogActorContext, ydblogPriority, ydblogComponent, 0ull)) { \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage = NActors::NStructuredLog::TLogStack::GetTop(); \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__); \
+            TStringStream ydblogMessageTextStream; ydblogMessageTextStream << T; \
+            MemStructLogAdapter(ydblogActorContext, ydblogPriority, ydblogComponent, __FILE_NAME__, __LINE__, ydblogMessageTextStream.Str(), std::move(ydblogStructuredMessage) ); \
+        } \
+    } while (false)
+
+#define YDB_LOG_CTX_COMP_FAIL(CTX, PRIO, COMP, T, ...) \
+    do { \
+        auto& ydblogActorContext = (CTX); \
+        const auto ydblogPriority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
+        const auto ydblogComponent = [&]{ using namespace NKikimrServices; return (COMP); }(); \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(ydblogActorContext, ydblogPriority, ydblogComponent, 0ull)) { \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage = NActors::NStructuredLog::TLogStack::GetTop(); \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__); \
+            TStringStream ydblogMessageTextStream; ydblogMessageTextStream << T; \
+            const TString ydblogMessageText = ydblogMessageTextStream.Str(); \
+            Y_VERIFY_DEBUG_S(false, ydblogMessageText); \
+            MemStructLogAdapter(ydblogActorContext, ydblogPriority, ydblogComponent, __FILE_NAME__, __LINE__, ydblogMessageText, std::move(ydblogStructuredMessage) ); \
+        } \
+    } while (false)
+
+
+#define YDB_LOG_EMERG_CTX_COMP(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_EMERG, COMP, T, __VA_ARGS__)
+#define YDB_LOG_ALERT_CTX_COMP(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_ALERT, COMP, T, __VA_ARGS__)
+#define YDB_LOG_CRIT_CTX_COMP(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_CRIT, COMP, T, __VA_ARGS__)
+#define YDB_LOG_ERROR_CTX_COMP(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_ERROR, COMP, T, __VA_ARGS__)
+#define YDB_LOG_WARN_CTX_COMP(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_WARN, COMP, T, __VA_ARGS__)
+#define YDB_LOG_NOTICE_CTX_COMP(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_NOTICE, COMP, T, __VA_ARGS__)
+#define YDB_LOG_INFO_CTX_COMP(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_INFO, COMP, T, __VA_ARGS__)
+#define YDB_LOG_DEBUG_CTX_COMP(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_DEBUG, COMP, T, __VA_ARGS__)
+#define YDB_LOG_TRACE_CTX_COMP(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_TRACE, COMP, T, __VA_ARGS__)
+
+#define YDB_LOG_CTX(CTX, PRIO, T, ...) YDB_LOG_CTX_COMP(CTX, PRIO, YDB_LOG_THIS_FILE_COMPONENT, T, __VA_ARGS__)
+#define YDB_LOG_EMERG_CTX(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_EMERG, T, __VA_ARGS__)
+#define YDB_LOG_ALERT_CTX(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_ALERT, T, __VA_ARGS__)
+#define YDB_LOG_CRIT_CTX(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_CRIT, T, __VA_ARGS__)
+#define YDB_LOG_ERROR_CTX(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_ERROR, T, __VA_ARGS__)
+#define YDB_LOG_WARN_CTX(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_WARN, T, __VA_ARGS__)
+#define YDB_LOG_NOTICE_CTX(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_NOTICE, T, __VA_ARGS__)
+#define YDB_LOG_INFO_CTX(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_INFO, T, __VA_ARGS__)
+#define YDB_LOG_DEBUG_CTX(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_DEBUG, T, __VA_ARGS__)
+#define YDB_LOG_TRACE_CTX(CTX, T, ...) YDB_LOG_CTX(CTX, PRI_TRACE, T, __VA_ARGS__)
+
+#define YDB_LOG_COMP(PRIO, COMP, T, ...) \
+    do { \
+        if (auto ctxp = NActors::TlsActivationContext) { \
+            YDB_LOG_CTX_COMP(*ctxp, PRIO, COMP, T, __VA_ARGS__); \
+        } \
+    } while (false)
+
+#define YDB_LOG_COMP_FAIL(PRIO, COMP, T, ...) \
+    do { \
+        if (auto ctxp = NActors::TlsActivationContext) { \
+            YDB_LOG_CTX_COMP_FAIL(*ctxp, PRIO, COMP, T, __VA_ARGS__); \
+        } \
+    } while (false)
+
+#define YDB_LOG_EMERG_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_EMERG, COMP, T, __VA_ARGS__)
+#define YDB_LOG_ALERT_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_ALERT, COMP, T, __VA_ARGS__)
+#define YDB_LOG_CRIT_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_CRIT, COMP, T, __VA_ARGS__)
+#define YDB_LOG_ERROR_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_ERROR, COMP, T, __VA_ARGS__)
+#define YDB_LOG_WARN_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_WARN, COMP, T, __VA_ARGS__)
+#define YDB_LOG_NOTICE_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_NOTICE, COMP, T, __VA_ARGS__)
+#define YDB_LOG_INFO_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_INFO, COMP, T, __VA_ARGS__)
+#define YDB_LOG_DEBUG_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_DEBUG, COMP, T, __VA_ARGS__)
+#define YDB_LOG_DEBUG_COMP_FAIL(COMP, T, ...) YDB_LOG_COMP_FAIL(PRI_DEBUG, COMP, T, __VA_ARGS__)
+#define YDB_LOG_TRACE_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_TRACE, COMP, T, __VA_ARGS__)
+
+#define YDB_LOG(PRIO, T, ...) YDB_LOG_COMP(PRIO, YDB_LOG_THIS_FILE_COMPONENT, T, __VA_ARGS__)
+#define YDB_LOG_EMERG(T, ...) YDB_LOG(PRI_EMERG, T, __VA_ARGS__)
+#define YDB_LOG_ALERT(T, ...) YDB_LOG(PRI_ALERT, T, __VA_ARGS__)
+#define YDB_LOG_CRIT(T, ...) YDB_LOG(PRI_CRIT, T, __VA_ARGS__)
+#define YDB_LOG_ERROR(T, ...) YDB_LOG(PRI_ERROR, T, __VA_ARGS__)
+#define YDB_LOG_WARN(T, ...) YDB_LOG(PRI_WARN, T, __VA_ARGS__)
+#define YDB_LOG_NOTICE(T, ...) YDB_LOG(PRI_NOTICE, T, __VA_ARGS__)
+#define YDB_LOG_INFO(T, ...) YDB_LOG(PRI_INFO, T, __VA_ARGS__)
+#define YDB_LOG_DEBUG(T, ...) YDB_LOG(PRI_DEBUG, T, __VA_ARGS__)
+#define YDB_LOG_DEBUG_FAIL(T, ...) YDB_LOG_COMP_FAIL(PRI_DEBUG, YDB_LOG_THIS_FILE_COMPONENT, T, __VA_ARGS__)
+#define YDB_LOG_TRACE(T, ...) YDB_LOG(PRI_TRACE, T, __VA_ARGS__)

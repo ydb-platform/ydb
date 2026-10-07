@@ -2,6 +2,9 @@
 
 #include "distconf.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+
 namespace NKikimr::NStorage {
 
     class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActor<TInvokeRequestHandlerActor> {
@@ -81,13 +84,17 @@ namespace NKikimr::NStorage {
 
         THashMultiMap<ui32, TVDiskID> NodeToVDisk;
         THashMap<TActorId, TVDiskID> ActorToVDisk;
+        THashMap<ui32, TVector<std::pair<TActorId, TVDiskID>>> VStatusQueriesAwaitingConnection;
         std::optional<NKikimrBlobStorage::TBaseConfig> BaseConfig;
         THashSet<TVDiskID> PendingVDiskIds;
         TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
         std::optional<TBlobStorageGroupInfo::TGroupVDisks> SuccessfulVDisks;
+        std::optional<TResult::TReassignGroupDisk> ReassignGroupDiskResult;
 
         void ReassignGroupDisk(const TQuery::TReassignGroupDisk& cmd);
         void IssueVStatusQueries(const NKikimrBlobStorage::TGroupInfo& group);
+        void SendVStatusQuery(TActorId actorId, TVDiskID vdiskId, TActorId sessionId = {});
+        void SendPendingVStatusQueries(ui32 nodeId, TActorId sessionId);
         void Handle(TEvBlobStorage::TEvVStatusResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void OnVStatusError(TVDiskID vdiskId);
@@ -155,7 +162,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerDistconfResponse::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev);
-        void BootstrapCluster(const TString& selfAssemblyUUID);
+        void BootstrapCluster(const TQuery::TBootstrapCluster& request);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge mode
@@ -166,6 +173,11 @@ namespace NKikimr::NStorage {
 
         void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
         void NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Retro trace collection
+
+        void DemandRetroTrace(const TQuery::TDemandRetroTrace& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition
@@ -181,7 +193,7 @@ namespace NKikimr::NStorage {
         void RunCommonChecks(bool requireScepter = true);
 
         void Finish(TResult::EStatus status, std::optional<TStringBuf> errorReason,
-            const std::function<void(TResult*)>& callback = {});
+            const std::function<void(TResult*)>& callback = {}, bool sendResult = true);
 
         void DetachQuery();
 

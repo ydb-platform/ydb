@@ -10,6 +10,7 @@
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/common/empty_attributes.h"
 #include "opentelemetry/sdk/instrumentationscope/instrumentation_scope.h"
+#include "opentelemetry/sdk/trace/span_limits.h"
 #include "opentelemetry/trace/span_context.h"
 #include "opentelemetry/trace/span_id.h"
 #include "opentelemetry/trace/span_metadata.h"
@@ -170,6 +171,12 @@ public:
    * @param duration the duration to set
    */
   virtual void SetDuration(std::chrono::nanoseconds duration) noexcept = 0;
+
+  /**
+   * Set the span limits for the span.
+   * This method must be called before any SetAttribute / AddEvent / AddLink call.
+   */
+  virtual void SetSpanLimits(const SpanLimits & /* limits */) noexcept {}
 
   /**
    * Get the SpanData object for this Recordable.

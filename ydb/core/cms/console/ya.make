@@ -35,6 +35,7 @@ SRCS(
     console__configure.cpp
     console__create_tenant.cpp
     console__drop_yaml_config.cpp
+    console__decommit_groups.cpp
     console__init_scheme.cpp
     console__load_state.cpp
     console__get_log_tail.cpp
@@ -66,6 +67,8 @@ SRCS(
     http.h
     immediate_controls_configurator.cpp
     immediate_controls_configurator.h
+    interconnect_configurator.cpp
+    interconnect_configurator.h
     jaeger_tracing_configurator.cpp
     jaeger_tracing_configurator.h
     log_settings_configurator.cpp
@@ -84,6 +87,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http
+    ydb/library/actors/interconnect
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blobstorage
@@ -100,6 +104,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/util
     ydb/library/aclib
+    ydb/library/protobuf_printer
     ydb/library/yaml_config
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/library/operation_id

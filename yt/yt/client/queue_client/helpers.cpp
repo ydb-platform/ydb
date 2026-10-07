@@ -66,7 +66,8 @@ TFuture<THashMap<int, THashMap<i64, TPartitionRowInfo>>> CollectPartitionRowInfo
 
     auto query = queryBuilder.Flush();
 
-    YT_LOG_TRACE("Executing query for partition row infos (Query: %v)", query);
+    YT_TLOG_TRACE("Executing query for partition row infos")
+        .With("Query", query);
 
     TSelectRowsOptions options;
     options.ReplicaConsistency = EReplicaConsistency::Sync;

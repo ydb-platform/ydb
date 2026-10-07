@@ -286,6 +286,13 @@ license. See [LICENSE](LICENSE) for more information.
 
 
 ====================COPYRIGHT====================
+  //       including by reference (e.g. const Status&).
+  //     - Never pass the builder to any function which might convert the
+  //       builder to Status (i.e. this restriction is viral).
+  // (c) Return a StatusBuilder (usually the input parameter).
+
+
+====================COPYRIGHT====================
 // Copyright 2016 Google Inc. All Rights Reserved.
 
 
@@ -331,6 +338,10 @@ license. See [LICENSE](LICENSE) for more information.
 
 ====================COPYRIGHT====================
 // Copyright 2025 The Abseil Authors
+
+
+====================COPYRIGHT====================
+// Copyright 2026 The Abseil Authors.
 
 
 ====================COPYRIGHT====================

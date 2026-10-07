@@ -103,21 +103,23 @@ private:
     TDuration BatchDuration_;
     bool AllowEmptyBatches_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TBatch CurrentBatch_;
     TBatchLimiter CurrentBatchLimiter_;
 
     ETimerState TimerState_ = ETimerState::Initial;
+    TInstant TimerStartTime_;
     std::deque<TBatch> Batches_;
     std::deque<TPromise<TBatch>> Promises_;
     TDelayedExecutorCookie BatchFlushCookie_;
     ui64 FlushGeneration_ = 0;
 
-    void ResetTimer(TGuard<NThreading::TSpinLock>& guard);
-    void StartTimer(TGuard<NThreading::TSpinLock>& guard);
-    bool IsFlushNeeded(TGuard<NThreading::TSpinLock>& guard) const;
-    void CheckFlush(TGuard<NThreading::TSpinLock>& guard);
-    void CheckReturn(TGuard<NThreading::TSpinLock>& guard);
+    void SetBatchDuration(TGuard<TSpinLock>& guard, TDuration batchDuration);
+    void ResetTimer(TGuard<TSpinLock>& guard);
+    void StartTimer(TGuard<TSpinLock>& guard);
+    bool IsFlushNeeded(TGuard<TSpinLock>& guard) const;
+    void CheckFlush(TGuard<TSpinLock>& guard);
+    void CheckReturn(TGuard<TSpinLock>& guard);
     void OnBatchTimeout(ui64 generation);
 };
 

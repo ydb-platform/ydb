@@ -13,6 +13,7 @@
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/library/security/util.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/map.h>
@@ -572,19 +573,19 @@ Y_UNIT_TEST_SUITE(Mvp) {
         redirectStrategy.CheckRedirectStatus(outgoingResponseEv);
         TString location = redirectStrategy.GetRedirectUrl(outgoingResponseEv);
         UNIT_ASSERT_STRING_CONTAINS(location, "https://auth.test.net/oauth/authorize");
-        UNIT_ASSERT_STRING_CONTAINS(location, "response_type=code");
-        UNIT_ASSERT_STRING_CONTAINS(location, "scope=openid");
-        UNIT_ASSERT_STRING_CONTAINS(location, "client_id=" + settings.ClientId);
-        UNIT_ASSERT_STRING_CONTAINS(location, "redirect_uri=https://" + hostProxy + "/auth/callback");
 
         NHttp::TUrlParameters urlParameters(location);
-        const TString state = urlParameters["state"];
+        UNIT_ASSERT_STRINGS_EQUAL(urlParameters["response_type"], "code");
+        UNIT_ASSERT_STRINGS_EQUAL(urlParameters["scope"], "openid");
+        UNIT_ASSERT_STRINGS_EQUAL(urlParameters["client_id"], settings.ClientId);
+        UNIT_ASSERT_STRINGS_EQUAL(urlParameters["redirect_uri"], "https://" + hostProxy + "/auth/callback");
+        const TString state = TString(urlParameters.Get("state"));
 
         const NHttp::THeaders headers(outgoingResponseEv->Response->Headers);
         UNIT_ASSERT(headers.Has("X-Request-Id"));
         UNIT_ASSERT(headers.Has("Set-Cookie"));
         TStringBuf setCookie = headers.Get("Set-Cookie");
-        UNIT_ASSERT_STRING_CONTAINS(setCookie, TOpenIdConnectSettings::YDB_OIDC_COOKIE);
+        UNIT_ASSERT_STRING_CONTAINS(setCookie, "ydb_oidc_cookie=");
         redirectStrategy.CheckSpecificHeaders(headers);
 
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
@@ -692,8 +693,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TAutoPtr<IEventHandle> handle;
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
         const NHttp::THeaders protectedPageHeaders(outgoingResponseEv->Response->Headers);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
         UNIT_ASSERT(protectedPageHeaders.Has("Location"));
         UNIT_ASSERT_STRINGS_EQUAL(protectedPageHeaders.Get("Location"), "/requested/page");
     }
@@ -706,6 +707,19 @@ Y_UNIT_TEST_SUITE(Mvp) {
     Y_UNIT_TEST(OpenIdConnectWrongStateAuthorizationFlowAjax) {
         TAjaxRedirectStrategy redirectStrategy;
         OidcWrongStateAuthorizationFlow(redirectStrategy);
+    }
+
+    Y_UNIT_TEST(OpenIdConnectExpiredStateCheckFails) {
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp);
+        TState sourcePayload;
+        sourcePayload.AntiForgeryToken = "state";
+        sourcePayload.ExpirationTime = TInstant::Seconds(0);
+
+        TCheckStateResult result = CheckState(EncodeState(sourcePayload, settings.ClientSecret), settings.ClientSecret);
+
+        UNIT_ASSERT(!result.Ok);
+        UNIT_ASSERT_STRING_CONTAINS(result.ErrorMessage, "State life time expired");
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateAuthorizationFail) {
@@ -991,8 +1005,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TAutoPtr<IEventHandle> handle;
         NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* outgoingResponseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
-        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "400");
-        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Body, "Unknown error has occurred. Please open the page again");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingResponseEv->Response->Status, "302");
+        UNIT_ASSERT_STRING_CONTAINS(outgoingResponseEv->Response->Headers, "Location: /requested/page");
     }
 
     Y_UNIT_TEST(OpenIdConnectSessionServiceCreateGetWrongStateAndWrongCookie) {
@@ -1410,18 +1424,17 @@ Y_UNIT_TEST_SUITE(Mvp) {
             return response;
         }
 
+        // Mirrors the real viewer, which stopped emitting OriginalUserToken in #34970.
         static TString GetViewerResponse200() {
-            TStringBuilder body;
-            body << "{\"UserSID\":\"" << VIEWER_USER_ACCOUNT_ID
-                << "\",\"OriginalUserToken\":\"" << TProfileServiceMock::VALID_USER_TOKEN << "\"}";
-            return MakeHttpResponse("200 OK", body, "application/json");
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json["UserSID"] = VIEWER_USER_ACCOUNT_ID;
+            return MakeHttpResponse("200 OK", NJson::WriteJson(json, false), "application/json");
         }
 
         static TString GetViewerResponseService200() {
-            TStringBuilder body;
-            body << "{\"UserSID\":\"" << VIEWER_SERVICE_ACCOUNT_ID
-                << "\",\"OriginalUserToken\":\"" << TProfileServiceMock::VALID_SERVICE_TOKEN << "\"}";
-            return MakeHttpResponse("200 OK", body, "application/json");
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json["UserSID"] = VIEWER_SERVICE_ACCOUNT_ID;
+            return MakeHttpResponse("200 OK", NJson::WriteJson(json, false), "application/json");
         }
 
         static TString GetViewerResponse403() {
@@ -1491,12 +1504,22 @@ Y_UNIT_TEST_SUITE(Mvp) {
         return json;
     }
 
+    // The token is exposed only as a mask, so UI problems stay debuggable without handing
+    // JS a usable credential. Temporary - to be dropped once access observability lands.
+    void AssertTokenIsMasked(const NJson::TJsonValue& json, TStringBuf rawToken) {
+        UNIT_ASSERT(json.Has(ORIGINAL_USER_TOKEN));
+        const TString masked = json[ORIGINAL_USER_TOKEN].GetStringSafe();
+        UNIT_ASSERT_C(!masked.Contains(rawToken),
+                      TStringBuilder() << "mask still contains the raw token: " << masked);
+        UNIT_ASSERT_C(masked.Contains("****"), TStringBuilder() << "not a mask: " << masked);
+    }
+
     Y_UNIT_TEST(OidcWhoami200) {
         auto json = OidcWhoamiExtendedInfoTest(
             TWhoamiContext(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse200(), "200"));
 
         UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TWhoamiContext::VIEWER_USER_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        AssertTokenIsMasked(json, TProfileServiceMock::VALID_USER_TOKEN);
         UNIT_ASSERT(json.Has(EXTENDED_INFO));
         UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
     }
@@ -1506,7 +1529,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             TWhoamiContext(TProfileServiceMock::VALID_SERVICE_TOKEN, TWhoamiContext::GetViewerResponseService200(), "200"));
 
         UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TWhoamiContext::VIEWER_SERVICE_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_SERVICE_TOKEN);
+        AssertTokenIsMasked(json, TProfileServiceMock::VALID_SERVICE_TOKEN);
         UNIT_ASSERT(json.Has(EXTENDED_INFO));
         UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
     }
@@ -1516,7 +1539,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             TWhoamiContext(TProfileServiceMock::BAD_TOKEN, TWhoamiContext::GetViewerResponse200(), "200"));
 
         UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TWhoamiContext::VIEWER_USER_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        AssertTokenIsMasked(json, TProfileServiceMock::BAD_TOKEN);
         UNIT_ASSERT(!json.Has(EXTENDED_INFO));
         UNIT_ASSERT(!json[EXTENDED_ERRORS].Has("Ydb"));
         UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Iam"));
@@ -1529,7 +1552,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             TWhoamiContext(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse403(), "200"));
 
         UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TProfileServiceMock::USER_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        AssertTokenIsMasked(json, TProfileServiceMock::VALID_USER_TOKEN);
         UNIT_ASSERT(json.Has(EXTENDED_INFO));
         UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Ydb"));
         UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseStatus"], "403");
@@ -1543,7 +1566,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             TWhoamiContext(TProfileServiceMock::VALID_SERVICE_TOKEN, TWhoamiContext::GetViewerResponse403(), "200"));
 
         UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TProfileServiceMock::SERVICE_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_SERVICE_TOKEN);
+        AssertTokenIsMasked(json, TProfileServiceMock::VALID_SERVICE_TOKEN);
         UNIT_ASSERT(json.Has(EXTENDED_INFO));
         UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Ydb"));
         UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseStatus"], "403");
@@ -1582,9 +1605,26 @@ Y_UNIT_TEST_SUITE(Mvp) {
         ctx.AccessServiceType = NMvp::yandex_v2;
         auto json = OidcWhoamiExtendedInfoTest(ctx);
         UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TWhoamiContext::VIEWER_USER_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
         UNIT_ASSERT(!json.Has(EXTENDED_INFO));
         UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
+    }
+
+    // The session cookie is httpOnly on purpose; the IAM token it is exchanged for must never
+    // reach JS through the whoami body - under any key, at any nesting depth.
+    Y_UNIT_TEST(OidcWhoamiNeverLeaksBearerToken) {
+        const std::pair<TStringBuf, TString> cases[] = {
+            {TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse200()},
+            {TProfileServiceMock::VALID_SERVICE_TOKEN, TWhoamiContext::GetViewerResponseService200()},
+            {TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse403()},
+            {TProfileServiceMock::VALID_SERVICE_TOKEN, TWhoamiContext::GetViewerResponse403()},
+        };
+        for (const auto& [token, viewerResponse] : cases) {
+            auto json = OidcWhoamiExtendedInfoTest(TWhoamiContext(token, viewerResponse, "200"));
+            const TString body = NJson::WriteJson(json, false);
+            UNIT_ASSERT_C(!body.Contains(token),
+                          TStringBuilder() << "whoami body leaked the bearer token: " << body);
+        }
     }
 
     Y_UNIT_TEST(GetAddressWithoutPort) {
@@ -1607,6 +1647,67 @@ static void NavigationRequestTest(const TString& rawRequest, bool expectedNaviga
 }
 
 Y_UNIT_TEST_SUITE(Utils) {
+    Y_UNIT_TEST(CreateProxiedRequestForwardsSingleAcceptHeader) {
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest,
+            "GET /resource HTTP/1.1\r\n"
+            "Host: oidcproxy.net\r\n"
+            "Accept: multipart/form-data\r\n\r\n");
+
+        const TProxiedRequestParams params{
+            incomingRequest,
+            {},
+            false,
+            NMVP::TCrackedPage("http://" + ALLOWED_PROXY_HOST + "/resource"),
+            TOpenIdConnectSettings{},
+        };
+        const auto outgoingRequest = CreateProxiedRequest(params);
+        const NHttp::THeaders headers(outgoingRequest->Headers);
+
+        UNIT_ASSERT_VALUES_EQUAL(headers.Headers.count("Accept"), 1);
+        UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Accept"), "multipart/form-data");
+    }
+
+    Y_UNIT_TEST(CreateProxiedRequestAddsSingleDefaultAcceptHeader) {
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest,
+            "GET /resource HTTP/1.1\r\n"
+            "Host: oidcproxy.net\r\n\r\n");
+
+        const TProxiedRequestParams params{
+            incomingRequest,
+            {},
+            false,
+            NMVP::TCrackedPage("http://" + ALLOWED_PROXY_HOST + "/resource"),
+            TOpenIdConnectSettings{},
+        };
+        const auto outgoingRequest = CreateProxiedRequest(params);
+        const NHttp::THeaders headers(outgoingRequest->Headers);
+
+        UNIT_ASSERT_VALUES_EQUAL(headers.Headers.count("Accept"), 1);
+        UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Accept"), "*/*");
+    }
+
+    Y_UNIT_TEST(OpenIdConnectStateRoundTrip) {
+        TPortManager tp;
+        auto settings = BuildBaseSettings(tp);
+
+        TState sourcePayload;
+        sourcePayload.AntiForgeryToken = "state";
+        sourcePayload.ExpirationTime = TInstant::Seconds(TInstant::Now().Seconds() + TDuration::Minutes(10).Seconds());
+
+        const TString state = EncodeState(sourcePayload, settings.ClientSecret);
+        const TCheckStateResult result = CheckState(state, settings.ClientSecret);
+        const TDecodeStateResult decodedResult = DecodeState(state);
+
+        UNIT_ASSERT(result.Ok);
+        UNIT_ASSERT(result.ErrorMessage.empty());
+        UNIT_ASSERT(decodedResult.HasSignedStateJson);
+        UNIT_ASSERT(decodedResult.HasStateContainerJson);
+        UNIT_ASSERT(decodedResult.Payload == sourcePayload);
+        UNIT_ASSERT_STRINGS_EQUAL(EncodeState(decodedResult.Payload, settings.ClientSecret), state);
+    }
+
     Y_UNIT_TEST(GenerateRandomBase64RandomUniqueness) {
         THashSet<TString> seen;
         for (size_t i = 0; i < 100; ++i) {

@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/misc/lazy_ptr.h>
 
+#include <atomic>
+
 namespace NYT::NConcurrency {
 namespace {
 
@@ -73,8 +75,8 @@ TEST_F(TBoundedConcurrencyInvokerTest, WaitFor3)
     auto promise = NewPromise<void>();
     auto future = promise.ToFuture();
 
-    bool a1called = false;
-    bool a1finished = false;
+    std::atomic<bool> a1called = false;
+    std::atomic<bool> a1finished = false;
     auto a1 = BIND([&] {
         a1called = true;
         WaitFor(future)
@@ -82,7 +84,7 @@ TEST_F(TBoundedConcurrencyInvokerTest, WaitFor3)
         a1finished = true;
     });
 
-    bool a2called = false;
+    std::atomic<bool> a2called = false;
     auto a2 = BIND([&] {
         a2called = true;
     });
@@ -132,8 +134,8 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
     auto firstFuture = firstPromise.ToFuture();
     auto secondFuture = secondPromise.ToFuture();
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, lock);
-    int runnedCallbacks = 0;
+    YT_DECLARE_SPIN_LOCK(TSpinLock, lock);
+    int ranCallbacks = 0;
     int finishedCallbacks = 0;
 
     std::vector<std::vector<TFuture<void>>> callbacks;
@@ -152,11 +154,14 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
 
                 {
                     auto guard = Guard(lock);
-                    runnedCallbacks += 1;
+                    ranCallbacks += 1;
+                    if (finishedCallbacks <= callbackIndex - maxConcurrentInvocations) {
+                        THROW_ERROR_EXCEPTION("%v-th callback was executed before %v callbacks finished",
+                            callbackIndex + 1,
+                            callbackIndex + 1 - maxConcurrentInvocations);
+                    }
                 }
 
-                // Later callbacks wait for the first future to set to check that
-                // they are not scheduled before first MaxConcurrentInvocations callbacks.
                 WaitFor((callbackIndex > maxConcurrentInvocations)
                     ? firstFuture
                     : secondFuture)
@@ -164,14 +169,10 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
 
                 auto guard = Guard(lock);
 
-                auto concurrentInvocations = runnedCallbacks - finishedCallbacks;
-                THROW_ERROR_EXCEPTION_UNLESS(concurrentInvocations <= maxConcurrentInvocations, "Number of concurrent invocations exceeds maximum (ConcurrentInvocations: %v, MaxConcurrentInvocations: %v)",
+                auto concurrentInvocations = ranCallbacks - finishedCallbacks;
+                THROW_ERROR_EXCEPTION_UNLESS(concurrentInvocations <= maxConcurrentInvocations, "Number of concurrent invocations %v exceeds maximum %v",
                     concurrentInvocations,
                     maxConcurrentInvocations);
-                if (callbackIndex > maxConcurrentInvocations) {
-                    THROW_ERROR_EXCEPTION_UNLESS(finishedCallbacks > maxConcurrentInvocations, "%v-th callback was executed before first %v",
-                        callbackIndex + 1, maxConcurrentInvocations);
-                }
 
                 finishedCallbacks += 1;
             }).AsyncVia(invoker).Run());
@@ -185,7 +186,7 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
         firstFuture = firstPromise.ToFuture();
         secondFuture = secondPromise.ToFuture();
 
-        runnedCallbacks = 0;
+        ranCallbacks = 0;
         finishedCallbacks = 0;
     };
 
@@ -227,7 +228,7 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
 
     WaitFor(AllSucceeded(callbacks[0]))
         .ThrowOnError();
-    EXPECT_EQ(runnedCallbacks, 10);
+    EXPECT_EQ(ranCallbacks, 10);
     EXPECT_EQ(finishedCallbacks, 10);
 
     resetState();
@@ -256,7 +257,7 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
 
     WaitFor(AllSucceeded(callbacks[1]))
         .ThrowOnError();
-    EXPECT_EQ(runnedCallbacks, 10);
+    EXPECT_EQ(ranCallbacks, 10);
     EXPECT_EQ(finishedCallbacks, 10);
 }
 
@@ -276,6 +277,25 @@ TEST_F(TBoundedConcurrencyInvokerTest, ReconfigureBeforeFirstInvocation)
     EXPECT_TRUE(promise.IsSet());
 }
 
+TEST_F(TBoundedConcurrencyInvokerTest, CurrentInvoker)
+{
+    auto underlyingInvoker = Queue1->GetInvoker();
+    auto invoker = CreateBoundedConcurrencyInvoker(underlyingInvoker, 1);
+
+    auto future = BIND([&] {
+        // The bounded concurrency invoker deliberately installs the *underlying*
+        // invoker as current (see the `// sic!` in TBoundedConcurrencyInvoker::
+        // DoRunCallback), not itself.
+        EXPECT_EQ(underlyingInvoker.Get(), GetCurrentInvoker());
+        EXPECT_NE(invoker.Get(), GetCurrentInvoker());
+        Yield();
+        EXPECT_EQ(underlyingInvoker.Get(), GetCurrentInvoker());
+    })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitUntilSet(future);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

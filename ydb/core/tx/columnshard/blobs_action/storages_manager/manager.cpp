@@ -13,8 +13,9 @@ namespace NKikimr::NOlap {
 
 std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TStoragesManager::DoBuildOperator(const TString& storageId) {
     if (storageId == TBase::DefaultStorageId) {
-        return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(
-            storageId, Shard.SelfId(), Shard.Info(), Shard.Executor()->Generation(), SharedBlobsManager->GetStorageManagerGuarantee(storageId));
+        const bool weightedDataChannelSelection = HasAppData() && AppDataVerified().ColumnShardConfig.GetEnableWeightedDataChannelSelection();
+        return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, Shard.SelfId(), Shard.Info(),
+            Shard.Executor()->Generation(), SharedBlobsManager->GetStorageManagerGuarantee(storageId), weightedDataChannelSelection);
     } else if (storageId == TBase::LocalMetadataStorageId) {
         return std::make_shared<NOlap::NBlobOperations::NLocal::TOperator>(storageId, SharedBlobsManager->GetStorageManagerGuarantee(storageId));
     } else if (storageId == TBase::MemoryStorageId) {
@@ -49,7 +50,8 @@ bool TStoragesManager::DoLoadIdempotency(NTable::TDatabase& database) {
 
 TStoragesManager::TStoragesManager(NColumnShard::TColumnShard& shard)
     : Shard(shard)
-    , SharedBlobsManager(std::make_shared<NDataSharing::TSharedBlobsManager>((TTabletId)Shard.TabletID())) {
+    , SharedBlobsManager(std::make_shared<NDataSharing::TSharedBlobsManager>((TTabletId)Shard.TabletID()))
+{
 }
 
 }   // namespace NKikimr::NOlap

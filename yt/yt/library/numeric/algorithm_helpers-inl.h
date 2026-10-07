@@ -24,15 +24,17 @@ template <class TIter, class TPredicate>
 TIter BinarySearch(TIter begin, TIter end, TPredicate pred)
 {
     size_t count = end - begin;
-    while (count != 0) {
+    while (count > 1) {
         auto half = count / 2;
         auto middle = begin + half;
         if (pred(middle)) {
-            begin = ++middle;
-            count -= half + 1;
-        } else {
-            count = half;
+            begin = middle;
         }
+        count -= half;
+    }
+
+    if (count > 0 && pred(begin)) {
+        ++begin;
     }
 
     return begin;

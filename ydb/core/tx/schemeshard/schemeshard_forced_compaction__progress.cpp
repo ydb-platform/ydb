@@ -1,8 +1,10 @@
 
 #include "schemeshard_impl.h"
 
-#define LOG_T(stream) LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 
 namespace NKikimr::NSchemeShard {
 
@@ -18,17 +20,21 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
     }
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxProgress DoExecute"
-            << ", DoneShardsToPersist size: " << Self->DoneShardsToPersist.size()
-            << ", CancellingForcedCompactions size: " << Self->CancellingForcedCompactions.size());
+        YDB_LOG_DEBUG_CTX(ctx, "[ForcedCompaction] TForcedCompaction::TTxProgress DoExecute",
+            {"schemeshard", Self->SelfTabletId()},
+            {"doneShardsToPersistSize", Self->ForcedCompactionsDoneShardsToPersist.size()},
+            {"cancellingSize", Self->CancellingForcedCompactions.size()},
+        );
         THashSet<TForcedCompactionInfo::TPtr> compactionsToPersist;
-        compactionsToPersist.reserve(Self->DoneShardsToPersist.size() + Self->CancellingForcedCompactions.size());
+        compactionsToPersist.reserve(Self->ForcedCompactionsDoneShardsToPersist.size() + Self->CancellingForcedCompactions.size());
         NIceDb::TNiceDb db(txc.DB);
-        for (auto& [shardIdx, forcedCompactionInfo] : Self->DoneShardsToPersist) {
-            if (Self->InProgressForcedCompactionsByShard.erase(shardIdx)) {
+        for (auto& [shardIdx, forcedCompactionInfo] : Self->ForcedCompactionsDoneShardsToPersist) {
+            if (Self->InProgressForcedCompactionsByShard.erase(shardIdx) && forcedCompactionInfo) {
                 forcedCompactionInfo->DoneShardCount++;
             }
-            compactionsToPersist.emplace(forcedCompactionInfo);
+            if (forcedCompactionInfo) {
+                compactionsToPersist.emplace(forcedCompactionInfo);
+            }
             Self->PersistForcedCompactionDoneShard(db, shardIdx);
         }
 
@@ -46,14 +52,12 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
         }
 
         for (auto& forcedCompactionInfo : compactionsToPersist) {
-            const auto* shardsQueue = Self->ForcedCompactionShardsByTable.FindPtr(forcedCompactionInfo->TablePathId);
-            bool compactionCompleted = (!shardsQueue || shardsQueue->Empty()) && forcedCompactionInfo->ShardsInFlight.empty();
-            if (compactionCompleted) {
-                if (!shardsQueue || shardsQueue->Empty()) {
-                    Self->ForcedCompactionShardsByTable.erase(forcedCompactionInfo->TablePathId);
-                    Self->ForcedCompactionTablesQueue.Remove(forcedCompactionInfo->TablePathId);
+            if (Self->IsForcedCompactionCompleted(*forcedCompactionInfo)) {
+                for (const auto& tablePathId : forcedCompactionInfo->TablesToCompact) {
+                    Self->ForcedCompactionShardsByTable.erase(tablePathId);
+                    Self->ForcedCompactionTablesQueue.Remove(tablePathId);
+                    Self->InProgressForcedCompactionsByTable.erase(tablePathId);
                 }
-                Self->InProgressForcedCompactionsByTable.erase(forcedCompactionInfo->TablePathId);
                 forcedCompactionInfo->EndTime = ctx.Now();
 
                 TransitToFinalState(*forcedCompactionInfo);
@@ -61,15 +65,18 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
             Self->PersistForcedCompactionState(db, *forcedCompactionInfo);
             SendNotificationsIfFinished(*forcedCompactionInfo, ctx);
         }
-        Self->DoneShardsToPersist.clear();
+        Self->ForcedCompactionsDoneShardsToPersist.clear();
         Self->CancellingForcedCompactions.clear();
+        Self->ForcedCompactionNeedsImmediatePersist = false;
         SideEffects.ApplyOnExecute(Self, txc, ctx);
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxProgress DoComplete"
-            << ", DoneShardsToPersist size: " << Self->DoneShardsToPersist.size()
-            << ", CancellingForcedCompactions size: " << Self->CancellingForcedCompactions.size());
+        YDB_LOG_DEBUG_CTX(ctx, "[ForcedCompaction] TForcedCompaction::TTxProgress DoComplete",
+            {"schemeshard", Self->SelfTabletId()},
+            {"doneShardsToPersistSize", Self->ForcedCompactionsDoneShardsToPersist.size()},
+            {"cancellingSize", Self->CancellingForcedCompactions.size()},
+        );
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 
@@ -79,9 +86,11 @@ private:
             return;
         }
 
-        LOG_T("TForcedCompaction::TTxProgress SendNotifications: "
-            << ": id# " << info.Id
-            << ", subscribers count# " << info.Subscribers.size());
+        YDB_LOG_TRACE_CTX(ctx, "[ForcedCompaction] TForcedCompaction::TTxProgress SendNotifications",
+            {"schemeshard", Self->SelfTabletId()},
+            {"id", info.Id},
+            {"subscriberCount", info.Subscribers.size()},
+        );
 
         TSet<TActorId> toAnswer;
         toAnswer.swap(info.Subscribers);
@@ -112,3 +121,5 @@ ITransaction* TSchemeShard::CreateTxProgressForcedCompaction() {
 }
 
 } // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

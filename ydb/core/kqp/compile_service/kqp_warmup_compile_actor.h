@@ -3,12 +3,16 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
 #include <util/datetime/base.h>
 
 namespace NKikimr::NKqp {
+
+inline constexpr size_t MaxWarmupGroupSids = 256;
+inline constexpr size_t MaxWarmupGroupSidsBytes = 16 * 1024;
 
 struct TEvKqpWarmupComplete : public NActors::TEventLocal<TEvKqpWarmupComplete, TKqpEvents::EvWarmupComplete> {
     bool Success;
@@ -51,6 +55,19 @@ inline TKqpWarmupConfig ImportWarmupConfigFromProto(const NKikimrConfig::TTableS
     config.MaxQueriesToLoad = proto.GetMaxQueriesToLoad();
     config.MaxNodesToRequest = proto.GetMaxNodesToRequest();
     return config;
+}
+
+// Warmup targets tenant databases. The root/service domain is served by system nodes that must be
+// discoverable from startup, so warmup (which holds a node out of discovery until its cache is warm)
+// is not applied there. The root node's TenantName equals the canonized domain path (e.g. "/Root").
+inline bool IsCompileCacheWarmupEnabled(
+        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+        const TString& tenantName,
+        const TString& domainName) {
+    return tableServiceConfig.GetEnableCompileCacheWarmup()
+        && !tenantName.empty()
+        && !domainName.empty()
+        && tenantName != CanonizePath(domainName);
 }
 
 inline NActors::TActorId MakeKqpWarmupActorId(ui32 nodeId) {

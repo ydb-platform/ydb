@@ -168,6 +168,15 @@ namespace NTable {
             return update->RowVersion.TxId;
         }
 
+        ui32 GetDeltaSavepointSeqNum() const
+        {
+            auto* update = GetCurrentVersion();
+            Y_ENSURE(update);
+            Y_ENSURE(update->RowVersion.Step == Max<ui64>());
+
+            return update->SavepointSeqNum;
+        }
+
         std::tuple<ELockMode, ui64> GetLockInfo() const {
             auto* update = GetCurrentVersion();
             Y_ENSURE(update);
@@ -392,7 +401,7 @@ namespace NTable {
                 if (chain->Rop != ERowOp::Absent) {
                     auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                     if (commitVersion) {
-                        return { *commitVersion, chain->RowVersion.TxId };
+                        return { *commitVersion, chain->RowVersion.TxId, chain->Rop };
                     }
                     transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
                 }
@@ -403,7 +412,7 @@ namespace NTable {
                 CurrentVersion = chain;
             }
 
-            return chain->RowVersion;
+            return { chain->RowVersion, 0, chain->Rop };
         }
 
         bool IsValid() const

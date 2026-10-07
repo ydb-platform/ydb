@@ -119,6 +119,9 @@ namespace NKikimr {
         ui32 MaxLogoBlobDataSize;
         ui32 HullSstSizeInChunksFresh;
         ui32 HullSstSizeInChunksLevel;
+        ui32 HeapAllocatorMaxSstInBytes;
+        // Latched at VDisk start: the feature flag is set and orderNumber < N. A running VDisk does not re-read either.
+        bool UseHeapAllocator = false;
         ui32 HugeBlobsFreeChunkReservation;
         ui32 MinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;
@@ -128,6 +131,9 @@ namespace NKikimr {
         ui32 HullCompSortedPartsNum;
         double HullCompLevelRateThreshold;
         TControlWrapper HullCompFreeSpaceThresholdPerMille;
+        TControlWrapper HullCompEmergencyMaxSsts;
+        TControlWrapper HullCompEmergencyChunkReserve;
+        TControlWrapper HullCompEmergencyEnableAtColor;
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper FreshCompMaxInFlightReads;
         TControlWrapper HullCompMaxInFlightWrites;
@@ -171,7 +177,7 @@ namespace NKikimr {
         TControlWrapper EnableLocalSyncLogDataCutting;
         TControlWrapper EnableSyncLogChunkCompression;
         TControlWrapper MaxSyncLogChunksInFlight;
-        ui32 MaxSyncLogChunkSize;
+        ui32 MaxSyncDataCutterChunkSize;
 
         ///////////// REPL SETTINGS /////////////////////////
         TDuration ReplTimeInterval;
@@ -231,6 +237,7 @@ namespace NKikimr {
         TDuration StatsUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
+        TControlWrapper SpaceReportPeriodSeconds = TControlWrapper(0, 0, 86400);
         bool UseActorSystemTimeInBSQueue = false;
         ui32 GroupSizeInUnits = 0;
 
@@ -280,6 +287,10 @@ namespace NKikimr {
         TControlWrapper EnablePhantomFlagStorage;
         bool EnablePersistentPhantomFlagStorage = false;
         TControlWrapper PhantomFlagStorageLimit;
+        TControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
+        TControlWrapper EnableFreshSyncDataThrottling;
+        TControlWrapper EnableChecksumReadValidationOnVDisk;
+        TControlWrapper EnableChecksumWriteValidationOnVDisk;
 
         ///////////// CHUNK Keeper //////////////////
         TControlWrapper EnableChunkKeeper;

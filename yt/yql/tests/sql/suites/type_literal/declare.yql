@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* do not execute */
 
 declare $c_void as Void;

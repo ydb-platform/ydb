@@ -246,6 +246,28 @@ struct TTxWriteValue : public ITransaction {
     }
 }; // TTxWriteValue
 
+struct TTxWriteKeyOnly : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+
+    TTxWriteKeyOnly(TActorId owner, ui64 key)
+        : Owner(owner)
+        , Key(key)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        db.Table<TSchema::Data>().Key(Key).Update();
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TTxWriteKeyOnly
+
 struct TTxWriteRange : public ITransaction {
     const TActorId Owner;
     const ui64 KeyStart;
@@ -326,6 +348,35 @@ struct TTxWriteCompositePK : public ITransaction {
         ctx.Send(Owner, new NFake::TEvResult);
     }
 }; // TTxWriteCompositePK
+
+struct TTxWriteCompositePKNullSubKey : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+    const ui32 Value;
+
+    TTxWriteCompositePKNullSubKey(TActorId owner, ui64 key, ui32 value)
+        : Owner(owner)
+        , Key(key)
+        , Value(value)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        using T = TSchema::CompositePKData;
+
+        txc.DB.Update(
+            T::TableId,
+            NTable::ERowOp::Upsert,
+            { NScheme::TUint64::TInstance(Key), TRawTypeValue() },
+            { NIceDb::TUpdateOp(T::Value::ColumnId, NTable::ECellOp::Set, NScheme::TUint32::TInstance(Value)) }
+        );
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TTxWriteCompositePKNullSubKey
 
 struct TTxEraseRow : public ITransaction {
     const TActorId Owner;
@@ -885,6 +936,56 @@ struct TTxReadCompositePK : public ITransaction {
     }
 }; // TTxReadCompositePK
 
+struct TTxReadCompositePKNullSubKey : public ITransaction {
+    enum EEv {
+        EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
+    };
+
+    struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
+        TEvResult(ui32 value)
+            : Value(value)
+        {}
+
+        ui32 Value;
+    };
+
+    const TActorId Owner;
+    const ui64 Key;
+    ui32 Value = 0;
+
+    TTxReadCompositePKNullSubKey(TActorId owner, ui64 key)
+        : Owner(owner)
+        , Key(key)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        using T = TSchema::CompositePKData;
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        auto rowset = db.Table<T>().Range().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        while (!rowset.EndOfSet()) {
+            if (rowset.GetValue<T::Key>() == Key && !rowset.HaveValue<T::SubKey>()) {
+                Value = rowset.GetValueOrDefault<T::Value>();
+            }
+
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new TEvResult(Value));
+    }
+}; // TTxReadCompositePKNullSubKey
+
 void WriteFileContent(const TFsPath& path, const TString& content) {
     TFile file(path, CreateAlways | WrOnly);
     file.Write(content.data(), content.size());
@@ -943,6 +1044,11 @@ struct TEnv : public TMyEnvBase {
         WaitFor<NFake::TEvResult>();
     }
 
+    void WriteKeyOnly(ui64 key) {
+        SendAsync(new NFake::TEvExecute{ new TTxWriteKeyOnly(Edge, key) });
+        WaitFor<NFake::TEvResult>();
+    }
+
     void EraseRow(ui64 key) {
         SendAsync(new NFake::TEvExecute{ new TTxEraseRow(Edge, key) });
         WaitFor<NFake::TEvResult>();
@@ -960,6 +1066,11 @@ struct TEnv : public TMyEnvBase {
 
     void WriteCompositePK(ui64 key, ui64 subKey, ui32 value) {
         SendAsync(new NFake::TEvExecute{ new TTxWriteCompositePK(Edge, key, subKey, value) });
+        WaitFor<NFake::TEvResult>();
+    }
+
+    void WriteCompositePKNullSubKey(ui64 key, ui32 value) {
+        SendAsync(new NFake::TEvExecute{ new TTxWriteCompositePKNullSubKey(Edge, key, value) });
         WaitFor<NFake::TEvResult>();
     }
 
@@ -1074,6 +1185,15 @@ struct TEnv : public TMyEnvBase {
         Env.GrabEdgeEventRethrow<TTxReadCompositePK::TEvResult>(handle);
 
         return handle->Get<TTxReadCompositePK::TEvResult>()->Value;
+    }
+
+    ui32 ReadCompositePKNullSubKey(ui64 key) {
+        SendAsync(new NFake::TEvExecute{ new TTxReadCompositePKNullSubKey(Edge, key) });
+
+        TAutoPtr<IEventHandle> handle;
+        Env.GrabEdgeEventRethrow<TTxReadCompositePKNullSubKey::TEvResult>(handle);
+
+        return handle->Get<TTxReadCompositePKNullSubKey::TEvResult>()->Value;
     }
 
     void RestartTabletInRecoveryMode()
@@ -1267,7 +1387,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TFsPath(env->GetTempDir()).Child("dummy").ForceDelete();
 
         Cerr << "...backup retry should start automatically" << Endl;
-        auto retryTimeout = TDuration::Seconds(env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        auto retryTimeout = TDuration::Seconds(2 * env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
         env.Env.AdvanceCurrentTime(retryTimeout);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
     }
@@ -1297,7 +1417,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TFsPath(env->GetTempDir()).Child("dummy").ForceDelete();
 
         Cerr << "...backup retry should start automatically" << Endl;
-        auto retryTimeout = TDuration::Seconds(env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        auto retryTimeout = TDuration::Seconds(2 * env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
         env.Env.AdvanceCurrentTime(retryTimeout);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
     }
@@ -2761,7 +2881,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TEnv env;
 
         // Small limit
-        env->GetAppData().SystemTabletBackupConfig.SetNewBackupChangelogMinBytes(100);
+        env->GetAppData().SystemTabletBackupConfig.SetNewBackupChangelogMinBytes(10_KB);
 
         Cerr << "...starting tablet" << Endl;
         env.FireDummyTablet(TestTabletFlags);
@@ -3046,8 +3166,8 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         env.RestoreBackupExpectFail(backup);
 
-        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
-        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
     }
 
     Y_UNIT_TEST(CorruptedChangelogInvalidBase64) {
@@ -3451,7 +3571,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(3), 30);
 
         Cerr << "...backup retry should start automatically" << Endl;
-        auto retryTimeout = TDuration::Seconds(env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        auto retryTimeout = TDuration::Seconds(2 * env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
         env.Env.AdvanceCurrentTime(retryTimeout);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
     }
@@ -4028,6 +4148,91 @@ Y_UNIT_TEST_SUITE(Backup) {
             auto wrongUtf8 = env.ReadAllTypesRow(WRONG_UTF8_KEY);
             UNIT_ASSERT_VALUES_EQUAL(*wrongUtf8.StringVal, wrongUtf8Val);
             UNIT_ASSERT_VALUES_EQUAL(*wrongUtf8.Utf8Val, wrongUtf8Val);
+        };
+
+        env.WaitChangelogFlush();
+        auto changelogBackup = env.GetLastBackupPath();
+
+        Cerr << "...restarting tablet that data goes to snapshot" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        auto snapshotBackup = env.GetLastBackupPath();
+
+        assertState();
+        env.RestoreBackup(changelogBackup, TestTabletFlags);
+        assertState();
+
+        assertState();
+        env.RestoreBackup(snapshotBackup, TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(KeyOnlyRow) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...inserting row with only key column" << Endl;
+        env.WriteKeyOnly(7);
+
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(7), 0);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::DefaultValue>(7), 42);
+        };
+
+        env.WaitChangelogFlush();
+        auto changelogBackup = env.GetLastBackupPath();
+
+        Cerr << "...restarting tablet that data goes to snapshot" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        auto snapshotBackup = env.GetLastBackupPath();
+
+        assertState();
+        env.RestoreBackup(changelogBackup, TestTabletFlags);
+        assertState();
+
+        assertState();
+        env.RestoreBackup(snapshotBackup, TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(CompositePKNullSubKey) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...inserting composite-key row with null sub key" << Endl;
+        env.WriteCompositePKNullSubKey(1, 10);
+
+        Cerr << "...inserting composite-key row with non-null sub key" << Endl;
+        env.WriteCompositePK(2, 3, 20);
+
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::CompositePKData>(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadCompositePKNullSubKey(1), 10);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadCompositePK(2, 3), 20);
         };
 
         env.WaitChangelogFlush();

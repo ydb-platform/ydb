@@ -84,7 +84,6 @@ private:
         GroupsProto_.pop();
     }
 
-private:
     TStack<NProto::TCounterGroup*> GroupsProto_;
     bool HasAnyCounters_;
     bool Invalidate_;
@@ -119,7 +118,7 @@ public:
             return;
         }
 
-        auto totalCnt = GetCounter(labelName, labelValue, nullptr, derivative);
+        auto totalCnt = GetCounter(labelName, labelValue, /*userName=*/nullptr, derivative);
         if (totalCnt) {
             *totalCnt = value;
         }
@@ -130,7 +129,7 @@ public:
         const TString& labelValue,
         bool derivative) override {
         // total aggregate counter
-        auto totalCnt = GetCounter(labelName, labelValue, nullptr, derivative);
+        auto totalCnt = GetCounter(labelName, labelValue, /*userName=*/nullptr, derivative);
         if (totalCnt) {
             totalCnt->Inc();
         }
@@ -151,7 +150,7 @@ public:
         i64 value,
         bool derivative) override {
         // total aggregate counter
-        auto totalCnt = GetCounter(labelName, labelValue, nullptr, derivative);
+        auto totalCnt = GetCounter(labelName, labelValue, /*userName=*/nullptr, derivative);
         if (totalCnt) {
             totalCnt->Add(value);
         }
@@ -168,7 +167,7 @@ public:
 
     bool TakeSnapshot(NProto::TMetricsRegistrySnapshot* snapshot) const override {
         bool hasRootGroupBefore = snapshot->HasRootGroup();
-        TCountersPhotographer photographer(snapshot->MutableRootGroup(), snapshot->GetDontIncrement() == false);
+        TCountersPhotographer photographer(snapshot->MutableRootGroup(), !snapshot->GetDontIncrement());
         Sensors_->Accept(TString(), TString(), photographer);
         if (!photographer.HasAnyCounters() && !hasRootGroupBefore) {
             // remove prematurely allocated group
@@ -265,7 +264,6 @@ private:
         }
     }
 
-private:
     TSensorsGroupPtr Sensors_;
     const TMaybe<TString> UserName_;
 

@@ -44,12 +44,15 @@ public:
         const NKikimrSchemeOp::TColumnTableSchema& current, const NKikimrSchemeOp::TColumnTableSchema& next);
 
     const NKikimrSchemeOp::TColumnTableSchemeOptions& GetSchemaOptions() const;
+
     const NKikimrSchemeOp::TCompressionOptions* GetCompressionOptions() const {
         return CompressionOptions;
     }
+
     const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& GetModifiedColumns() const {
         return ModifiedColumns;
     }
+
     const std::map<ui32, const NKikimrSchemeOp::TOlapIndexDescription*>& GetModifiedIndexes() const {
         return ModifiedIndexes;
     }

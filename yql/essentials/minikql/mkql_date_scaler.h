@@ -6,8 +6,8 @@
 namespace NKikimr::NMiniKQL {
 using TScaledDate = i64;
 
-constexpr TScaledDate DateScale = 86400000000ll;
-constexpr TScaledDate DatetimeScale = 1000000ll;
+constexpr TScaledDate DateScale = 86400000000LL;
+constexpr TScaledDate DatetimeScale = 1000000LL;
 
 template <typename TSrc>
 inline TScaledDate ToScaledDate(typename TSrc::TLayout src);

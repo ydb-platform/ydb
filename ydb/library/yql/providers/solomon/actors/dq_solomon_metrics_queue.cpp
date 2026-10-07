@@ -1,6 +1,5 @@
 #include "dq_solomon_metrics_queue.h"
 
-#include <ydb/core/base/events.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/services/services.pb.h>
@@ -10,11 +9,14 @@
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/providers/solomon/events/events.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
+#include <ydb/library/yql/providers/solomon/common/constants.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
+
+#include <algorithm>
 
 #define LOG_E(name, stream) \
     LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << stream)
@@ -37,7 +39,7 @@ public:
 
     struct TEvPrivatePrivate {
         enum {
-            EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),  // Leave space for RetryQueue events
+            EvBegin = TEvRetryQueuePrivate::EvEnd,
 
             EvNextLabelsListingChunkReceived = EvBegin,
             EvNextMetricsListingChunkReceived,
@@ -78,24 +80,22 @@ public:
     TDqSolomonMetricsQueueActor(
         ui64 consumersCount,
         TDqSolomonReadParams&& readParams,
-        bool enableSolomonClientPostApi,
-        ui64 batchCountLimit,
-        ui64 prefetchSize,
-        TDuration truePointsFindRange,
-        ui64 maxListingPageSize,
-        ui64 maxApiInflight,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+        const NSo::TSolomonReadActorConfig& cfg,
+        NSo::ISolomonAccessorClient::TPtr solomonClient)
         : ConsumersCount(consumersCount)
         , ReadParams(std::move(readParams))
-        , EnableSolomonClientPostApi(enableSolomonClientPostApi)
-        , BatchCountLimit(batchCountLimit)
-        , PrefetchSize(prefetchSize)
-        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - truePointsFindRange)
-        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + truePointsFindRange)
-        , MaxListingPageSize(maxListingPageSize)
-        , MaxApiInflight(maxApiInflight)
+        , EnableSolomonClientPostApi(cfg.EnablePostApi)
+        , BatchCountLimit(cfg.MetricsQueueBatchCountLimit)
+        , PrefetchSize(cfg.MetricsQueuePrefetchSize)
+        , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - TDuration::Seconds(cfg.TruePointsFindRangeSec))
+        , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + TDuration::Seconds(cfg.TruePointsFindRangeSec))
+        , MaxListingPageSize(cfg.MaxListingPageSize)
+        , MaxApiInflight(cfg.MaxApiInflight)
+        , PoisonTimeout(cfg.PoisonTimeout)
+        , RoundRobinStageTimeout(cfg.RoundRobinStageTimeout)
         , CredentialsProvider(credentialsProvider)
-        , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
+        , SolomonClient(solomonClient ? std::move(solomonClient) : NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider, cfg))
     {}
 
     void Bootstrap() {
@@ -114,7 +114,14 @@ public:
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
+                hFunc(TEvRetryQueuePrivate::TEvRetry, HandleRetry);
+                hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleConnected);
+                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+                hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
+                hFunc(NActors::TEvents::TEvWakeup, HandleDisconnectDeadline);
+                hFunc(TEvSolomonProvider::TEvAck, HandleAck);
                 hFunc(TEvSolomonProvider::TEvGetNextBatch, HandleGetNextBatch);
+                hFunc(TEvSolomonProvider::TEvConsumerFinished, HandleConsumerFinished);
                 hFunc(TEvPrivatePrivate::TEvNextLabelsListingChunkReceived, HandleNextLabelsListingChunkReceived);
                 hFunc(TEvPrivatePrivate::TEvNextMetricsListingChunkReceived, HandleNextMetricsListingChunkReceived);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
@@ -134,7 +141,14 @@ public:
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
+                hFunc(TEvRetryQueuePrivate::TEvRetry, HandleRetry);
+                hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleConnected);
+                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+                hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
+                hFunc(NActors::TEvents::TEvWakeup, HandleDisconnectDeadline);
+                hFunc(TEvSolomonProvider::TEvAck, HandleAck);
                 hFunc(TEvSolomonProvider::TEvGetNextBatch, HandleGetNextBatchForEmptyState);
+                hFunc(TEvSolomonProvider::TEvConsumerFinished, HandleConsumerFinished);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(NActors::TEvents::TSystem::Poison, HandlePoison);
                 default:
@@ -152,7 +166,14 @@ public:
         try {
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
+                hFunc(TEvRetryQueuePrivate::TEvRetry, HandleRetry);
+                hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleConnected);
+                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+                hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
+                hFunc(NActors::TEvents::TEvWakeup, HandleDisconnectDeadline);
+                hFunc(TEvSolomonProvider::TEvAck, HandleAck);
                 hFunc(TEvSolomonProvider::TEvGetNextBatch, HandleGetNextBatchForErrorState);
+                hFunc(TEvSolomonProvider::TEvConsumerFinished, HandleConsumerFinished);
                 cFunc(TEvPrivatePrivate::EvRoundRobinStageTimeout, HandleRoundRobinStageTimeout);
                 cFunc(NActors::TEvents::TSystem::Poison, HandlePoison);
                 default:
@@ -167,16 +188,163 @@ public:
     }
 
 private:
-    void HandleUpdateConsumersCount(TEvSolomonProvider::TEvUpdateConsumersCount::TPtr& ev) {
-        if (const auto [it, inserted] = UpdatedConsumers.emplace(ev->Sender); inserted) {
-            LOG_D("TDqSolomonMetricsQueueActor",
-                "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() << ", received from " << ev->Sender);
-            ConsumersCount -= ev->Get()->Record.GetConsumersCountDelta();
+    struct TConsumerQueue {
+        ui64 Id = 0;
+        TRetryEventsQueue Events;
+    };
+
+    TRetryEventsQueue& GetConsumerQueue(const NActors::TActorId& consumer) {
+        auto [it, inserted] = ConsumerQueues.try_emplace(consumer);
+        if (inserted) {
+            auto& queue = it->second;
+            queue.Id = NextConsumerQueueId++;
+            ConsumerByQueueId.emplace(queue.Id, consumer);
+            queue.Events.Init("SolomonMetricsQueue", SelfId(), SelfId(), queue.Id, /* keepAlive */ false, /* useConnect */ true, /* ordered */ false);
+            queue.Events.OnNewRecipientId(consumer, /* unsubscribe */ false);
         }
-        Send(ev->Sender, new TEvSolomonProvider::TEvAck(ev->Get()->Record.GetTransportMeta()));
+        return it->second.Events;
+    }
+
+    template <class T>
+    bool CheckConsumerEvent(const T& ev) {
+        if (!ConsumerQueues.contains(ev->Sender) && FinishedConsumers.contains(ev->Sender)) {
+            return false;
+        }
+        if (!GetConsumerQueue(ev->Sender).OnEventReceived(ev)) {
+            // Duplicate requests can still acknowledge retained responses.
+            MaybeFinish();
+            return false;
+        }
+        return true;
+    }
+
+    void HandleRetry(TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
+        if (auto it = ConsumerByQueueId.find(ev->Get()->EventQueueId); it != ConsumerByQueueId.end()) {
+            ConsumerQueues.at(it->second).Events.Retry();
+        }
+    }
+
+    void HandleConnected(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+        DisconnectTimers.erase(ev->Get()->NodeId);
+        for (auto& [consumer, queue] : ConsumerQueues) {
+            queue.Events.HandleNodeConnected(ev->Get()->NodeId);
+        }
+    }
+
+    void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        for (auto& [consumer, queue] : ConsumerQueues) {
+            queue.Events.HandleNodeDisconnected(ev->Get()->NodeId);
+            if (consumer.NodeId() == ev->Get()->NodeId) {
+                StartDisconnectDeadline(consumer.NodeId());
+            }
+        }
+    }
+
+    void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        auto it = ConsumerQueues.find(ev->Sender);
+        if (it == ConsumerQueues.end()) {
+            return;
+        }
+        const auto state = it->second.Events.HandleUndelivered(ev);
+        if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::Disconnected) {
+            StartDisconnectDeadline(ev->Sender.NodeId());
+        }
+        if (state == TRetryEventsQueue::ESessionState::SessionClosed) {
+            // Interconnect subscriptions belong to the actor, so readers on the same node share one.
+            const bool lastConsumerOnNode = std::none_of(ConsumerQueues.begin(), ConsumerQueues.end(), [&](const auto& entry) {
+                return entry.first != ev->Sender && entry.first.NodeId() == ev->Sender.NodeId();
+            });
+            if (lastConsumerOnNode) {
+                DisconnectTimers.erase(ev->Sender.NodeId());
+                it->second.Events.Unsubscribe();
+            }
+            ConsumerByQueueId.erase(it->second.Id);
+            ConsumerQueues.erase(it);
+            PendingRequests.erase(ev->Sender);
+            FinishedConsumers.insert(ev->Sender);
+            MaybeFinish();
+        }
+    }
+
+    // A retry interval is not a lifetime bound. Keep one deadline per node,
+    // starting at its first disconnect; repeated failures must not postpone it.
+    static constexpr TDuration ConsumerDisconnectTimeout = TDuration::Minutes(2);
+    THashMap<ui32, ui64> DisconnectTimers;
+    ui64 NextDisconnectTimer = 0;
+
+    void StartDisconnectDeadline(ui32 nodeId) {
+        if (!DisconnectTimers.contains(nodeId)) {
+            const ui64 tag = ++NextDisconnectTimer;
+            DisconnectTimers.emplace(nodeId, tag);
+            Schedule(ConsumerDisconnectTimeout, new NActors::TEvents::TEvWakeup(tag));
+        }
+    }
+
+    void HandleDisconnectDeadline(NActors::TEvents::TEvWakeup::TPtr& ev) {
+        for (const auto& [nodeId, tag] : DisconnectTimers) {
+            if (tag != ev->Get()->Tag) {
+                continue;
+            }
+            const TString message = TStringBuilder()
+                << "Source queue consumer node " << nodeId << " disconnected for "
+                << ConsumerDisconnectTimeout << "; query cannot complete without losing data";
+            // Fail the entire queue: never redistribute or silently discard an
+            // unacknowledged batch and let the remaining consumers succeed.
+            // Connected consumers receive an error. Disconnected consumers get
+            // ActorUnknown on return, which their readers treat as queue loss
+            // whenever they still need a response. Actor death stops all retries.
+            for (auto& [consumer, queue] : ConsumerQueues) {
+                queue.Events.Send(new TEvSolomonProvider::TEvMetricsReadError(message, {}));
+            }
+            PassAway();
+            return;
+        }
+        // A reconnect or session removal invalidated this timer.
+    }
+
+    void HandleAck(TEvSolomonProvider::TEvAck::TPtr& ev) {
+        if (CheckConsumerEvent(ev)) {
+            MaybeFinish();
+        }
+    }
+
+    void MaybeFinish() {
+        if (FinishedConsumers.size() < ConsumersCount) {
+            return;
+        }
+        for (const auto& [consumer, queue] : ConsumerQueues) {
+            if (queue.Events.HasPendingEvents()) {
+                return;
+            }
+        }
+        PassAway();
+    }
+
+    void HandleUpdateConsumersCount(TEvSolomonProvider::TEvUpdateConsumersCount::TPtr& ev) {
+        if (!CheckConsumerEvent(ev)) {
+            return;
+        }
+        ConnectedConsumers.insert(ev->Sender);
+        if (const auto [it, inserted] = UpdatedConsumers.emplace(ev->Sender); inserted) {
+            const ui64 delta = ev->Get()->Record.GetConsumersCountDelta();
+            LOG_D("TDqSolomonMetricsQueueActor",
+                "HandleUpdateConsumersCount Reducing ConsumersCount by " << delta << ", received from " << ev->Sender);
+            if (delta <= ConsumersCount) {
+                ConsumersCount -= delta;
+            } else {
+                LOG_E("TDqSolomonMetricsQueueActor",
+                    "HandleUpdateConsumersCount delta=" << delta << " exceeds ConsumersCount=" << ConsumersCount << ", clamping to 0");
+                ConsumersCount = 0;
+            }
+        }
+        GetConsumerQueue(ev->Sender).Send(new TEvSolomonProvider::TEvAck(ev->Get()->Record.GetTransportMeta()));
     }
 
     void HandleGetNextBatch(TEvSolomonProvider::TEvGetNextBatch::TPtr& ev) {
+        if (!CheckConsumerEvent(ev)) {
+            return;
+        }
+        ConnectedConsumers.insert(ev->Sender);
         if (HasEnoughToSend()) {
             LOG_I("TDqSolomonMetricsQueueActor", "HandleGetNextBatch has enough metrics to send, trying to send them");
             TrySendMetrics(ev->Sender, ev->Get()->Record.GetTransportMeta());
@@ -199,11 +367,11 @@ private:
             return;
         }
 
-        auto listLabelsResult = batch.Response.Result;
+        auto listLabelsResult = std::move(batch.Response.Result);
         if (listLabelsResult.TotalCount <= MaxListingPageSize) {
-            PendingListingRequests.push_back(batch.Selectors);
+            PendingListingRequests.push_back(std::move(batch.Selectors));
         } else {
-            auto selectors = batch.Selectors;
+            auto selectors = batch.Selectors;  // intentional copy — will be mutated per-batch below
             auto& labels = listLabelsResult.Labels;
             auto maxSizeLabelIt = std::max_element(labels.begin(), labels.end(),
                 [](const NSo::TLabelValues& a, const NSo::TLabelValues& b) {
@@ -233,7 +401,7 @@ private:
                 }
 
                 double avgLength = std::max<double>(1.0, sumLength * 1.0 / label.Values.size());
-                batchSize = std::min<ui64>(batchSize, MaxHttpGetRequestSize * 0.5 / avgLength);
+                batchSize = std::min<ui64>(batchSize, NSo::NConstants::MaxHttpGetRequestSize * 0.5 / avgLength);
             }
 
             for (ui64 i = 0; i * batchSize < label.Values.size(); i++) {
@@ -279,23 +447,60 @@ private:
     }
 
     void HandlePoison() {
+        // PoisonTimeout is a safety net for the case where some read actors are never
+        // bootstrapped (e.g. node failure during query startup).  Once we know that all
+        // consumers are alive, we can safely ignore the timeout and let the normal
+        // shutdown path run.
+        if (ConnectedConsumers.size() == ConsumersCount) {
+            LOG_D("TDqSolomonMetricsQueueActor", "HandlePoison: consumers are active, ignoring PoisonTimeout");
+            return;
+        }
+        LOG_I("TDqSolomonMetricsQueueActor", "HandlePoison: no consumer messages received, shutting down");
         AnswerPendingRequests();
         PassAway();
     }
 
     void HandleGetNextBatchForEmptyState(TEvSolomonProvider::TEvGetNextBatch::TPtr& ev) {
+        if (!CheckConsumerEvent(ev)) {
+            return;
+        }
+        ConnectedConsumers.insert(ev->Sender);
         LOG_T("TDqSolomonMetricsQueueActor", "HandleGetNextBatchForEmptyState giving away rest of Objects");
         TrySendMetrics(ev->Sender, ev->Get()->Record.GetTransportMeta());
     }
 
     void HandleGetNextBatchForErrorState(TEvSolomonProvider::TEvGetNextBatch::TPtr& ev) {
+        if (!CheckConsumerEvent(ev)) {
+            return;
+        }
+        ConnectedConsumers.insert(ev->Sender);
         LOG_D("TDqSolomonMetricsQueueActor", "HandleGetNextBatchForErrorState sending issues");
-        Send(ev->Sender, new TEvSolomonProvider::TEvMetricsReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
+        GetConsumerQueue(ev->Sender).Send(new TEvSolomonProvider::TEvMetricsReadError(*MaybeIssues, ev->Get()->Record.GetTransportMeta()));
         TryFinish(ev->Sender, ev->Get()->Record.GetTransportMeta().GetSeqNo());
     }
 
+    void HandleConsumerFinished(TEvSolomonProvider::TEvConsumerFinished::TPtr& ev) {
+        if (!CheckConsumerEvent(ev)) {
+            return;
+        }
+        LOG_I("TDqSolomonMetricsQueueActor",
+            "HandleConsumerFinished from " << ev->Sender << ", " << FinishedConsumers.size() + 1
+            << "/" << ConsumersCount << " consumers finished");
+        ConnectedConsumers.insert(ev->Sender);
+        FinishedConsumers.insert(ev->Sender);
+        MaybeFinish();
+    }
+
     void PassAway() override {
+        for (auto& [consumer, queue] : ConsumerQueues) {
+            queue.Events.Unsubscribe();
+        }
         LOG_I("TDqSolomonMetricsQueueActor", "PassAway, processed " << ProcessedMetrics << " metrics");
+        // Explicitly cancel all in-flight gRPC requests before the actor dies.
+        // ~TSolomonAccessorClient() calls GrpcClient->Stop() which drains the
+        // completion queue; doing it here ensures cancellation happens before
+        // actor memory is freed.
+        SolomonClient.reset();
         TBase::PassAway();
     }
 
@@ -394,7 +599,7 @@ private:
 
                 if (!requests.empty()) {
                     if (MaybeIssues.Defined()) {
-                        Send(consumer, new TEvSolomonProvider::TEvMetricsReadError(*MaybeIssues, requests.front()));
+                        GetConsumerQueue(consumer).Send(new TEvSolomonProvider::TEvMetricsReadError(*MaybeIssues, requests.front()));
                         TryFinish(consumer, requests.front().GetSeqNo());
                     } else {
                         SendMetrics(consumer, requests.front());
@@ -447,14 +652,15 @@ private:
         std::vector<NSo::MetricQueue::TMetric> result;
         result.reserve(std::min<ui64>(BatchCountLimit, Metrics.size()));
         while (!Metrics.empty() && result.size() < BatchCountLimit) {
-            result.push_back(Metrics.back());
+            result.push_back(std::move(Metrics.back()));
             Metrics.pop_back();
             ProcessedMetrics++;
-            TryFetch();
         }
 
+        while (TryFetch()) {}
+
         LOG_D("TDqSolomonMetricsQueueActor", "SendMetrics Sending " << result.size() << " metrics to consumer with id " << consumer);
-        Send(consumer, new TEvSolomonProvider::TEvMetricsBatch(std::move(result), HasNoMoreItems(), DownloadedBytes, transportMeta));
+        GetConsumerQueue(consumer).Send(new TEvSolomonProvider::TEvMetricsBatch(std::move(result), HasNoMoreItems(), DownloadedBytes, transportMeta));
         DownloadedBytes = 0;
 
         if (HasNoMoreItems()) {
@@ -479,9 +685,7 @@ private:
             LOG_T("TDqSolomonMetricsQueueActor", "TryFinish FinishingConsumerToLastSeqNo=" << FinishingConsumerToLastSeqNo[consumer]);
             if (it->second < seqNo || SelfId().NodeId() == consumer.NodeId()) {
                 FinishedConsumers.insert(consumer);
-                if (FinishedConsumers.size() == ConsumersCount) {
-                    PassAway();
-                }
+                MaybeFinish();
             }
         } else {
             FinishingConsumerToLastSeqNo[consumer] = seqNo;
@@ -496,10 +700,14 @@ private:
     ui64 CurrentInflight = 0;
     THashSet<NActors::TActorId> StartedConsumers;
     THashSet<NActors::TActorId> UpdatedConsumers;
+    THashSet<NActors::TActorId> ConnectedConsumers;
     THashSet<NActors::TActorId> FinishedConsumers;
     THashMap<NActors::TActorId, ui64> FinishingConsumerToLastSeqNo;
 
     bool HasPendingRequests = false;
+    ui64 NextConsumerQueueId = 1;
+    THashMap<NActors::TActorId, TConsumerQueue> ConsumerQueues;
+    THashMap<ui64, NActors::TActorId> ConsumerByQueueId;
     THashMap<NActors::TActorId, TDeque<NDqProto::TMessageTransportMeta>> PendingRequests;
     std::vector<NSo::TSelectors> PendingLabelRequests;
     std::vector<NSo::TSelectors> PendingListingRequests;
@@ -515,12 +723,10 @@ private:
     const TInstant TrueRangeTo;
     const ui64 MaxListingPageSize;
     const ui64 MaxApiInflight;
-    const ui64 MaxHttpGetRequestSize = 4_KB;
+    const TDuration PoisonTimeout;
+    const TDuration RoundRobinStageTimeout;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
-    const NSo::ISolomonAccessorClient::TPtr SolomonClient;
-
-    static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
-    static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
+    NSo::ISolomonAccessorClient::TPtr SolomonClient;
 };
 
 
@@ -529,41 +735,11 @@ private:
 NActors::IActor* CreateSolomonMetricsQueueActor(
     ui64 consumersCount,
     TDqSolomonReadParams readParams,
-    std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
+    std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+    const NSo::TSolomonReadActorConfig& cfg,
+    NSo::ISolomonAccessorClient::TPtr solomonClient)
 {
-    const auto& settings = readParams.Source.settings();
-
-    bool enableSolomonClientPostApi = false;
-    if (auto it = settings.find("enableSolomonClientPostApi"); it != settings.end()) {
-        enableSolomonClientPostApi = FromString<bool>(it->second);
-    }
-
-    ui64 batchCountLimit = 0;
-    if (auto it = settings.find("metricsQueueBatchCountLimit"); it != settings.end()) {
-        batchCountLimit = FromString<ui64>(it->second);
-    }
-    
-    ui64 prefetchSize = 1000;
-    if (auto it = settings.find("metricsQueuePrefetchSize"); it != settings.end()) {
-        prefetchSize = FromString<ui64>(it->second);
-    }
-
-    ui64 truePointsFindRange = 301;
-    if (auto it = settings.find("truePointsFindRange"); it != settings.end()) {
-        truePointsFindRange = FromString<ui64>(it->second);
-    }
-
-    ui64 maxListingPageSize = 20000;
-    if (auto it = settings.find("maxListingPageSize"); it != settings.end()) {
-        maxListingPageSize = FromString<ui64>(it->second);
-    }
-
-    ui64 maxApiInflight = 40;
-    if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
-        maxApiInflight = FromString<ui64>(it->second);
-    }
-
-    return new TDqSolomonMetricsQueueActor(consumersCount, std::move(readParams), enableSolomonClientPostApi, batchCountLimit, prefetchSize, TDuration::Seconds(truePointsFindRange), maxListingPageSize, maxApiInflight, credentialsProvider);
+    return new TDqSolomonMetricsQueueActor(consumersCount, std::move(readParams), credentialsProvider, cfg, std::move(solomonClient));
 }
 
 } // namespace NYql::NDq

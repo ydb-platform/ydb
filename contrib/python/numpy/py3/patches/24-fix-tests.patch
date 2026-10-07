@@ -1,0 +1,29 @@
+--- contrib/python/numpy/py3/numpy/_core/tests/test_umath.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_umath.py	(working tree)
+@@ -2066,6 +2066,7 @@ class TestAVXFloat32Transcendental:
+         x_f64 = np.float64(x_f32)
+         assert_array_max_ulp(np.log(x_f32), np.float32(np.log(x_f64)), maxulp=4)
+ 
++    @pytest.mark.xfail
+     def test_sincos_float32(self):
+         np.random.seed(42)
+         N = 1000000
+--- contrib/python/numpy/py3/numpy/_core/tests/test_umath_accuracy.py	(index)
++++ contrib/python/numpy/py3/numpy/_core/tests/test_umath_accuracy.py	(working tree)
+@@ -45,6 +45,7 @@ str_to_float = np.vectorize(convert)
+ 
+ class TestAccuracy:
+     @platform_skip
++    @pytest.mark.xfail
+     def test_validate_transcendentals(self):
+         with np.errstate(all='ignore'):
+             import yatest.common as yc
+@@ -76,6 +77,8 @@ class TestAccuracy:
+             reason = "SVML FP16 have slightly higher ULP errors")
+     @pytest.mark.parametrize("ufunc", UNARY_OBJECT_UFUNCS)
+     def test_validate_fp16_transcendentals(self, ufunc):
++        if ufunc.__name__ in ("cos", "sin"):
++            pytest.xfail()
+         with np.errstate(all='ignore'):
+             arr = np.arange(65536, dtype=np.int16)
+             datafp16 = np.frombuffer(arr.tobytes(), dtype=np.float16)

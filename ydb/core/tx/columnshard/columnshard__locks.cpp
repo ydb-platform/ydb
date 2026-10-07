@@ -9,7 +9,8 @@ private:
 public:
     TAbortWriteTransaction(TColumnShard* self, const ui64 lockId)
         : TBase(self)
-        , LockId(lockId) {
+        , LockId(lockId)
+    {
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -33,14 +34,25 @@ void TColumnShard::SubscribeLockIfNotAlready(const ui64 lockId, const ui32 lockN
     auto& lock = OperationsManager->GetLockVerified(lockId);
     if (!lock.IsSubscribed()) {
         lock.SetSubscribed();
-        Send(NLongTxService::MakeLongTxServiceID(SelfId().NodeId()), std::make_unique<NLongTxService::TEvLongTxService::TEvSubscribeLock>(lockId, lockNodeId));
+        Send(NLongTxService::MakeLongTxServiceID(SelfId().NodeId()),
+            std::make_unique<NLongTxService::TEvLongTxService::TEvSubscribeLock>(lockId, lockNodeId));
     }
 }
 
 void TColumnShard::TransactionToAbort(const ui64 lockId) {
-    if (auto lock = OperationsManager->GetLockOptional(lockId)) {
+    if (auto lock = OperationsManager->GetLockOptional(lockId); lock && !lock->IsTxIdAssigned()) {
         lock->SetNeedsAborting();
         MaybeAbortTransaction(lockId);
+    }
+}
+
+void TColumnShard::AbortNotProposedTransactions() {
+    for (const ui64 lockId : OperationsManager->GetLockIdsOfNotProposedTransactions()) {
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+            {"event", "abort_not_proposed_transaction"},
+            {"tabletId", TabletID()},
+            {"lockId", lockId});
+        TransactionToAbort(lockId);
     }
 }
 
@@ -53,7 +65,6 @@ void TColumnShard::MaybeAbortTransaction(const ui64 lockId) {
     lock->SetAborting();
     Execute(new TAbortWriteTransaction(this, lockId));
 }
-
 
 void TColumnShard::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& /*ctx*/) {
     auto* msg = ev->Get();
@@ -69,4 +80,4 @@ void TColumnShard::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr&
     }
 }
 
-} // namespace NKikimr::NColumnShard
+}   // namespace NKikimr::NColumnShard

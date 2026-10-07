@@ -40,9 +40,11 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
     return true;
 }
 
-TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
+TBlobWithAdditionalAccessorData TConstructor::DoSerializeToBlobAndMeta(
+    const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
     std::shared_ptr<TSparsedArray> sparsed = std::static_pointer_cast<TSparsedArray>(columnData);
-    return externalInfo.GetDefaultSerializer()->SerializePayload(sparsed->GetRecordBatchVerified());
+    return { externalInfo.GetDefaultSerializer()->SerializePayload(sparsed->GetRecordBatchVerified()),
+        std::make_shared<TEmptyAdditionalData>() };
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(

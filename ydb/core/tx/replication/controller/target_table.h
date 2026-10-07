@@ -10,13 +10,14 @@ public:
         ui64 id, const IConfig::TPtr& config);
 
     TString GetStreamPath() const override;
+
 protected:
     virtual TString BuildStreamPath() const = 0;
 };
 
 class TTargetTable: public TTargetTableBase {
 public:
-    struct TTableConfig : public TConfigBase {
+    struct TTableConfig: public TConfigBase {
         using TPtr = std::shared_ptr<TTableConfig>;
 
         TTableConfig(const TString& srcPath, const TString& dstPath)
@@ -33,7 +34,7 @@ protected:
 
 class TTargetIndexTable: public TTargetTableBase {
 public:
-    struct TIndexTableConfig : public TConfigBase {
+    struct TIndexTableConfig: public TConfigBase {
         using TPtr = std::shared_ptr<TIndexTableConfig>;
 
         TIndexTableConfig(const TString& srcPath, const TString& dstPath)

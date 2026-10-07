@@ -92,7 +92,7 @@ void TUserTable::SwitchIndexState(const TPathId& indexPathId, TTableIndex::EStat
 
     it->second.State = state;
 
-    // This isn't really necessary now, because no one rely on index state
+    // CDC schema events read index state from the serialized table description.
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
 
@@ -282,6 +282,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         }
         column.Family = col.GetFamily();
         column.NotNull = col.GetNotNull();
+        column.SetNotNullInProgress = col.GetSetNotNullInProgress();
     }
 
     for (const auto& col : descr.GetDropColumns()) {
@@ -324,9 +325,20 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
     TableSchemaVersion = descr.GetTableSchemaVersion();
     IsBackup = descr.GetIsBackup();
+    // On the alter path descr is a delta, but the schemeshard always resends the
+    // current detailed metrics settings in it, so an absent Configured status
+    // means the override was never set or was dropped.
+    DetailedMetricsLevel = descr.GetDetailedMetricsSettings().HasConfigured()
+        ? descr.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel()
+        : NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
-    UniqueIndexKeySize = descr.GetUniqueIndexKeySize();
+    if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {
+        UniqueIndexKeySize = descr.GetPartitionConfig().GetUniqueIndexKeySize();
+    }
+    if (descr.GetPartitionConfig().HasSpecialTableType()) {
+        SpecialTableType = descr.GetPartitionConfig().GetSpecialTableType();
+    }
 
     CheckSpecialColumns();
 
@@ -378,7 +390,6 @@ void TUserTable::AlterSchema() {
         partConfig.AddStorageRooms()->CopyFrom(*room.second);
     }
 
-    // FIXME: these generated column families are incorrect!
     partConfig.ClearColumnFamilies();
     for (const auto& f : Families) {
         const TUserFamily& family = f.second;
@@ -386,9 +397,11 @@ void TUserTable::AlterSchema() {
         columnFamily->SetId(f.first);
         columnFamily->SetName(family.GetName());
         columnFamily->SetStorage(family.Storage);
-        columnFamily->SetColumnCodec(family.ColumnCodec);
+        columnFamily->SetColumnCodec(family.Codec == NTable::NPage::ECodec::Plain
+            ? NKikimrSchemeOp::ColumnCodecPlain : NKikimrSchemeOp::ColumnCodecLZ4);
         columnFamily->SetColumnCache(family.ColumnCache);
         columnFamily->SetColumnCacheMode(family.ColumnCacheMode);
+        columnFamily->MutableStorageConfig()->CopyFrom(family.StorageConfig);
         columnFamily->SetRoom(family.GetRoomId());
     }
 
@@ -415,6 +428,15 @@ void TUserTable::AlterSchema() {
 
     ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
     IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
+
+    // Keep the persisted schema in sync with the parsed level, so that a restart
+    // does not resurrect an override, which an alter has just dropped
+    if (DetailedMetricsLevel != NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified) {
+        schema.MutableDetailedMetricsSettings()->MutableConfigured()
+            ->SetMetricsLevel(DetailedMetricsLevel);
+    } else {
+        schema.ClearDetailedMetricsSettings();
+    }
 
     schema.SetName(Name);
     schema.SetPath(Path);
@@ -468,7 +490,7 @@ void TUserTable::DoApplyCreate(
         const TUserColumn& column = col.second;
 
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-        alter.AddColumnWithTypeInfo(tid, column.Name, columnId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false);
+        alter.AddColumnWithTypeInfo(tid, column.Name, columnId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false, {}, column.SetNotNullInProgress);
         alter.AddColumnToFamily(tid, columnId, column.Family);
     }
 
@@ -490,6 +512,7 @@ void TUserTable::DoApplyCreate(
         for (const auto& p : partConfig.GetByKeyFilterPrefixes()) {
             if (p.GetPrefixLength() > 0) {
                 double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                Y_ENSURE(fpp > 0.0 && fpp < 1.0, "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)");
                 prefixMap[p.GetPrefixLength()] = fpp;
             }
         }
@@ -503,6 +526,10 @@ void TUserTable::DoApplyCreate(
             }
             alter.SetByKeyFilterPrefixes(tid, prefixes);
         }
+    }
+
+    if (SpecialTableType != NKikimrSchemeOp::ESpecialTableTypeNone) {
+        alter.SetSpecialTableType(tid, SpecialTableType);
     }
 
     // N.B. some settings only apply to the main table
@@ -588,10 +615,11 @@ void TUserTable::ApplyAlter(
         ui32 colId = col.first;
         const TUserColumn& column = col.second;
 
-        if (!oldTable.Columns.contains(colId)) {
+        auto it = oldTable.Columns.find(colId);
+        if (it == oldTable.Columns.end() || it->second.NotNull != column.NotNull || it->second.SetNotNullInProgress != column.SetNotNullInProgress) {
             for (ui32 tid : tids) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false);
+                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false, {}, column.SetNotNullInProgress);
             }
         }
 
@@ -634,42 +662,31 @@ void TUserTable::ApplyAlter(
         }
     }
 
-    if (configDelta.HasEnableFilterByKey() || configDelta.ByKeyFilterPrefixesSize() > 0) {
+    // Rebuild the prefix bloom set from the full authoritative config the schemeshard sends. The
+    // last disjunct also fires when the table had prefixes but the delta clears them all (DROP of
+    // the last prefix bloom, or KEY_BLOOM_FILTER = DISABLED), which carries no explicit bloom field.
+    if (configDelta.HasEnableFilterByKey() || configDelta.ByKeyFilterPrefixesSize() > 0 || config.ByKeyFilterPrefixesSize() > 0) {
         using TPrefix = NTable::TScheme::TTableInfo::TByKeyFilterPrefix;
-        // Rebuild unified prefix list from current config + delta
-        // Use a map to track FPP per prefix length
+        const ui32 keyCount = KeyColumnIds.size();
+
+        // Full-key filter is governed by EnableFilterByKey; the delta may toggle it or leave it.
+        bool enableFullKey = config.GetEnableFilterByKey();
+        if (configDelta.HasEnableFilterByKey()) {
+            enableFullKey = configDelta.GetEnableFilterByKey();
+            config.SetEnableFilterByKey(enableFullKey);
+        }
+
         TMap<ui32, double> prefixMap;
-        // Start with existing prefixes from current config
-        for (const auto& p : config.GetByKeyFilterPrefixes()) {
+        for (const auto& p : configDelta.GetByKeyFilterPrefixes()) {
             if (p.GetPrefixLength() > 0) {
                 double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                Y_ENSURE(fpp > 0.0 && fpp < 1.0, "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)");
                 prefixMap[p.GetPrefixLength()] = fpp;
             }
         }
-        ui32 keyCount = KeyColumnIds.size();
-
-        if (configDelta.HasEnableFilterByKey()) {
-            config.SetEnableFilterByKey(configDelta.GetEnableFilterByKey());
-            if (configDelta.GetEnableFilterByKey()) {
-                prefixMap.emplace(keyCount, NTable::DefaultBloomFilterFpp);
-            } else {
-                prefixMap.erase(keyCount);
-            }
-        }
-
-        if (configDelta.ByKeyFilterPrefixesSize() > 0) {
-            // Delta replaces the explicit prefix list
-            prefixMap.clear();
-            for (const auto& p : configDelta.GetByKeyFilterPrefixes()) {
-                if (p.GetPrefixLength() > 0) {
-                    double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
-                    prefixMap[p.GetPrefixLength()] = fpp;
-                }
-            }
-            // Re-add full-key entry if EnableFilterByKey is enabled
-            if (config.GetEnableFilterByKey()) {
-                prefixMap.emplace(keyCount, NTable::DefaultBloomFilterFpp);
-            }
+        // Re-add full-key entry if EnableFilterByKey is enabled.
+        if (enableFullKey) {
+            prefixMap.emplace(keyCount, NTable::DefaultBloomFilterFpp);
         }
 
         config.ClearByKeyFilterPrefixes();
@@ -680,6 +697,7 @@ void TUserTable::ApplyAlter(
             entry->SetFalsePositiveProbability(fpp);
             prefixes.push_back(TPrefix{len, fpp});
         }
+        // An empty list emits a clear sentinel, so the engine drops any previously-set filter.
         for (ui32 tid : tids) {
             alter.SetByKeyFilterPrefixes(tid, prefixes);
         }

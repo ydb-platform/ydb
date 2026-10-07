@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr::NSchemeShard;
@@ -334,13 +335,12 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         ui64 txId = 100;
 
         CreateExternalDataSource(runtime, env, ++txId);
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateExternalTableOrReplace(runtime, ++txId, "/MyRoot", R"(
                 Name: "ExternalTable"
                 SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "key" Type: "Uint64" }
-                ReplaceIfExists: true
             )", {NKikimrScheme::StatusAccepted});
 
         env.TestWaitNotification(runtime, txId);
@@ -353,14 +353,13 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
             UNIT_ASSERT_VALUES_EQUAL(columns[0].GetNotNull(), false);
         }
 
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateExternalTableOrReplace(runtime, ++txId, "/MyRoot", R"(
                 Name: "ExternalTable"
                 SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/new_location"
                 Columns { Name: "key" Type: "Uint64" }
                 Columns { Name: "value" Type: "Uint64" }
-                ReplaceIfExists: true
             )", {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
 
@@ -375,13 +374,12 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
             UNIT_ASSERT_VALUES_EQUAL(columns[1].GetNotNull(), false);
         }
 
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateExternalTableOrReplace(runtime, ++txId, "/MyRoot", R"(
                 Name: "ExternalTable"
                 SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/other_location"
                 Columns { Name: "value" Type: "Uint64" }
-                ReplaceIfExists: true
             )", {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
 
@@ -400,13 +398,12 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         ui64 txId = 100;
 
         CreateExternalDataSource(runtime, env, ++txId);
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateExternalTableOrReplace(runtime, ++txId, "/MyRoot", R"(
                 Name: "ExternalTable"
                 SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "key" Type: "Uint64" }
-                ReplaceIfExists: true
             )", {NKikimrScheme::StatusAccepted}
         );
 
@@ -415,14 +412,13 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         constexpr ui32 TEST_RUNS = 30;
         TSet<ui64> txIds;
         for (ui32 i = 0; i < TEST_RUNS; ++i) {
-            AsyncCreateExternalTable(runtime, ++txId, "/MyRoot",R"(
+            AsyncCreateExternalTableOrReplace(runtime, ++txId, "/MyRoot",R"(
                     Name: "ExternalTable"
                     SourceType: "General"
                     DataSourcePath: "/MyRoot/ExternalDataSource"
                     Location: "/new_location"
                     Columns { Name: "key" Type: "Uint64" }
                     Columns { Name: "value" Type: "Uint64" }
-                    ReplaceIfExists: true
                 )"
             );
 
@@ -526,13 +522,12 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         TestLs(runtime, "/MyRoot/UniqueName", false, NLs::PathExist);
 
         CreateExternalDataSource(runtime, env, ++txId);
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateExternalTableOrReplace(runtime, ++txId, "/MyRoot", R"(
                 Name: "UniqueName"
                 SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "key" Type: "Uint64" }
-                ReplaceIfExists: true
             )", {{NKikimrScheme::StatusNameConflict, "error: unexpected path type"}});
 
         env.TestWaitNotification(runtime, txId);
@@ -544,13 +539,12 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         ui64 txId = 100;
 
         CreateExternalDataSource(runtime, env, ++txId);
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateExternalTableOrReplace(runtime, ++txId, "/MyRoot", R"(
                 Name: "ExternalTable"
                 SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "key" Type: "Uint64" }
-                ReplaceIfExists: true
             )", {{NKikimrScheme::StatusPreconditionFailed, "Unsupported: feature flag EnableReplaceIfExistsForExternalEntities is off"}});
 
         env.TestWaitNotification(runtime, txId);
@@ -574,5 +568,39 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         env.TestWaitNotification(runtime, txId - 1);
 
         TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathExist);
-    }    
+    }
+
+    Y_UNIT_TEST(ReplaceExternalTableOverDroppedTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+
+        CreateExternalDataSource(runtime, env, ++txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "UniqueName"
+                Columns { Name: "key" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Keep the dropped path among the parent's children
+        auto observer = runtime.AddObserver<TEvPrivate::TEvCleanDroppedPaths>([](auto& ev) {
+            ev.Reset();
+        });
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "UniqueName");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateExternalTableOrReplace(runtime, ++txId, "/MyRoot", R"(
+                Name: "UniqueName"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "key" Type: "Uint64" }
+            )", {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/UniqueName", false, NLs::PathExist);
+    }
 }

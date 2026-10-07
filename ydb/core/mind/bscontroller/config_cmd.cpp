@@ -112,6 +112,20 @@ namespace NKikimr::NBsController {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings: {
                         const auto& settings = cmd.GetUpdateSettings();
                         using T = Schema::State;
+
+                        // validate database space thresholds before applying anything
+                        auto databaseSpaceBlockColor = Self->DatabaseSpace.GetBlockColor();
+                        auto databaseSpaceUnblockColor = Self->DatabaseSpace.GetUnblockColor();
+                        for (auto value : settings.GetDatabaseSpaceBlockColor()) {
+                            databaseSpaceBlockColor = static_cast<T::DatabaseSpaceBlockColor::Type>(value);
+                        }
+                        for (auto value : settings.GetDatabaseSpaceUnblockColor()) {
+                            databaseSpaceUnblockColor = static_cast<T::DatabaseSpaceUnblockColor::Type>(value);
+                        }
+                        if (!TDatabaseSpaceTracker::IsValidThresholds(databaseSpaceBlockColor, databaseSpaceUnblockColor)) {
+                            throw TExError() << "DatabaseSpaceUnblockColor must not be worse than DatabaseSpaceBlockColor";
+                        }
+
                         for (ui32 value : settings.GetDefaultMaxSlots()) {
                             Self->DefaultMaxSlots = value;
                             db.Table<T>().Key(true).Update<T::DefaultMaxSlots>(Self->DefaultMaxSlots);
@@ -155,6 +169,12 @@ namespace NKikimr::NBsController {
                             Self->PDiskSpaceColorBorder = static_cast<T::PDiskSpaceColorBorder::Type>(value);
                             db.Table<T>().Key(true).Update<T::PDiskSpaceColorBorder>(Self->PDiskSpaceColorBorder);
                         }
+                        if (settings.DatabaseSpaceBlockColorSize() || settings.DatabaseSpaceUnblockColorSize()) {
+                            db.Table<T>().Key(true).Update<T::DatabaseSpaceBlockColor, T::DatabaseSpaceUnblockColor>(
+                                databaseSpaceBlockColor, databaseSpaceUnblockColor);
+                            Self->DatabaseSpace.SetThresholds(databaseSpaceBlockColor, databaseSpaceUnblockColor);
+                            Self->CommitDatabaseSpaceChanges(db);
+                        }
                         for (bool value : settings.GetEnableGroupLayoutSanitizer()) {
                             Self->GroupLayoutSanitizerEnabled = value;
                             db.Table<T>().Key(true).Update<T::GroupLayoutSanitizer>(Self->GroupLayoutSanitizerEnabled);
@@ -172,10 +192,16 @@ namespace NKikimr::NBsController {
                         for (bool value : settings.GetUseSelfHealLocalPolicy()) {
                             Self->UseSelfHealLocalPolicy = value;
                             db.Table<T>().Key(true).Update<T::UseSelfHealLocalPolicy>(Self->UseSelfHealLocalPolicy);
+                            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+                            ev->UseSelfHealLocalPolicy = Self->UseSelfHealLocalPolicy;
+                            Self->Send(Self->SelfHealId, ev.release());
                         }
                         for (bool value : settings.GetTryToRelocateBrokenDisksLocallyFirst()) {
                             Self->TryToRelocateBrokenDisksLocallyFirst = value;
                             db.Table<T>().Key(true).Update<T::TryToRelocateBrokenDisksLocallyFirst>(Self->TryToRelocateBrokenDisksLocallyFirst);
+                            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+                            ev->TryToRelocateBrokenDisksLocallyFirst = Self->TryToRelocateBrokenDisksLocallyFirst;
+                            Self->Send(Self->SelfHealId, ev.release());
                         }
                         return;
                     }
@@ -216,10 +242,11 @@ namespace NKikimr::NBsController {
                 google::protobuf::TextFormat::Printer printer;
                 printer.SetSingleLineMode(true);
                 printer.PrintToString(Cmd, &m);
-                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA02, "Generic command",
-                    (UniqueId, State->UniqueId),
-                    (Request, Cmd),
-                    (SelfHeal, SelfHeal));
+                YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Generic command",
+                    {"marker", "BSCA02"},
+                    {"uniqueId", State->UniqueId},
+                    {"request", Cmd},
+                    {"selfHeal", SelfHeal});
 
                 for (const auto& step : Cmd.GetCommand()) {
                     WrapCommand([&] {
@@ -237,7 +264,7 @@ namespace NKikimr::NBsController {
                             }
                         }
                         const auto availabilityDomainId = AppData()->DomainsInfo->GetDomain()->DomainUid;
-                        Self->FitGroupsForUserConfig(*State, availabilityDomainId, Cmd, std::move(expectedSlotSize), status);
+                        Self->FitGroupsForUserConfig(*State, availabilityDomainId, Cmd, std::move(expectedSlotSize), status, !SelfHeal && !GroupLayoutSanitizer);
 
                         const TDuration passed = TDuration::Seconds(timer.Passed());
                         switch (step.GetCommandCase()) {
@@ -279,6 +306,7 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(ReadDDiskPool, READ_DDISK_POOL)
                             MAP_TIMING(DeleteDDiskPool, DELETE_DDISK_POOL)
                             MAP_TIMING(MoveDDisk, MOVE_DDISK)
+                            MAP_TIMING(DeleteSpecificGroups, DELETE_SPECIFIC_GROUPS)
 
                             default:
                                 break;
@@ -295,8 +323,13 @@ namespace NKikimr::NBsController {
                 }
 
                 const bool hasChanges = Success && State->Changed() && !Cmd.GetRollback();
-                Success = Success && Self->ValidateConfigUpdates(*State, Cmd.GetIgnoreGroupFailModelChecks(),
-                    Cmd.GetIgnoreDegradedGroupsChecks(), Cmd.GetIgnoreDisintegratedGroupsChecks(), &Error, Response);
+                const TValidateConfigUpdatesParameters validationParameters{
+                    .SuppressFailModelChecking = Cmd.GetIgnoreGroupFailModelChecks(),
+                    .SuppressDegradedGroupsChecking = Cmd.GetIgnoreDegradedGroupsChecks(),
+                    .SuppressDisintegratedGroupsChecking = Cmd.GetIgnoreDisintegratedGroupsChecks(),
+                    .AllowDegradedWithSinglePhantomsOnly = SelfHeal,
+                };
+                Success = Success && Self->ValidateConfigUpdates(*State, validationParameters, &Error, Response);
 
                 if (Success && Cmd.GetRollback()) {
                     Rollback();
@@ -309,10 +342,11 @@ namespace NKikimr::NBsController {
                     LogCommand(txc, TDuration::Seconds(timer.Passed()));
                 }
 
-                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA03, "Transaction ended",
-                    (UniqueId, State->UniqueId),
-                    (Status, Success ? "commit" : "rollback"),
-                    (Error, Error));
+                YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Transaction ended",
+                    {"marker", "BSCA03"},
+                    {"uniqueId", State->UniqueId},
+                    {"status", Success ? "commit" : "rollback"},
+                    {"error", Error});
 
                 if (SelfHeal) {
                     const auto counter = Success
@@ -350,8 +384,12 @@ namespace NKikimr::NBsController {
                 db.Table<Schema::State>().Key(true).Update(
                     NIceDb::TUpdate<Schema::State::NextOperationLogIndex>(++Self->NextOperationLogIndex));
 
-                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA10, "Finished processing command", (Request, Cmd.DebugString()),
-                        (Response, Response->DebugString()), (ExecutionTime, executionTime), (OperationLogIndex, operationLogIndex));
+                YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Finished processing command",
+                    {"marker", "BSCA10"},
+                    {"request", Cmd.DebugString()},
+                    {"response", Response->DebugString()},
+                    {"executionTime", executionTime},
+                    {"operationLogIndex", operationLogIndex});
             }
 
             void ExecuteStep(TConfigState& state, const NKikimrBlobStorage::TConfigRequest::TCommand& cmd,
@@ -397,6 +435,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(StopPDisk)
                     HANDLE_COMMAND(GetInterfaceVersion)
                     HANDLE_COMMAND(MovePDisk)
+                    HANDLE_COMMAND(PopulatePDisk)
                     HANDLE_COMMAND(UpdateBridgeGroupInfo)
                     HANDLE_COMMAND(ReconfigureVirtualGroup)
                     HANDLE_COMMAND(RecommissionGroups)
@@ -404,6 +443,9 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(ReadDDiskPool)
                     HANDLE_COMMAND(DeleteDDiskPool)
                     HANDLE_COMMAND(MoveDDisk)
+                    HANDLE_COMMAND(DeleteSpecificGroups)
+                    HANDLE_COMMAND(UpdateStoragePoolSettings)
+
                     default: break;
                 }
 
@@ -417,8 +459,10 @@ namespace NKikimr::NBsController {
             void Complete(const TActorContext&) override {
                 if (auto state = std::exchange(State, std::nullopt)) {
                     ui64 configTxSeqNo = state->ApplyConfigUpdates();
-                    STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA09, "Transaction complete", (UniqueId, state->UniqueId),
-                            (NextConfigTxSeqNo, configTxSeqNo));
+                    YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Transaction complete",
+                        {"marker", "BSCA09"},
+                        {"uniqueId", state->UniqueId},
+                        {"nextConfigTxSeqNo", configTxSeqNo});
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(configTxSeqNo);
                 } else {
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
@@ -439,7 +483,9 @@ namespace NKikimr::NBsController {
 
             NKikimrBlobStorage::TEvControllerConfigRequest& record(ev->Get()->Record);
             const NKikimrBlobStorage::TConfigRequest& request = record.GetRequest();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCC01, "Execute TEvControllerConfigRequest", (Request, request));
+            YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Execute TEvControllerConfigRequest",
+                {"marker", "BSCTXCC01"},
+                {"request", request});
             Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer, ev->Get()->EnforceHostRecords, this));
         }
 

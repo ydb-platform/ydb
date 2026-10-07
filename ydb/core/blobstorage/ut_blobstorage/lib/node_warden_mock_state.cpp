@@ -1,6 +1,8 @@
 #include "node_warden_mock.h"
 #include "node_warden_mock_state.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr {
 namespace NPDisk {
 extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;
@@ -13,7 +15,8 @@ TNodeWardenMockActor::TNodeWardenMockActor(TSetup::TPtr setup)
 
 void TNodeWardenMockActor::Bootstrap() {
     Become(&TThis::StateFunc);
-    STLOG(PRI_INFO, BS_NODE, NWM01, "starting");
+    YDB_LOG_INFO("Starting",
+        {"marker", "NWM01"});
     Connect();
 }
 
@@ -41,9 +44,11 @@ void TNodeWardenMockActor::TGroupState::UpdateGroup(TIntrusivePtr<TBlobStorageGr
         if (Info->GetActorId(vdisk->VDiskId) == info->GetActorId(vdisk->VDiskId)) {
             vdisk->Generation = info->GroupGeneration; // just update generation
         } else {
-            STLOG(PRI_INFO, BS_NODE, NWM11, "UpdateGroup", (VDiskId, vdisk->VDiskId),
-                (PrevActorId, Info->GetActorId(vdisk->VDiskId)),
-                (CurActorId, info->GetActorId(vdisk->VDiskId)));
+            YDB_LOG_INFO("UpdateGroup",
+                {"marker", "NWM11"},
+                {"VDiskId", vdisk->VDiskId},
+                {"prevActorId", Info->GetActorId(vdisk->VDiskId)},
+                {"curActorId", info->GetActorId(vdisk->VDiskId)});
             vdisk->RequireDonorMode = true;
         }
     }

@@ -3,39 +3,39 @@
 
 #include <yt/yt/core/misc/configurable_singleton_def.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void SetupSingletonConfigParameter(TYsonStructParameter<TTcpDispatcherConfigPtr>& parameter)
+void SetupSingletonConfigParameter(TYsonStructParameter<TDispatcherConfigPtr>& parameter)
 {
     parameter.DefaultNew();
 }
 
-void SetupSingletonConfigParameter(TYsonStructParameter<TTcpDispatcherDynamicConfigPtr>& parameter)
+void SetupSingletonConfigParameter(TYsonStructParameter<TDispatcherDynamicConfigPtr>& parameter)
 {
     parameter.DefaultNew();
 }
 
-void ConfigureSingleton(const TTcpDispatcherConfigPtr& config)
+void ConfigureSingleton(const TDispatcherConfigPtr& config)
 {
-    NBus::TTcpDispatcher::Get()->Configure(config);
+    TDispatcher::Get()->Configure(config);
 }
 
 void ReconfigureSingleton(
-    const TTcpDispatcherConfigPtr& config,
-    const TTcpDispatcherDynamicConfigPtr& dynamicConfig)
+    const TDispatcherConfigPtr& config,
+    const TDispatcherDynamicConfigPtr& dynamicConfig)
 {
-    TTcpDispatcher::Get()->Configure(config->ApplyDynamic(dynamicConfig));
+    TDispatcher::Get()->Configure(config->ApplyDynamic(dynamicConfig));
 }
 
 YT_DEFINE_RECONFIGURABLE_SINGLETON(
     "tcp_dispatcher",
-    TTcpDispatcherConfig,
-    TTcpDispatcherDynamicConfig);
+    TDispatcherConfig,
+    TDispatcherDynamicConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp

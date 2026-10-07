@@ -1,4 +1,5 @@
 #include "yql_server.h"
+#include "sql_complete_servlet.h"
 #include "sql_tokens_servlet.h"
 
 #include <yql/essentials/core/cbo/simple/cbo_simple.h>
@@ -143,7 +144,7 @@ private:
     IOutputStream* Stream;
 };
 
-NSQLTranslation::TTranslationSettings GetTranslationSettings(const THashSet<TString>& sqlFlags) {
+NSQLTranslation::TTranslationSettings GetTranslationSettings(const TYqlServer& server) {
     static const THashMap<TString, TString> clusters = {
         { "plato", TString(YtProviderName) },
         { "plato_rtmr", TString(RtmrProviderName) },
@@ -156,7 +157,8 @@ NSQLTranslation::TTranslationSettings GetTranslationSettings(const THashSet<TStr
     settings.SyntaxVersion = 1;
     settings.InferSyntaxVersion = true;
     settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
-    settings.Flags = sqlFlags;
+    settings.Flags = server.SqlFlags;
+    settings.Syntax = server.Syntax;
     return settings;
 }
 
@@ -200,6 +202,7 @@ TProgramPtr MakeFileProgram(const TString& program, TYqlServer& yqlServer,
         dataProvidersInit,
         "yqlrun");
 
+    programFactory.SetTranslatorsRegistry(yqlServer.TranslatorsRegistry);
     programFactory.AddUserDataTable(yqlServer.FilesMapping);
     programFactory.SetModules(yqlServer.Modules);
     programFactory.SetUdfResolver(yqlServer.UdfResolver);
@@ -330,7 +333,7 @@ YQL_ACTION(Parse)
 
         bool parsed = (options & TYqlAction::YqlProgram)
                 ? prg->ParseYql()
-                : prg->ParseSql(GetTranslationSettings(YqlServer.SqlFlags));
+                : prg->ParseSql(GetTranslationSettings(YqlServer));
 
         if (parsed) {
             ui32 prettyFlg = TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote;
@@ -357,7 +360,7 @@ YQL_ACTION(Compile)
         TProgramPtr prg = MakeFileProgram(program, YqlServer, {}, {}, tmpDir.Name());
         prg->SetParametersYson(parameters);
 
-        bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer.SqlFlags));
+        bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer));
         noError = noError && prg->Compile(GetUsername());
 
         if (options & (EOptions::PrintAst | EOptions::PrintExpr)) {
@@ -391,7 +394,7 @@ YQL_ACTION(OptimizeOrValidateFile)
         TTempDir tmpDir;
         TProgramPtr prg = MakeFileProgram(program, input, attr, inputFile, outputFile, YqlServer, tmpDir.Name());
 
-        bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer.SqlFlags));
+        bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer));
 
         prg->SetParametersYson(parameters);
         prg->SetDiagnosticFormat(NYson::EYsonFormat::Pretty);
@@ -466,7 +469,7 @@ YQL_ACTION(FileRun)
         TTempDir tmpDir;
         TProgramPtr prg = MakeFileProgram(program, input, attr, inputFile, outputFile, YqlServer, tmpDir.Name());
 
-        bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer.SqlFlags));
+        bool noError = (options & TYqlAction::YqlProgram) ? prg->ParseYql() : prg->ParseSql(GetTranslationSettings(YqlServer));
 
         prg->SetDiagnosticFormat(NYson::EYsonFormat::Pretty);
         prg->SetParametersYson(parameters);
@@ -641,11 +644,13 @@ TAutoPtr<TYqlServer> CreateYqlServer(
         const THashSet<TString>& sqlFlags,
         IModuleResolver::TPtr modules,
         IUdfResolver::TPtr udfResolver,
-        TFileStoragePtr fileStorage)
+        TFileStoragePtr fileStorage,
+        NSQLTranslation::TTranslatorsRegistry translatorsRegistry,
+        TMaybe<TString> syntax)
 {
     TAutoPtr<TYqlServer> server = new TYqlServer(
         config, functionRegistry, udfIndex, nextUniqueId,
-        std::move(filesMapping), std::move(gatewaysConfig), sqlFlags, modules, udfResolver, fileStorage);
+        std::move(filesMapping), std::move(gatewaysConfig), sqlFlags, modules, udfResolver, fileStorage, std::move(translatorsRegistry), std::move(syntax));
 
     server->RegisterAction<TYqlActionPaste>("/api/yql/paste");
     server->RegisterAction<TYqlActionParse>("/api/yql/parse");
@@ -657,6 +662,7 @@ TAutoPtr<TYqlServer> CreateYqlServer(
 
     server->RegisterServlet("/js/yql-functions.js", new TYqlFunctoinsServlet());
     server->RegisterServlet("/js/sql-tokens.js", new TSqlTokensServlet());
+    server->RegisterServlet("/api/sql/completion", new TSqlCompleteServlet());
 
     server->RegisterAction<TYqlActionFileRun>("/api/yql/lineage");
     server->RegisterAction<TYqlActionFileRun>("/api/yql/run");

@@ -1,5 +1,6 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_create_cdc_stream.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
@@ -336,6 +337,90 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         }
     }
 
+    Y_UNIT_TEST(SchemaChangesRejectUnnamedFamilies) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+              ColumnFamilies { Id: 0 StorageConfig { SysLog {} Log {} } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "value" Family: 1 }
+            PartitionConfig {
+              ColumnFamilies { Id: 1 ColumnCodec: ColumnCodecLZ4 }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatJson
+              SchemaChanges: true
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "LegacyStream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatJson
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            PartitionConfig {
+              ColumnFamilies { Id: 1 ColumnCodec: ColumnCodecPlain }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "OtherTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+              ColumnFamilies { Id: 0 StorageConfig { SysLog {} Log {} } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "OtherTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatJson
+              SchemaChanges: true
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "OtherTable"
+            Columns { Name: "value" Family: 1 }
+            PartitionConfig {
+              ColumnFamilies { Id: 1 ColumnCodec: ColumnCodecLZ4 }
+            }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+    }
+
     Y_UNIT_TEST(RetentionPeriod) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
@@ -535,7 +620,26 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             DropColumns { Name: "value" }
         )", {NKikimrScheme::StatusPreconditionFailed});
 
-        // drop stream
+        // A schema-aware stream does not make a mixed table safe: the legacy
+        // stream still cannot consume a column-change record.
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "SchemaStream"
+              Mode: ECdcStreamModeUpdate
+              Format: ECdcStreamFormatJson
+              SchemaChanges: true
+              UserAttributes { Key: "__async_replication" Value: "%s" }
+            }
+        )", EscapeC(jsonString).c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "mixed_extra" Type: "Uint64" }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+
+        // After removing the legacy stream, ordinary ADD/DROP is allowed.
         TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
             StreamName: "Stream"
@@ -551,9 +655,104 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
+            Columns { Name: "extra" EmptyDefault: NULL_VALUE }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
             DropColumns { Name: "value" }
         )");
         env.TestWaitNotification(runtime, txId);
+    }
+
+    NKikimrSchemeOp::TCreateCdcStream ReplicationStream(bool supportsTopicAutopartitioning) {
+        NJson::TJsonValue attrs;
+        attrs["id"] = "1";
+        attrs["path"] = "/Root/replica";
+        attrs["supports_topic_autopartitioning"] = supportsTopicAutopartitioning;
+
+        NKikimrSchemeOp::TCreateCdcStream op;
+        auto& descr = *op.MutableStreamDescription();
+        descr.SetName("Stream");
+        descr.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+        descr.SetFormat(NKikimrSchemeOp::ECdcStreamFormatJson);
+        auto* attr = descr.AddUserAttributes();
+        attr->SetKey("__async_replication");
+        attr->SetValue(NJson::WriteJson(attrs, false));
+        return op;
+    }
+
+    // No tablets: the changefeed topic shape is decided before hive creates anything.
+    Y_UNIT_TEST(ReplicationTopicFor50000Shards) {
+        const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 50'000, maxShardsInPath);
+        UNIT_ASSERT(params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 50'000 / 16);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
+    }
+
+    Y_UNIT_TEST(ReplicationTopicMinIsQuarterOfMax) {
+        // 200000 / 16 = 12500, above MaxShardsInPath / 4.
+        const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 200'000, maxShardsInPath);
+        UNIT_ASSERT(params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, maxShardsInPath / 4);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
+    }
+
+    Y_UNIT_TEST(ReplicationTopicForSmallTable) {
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 8, TSchemeLimits{}.MaxShardsInPath);
+        UNIT_ASSERT(params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, 128);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 8);
+        UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
+    }
+
+    Y_UNIT_TEST(ReplicationTopicMaxPartitionCountFollowsPathLimit) {
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(true), 50'000, 1'000);
+        UNIT_ASSERT(params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.MinPartitionCount, 1'000 / 4);
+        UNIT_ASSERT_VALUES_EQUAL(params.MaxPartitionCount, 1'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 1'000);
+    }
+
+    Y_UNIT_TEST(ReplicationTopicExplicitPartitionsStayRequested) {
+        const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
+        auto small = ReplicationStream(true);
+        small.SetTopicPartitions(5);
+        const auto smallParams = NCdc::MakeCdcPqPartParams(small, 50'000, maxShardsInPath);
+        UNIT_ASSERT(smallParams.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(smallParams.TotalGroupCount, 5);
+        UNIT_ASSERT_VALUES_EQUAL(smallParams.MinPartitionCount, 5);
+        UNIT_ASSERT_VALUES_EQUAL(smallParams.MaxPartitionCount, maxShardsInPath);
+
+        // Above the formula minimum, the request itself is the strategy minimum.
+        auto requested = ReplicationStream(true);
+        requested.SetTopicPartitions(10'000);
+        const auto requestedParams = NCdc::MakeCdcPqPartParams(requested, 50'000, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(requestedParams.TotalGroupCount, 10'000);
+        UNIT_ASSERT_VALUES_EQUAL(requestedParams.MinPartitionCount, 10'000);
+        UNIT_ASSERT_VALUES_EQUAL(requestedParams.MaxPartitionCount, maxShardsInPath);
+
+        auto aboveLimit = ReplicationStream(true);
+        aboveLimit.SetTopicPartitions(100'000);
+        const auto capped = NCdc::MakeCdcPqPartParams(aboveLimit, 50'000, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(capped.TotalGroupCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(capped.MinPartitionCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(capped.MaxPartitionCount, maxShardsInPath);
+    }
+
+    Y_UNIT_TEST(ReplicationTopicWithoutAutopartitioning) {
+        const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
+        const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(false), 50'000, maxShardsInPath);
+        UNIT_ASSERT(!params.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 50'000);
+        UNIT_ASSERT_VALUES_EQUAL(params.PartitionPerTablet, 2);
     }
 
     Y_UNIT_TEST(DocApi) {
@@ -1721,6 +1920,31 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         // check that index schema-versions after reboot are the same as before
         UNIT_ASSERT_VALUES_EQUAL(getTableIndexSchemaVersion("/MyRoot/Tenant/Table"), tableIndexSchemaVersion);
         UNIT_ASSERT_VALUES_EQUAL(getIndexSchemaVersion("/MyRoot/Tenant/Table/Index"), indexSchemaVersion);
+    }
+
+    Y_UNIT_TEST(CreateCdcStreamForbiddenWhenTopicsAreNotFirstClassCitizen) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )", {NKikimrScheme::StatusPreconditionFailed});
     }
 
 } // TCdcStreamTests

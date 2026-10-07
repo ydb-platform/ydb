@@ -11,6 +11,8 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_PROXY
+
 namespace NFq {
 namespace NPrivate {
 
@@ -80,7 +82,8 @@ public:
     }
 
     void SendCPSRequest() {
-        CPP_LOG_I("TControlPlaneStorageRequesterActor Sending CPS request. Actor id: " << TBase::SelfId());
+        YDB_LOG_INFO("TControlPlaneStorageRequesterActor Sending CPS request. Actor",
+            {"id", TBase::SelfId()});
         const auto& request = Request;
         auto event = new TCPSEventRequest(request->Get()->Scope,
                                           CPSProtoRequestFactory(request),
@@ -101,16 +104,19 @@ public:
     )
 
     void Handle(typename TCPSEventResponse::TPtr& event) {
-        CPP_LOG_I("TControlPlaneStorageRequesterActor Handling CPS response. Actor id: " << TBase::SelfId());
+        YDB_LOG_INFO("TControlPlaneStorageRequesterActor Handling CPS response. Actor",
+            {"id", TBase::SelfId()});
         auto issues = event->Get()->Issues;
         if (!issues.Empty()) {
-            CPP_LOG_I("TControlPlaneStorageRequesterActor Handling CPS response. Request finished with issues. Actor id: " << TBase::SelfId());
+            YDB_LOG_INFO("TControlPlaneStorageRequesterActor Handling CPS response. Request finished with issues. Actor",
+                {"id", TBase::SelfId()});
             TString errorMessage = ErrorMessageFactory(issues);
             TBase::HandleError(errorMessage, issues);
             return;
         }
 
-        CPP_LOG_I("TControlPlaneStorageRequesterActor Handling CPS response. Request finished successfully. Actor id: " << TBase::SelfId());
+        YDB_LOG_INFO("TControlPlaneStorageRequesterActor Handling CPS response. Request finished successfully. Actor",
+            {"id", TBase::SelfId()});
         ResultHandler(Request, event->Get()->Result);
         TBase::SendRequestToSender();
     }

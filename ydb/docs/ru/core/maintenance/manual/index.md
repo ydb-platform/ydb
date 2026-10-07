@@ -10,11 +10,14 @@
 * Обслуживание:
 
   * [{#T}](../../devops/configuration-management/configuration-v2/replacing-nodes.md).
+  * [{#T}](node_restarting.md).
   * [{#T}](scrubbing.md).
-  * [{#T}](selfheal.md).
+  * [{#T}](../../devops/concepts/selfheal.md).
   * [{#T}](../../devops/deployment-options/manual/decommissioning.md).
   * [{#T}](virtual_storage_groups_decommit.md).
   * [{#T}](moving_vdisks.md).
+  * [{#T}](blobdepot.md).
+  * [{#T}](blobdepot_decommit.md).
 
 * Решение проблем:
 

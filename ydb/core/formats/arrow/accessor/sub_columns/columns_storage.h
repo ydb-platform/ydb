@@ -2,14 +2,20 @@
 
 #include "stats.h"
 
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
-#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
+#include <ydb/core/formats/arrow/accessor/common/json_value_view.h>
+#include <ydb/core/formats/arrow/accessor/common/types.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
+
+#include <util/generic/overloaded.h>
+
+#include <variant>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
@@ -19,13 +25,9 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
-    TConclusion<std::shared_ptr<TJsonPathAccessor>> GetPathAccessor(const std::string_view path) const {
-        auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
-        for (ui32 i = 0; i < Stats.GetColumnsCount(); ++i) {
-            auto insertResult = jsonPathAccessorTrie->Insert(ToSubcolumnName(Stats.GetColumnName(i)), Records->GetColumnVerified(i));
-            AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
-        }
-        return jsonPathAccessorTrie->GetAccessor(path);
+    std::shared_ptr<TJsonPathAccessor> GetPathAccessor(TDictStats::TResolvedPath path) const {
+        return std::make_shared<TJsonPathAccessor>(
+            Records->GetColumnVerified(path.ColumnIndex), std::move(path.RemainingPath), path.ValueType);
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -50,17 +52,43 @@ public:
     class TIterator {
     private:
         ui32 KeyIndex;
+        EValueType ValueType;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-        const arrow::BinaryArray* CurrentArrayData;
+        std::variant<const arrow::Array*, const TDictionaryArray*> CurrentData;
+        // Currently iterated accessor relative to GlobalChunkedArray
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
+        // Currently iterated arrow chunk relative to GlobalChunkedArray
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
 
         void InitArrays();
 
+        bool IsCurrentNull() const {
+            return std::visit(TOverloaded{
+                [this](const arrow::Array* array) {
+                    return array->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
+                },
+                [this](const TDictionaryArray* dictionary) {
+                    return dictionary->IsNull(FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex));
+                }},
+                CurrentData);
+        }
+
+        ui32 GetCurrentFinishPosition() const {
+            return std::visit(TOverloaded{
+                [this](const arrow::Array*) {
+                    return ChunkAddress->GetAddress().GetGlobalFinishPosition();
+                },
+                [this](const TDictionaryArray*) {
+                    return FullArrayAddress->GetAddress().GetGlobalFinishPosition();
+                }},
+                CurrentData);
+        }
+
     public:
-        TIterator(const ui32 keyIndex, const std::shared_ptr<IChunkedArray>& chunkedArray)
+        TIterator(const ui32 keyIndex, const EValueType valueType, const std::shared_ptr<IChunkedArray>& chunkedArray)
             : KeyIndex(keyIndex)
+            , ValueType(valueType)
             , GlobalChunkedArray(chunkedArray) {
             InitArrays();
         }
@@ -73,15 +101,21 @@ public:
             return KeyIndex;
         }
 
-        std::string_view GetRawValue() const {
-            auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
-            return std::string_view(view.data(), view.size());
+
+        NArrow::NAccessor::TJsonValueView GetValue() const {
+            return std::visit(TOverloaded{
+                [this](const arrow::Array* array) {
+                    return ArrayElementToJsonValueView(*array, ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex), ValueType);
+                },
+                [this](const TDictionaryArray* dictionary) {
+                    return dictionary->GetJsonValueView(FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex), ValueType);
+                }},
+                CurrentData);
         }
 
-        NArrow::NAccessor::TBinaryJsonValueView GetValue() const;
 
         bool HasValue() const {
-            return !CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
+            return !IsCurrentNull();
         }
 
         bool IsValid() const {
@@ -93,10 +127,9 @@ public:
                 return true;
             }
             AFL_VERIFY(IsValid());
-            AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
             CurrentIndex = recordIndex;
-            for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
-                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+            for (; CurrentIndex < GetCurrentFinishPosition(); ++CurrentIndex) {
+                if (IsCurrentNull()) {
                     continue;
                 }
                 return true;
@@ -107,10 +140,9 @@ public:
 
         bool Next() {
             AFL_VERIFY(IsValid());
-            AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
             ++CurrentIndex;
-            for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
-                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+            for (; CurrentIndex < GetCurrentFinishPosition(); ++CurrentIndex) {
+                if (IsCurrentNull()) {
                     continue;
                 }
                 return true;
@@ -121,7 +153,7 @@ public:
     };
 
     TIterator BuildIterator(const ui32 keyIndex) const {
-        return TIterator(keyIndex, Records->GetColumnVerified(keyIndex));
+        return TIterator(keyIndex, Stats.GetValueType(keyIndex), Records->GetColumnVerified(keyIndex));
     }
 
     const TDictStats& GetStats() const {
@@ -132,8 +164,9 @@ public:
         : Stats(dict)
         , Records(data) {
         AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount())("records", Records->num_columns())("stats", Stats.GetColumnsCount());
-        for (auto&& i : Records->GetColumns()) {
-            AFL_VERIFY(i->GetDataType()->id() == arrow::binary()->id());
+        for (ui32 i = 0; i < (ui32)Records->num_columns(); ++i) {
+            AFL_VERIFY(Records->GetColumnVerified(i)->GetDataType()->id() == Stats.GetField(i)->type()->id())(
+                "column", Records->GetColumnVerified(i)->GetDataType()->ToString())("stats", Stats.GetField(i)->type()->ToString());
         }
     }
 };

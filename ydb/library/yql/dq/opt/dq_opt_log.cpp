@@ -340,15 +340,27 @@ NNodes::TExprBase DqReplicateFieldSubset(NNodes::TExprBase node, TExprContext& c
 IGraphTransformer::TStatus DqWrapIO(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const IDqIntegration::TWrapReadSettings& wrSettings) {
     TOptimizeExprSettings settings{&typesCtx};
     auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
-        if (auto maybeRead = TMaybeNode<TCoRight>(node).Input()) {
-            if (maybeRead.Raw()->ChildrenSize() > 1 && TCoDataSource::Match(maybeRead.Raw()->Child(1))) {
-                auto dataSourceName = maybeRead.Raw()->Child(1)->Child(0)->Content();
-                auto dataSource = typesCtx.DataSourceMap.FindPtr(dataSourceName);
-                YQL_ENSURE(dataSource);
-                if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
-                    auto newRead = dqIntegration->WrapRead(maybeRead.Cast().Ptr(), ctx, wrSettings);
-                    if (newRead.Get() != maybeRead.Raw()) {
-                        return newRead;
+        if (auto maybeIO = TMaybeNode<TCoRight>(node).Input()) {
+            if (maybeIO.Raw()->ChildrenSize() > 1) {
+                if (TCoDataSource::Match(maybeIO.Raw()->Child(1))) {
+                    auto dataSourceName = maybeIO.Raw()->Child(1)->Child(0)->Content();
+                    auto dataSource = typesCtx.DataSourceMap.FindPtr(dataSourceName);
+                    YQL_ENSURE(dataSource);
+                    if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
+                        auto newRead = dqIntegration->WrapRead(maybeIO.Cast().Ptr(), ctx, wrSettings);
+                        if (newRead.Get() != maybeIO.Raw()) {
+                            return newRead;
+                        }
+                    }
+                } else if (TCoDataSink::Match(maybeIO.Raw()->Child(1))) {
+                    auto dataSinkName = maybeIO.Raw()->Child(1)->Child(0)->Content();
+                    auto dataSink = typesCtx.DataSinkMap.FindPtr(dataSinkName);
+                    YQL_ENSURE(dataSink);
+                    if (auto dqIntegration = (*dataSink)->GetDqIntegration()) {
+                        auto newWrite = dqIntegration->RecaptureWrite(maybeIO.Cast().Ptr(), ctx);
+                        if (newWrite.Get() != maybeIO.Raw()) {
+                            return newWrite;
+                        }
                     }
                 }
             }

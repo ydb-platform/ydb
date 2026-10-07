@@ -18,6 +18,10 @@ from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDa
 import conftest
 import random
 
+# TODO:
+# Mostly identical to ydb streaming test ydb/tests/fq/streaming/generic/test_json.py
+# Keep in sync (until yqv1 will be decomissioned and this copy removed)
+
 MAX_WRITE_STREAM_SIZE = 500
 DEBUG = 0
 SEED = 0  # use fixed seed for regular tests
@@ -45,13 +49,14 @@ def ResequenceId(messages, field="id"):
     return res
 
 
-def freeze(json):
-    t = type(json)
+def freeze(obj):
+    # Designed for (deserialized) obj
+    t = type(obj)
     if t == dict:
-        return frozenset((k, freeze(v)) for k, v in json.items())
+        return frozenset((k, freeze(v)) for k, v in obj.items())
     if t == list:
-        return tuple(map(freeze, json))
-    return json
+        return tuple(map(freeze, obj))
+    return obj
 
 
 TESTCASES = [
@@ -287,6 +292,10 @@ TESTCASES = [
         "5",
         "MaxDelayedRows",
         "100",
+        "ShuffleMode",
+        "Hash",
+        "FullscanLimit",
+        "0",
     ),
     # 5
     (
@@ -377,6 +386,8 @@ TESTCASES = [
                 ),
             ]
         ),
+        "FullscanLimit",
+        "2",
     ),
     # 7
     (
@@ -483,6 +494,7 @@ TESTCASES = [
     # 9
     (
         R'''
+            PRAGMA dq.MaxTasksPerStage = "3";
             $input = SELECT * FROM myyds.`{input_topic}`
                     WITH (
                         FORMAT=json_each_row,
@@ -531,10 +543,14 @@ TESTCASES = [
                 ),
             ]
         ),
+        'ShuffleMode',
+        'Map',
     ),
     # 10
     (
         R'''
+            PRAGMA dq.MaxTasksPerStage = "1";
+
             $input = SELECT * FROM myyds.`{input_topic}`;
 
             $enriched = select
@@ -564,6 +580,8 @@ TESTCASES = [
         * 10,
         'MultiGet',
         'true',
+        'ShuffleMode',
+        'Map',
     ),
     # 11
     (
@@ -869,6 +887,8 @@ TESTCASES = [
         "5",
         "MaxDelayedRows",
         "100",
+        "FullscanLimit",
+        "0",
     ),
     # 16
     (
@@ -1003,6 +1023,93 @@ TESTCASES = [
         "MaxCachedRows",
         "4",
     ),
+    # 18
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            id Int32,
+                            ts String,
+                            ev_type String,
+                            user Int32,
+                        )
+                    )            ;
+
+            $formatTime = DateTime::Format("%H:%M:%S");
+
+            $enriched = select e.id as id,
+                            $formatTime(DateTime::ParseIso8601(e.ts)) as ts,
+                            e.user as user_id,
+                            u.id as uid,
+                            u.name as name,
+                            u.age as age
+                from
+                    $input as e
+                left join {streamlookup} any ydb_conn_{table_name}.`users` as u
+                on(e.user = u.id)
+            ;
+
+            $enriched = select e.id as id,
+                            e.ts as ts,
+                            e.user_id as user_id,
+                            u2.id as uid,
+                            u2.name as name,
+                            u2.age as age
+                from
+                    $enriched as e
+                left join {streamlookup} any ydb_conn_{table_name}.`users` as u2
+                on(e.name = u2.name and u2.age = e.age)
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"ts":"20240701T113344","ev_type":"foo1","user":2}',
+                    '{"id":1,"ts":"11:33:44","uid":2,"user_id":2,"name":"Petr","age":25}',
+                ),
+                (
+                    '{"id":2,"ts":"20240701T112233","ev_type":"foo2","user":1}',
+                    '{"id":2,"ts":"11:22:33","uid":1,"user_id":1,"name":"Anya","age":15}',
+                ),
+                (
+                    '{"id":3,"ts":"20240701T113355","ev_type":"foo3","user":100}',
+                    '{"id":3,"ts":"11:33:55","uid":null,"user_id":100,"name":null,"age":null}',
+                ),
+                (
+                    '{"id":4,"ts":"20240701T113356","ev_type":"foo4","user":3}',
+                    '{"id":4,"ts":"11:33:56","uid":3,"user_id":3,"name":"Masha","age":17}',
+                ),
+                (
+                    '{"id":5,"ts":"20240701T113357","ev_type":"foo5","user":3}',
+                    '{"id":5,"ts":"11:33:57","uid":3,"user_id":3,"name":"Masha","age":17}',
+                ),
+                (
+                    '{"id":6,"ts":"20240701T112238","ev_type":"foo6","user":1}',
+                    '{"id":6,"ts":"11:22:38","uid":1,"user_id":1,"name":"Anya","age":15}',
+                ),
+                (
+                    '{"id":7,"ts":"20240701T113349","ev_type":"foo7","user":2}',
+                    '{"id":7,"ts":"11:33:49","uid":2,"user_id":2,"name":"Petr","age":25}',
+                ),
+            ]
+            * 1000
+        ),
+        "TTL",
+        "10",
+        "MaxCachedRows",
+        "5",
+        "MaxDelayedRows",
+        "100",
+        "ShuffleMode",
+        "Hash",
+        "FullscanLimit",
+        "0",
+    ),
 ]
 
 
@@ -1072,19 +1179,17 @@ class TestJoinStreaming(TestYdsBase):
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
     @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
-    @pytest.mark.parametrize("ca", ["sync", "async"])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
     def test_streamlookup(
         self,
         kikimr,
         testcase,
-        ca,
         streamlookup,
         partitions_count,
         fq_client: FederatedQueryClient,
         yq_version,
     ):
-        title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}{ca[:1]}{yq_version}"
+        title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}{yq_version}"
         self.init_topics(title, partitions_count=partitions_count)
         fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
 
@@ -1103,7 +1208,8 @@ class TestJoinStreaming(TestYdsBase):
             table_name=table_name,
             streamlookup=Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else '',
         )
-        sql = f'PRAGMA dq.ComputeActorType = "{ca}";\n{sql}'
+
+        options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
 
         one_time_waiter.wait()
 
@@ -1140,6 +1246,11 @@ class TestJoinStreaming(TestYdsBase):
                     labels={"operation": query_id, "component": component},
                     key_label="sensor",
                 )
+                if component == "LookupSrc":
+                    if options_dict.get("FullscanLimit") == "0" or (
+                        "FullscanLimit" not in options_dict and options_dict.get("MaxCachedRows") == "0"
+                    ):
+                        assert componentSensors.get("Fullscans", 0) == 0
                 for k in componentSensors:
                     print(
                         f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
@@ -1162,12 +1273,10 @@ class TestJoinStreaming(TestYdsBase):
     @pytest.mark.parametrize("partitions_count", [1, 2])
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("streamlookup", [True, False])
-    @pytest.mark.parametrize("ca", ["sync", "async"])
     @pytest.mark.parametrize("limit", [6, 7, 8, 9, None])
     def test_streamlookup_watermarks(
         self,
         kikimr,
-        ca,
         limit,
         streamlookup,
         tasks,
@@ -1175,7 +1284,7 @@ class TestJoinStreaming(TestYdsBase):
         fq_client: FederatedQueryClient,
         yq_version,
     ):
-        title = f"slj_wm_{partitions_count}{str(streamlookup)[:1]}{limit}{ca[:1]}{tasks}"
+        title = f"slj_wm_{partitions_count}{str(streamlookup)[:1]}{limit}{tasks}"
         self.init_topics(title, partitions_count=partitions_count)
         fq_client.create_yds_connection(
             "wmyds",
@@ -1196,7 +1305,6 @@ class TestJoinStreaming(TestYdsBase):
         streamlookup_hint = Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else ''
         idle_clause = R", WATERMARK_IDLE_TIMEOUT = 'PT5S'" if tasks > 1 or partitions_count > 1 else ""
         sql = Rf'''
-            PRAGMA dq.ComputeActorType = "{ca}";
             PRAGMA dq.WatermarksMode = "default";
             PRAGMA dq.MaxTasksPerStage = "{tasks}";
             PRAGMA dq.WatermarksGranularityMs = "2000";

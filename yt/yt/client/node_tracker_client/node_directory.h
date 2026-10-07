@@ -10,12 +10,11 @@
 
 #include <yt/yt/core/yson/public.h>
 
-#include <yt/yt/core/misc/property.h>
-#include <yt/yt/core/misc/copyable_atomic.h>
-
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/property.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/copyable_atomic.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 namespace NYT::NNodeTrackerClient {
 
@@ -169,7 +168,7 @@ public:
     void Load(TStreamLoadContext& context);
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     THashMap<TNodeId, const TNodeDescriptor*> IdToDescriptor_;
     THashMap<std::string, const TNodeDescriptor*> AddressToDescriptor_;
     THashSet<TNodeDescriptor> Descriptors_;

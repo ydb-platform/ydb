@@ -206,12 +206,8 @@ errors.
 
 OpenSSL has a number of different initialization functions for setting up error
 strings and loading algorithms, etc. All of these functions still exist in
-BoringSSL for convenience, but they do nothing and are not necessary.
-
-The one exception is `CRYPTO_library_init`. In `BORINGSSL_NO_STATIC_INITIALIZER`
-builds, it must be called to query CPU capabilities before the rest of the
-library. In the default configuration, this is done with a static initializer
-and is also unnecessary.
+BoringSSL for convenience, but they do nothing and are not necessary. BoringSSL
+internally initializes itself as needed.
 
 ### Threading
 
@@ -287,7 +283,7 @@ parameter.
 
 ## Significant API additions
 
-In some places, BoringSSL has added significant APIs. Use of these APIs goes beyound “porting” and means giving up on OpenSSL compatibility.
+In some places, BoringSSL has added significant APIs. Use of these APIs goes beyond “porting” and means giving up on OpenSSL compatibility.
 
 One example of this has already been mentioned: the [CBS and CBB](https://commondatastorage.googleapis.com/chromium-boringssl-docs/bytestring.h.html) functions should be used whenever parsing or serialising data.
 

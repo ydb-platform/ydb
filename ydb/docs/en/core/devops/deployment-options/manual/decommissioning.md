@@ -1,4 +1,10 @@
-# Decommissioning a Part of Cluster
+# Data Center Decommissioning
+
+{% note info %}
+
+Use this procedure only to decommission an entire data center.
+
+{% endnote %}
 
 Decommissioning is the procedure for moving a VDisk from a PDisk that needs to be decommissioned.
 
@@ -23,7 +29,7 @@ By managing the `DECOMMIT_PENDING` and `DECOMMIT_IMMINENT` states, you can perfo
 For example, you need to move equipment from data center-1 (DC-1) to data center-2 (DC-2):
 
 1. The DC-2 hosts buffer equipment to transfer the first chunk of data to.
-1. Switch the status of all DC-1 disks to `DECOMMIT_PENDING` so that no data can be moved inside the DC-1.
+1. Switch the status of all DC-1 disks to `DECOMMIT_PENDING` at once so that no data can be moved inside the DC-1. Set this status for every disk in the data center simultaneously: applying `DECOMMIT_PENDING` to only a subset of disks in the data center may cause violation of the storage group failure model.
 1. Switch the status of all DC-1 disks to `DECOMMIT_IMMINENT` on the equipment that is equivalent to the buffer one.
 1. Wait until all the disks in the `DECOMMIT_IMMINENT` status are released.
 1. Move the released equipment from the DC-1 to the DC-2 and switch the status of its disks to `DECOMMIT_NONE`.

@@ -10,7 +10,6 @@ import attr
 import pytest
 import requests
 
-from ydb.tests.library.common.types import TabletTypes
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.fixtures import ydb_database_ctx
 from ydb.tests.library.fixtures.safe_parametrize import ParameterSet, safe_mark_parametrize
@@ -470,18 +469,18 @@ def _wait_for_tablet_resolver_cache(context: _YdbTestContext) -> None:
     """
     _logger.info("Waiting for the Tablet Resolver cache to become populated with followers")
 
-    # Find the tablet ID for the DataShard for the test table
-    #
-    # NOTE: Since there is only one table created for the test, there should be
-    #       only one DataShard present
-    tablet_state_response = context.cluster.client.tablet_state(TabletTypes.FLAT_DATASHARD)
-
-    leader_tablet_ids = [
-        info.TabletId
-        for info in tablet_state_response.TabletStateInfo
-        if info.Leader
-    ]
-
+    # Find the tablet ID for the single DataShard of the test table
+    describe_url = "{}/viewer/json/describe?{}".format(
+        context.db_http_endpoint,
+        urllib.parse.urlencode({
+            "database": context.database,
+            "path": "{}/{}".format(context.database, _TABLE_NAME),
+        }),
+    )
+    response = requests.get(describe_url)
+    response.raise_for_status()
+    table_partitions = response.json()["PathDescription"]["TablePartitions"]
+    leader_tablet_ids = [int(p["DatashardId"]) for p in table_partitions]
     assert len(leader_tablet_ids) == 1, "There should be exactly one leader DataShard"
 
     follower_url = "{}/tablets/app?TabletID={}&FollowerID=1".format(

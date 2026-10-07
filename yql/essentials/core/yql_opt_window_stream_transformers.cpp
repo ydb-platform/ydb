@@ -48,7 +48,7 @@ TMaybe<std::pair<TExprNode::TPtr, TNodeTransform>> GetSortedBoundNodeKeyForDedup
     if (!bound.IsFinite()) {
         return {};
     }
-    if (!bound.GetUnderlyingValue().GetColumnCast()){
+    if (!bound.GetUnderlyingValue().GetColumnCast()) {
         return {};
     }
     return std::make_pair(bound.GetUnderlyingValue().GetFrameBound(), *bound.GetUnderlyingValue().GetColumnCast());
@@ -56,11 +56,11 @@ TMaybe<std::pair<TExprNode::TPtr, TNodeTransform>> GetSortedBoundNodeKeyForDedup
 
 } // namespace
 
-TWindowSortedColumnPusher::TWindowSortedColumnPusher(const TExprNode::TPtr& sortLambda, TExprContext& ctx, const TExprNode::TPtr& frames)
+TWindowSortedColumnPusher::TWindowSortedColumnPusher(const TExprNode::TPtr& sortTraits, TExprContext& ctx, const TExprNode::TPtr& frames)
     : Ctx_(ctx)
 {
     SortOrder_ = ExtractAndVerifyRangeSortOrder(frames, ctx);
-    SortColumnType_ = GetSortedColumnType(sortLambda);
+    SortColumnType_ = GetSortedColumnType(sortTraits);
     ForEachRangeFrame(frames, ctx, [&](const TWindowFrameSettings::TRangeFrame& rangeFrame) {
         auto boundForDedup = {GetSortedBoundNodeKeyForDedup(rangeFrame.GetFirst()), GetSortedBoundNodeKeyForDedup(rangeFrame.GetLast())};
         for (auto boundNodeAndTransform : boundForDedup) {
@@ -91,14 +91,14 @@ std::pair<TStringBuf, TStringBuf> TWindowSortedColumnPusher::GetRangeSortedColum
             getSortedColumnName(GetSortedBoundNodeKeyForDedup(rangeFrame.GetLast()))};
 }
 
-TVector<TStringBuf> TWindowSortedColumnPusher::GetAllSortedColumnNames() const {
-    TVector<TStringBuf> sortedColumns;
+TVector<TString> TWindowSortedColumnPusher::GetAllSortedColumnNames() const {
+    TVector<TString> sortedColumns;
     if (!ShouldAddSortedColumn()) {
         YQL_ENSURE(MappedSortedColumnsToNames_.empty(), "No sort column type is provided, but extrasorted columns are provided");
         return sortedColumns;
     }
     sortedColumns.reserve(MappedSortedColumnsToNames_.size() + 1);
-    sortedColumns.push_back(SortedColumnMemberName);
+    sortedColumns.emplace_back(SortedColumnMemberName);
 
     std::transform(MappedSortedColumnsToNames_.begin(), MappedSortedColumnsToNames_.end(), std::back_inserter(sortedColumns), [](const auto& item) {
         const auto& [keyNode, transformAndColumnName] = item;

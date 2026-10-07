@@ -1,5 +1,12 @@
-/* syntax version 1 */
-SELECT 
+$input = [
+    <|value: "ываыва"u|>,
+    <|value: "ячсячсяаачы"u|>,
+    <|value: "аавыаываыва"u|>,
+    <|value: "gd2цй3ываафы"u|>,
+    <|value: ""u|>,
+];
+
+SELECT
     value,
     Unicode::ReplaceAll(value, Utf8("аф"), Utf8("zzz")) AS all,
     Unicode::ReplaceFirst(value, Utf8("а"), Utf8("z")) AS first,
@@ -8,4 +15,4 @@ SELECT
     Unicode::ReplaceLast(value, Utf8("а"), Utf8("")) AS last2,
     Unicode::ReplaceFirst(value, Utf8("а"), Utf8("zzz")) AS first3,
     Unicode::ReplaceLast(value, Utf8("а"), Utf8("zzz")) AS last3
-FROM Input
+FROM AS_TABLE($input)

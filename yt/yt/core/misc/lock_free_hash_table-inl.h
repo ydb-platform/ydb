@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "lock_free_hash_table.h"
 #endif
-#undef LOCK_FREE_HASH_TABLE_INL_H_
 
 namespace NYT {
 

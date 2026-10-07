@@ -4,6 +4,49 @@
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    {{ ydb-short-name }} C++ SDK использует алгоритм `prefer_local_dc` (предпочитать ближайший дата-центр) по умолчанию.
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation());
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        databases:
+            db:
+                endpoint: grpc://localhost:2136
+                database: /local
+                prefer_local_dc: true
+    ```
+
+    {% endcut %}
+
+    Код инициализации `ydb::YdbComponent`, получения `ydb::TableClient` и запуска `components::MinimalServerComponentList` — как в примере из [init.md](./init.md).
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}
@@ -87,26 +130,6 @@
 
   {% endlist %}
 
-- С++
-
-  {{ ydb-short-name }} C++ SDK использует алгоритм `prefer_local_dc` (предпочитать ближайший дата-центр) по умолчанию.
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
-
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation());
-
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
-
 - Python
 
   {% list tabs %}
@@ -183,19 +206,69 @@
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
     import tech.ydb.core.grpc.BalancingSettings;
     import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
-            .withBalancingSettings(BalancingSettings.detectLocalDs())
-            .build()) {
-        // ...
+    public class PreferLocalExample {
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    // Автоопределение ближайшего дата-центра по задержке до нод
+                    .withBalancingSettings(BalancingSettings.detectLocalDs())
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
   - JDBC
 
-    См. [свойства JDBC-драйвера](../../reference/languages-and-apis/jdbc-driver/properties.md); при необходимости задайте политику балансировки через нативный транспорт.
+    Укажите локальный дата-центр через `localDatacenter` в JDBC URL — см. [свойства JDBC-драйвера](../../reference/languages-and-apis/jdbc-driver/properties.md).
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class JdbcPreferLocalExample {
+        public static void main(String[] args) throws SQLException {
+            // JDBC-драйвер не поддерживает автоматическое определение ближайшего DC.
+            // Явно укажите зону доступности через параметр localDatacenter —
+            // см. рецепт [Балансировка нагрузки — Предпочитать зону доступности](./balancing-prefer-location.md).
+            try (Connection connection = DriverManager.getConnection(
+                         "jdbc:ydb:grpc://localhost:2136/local?localDatacenter=VLA");
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getInt("value"));
+                }
+            }
+        }
+    }
+    ```
 
     В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC укажите ту же JDBC-строку подключения и параметры балансировки, что и при прямом использовании драйвера (например, `spring.datasource.url` или свойства `DataSource`).
 
@@ -204,6 +277,8 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#239](https://github.com/ydb-platform/ydb-rs-sdk/issues/239)
 
 - PHP
 

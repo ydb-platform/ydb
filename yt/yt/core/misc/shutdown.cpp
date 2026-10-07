@@ -7,12 +7,14 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
-#include <library/cpp/yt/threading/event_count.h>
-
 #include <library/cpp/yt/misc/tls.h>
 
+#include <library/cpp/yt/string/string.h>
+
+#include <library/cpp/yt/system/event_count.h>
 #include <library/cpp/yt/system/exit.h>
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
+#include <library/cpp/yt/system/thread_id.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
@@ -79,12 +81,12 @@ public:
             }
 
             ShutdownStarted_.store(true);
-            ShutdownThreadId_.store(GetCurrentThreadId());
+            ShutdownThreadId_.store(GetSystemThreadId());
 
             if (auto* logFile = TryGetShutdownLogFile()) {
                 ::fprintf(logFile, "%s\t*** Shutdown started (ThreadId: %" PRISZT ")\n",
                     GetInstant().ToString().c_str(),
-                    GetCurrentThreadId());
+                    GetSystemThreadId());
             }
 
             for (auto* registeredCallback : RegisteredCallbacks_) {
@@ -100,7 +102,7 @@ public:
     // so the routine will not be executed. Moreover, if we try to join this thread we'll get deadlock
     // because this thread will try to acquire atexit lock which is owned by this thread
     #ifndef _win_
-        NThreading::TEvent shutdownCompleteEvent;
+        TEvent shutdownCompleteEvent;
         std::thread watchdogThread([&] {
             ::TThread::SetCurrentThreadName("ShutdownWD");
             if (!shutdownCompleteEvent.Wait(options.GraceTimeout)) {
@@ -192,7 +194,7 @@ public:
 private:
     std::atomic<FILE*> ShutdownLogFile_ = IsShutdownLoggingEnabledImpl() ? stderr : nullptr;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, Lock_);
 
     struct TRegisteredCallback
     {
@@ -219,8 +221,7 @@ private:
 
     static bool IsShutdownLoggingEnabledImpl()
     {
-        auto value = GetEnv("YT_ENABLE_SHUTDOWN_LOGGING");
-        value.to_lower();
+        auto value = AsciiStringToLower(GetEnv("YT_ENABLE_SHUTDOWN_LOGGING"));
         return value == "1" || value == "true";
     }
 

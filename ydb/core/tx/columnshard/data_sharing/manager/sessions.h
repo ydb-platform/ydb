@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/core/tx/columnshard/data_sharing/source/session/source.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/session/destination.h>
+#include <ydb/core/tx/columnshard/data_sharing/source/session/source.h>
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
@@ -13,8 +13,18 @@ private:
     THashMap<TString, std::shared_ptr<TSourceSession>> SourceSessions;
     THashMap<TString, std::shared_ptr<TDestinationSession>> DestSessions;
     TAtomicCounter SharingSessions;
+    bool AdmissionSeen = false;
+
 public:
     TSessionsManager() = default;
+
+    void OnSharingAdmission() {
+        AdmissionSeen = true;
+    }
+
+    bool CanCutHistory() const {
+        return !AdmissionSeen && SourceSessions.empty() && DestSessions.empty();
+    }
 
     void StartSharingSession() {
         SharingSessions.Inc();
@@ -58,10 +68,12 @@ public:
 
     void InitializeEventsExchange(const NColumnShard::TColumnShard& shard, const std::optional<ui64> sessionCookie = {});
 
-    std::unique_ptr<NTabletFlatExecutor::ITransaction> InitializeSourceSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session);
-    std::unique_ptr<NTabletFlatExecutor::ITransaction> ProposeDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session);
-    std::unique_ptr<NTabletFlatExecutor::ITransaction> ConfirmDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session);
-
+    std::unique_ptr<NTabletFlatExecutor::ITransaction> InitializeSourceSession(
+        NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session);
+    std::unique_ptr<NTabletFlatExecutor::ITransaction> ProposeDestSession(
+        NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session);
+    std::unique_ptr<NTabletFlatExecutor::ITransaction> ConfirmDestSession(
+        NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session);
 };
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing

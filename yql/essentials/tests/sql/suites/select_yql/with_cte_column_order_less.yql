@@ -1,0 +1,7 @@
+/* custom error: Error: Wrong number of columns, expected: 2, got: 3 */
+PRAGMA YqlSelect = 'force';
+
+WITH x (a, b, c) AS (
+    SELECT 1, '2'
+)
+SELECT * FROM x;

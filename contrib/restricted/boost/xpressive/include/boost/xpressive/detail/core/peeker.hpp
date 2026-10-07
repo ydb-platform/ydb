@@ -271,7 +271,6 @@ private:
 
     hash_peek_bitset<Char> &bset_;
     peeker_string<Char> str_;
-    bool str_icase_;
     bool line_start_;
     void const *traits_;
     std::type_info const *traits_type_;

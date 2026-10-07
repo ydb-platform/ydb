@@ -1,6 +1,6 @@
 PRAGMA WindowNewPipeline;
 
-/* custom error: Range frame for multiple expressions is only allowed to be UNBOUNDED PRECEDING AND CURRENT ROW. */
+/* custom error: RANGE frames over an ORDER BY expression of type "Tuple<pgint4,pgint4>" support only RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW mode */
 $data = [
     <|a: 1p, c: 1p, b: 1|>,
     <|a: 1p, c: 2p, b: 1|>,

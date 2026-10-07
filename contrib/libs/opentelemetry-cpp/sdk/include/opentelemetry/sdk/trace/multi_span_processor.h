@@ -31,8 +31,7 @@ struct MultiSpanProcessorOptions
 class MultiSpanProcessor : public SpanProcessor
 {
 public:
-  MultiSpanProcessor(std::vector<std::unique_ptr<SpanProcessor>> &&processors)
-      : head_(nullptr), tail_(nullptr), count_(0)
+  MultiSpanProcessor(std::vector<std::unique_ptr<SpanProcessor>> processors)
   {
     for (auto &processor : processors)
     {
@@ -97,7 +96,7 @@ public:
 
   void OnEnd(std::unique_ptr<Recordable> &&span) noexcept override
   {
-    auto multi_recordable = static_cast<MultiRecordable *>(span.release());
+    auto multi_recordable = static_cast<MultiRecordable *>(std::move(span).release());
     ProcessorNode *node   = head_;
     while (node != nullptr)
     {
@@ -120,7 +119,10 @@ public:
     while (node != nullptr)
     {
       auto processor = node->value_.get();
-      result |= processor->ForceFlush(timeout);
+      if (!processor->ForceFlush(timeout))
+      {
+        result = false;
+      }
       node = node->next_;
     }
     return result;
@@ -147,7 +149,10 @@ protected:
     while (node != nullptr)
     {
       auto processor = node->value_.get();
-      result |= processor->Shutdown(timeout);
+      if (!processor->Shutdown(timeout))
+      {
+        result = false;
+      }
       node = node->next_;
     }
     return result;
@@ -192,8 +197,9 @@ private:
     }
   }
 
-  ProcessorNode *head_, *tail_;
-  size_t count_;
+  ProcessorNode *head_{nullptr};
+  ProcessorNode *tail_{nullptr};
+  size_t count_{0};
 };
 }  // namespace trace
 }  // namespace sdk

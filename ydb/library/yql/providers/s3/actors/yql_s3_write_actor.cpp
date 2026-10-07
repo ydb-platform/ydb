@@ -579,8 +579,11 @@ protected:
     }
 
 private:
-    void CommitState(const NDqProto::TCheckpoint&) final {}
-    void LoadState(const TSinkState&) final {}
+    void CommitState(const NDqProto::TCheckpoint& checkpoint) final {
+        Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
+    }
+
+    void LoadState(const TSinkState&, const NDqProto::TCheckpoint&) final {}
 
     ui64 GetOutputIndex() const final {
         return OutputIndex;
@@ -996,7 +999,7 @@ std::pair<IDqComputeActorAsyncOutput*, IActor*> CreateS3WriteActor(
     const TString& prefix,
     const THashMap<TString, TString>& secureParams,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy)
 {
     const auto token = secureParams.Value(params.GetToken(), TString{});

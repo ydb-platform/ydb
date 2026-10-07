@@ -4,8 +4,7 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapQueueCreate(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapQueuePush(TCallable& callable, const TComputationNodeFactoryContext& ctx);
@@ -20,5 +19,4 @@ IComputationNode* WrapPreserveStream(TCallable& callable, const TComputationNode
 IComputationNode* WrapWinFramesCollector(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapWinFrame(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

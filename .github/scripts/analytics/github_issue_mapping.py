@@ -15,9 +15,17 @@ row; downstream marts use those columns.
 
 Edge cases:
   * No ``area`` in issue ``info`` → area_override = NULL
+  * Closed **NOT_PLANNED** / **DUPLICATE** → area_override = NULL (issues excluded from mapping query)
+  * Closed **COMPLETED** with ``manual-fast-unmute`` label → override can apply (fast-track window)
+  * Closed **COMPLETED** without that label: override cleared **only** when **project Status** is
+    ``Unmuted`` (do not infer from closer — avoids clearing during the gap before fast-unmute label).
   * Area resolves to the same team as the default owner → area_override = NULL
   * Area not found in mapping → area_override = NULL
   * Labels change → we always see the *current* ``info`` snapshot
+
+``github_issue_state_reason`` / ``info`` (Json): GitHub close reason and a snapshot (assignees,
+labels, project fields, …). For existing deployments run ``ALTER TABLE``; ``CREATE TABLE`` below
+is for new installs only.
 
 ``area_override_since`` (Date)
 -------------------------------
@@ -38,15 +46,25 @@ import sys
 from ydb_wrapper import YDBWrapper
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+_mute_scripts_dir = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', 'tests', 'mute')
+)
+if _mute_scripts_dir not in sys.path:
+    sys.path.insert(0, _mute_scripts_dir)
+from update_mute_issues import MANUAL_FAST_UNMUTE_GITHUB_LABEL
 from github_issue_utils import (
     create_test_issue_mapping,
     DEFAULT_BUILD_TYPE,
+    issue_label_names_lower,
     scan_to_utc_date,
 )
 
 
 def get_github_issues_data(ydb_wrapper):
-    """Get GitHub issues data from the issues table, including labels info."""
+    """Get GitHub issues data from the issues table, including labels info.
+
+    Excludes issues closed as **Not planned** or **Duplicate**.
+    """
     issues_table = ydb_wrapper.get_table_path("issues")
     query = f"""
     SELECT
@@ -54,13 +72,28 @@ def get_github_issues_data(ydb_wrapper):
         title,
         url,
         state,
+        state_reason,
         body,
         created_at,
         updated_at,
-        info
+        info,
+        assignees,
+        labels,
+        milestone,
+        project_fields,
+        issue_type,
+        author_login,
+        repository_name,
+        project_status,
+        project_owner,
+        project_priority
     FROM `{issues_table}`
     WHERE body IS NOT NULL
     AND body != ''
+    AND NOT (
+        state = 'CLOSED'
+        AND Coalesce(state_reason, '') IN ('NOT_PLANNED', 'DUPLICATE')
+    )
     """
 
     print("Fetching GitHub issues data...")
@@ -134,6 +167,74 @@ def merge_area_override_since(mapping_data: list, existing_by_key: dict, url_to_
             row["area_override_since"] = scan_to_utc_date(old.get("area_override_since"))
 
 
+def delete_stale_github_issue_mapping_rows(
+    ydb_wrapper, table_path: str, existing_by_key: dict, mapping_data: list
+) -> None:
+    """Delete rows not present in the current recomputed snapshot."""
+    new_keys = {
+        (
+            row["full_name"],
+            row["branch"],
+            row["build_type"],
+            row["github_issue_number"],
+        )
+        for row in mapping_data
+    }
+    stale_keys = [k for k in existing_by_key.keys() if k not in new_keys]
+    if not stale_keys:
+        return
+
+    chunk_size = 100
+    deleted = 0
+    for chunk_start in range(0, len(stale_keys), chunk_size):
+        chunk = stale_keys[chunk_start : chunk_start + chunk_size]
+        declare_lines = []
+        predicates = []
+        params = {}
+        for idx, (full_name, branch, build_type, github_issue_number) in enumerate(chunk):
+            p_full_name = f"$full_name_{idx}"
+            p_branch = f"$branch_{idx}"
+            p_build_type = f"$build_type_{idx}"
+            p_issue_number = f"$github_issue_number_{idx}"
+            declare_lines.extend(
+                [
+                    f"DECLARE {p_full_name} AS Utf8;",
+                    f"DECLARE {p_branch} AS Utf8;",
+                    f"DECLARE {p_build_type} AS Utf8;",
+                    f"DECLARE {p_issue_number} AS Uint64;",
+                ]
+            )
+            predicates.append(
+                "("
+                f"full_name = {p_full_name} "
+                f"AND branch = {p_branch} "
+                f"AND build_type = {p_build_type} "
+                f"AND github_issue_number = {p_issue_number}"
+                ")"
+            )
+            params[p_full_name] = full_name
+            params[p_branch] = branch
+            params[p_build_type] = build_type
+            params[p_issue_number] = ydb.TypedValue(
+                value=int(github_issue_number),
+                value_type=ydb.PrimitiveType.Uint64,
+            )
+
+        delete_query = f"""
+            {' '.join(declare_lines)}
+
+            DELETE FROM `{table_path}`
+            WHERE {' OR '.join(predicates)};
+        """
+        ydb_wrapper.execute_dml(
+            delete_query,
+            params,
+            query_name="github_issue_mapping_delete_stale_row",
+        )
+        deleted += len(chunk)
+    print(f"Deleted {deleted} stale github_issue_mapping row(s)")
+
+
 def get_area_to_owner_mapping(ydb_wrapper):
     """Load area -> owner_team mapping from YDB."""
     try:
@@ -204,11 +305,45 @@ def _resolve_area_to_team(area_label: str, area_to_owner: dict) -> str:
     return best_team
 
 
-def resolve_area_override(body: str, info_raw, area_to_owner: dict):
+def resolve_area_override(
+    body: str,
+    info_raw,
+    area_to_owner: dict,
+    issue_state=None,
+    state_reason=None,
+    labels_raw=None,
+    project_status=None,
+):
     """If GitHub ``area/...`` implies a different team than ``Owner:``, return that area path.
+
+    **Closed issues**
+
+    * ``NOT_PLANNED`` / ``DUPLICATE``: no override.
+    * ``COMPLETED`` (or empty ``state_reason`` on **CLOSED**) + label ``manual-fast-unmute``: override stays (fast-track active).
+    * ``COMPLETED`` (or empty ``state_reason``) without that label: override cleared **only** when **project Status** is ``Unmuted``.
+
+    Open issues: unchanged area logic.
 
     Stored value matches issue info (e.g. ``area/blobstorage``), not the resolved team slug.
     """
+    st = (issue_state or "").strip().upper()
+    sr = (state_reason or "").strip().upper()
+    labels_lo = issue_label_names_lower(labels_raw)
+
+    if st == "CLOSED":
+        if sr in ("NOT_PLANNED", "DUPLICATE"):
+            return None
+        # Empty ``state_reason`` in export/API: treat like COMPLETED for override / Unmuted logic.
+        if sr == "COMPLETED" or not sr:
+            if MANUAL_FAST_UNMUTE_GITHUB_LABEL.lower() in labels_lo:
+                pass
+            else:
+                ps = (project_status or "").strip().lower()
+                if ps == "unmuted":
+                    return None
+        else:
+            return None
+
     area_label = (_extract_area_from_info(info_raw) or "").strip()
     if not area_label:
         return None
@@ -237,10 +372,12 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
         `github_issue_url`        Utf8,
         `github_issue_title`      Utf8,
         `github_issue_number`     Uint64     NOT NULL,
-        `github_issue_state`      Utf8,
-        `github_issue_created_at` Timestamp,
-        `area_override`           Utf8,
-        `area_override_since`     Date,
+        `github_issue_state`        Utf8,
+        `github_issue_state_reason` Utf8,
+        `github_issue_created_at`   Timestamp,
+        `area_override`             Utf8,
+        `area_override_since`       Date,
+        `info`                      Json,
         PRIMARY KEY (full_name, branch, build_type, github_issue_number)
     )
     PARTITION BY HASH(full_name)
@@ -252,33 +389,37 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
 
 
 def convert_mapping_to_table_data(test_to_issue_mapping):
-    """Convert the test-to-issue mapping to table data format"""
+    """Convert the test-to-issue mapping to table data format.
+
+    Emits one row per (test, branch, build_type, github_issue_number) so every linked issue row
+    is refreshed during upsert and ``github_issue_state`` does not become stale for older issues.
+    """
     table_data = []
 
     for test_name, issues in test_to_issue_mapping.items():
         if not issues:
             continue
 
-        # Group issues by build_type, then pick the latest per group
-        by_build_type = {}
         for issue in issues:
             bt = issue.get('build_type', DEFAULT_BUILD_TYPE)
-            existing = by_build_type.get(bt)
-            if existing is None or issue.get('created_at', 0) > existing.get('created_at', 0):
-                by_build_type[bt] = issue
-
-        for bt, latest_issue in by_build_type.items():
-            for branch in latest_issue['branches']:
+            snap = dict(issue.get('mapping_info') or {})
+            ao = issue.get('area_override')
+            if ao:
+                snap['area_override'] = ao
+            info_json = json.dumps(snap, ensure_ascii=False)
+            for branch in issue['branches']:
                 table_data.append({
                     'full_name': test_name,
                     'branch': branch,
                     'build_type': bt,
-                    'github_issue_url': latest_issue['url'],
-                    'github_issue_title': latest_issue['title'],
-                    'github_issue_number': latest_issue['issue_number'],
-                    'github_issue_state': latest_issue['state'],
-                    'github_issue_created_at': latest_issue.get('created_at'),
-                    'area_override': latest_issue.get('area_override'),
+                    'github_issue_url': issue['url'],
+                    'github_issue_title': issue['title'],
+                    'github_issue_number': issue['issue_number'],
+                    'github_issue_state': issue['state'],
+                    'github_issue_state_reason': issue.get('state_reason'),
+                    'github_issue_created_at': issue.get('created_at'),
+                    'area_override': issue.get('area_override'),
+                    'info': info_json,
                 })
 
     return table_data
@@ -296,9 +437,13 @@ def bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data):
     column_types.add_column('github_issue_title', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     column_types.add_column('github_issue_number', ydb.PrimitiveType.Uint64)
     column_types.add_column('github_issue_state', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    column_types.add_column(
+        'github_issue_state_reason', ydb.OptionalType(ydb.PrimitiveType.Utf8)
+    )
     column_types.add_column('github_issue_created_at', ydb.OptionalType(ydb.PrimitiveType.Timestamp))
     column_types.add_column('area_override', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     column_types.add_column('area_override_since', ydb.OptionalType(ydb.PrimitiveType.Date))
+    column_types.add_column('info', ydb.OptionalType(ydb.PrimitiveType.Json))
 
     ydb_wrapper.bulk_upsert(table_path, mapping_data, column_types)
     print(f"Bulk upsert completed")
@@ -335,6 +480,10 @@ def main():
                         issue.get('body', ''),
                         issue.get('info'),
                         area_to_owner,
+                        issue.get('state'),
+                        issue.get('state_reason'),
+                        issue.get('labels'),
+                        issue.get('project_status'),
                     )
 
             print("Creating test-to-issue mapping...")
@@ -366,6 +515,9 @@ def main():
                 bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data)
             else:
                 print("No mapping data to insert")
+            delete_stale_github_issue_mapping_rows(
+                ydb_wrapper, table_path, existing_by_key, mapping_data
+            )
 
             script_elapsed = time.time() - script_start_time
             print(f"Script completed successfully, total time: {script_elapsed:.2f}s")

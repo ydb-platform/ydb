@@ -7,7 +7,6 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/util/backoff.h>
-
 #include <ydb/library/actors/core/events.h>
 
 namespace NKikimr::NPQ::NMLP {
@@ -20,6 +19,13 @@ public:
 
     void Bootstrap();
     void PassAway() override;
+
+protected:
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"topic", Settings.TopicName},
+            {"consumer", Settings.Consumer});
+    }
 
 private:
     enum class EPartitionStatus {

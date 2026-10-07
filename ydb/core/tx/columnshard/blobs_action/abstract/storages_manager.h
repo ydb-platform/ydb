@@ -1,5 +1,6 @@
 #pragma once
 #include "storage.h"
+
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 
 namespace NKikimr::NOlap {
@@ -12,6 +13,7 @@ private:
     bool Initialized = false;
     bool Finished = false;
     std::optional<ui64> Generation;
+
 protected:
     virtual std::shared_ptr<IBlobsStorageOperator> DoBuildOperator(const TString& storageId) = 0;
     THashMap<TString, std::shared_ptr<IBlobsStorageOperator>> Constructed;
@@ -69,5 +71,4 @@ public:
     std::shared_ptr<IBlobsStorageOperator> GetOperatorOptional(const TString& storageIdExt) const;
 };
 
-
-}
+}   // namespace NKikimr::NOlap

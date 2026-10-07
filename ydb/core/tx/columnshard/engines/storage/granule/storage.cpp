@@ -5,9 +5,7 @@
 namespace NKikimr::NOlap {
 
 std::vector<TGranuleOrdered> TGranulesStorage::GetGranulesForCompaction(
-    const std::set<TInternalPathId>& pathIds, 
-    const std::optional<ui64> waitingPriority
-) const {
+    const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const {
     const TInstant now = HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now();
     std::vector<TGranuleOrdered> granulesSorted;
     const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetCompactionActualizationLag();
@@ -33,9 +31,9 @@ std::vector<TGranuleOrdered> TGranulesStorage::GetGranulesForCompaction(
         }
     }
     // descending order
-    std::sort(granulesSorted.begin(), granulesSorted.end(),
-        [](const TGranuleOrdered& a, const TGranuleOrdered& b) { return b < a; }
-    );
+    std::sort(granulesSorted.begin(), granulesSorted.end(), [](const TGranuleOrdered& a, const TGranuleOrdered& b) {
+        return b < a;
+    });
     return granulesSorted;
 }
 

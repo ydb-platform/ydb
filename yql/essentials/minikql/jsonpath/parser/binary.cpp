@@ -53,9 +53,9 @@ const TJsonPathItem& TJsonPathReader::ReadFirst() {
     return ReadFromPos(InitialPos_);
 }
 
-const TJsonPathItem& TJsonPathReader::ReadInput(const TJsonPathItem& item) {
-    YQL_ENSURE(item.InputItemOffset.Defined());
-    return ReadFromPos(*item.InputItemOffset);
+const TJsonPathItem& TJsonPathReader::ReadInput(const TJsonPathItem& node) {
+    YQL_ENSURE(node.InputItemOffset.Defined());
+    return ReadFromPos(*node.InputItemOffset);
 }
 
 const TJsonPathItem& TJsonPathReader::ReadFromSubscript(const TArraySubscriptOffsets& subscript) {

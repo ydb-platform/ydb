@@ -97,6 +97,8 @@ private:
 
     void ScheduleShredWakeup();
     NOperationQueue::EStartStatus StartShredOperation(const TPathId& pathId);
+    void CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, const TVector<ui64>& generationsToCleanup);
+    void CleanupOldGenerationsOnShred(NIceDb::TNiceDb& db);
 };
 
 } // NKikimr::NSchemeShard

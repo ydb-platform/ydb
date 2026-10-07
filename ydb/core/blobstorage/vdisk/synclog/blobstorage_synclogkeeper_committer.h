@@ -86,6 +86,22 @@ namespace NKikimr {
         };
 
         ////////////////////////////////////////////////////////////////////////////
+        // TEvSyncLogDiskOutOfSpace
+        // Sent by the committer to the keeper when a sync log chunk write returns
+        // OUT_OF_SPACE. Carries the chunks that were allocated during the aborted
+        // commit so the keeper can dispose of them together with the whole disk log.
+        ////////////////////////////////////////////////////////////////////////////
+        struct TEvSyncLogDiskOutOfSpace
+            : public TEventLocal<TEvSyncLogDiskOutOfSpace, TEvBlobStorage::EvSyncLogDiskOutOfSpace>
+        {
+            TVector<ui32> AllocatedChunks;
+
+            TEvSyncLogDiskOutOfSpace(TVector<ui32>&& allocatedChunks)
+                : AllocatedChunks(std::move(allocatedChunks))
+            {}
+        };
+
+        ////////////////////////////////////////////////////////////////////////////
         // TSyncLogKeeperCommitData
         ////////////////////////////////////////////////////////////////////////////
         struct TSyncLogKeeperCommitData {

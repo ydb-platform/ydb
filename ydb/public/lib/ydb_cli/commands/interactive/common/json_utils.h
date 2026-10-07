@@ -75,6 +75,8 @@ public:
 
     TJsonSchemaBuilder& Description(const TString& description);
 
+    TJsonSchemaBuilder& Enum(const std::vector<TString>& allowedValues);
+
     // Object
 
     TJsonSchemaBuilder& Property(const TString& name, bool required = true);
@@ -93,6 +95,7 @@ private:
     EType TypeValue = EType::Undefined;
     std::unordered_map<TString, std::shared_ptr<TJsonSchemaBuilder>> Properties;
     std::vector<TString> RequiredProperties;
+    std::vector<TString> AllowedValues;
     std::optional<TString> DescriptionValue;
     std::shared_ptr<TJsonSchemaBuilder> ArrayItemSchema;
 };

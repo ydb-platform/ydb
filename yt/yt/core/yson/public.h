@@ -12,9 +12,9 @@ namespace NYT::NYson {
 
 enum class ETokenType;
 
-class TYsonProducer;
 template <class... TAdditionalArgs>
-class TExtendedYsonProducer;
+class TParametricYsonProducer;
+using TYsonProducer = TParametricYsonProducer<>;
 
 class TYsonInput;
 class TYsonOutput;
@@ -54,9 +54,10 @@ DEFINE_ENUM(EUnknownYsonFieldsMode,
 ////////////////////////////////////////////////////////////////////////////////
 
 YT_DEFINE_ERROR_ENUM(
-    ((ParseError)          (4000))
-    ((MemoryLimitExceeded) (4001))
-    ((DepthLimitExceeded)  (4002))
+    ((ParseError)                (4000))
+    ((MemoryLimitExceeded)       (4001))
+    ((DepthLimitExceeded)        (4002))
+    ((InvalidProtobufWireFormat) (4003))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -139,8 +139,13 @@ public:
                         }
                     }
 
-                    // skip if table already has loaded metadata and has only read intents
-                    if (State_->Types->IsReadOnly || State_->Types->UseTableMetaFromGraph || tableDesc.HasWriteLock || !HasModifyIntents(tableDesc.Intents)) {
+                    const bool hasRequiredLocks = (tableDesc.HasWriteLock || !HasModifyIntents(tableDesc.Intents))
+                        && (tableDesc.HasSymlinkLock || !HasSymlinkIntents(tableDesc.Intents))
+                        && (tableDesc.HasReferenceLock
+                            || !tableDesc.Intents.HasFlags(TYtTableIntent::Referenced)
+                            || !tableDesc.Meta->DoesExist);
+                    // Reuse metadata when all required protection is satisfied.
+                    if (State_->Types->IsReadOnly || State_->Types->UseTableMetaFromGraph || hasRequiredLocks) {
                         // Intents/views can be updated since evaluation phase
                         if (!tableDesc.FillViews(
                             clusterAndTable.first, clusterAndTable.second, State_->Types->QContext, ctx,
@@ -231,6 +236,8 @@ public:
             if (LoadCtx->Result.Data[i].WriteLock) {
                 tableDesc.HasWriteLock = true;
             }
+            tableDesc.HasSymlinkLock |= LoadCtx->Result.Data[i].SymlinkLock;
+            tableDesc.HasReferenceLock |= LoadCtx->Result.Data[i].ReferenceLock;
 
             TIssueScopeGuard issueScope(ctx.IssueManager, [tableName]() {
                 return MakeIntrusive<TIssue>(TStringBuilder() << "Table " << tableName);
@@ -241,7 +248,8 @@ public:
                 const auto schemaAttrs = std::initializer_list<TStringBuf>{YqlRowSpecAttribute, SCHEMA_ATTR_NAME, READ_SCHEMA_ATTR_NAME, INFER_SCHEMA_ATTR_NAME};
                 if (AnyOf(schemaAttrs, [&tableDesc](TStringBuf attr) { return tableDesc.Meta->Attrs.contains(attr); })) {
                     auto rowSpec = MakeIntrusive<TYqlRowSpecInfo>();
-                    if (!rowSpec->Parse(tableDesc.Meta->Attrs, ctx)) {
+                    auto parseExpressionColumns = State_->Configuration->_ParseExpressionColumns.Get().GetOrElse(DEFAULT_PARSE_EXPRESSION_COLUMNS);
+                    if (!rowSpec->Parse(tableDesc.Meta->Attrs, parseExpressionColumns, ctx)) {
                         return TStatus::Error;
                     }
                     if (!State_->Configuration->UseNativeDescSort.Get().GetOrElse(false) && rowSpec->ClearNativeDescendingSort(ctx)) {
@@ -326,13 +334,15 @@ public:
                             State_->UseSecureTmp->store(true);
                         }
 
-                        if (tmpSecurity == ETmpSecurityMode::Disable || !State_->Configuration->_SecureTmpRoot.Get(cluster)) {
+                        if (!State_->UseSecureTmp->load() || !State_->Configuration->_SecureTmpRoot.Get(cluster)) {
                             TStringBuilder msg;
                             msg << "Table " << cluster << "." << tableName
                                 << " contains sensitive data, but is used with the default tmp folder."
                                 << " This may lead to sensitive data being leaked, consider using a protected tmp folder with the TmpFolder pragma.";
                             auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_COMMON_TMP, msg);
                             if (State_->Configuration->ForceTmpSecurity.Get().GetOrElse(tmpSecurity == ETmpSecurityMode::Force)) {
+                                // treat this warning as error in force mode
+                                issue.SetCode(issue.GetCode(), ESeverity::TSeverityIds_ESeverityId_S_ERROR);
                                 ctx.AddError(issue);
                                 return TStatus::Error;
                             } else {

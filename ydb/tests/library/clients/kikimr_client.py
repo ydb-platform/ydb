@@ -11,6 +11,7 @@ import six
 import functools
 
 from google.protobuf.text_format import Parse
+from ydb.core.protos import blobstorage_base3_pb2
 from ydb.core.protos import blobstorage_config_pb2
 import ydb.core.protos.msgbus_pb2 as msgbus
 import ydb.core.protos.grpc_pb2_grpc as grpc_server
@@ -103,6 +104,10 @@ class KiKiMRMessageBusClient(object):
         self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
         self._stub = grpc_server.TGRpcServerStub(self._channel)
         self.tablet_service = StubWithRetries(grpc_tablet_service.TabletServiceStub(self._channel), timeout=self.__timeout)
+        self._auth_token = None
+
+    def set_auth_token(self, token):
+        self._auth_token = token
 
     def describe(self, path, token):
         request = msgbus.TSchemeDescribe()
@@ -211,6 +216,8 @@ class KiKiMRMessageBusClient(object):
         return self.invoke(request, 'SchemeOperationStatus')
 
     def send(self, request, method):
+        if self._auth_token and hasattr(request, 'SecurityToken') and not request.SecurityToken:
+            request.SecurityToken = self._auth_token
         return self.invoke(request, method)
 
     def ddl_exec_status(self, flat_tx_id, token=None):
@@ -299,12 +306,18 @@ class KiKiMRMessageBusClient(object):
         request.Alive = True
         return self.invoke(request, 'TabletStateRequest')
 
+    def _send_blob_storage_config_request(self, request):
+        response = self.send(request, 'BlobStorageConfig')
+        if not response.HasField('BlobStorageConfigResponse'):
+            raise RuntimeError('BlobStorageConfig request failed with status %s: %s' % (response.Status, response.ErrorReason))
+        return response.BlobStorageConfigResponse
+
     def read_host_configs(self, domain=1):
         request = msgbus.TBlobStorageConfigRequest()
         request.Domain = domain
         request.Request.Command.add().ReadHostConfig.SetInParent()
 
-        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        response = self._send_blob_storage_config_request(request)
         if not response.Success:
             raise RuntimeError('read_host_config request failed: %s' % response.ErrorDescription)
         status = response.Status[0]
@@ -319,7 +332,7 @@ class KiKiMRMessageBusClient(object):
         for host_config in host_configs:
             request.Request.Command.add().DefineHostConfig.MergeFrom(host_config)
 
-        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        response = self._send_blob_storage_config_request(request)
         if not response.Success:
             raise RuntimeError('define_host_config request failed: %s' % response.ErrorDescription)
         for i, status in enumerate(response.Status):
@@ -332,7 +345,7 @@ class KiKiMRMessageBusClient(object):
         cmd = request.Request.Command.add().ReadStoragePool
         cmd.BoxId = 0xFFFFFFFFFFFFFFFF
 
-        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        response = self._send_blob_storage_config_request(request)
         if not response.Success:
             raise RuntimeError('read_storage_pools request failed: %s' % response.ErrorDescription)
 
@@ -355,9 +368,9 @@ class KiKiMRMessageBusClient(object):
             cmd = request.Request.Command.add().UpdateDriveStatus
             cmd.HostKey.NodeId = pdisk.NodeId
             cmd.PDiskId = pdisk.PDiskId
-            cmd.Status = blobstorage_config_pb2.EDriveStatus.ACTIVE
+            cmd.Status = blobstorage_base3_pb2.EDriveStatus.ACTIVE
 
-        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        response = self._send_blob_storage_config_request(request)
 
         if not response.Success:
             raise RuntimeError('update_all_drive_status_active request failed: %s' % response.ErrorDescription)
@@ -373,7 +386,7 @@ class KiKiMRMessageBusClient(object):
         command.QueryBaseConfig.RetrieveDevices = True
         command.QueryBaseConfig.VirtualGroupsOnly = False
 
-        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        response = self._send_blob_storage_config_request(request)
         if not response.Success:
             raise RuntimeError('query_base_config failed: %s' % response.ErrorDescription)
 

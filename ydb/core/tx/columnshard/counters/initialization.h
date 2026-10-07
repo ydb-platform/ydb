@@ -33,6 +33,7 @@ public:
     void OnActivateExecutor(const TDuration fromCreate) const {
         HistogramActivateExecutorFromActivationDurationMs->Collect(fromCreate.MilliSeconds());
     }
+
     void OnSwitchToWork(const TDuration fromStart, const TDuration fromCreate) const {
         HistogramSwitchToWorkFromActivationDurationMs->Collect(fromStart.MilliSeconds());
         HistogramSwitchToWorkFromCreateDurationMs->Collect(fromCreate.MilliSeconds());
@@ -49,8 +50,9 @@ public:
         , HistogramSwitchToWorkFromActivationDurationMs(
               TBase::GetHistogram("SwitchToWorkFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
         , HistogramSwitchToWorkFromCreateDurationMs(
-              TBase::GetHistogram("SwitchToWorkFromCreateDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32))) {
+              TBase::GetHistogram("SwitchToWorkFromCreateDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+    {
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

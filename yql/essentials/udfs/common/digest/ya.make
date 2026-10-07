@@ -11,6 +11,7 @@ YQL_UDF_CONTRIB(digest_udf)
     )
 
     PEERDIR(
+        yql/essentials/core/langver
         contrib/libs/farmhash
         contrib/libs/highwayhash
         contrib/libs/openssl

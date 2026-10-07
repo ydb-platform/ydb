@@ -1,5 +1,6 @@
 #include "change_message_visibility.h"
 #include "actor.h"
+#include "config.h"
 #include "error.h"
 #include "limits.h"
 #include "receipt.h"
@@ -34,9 +35,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
-
-#include <ydb/library/actors/core/log.h>
-#include <ydb/services/sqs_topic/statuses.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -119,8 +117,6 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
-            this->Become(&TChangeMessageVisibilityActorBase::StateWork);
-
             if (requestList.empty()) {
                 static_cast<TDerived*>(this)->ReplyAndDie(ctx);
                 return;
@@ -143,22 +139,33 @@ namespace NKikimr::NSqsTopic::V1 {
                 deadlines.push_back(deadline);
             }
 
-            NPQ::NMLP::TMessageDeadlineChangerSettings changerSettings{
+            ChangerSettings_ = NPQ::NMLP::TMessageDeadlineChangerSettings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
-                .Consumer = this->QueueUrl_->Consumer,
+                .Consumer = ResolveConsumerNameFromQueueUrl(this->QueueUrl_->Consumer, ctx),
                 .Messages = std::move(messages),
                 .Deadlines = std::move(deadlines),
                 .UserToken = this->Request_->GetInternalToken(),
             };
+            this->DescribeTopic(NACLib::DescribeSchema);
+            this->Become(&TChangeMessageVisibilityActorBase::StateWork);
+        }
 
-            std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreateMessageDeadlineChanger(this->SelfId(), std::move(changerSettings))};
-            DeadlineChangerActorId_ = ctx.RegisterWithSameMailbox(actorPtr.release());
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo&) {
+            this->ChargeRequestUnits(TlsActivationContext->AsActorContext());
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const NActors::TActorContext& ctx) {
+            DeadlineChangerActorId_ = ctx.RegisterWithSameMailbox(
+                NKikimr::NPQ::NMLP::CreateMessageDeadlineChanger(this->SelfId(), std::move(*ChangerSettings_)));
         }
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse); // override for testing
                 HFunc(NPQ::NMLP::TEvChangeResponse, Handle);
                 default:
                     TBase::StateWork(ev);
@@ -191,12 +198,23 @@ namespace NKikimr::NSqsTopic::V1 {
                     this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, std::format("Message id not found")));
                     return;
                 }
-                if (message.Success) {
-                    Success_.insert(*id);
-                    ++successCount;
-                } else {
-                    Failed_[*id] = MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, {});
-                    ++failedCount;
+                switch (message.Status) {
+                    case NPQ::NMLP::EOperationResult::Success:
+                        Success_.insert(*id);
+                        ++successCount;
+                        break;
+                    case NPQ::NMLP::EOperationResult::NotFound:
+                        Failed_[*id] = MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, {});
+                        ++failedCount;
+                        break;
+                    case NPQ::NMLP::EOperationResult::NotInFlight:
+                        Failed_[*id] = MakeError(NSQS::NErrors::MESSAGE_NOT_INFLIGHT, {});
+                        ++failedCount;
+                        break;
+                    case NPQ::NMLP::EOperationResult::Failed:
+                        Failed_[*id] = MakeError(NSQS::NErrors::INTERNAL_FAILURE, {});
+                        ++failedCount;
+                        break;
                 }
             }
 
@@ -231,10 +249,6 @@ namespace NKikimr::NSqsTopic::V1 {
             this->TBase::Die(ctx);
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            Y_UNUSED(ev);
-        }
-
     protected:
         const TProtoRequest& Request() const {
             return GetRequest<TProtoRequest>(this->Request_.get());
@@ -242,6 +256,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
     protected:
         TActorId DeadlineChangerActorId_;
+        TMaybe<NPQ::NMLP::TMessageDeadlineChangerSettings> ChangerSettings_;
         THashMap<TString, NSQS::TError> Failed_;
         THashSet<TString> Success_;
         TMap<NPQ::NMLP::TMessageId, TString, TMessageIdLess> PositionToIdMap_;

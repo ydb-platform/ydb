@@ -23,7 +23,7 @@ protected:
 public:
     void ApplyHeartbeat(const TString& sourceId, const TRowVersion& version);
     void ForgetHeartbeat(const TString& sourceId, const TRowVersion& version);
-    void ForgetSourceId(const TString& sourceId);
+    void ForgetHeartbeatSourceId(const TString& sourceId);
 
 protected:
     THashSet<TString> SourceIdsWithHeartbeat;
@@ -31,10 +31,30 @@ protected:
 
 }; // THeartbeatProcessor
 
-class THeartbeatEmitter;
+class TSchemaChangeProcessor {
+protected:
+    using TSourceIdsBySchemaChange = TMap<TRowVersion, THashSet<TString>>;
 
-class TSourceIdStorage: private THeartbeatProcessor {
+public:
+    void ApplySchemaChange(const TString& sourceId, const TRowVersion& version);
+    void ForgetSchemaChange(const TString& sourceId, const TRowVersion& version);
+    void ForgetSchemaChangeSourceId(const TString& sourceId);
+
+protected:
+    THashSet<TString> SourceIdsWithSchemaChange;
+    TSourceIdsBySchemaChange SourceIdsBySchemaChange;
+
+}; // TSchemaChangeProcessor
+
+class THeartbeatEmitter;
+class TSchemaChangeEmitter;
+
+class TSourceIdStorage
+    : private THeartbeatProcessor
+    , private TSchemaChangeProcessor
+{
     friend class THeartbeatEmitter;
+    friend class TSchemaChangeEmitter;
 
 public:
     const TSourceIdMap& GetInMemorySourceIds() const {
@@ -61,6 +81,7 @@ public:
     void MarkOwnersForDeletedSourceId(THashMap<TString, TOwnerInfo>& owners);
 
     TInstant MinAvailableTimestamp(TInstant now) const;
+    TRowVersion GetCommittedSchemaChangeVersion() const;
 
 private:
     void LoadRawSourceIdInfo(const TString& key, const TString& data, TInstant now);
@@ -128,6 +149,24 @@ private:
     THashMap<TString, THeartbeat> Heartbeats;
 
 }; // THeartbeatEmitter
+
+class TSchemaChangeEmitter: private TSchemaChangeProcessor {
+public:
+    explicit TSchemaChangeEmitter(const TSourceIdStorage& storage);
+
+    void Process(const TString& sourceId, TSchemaChangeInfo&& schemaChange);
+    TMaybe<TSchemaChangeInfo> CanEmit() const;
+
+private:
+    TMaybe<TSchemaChangeInfo> GetFromStorage(TSourceIdsBySchemaChange::const_iterator it) const;
+    TMaybe<TSchemaChangeInfo> GetFromDiff(TSourceIdsBySchemaChange::const_iterator it) const;
+
+private:
+    const TSourceIdStorage& Storage;
+    THashSet<TString> NewSourceIdsWithSchemaChange;
+    THashMap<TString, TSchemaChangeInfo> SchemaChanges;
+
+}; // TSchemaChangeEmitter
 
 }
 

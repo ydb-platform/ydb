@@ -14,7 +14,7 @@ inline ui64 SaturationSub(ui64 x, ui64 y) {
 
 inline ui8 LoadByteUnaligned(const ui8* bitmap, size_t bitmapOffset) {
     size_t byteOffset = bitmapOffset >> 3;
-    ui8 bit = ui8(bitmapOffset & 7u);
+    ui8 bit = ui8(bitmapOffset & 7U);
 
     ui8 first = bitmap[byteOffset];
     // extend to ui32 to avoid left UB in case of left shift of byte by 8 bit
@@ -126,14 +126,14 @@ inline size_t CompressBitmap(const ui8* src, size_t srcOffset,
     //       2) 64 bit processing (instead of 8)
     ui8* target = dst + (dstOffset >> 3);
     ui8 state = *target;
-    ui8 stateBits = dstOffset & 7u;
-    state &= (ui32(1) << stateBits) - 1u;
+    ui8 stateBits = dstOffset & 7U;
+    state &= (ui32(1) << stateBits) - 1U;
     while (count) {
         ui8 srcByte = LoadByteUnaligned(src, srcOffset);
         ui8 bitmapByte = LoadByteUnaligned(bitmap, bitmapOffset);
 
         // zero all bits outside of input range
-        bitmapByte &= ui8(0xff) >> ui8(SaturationSub(8u, count));
+        bitmapByte &= ui8(0xff) >> ui8(SaturationSub(8U, count));
 
         ui8 compressed = CompressByte(srcByte, bitmapByte);
         ui8 compressedBits = PopCountByte(bitmapByte);
@@ -152,7 +152,7 @@ inline size_t CompressBitmap(const ui8* src, size_t srcOffset,
         dstOffset += compressedBits;
         srcOffset += 8;
         bitmapOffset += 8;
-        count = SaturationSub(count, 8u);
+        count = SaturationSub(count, 8U);
     }
     *target = state;
     return dstOffset;

@@ -147,3 +147,26 @@ TEST_F(TLoggerTest, DifferentLogLevels) {
     EXPECT_NE(output.find("Warning message"), std::string::npos);
     EXPECT_NE(output.find("Error message"), std::string::npos);
 }
+
+TEST_F(TLoggerTest, DisabledThrottling) {
+    LoggerImpl = std::make_unique<TLogger>(*Log, Nothing(), /*maxLogsPerSlot=*/0, /*slotSeconds=*/0,
+        TLogger::TCounters{.RecordsReceived = ReceivedCounter,
+                        .RecordsDropped = DroppedCounter});
+
+    Logger = LoggerImpl->Child("");
+
+    // Log 40 messages using YLOG_T macro
+    for (int i = 0; i < 40; ++i) {
+        YLOG_ERROR_T("Test message {}", i);
+    }
+
+    const auto output = GetLogOutput();
+    const int count = std::count(output.begin(), output.end(), '\n');
+
+    // Should log exactly 40 messages (throttler disabled)
+    EXPECT_EQ(count, 40);
+
+    // Check counters: 40 received, 0 dropped
+    EXPECT_EQ(ReceivedCounter->Val(), 40);
+    EXPECT_EQ(DroppedCounter->Val(), 0);
+}

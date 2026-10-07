@@ -1,14 +1,23 @@
 #pragma once
 
-#include <util/datetime/base.h>
-#include <util/string/builder.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
+#include <util/datetime/base.h>
+#include <util/string/builder.h>
+
+#include <functional>
+#include <memory>
+#include <set>
+#include <unordered_map>
+#include <vector>
+
 namespace NKikimrPQ {
-    class TUpdateBalancerConfig;
-}
+
+class TUpdateBalancerConfig;
+
+} // namespace NKikimrPQ
 
 namespace NKikimr::NPQ {
 
@@ -32,6 +41,12 @@ NKikimrPQ::TPQTabletConfig::TConsumer* GetConsumer(NKikimrPQ::TPQTabletConfig& c
 size_t ConsumerCount(const NKikimrPQ::TPQTabletConfig& config);
 
 const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config, const ui32 partitionId);
+
+// Read quota entry (per consumer or, for CLIENTID_WITHOUT_CONSUMER, for reading a partition without a consumer)
+// stored in TPartitionConfig.ReadQuota keyed by ClientId.
+const NKikimrPQ::TPartitionConfig::TReadQuota* GetReadQuota(const NKikimrPQ::TPQTabletConfig& config, const TString& clientId);
+NKikimrPQ::TPartitionConfig::TReadQuota* GetOrAddReadQuota(NKikimrPQ::TPQTabletConfig& config, const TString& clientId);
+void ClearReadQuotaExceptWithoutConsumer(NKikimrPQ::TPQTabletConfig& config);
 
 // The graph of split-merge operations.
 class TPartitionGraph {
@@ -78,6 +93,7 @@ public:
 
     TString DebugString() const;
 
+    std::vector<ui32> GetRootPartitions() const;
 private:
     std::unordered_map<ui32, Node> Partitions;
 };
@@ -91,4 +107,4 @@ TPartitionGraph::TPtr MakeSharedPartitionGraph(const NKikimrSchemeOp::TPersQueue
 
 Y_PURE_FUNCTION bool PreciseReadFromTimestampBehaviourEnabled(const NKikimr::TAppData& appData);
 
-} // NKikimr::NPQ
+} // namespace NKikimr::NPQ

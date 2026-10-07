@@ -98,6 +98,7 @@ class TableService(object):
     CopyTables = "CopyTables"
     RenameTables = "RenameTables"
     DescribeTable = "DescribeTable"
+    DescribeSystemView = "DescribeSystemView"
     CreateSession = "CreateSession"
     DeleteSession = "DeleteSession"
     ExecuteSchemeQuery = "ExecuteSchemeQuery"
@@ -109,6 +110,7 @@ class TableService(object):
     KeepAlive = "KeepAlive"
     StreamReadTable = "StreamReadTable"
     BulkUpsert = "BulkUpsert"
+    ReadRows = "ReadRows"
 
 
 class TopicService(object):

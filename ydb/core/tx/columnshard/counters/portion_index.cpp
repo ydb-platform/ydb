@@ -13,6 +13,11 @@ void TPortionIndexStats::AddPortion(const NOlap::TPortionInfo& portion) {
     TPortionClass portionClass(portion);
     TotalStats[portionClass].AddPortion(portion);
     StatsByPathId[portion.GetPathId()][portionClass].AddPortion(portion);
+
+    const ui64 smallBlobsVolume = portion.GetSmallBlobBytesInBlobStorage(SmallBlobThresholdBytes);
+    const ui64 smallBlobsCount = smallBlobsVolume ? 1 : 0;
+    TotalSmallBlobs.Add(smallBlobsVolume, smallBlobsCount);
+    SmallBlobsByPathId[portion.GetPathId()].Add(smallBlobsVolume, smallBlobsCount);
 }
 
 void TPortionIndexStats::RemovePortion(const NOlap::TPortionInfo& portion) {
@@ -38,6 +43,16 @@ void TPortionIndexStats::RemovePortion(const NOlap::TPortionInfo& portion) {
             if (findPathId->second.empty()) {
                 StatsByPathId.erase(findPathId);
             }
+        }
+    }
+
+    const ui64 smallBlobsVolume = portion.GetSmallBlobBytesInBlobStorage(SmallBlobThresholdBytes);
+    const ui64 smallBlobsCount = smallBlobsVolume ? 1 : 0;
+    TotalSmallBlobs.Sub(smallBlobsVolume, smallBlobsCount);
+    if (auto findPathId = SmallBlobsByPathId.find(portion.GetPathId()); findPathId != SmallBlobsByPathId.end()) {
+        findPathId->second.Sub(smallBlobsVolume, smallBlobsCount);
+        if (!StatsByPathId.contains(portion.GetPathId())) {
+            SmallBlobsByPathId.erase(findPathId);
         }
     }
 }

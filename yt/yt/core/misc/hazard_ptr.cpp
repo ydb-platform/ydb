@@ -1,14 +1,15 @@
 #include "hazard_ptr.h"
 
 #include <yt/yt/core/misc/proc.h>
-#include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/finally.h>
 
-#include <library/cpp/yt/threading/at_fork.h>
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/at_fork.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
+#include <library/cpp/yt/system/thread_id.h>
 
 #include <library/cpp/yt/containers/intrusive_linked_list.h>
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
@@ -136,14 +137,14 @@ public:
         void* reclaimPtr,
         THazardPtrReclaimer reclaimer);
 
-    void ReclaimHazardPointers(bool flush);
+    bool ReclaimHazardPointers(bool flush);
 
 private:
     std::atomic<int> ThreadCount_ = 0;
 
     TRetireQueue<TRetiredPtr> RetireQueue_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ThreadRegistryLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, ThreadRegistryLock_);
     TIntrusiveLinkedList<THazardThreadState, THazardThreadStateToRegistryNode> ThreadRegistry_;
 
     THazardPointerManager();
@@ -174,7 +175,7 @@ static void* HazardPointerManagerInitializer = [] {
 
 THazardPointerManager::THazardPointerManager()
 {
-    NThreading::RegisterAtForkHandlers(
+    RegisterAtForkHandlers(
         [this] { BeforeFork(); },
         [this] { AfterForkParent(); },
         [this] { AfterForkChild(); });
@@ -245,13 +246,19 @@ bool THazardPointerManager::TryReclaimHazardPointers()
         std::ssize(threadState->RetireList) > threadCount;
 }
 
-void THazardPointerManager::ReclaimHazardPointers(bool flush)
+bool THazardPointerManager::ReclaimHazardPointers(bool flush)
 {
     if (flush) {
         while (TryReclaimHazardPointers());
     } else {
         TryReclaimHazardPointers();
     }
+
+    // Report whether some retired pointers are still pending on this thread.
+    // They could not be reclaimed because they are currently protected; the
+    // caller must retry maintenance later rather than park indefinitely.
+    auto* threadState = HazardThreadState();
+    return threadState && !threadState->RetireList.empty();
 }
 
 void THazardPointerManager::InitThreadState()
@@ -288,7 +295,7 @@ YT_PREVENT_TLS_CACHING THazardThreadState* THazardPointerManager::AllocateThread
     if (auto* logFile = TryGetShutdownLogFile()) {
         ::fprintf(logFile, "%s\t*** Hazard Pointer Manager thread state allocated (ThreadId: %" PRISZT ")\n",
             GetInstant().ToString().c_str(),
-            GetCurrentThreadId());
+            GetSystemThreadId());
     }
 
     return threadState;
@@ -370,7 +377,7 @@ void THazardPointerManager::DestroyThreadState(THazardThreadState* threadState)
     if (auto* logFile = TryGetShutdownLogFile()) {
         ::fprintf(logFile, "%s\t*** Hazard Pointer Manager thread state destroyed (ThreadId: %" PRISZT ", RetiredPtrCount: %d)\n",
             GetInstant().ToString().c_str(),
-            GetCurrentThreadId(),
+            GetSystemThreadId(),
             count);
     }
 
@@ -425,9 +432,9 @@ void RetireHazardPointer(
         reclaimer);
 }
 
-void ReclaimHazardPointers(bool flush)
+bool ReclaimHazardPointers(bool flush)
 {
-    NYT::NDetail::THazardPointerManager::Get()->ReclaimHazardPointers(flush);
+    return NYT::NDetail::THazardPointerManager::Get()->ReclaimHazardPointers(flush);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

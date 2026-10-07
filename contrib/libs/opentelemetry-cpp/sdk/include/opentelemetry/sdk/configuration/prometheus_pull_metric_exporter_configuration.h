@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <string>
 
 #include "opentelemetry/sdk/configuration/headers_configuration.h"
@@ -23,17 +24,24 @@ namespace configuration
 class PrometheusPullMetricExporterConfiguration : public PullMetricExporterConfiguration
 {
 public:
+  static constexpr const char *kDefaultHost       = "localhost";
+  static constexpr std::size_t kDefaultPort       = 9464;
+  static constexpr bool kDefaultScopeInfoEnabled  = true;
+  static constexpr bool kDefaultTargetInfoEnabled = true;
+  static constexpr TranslationStrategy kDefaultTranslationStrategy =
+      TranslationStrategy::UnderscoreEscapingWithSuffixes;
+
   void Accept(PullMetricExporterConfigurationVisitor *visitor) const override
   {
     visitor->VisitPrometheus(this);
   }
 
-  std::string host;
-  std::size_t port{0};
-  bool without_scope_info{false};
-  bool without_target_info{false};
-  std::unique_ptr<IncludeExcludeConfiguration> with_resource_constant_labels;
-  TranslationStrategy translation_strategy;
+  std::string host{kDefaultHost};
+  std::size_t port{kDefaultPort};
+  bool scope_info_enabled{kDefaultScopeInfoEnabled};
+  bool target_info_enabled{kDefaultTargetInfoEnabled};
+  std::unique_ptr<IncludeExcludeConfiguration> resource_constant_labels;
+  TranslationStrategy translation_strategy{kDefaultTranslationStrategy};
 };
 
 }  // namespace configuration

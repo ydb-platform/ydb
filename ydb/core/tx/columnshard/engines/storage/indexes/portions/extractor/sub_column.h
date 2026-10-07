@@ -18,6 +18,7 @@ private:
         AFL_VERIFY(!!SubColumnName);
         proto.MutableSubColumn()->SetSubColumnName(SubColumnName);
     }
+
     virtual bool DoDeserializeFromProto(const TProto& proto) override {
         if (!proto.HasSubColumn()) {
             return false;
@@ -28,6 +29,7 @@ private:
         }
         return true;
     }
+
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override {
         if (!jsonInfo.Has("sub_column_name")) {
             return TConclusionStatus::Fail("extractor description has to have 'sub_column_name' parameter");
@@ -46,7 +48,7 @@ private:
         const TRecordVisitor& recordVisitor) const override;
 
     virtual bool DoCheckForIndex(const NRequest::TOriginalDataAddress& request, ui64* /*hashBase*/) const override {
-        return request.GetSubColumnName() == SubColumnName;
+        return request.GetSubColumnName().GetValue() == SubColumnName;
     }
 
     virtual THashMap<ui64, ui32> DoGetIndexHitsCount(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray) const override;

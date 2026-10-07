@@ -121,9 +121,7 @@ Y_NO_INLINE TStatefulComputationNodeBase::TStatefulComputationNodeBase(ui32 valu
 {
 }
 
-Y_NO_INLINE TStatefulComputationNodeBase::~TStatefulComputationNodeBase()
-{
-}
+Y_NO_INLINE TStatefulComputationNodeBase::~TStatefulComputationNodeBase() = default;
 
 Y_NO_INLINE void TStatefulComputationNodeBase::AddDependentImpl(const IComputationNode* node) {
     Dependents_.emplace_back(node);
@@ -168,19 +166,15 @@ Y_NO_INLINE void TStatefulComputationNodeBase::CollectUpvaluesImpl(TComputationE
     this->UpvaluesCollected_ = true;
 }
 
-Y_NO_INLINE TStatefulSourceComputationNodeBase::TStatefulSourceComputationNodeBase()
-{
-}
+Y_NO_INLINE TStatefulSourceComputationNodeBase::TStatefulSourceComputationNodeBase() = default;
 
-Y_NO_INLINE TStatefulSourceComputationNodeBase::~TStatefulSourceComputationNodeBase()
-{
-}
+Y_NO_INLINE TStatefulSourceComputationNodeBase::~TStatefulSourceComputationNodeBase() = default;
 
 Y_NO_INLINE void TStatefulSourceComputationNodeBase::PrepareStageOneImpl(const TConstComputationNodePtrVector& dependents) {
     if (!Stateless_) {
         Stateless_ = std::accumulate(
                          dependents.cbegin(), dependents.cend(), 0,
-                         std::bind(std::plus<i32>(), std::placeholders::_1,
+                         std::bind(std::plus<>(), std::placeholders::_1,
                                    std::bind(&IComputationNode::GetDependentWeight, std::placeholders::_2))) <= 1;
     }
 }
@@ -415,8 +409,9 @@ Y_NO_INLINE TString TBinaryComputationNodeBase::DebugStringImpl(const TString& t
     return typeName + "(" + Left_->DebugString() + "," + Right_->DebugString() + ")";
 }
 
-void TExternalComputationNode::CollectDependentIndexes(const IComputationNode*, TIndexesMap& map) const {
-    map.emplace(ValueIndex_, RepresentationKind_);
+void TExternalComputationNode::CollectDependentIndexes(const IComputationNode* owner, TIndexesMap& dependents) const {
+    Y_UNUSED(owner);
+    dependents.emplace(ValueIndex_, RepresentationKind_);
 }
 
 void TExternalComputationNode::CollectUpvalues(TComputationExternalNodePtrSet& upvalues) const {
@@ -889,8 +884,8 @@ TPasstroughtMap MergePasstroughtMaps(const TPasstroughtMap& lhs, const TPasstrou
     return map;
 }
 
-void ApplyChanges(const NUdf::TUnboxedValue& list, NUdf::IApplyContext& applyCtx) {
-    TThresher<false>::DoForEachItem(list,
+void ApplyChanges(const NUdf::TUnboxedValue& value, NUdf::IApplyContext& applyCtx) {
+    TThresher<false>::DoForEachItem(value,
                                     [&applyCtx](const NUdf::TUnboxedValue& item) {
                                         if (item.IsBoxed()) {
                                             item.Apply(applyCtx);

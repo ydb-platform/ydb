@@ -9,6 +9,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <optional>
+
 using namespace NYdb;
 using namespace NKikimr::Tests;
 
@@ -19,6 +21,15 @@ namespace {
 void WaitForAuditLogLines(const std::vector<std::string>& lines,
     size_t expectedLines, TDuration timeout = TDuration::MilliSeconds(500))
 {
+    /*
+    There is no good thread-safe approach here without either significantly
+    rewriting the audit actor implementation to use a thread-safe vector,
+    or changing the behavior of the audit subsystem itself
+    (which is something we may indeed want to do in the future).
+
+    Therefore, this function is temporarily (hope) excluded from TSAN checks.
+    */
+
     auto deadline = TInstant::Now() + timeout;
     while (lines.size() < expectedLines && TInstant::Now() < deadline) {
         Sleep(TDuration::MilliSeconds(50));
@@ -54,18 +65,29 @@ NHttp::THttpIncomingRequestPtr MakeLoginRequest(const TString& user, const TStri
     return request;
 }
 
-NHttp::THttpIncomingRequestPtr MakeLogoutRequest(const TString& cookieName, const TString& cookieValue) {
+NHttp::THttpIncomingRequestPtr MakeLogoutRequest(
+    const TString& cookieName,
+    const TString& cookieValue,
+    const std::optional<TString>& requestId)
+{
     TStringBuilder text;
     text << "POST /logout HTTP/1.1\r\n"
         << "Host: test.ydb\r\n"
         << "Content-Type: text/plain\r\n"
-        << "Cookie: " << cookieName << "=" << cookieValue << "\r\n"
-        << "\r\n";
+        << "Cookie: " << cookieName << "=" << cookieValue << "\r\n";
+    if (requestId) {
+        text << "x-request-id: " << *requestId << "\r\n";
+    }
+    text << "\r\n";
     NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
     EatWholeString(request, text);
     // WebLoginService will crash without address
     request->Address = std::make_shared<TSockAddrInet>("127.0.0.1", 0);
     return request;
+}
+
+NHttp::THttpIncomingRequestPtr MakeLogoutRequest(const TString& cookieName, const TString& cookieValue) {
+    return MakeLogoutRequest(cookieName, cookieValue, std::nullopt);
 }
 
 void CreateUser(TTestEnv& env, const TString& user, const TString& password) {
@@ -113,6 +135,34 @@ void ChangeUserIsEnabled(TTestEnv& env, const TString& user, bool isEnabled) {
 }
 
 } // namespace
+
+Y_UNIT_TEST_SUITE(WebLoginService) {
+
+    Y_UNIT_TEST(PropagatesOrGeneratesRequestIdForLogout) {
+        TTestEnv env;
+        auto* runtime = env.GetServer().GetRuntime();
+        const auto edge = runtime->AllocateEdgeActor();
+        runtime->RegisterService(MakeTicketParserID(), edge);
+
+        const auto authorize = [&](NHttp::THttpIncomingRequestPtr request) {
+            runtime->Send(new IEventHandle(
+                env.GetWebLoginService(),
+                edge,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(std::move(request))));
+
+            TAutoPtr<IEventHandle> handle;
+            return runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicket>(handle)->TraceContext.RequestId;
+        };
+
+        const TString generatedRequestId = authorize(MakeLogoutRequest("ydb_session_id", "session-id"));
+        UNIT_ASSERT_C(!generatedRequestId.empty(), "x-request-id must be generated when the header is missing");
+
+        const TString requestId = "provided-request-id";
+        UNIT_ASSERT_VALUES_EQUAL(
+            authorize(MakeLogoutRequest("ydb_session_id", "session-id", requestId)),
+            requestId);
+    }
+}
 
 Y_UNIT_TEST_SUITE(WebLoginServiceAudit) {
 

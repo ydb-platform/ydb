@@ -44,7 +44,7 @@ public:
         const StringPiece piece(text.data(), text.size());
         RE2::Anchor anchor = RE2::UNANCHORED;
 
-        return Regexp_.Match(piece, 0, text.size(), anchor, nullptr, 0);
+        return Regexp_.Match(piece, 0, text.size(), anchor, /*submatch=*/nullptr, 0);
     }
 
     TString Serialize() const override {

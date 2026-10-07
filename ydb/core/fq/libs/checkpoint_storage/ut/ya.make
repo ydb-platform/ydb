@@ -12,7 +12,6 @@ FORK_SUBTESTS()
 PEERDIR(
     library/cpp/retry
     library/cpp/testing/unittest
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/checkpoint_storage/events
     ydb/core/testlib
     ydb/core/testlib/default
@@ -27,8 +26,8 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     gc_ut.cpp
     storage_service_ydb_ut.cpp
-    ydb_state_storage_ut.cpp
     ydb_checkpoint_storage_ut.cpp
+    ydb_state_storage_ut.cpp
 )
 
 END()

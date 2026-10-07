@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $l = AsList(
     AsStruct(AsTuple(1,2,3) as Key, "1,2,3" as Lhs),
     AsStruct(AsTuple(1,2,4) as Key, "1,2,4" as Lhs)

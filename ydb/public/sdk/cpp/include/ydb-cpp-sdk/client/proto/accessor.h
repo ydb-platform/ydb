@@ -58,6 +58,9 @@ public:
     static NTable::TIndexDescription FromProto(const Ydb::Table::TableIndex& tableIndex);
     static NTable::TIndexDescription FromProto(const Ydb::Table::TableIndexDescription& tableIndexDesc);
 
+    static NTable::TMultiColumnStatisticsDescription FromProto(const Ydb::Table::TableMultiColumnStatistics& tableMultiColumnStatistics);
+    static NTable::TMultiColumnStatisticsDescription FromProto(const Ydb::Table::TableMultiColumnStatisticsDescription& tableMultiColumnStatisticsDesc);
+
     static NTable::TChangefeedDescription FromProto(const Ydb::Table::Changefeed& changefeed);
     static NTable::TChangefeedDescription FromProto(const Ydb::Table::ChangefeedDescription& changefeed);
 
@@ -73,6 +76,8 @@ public:
     static Ydb::Export::ExportToS3Settings::StorageClass GetProto(NExport::TExportToS3Settings::EStorageClass value);
     static NExport::TExportToS3Settings::EStorageClass FromProto(Ydb::Export::ExportToS3Settings::StorageClass value);
     static NExport::EExportProgress FromProto(Ydb::Export::ExportProgress::Progress value);
+    static NExport::TYdbDumpFormat FromProto(const Ydb::Export::YdbDumpFormat& value);
+    static NExport::TParquetFormat FromProto(const Ydb::Export::ParquetFormat& value);
     static NImport::EImportProgress FromProto(Ydb::Import::ImportProgress::Progress value);
     static Ydb::Import::ImportFromS3Settings::IndexPopulationMode GetProto(NImport::EIndexPopulationMode value);
     static NImport::EIndexPopulationMode FromProto(Ydb::Import::ImportFromS3Settings::IndexPopulationMode value);

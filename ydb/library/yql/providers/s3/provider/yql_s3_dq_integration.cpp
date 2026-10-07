@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_source_queue.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
@@ -576,7 +577,7 @@ public:
                     readLimit = FromString<ui64>(sizeLimitIter->second);
                 }
 
-                YQL_ENSURE(NActors::TlsActivationContext, "s3.RuntimeListing incompatible with service"); // TODO: move actor creation elsewhere
+                YQL_ENSURE(NActors::TlsActivationContext, "Using setting `PRAGMA s3.UseRuntimeListing = \"TRUE\"` requires an actor system. Disable this option or run the query in an environment with actors."); // TODO: move actor creation elsewhere
                 auto fileQueueActor = NActors::TActivationContext::ActorSystem()->Register(
                     NDq::CreateS3FileQueueActor(
                         0ul,

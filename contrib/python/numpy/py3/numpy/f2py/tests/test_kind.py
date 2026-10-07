@@ -1,17 +1,23 @@
-import os
-import pytest
 import platform
+import sys
+
+import pytest
 
 from numpy.f2py.crackfortran import (
     _selected_int_kind_func as selected_int_kind,
+)
+from numpy.f2py.crackfortran import (
     _selected_real_kind_func as selected_real_kind,
 )
+
 from . import util
 
 
 class TestKind(util.F2PyTest):
     sources = [util.getpath("tests", "src", "kind", "foo.f90")]
 
+    @pytest.mark.skipif(sys.maxsize < 2 ** 31 + 1,
+                        reason="Fails for 32 bit machines")
     def test_int(self):
         """Test `int` kind_func for integers up to 10**40."""
         selectedintkind = self.module.selectedintkind

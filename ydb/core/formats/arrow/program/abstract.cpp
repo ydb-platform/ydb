@@ -5,29 +5,30 @@
 
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NArrow::NSSA {
 
 NJson::TJsonValue IResourceProcessor::DebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     if (Input.size()) {
-        result.InsertValue("i", JoinSeq(",", Input));
+        result.InsertValue("input_columns", JoinSeq(",", Input));
     }
     if (Output.size()) {
-        result.InsertValue("o", JoinSeq(",", Output));
+        result.InsertValue("output_columns", JoinSeq(",", Output));
     }
-    result.InsertValue("t", ::ToString(ProcessorType));
-    if (IsAggregation()) {
-        result.InsertValue("a", IsAggregation());
-    }
+    result.InsertValue("processor_type", ::ToString(ProcessorType));
+    result.InsertValue("is_aggregation", IsAggregation());
     auto internalJson = DoDebugJson();
     if (!internalJson.IsMap() || internalJson.GetMapSafe().size()) {
-        result.InsertValue("p", std::move(internalJson));
+        result.InsertValue("extra_data", std::move(internalJson));
     }
     return result;
 }
 
-TConclusion<IResourceProcessor::EExecutionResult> IResourceProcessor::Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("execute", GetProcessorType());
+TConclusion<TExecutionResult> IResourceProcessor::Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
+    YDB_LOG_DEBUG("",
+        {"execute", GetProcessorType()});
     return DoExecute(context, nodeContext);
 }
 

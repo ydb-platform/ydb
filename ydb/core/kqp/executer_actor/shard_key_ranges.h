@@ -50,6 +50,7 @@ struct TShardInfo {
     TMaybe<TShardKeyRanges> KeyReadRanges;  // empty -> no reads
     TMaybe<TShardKeyRanges> KeyWriteRanges; // empty -> no writes
     THashMap<TString, TColumnWriteInfo> ColumnWrites;
+    double EstimatedRows = 0.0;
 
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
 };

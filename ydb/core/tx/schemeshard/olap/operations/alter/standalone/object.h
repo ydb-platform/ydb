@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/schemeshard/olap/operations/alter/common/object.h>
+#include <ydb/core/tx/schemeshard/olap/statistics/schema.h>
 #include <ydb/core/tx/schemeshard/olap/table/table.h>
 #include <ydb/core/tx/schemeshard/olap/ttl/schema.h>
 
@@ -10,6 +11,7 @@ private:
     using TBase = TColumnTableEntity;
     std::optional<TOlapSchema> TableSchema;
     std::optional<TOlapTTL> TableTTL;
+    std::optional<TOlapMultiColumnStatisticsDescription> TableMultiColumnStatistics;
     virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdateImpl(const TUpdateInitializationContext& context) const override;
     virtual TConclusionStatus DoInitializeImpl(const TEntityInitializationContext& context) override;
     TConclusionStatus InitializeFromTableInfo();
@@ -52,6 +54,11 @@ public:
 
     const TOlapTTL* GetTableTTLOptional() const {
         return TableTTL ? &*TableTTL : nullptr;
+    }
+
+    const TOlapMultiColumnStatisticsDescription& GetTableMultiColumnStatisticsVerified() const {
+        AFL_VERIFY(!!TableMultiColumnStatistics);
+        return *TableMultiColumnStatistics;
     }
 
 };

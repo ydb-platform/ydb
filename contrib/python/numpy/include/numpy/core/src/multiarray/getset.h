@@ -1,5 +1,5 @@
 #ifdef USE_PYTHON3
-#include <contrib/python/numpy/py3/numpy/core/src/multiarray/getset.h>
+#include <contrib/python/numpy/py3/numpy/_core/src/multiarray/getset.h>
 #else
 #include <contrib/python/numpy/py2/numpy/core/src/multiarray/getset.h>
 #endif

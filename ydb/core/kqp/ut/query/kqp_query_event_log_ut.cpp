@@ -192,6 +192,7 @@ Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
     UNIT_ASSERT_C(req.Has("started_at_us"), "started_at_us field");
     UNIT_ASSERT_C(req.Has("is_streaming"), "is_streaming field");
     UNIT_ASSERT_VALUES_EQUAL(req["is_streaming"].GetBooleanSafe(true), false);
+    UNIT_ASSERT_C(req.Has("used_new_rbo"), "used_new_rbo field");
 }
 
 Y_UNIT_TEST(StreamingQueryIsMarked) {

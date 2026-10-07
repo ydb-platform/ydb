@@ -7,6 +7,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/kqp/opt/logical/kqp_opt_log_join_projection.h>
 #include <ydb/core/kqp/opt/physical/predicate_collector.h>
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
@@ -19,7 +20,11 @@
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
+#include <yql/essentials/core/sql_types/yql_atom_enums.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/printf.h>
 
 namespace NKikimr::NKqp {
 using namespace NSchemeShard;
@@ -2733,10 +2738,371 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(ProjectionPushDownForTopHostsSemiJoin) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        auto result = session
+                          .ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                timestamp Timestamp NOT NULL,
+                id Uint64 NOT NULL,
+                labels JsonDocument,
+                PRIMARY KEY (timestamp, id)
+            ) WITH (STORE = COLUMN);
+        )")
+                          .GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto insertResult = querySession
+                                .ExecuteQuery(R"(
+            INSERT INTO `/Root/foo` (timestamp, id, labels) VALUES
+                (Timestamp("1970-01-01T00:00:03.000001Z"), 1, JsonDocument('{"host":"a1"}')),
+                (Timestamp("1970-01-01T00:00:03.000002Z"), 2, JsonDocument('{"host":"a1"}')),
+                (Timestamp("1970-01-01T00:00:03.000003Z"), 3, JsonDocument('{"host":"a2"}')),
+                (Timestamp("1970-01-01T00:00:03.000004Z"), 4, JsonDocument('{}'));
+        )", NYdb::NQuery::TTxControl::NoTx())
+                                .GetValueSync();
+        UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
+
+        // query is rewritten as join
+        const TString query = R"(
+            $from = Timestamp("1970-01-01T00:00:03Z");
+            $to = Timestamp("1970-01-01T00:00:04Z");
+            SELECT min(`timestamp`) AS bucket, column, count(*) AS cnt
+            FROM `/Root/foo`
+            WHERE `timestamp` >= $from AND `timestamp` < $to
+                AND JSON_VALUE(labels, '$.host') IN (
+                    SELECT column FROM (
+                        SELECT column, count(*) AS total
+                        FROM `/Root/foo`
+                        WHERE `timestamp` >= $from AND `timestamp` < $to
+                        GROUP BY JSON_VALUE(labels, '$.host') AS column
+                        ORDER BY total DESC
+                        LIMIT 10
+                    )
+                )
+            GROUP BY CAST(`timestamp` AS Int64) / 300 / 1000000, JSON_VALUE(labels, '$.host') AS column
+            ORDER BY bucket, column;
+        )";
+
+        auto execution = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(execution.IsSuccess(), execution.GetIssues().ToString());
+        CompareYson(FormatResultSetYson(execution.GetResultSet(0)), R"([[3000001u;["a1"];2u];[3000003u;["a2"];1u]])");
+
+        auto explain = querySession
+                           .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                               NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                           .GetValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+        const auto ast = *explain.GetStats()->GetAst();
+        UNIT_ASSERT_C(ast.find("KqpOlapProjections") != TString::npos, ast);
+        UNIT_ASSERT_C(ast.find("Json2.JsonDocumentSqlValueConvertToUtf8") == TString::npos, ast);
+    }
+
+    Y_UNIT_TEST(ProjectionPushDownForTwoAggregationBranches) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+        auto create = session
+                          .ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                timestamp Timestamp NOT NULL,
+                id Uint64 NOT NULL,
+                labels JsonDocument,
+                PRIMARY KEY (timestamp, id)
+            ) WITH (STORE = COLUMN);
+        )")
+                          .GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        auto insert = querySession
+                          .ExecuteQuery(R"(
+            INSERT INTO `/Root/foo` (timestamp, id, labels) VALUES
+                (Timestamp("1970-01-01T00:00:03.000001Z"), 1, JsonDocument('{"host":"a1"}')),
+                (Timestamp("1970-01-01T00:00:03.000002Z"), 2, JsonDocument('{"host":"a1"}')),
+                (Timestamp("1970-01-01T00:00:03.000003Z"), 3, JsonDocument('{"host":"a2"}'));
+        )", NYdb::NQuery::TTxControl::NoTx())
+                          .GetValueSync();
+        UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+
+        const TString query = R"(
+            $rows = SELECT `timestamp`, labels FROM `/Root/foo`
+                WHERE timestamp >= Timestamp("1970-01-01T00:00:03Z")
+                    AND timestamp < Timestamp("1970-01-01T00:00:04Z");
+            $by_host = SELECT host, COUNT(*) AS cnt FROM $rows
+                GROUP BY JSON_VALUE(labels, '$.host') AS host;
+            $by_host_bucket = SELECT host, bucket, COUNT(*) AS cnt FROM $rows
+                GROUP BY JSON_VALUE(labels, '$.host') AS host, CAST(`timestamp` AS Int64) / 2 AS bucket;
+            SELECT a.host, a.cnt, b.cnt FROM $by_host AS a
+                INNER JOIN $by_host_bucket AS b ON a.host = b.host
+                ORDER BY a.host, b.bucket;
+        )";
+
+        auto execution = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(execution.IsSuccess(), execution.GetIssues().ToString());
+        CompareYson(FormatResultSetYson(execution.GetResultSet(0)), R"([[["a1"];2u;1u];[["a1"];2u;1u];[["a2"];1u;1u]])");
+
+        auto explain = querySession
+                           .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                               NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                           .GetValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+        const auto ast = *explain.GetStats()->GetAst();
+        UNIT_ASSERT_C(ast.find("KqpOlapProjections") != TString::npos, ast);
+        UNIT_ASSERT_C(ast.find("Json2.JsonDocumentSqlValueConvertToUtf8") == TString::npos, ast);
+    }
+
+    void CheckJsonValueProjectionAfterJoin(const TString& query, const TString& expected, bool expectPushdown) {
+        const TString queryWithPragma = "PRAGMA kikimr.OptEnableOlapJsonValueProjectionThroughJoin = \"true\";\n" + query;
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        for (const auto* path : { "/Root/join_left", "/Root/join_right" }) {
+            auto result = session
+                              .ExecuteSchemeQuery(Sprintf(R"(
+                CREATE TABLE `%s` (
+                    id Uint64 NOT NULL,
+                    labels JsonDocument,
+                    PRIMARY KEY (id)
+                ) WITH (STORE = COLUMN);
+            )",
+                                  path))
+                              .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto insert = querySession
+                          .ExecuteQuery(R"(
+            INSERT INTO `/Root/join_left` (id, labels) VALUES
+                (1, JsonDocument('{"host":"left"}')),
+                (2, JsonDocument('{"host":"unmatched"}'));
+            INSERT INTO `/Root/join_right` (id, labels) VALUES
+                (1, JsonDocument('{"host":"right"}')),
+                (3, JsonDocument('{"host":"right_only"}'));
+        )",
+                              NYdb::NQuery::TTxControl::NoTx())
+                          .GetValueSync();
+        UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+
+        auto execution = querySession.ExecuteQuery(queryWithPragma, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(execution.IsSuccess(), execution.GetIssues().ToString());
+        CompareYson(FormatResultSetYson(execution.GetResultSet(0)), expected);
+
+        auto explain = querySession
+                           .ExecuteQuery(queryWithPragma, NYdb::NQuery::TTxControl::NoTx(),
+                               NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                           .GetValueSync();
+        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+        const auto ast = *explain.GetStats()->GetAst();
+        UNIT_ASSERT_VALUES_EQUAL_C(ast.find("KqpOlapProjections") != TString::npos, expectPushdown, ast);
+        if (expectPushdown) {
+            UNIT_ASSERT_C(ast.find("Json2.JsonDocumentSqlValueConvertToUtf8") == TString::npos, ast);
+        }
+    }
+
+    Y_UNIT_TEST(ProjectionPushDownAfterInnerJoin) {
+        CheckJsonValueProjectionAfterJoin(R"(
+            SELECT l.id, JSON_VALUE(l.labels, '$.host') AS left_host, JSON_VALUE(r.labels, '$.host') AS right_host
+            FROM `/Root/join_left` AS l INNER JOIN `/Root/join_right` AS r ON l.id = r.id
+            ORDER BY l.id;
+        )",
+            R"([[1u;["left"];["right"]]])", true);
+    }
+
+    Y_UNIT_TEST(ProjectionPushDownAfterLeftJoin) {
+        CheckJsonValueProjectionAfterJoin(R"(
+            SELECT l.id, JSON_VALUE(r.labels, '$.host') AS right_host
+            FROM `/Root/join_left` AS l LEFT JOIN `/Root/join_right` AS r ON l.id = r.id
+            ORDER BY l.id;
+        )",
+            R"([[1u;["right"]];[2u;#]])", true);
+    }
+
+    Y_UNIT_TEST(ProjectionPushDownAfterRightJoin) {
+        CheckJsonValueProjectionAfterJoin(R"(
+            SELECT r.id, JSON_VALUE(l.labels, '$.host') AS left_host, JSON_VALUE(r.labels, '$.host') AS right_host
+            FROM `/Root/join_left` AS l RIGHT JOIN `/Root/join_right` AS r ON l.id = r.id
+            ORDER BY r.id;
+        )",
+            R"([[1u;["left"];["right"]];[3u;#;["right_only"]]])", true);
+    }
+
+    Y_UNIT_TEST(ProjectionPushDownAfterFullJoin) {
+        CheckJsonValueProjectionAfterJoin(R"(
+            SELECT JSON_VALUE(l.labels, '$.host') AS left_host, JSON_VALUE(r.labels, '$.host') AS right_host
+            FROM `/Root/join_left` AS l FULL JOIN `/Root/join_right` AS r ON l.id = r.id
+            ORDER BY COALESCE(l.id, r.id);
+        )",
+            R"([[["left"];["right"]];[["unmatched"];#];[#;["right_only"]]])", true);
+    }
+
+    Y_UNIT_TEST(ProjectionPushDownAfterJoinWithSourceUse) {
+        CheckJsonValueProjectionAfterJoin(R"(
+            SELECT l.id, JSON_VALUE(l.labels, '$.host') AS left_host, l.labels IS NOT NULL AS has_labels
+            FROM `/Root/join_left` AS l INNER JOIN `/Root/join_right` AS r ON l.id = r.id
+            ORDER BY l.id;
+        )",
+            R"([[1u;["left"];%true]])", true);
+    }
+
+    Y_UNIT_TEST(ProjectionPushDownAfterJoinWithMultipleJsonValues) {
+        CheckJsonValueProjectionAfterJoin(R"(
+            SELECT l.id, JSON_VALUE(l.labels, '$.host') AS host, JSON_VALUE(l.labels, '$.missing') AS missing
+            FROM `/Root/join_left` AS l INNER JOIN `/Root/join_right` AS r ON l.id = r.id
+            ORDER BY l.id;
+        )",
+            R"([[1u;["left"];#]])", true);
+    }
+
+    Y_UNIT_TEST(ProjectionNotPushedDownAfterJoinWithUnsupportedJsonValue) {
+        CheckJsonValueProjectionAfterJoin(R"(
+            SELECT l.id, JSON_VALUE(l.labels, '$.host' RETURNING String) AS host
+            FROM `/Root/join_left` AS l INNER JOIN `/Root/join_right` AS r ON l.id = r.id
+            ORDER BY l.id;
+        )",
+            R"([[1u;["left"]]])", false);
+    }
+
+    NYql::NNodes::TCoJsonValue MakeJoinJsonValue(NYql::TExprContext & ctx, const NYql::TExprNode::TPtr& row, bool returningType) {
+        const auto pos = row->Pos();
+        auto member = ctx.NewCallable(pos, "Member", { row, ctx.NewAtom(pos, "l.labels") });
+        auto path = ctx.NewCallable(pos, "Utf8", { ctx.NewAtom(pos, "$.host") });
+        auto mode = ctx.NewAtom(pos, ToString(NYql::EJsonValueHandlerMode::DefaultValue));
+        auto null = ctx.NewCallable(pos, "Null", {});
+        NYql::TExprNode::TListType args{ member, path, ctx.NewCallable(pos, "JsonVariables", {}), mode, null, mode, null };
+        if (returningType) {
+            args.push_back(ctx.NewCallable(pos, "DataType", { ctx.NewAtom(pos, "String") }));
+        }
+        return NYql::NNodes::TCoJsonValue(ctx.NewCallable(pos, "JsonValue", std::move(args)));
+    }
+
+    Y_UNIT_TEST(JoinJsonValueProjectionEligibility) {
+        NYql::TExprContext ctx;
+        auto row = ctx.NewArgument(NYql::TPositionHandle{}, "row");
+        auto jsonValue = MakeJoinJsonValue(ctx, row, false);
+        UNIT_ASSERT(NOpt::CanBePushedAsOlapJsonValue(jsonValue, row.Get()));
+    }
+
+    Y_UNIT_TEST(JoinJsonValueProjectionRejectsReturningType) {
+        NYql::TExprContext ctx;
+        auto row = ctx.NewArgument(NYql::TPositionHandle{}, "row");
+        auto jsonValue = MakeJoinJsonValue(ctx, row, true);
+        UNIT_ASSERT(!NOpt::CanBePushedAsOlapJsonValue(jsonValue, row.Get()));
+    }
+
+    Y_UNIT_TEST(JoinColumnUsageIgnoresJsonValueInput) {
+        NYql::TExprContext ctx;
+        auto row = ctx.NewArgument(NYql::TPositionHandle{}, "row");
+        auto jsonValue = MakeJoinJsonValue(ctx, row, false);
+        auto usage = NOpt::NPrivate::CollectJoinColumnUsage(jsonValue.Ptr(), *row);
+        UNIT_ASSERT(usage.OutputFieldNames.empty());
+        UNIT_ASSERT(!usage.WholeRow);
+    }
+
+    Y_UNIT_TEST(JoinColumnUsageTracksMember) {
+        NYql::TExprContext ctx;
+        auto row = ctx.NewArgument(NYql::TPositionHandle{}, "row");
+        auto member = ctx.NewCallable(row->Pos(), "Member", { row, ctx.NewAtom(row->Pos(), "l.labels") });
+        auto usage = NOpt::NPrivate::CollectJoinColumnUsage(member, *row);
+        UNIT_ASSERT(usage.OutputFieldNames.contains("l.labels"));
+        UNIT_ASSERT(!usage.WholeRow);
+    }
+
+    Y_UNIT_TEST(JoinColumnUsageTracksWholeRow) {
+        NYql::TExprContext ctx;
+        auto row = ctx.NewArgument(NYql::TPositionHandle{}, "row");
+        auto body = ctx.NewCallable(row->Pos(), "Just", { row });
+        auto usage = NOpt::NPrivate::CollectJoinColumnUsage(body, *row);
+        UNIT_ASSERT(usage.WholeRow);
+    }
+
+    Y_UNIT_TEST(JoinProjectionSingleParent) {
+        NYql::TExprContext ctx;
+        const NYql::TPositionHandle pos;
+        auto join = ctx.NewCallable(pos, "EquiJoin", {});
+        auto consumer = ctx.NewCallable(pos, "FlatMap", { join, ctx.NewAtom(pos, "first") });
+        NYql::TParentsMap parents;
+        NYql::GatherParents(*consumer, parents);
+        UNIT_ASSERT(!NOpt::NPrivate::HasMultipleParents(*join, parents));
+    }
+
+    Y_UNIT_TEST(JoinProjectionMultipleParents) {
+        NYql::TExprContext ctx;
+        const NYql::TPositionHandle pos;
+        auto join = ctx.NewCallable(pos, "EquiJoin", {});
+        auto first = ctx.NewCallable(pos, "FlatMap", { join, ctx.NewAtom(pos, "first") });
+        auto second = ctx.NewCallable(pos, "FlatMap", { join, ctx.NewAtom(pos, "second") });
+        auto root = ctx.NewCallable(pos, "Extend", { first, second });
+        NYql::TParentsMap parents;
+        NYql::GatherParents(*root, parents);
+        UNIT_ASSERT(NOpt::NPrivate::HasMultipleParents(*join, parents));
+    }
+
+    // Builds an EquiJoin with "l" and "r" inputs, each List<Struct<labels: Utf8>>.
+    // Its join tree is empty because output-column lookup uses only these input types and the supplied settings.
+    NYql::NNodes::TCoEquiJoin MakeJoinForOutputColumnLookup(NYql::TExprContext & ctx, NYql::TExprNode::TListType settings) {
+        const NYql::TPositionHandle pos;
+        const auto* valueType = ctx.MakeType<NYql::TDataExprType>(NYql::EDataSlot::Utf8);
+        const auto* itemType = ctx.MakeType<NYql::TItemExprType>("labels", valueType);
+        const auto* rowType = ctx.MakeType<NYql::TStructExprType>(TVector<const NYql::TItemExprType*>{ itemType });
+        const auto* listType = ctx.MakeType<NYql::TListExprType>(rowType);
+        const auto makeInput = [&](TStringBuf scope) {
+            auto list = ctx.NewCallable(pos, "Input", {});
+            list->SetTypeAnn(listType);
+            return ctx.NewList(pos, { list, ctx.NewAtom(pos, scope) });
+        };
+        return NYql::NNodes::TCoEquiJoin(
+            ctx.NewCallable(pos, "EquiJoin", { makeInput("l"), makeInput("r"), ctx.NewList(pos, {}), ctx.NewList(pos, std::move(settings)) }));
+    }
+
+    Y_UNIT_TEST(JoinOutputColumnLookupUsesInputNames) {
+        NYql::TExprContext ctx;
+        const auto join = MakeJoinForOutputColumnLookup(ctx, {});
+        const auto columns = NOpt::NPrivate::BuildJoinOutputColumns(join);
+        UNIT_ASSERT_VALUES_EQUAL(columns.at("l.labels").InputIndex, 0);
+        UNIT_ASSERT_VALUES_EQUAL(columns.at("l.labels").SourceColumnName, "labels");
+        UNIT_ASSERT_VALUES_EQUAL(columns.at("r.labels").InputIndex, 1);
+    }
+
+    Y_UNIT_TEST(JoinOutputColumnLookupResolvesRenamedOutput) {
+        NYql::TExprContext ctx;
+        const NYql::TPositionHandle pos;
+        const auto rename = [&](TStringBuf source, TStringBuf target) {
+            return ctx.NewList(pos, { ctx.NewAtom(pos, "rename"), ctx.NewAtom(pos, source), ctx.NewAtom(pos, target) });
+        };
+        const auto join = MakeJoinForOutputColumnLookup(ctx, { rename("l.labels", "l.original"), rename("r.labels", "l.labels") });
+        const auto columns = NOpt::NPrivate::BuildJoinOutputColumns(join);
+        UNIT_ASSERT_VALUES_EQUAL(columns.at("l.labels").InputIndex, 1);
+        UNIT_ASSERT_VALUES_EQUAL(columns.at("l.labels").SourceColumnName, "labels");
+        UNIT_ASSERT_VALUES_EQUAL(columns.at("l.labels").OriginalName, "r.labels");
+        UNIT_ASSERT_VALUES_EQUAL(columns.at("l.original").InputIndex, 0);
+    }
+
+    Y_UNIT_TEST(JoinOutputColumnLookupRetainsRenamedSource) {
+        NYql::TExprContext ctx;
+        const NYql::TPositionHandle pos;
+        const auto drop = ctx.NewList(pos, { ctx.NewAtom(pos, "rename"), ctx.NewAtom(pos, "l.labels"), ctx.NewAtom(pos, "") });
+        const auto rename = ctx.NewList(pos, { ctx.NewAtom(pos, "rename"), ctx.NewAtom(pos, "r.labels"), ctx.NewAtom(pos, "l.labels") });
+        const auto join = MakeJoinForOutputColumnLookup(ctx, { drop, rename });
+        const auto columns = NOpt::NPrivate::BuildJoinOutputColumns(join);
+        NOpt::NPrivate::TJoinColumnUsage usage;
+        usage.OutputFieldNames.insert("l.labels");
+        const auto sources = NOpt::NPrivate::CollectRequiredJoinSources(usage, columns);
+        UNIT_ASSERT(sources.contains("r.labels"));
+        UNIT_ASSERT(!sources.contains("l.labels"));
+    }
+
     // Unit tests for datetime pushdowns in query service
     Y_UNIT_TEST(PredicatePushdown_Datetime_QS) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();
@@ -2747,7 +3113,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         NStatusHelpers::ThrowOnError(result);
         auto session2 = result.GetSession();
 
-        auto res = session.ExecuteSchemeQuery(R"(
+        auto res = session
+                       .ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/foo` (
                 id	Int64	NOT NULL,
                 dt      Date,
@@ -2762,7 +3129,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )
             PARTITION BY HASH(id)
             WITH (STORE = COLUMN);
-        )").GetValueSync();
+        )")
+                       .GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
 
         auto insertRes = session2.ExecuteQuery(R"(

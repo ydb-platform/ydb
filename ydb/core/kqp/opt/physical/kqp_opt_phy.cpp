@@ -55,6 +55,7 @@ public:
         AddHandler(0, &TDqStage::Match, HNDL(ApplyVectorTopKToStageWithSource));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapProjections));
+        AddHandler(0, &TDqReplicate::Match, HNDL(PushOlapReplicateJsonValue));
         AddHandler(0, &TCoTake::Match, HNDL(DisableOlapBlocks));
         AddHandler(0, &TKqpStreamEnumerate::Match, HNDL(PushStreamEnumerateToStage));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
@@ -335,6 +336,12 @@ protected:
     TMaybeNode<TExprBase> PushOlapProjections(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpPushOlapProjections(node, ctx, KqpCtx, TypesCtx);
         DumpAppliedRule("PushOlapProjections", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> PushOlapReplicateJsonValue(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpPushOlapReplicateJsonValue(node, ctx, KqpCtx);
+        DumpAppliedRule("PushOlapReplicateJsonValue", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

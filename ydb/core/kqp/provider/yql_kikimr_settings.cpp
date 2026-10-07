@@ -93,6 +93,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptForceOlapPushdownDistinct);
     REGISTER_SETTING(*this, OptForceOlapPushdownDistinctLimit);
     REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
+    REGISTER_SETTING(*this, OptEnableOlapJsonValueProjectionThroughJoin);
     REGISTER_SETTING(*this, OptEnableOlapPushdownRegexp);
     REGISTER_SETTING(*this, OptEnableOlapFastAsciiIgnoreCase);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
@@ -265,6 +266,10 @@ bool TKikimrSettings::HasOptEnableInplaceUpdate() const {
 
 bool TKikimrSettings::HasOptEnableOlapPushdown() const {
     return GetOptionalFlagValue(OptEnableOlapPushdown.Get()) != EOptionalFlag::Disabled;
+}
+
+bool TKikimrSettings::HasOptEnableOlapJsonValueProjectionThroughJoin() const {
+    return GetOptionalFlagValue(OptEnableOlapJsonValueProjectionThroughJoin.Get()) == EOptionalFlag::Enabled;
 }
 
 bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {

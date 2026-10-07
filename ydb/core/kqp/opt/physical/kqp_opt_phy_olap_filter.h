@@ -2,8 +2,9 @@
 #include "predicate_collector.h"
 
 #include <util/generic/strbuf.h>
-#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -13,6 +14,8 @@ using namespace NYql::NNodes;
 
 // Synthetic name prefix for OLAP projections that would otherwise shadow a stored column.
 constexpr TStringBuf KqpOlapProjectionNamePrefix = "__kqp_olap_projection";
+// The YQL optimizer leaves projections with this join-key prefix below EquiJoin.
+inline const TString KqpJoinJsonValueColumnName = TString::Join(YqlJoinKeyColumnName, "_kqp_json_value_");
 
 struct TFilterOpsLevels {
     TFilterOpsLevels(const TMaybeNode<TExprBase>& firstLevel, const TMaybeNode<TExprBase>& secondLevel)

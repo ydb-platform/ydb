@@ -691,6 +691,9 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 {false, true, false}, {false, false, true}, {false, false, false, true}}) {
             for (const auto storage : {NYql::EStorageType::RowStorage, NYql::EStorageType::ColumnStorage}) {
                 NTests::TIdTestContext f;
+                f.Config->SetEnableQueryServiceSpilling(true);
+                f.Config->_KqpEnableSpilling = true;
+                f.QueryCtx->Type = EKikimrQueryType::Query;
                 f.Config->OptShuffleElimination = testCase.EliminateShuffle;
                 const auto key = f.Id("key"), value = f.Id("value"), result = f.Id("result");
                 auto read = f.Read({key, value});

@@ -1754,6 +1754,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     // YDBBUGS-934: one TestInit row makes Kind = "TestInit" a one-value predicate, so OR skips the JSON_VALUE assembler
     // after the shared filter fetch already stored the Stats fetcher. The projection must still return the full Stats value.
+    // SIMPLE and TRIVIAL both use IDataSource::DoApplyPendingFetcher; the plain column stays PLAIN so it does not reset the reader.
     TString scriptDuplicateStatsFetch = R"(
         STOP_COMPACTION
         ------
@@ -1769,10 +1770,10 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`$$SIMPLE|TRIVIAL$$`)
         ------
         SCHEMA:
-        $$ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Stats, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`)|ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)$$
+        $$ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Stats, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`)|ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Stats, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`)$$
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Id, Kind, Success, Stats) VALUES

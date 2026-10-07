@@ -3,7 +3,7 @@ import pytest
 import time
 from typing import Callable
 
-from ydb.tests.fq.streaming_common.common import StreamingTestBase
+from ydb.tests.fq.streaming_common.common import StreamingTestBase, get_streaming_query_diagnostics
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class SimpleTest:
 Queries = [SimpleTest("test_compatibility_")]
 
 
-class StreamingTestBase2(StreamingTestBase):
+class TestStreamingCompatibility(StreamingTestBase):
 
     def start_query(self, kikimr, query):
         self.current_query_name = query.get_name()
@@ -66,12 +66,13 @@ class StreamingTestBase2(StreamingTestBase):
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{self.current_query_name}`;")
         logger.debug(f"Query {self.current_query_name} is dropped")
 
-
-class TestStreamingCompatibility(StreamingTestBase2):
-
-    @pytest.mark.parametrize("kikimr", [{"is_compatibility_tests": True}], indirect=["kikimr"])
+    @pytest.mark.parametrize(
+        "kikimr",
+        [{"is_compatibility_tests": True, "enable_streaming_query_scheme_operations": False}],
+        indirect=["kikimr"],
+    )
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_compatibility(self: StreamingTestBase2, kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+    def test_compatibility(self: StreamingTestBase, kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         self.inp, self.out, self.topic_endpoint = self.get_io_names(kikimr, "test_compatibility", local_topics, entity_name, partitions_count=10)
 
         try:
@@ -87,6 +88,7 @@ class TestStreamingCompatibility(StreamingTestBase2):
 
                 kikimr.recreate_driver()
                 for query in Queries:
+                    self.wait_completed_checkpoints(kikimr, query.get_name())
                     self.check_data(kikimr, query)
 
                 kikimr.recreate_driver()
@@ -102,4 +104,5 @@ class TestStreamingCompatibility(StreamingTestBase2):
 
         except AssertionError as error:
             path = f"{kikimr.get_database_name()}/{self.current_query_name}"
-            raise AssertionError(f"{error}\n{self.get_diagnostics(kikimr, path)}") from error
+            diagnostics = get_streaming_query_diagnostics(kikimr, path)
+            raise AssertionError(f"{error}\n{diagnostics}") from error

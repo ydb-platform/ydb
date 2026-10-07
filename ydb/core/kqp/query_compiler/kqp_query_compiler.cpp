@@ -754,7 +754,6 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
-        queryProto.SetEnableOltpSink(true);
         queryProto.SetEnableOlapSink(Config->GetEnableOlapSink());
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());

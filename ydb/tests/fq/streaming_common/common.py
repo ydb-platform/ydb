@@ -65,9 +65,6 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_external_data_sources = param.get("enable_external_data_sources", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
     enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
-    enable_dq_source_stream_lookup_join_local_lookups = param.get(
-        "enable_dq_source_stream_lookup_join_local_lookups", True
-    )
     enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
         "enable_dq_source_stream_lookup_join_shuffle_mode", True
@@ -90,7 +87,10 @@ def get_ydb_config(request, enable_fq_connector=None):
     for flag in (
         "enable_streaming_aggregation",
         "enable_streaming_aggregation_advanced",
+        "enable_streaming_query_scheme_operations",
         "enable_streaming_query_state_recompute",
+        "enable_dq_source_stream_lookup_join_local_lookups",
+        "enable_shared_reading_structured_json_parsing"
     ):
         if flag in param:
             if param[flag]:
@@ -102,15 +102,11 @@ def get_ydb_config(request, enable_fq_connector=None):
     else:
         disabled_feature_flags.append("enable_shared_reading_in_streaming_queries")
 
-   # if enable_shared_reading_structured_json_parsing:
-   #     extra_feature_flags.add("enable_shared_reading_structured_json_parsing")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
     else:
         disabled_feature_flags.append("enable_streaming_queries")
 
- #   if enable_dq_source_stream_lookup_join_local_lookups:
- #       extra_feature_flags.add("enable_dq_source_stream_lookup_join_local_lookups")
     if enable_dq_source_stream_lookup_join_fullscan:
         extra_feature_flags.add("enable_dq_source_stream_lookup_join_fullscan")
     if enable_dq_source_stream_lookup_join_shuffle_mode:
@@ -473,14 +469,17 @@ def get_streaming_query_diagnostics(context, path: str) -> str:
         query = f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
         if hasattr(context, "kikimr"):
             result_sets = context.kikimr.ydb_client.query(query)
+        elif hasattr(context, "ydb_client"):
+            result_sets = context.ydb_client.query(query)
         elif hasattr(context, "driver"):
             with ydb.QuerySessionPool(context.driver) as session_pool:
                 result_sets = session_pool.execute_with_retries(query)
         else:
-            raise AttributeError("Context must provide either 'kikimr' or 'driver'")
+            raise AttributeError("Context must provide 'kikimr', 'ydb_client', or 'driver'")
         return (
             "\n".join(
-                "Status: {status}\nIssues:\n{issues}".format(
+                "Query path: {path}\nStatus: {status}\nIssues:\n{issues}".format(
+                    path=path,
                     status=row["Status"],
                     issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
                 )
@@ -722,6 +721,13 @@ class Kikimr:
                 time.sleep(2)
         raise TimeoutError(f"Cluster not ready after {timeout}s") from last_exc
 
+    def wait_for_node_readiness(self, node_id: int, timeout: int = 60) -> None:
+        node = self.cluster.slots[node_id]
+        if not wait_for(lambda: node.is_port_listening(node.port), timeout_seconds=timeout):
+            raise TimeoutError(f"Node {node_id} did not open gRPC port {node.port} after {timeout}s")
+        self.recreate_driver(node_id)
+        self.wait_for_readiness(timeout)
+
     def rolling(self):
         rolling_slot_id = 1
         logger.info(f"rolling update: step 1 — switching slot {rolling_slot_id} to stable version")
@@ -730,7 +736,7 @@ class Kikimr:
         rolling_node.binary_path = self.stable_binary_path
         rolling_node.set_log_file_prefix("logfile_stable_")
         rolling_node.start()
-        self.wait_for_readiness()
+        self.wait_for_node_readiness(rolling_slot_id)
         logger.info(f"rolling update: step 1 complete")
         yield
 
@@ -741,7 +747,7 @@ class Kikimr:
         rolling_node.binary_path = self.stable_binary_path
         rolling_node.set_log_file_prefix("logfile_stable_")
         rolling_node.start()
-        self.wait_for_readiness()
+        self.wait_for_node_readiness(rolling_slot_id)
         logger.info(f"rolling update: step 2 complete")
         yield
 
@@ -755,7 +761,7 @@ class Kikimr:
 
         for rolling_node in self.cluster.slots.values():
             rolling_node.start()
-            self.wait_for_readiness()
+        self.wait_for_node_readiness(next(iter(self.cluster.slots)))
         logger.info("rolling update: step 3 complete")
         yield
 
@@ -788,25 +794,6 @@ class StreamingTestBase(TestYdsBase):
             endpoint = self.get_endpoint(kikimr, local_topics=False)
         kikimr.ydb_client.create_external_data_source(source_name, endpoint.endpoint, endpoint.database, shared)
 
-    def get_diagnostics(self, kikimr, path: str):
-        try:
-            result_sets = kikimr.ydb_client.query(
-                f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
-            )
-            return (
-                "\n".join(
-                    "Status: {status}\nIssues:\n{issues}".format(
-                        status=row["Status"],
-                        issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
-                    )
-                    for row in result_sets[0].rows
-                )
-                if result_sets
-                else []
-            )
-        except Exception as diagnostics_error:
-            return f"failed to retrieve Status / Issues: {diagnostics_error}"
-            
     def wait_completed_checkpoints(
         self,
         kikimr: Kikimr,
@@ -821,25 +808,7 @@ class StreamingTestBase(TestYdsBase):
                 kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
             )
         except AssertionError as error:
-            diagnostics = "failed to retrieve Status / Issues"
-            try:
-                result_sets = kikimr.ydb_client.query(
-                    f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
-                )
-                diagnostics = (
-                    "\n".join(
-                        "Status: {status}\nIssues:\n{issues}".format(
-                            status=row["Status"],
-                            issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
-                        )
-                        for row in result_sets[0].rows
-                    )
-                    if result_sets
-                    else []
-                )
-            except Exception as diagnostics_error:
-                diagnostics = f"failed to retrieve Status / Issues: {diagnostics_error}"
-            raise AssertionError(f"{error}\n{diagnostics}") from error
+            raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(kikimr, path)}") from error
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(
@@ -997,9 +966,8 @@ class StreamingTestBase(TestYdsBase):
         )
         return endpoint, refs[0], paths[0]
 
-    # TODO rm
     def roll(self, kikimr):
-        all_nodes = [(id, n, "node") for id, n in kikimr.cluster.slots.items()] + [
+        all_nodes = [
             (id, n, "slot") for id, n in kikimr.cluster.slots.items()
         ]
 

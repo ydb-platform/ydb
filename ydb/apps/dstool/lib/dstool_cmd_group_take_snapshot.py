@@ -10,9 +10,11 @@ lock = Lock()
 output_file = None
 
 
-def fetch_blobs_from_vdisk(group_id, index, host, pdisk_id, vslot_id):
+def fetch_blobs_from_vdisk(group_id, index, host, pdisk_id, vslot_id, full_memrec):
     session_id = uuid.uuid4()
     params = dict(pdiskId=pdisk_id, vdiskSlotId=vslot_id, sessionId=session_id)
+    if full_memrec:
+        params['fullMemRec'] = 1
     while True:
         data = common.fetch('vdisk_stream', params, explicit_host=host, fmt='raw')
         if not data or data == b'ERROR':
@@ -25,6 +27,8 @@ def fetch_blobs_from_vdisk(group_id, index, host, pdisk_id, vslot_id):
 def add_options(p):
     common.add_group_ids_option(p, required=True)
     p.add_argument('--output', type=FileType('wb'), required=True, help='Path to output binary file')
+    p.add_argument('--full-memrec', action='store_true',
+                   help='Store whole LogoBlob memrecs (blob location and size), not only ingress')
     common.add_basic_format_options(p)
 
 
@@ -38,7 +42,7 @@ def do(args):
                 for index, vslot in enumerate(group.vslots_of_group):
                     id_ = vslot.base.VSlotId
                     if vslot.pdisk.node.node_mon_endpoint is not None:
-                        yield group.base.GroupId, index, vslot.pdisk.node.node_mon_endpoint, id_.PDiskId, id_.VSlotId
+                        yield group.base.GroupId, index, vslot.pdisk.node.node_mon_endpoint, id_.PDiskId, id_.VSlotId, args.full_memrec
 
     global output_file
     output_file = args.output

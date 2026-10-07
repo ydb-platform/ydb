@@ -1038,6 +1038,48 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TStorageRatioGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TStorageRatioGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TStorageRatioGroup)
+            {
+                COUNTER_INIT(StorageRatioInvocations, true);
+                COUNTER_INIT(StorageRatioNoCalculationInvocations, true);
+                COUNTER_INIT(StorageRatioFeatureDisabledCalculations, true);
+                COUNTER_INIT(StorageRatioNonOverlappingFallbacks, true);
+                COUNTER_INIT(StorageRatioFullRecalculations, true);
+                COUNTER_INIT(StorageRatioTimeouts, true);
+                COUNTER_INIT(StorageRatioTotalElapsedMicroseconds, true);
+            }
+
+            COUNTER_DEF(StorageRatioInvocations);
+            COUNTER_DEF(StorageRatioNoCalculationInvocations);
+            COUNTER_DEF(StorageRatioFeatureDisabledCalculations);
+            COUNTER_DEF(StorageRatioNonOverlappingFallbacks);
+            COUNTER_DEF(StorageRatioFullRecalculations);
+            COUNTER_DEF(StorageRatioTimeouts);
+            COUNTER_DEF(StorageRatioTotalElapsedMicroseconds);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TStorageRatioAlgorithmGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TStorageRatioAlgorithmGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TStorageRatioAlgorithmGroup)
+            {
+                COUNTER_INIT(StorageRatioCalculations, true);
+                COUNTER_INIT(StorageRatioSstsCalculated, true);
+                COUNTER_INIT(StorageRatioElapsedMicroseconds, true);
+            }
+
+            COUNTER_DEF(StorageRatioCalculations);
+            COUNTER_DEF(StorageRatioSstsCalculated);
+            COUNTER_DEF(StorageRatioElapsedMicroseconds);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TDeepScrubbingGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TDeepScrubbingGroup : public TBase {

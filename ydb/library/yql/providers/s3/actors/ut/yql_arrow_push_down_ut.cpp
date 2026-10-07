@@ -347,7 +347,8 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
         UNIT_ASSERT_VALUES_EQUAL(rowGroups[0], 1);
     }
 
-    Y_UNIT_TEST(FixedSizeBinaryWithoutUuidLogicalType) {
+    Y_UNIT_TEST(Flba16WithoutUuidLogicalTypeKeepsGroup) {
+        // FLBA(16) without UUID annotation is ambiguous; do not use its min/max as UUID stats.
         const TString lo(16, '\x10');
         const TString hi(16, '\x20');
         const TString outside(16, '\x30');
@@ -367,58 +368,6 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
                     left_value { column: "id" }
                     right_value { typed_value { type { type_id: UUID } value { )proto"
                              << UuidValueField(outside) << R"proto( } } }
-                }
-            )proto");
-        // pyarrow 5 writes Uuid as FLBA(16) without UUID logical type; skip using raw bytes.
-        UNIT_ASSERT_VALUES_EQUAL(NDq::MatchedRowGroups(fileMetadata, predicate).size(), 0);
-    }
-
-    Y_UNIT_TEST(Flba16WithoutUuidLogicalTypeIsTreatedAsUuid) {
-        // FLBA(16) with NONE logical type is treated as UUID (pyarrow 5 compatibility).
-        const TString lo(16, '\x10');
-        const TString hi(16, '\x20');
-        const TString outside(16, '\x30');
-
-        TFileMetaDataBuilder builder{{
-            arrow::field("data", arrow::fixed_size_binary(16))
-        }};
-        auto fileMetadata = builder.AddRowGroup()
-                                   .AddColumnFlbaStatistics(0, lo, hi)
-                                   .Build()
-                            .Build();
-
-        auto predicate = BuildPredicate(
-            TStringBuilder() << R"proto(
-                comparison {
-                    operation: EQ
-                    left_value { column: "data" }
-                    right_value { typed_value { type { type_id: UUID } value { )proto"
-                             << UuidValueField(outside) << R"proto( } } }
-                }
-            )proto");
-        UNIT_ASSERT_VALUES_EQUAL(NDq::MatchedRowGroups(fileMetadata, predicate).size(), 0);
-    }
-
-    Y_UNIT_TEST(Flba16WithoutUuidLogicalTypeKeepGroup) {
-        const TString lo(16, '\x10');
-        const TString hi(16, '\x20');
-        const TString inside(16, '\x15');
-
-        TFileMetaDataBuilder builder{{
-            arrow::field("data", arrow::fixed_size_binary(16))
-        }};
-        auto fileMetadata = builder.AddRowGroup()
-                                   .AddColumnFlbaStatistics(0, lo, hi)
-                                   .Build()
-                            .Build();
-
-        auto predicate = BuildPredicate(
-            TStringBuilder() << R"proto(
-                comparison {
-                    operation: EQ
-                    left_value { column: "data" }
-                    right_value { typed_value { type { type_id: UUID } value { )proto"
-                             << UuidValueField(inside) << R"proto( } } }
                 }
             )proto");
         auto kept = NDq::MatchedRowGroups(fileMetadata, predicate);

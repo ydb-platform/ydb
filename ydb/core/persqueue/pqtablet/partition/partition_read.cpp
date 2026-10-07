@@ -52,25 +52,30 @@ static TMaybe<TInstant> GetReadFrom(TDuration maxLag, ui64 readTimestampMs, TIns
     return timestamp;
 }
 
-ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const {
-    if (!readTimestamp) {
+ui64 TPartition::GetReadOffset(const ui64 offset, const TMaybe<TInstant> srcReadTimestamp) const {
+    if (!srcReadTimestamp) {
         return offset;
     }
-    if (AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+    TInstant readTimestamp = *srcReadTimestamp;
+    const bool skipObsoleteMessages = AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp();
+    if (skipObsoleteMessages) {
         // round timestamp down, because timestamps are stored with second precision in the kv-tablet
-        readTimestamp = TInstant::Seconds(readTimestamp->Seconds());
+        readTimestamp = TInstant::Seconds(srcReadTimestamp->Seconds());
     }
-    TMaybe<ui64> estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.DataKeysBody, *readTimestamp);
+    TMaybe<ui64> estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.DataKeysBody, readTimestamp);
 
     if (!estimatedOffset.Defined()) {
-        estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp);
+        estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, readTimestamp);
     }
     if (!estimatedOffset.Defined()) {
-        estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp);
+        estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, readTimestamp);
     }
-
     if (!estimatedOffset.Defined()) {
-        estimatedOffset = Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1);
+        if (EndWriteTimestamp < *srcReadTimestamp && skipObsoleteMessages && !AppData()->FeatureFlags.GetEnableTopicReadPriorRetention()) {
+            estimatedOffset = BlobEncoder.EndOffset;
+        } else {
+            estimatedOffset = Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1);
+        }
     }
     return Max(*estimatedOffset, offset);
 }

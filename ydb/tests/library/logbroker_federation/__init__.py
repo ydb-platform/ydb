@@ -245,7 +245,6 @@ class LogbrokerFederation(object):
                 _setenv("{}_{}_kafka_dynamic_port".format(name, account), str(kafka_port))
                 logger.info("YDB cluster {} {} slot started on kafka port {}".format(name, account, kafka_port))
 
-
         driver_config = ydb.DriverConfig(
             endpoint="localhost:{}".format(grpc_port),
             database="/Root",

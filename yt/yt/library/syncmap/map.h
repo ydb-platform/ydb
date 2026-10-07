@@ -3,7 +3,7 @@
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/hazard_ptr.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/memory/ref_counted.h>
 
@@ -26,7 +26,7 @@ template <
     class TValue,
     class THash = THash<TKey>,
     class TEqual = TEqualTo<TKey>,
-    class TLock = NThreading::TSpinLock
+    class TLock = TSpinLock
 >
 class TSyncMap
     : public TNonCopyable

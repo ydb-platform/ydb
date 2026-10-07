@@ -1,5 +1,7 @@
 #include "yql_pq_settings.h"
 
+#include <ydb/library/yql/providers/common/message_stream/provider.h>
+
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
@@ -87,25 +89,8 @@ void TPqConfiguration::AddCluster(
     const TString authToken = credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
     clusterSettings.AuthToken = authToken;
 
-    TString structuredTokenJson;
-    auto authMethod = properties.Value("authMethod", "");
-    if (authMethod == "TOKEN") {
-        const TString& token = properties.Value("token", "");
-        structuredTokenJson = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
-    } else if (authMethod == "BASIC") {
-        const TString& login = properties.Value("login", "");
-        const TString& password = properties.Value("password", "");
-        const TString& passwordReference = properties.Value("passwordReference", "");
-        structuredTokenJson = ComposeStructuredTokenJsonForBasicAuthWithSecret(login, passwordReference, password);
-    } else if (authMethod == "IAM") {
-        const TString& serviceAccountId = properties.Value("iamServiceAccountId", "");
-        const TString& resourceId = properties.Value("iamResourceId", "");
-        structuredTokenJson = ComposeStructuredTokenJsonForIamAuth(serviceAccountId, resourceId);
-    } else if (const auto it = properties.find("transient_token"); it != properties.end()) {
-        structuredTokenJson = ComposeStructuredTokenJsonForTransientTokenAuth(it->second);
-    } else {
-        structuredTokenJson = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
-    }
+    const auto structuredTokenJson = NFq::NMessageStream::ComposeAuthToken(properties, authToken,
+        cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature());
     Tokens[clusterSettings.ClusterName] = structuredTokenJson;
 
     if (dbResolver) {

@@ -117,6 +117,14 @@ constexpr grpc_core::Duration kLifeguardMinSleepBetweenChecks{
 // Maximum time the lifeguard thread should sleep between checking for new work.
 constexpr grpc_core::Duration kLifeguardMaxSleepBetweenChecks{
     grpc_core::Duration::Seconds(1)};
+
+size_t EffectiveThreadsLimit() {
+  // The posix EventEngine TimerManager loop permanently occupies one pool
+  // thread; do not count it against the configured limit, otherwise small
+  // limits leave no thread for regular work until the lifeguard adds one.
+  constexpr size_t kTimerManagerThreads = 1;
+  return ThreadPool::GetThreadsLimit() + kTimerManagerThreads;
+}
 }  // namespace
 
 thread_local WorkQueue* g_local_queue = nullptr;
@@ -174,7 +182,7 @@ void WorkStealingThreadPool::PostforkChild() { pool_->Postfork(); }
 
 WorkStealingThreadPool::WorkStealingThreadPoolImpl::WorkStealingThreadPoolImpl(
     size_t reserve_threads)
-    : reserve_threads_(std::min(reserve_threads, ThreadPool::GetThreadsLimit())), queue_(this), lifeguard_(this) {}
+    : reserve_threads_(std::min(reserve_threads, EffectiveThreadsLimit())), queue_(this), lifeguard_(this) {}
 
 void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Start() {
   for (size_t i = 0; i < reserve_threads_; i++) {
@@ -362,7 +370,7 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Lifeguard::
     return;
   }
 
-  if (living_thread_count > ThreadPool::GetThreadsLimit()) {
+  if (living_thread_count > EffectiveThreadsLimit()) {
     return;
   }
 

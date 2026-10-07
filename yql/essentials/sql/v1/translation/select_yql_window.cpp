@@ -41,6 +41,9 @@ public:
                 settings = L(std::move(settings), Q(Y(Q("ansi"))));
             }
         }
+        if (Name == "cumedist" && ctx.AnsiCurrentRow) {
+            settings = L(std::move(settings), Q(Y(Q("ansi"))));
+        }
 
         Apply_ = Y("YqlWin", Q(Name), Q(GetWindowName()), Q(std::move(settings)), Y("Void"));
         for (const auto& arg : Args) {

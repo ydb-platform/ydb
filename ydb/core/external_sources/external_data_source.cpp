@@ -3,6 +3,8 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
+#include <ydb/library/yql/providers/ydb_external/common/settings.h>
+#include <util/string/cast.h>
 
 namespace NKikimr::NExternalSource {
 
@@ -71,6 +73,18 @@ struct TExternalDataSource : public IExternalSource {
             if (!hasDatabaseName && !hasDatabaseId) {
                 throw TExternalSourceException()
                     << proto.GetSourceType() << " source must provide a non-empty database_name or database_id";
+            }
+        }
+
+        if (proto.GetSourceType() == ToString(NYql::EDatabaseType::YdbExternal)) {
+            const auto& props = proto.GetProperties().GetProperties();
+            const auto database = props.find("database_name");
+            const auto tls = props.find("use_tls");
+            const auto error = NYql::NYdbExternal::ValidateConnectionSettings(proto.GetLocation(),
+                database == props.end() ? TString() : TString(database->second),
+                tls == props.end() ? TString("false") : TString(tls->second));
+            if (error) {
+                throw TExternalSourceException() << error;
             }
         }
 

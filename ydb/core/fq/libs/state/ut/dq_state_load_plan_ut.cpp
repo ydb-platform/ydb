@@ -1612,9 +1612,68 @@ bool OutputStartTimeReplayPlan(const NProto::TGraphParams& graph, ui64 outputSta
     }
 }
 
+TStageStateRecoveryInfo GetStageStateRecoveryInfo(const NYql::NDqProto::TDqTask& task,
+    TStageStateRecoveryInfo::EMode mode = TStageStateRecoveryInfo::EMode::Analyze)
+{
+    NProto::TGraphParams graph;
+    auto& checkpointedTask = *graph.AddTasks();
+    checkpointedTask = task;
+    checkpointedTask.AddInputs()->AddChannels()->SetCheckpointingMode(NYql::NDqProto::CHECKPOINTING_MODE_DEFAULT);
+    const TGraphStateContext context;
+    const TGraphStateInfo discovered(graph, context);
+    UNIT_ASSERT_VALUES_EQUAL(discovered.GetStages().size(), 1);
+    const auto guard = discovered.BindAllocator();
+    return TStageStateRecoveryInfo(discovered.GetStages().front(), mode);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
+    Y_UNIT_TEST(DetectsStatefulCallables) {
+        for (const TStringBuf name : {
+            "CombineCore", "GroupingCore", "Condense", "Condense1",
+            "WideCombiner", "WideLastCombiner", "WideLastCombinerWithSpilling", "WideCondense1",
+            "BlockCombineAll", "BlockCombineHashed", "BlockMergeFinalizeHashed", "BlockMergeManyFinalizeHashed",
+            "HoppingCore", "MultiHoppingCore", "KqpStreamingAggregation",
+            "Fold", "Fold1", "Squeeze", "Squeeze1", "ChainMap", "Chain1Map", "WideChain1Map", "Chopper", "WideChopper",
+            "MatchRecognizeCore", "TimeOrderRecover"
+        }) {
+            NYql::NDqProto::TDqTask task;
+            SetReplayProgram(task, 0, 0, name);
+            const TStageStateRecoveryInfo info = GetStageStateRecoveryInfo(task, TStageStateRecoveryInfo::EMode::Analyze);
+            UNIT_ASSERT_C(info.HasState, name);
+        }
+    }
+
+    Y_UNIT_TEST(DoesNotConfuseStatelessCallablesOrSubstringsWithState) {
+        for (const TStringBuf name : {
+            "Map", "WideMap", "DqWatermarkGenerator", "NotCombineCore", "CombineCoreSuffix",
+            "NotMatchRecognizeCore", "MatchRecognizeCoreSuffix", "NotTimeOrderRecover", "TimeOrderRecoverSuffix"
+        }) {
+            NYql::NDqProto::TDqTask task;
+            SetReplayProgram(task, 0, 0, name);
+            const TStageStateRecoveryInfo info = GetStageStateRecoveryInfo(task, TStageStateRecoveryInfo::EMode::Analyze);
+            UNIT_ASSERT_C(!info.HasState, name);
+            UNIT_ASSERT_VALUES_EQUAL(info.HasWatermarkGenerator, name == "DqWatermarkGenerator");
+        }
+    }
+
+    Y_UNIT_TEST(AnalysisDoesNotApplyReplayRestrictions) {
+        NYql::NDqProto::TDqTask task;
+        SetReplayProgram(task, 10, 20, "Map", false, false);
+        UNIT_ASSERT(GetStageStateRecoveryInfo(task).HasState);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            GetStageStateRecoveryInfo(task, TStageStateRecoveryInfo::EMode::HistoryReplay),
+            yexception, "minimum window start checking is not enabled");
+        for (const TStringBuf name : {"MatchRecognizeCore", "TimeOrderRecover", "KqpStreamingAggregation"}) {
+            SetReplayProgram(task, 0, 0, name);
+            UNIT_ASSERT_C(GetStageStateRecoveryInfo(task).HasState, name);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                GetStageStateRecoveryInfo(task, TStageStateRecoveryInfo::EMode::HistoryReplay),
+                yexception, "Unsupported checkpointed operator");
+        }
+    }
+
     Y_UNIT_TEST(RejectsAdjustWatermarkPolicy) {
         for (ui32 index : {23, 24}) {
             for (bool optional : {false, true}) {

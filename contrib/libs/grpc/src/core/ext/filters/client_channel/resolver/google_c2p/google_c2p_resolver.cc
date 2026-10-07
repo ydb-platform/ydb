@@ -155,7 +155,7 @@ void GoogleCloud2ProdResolver::StartLocked() {
   zone_query_ = MakeOrphanable<MetadataQuery>(
       metadata_server_name_, TString(MetadataQuery::kZoneAttribute),
       &pollent_,
-      [resolver = static_cast<RefCountedPtr<GoogleCloud2ProdResolver>>(Ref())](
+      [resolver = RefAsSubclass<GoogleCloud2ProdResolver>()](
           TString /* attribute */,
           y_absl::StatusOr<TString> result) mutable {
         resolver->work_serializer_->Run(
@@ -169,7 +169,7 @@ void GoogleCloud2ProdResolver::StartLocked() {
   ipv6_query_ = MakeOrphanable<MetadataQuery>(
       metadata_server_name_, TString(MetadataQuery::kIPv6Attribute),
       &pollent_,
-      [resolver = static_cast<RefCountedPtr<GoogleCloud2ProdResolver>>(Ref())](
+      [resolver = RefAsSubclass<GoogleCloud2ProdResolver>()](
           TString /* attribute */,
           y_absl::StatusOr<TString> result) mutable {
         resolver->work_serializer_->Run(

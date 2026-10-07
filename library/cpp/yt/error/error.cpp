@@ -124,7 +124,7 @@ public:
         return OriginAttributes_.Pid;
     }
 
-    NThreading::TThreadId GetTid() const noexcept
+    TThreadId GetTid() const noexcept
     {
         return OriginAttributes_.Tid;
     }
@@ -185,7 +185,7 @@ private:
 
     TOriginAttributes OriginAttributes_{
         .Pid = 0,
-        .Tid = NThreading::InvalidThreadId,
+        .Tid = InvalidThreadId,
     };
 
     TErrorAttributes Attributes_;
@@ -425,10 +425,10 @@ TProcessId TError::GetPid() const
     return Impl_->GetPid();
 }
 
-NThreading::TThreadId TError::GetTid() const
+TThreadId TError::GetTid() const
 {
     if (!Impl_) {
-        return NThreading::InvalidThreadId;
+        return InvalidThreadId;
     }
     return Impl_->GetTid();
 }
@@ -934,8 +934,37 @@ void TraverseError(const TError& error, const TErrorVisitor& visitor, int depth)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TErrorException::TErrorException(const TErrorException& other)
+    : Error_(other.Error_)
+{ }
+
+TErrorException::TErrorException(TErrorException&& other) noexcept
+    : Error_(std::move(other.Error_))
+{ }
+
+TErrorException& TErrorException::operator=(const TErrorException& other)
+{
+    if (this != &other) {
+        Error_ = other.Error_;
+        auto guard = Guard(CachedWhatLock_);
+        CachedWhat_.clear();
+    }
+    return *this;
+}
+
+TErrorException& TErrorException::operator=(TErrorException&& other) noexcept
+{
+    if (this != &other) {
+        Error_ = std::move(other.Error_);
+        auto guard = Guard(CachedWhatLock_);
+        CachedWhat_.clear();
+    }
+    return *this;
+}
+
 const char* TErrorException::what() const noexcept
 {
+    auto guard = Guard(CachedWhatLock_);
     if (CachedWhat_.empty()) {
         CachedWhat_ = ToString(Error_);
     }

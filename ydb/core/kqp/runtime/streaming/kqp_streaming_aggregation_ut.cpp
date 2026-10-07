@@ -1,6 +1,7 @@
+#include "kqp_streaming_aggregation.h"
+
+#include <ydb/core/kqp/runtime/common/kqp_program_builder.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
-#include <ydb/core/kqp/runtime/kqp_program_builder.h>
-#include <ydb/core/kqp/runtime/streaming/kqp_streaming_aggregation.h>
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>

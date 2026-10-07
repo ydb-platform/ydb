@@ -136,11 +136,11 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
         UNIT_ASSERT_VALUES_EQUAL(properties.at("__started_by"), "starter@builtin");
         UNIT_ASSERT_VALUES_EQUAL(properties.at("__modified_by"), "alterer@builtin");
 
-        // Requests without a token retain the previous owner-based fallback.
+        // Requests without a token leave the user's attribution empty.
         properties = apply("", true, false, false);
-        UNIT_ASSERT_VALUES_EQUAL(properties.at("__started_by"), "owner@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__started_by"), "");
         UNIT_ASSERT_VALUES_EQUAL(properties.at("__stopped_by"), "alterer@builtin");
-        UNIT_ASSERT_VALUES_EQUAL(properties.at("__modified_by"), "owner@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__modified_by"), "");
     }
 
     Y_UNIT_TEST(StreamingQueryAuditTimestampsUseRuntimeClock) {

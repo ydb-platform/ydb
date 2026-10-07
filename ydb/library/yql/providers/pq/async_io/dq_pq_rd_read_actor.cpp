@@ -1,6 +1,8 @@
 #include "dq_pq_rd_read_actor.h"
 #include "probes.h"
 
+#include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
+
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
@@ -327,6 +329,7 @@ private:
     const i64 MaxBufferSize;
     i64 ReadyBufferSizeBytes = 0;
     // Set on Parent
+    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     ui64 NextGeneration = 0;
     ui64 NextEventQueueId = 0;
     bool EnableStreamingQueriesCounters = false;
@@ -461,6 +464,7 @@ public:
 
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
+    void LoadState(const TSourceState& state) override;
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override;
     void PassAway() override;
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override;
@@ -478,8 +482,8 @@ public:
     TSession* FindAndUpdateSession(const TEventPtr& ev);
     void SendNoSession(const NActors::TActorId& recipient, ui64 cookie);
     void NotifyCA();
-    void SchedulePartitionIdlenessCheck(TInstant) override;
-    void InitWatermarkTracker() override;
+    void MaybeSchedulePartitionIdlenessCheck(TInstant systemTime);
+    void InitWatermarkTracker();
     void SendStartSession(TSession& sessionInfo);
     void Init();
     void InitChild();
@@ -607,7 +611,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     InputDataType = programBuilder->NewMultiType(inputTypeParts);
     DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType, NKikimr::NMiniKQL::EValuePackerVersion::V0, DefaultDatumValidationMode);
 
-    InitWatermarkTracker(); // non-virtual!
+    InitWatermarkTracker();
     IngressStats.Level = statsLevel;
 }
 
@@ -858,8 +862,17 @@ TDuration TDqPqRdReadActor::GetCpuTime() {
     return TDuration::MicroSeconds(CpuMicrosec);
 }
 
-void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
-    Schedule(at, new TEvPrivate::TEvPartitionIdleness(at));
+void TDqPqRdReadActor::LoadState(const TSourceState& state) {
+    InitWatermarkTracker();
+    TDqPqReadActorBase::LoadState(state);
+}
+
+void TDqPqRdReadActor::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime) {
+    Y_DEBUG_ABORT_UNLESS(WatermarkTracker);
+    if (const auto nextIdleCheckAt = WatermarkTracker->PrepareIdlenessCheck(systemTime)) {
+        SRC_LOG_T("Next idleness check scheduled at " << *nextIdleCheckAt);
+        Schedule(*nextIdleCheckAt, new TEvPrivate::TEvPartitionIdleness(*nextIdleCheckAt));
+    }
 }
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
@@ -869,10 +882,17 @@ void TDqPqRdReadActor::InitWatermarkTracker() {
         SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
         SourceParams.GetWatermarks().GetIdleTimeoutUs() :
         lateArrivalDelayUs;
-    TDqPqReadActorBase::InitWatermarkTracker(
-            TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
-            TDuration::MicroSeconds(idleTimeoutUs),
-            Metrics.Counters ? Metrics.Source : nullptr);
+    const auto& watermarks = SourceParams.GetWatermarks();
+    if (!watermarks.GetEnabled()) {
+        return;
+    }
+    WatermarkTracker.ConstructInPlace(
+        TDuration::MicroSeconds(watermarks.GetGranularityUs()),
+        watermarks.GetIdlePartitionsEnabled(),
+        TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
+        TDuration::MicroSeconds(idleTimeoutUs),
+        LogPrefix,
+        Metrics.Counters ? Metrics.Source : nullptr);
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {

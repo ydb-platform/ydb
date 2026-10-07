@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    yql/essentials/minikql/computation
+    yql/essentials/public/udf
 )
 
 END()

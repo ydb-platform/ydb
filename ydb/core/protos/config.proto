@@ -2911,6 +2911,8 @@ message THiveConfig {
     repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
     optional double TabletImpactToPin = 93 [default = 0.3, (ParamDescription) = "Usage impact at which a tablet is treated as high-impact and is potentially isolated on a node"];
     optional double TabletImpactShareToPin = 94 [default = 0.5, (ParamDescription) = "Same as above, but relative to node's total usage"];
+    optional uint64 TabletEventHistorySize = 95 [default = 20, (ParamDescription) = "Number of recent events kept in memory per tablet for debugging, shown on the tablet page in Hive UI. 0 disables per-tablet history, values above 5000 are capped."];
+    optional uint64 NodeEventHistorySize = 96 [default = 50, (ParamDescription) = "Number of recent events kept in memory per node for debugging, shown on the node page in Hive UI. 0 disables per-node history, values above 5000 are capped."];
 }
 
 message THealthCheckConfig {
@@ -3084,6 +3086,15 @@ message TColumnShardConfig {
     // Actor-system pool for compaction conveyor tasks: "User" or "Batch". Unset is User.
     optional string CompactionDefaultPool = 76;
     optional bool EnableWeightedDataChannelSelection = 77 [default = false];
+
+    message TCutHistoryConfig {
+        optional uint32 ScanBatchSize = 2 [default = 32];
+        optional uint64 ScanMemoryLimitBytes = 3 [default = 8388608];
+        optional uint32 ContinuationDelayMs = 4 [default = 1];
+        optional uint32 ContinuationJitterMs = 5 [default = 1];
+    }
+
+    optional TCutHistoryConfig CutHistory = 78;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from
@@ -3564,6 +3575,7 @@ message TSystemTabletBackupConfig {
     optional uint32 RetryBackupTimeoutSeconds = 7 [default = 60];
     optional uint32 RetryBackupMaxTimeoutSeconds = 8 [default = 900];
     optional uint32 SnapshotWorkBudgetPercent = 9 [default = 25];
+    optional uint64 MaxGlobalBackupsLimit = 10 [default = 50];
 }
 
 message TClusterDiagnosticsConfig {

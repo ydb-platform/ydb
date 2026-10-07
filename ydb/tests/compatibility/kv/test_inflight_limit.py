@@ -5,6 +5,7 @@ from threading import Barrier
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import grpc
 import pytest
 
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
@@ -38,10 +39,16 @@ class TestKvInflightLimitCompatibility(MixedClusterFixture):
         self.all_binary_paths = request.param
         self.versions = [current_binary_version, inter_stable_version]
 
-    @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
+    @pytest.fixture(
+        autouse=True,
+        scope="function",
+        params=[False, True],
+        ids=["limit_disabled", "limit_enabled"],
+    )
+    def setup(self, request):
+        self.limit_enabled = request.param
         self.volume_path = "/Root/kv_inflight_limit_compatibility"
-        yield from self.setup_cluster()
+        yield from self.setup_cluster(separate_node_configs=True)
 
     def _nodes_by_binary(self, binary_path):
         return [
@@ -76,6 +83,16 @@ class TestKvInflightLimitCompatibility(MixedClusterFixture):
 
     def _run_concurrent_writes(self, proxy_node):
         current_node = self._nodes_by_binary(current_binary_path)[0]
+        if self.limit_enabled:
+            # Old binaries reject unknown flags, so configure only the current node.
+            config = current_node.read_node_config()
+            config.setdefault("feature_flags", {})["enable_key_value_request_in_flight_limit"] = True
+            current_node.stop()
+            self.cluster.overwrite_configs(config, node_ids=[current_node.node_id])
+            current_node.start()
+            with grpc.insecure_channel(current_node.endpoint) as channel:
+                grpc.channel_ready_future(channel).result(timeout=120)
+
         client = keyvalue_client_factory(
             proxy_node.host,
             proxy_node.port,
@@ -124,12 +141,10 @@ class TestKvInflightLimitCompatibility(MixedClusterFixture):
         old_node = self._nodes_by_binary(inter_stable_binary_path)[0]
         old_client, statuses = self._run_concurrent_writes(old_node)
 
-        assert StatusIds.SUCCESS in statuses, statuses
-        assert StatusIds.UNAVAILABLE in statuses, statuses
-        assert all(
-            status in (StatusIds.SUCCESS, StatusIds.UNAVAILABLE)
-            for status in statuses
-        ), statuses
+        expected_statuses = {StatusIds.SUCCESS}
+        if self.limit_enabled:
+            expected_statuses.add(StatusIds.UNAVAILABLE)
+        assert set(statuses) == expected_statuses, statuses
 
         response = old_client.kv_write(self.volume_path, 0, "after_burst", b"ok")
         assert response.operation.status == StatusIds.SUCCESS, response
@@ -138,12 +153,10 @@ class TestKvInflightLimitCompatibility(MixedClusterFixture):
         current_node = self._nodes_by_binary(current_binary_path)[0]
         current_client, statuses = self._run_concurrent_writes(current_node)
 
-        assert StatusIds.SUCCESS in statuses, statuses
-        assert StatusIds.OVERLOADED in statuses, statuses
-        assert all(
-            status in (StatusIds.SUCCESS, StatusIds.OVERLOADED)
-            for status in statuses
-        ), statuses
+        expected_statuses = {StatusIds.SUCCESS}
+        if self.limit_enabled:
+            expected_statuses.add(StatusIds.OVERLOADED)
+        assert set(statuses) == expected_statuses, statuses
 
         response = current_client.kv_write(
             self.volume_path,

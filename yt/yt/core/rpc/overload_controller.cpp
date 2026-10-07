@@ -15,7 +15,7 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NRpc {
 
@@ -461,7 +461,7 @@ private:
         THashMap<std::string, TOverloadTrackerPtr> Trackers;
     };
 
-    using TSpinLockGuard = TGuard<NThreading::TSpinLock>;
+    using TSpinLockGuard = TGuard<TSpinLock>;
 
     const NConcurrency::TActionQueuePtr ControlThread_;
     const IInvokerPtr Invoker_;
@@ -470,7 +470,7 @@ private:
 
     TAtomicPtr<TState, /*EnableAcquireHazard*/ true> StateSnapshot_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TState State_;
 
     void Adjust()

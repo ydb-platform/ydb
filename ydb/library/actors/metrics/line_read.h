@@ -89,6 +89,8 @@ namespace NActors {
 
     struct TLineMeta {
         const TLineFrontendOps* Frontend = nullptr;
+        // Runtime schemas remain alive with registration requests and snapshots.
+        std::shared_ptr<const TLineFrontendOps> FrontendOwner;
 
         TLineMeta() noexcept;
         explicit TLineMeta(const TLineFrontendOps* frontend) noexcept;

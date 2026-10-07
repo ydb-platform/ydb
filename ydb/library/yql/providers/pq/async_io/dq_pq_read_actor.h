@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
@@ -46,7 +47,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     NActors::TActorId infoAggregator = {},
     TDuration checkPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod,
     NActors::TActorId controlPlaneActorId = {},
-    bool enableStreamingQueryTopicAutopartitioning = false
+    bool enableStreamingQueryTopicAutopartitioning = false,
+    IDqSchedulableWorkFactoryPtr workFactory = nullptr
 );
 
 void RegisterDqPqReadActorFactory(

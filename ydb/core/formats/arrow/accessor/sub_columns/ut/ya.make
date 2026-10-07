@@ -14,10 +14,12 @@ PEERDIR(
 )
 
 SRCS(
+    ut_sub_column_name.cpp
     ut_sub_columns.cpp
     ut_native_scalars.cpp
     ut_dictionary.cpp
     ut_sparsed.cpp
+    ut_key_ownership.cpp
 )
 
 YQL_LAST_ABI_VERSION()

@@ -56,11 +56,12 @@ public:
                            const TActorId& storageProxy,
                            const TActorId& runActorId,
                            const TCheckpointCoordinatorSettings& settings,
-                           const ::NMonitoring::TDynamicCounterPtr& counters,
-                           const NProto::TGraphParams& graphParams,
-                           const FederatedQuery::StateLoadMode& stateLoadMode,
-                           const FederatedQuery::StreamingDisposition& streamingDisposition
-                           );
+                            const ::NMonitoring::TDynamicCounterPtr& counters,
+                            const NProto::TGraphParams& graphParams,
+                            const FederatedQuery::StateLoadMode& stateLoadMode,
+                            const FederatedQuery::StreamingDisposition& streamingDisposition,
+                            bool restoreOffsetsFromForeignCheckpoint
+                            );
 
     void Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvRegisterCoordinatorResponse::TPtr&);
@@ -231,6 +232,7 @@ private:
 
     FederatedQuery::StateLoadMode StateLoadMode;
     FederatedQuery::StreamingDisposition StreamingDisposition;
+    const bool RestoreOffsetsFromForeignCheckpoint;
 
     THashMap<TActorId, ui64> TaskIds;
     THashSet<ui64> FinishedTasks;
@@ -245,6 +247,7 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NProto::TGraphParams& graphParams,
     const FederatedQuery::StateLoadMode& stateLoadMode,
-    const FederatedQuery::StreamingDisposition& streamingDisposition);
+    const FederatedQuery::StreamingDisposition& streamingDisposition,
+    bool restoreOffsetsFromForeignCheckpoint);
 
 } // namespace NFq

@@ -613,17 +613,6 @@ void PrettyPrintNode(
     }
 }
 
-void DestroyNode(TAstNode* node) {
-    if (node->IsList()) {
-        for (ui32 i = 0; i < node->GetChildrenCount(); ++i) {
-            DestroyNode(node->GetChild(i));
-        }
-    }
-
-    if (node != &TAstNode::QuoteAtom) {
-        node->Destroy();
-    }
-}
 } // namespace
 
 TAstParseResult::~TAstParseResult() {
@@ -652,10 +641,7 @@ TAstParseResult& TAstParseResult::operator=(TAstParseResult&& other) {
 }
 
 void TAstParseResult::Destroy() {
-    if (Root) {
-        DestroyNode(Root);
-        Root = nullptr;
-    }
+    Root = nullptr;
 }
 
 TAstParseResult ParseAst(const TStringBuf& str, TMemoryPool* externalPool, const TString& file)
@@ -672,7 +658,7 @@ void TAstNode::PrettyPrintTo(IOutputStream& out, ui32 flags) const {
     PrettyPrintNode(out, *this, 0, 0, 0, flags);
 }
 
-TAstNode TAstNode::QuoteAtom(TPosition(0, 0), TStringBuf("quote"), TNodeFlags::Default);
+TAstNode TAstNode::QuoteAtom(0, 0, TStringBuf(), TStringBuf("quote"), TNodeFlags::Default);
 
 } // namespace NYql
 

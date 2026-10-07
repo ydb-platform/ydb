@@ -234,7 +234,6 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3Provider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvRetryQueuePrivate::TEvRetry, HandleRetry);
-                hFunc(TEvRetryQueuePrivate::TEvEvHeartbeat, HandleHeartbeat);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleConnected);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
@@ -354,7 +353,6 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3Provider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvRetryQueuePrivate::TEvRetry, HandleRetry);
-                hFunc(TEvRetryQueuePrivate::TEvEvHeartbeat, HandleHeartbeat);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleConnected);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
@@ -390,7 +388,6 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvS3Provider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvRetryQueuePrivate::TEvRetry, HandleRetry);
-                hFunc(TEvRetryQueuePrivate::TEvEvHeartbeat, HandleHeartbeat);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleConnected);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
@@ -431,7 +428,7 @@ public:
             auto& queue = it->second;
             queue.Id = NextConsumerQueueId++;
             ConsumerByQueueId.emplace(queue.Id, consumer);
-            queue.Events.Init(TxId, SelfId(), SelfId(), queue.Id, /* keepAlive */ true, /* useConnect */ true, /* ordered */ false);
+            queue.Events.Init(TxId, SelfId(), SelfId(), queue.Id, /* keepAlive */ false, /* useConnect */ true, /* ordered */ false);
             queue.Events.OnNewRecipientId(consumer, /* unsubscribe */ false);
         }
         return it->second.Events;
@@ -453,15 +450,6 @@ public:
     void HandleRetry(TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
         if (auto it = ConsumerByQueueId.find(ev->Get()->EventQueueId); it != ConsumerByQueueId.end()) {
             ConsumerQueues.at(it->second).Events.Retry();
-        }
-    }
-
-    void HandleHeartbeat(TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr& ev) {
-        if (auto it = ConsumerByQueueId.find(ev->Get()->EventQueueId); it != ConsumerByQueueId.end()) {
-            auto& queue = ConsumerQueues.at(it->second).Events;
-            if (queue.Heartbeat()) {
-                queue.Send(new TEvS3Provider::TEvAck());
-            }
         }
     }
 
@@ -589,11 +577,17 @@ public:
         // bootstrapped (e.g. node failure during query startup).  Once we know that all
         // consumers are alive, we can safely ignore the timeout and let the normal
         // shutdown path run.
-        if (ConnectedConsumers.size() >= ConsumersCount) {
+        // A local queue (runtime listing off) has no PoisonTimeout: its only poison sender is
+        // the owning read actor, which stops the queue when it passes away.
+        if (UseRuntimeListing && ConnectedConsumers.size() >= ConsumersCount) {
             LOG_D("TS3FileQueueActor", "HandlePoison: consumers are active, ignoring PoisonTimeout");
             return;
         }
-        LOG_I("TS3FileQueueActor", "HandlePoison: no consumer messages received, shutting down");
+        if (UseRuntimeListing) {
+            LOG_I("TS3FileQueueActor", "HandlePoison: no consumer messages received, shutting down");
+        } else {
+            LOG_I("TS3FileQueueActor", "HandlePoison: owner passed away, shutting down");
+        }
         AnswerPendingRequests();
         PassAway();
     }

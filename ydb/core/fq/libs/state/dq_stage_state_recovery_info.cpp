@@ -21,6 +21,20 @@ namespace {
 
 using namespace NKikimr::NMiniKQL;
 
+bool IsStatefulOperator(const TStringBuf name) {
+    // Exact runtime callable names from mkql_factory.cpp, dq_tasks_runner.cpp
+    // and kqp_compute.cpp. Universal accumulators are conservative positives:
+    // their lambdas may retain state even without a combiner.
+    return IsIn({
+        "CombineCore", "GroupingCore", "Condense", "Condense1",
+        "WideCombiner", "WideLastCombiner", "WideLastCombinerWithSpilling", "WideCondense1",
+        "BlockCombineAll", "BlockCombineHashed", "BlockMergeFinalizeHashed", "BlockMergeManyFinalizeHashed",
+        "HoppingCore", "MultiHoppingCore", "KqpStreamingAggregation",
+        "Fold", "Fold1", "Squeeze", "Squeeze1", "ChainMap", "Chain1Map", "WideChain1Map",
+        "Chopper", "WideChopper", "TimeOrderRecover", "MatchRecognizeCore"
+    }, name);
+}
+
 ui64 ParseHoppingInterval(const TCallable& callable, const ui32 index) {
     auto input = callable.GetInput(index);
     if (input.IsImmediate() && input.GetStaticType()->IsOptional()) {
@@ -165,7 +179,7 @@ TGraphStateInfo::TGraphStateInfo(const NProto::TGraphParams& graph, const TGraph
 
                 const auto& callable = static_cast<const TCallable&>(*node);
                 const TStringBuf name = callable.GetType()->GetName();
-                if (IsIn({"MultiHoppingCore", "MatchRecognizeCore", "TimeOrderRecover", "KqpStreamingAggregation"}, name)) {
+                if (IsStatefulOperator(name)) {
                     stage.StatefulOperators.push_back(&callable);
                 } else if (name == "DqWatermarkGenerator") {
                     stage.HasWatermarkGenerator = true;
@@ -202,12 +216,17 @@ TGuard<TScopedAlloc> TGraphStateInfo::BindAllocator() const {
 
 //// TStageStateRecoveryInfo
 
-TStageStateRecoveryInfo::TStageStateRecoveryInfo(const TStageStateInfo& stage)
+TStageStateRecoveryInfo::TStageStateRecoveryInfo(const TStageStateInfo& stage, EMode mode)
     : HasWatermarkGenerator(stage.HasWatermarkGenerator)
 {
     for (const auto* node : stage.StatefulOperators) {
         const auto& callable = *node;
         const TStringBuf name = callable.GetType()->GetName();
+        HasState |= IsStatefulOperator(name);
+        HasWatermarkGenerator |= name == "DqWatermarkGenerator";
+        if (mode != EMode::HistoryReplay) {
+            continue;
+        }
         if (name == "MultiHoppingCore") {
             YQL_ENSURE(!Hopping, "History replay supports at most one hopping operator per stage");
             Y_VALIDATE(callable.GetInputsCount() > 20, "Expected at least 21 hopping operator inputs");

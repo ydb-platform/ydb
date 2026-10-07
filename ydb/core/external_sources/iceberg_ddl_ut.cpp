@@ -18,11 +18,10 @@ public:
     {
         using namespace NKikimr::NExternalSource::NIceberg;
 
-        auto type = ToString(NYql::EDatabaseType::Iceberg);
         auto factory = NExternalSource::CreateExternalSourceFactory(
-            {}, nullptr, 50000, nullptr, false, false, false, {type});
+            {}, nullptr, 50000, nullptr, false, false, false, {NYql::EDatabaseType::Iceberg});
 
-        Source = factory->GetOrCreate(type);
+        Source = factory->GetOrCreate(NYql::EDatabaseType::Iceberg);
 
         Props[WAREHOUSE_TYPE]         = VALUE_S3;
         Props[WAREHOUSE_DB]           = "db";

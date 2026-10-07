@@ -21,7 +21,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
         InternalInitFederatedQuerySetupFactory = true;
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
-        config.MutableFeatureFlags()->SetEnableUpdatingPartitionsOnStreamingQueryRestart(true);
 
         const auto runTest = [&](bool local) {
             const std::string suffix = local ? "_local" : "_nonlocal";
@@ -122,7 +121,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
 
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
-        config.MutableFeatureFlags()->SetEnableUpdatingPartitionsOnStreamingQueryRestart(true);
 
         const ui32 initialPartitionCount = 4;
         CreateScopedTopicExt(inputTopicName, NYdb::NTopic::TCreateTopicSettings()

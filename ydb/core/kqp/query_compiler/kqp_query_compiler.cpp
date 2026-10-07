@@ -727,7 +727,7 @@ public:
         , Database(database)
         , TablesData(optimizeCtx.Tables)
         , FuncRegistry(funcRegistry)
-        , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
+        , Alloc(__LOCATION__)
         , TypeEnv(Alloc)
         // 1 == StreamLookupJoinCookieVersionV1 (see kqp_stream_lookup_join_helpers.h);
         // kept as a literal to avoid a runtime PEERDIR from the compiler.

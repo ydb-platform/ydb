@@ -115,7 +115,6 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvRetryQueuePrivate::TEvRetry, HandleRetry);
-                hFunc(TEvRetryQueuePrivate::TEvEvHeartbeat, HandleHeartbeat);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleConnected);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
@@ -143,7 +142,6 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvRetryQueuePrivate::TEvRetry, HandleRetry);
-                hFunc(TEvRetryQueuePrivate::TEvEvHeartbeat, HandleHeartbeat);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleConnected);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
@@ -169,7 +167,6 @@ public:
             switch (const auto etype = ev->GetTypeRewrite()) {
                 hFunc(TEvSolomonProvider::TEvUpdateConsumersCount, HandleUpdateConsumersCount);
                 hFunc(TEvRetryQueuePrivate::TEvRetry, HandleRetry);
-                hFunc(TEvRetryQueuePrivate::TEvEvHeartbeat, HandleHeartbeat);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleConnected);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
@@ -202,7 +199,7 @@ private:
             auto& queue = it->second;
             queue.Id = NextConsumerQueueId++;
             ConsumerByQueueId.emplace(queue.Id, consumer);
-            queue.Events.Init("SolomonMetricsQueue", SelfId(), SelfId(), queue.Id, /* keepAlive */ true, /* useConnect */ true, /* ordered */ false);
+            queue.Events.Init("SolomonMetricsQueue", SelfId(), SelfId(), queue.Id, /* keepAlive */ false, /* useConnect */ true, /* ordered */ false);
             queue.Events.OnNewRecipientId(consumer, /* unsubscribe */ false);
         }
         return it->second.Events;
@@ -224,15 +221,6 @@ private:
     void HandleRetry(TEvRetryQueuePrivate::TEvRetry::TPtr& ev) {
         if (auto it = ConsumerByQueueId.find(ev->Get()->EventQueueId); it != ConsumerByQueueId.end()) {
             ConsumerQueues.at(it->second).Events.Retry();
-        }
-    }
-
-    void HandleHeartbeat(TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr& ev) {
-        if (auto it = ConsumerByQueueId.find(ev->Get()->EventQueueId); it != ConsumerByQueueId.end()) {
-            auto& queue = ConsumerQueues.at(it->second).Events;
-            if (queue.Heartbeat()) {
-                queue.Send(new TEvSolomonProvider::TEvAck());
-            }
         }
     }
 

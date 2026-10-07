@@ -8,7 +8,8 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <cstring>
+#include <util/system/byteorder.h>
+#include <util/system/unaligned_mem.h>
 
 namespace NYql::NPathGenerator {
 
@@ -37,6 +38,14 @@ struct TFileMetaDataBuilder {
             parquet::FixedLenByteArray maxFlba(reinterpret_cast<const uint8_t*>(max.data()));
             stat->SetMinMax(minFlba, maxFlba);
             columnChunk->SetStatistics(stat->Encode());
+            return *this;
+        }
+
+        TRowGroupBuilder& AddColumnNullStatistics(int64_t nullCount) {
+            auto columnChunk = RowGroup->NextColumnChunk();
+            parquet::EncodedStatistics statistics;
+            statistics.set_null_count(nullCount);
+            columnChunk->SetStatistics(statistics);
             return *this;
         }
 
@@ -102,10 +111,8 @@ NYql::NConnector::NApi::TPredicate BuildPredicate(const TString& text) {
 }
 
 TString UuidValueField(const TString& bytes) {
-    ui64 low = 0;
-    ui64 high = 0;
-    memcpy(&low, bytes.data(), sizeof(ui64));
-    memcpy(&high, bytes.data() + sizeof(ui64), sizeof(ui64));
+    const ui64 low = LittleToHost(ReadUnaligned<ui64>(bytes.data()));
+    const ui64 high = LittleToHost(ReadUnaligned<ui64>(bytes.data() + sizeof(ui64)));
     return TStringBuilder() << "low_128: " << low << " high_128: " << high;
 }
 
@@ -219,6 +226,30 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
         UNIT_ASSERT_VALUES_EQUAL(rowGroups.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(rowGroups[0], 0);
         UNIT_ASSERT_VALUES_EQUAL(rowGroups[1], 1);
+    }
+
+    Y_UNIT_TEST(UuidWithoutMinMaxKeepsGroup) {
+        auto plainSchema = std::make_shared<parquet::SchemaDescriptor>();
+        plainSchema->Init(parquet::schema::GroupNode::Make(
+            "schema", parquet::Repetition::REQUIRED,
+            {parquet::schema::PrimitiveNode::Make("id", parquet::Repetition::OPTIONAL,
+                parquet::Type::FIXED_LEN_BYTE_ARRAY, parquet::ConvertedType::NONE, 16)}));
+        const auto predicate = BuildPredicate(
+            R"proto(comparison {
+                operation: EQ
+                left_value { column: "id" }
+                right_value { typed_value { type { type_id: UUID } value { low_128: 0 high_128: 0 } } }
+            })proto");
+        for (const auto& schema : {MakeLogicalUuidSchema("id"), plainSchema}) {
+            TFileMetaDataBuilder builder{schema};
+            auto metadata = builder.AddRowGroup().AddColumnNullStatistics(2).Build().Build();
+            const auto column = metadata->RowGroup(0)->ColumnChunk(0);
+            UNIT_ASSERT(column->is_stats_set());
+            UNIT_ASSERT(!column->statistics()->HasMinMax());
+            const auto kept = NDq::MatchedRowGroups(metadata, predicate);
+            UNIT_ASSERT_VALUES_EQUAL(kept.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(kept[0], 0);
+        }
     }
 
     Y_UNIT_TEST(UuidLogicalTypePushDown) {

@@ -9,7 +9,8 @@ namespace NKikimr::NSharedCache {
 
 // TODO: remove template args and make some page base class
 
-enum class ES3FIFOPageLocation : ui32 {
+// ui16 on purpose: the value is stored in a 16-bit bit-field of NSharedCache::TPage
+enum class ES3FIFOPageLocation : ui16 {
     None,
     SmallQueue,
     MainQueue

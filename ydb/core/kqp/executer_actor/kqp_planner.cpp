@@ -52,8 +52,9 @@ std::unique_ptr<TEvKqp::TEvAbortExecution> CheckTaskSize(ui64 TxId, const TIntru
     return nullptr;
 }
 
-std::unique_ptr<IEventHandle> MakeActorStartFailureError(const TActorId& executerId, const TString& reason) {
-    auto ev = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::OVERLOADED, reason);
+std::unique_ptr<IEventHandle> MakeActorStartFailureError(const TActorId& executerId, const TString& reason,
+    NYql::NDqProto::StatusIds::StatusCode status) {
+    auto ev = std::make_unique<TEvKqp::TEvAbortExecution>(status, reason);
     return std::make_unique<IEventHandle>(executerId, executerId, ev.release());
 }
 
@@ -566,7 +567,7 @@ NYql::NDqProto::TDqTask* TKqpPlanner::SerializeTaskForExecution(const TTask& tas
 
 // optimizeProtoForLocalExecution - if we want to execute compute actor locally and don't want to serialize & then deserialize proto message
 // instead we just give ptr to proto message and after that we swap/copy it
-TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
+std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
     auto& task = TasksGraph.GetTask(taskId);
     auto* taskDesc = SerializeTaskForExecution(task);
 
@@ -597,42 +598,55 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     auto rmResult = QueryQuotaManager->AllocateTasks(1, initialMemoryLimit);
 
     if (!rmResult) {
-        return rmResult.GetFailReason();
+        return MakeActorStartFailureError(ExecuterId, rmResult.GetFailReason(), NYql::NDqProto::StatusIds::OVERLOADED);
     }
 
-    auto actorId = CaFactory_->CreateKqpComputeActor({
-        .ExecuterId = ExecuterId,
-        .TxId = TxId,
-        .LockTxId = TasksGraph.GetMeta().LockTxId,
-        .LockNodeId = TasksGraph.GetMeta().LockNodeId,
-        .LockMode = TasksGraph.GetMeta().LockMode,
-        .Task = taskDesc,
-        .TxInfo = QueryQuotaManager->GetTx(),
-        .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, initialMemoryLimit),
-        .ChannelQuotaManager = nullptr,
-        .ReportStatsSettings = StatsReportingSettings.LocalReportStatsSettings,
-        .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
-        .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),
-        .SerializedGUCSettings = SerializedGUCSettings,
-        .NumberOfTasks = computeTasksSize,
-        .OutputChunkMaxSize = OutputChunkMaxSize,
-        .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
-        .StatsMode = GetDqStatsMode(StatsMode),
-        .WithProgressStats = StatsReportingSettings.WithProgressStats,
-        // Compute actor should not arm a timeout timer: in case of timeout it will receive
-        // TEvAbortExecution from the executer (driven by gRPC client deadline / cancel ->
-        // session actor -> executer). Matches the remote path in kqp_query_control_plane.cpp.
-        .Deadline = TInstant(),
-        .ShareMailbox = (computeTasksSize <= 1),
-        .RlPath = Nothing(),
-        .BlockTrackingMode = BlockTrackingMode,
-        .QueryQuotaManager = QueryQuotaManager,
-        .InitialMemoryLimit = initialMemoryLimit,
-        .UserToken = UserToken,
-        .Database = Database,
-        .Query = Query,
-        .UseBatchPool = UserRequestContext->UseBatchPool,
-    });
+    TActorId actorId;
+    try {
+        actorId = CaFactory_->CreateKqpComputeActor({
+            .ExecuterId = ExecuterId,
+            .TxId = TxId,
+            .LockTxId = TasksGraph.GetMeta().LockTxId,
+            .LockNodeId = TasksGraph.GetMeta().LockNodeId,
+            .LockMode = TasksGraph.GetMeta().LockMode,
+            .Task = taskDesc,
+            .TxInfo = QueryQuotaManager->GetTx(),
+            .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, initialMemoryLimit),
+            .ChannelQuotaManager = nullptr,
+            .ReportStatsSettings = StatsReportingSettings.LocalReportStatsSettings,
+            .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
+            .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),
+            .SerializedGUCSettings = SerializedGUCSettings,
+            .NumberOfTasks = computeTasksSize,
+            .OutputChunkMaxSize = OutputChunkMaxSize,
+            .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
+            .StatsMode = GetDqStatsMode(StatsMode),
+            .WithProgressStats = StatsReportingSettings.WithProgressStats,
+            // Compute actor should not arm a timeout timer: in case of timeout it will receive
+            // TEvAbortExecution from the executer (driven by gRPC client deadline / cancel ->
+            // session actor -> executer). Matches the remote path in kqp_query_control_plane.cpp.
+            .Deadline = TInstant(),
+            .ShareMailbox = (computeTasksSize <= 1),
+            .RlPath = Nothing(),
+            .BlockTrackingMode = BlockTrackingMode,
+            .QueryQuotaManager = QueryQuotaManager,
+            .InitialMemoryLimit = initialMemoryLimit,
+            .UserToken = UserToken,
+            .Database = Database,
+            .Query = Query,
+            .UseBatchPool = UserRequestContext->UseBatchPool,
+        });
+    } catch (...) {
+        const TString message = TStringBuilder() << "Failed to create compute actor for task " << taskId
+            << ": " << CurrentExceptionMessage();
+        YDB_LOG_ERROR("Compute actor creation failed",
+            {"txId", TxId},
+            {"ctx", *UserRequestContext},
+            {"taskId", taskId},
+            {"message", message});
+        QueryQuotaManager->FreeTasks(1, initialMemoryLimit);
+        return MakeActorStartFailureError(ExecuterId, message, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+    }
 
     Y_ABORT_UNLESS(AcknowledgeCA(taskId, actorId, nullptr));
 
@@ -677,9 +691,8 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         // to execute this task locally so we can avoid useless overhead for remote task launching.
         for (auto& [shardId, tasks]: TasksPerNode) {
             for (ui64 taskId: tasks) {
-                auto result = ExecuteDataComputeTask(taskId, tasks.size());
-                if (!result.empty()) {
-                    return MakeActorStartFailureError(ExecuterId, result);
+                if (auto error = ExecuteDataComputeTask(taskId, tasks.size())) {
+                    return error;
                 }
             }
         }
@@ -701,9 +714,8 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
             if (tasksOnNodeIt != TasksPerNode.end()) {
                 auto& tasks = tasksOnNodeIt->second;
                 for (ui64 taskId: tasks) {
-                    auto result = ExecuteDataComputeTask(taskId, tasks.size());
-                    if (!result.empty()) {
-                        return MakeActorStartFailureError(ExecuterId, result);
+                    if (auto error = ExecuteDataComputeTask(taskId, tasks.size())) {
+                        return error;
                     }
                 }
             }

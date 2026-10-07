@@ -1253,7 +1253,7 @@ private:
         }
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     TIODirection ReadDirection_{EDirection::Read};
     TIODirection WriteDirection_{EDirection::Write};
     bool ShutdownRequested_ = false;

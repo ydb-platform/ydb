@@ -34,6 +34,7 @@ SRCS(
     generic/overloaded_ut.cpp
     generic/ptr_ut.cpp
     generic/queue_ut.cpp
+    generic/ranges_ut.cpp
     generic/scope_ut.cpp
     generic/serialized_enum_ut.cpp
     generic/set_ut.cpp

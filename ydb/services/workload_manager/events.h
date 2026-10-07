@@ -25,7 +25,26 @@ struct TWorkloadManagerEvents {
         EvUpdatePoolInfo,
         EvSubscribeOnPoolChanges,
         EvFetchDatabaseResponse,
+        EvWmStateChanged,
     };
+};
+
+// Local-only notification for ReportWmStateChanges: the requester must send to
+// the session owner's KQP proxy on the same node. Cross-node proxy forwarding
+// is not supported; forwarded requests do not receive notifications.
+// The event cookie is the original query request's cookie. NONE after a queued
+// state means admission ended without execution; the query response carries
+// the final status and issues.
+struct TEvWmStateChanged : public NActors::TEventLocal<TEvWmStateChanged, TWorkloadManagerEvents::EvWmStateChanged> {
+    TEvWmStateChanged(ISessionUpdater::EState state, TString poolId, TString classifiedBy)
+        : State(state)
+        , PoolId(std::move(poolId))
+        , ClassifiedBy(std::move(classifiedBy))
+    {}
+
+    const ISessionUpdater::EState State;
+    const TString PoolId;
+    const TString ClassifiedBy;
 };
 
 
@@ -68,7 +87,7 @@ struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TWor
         , Issues(std::move(issues))
     {}
 
-    bool IsDiskFull() {
+    bool IsDiskFull() const {
         if (Issues.Empty() || Issues.Size() > 1) {
             return false;
         }
@@ -77,6 +96,24 @@ struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TWor
 
         return issue.GetCode() == NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED ||
             issue.GetCode() == NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE;
+    }
+
+    enum class EAdmissionResult {
+        ContinueInPool,
+        ContinueWithoutPool,
+        Reject,
+    };
+
+    EAdmissionResult GetAdmissionResult() const {
+        if (Status == Ydb::StatusIds::UNSUPPORTED) {
+            return EAdmissionResult::ContinueWithoutPool;
+        }
+        // A WM bookkeeping write can fail on disk quota while the user query
+        // can still execute (for example, a read). Preserve its pool and issues.
+        if (Status == Ydb::StatusIds::SUCCESS || IsDiskFull()) {
+            return EAdmissionResult::ContinueInPool;
+        }
+        return EAdmissionResult::Reject;
     }
 
     const ui64 QueryId;

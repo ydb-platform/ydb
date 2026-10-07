@@ -213,11 +213,11 @@ class TCreateStreamingQuery : public TSubOperation {
         context.SS->StreamingQueries.Set(dstPath.Base()->PathId, streamingQueryInfo);
     }
 
-    TStreamingQueryInfo::TPtr GetQueryInfo(const TString& owner, const TOperationContext& context) const {
+    TStreamingQueryInfo::TPtr GetQueryInfo(const TOperationContext& context) const {
         const auto& info = Transaction.GetCreateStreamingQuery();
         auto properties = info.GetProperties();
         auto& propertiesMap = *properties.MutableProperties();
-        const TString& userSID = context.UserToken ? context.UserToken->GetUserSID() : owner;
+        const TString userSID = context.UserToken ? context.UserToken->GetUserSID() : TString();
         propertiesMap["__created_by"] = userSID;
         propertiesMap["__modified_by"] = userSID;
         if (const auto runIt = propertiesMap.find("run"); runIt != propertiesMap.end() && runIt->second == "true") {
@@ -268,7 +268,7 @@ public:
         TPath dstPath = parentPath.Child(name);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, context));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
-        const auto queryInfo = GetQueryInfo(owner, context);
+        const auto queryInfo = GetQueryInfo(context);
         RETURN_RESULT_UNLESS(IsDescriptionValid(result, queryInfo));
 
         const auto guard = context.DbGuard();

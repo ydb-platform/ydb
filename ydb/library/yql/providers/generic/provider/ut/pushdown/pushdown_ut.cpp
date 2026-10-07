@@ -5,6 +5,7 @@
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 
 #include <yql/essentials/ast/yql_ast.h>
@@ -847,6 +848,13 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                 }
             )proto"
         );
+    }
+
+    Y_UNIT_TEST(FormatUuidPredicate) {
+        const auto& filter = BuildProtoFilterFromLambda(
+            R"ast((== (Member $row '"col_uuid") (Uuid '"0123456789abcdef")))ast");
+        UNIT_ASSERT_STRINGS_EQUAL(FormatPredicate(filter),
+            R"sql((`col_uuid` = Uuid("33323130-3534-3736-3839-616263646566")))sql");
     }
 
     Y_UNIT_TEST(EqualUuid) {

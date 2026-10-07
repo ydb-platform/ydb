@@ -175,7 +175,7 @@ public:
 
         if (UseMetricsQueue) {
             Become(&TDqSolomonReadActor::LimitlessModeState);
-            MetricsQueueEvents.Init(TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ true, /* useConnect */ true, /* ordered */ false);
+            MetricsQueueEvents.Init(TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ false, /* useConnect */ true, /* ordered */ false);
             MetricsQueueEvents.OnNewRecipientId(MetricsQueueActor);
 
             if (MetricsQueueConsumersCountDelta > 0) {
@@ -209,7 +209,6 @@ public:
         hFunc(TEvSolomonProvider::TEvRetryDataRequest, HandleRetryDataRequest);
         hFunc(TEvSolomonProvider::TEvAck, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
-        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
@@ -343,12 +342,6 @@ public:
 
     void Handle(TEvSolomonProvider::TEvAck::TPtr& ev) {
         MetricsQueueEvents.OnEventReceived(ev);
-    }
-
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&) {
-        if (MetricsQueueEvents.Heartbeat()) {
-            MetricsQueueEvents.Send(new TEvSolomonProvider::TEvAck());
-        }
     }
 
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {

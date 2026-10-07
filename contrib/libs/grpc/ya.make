@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.60.2)
+VERSION(1.61.3)
 
-ORIGINAL_SOURCE(https://github.com/grpc/grpc/archive/v1.60.2.tar.gz)
+ORIGINAL_SOURCE(https://github.com/grpc/grpc/archive/v1.61.3.tar.gz)
 
 LICENSE(
     Apache-2.0 AND
@@ -53,6 +53,7 @@ SRCS(
     src/core/ext/filters/census/grpc_context.cc
     src/core/ext/filters/channel_idle/channel_idle_filter.cc
     src/core/ext/filters/channel_idle/idle_filter_state.cc
+    src/core/ext/filters/channel_idle/legacy_channel_idle_filter.cc
     src/core/ext/filters/client_channel/backend_metric.cc
     src/core/ext/filters/client_channel/backup_poller.cc
     src/core/ext/filters/client_channel/channel_connectivity.cc
@@ -87,7 +88,6 @@ SRCS(
     src/core/ext/filters/client_channel/lb_policy/xds/cds.cc
     src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_impl.cc
     src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_manager.cc
-    src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_resolver.cc
     src/core/ext/filters/client_channel/lb_policy/xds/xds_override_host.cc
     src/core/ext/filters/client_channel/lb_policy/xds/xds_wrr_locality.cc
     src/core/ext/filters/client_channel/local_subchannel_pool.cc
@@ -106,7 +106,9 @@ SRCS(
     src/core/ext/filters/client_channel/resolver/google_c2p/google_c2p_resolver.cc
     src/core/ext/filters/client_channel/resolver/polling_resolver.cc
     src/core/ext/filters/client_channel/resolver/sockaddr/sockaddr_resolver.cc
+    src/core/ext/filters/client_channel/resolver/xds/xds_dependency_manager.cc
     src/core/ext/filters/client_channel/resolver/xds/xds_resolver.cc
+    src/core/ext/filters/client_channel/resolver/xds/xds_resolver_trace.cc
     src/core/ext/filters/client_channel/retry_filter.cc
     src/core/ext/filters/client_channel/retry_filter_legacy_call_data.cc
     src/core/ext/filters/client_channel/retry_service_config.cc
@@ -122,6 +124,7 @@ SRCS(
     src/core/ext/filters/http/client_authority_filter.cc
     src/core/ext/filters/http/http_filters_plugin.cc
     src/core/ext/filters/http/message_compress/compression_filter.cc
+    src/core/ext/filters/http/message_compress/legacy_compression_filter.cc
     src/core/ext/filters/http/server/http_server_filter.cc
     src/core/ext/filters/message_size/message_size_filter.cc
     src/core/ext/filters/rbac/rbac_filter.cc
@@ -156,6 +159,7 @@ SRCS(
     src/core/ext/transport/chttp2/transport/chttp2_transport.cc
     src/core/ext/transport/chttp2/transport/decode_huff.cc
     src/core/ext/transport/chttp2/transport/flow_control.cc
+    src/core/ext/transport/chttp2/transport/frame.cc
     src/core/ext/transport/chttp2/transport/frame_data.cc
     src/core/ext/transport/chttp2/transport/frame_goaway.cc
     src/core/ext/transport/chttp2/transport/frame_ping.cc
@@ -264,6 +268,7 @@ SRCS(
     src/core/ext/upb-gen/envoy/extensions/transport_sockets/tls/v3/secret.upb_minitable.c
     src/core/ext/upb-gen/envoy/extensions/transport_sockets/tls/v3/tls.upb_minitable.c
     src/core/ext/upb-gen/envoy/extensions/transport_sockets/tls/v3/tls_spiffe_validator_config.upb_minitable.c
+    src/core/ext/upb-gen/envoy/extensions/upstreams/http/v3/http_protocol_options.upb_minitable.c
     src/core/ext/upb-gen/envoy/service/discovery/v3/ads.upb_minitable.c
     src/core/ext/upb-gen/envoy/service/discovery/v3/discovery.upb_minitable.c
     src/core/ext/upb-gen/envoy/service/load_stats/v3/lrs.upb_minitable.c
@@ -422,6 +427,7 @@ SRCS(
     src/core/ext/upbdefs-gen/envoy/extensions/transport_sockets/tls/v3/secret.upbdefs.c
     src/core/ext/upbdefs-gen/envoy/extensions/transport_sockets/tls/v3/tls.upbdefs.c
     src/core/ext/upbdefs-gen/envoy/extensions/transport_sockets/tls/v3/tls_spiffe_validator_config.upbdefs.c
+    src/core/ext/upbdefs-gen/envoy/extensions/upstreams/http/v3/http_protocol_options.upbdefs.c
     src/core/ext/upbdefs-gen/envoy/service/discovery/v3/ads.upbdefs.c
     src/core/ext/upbdefs-gen/envoy/service/discovery/v3/discovery.upbdefs.c
     src/core/ext/upbdefs-gen/envoy/service/load_stats/v3/lrs.upbdefs.c
@@ -560,12 +566,12 @@ SRCS(
     src/core/lib/event_engine/default_event_engine_factory.cc
     src/core/lib/event_engine/event_engine.cc
     src/core/lib/event_engine/forkable.cc
-    src/core/lib/event_engine/memory_allocator.cc
     src/core/lib/event_engine/posix_engine/ev_epoll1_linux.cc
     src/core/lib/event_engine/posix_engine/ev_poll_posix.cc
     src/core/lib/event_engine/posix_engine/event_poller_posix_default.cc
     src/core/lib/event_engine/posix_engine/internal_errqueue.cc
     src/core/lib/event_engine/posix_engine/lockfree_event.cc
+    src/core/lib/event_engine/posix_engine/native_posix_dns_resolver.cc
     src/core/lib/event_engine/posix_engine/posix_endpoint.cc
     src/core/lib/event_engine/posix_engine/posix_engine.cc
     src/core/lib/event_engine/posix_engine/posix_engine_listener.cc
@@ -593,6 +599,7 @@ SRCS(
     src/core/lib/event_engine/utils.cc
     src/core/lib/event_engine/windows/grpc_polled_fd_windows.cc
     src/core/lib/event_engine/windows/iocp.cc
+    src/core/lib/event_engine/windows/native_windows_dns_resolver.cc
     src/core/lib/event_engine/windows/win_socket.cc
     src/core/lib/event_engine/windows/windows_endpoint.cc
     src/core/lib/event_engine/windows/windows_engine.cc
@@ -816,6 +823,7 @@ SRCS(
     src/core/lib/security/security_connector/ssl_utils.cc
     src/core/lib/security/security_connector/tls/tls_security_connector.cc
     src/core/lib/security/transport/client_auth_filter.cc
+    src/core/lib/security/transport/legacy_server_auth_filter.cc
     src/core/lib/security/transport/secure_endpoint.cc
     src/core/lib/security/transport/security_handshaker.cc
     src/core/lib/security/transport/server_auth_filter.cc
@@ -853,6 +861,7 @@ SRCS(
     src/core/lib/surface/version.cc
     src/core/lib/transport/batch_builder.cc
     src/core/lib/transport/bdp_estimator.cc
+    src/core/lib/transport/call_final_info.cc
     src/core/lib/transport/connectivity_state.cc
     src/core/lib/transport/error_utils.cc
     src/core/lib/transport/handshaker.cc
@@ -860,7 +869,6 @@ SRCS(
     src/core/lib/transport/http_connect_handshaker.cc
     src/core/lib/transport/metadata_batch.cc
     src/core/lib/transport/parsed_metadata.cc
-    src/core/lib/transport/pid_controller.cc
     src/core/lib/transport/status_conversion.cc
     src/core/lib/transport/tcp_connect_handshaker.cc
     src/core/lib/transport/timeout_encoding.cc

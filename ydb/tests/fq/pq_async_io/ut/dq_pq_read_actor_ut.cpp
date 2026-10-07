@@ -8,6 +8,8 @@
 
 #include <util/generic/overloaded.h>
 
+#include <atomic>
+
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -25,9 +27,53 @@ const TString Message3 = "value3";
 const TString Message4 = "value4";
 const TString Message5 = "value5";
 
+struct TQuotaState {
+    std::atomic<bool> Allow = false;
+    std::atomic<ui32> Denied = 0;
+    std::atomic<ui32> Executed = 0;
+    std::atomic<ui32> Cancelled = 0;
+    NActors::TActorId ActorId;
+    TDuration RetryDelay = TDuration::MilliSeconds(10);
+};
+
+class TTestWorkFactory : public IDqSchedulableWorkFactory {
+    class TWork : public IDqSchedulableWork {
+    public:
+        explicit TWork(std::shared_ptr<TQuotaState> state) : State(std::move(state)) {}
+        std::optional<TDuration> TryStartExecution(TMonotonic) override {
+            Executing = State->Allow.load();
+            if (!Executing) {
+                ++State->Denied;
+                return State->RetryDelay;
+            }
+            return std::nullopt;
+        }
+        void StopExecution() override {
+            if (Executing) {
+                ++State->Executed;
+                Executing = false;
+            } else {
+                ++State->Cancelled;
+            }
+        }
+        void NotifyResumed(bool) override {}
+        void RegisterForResume(const NActors::TActorId& id) override { State->ActorId = id; }
+        TWorkScope GetWorkScope() const override { return {}; }
+    private:
+        std::shared_ptr<TQuotaState> State;
+        bool Executing = false;
+    };
+public:
+    const std::shared_ptr<TQuotaState> State = std::make_shared<TQuotaState>();
+    std::unique_ptr<IDqSchedulableWork> CreateSchedulableWork() override {
+        return std::make_unique<TWork>(State);
+    }
+    TWorkScope GetWorkScope() const override { return {}; }
+};
+
 class TFixture : public TPqIoTestFixture {
 public:
-    void InitSource(NYql::NPq::NProto::TDqPqTopicSource&& settings) const {
+    void InitSource(NYql::NPq::NProto::TDqPqTopicSource&& settings, IDqSchedulableWorkFactoryPtr workFactory = nullptr) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             NPq::NProto::TDqReadTaskParams params;
             auto* partitioningParams = params.AddPartitioningParams();
@@ -61,7 +107,7 @@ public:
                 actor.SelfId(),
                 actor.GetHolderFactory(),
                 actor.TypeEnv,
-                nullptr,
+                std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>(&actor.Alloc, [](auto*) {}),
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 gateway,
                 1,
@@ -69,7 +115,9 @@ public:
                 freeSpace,
                 {},
                 TDuration::Seconds(1),
-                controlPlaneId
+                controlPlaneId,
+                false,
+                std::move(workFactory)
             );
 
             actor.InitAsyncInput(dqAsyncInput, dqAsyncInputAsActor);
@@ -390,6 +438,60 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         SaveSourceState(checkpoint, state);
         CommitSourceState(checkpoint);
         WaitForConsumerOffset(topicName, 3);
+    }
+
+    Y_UNIT_TEST_TWIN_F(TopicCallbacksRespectCpuQuota, SchedulerWakeup, TFixture) {
+        const TString topicName = SchedulerWakeup ? "TopicCpuQuotaSchedulerWakeup" : "TopicCpuQuotaTimerWakeup";
+        PQCreateStream(topicName);
+        auto factory = std::make_shared<TTestWorkFactory>();
+        if constexpr (SchedulerWakeup) {
+            factory->State->RetryDelay = TDuration::Hours(1);
+        }
+        auto settings = BuildPqTopicSourceSettings(topicName);
+        // A scheduler must also cover SDK work when this legacy flag is off.
+        settings.SetUseActorSystemThreadsInTopicClient(false);
+        InitSource(std::move(settings), factory);
+        PQWrite({Message0, Message1, Message2}, topicName);
+        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        while (!factory->State->Denied.load() && TInstant::Now() < deadline) {
+            UNIT_ASSERT(SourceRead<TString>(UVParser).empty());
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT(factory->State->Denied.load() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(factory->State->Executed.load(), 0);
+        factory->State->Allow = true;
+        if constexpr (SchedulerWakeup) {
+            CaSetup->Execute([&](TFakeActor&) {
+                // KQP scheduler uses TEvWakeup with tag 201.
+                NActors::TActivationContext::Send(factory->State->ActorId,
+                    std::make_unique<NActors::TEvents::TEvWakeup>(201));
+            });
+        }
+        PQRead<TString>({Message0, Message1, Message2});
+        UNIT_ASSERT(factory->State->Executed.load() > 0);
+        CaSetup->Execute([](TFakeActor& actor) {
+            UNIT_ASSERT(actor.DqAsyncInput->GetCpuTime() > TDuration::Zero());
+        });
+    }
+
+    Y_UNIT_TEST_F(CancelTopicReadWhileWaitingForCpuQuota, TFixture) {
+        const TString topicName = "CancelTopicReadWhileWaitingForCpuQuota";
+        PQCreateStream(topicName);
+        auto factory = std::make_shared<TTestWorkFactory>();
+        factory->State->RetryDelay = TDuration::Hours(1);
+        InitSource(BuildPqTopicSourceSettings(topicName), factory);
+        PQWrite({Message0}, topicName);
+        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        while (!factory->State->Denied.load() && TInstant::Now() < deadline) {
+            UNIT_ASSERT(SourceRead<TString>(UVParser).empty());
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT(factory->State->Denied.load() > 0);
+        CaSetup->Execute([](TFakeActor& actor) {
+            actor.Terminate();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(factory->State->Cancelled.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(factory->State->Executed.load(), 0);
     }
 
     Y_UNIT_TEST_F(TestReadFromTopic, TFixture) {

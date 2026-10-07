@@ -13,9 +13,9 @@
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-#include <library/cpp/yt/threading/fork_aware_rw_spin_lock.h>
+#include <library/cpp/yt/system/atomic_object.h>
+#include <library/cpp/yt/system/fork_aware_rw_spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
@@ -82,12 +82,12 @@ private:
 
     TAtomicIntrusivePtr<TDispatcherConfig> Config_{New<TDispatcherConfig>()};
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, PollersLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, PollersLock_);
     NConcurrency::IThreadPoolPollerPtr AcceptorPoller_;
     NConcurrency::IThreadPoolPollerPtr XferPoller_;
 
     TMpscStack<TWeakPtr<TConnection>> ConnectionsToRegister_;
-    NThreading::TAtomicObject<std::vector<TWeakPtr<TConnection>>> ConnectionList_;
+    TAtomicObject<std::vector<TWeakPtr<TConnection>>> ConnectionList_;
     int CurrentConnectionListIndex_ = 0;
 
     struct TNetworkStatistics
@@ -97,13 +97,13 @@ private:
 
     NConcurrency::TSyncMap<std::string, std::array<TNetworkStatistics, 2>> NetworkStatistics_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, PeriodicExecutorsLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, PeriodicExecutorsLock_);
     NConcurrency::TPeriodicExecutorPtr ProfilingExecutor_;
     NConcurrency::TPeriodicExecutorPtr PeriodicCheckExecutor_;
 
     std::atomic<bool> NetworkingDisabled_ = false;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareReaderWriterSpinLock, NetworksLock_);
+    YT_DECLARE_SPIN_LOCK(TForkAwareReaderWriterSpinLock, NetworksLock_);
     std::vector<std::pair<NNet::TIP6Network, std::string>> Networks_;
 
     struct TBandDescriptor
@@ -115,7 +115,7 @@ private:
 
     TEnumIndexedArray<EMultiplexingBand, TBandDescriptor> BandToDescriptor_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, LocalMessageHandlersLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, LocalMessageHandlersLock_);
     THashMap<int, ILocalMessageHandlerPtr> LocalMessageHandlers_;
 };
 

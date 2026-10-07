@@ -1,5 +1,6 @@
+#include <ydb/core/subsystems/actor_system_monitoring/subsystem.h>
 #include <ydb/core/subsystems/inmemory_metrics_monitoring/subsystem.h>
-#include <ydb/core/mon/metric_chart/resources.h>
+#include <ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart/resources.h>
 #include <library/cpp/monlib/service/pages/resource_mon_page.h>
 #include "auto_config_initializer.h"
 #include "config_helpers.h"
@@ -640,6 +641,14 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     }));
 
     if (auto* mon = appData->Mon) {
+        auto monitoring = NActorSystemMonitoring::MakeConfig(
+            systemConfig, appData->BatchPoolId, useAutoConfig);
+        monitoring.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
+            auto* actors = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actors, "system", "Actor system", false, &system, actor, /*useAuth=*/true);
+        };
+        setup->RegisterSubSystem(NActorSystemMonitoring::MakeActorSystemMonitoring(std::move(monitoring)));
+
         NMetricChart::RegisterResources(mon);
         mon->Register(new NMonitoring::TResourceMonPage("static/inmemory-metrics/overview.js",
             "inmemory-metrics/overview.js", NMonitoring::TResourceMonPage::JAVASCRIPT));

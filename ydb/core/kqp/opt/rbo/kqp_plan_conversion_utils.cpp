@@ -854,15 +854,9 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpWindow(TExprNode::TPtr node
         functions.Add(id, TOpWindowFunc{TString(item.Function()), WindowFuncKindFromString(TString(item.Kind())), std::move(arguments)});
         Y_ENSURE(output->emplace(name, id).second, "Duplicate Window output " << name);
     }
-    const auto sourceFrame = source.Frame();
-    TOpWindowFrame frame;
-    frame.Type = WindowFrameTypeFromString(TString(sourceFrame.FrameType()));
-    frame.BeginKind = WindowFrameBoundFromString(TString(sourceFrame.BeginKind()));
-    frame.BeginValue = FromString<ui64>(TString(sourceFrame.BeginValue()));
-    frame.EndKind = WindowFrameBoundFromString(TString(sourceFrame.EndKind()));
-    frame.EndValue = FromString<ui64>(TString(sourceFrame.EndValue()));
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
-    return MakeIntrusive<TOpWindow>(std::move(input), node->Pos(), std::move(functions), std::move(partitionKeys), std::move(sortKeys), frame);
+    return MakeIntrusive<TOpWindow>(std::move(input), node->Pos(), std::move(functions), std::move(partitionKeys), std::move(sortKeys),
+                                    WindowFrameFromNode(source.Frame()));
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceAlias(TExprNode::TPtr node) {

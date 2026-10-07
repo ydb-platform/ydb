@@ -62,7 +62,7 @@ TTaskScheduler::TTaskScheduler(size_t threadCount, size_t maxTaskCount)
     : MaxTaskCount_(maxTaskCount)
 {
     for (size_t i = 0; i < threadCount; ++i) {
-        Workers_.push_back(new TWorkerThread(*this));
+        Workers_.emplace_back(new TWorkerThread(*this));
         Workers_.back()->DebugId = ToString(i);
     }
 }

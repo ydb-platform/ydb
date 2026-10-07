@@ -43,13 +43,19 @@ void TBufferedEncoderBase::OnMetricEnd() {
             if (it == std::end(MetricMap_)) {
                 MetricMap_.emplace(metric.Labels, Metrics_.size() - 1);
             } else {
-                auto& existing = Metrics_[it->second].TimeSeries;
+                auto& existingMetric = Metrics_[it->second];
 
-                Y_ENSURE(existing.GetValueType() == metric.TimeSeries.GetValueType(),
-                    "Time series point type mismatch: expected " << existing.GetValueType()
+                Y_ENSURE(existingMetric.TimeSeries.GetValueType() == metric.TimeSeries.GetValueType(),
+                    "Time series point type mismatch: expected " << existingMetric.TimeSeries.GetValueType()
                     << " but found " << metric.TimeSeries.GetValueType()
                     << ", labels '" << FormatLabels(metric.Labels) << "'");
 
+                if (existingMetric.StartTimeSeconds != metric.StartTimeSeconds) {
+                    it->second = Metrics_.size() - 1;
+                    break;
+                }
+
+                auto& existing = existingMetric.TimeSeries;
                 existing.CopyFrom(metric.TimeSeries);
                 Metrics_.pop_back();
             }

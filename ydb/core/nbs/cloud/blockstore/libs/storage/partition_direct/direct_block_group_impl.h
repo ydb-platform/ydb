@@ -103,6 +103,7 @@ public:
         THostIndex hostIndex,
         TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
@@ -111,6 +112,7 @@ public:
         TPBufferKey pBufferKey,
         TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) override;
 
     void WriteBlocksToManyPBuffers(
@@ -121,6 +123,7 @@ public:
         TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId,
         TWriteBlocksToManyPBuffersCallback callback) override;
 

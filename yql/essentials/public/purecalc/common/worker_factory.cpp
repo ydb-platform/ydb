@@ -582,8 +582,7 @@ TIssues TWorkerFactory<TBase>::GetIssues() const {
 template <typename TBase>
 TString TWorkerFactory<TBase>::GetCompiledProgram() {
     if (ExprRoot_) {
-        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                                              FuncRegistry_->SupportsSizedAllocators());
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         NKikimr::NMiniKQL::TTypeEnvironment env(alloc);
 
         auto rootNode = CompileMkql(ExprRoot_, ExprContext_, *FuncRegistry_, env, UserData_);

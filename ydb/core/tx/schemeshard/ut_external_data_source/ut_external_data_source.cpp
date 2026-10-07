@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
                     None {
                     }
                 }
-            )", {{NKikimrScheme::StatusSchemeError, "External source with type DataStream was not found"}});
+            )", {{NKikimrScheme::StatusSchemeError, "Unknown source type: DataStream"}});
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot/DirA",R"(
                 Name: "MyExternalDataSource"
                 SourceType: "ObjectStorage"

@@ -91,7 +91,7 @@ bool MatchRowGroup(std::unique_ptr<parquet::RowGroupMetaData> rowGroupMetadata, 
     TMap<TString, NYql::NGenericPushDown::TColumnStatistics> columns;
     for (int i = 0; i < rowGroupMetadata->schema()->num_columns(); i++) {
         auto columnChunkMetadata = rowGroupMetadata->ColumnChunk(i);
-        if (!columnChunkMetadata->is_stats_set()) {
+        if (!columnChunkMetadata->is_stats_set() || !columnChunkMetadata->statistics()->HasMinMax()) {
             continue;
         }
         auto column = rowGroupMetadata->schema()->Column(i);

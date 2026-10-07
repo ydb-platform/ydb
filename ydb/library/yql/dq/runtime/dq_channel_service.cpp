@@ -2129,8 +2129,12 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                         StartReconciliation(false, 'R');
                         return;
                     }
-                    Y_DEBUG_ABORT_UNLESS(Reconciliation.load() != 0, "%s, a discovery reply outside a reconciliation", LogPrefix.c_str());
-                    LOG_D(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo << " confirmed by discovery");
+                    // a retried discovery is answered twice, the 2nd reply may come after the reconciliation
+                    if (Reconciliation.load()) {
+                        LOG_D(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo << " confirmed by discovery");
+                    } else {
+                        LOG_W(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo << " confirmed by a late discovery reply");
+                    }
                 }
 
                 // The progress of a channel comes with TEvChannelUpdateV2 only, EarlyFinished and PopBytes of the

@@ -1,9 +1,8 @@
 #include "common.h"
 
-#include <ydb/core/kqp/common/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 
 #include <fmt/format.h>
-
 
 namespace NKikimr::NKqp {
 

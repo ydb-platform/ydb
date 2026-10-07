@@ -535,6 +535,41 @@ void AssertQueryPlanNotContains(
     UNIT_ASSERT_C(ast.find(needle) == TString::npos, ast);
 }
 
+TKikimrSettings PagedPortionSettings(const bool trivialReader) {
+    auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+    settings.SetColumnShardReaderClassName(trivialReader ? "TRIVIAL" : "SIMPLE");
+    settings.AppConfig.MutableColumnShardConfig()->SetMemoryLimitScanPortion(1);
+    return settings;
+}
+
+// One portion of 60 rows whose JSON key "a.b.c" has 10 dictionary values jv_0..jv_9.
+void FillDictionarySubColumnTable(TKikimrRunner& kikimr) {
+    auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+    for (const TString query : {
+             R"(
+                CREATE TABLE `/Root/DictTable` (
+                    id Uint64 NOT NULL,
+                    json_payload JsonDocument,
+                    PRIMARY KEY (id)
+                ) WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )",
+             R"(
+                ALTER OBJECT `/Root/DictTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=json_payload,
+                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`, `DICTIONARY_UNIQUE_FRACTION`=`1`);
+            )"}) {
+        const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+    const auto result = session.ExecuteQuery(R"(
+        UPSERT INTO `/Root/DictTable`
+        SELECT
+            Unwrap(CAST(x AS Uint64)) AS id,
+            CAST('{"a.b.c": "jv_' || CAST(x % 10 AS String) || '"}' AS JsonDocument) AS json_payload
+        FROM AS_TABLE(ListMap(ListFromRange(0u, 60u), ($x) -> (AsStruct($x AS x))));
+    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
@@ -1368,6 +1403,38 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
             5u,
             "JSON_VALUE DISTINCT over a dictionary sub-column + JSON filter: pushdown must match plain",
             ECounterOnForce::MustStay);
+    }
+
+    // A portion that does not fit MemoryLimitScanPortion is read in pages sized in rows, while the dictionary-only fetch has one row per value.
+    Y_UNIT_TEST_QUAD(OneShard_JsonValueDistinct_DictionarySubColumn_PagedPortion, Trivial, LimitBelowDistinct) {
+        TKikimrRunner kikimr(PagedPortionSettings(Trivial));
+        FillDictionarySubColumnTable(kikimr);
+        auto tableClient = kikimr.GetTableClient();
+
+        const ui64 limit = LimitBelowDistinct ? 5 : 100;
+        const ui64 expectedRows = LimitBelowDistinct ? 5 : 10;
+        const auto run = RunDictionaryOnlyOnOff(kikimr, [&](bool withForce) {
+            return RunJsonValueDistinctScanQuery(tableClient, "/Root/DictTable", withForce, "", limit);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(run.Off.RowsCount, expectedRows);
+        UNIT_ASSERT_VALUES_EQUAL(run.On.RowsCount, expectedRows);
+        if (!LimitBelowDistinct) {
+            CompareYsonUnordered(run.Off.ResultSetYson, run.On.ResultSetYson, "paged dictionary-only DISTINCT must match plain");
+        }
+    }
+
+    // The duplicates filter of a paged portion keeps its row count, and a filter on the DISTINCT key is built over dictionary values.
+    Y_UNIT_TEST_TWIN(OneShard_JsonValueDistinct_DictionarySubColumn_PagedPortion_SameKeyFilter, Trivial) {
+        TKikimrRunner kikimr(PagedPortionSettings(Trivial));
+        FillDictionarySubColumnTable(kikimr);
+        auto tableClient = kikimr.GetTableClient();
+
+        const TString where = R"(WHERE JSON_VALUE(json_payload, "$.\"a.b.c\"") = "jv_1")";
+        const auto run = RunDictionaryOnlyOnOff(kikimr, [&](bool withForce) {
+            return RunJsonValueDistinctScanQuery(tableClient, "/Root/DictTable", withForce, where, 100);
+        });
+        CompareYson(R"([[["jv_1"]]])", run.Off.ResultSetYson);
+        CompareYson(R"([[["jv_1"]]])", run.On.ResultSetYson);
     }
 
     // Same as DictionarySubColumn, but the JSON column is stored with dense dictionary encoding.

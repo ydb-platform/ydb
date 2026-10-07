@@ -11,6 +11,10 @@ from ydb.tests.library.common.wait_for import wait_for
 
 class TestRescaling(StreamingTestBase):
 
+    @pytest.fixture(autouse=True)
+    def _wait_initial_resources(self, kikimr: Kikimr):
+        kikimr.wait_kqp_node_count(len(counter_nodes(kikimr.cluster)), timeout_seconds=120)
+
     def _reader_count(self, kikimr: Kikimr) -> int:
         return sum(
             self.get_actor_count(kikimr, node_id, "DQ_MESSAGE_STREAM_READ_ACTOR")
@@ -21,6 +25,8 @@ class TestRescaling(StreamingTestBase):
         self.wait_completed_checkpoints(kikimr, query_name)
 
     def _wait_reader_count(self, kikimr: Kikimr, query_name: str, expected_readers=6) -> int:
+        # Actor counters are published independently on each node. Completed
+        # checkpoints do not guarantee that all reader counters have caught up.
         assert wait_for(
             lambda: self._reader_count(kikimr) == expected_readers,
             timeout_seconds=60,
@@ -65,7 +71,7 @@ class TestRescaling(StreamingTestBase):
         if scale_up:
             added_slots.extend(kikimr.cluster.register_and_start_slots(kikimr.get_database_name(), count=3))
             kikimr.cluster.wait_tenant_up(kikimr.get_database_name(), token="root@builtin")
-            time.sleep(1)
+            kikimr.wait_kqp_node_count(len(counter_nodes(kikimr.cluster)), timeout_seconds=120)
         self._resume_query(kikimr, query_name, readers_before, expect_growth=scale_up)
 
     def _cleanup_query(self, kikimr: Kikimr, query_name: str, added_slots: list) -> None:
@@ -180,12 +186,14 @@ class TestRescaling(StreamingTestBase):
         ''')
         try:
             self._wait_started(kikimr, query_name)
+            self._wait_reader_count(kikimr, query_name)
             readers_before = self._reader_count(kikimr)
             check_reading("before")
             assert 0 < readers_before < (partitions_count + 4) // 5, readers_before
             self._stop_query(kikimr, query_name)
             added_slots.extend(kikimr.cluster.register_and_start_slots(kikimr.get_database_name(), count=3))
             kikimr.cluster.wait_tenant_up(kikimr.get_database_name(), token="root@builtin")
+            kikimr.wait_kqp_node_count(len(counter_nodes(kikimr.cluster)), timeout_seconds=120)
             self._resume_query(kikimr, query_name, readers_before, expect_growth=False)
             check_reading("after")
             assert self._reader_count(kikimr) == readers_before, "Deferred-publication query was rescaled"
@@ -588,6 +596,7 @@ class TestRescaling(StreamingTestBase):
         ''')
         try:
             self._wait_started(kikimr, query_name)
+            self._wait_reader_count(kikimr, query_name)
             readers_before = self._reader_count(kikimr)
             self.wait_streaming_query_metric(
                 kikimr,

@@ -1678,14 +1678,18 @@ public:
         YDB_LOG_CREATE_CONTEXT(
             {"event", "TTxAskPortionChunks::Execute"});
         for (auto&& i : PortionsByPath) {
-            const auto& granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(i.first);
+            const auto granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleOptional(i.first);
+            if (!granule) {
+                AFL_VERIFY(!Self->GetTablesManager().HasTable(i.first))("path_id", i.first);
+                continue;
+            }
             for (auto&& c : i.second.GetConsumers()) {
                 YDB_LOG_CREATE_CONTEXT(
                     {"consumer", c.first},
                     {"pathId", i.first});
                 YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump size",
                     {"size", c.second.GetPortionsCount()});
-                for (auto&& portion : c.second.GetPortions(granule)) {
+                for (auto&& portion : c.second.GetPortions(*granule)) {
                     const ui64 p = portion->GetPortionId();
                     const NOlap::TPortionAddress pAddress = portion->GetAddress();
                     auto itPortionConstructor = Constructors.find(pAddress);
@@ -1694,14 +1698,21 @@ public:
                         itPortionConstructor = Constructors.emplace(pAddress, std::move(constructor)).first;
                     } else if (itPortionConstructor->second.IsReady()) {
                         continue;
+                    } else {
+                        // Cleanup may remove metadata between retries of an incomplete constructor.
+                        itPortionConstructor->second = TPortionConstructorV2(portion);
                     }
                     if (!itPortionConstructor->second.HasRecords()) {
                         auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(i.first.GetRawValue(), p).Select();
                         if (!rowset.IsReady()) {
                             reask = true;
                         } else {
-                            AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)(
-                                "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
+                            if (rowset.EndOfSet()) {
+                                AFL_VERIFY(portion->HasRemoveSnapshot() || !Self->GetTablesManager().HasTable(i.first))
+                                ("path_id", i.first)("portion_id", p)("debug", portion->DebugString(true));
+                                Constructors.erase(pAddress);
+                                continue;
+                            }
                             NOlap::TColumnChunkLoadContextV2 info(rowset, selector);
                             itPortionConstructor->second.SetRecords(std::move(info));
                         }
@@ -1725,7 +1736,9 @@ public:
                                         localReask = true;
                                     }
                                 }
-                                itPortionConstructor->second.SetIndexes(std::move(indexes));
+                                if (!localReask) {
+                                    itPortionConstructor->second.SetIndexes(std::move(indexes));
+                                }
                             }
                         }
                     }
@@ -1736,8 +1749,12 @@ public:
             return false;
         }
 
-        for (auto&& i : Constructors) {
-            FetchedAccessors.emplace_back(std::move(i.second));
+        for (auto&& [address, constructor] : Constructors) {
+            const auto granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleOptional(address.GetPathId());
+            if (granule && granule->GetPortionOptional(address.GetPortionId(), false)) {
+                AFL_VERIFY(constructor.IsReady())("portion_id", address.GetPortionId());
+                FetchedAccessors.emplace_back(std::move(constructor));
+            }
         }
 
         YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump stage",

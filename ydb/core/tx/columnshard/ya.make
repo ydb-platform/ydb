@@ -108,6 +108,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    ut_accessor
     ut_cut_history
     ut_rw
     ut_schema

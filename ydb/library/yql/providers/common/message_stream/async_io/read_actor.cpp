@@ -60,12 +60,20 @@ struct TEvPrivate {
         EvCheckPartitionCount,
         EvCheckPartitionCountResult,
         EvRequestPartitionStatus,
+        EvResumeCallbacks,
         EvReconnectCluster,
 
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    struct TEvResumeCallbacks : public TEventLocal<TEvResumeCallbacks, EvResumeCallbacks> {
+        explicit TEvResumeCallbacks(ui64 generation)
+            : Generation(generation)
+        {}
+        const ui64 Generation;
+    };
 
     // Events
 
@@ -120,6 +128,7 @@ struct TEvPrivate {
 } // anonymous namespace
 
 class TMessageStreamReadActor : public TActor<TMessageStreamReadActor>, public IDqComputeActorAsyncInput {
+    static constexpr ui64 HealthCheckWakeupTag = 1;
     static constexpr TDuration CHECK_HANGING_PERIOD = TDuration::Minutes(1);
 
     struct TMetrics {
@@ -201,6 +210,7 @@ public:
         std::unique_ptr<IMessageStreamReadActorState> state)
         : TActor<TMessageStreamReadActor>(&TMessageStreamReadActor::StateFunc)
         , Settings(std::move(settings))
+        , CpuQuota(Settings.WorkFactory)
         , State(std::move(state))
         , Partitions(State->GetReadState().Partitions)
         , IngressStats(State->GetReadState().IngressStats)
@@ -232,6 +242,8 @@ public:
         TGuard<TScopedAlloc> guard(*Alloc);
         ClearMkqlData();
     }
+
+    TDuration GetCpuTime() override { return CpuQuota.GetCpuTime(); }
 
     ui64 GetInputIndex() const override { return InputIndex; }
     const TDqAsyncStats& GetIngressStats() const override { return IngressStats; }
@@ -351,6 +363,7 @@ private:
         hFunc(TEvPrivate::TEvPartitionIdleness, Handle);
         hFunc(TEvPrivate::TEvReconnectSession, Handle);
         hFunc(TEvExecuteMessageStreamCallback, HandleCallback);
+        hFunc(TEvPrivate::TEvResumeCallbacks, Handle);
         hFunc(TEvPrivate::TEvCheckPartitionTimer, Handle);
         hFunc(TEvPrivate::TEvCheckPartitionCount, Handle);
         hFunc(TEvPrivate::TEvCheckPartitionCountResult, Handle);
@@ -361,7 +374,44 @@ private:
         cFunc(TEvents::TEvPoison::EventType, PassAway);
     )
 
-    void HandleCallback(TEvExecuteMessageStreamCallback::TPtr& event) { event->Get()->Execute(); }
+    void HandleCallback(TEvExecuteMessageStreamCallback::TPtr& ev) {
+        if (!CpuQuotaRegistered) {
+            CpuQuota.RegisterForResume(SelfId());
+            CpuQuotaRegistered = true;
+        }
+        const bool wasEmpty = PendingCallbacks.empty();
+        auto event = ev->Release();
+        PendingCallbacks.emplace(event.Release());
+        if (wasEmpty) {
+            ExecuteCallback();
+        }
+    }
+
+    void ExecuteCallback() {
+        if (PendingCallbacks.empty()) {
+            return;
+        }
+        const auto delay = CpuQuota.Execute([&] {
+            auto event = std::move(PendingCallbacks.front());
+            PendingCallbacks.pop();
+            event->Execute();
+        });
+        if (!PendingCallbacks.empty()) {
+            auto* resume = new TEvPrivate::TEvResumeCallbacks(++CallbackResumeGeneration);
+            if (delay) {
+                Schedule(*delay, resume);
+            } else {
+                Send(SelfId(), resume);
+            }
+        }
+    }
+
+    void Handle(TEvPrivate::TEvResumeCallbacks::TPtr& ev) {
+        if (ev->Get()->Generation == CallbackResumeGeneration) {
+            CpuQuota.NotifyResumed(false);
+            ExecuteCallback();
+        }
+    }
     void HandleConsumerOffsets(TEvents::TEvInvokeResult::TPtr& event) { State->HandleConsumerOffsets(event); }
     bool ConsumerOffsetsInitialized() const { return State->ConsumerOffsetsInitialized(); }
 
@@ -412,6 +462,9 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
+        CpuQuota.Cancel();
+        ++CallbackResumeGeneration;
+        PendingCallbacks = {};
         State->StopConsumerOffsetInitialization();
         ClearMkqlData();
 
@@ -463,7 +516,15 @@ private:
         }
     }
 
-    void Handle(TEvents::TEvWakeup::TPtr&) {
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag != HealthCheckWakeupTag) {
+            if (CpuQuota.IsWaiting()) {
+                ++CallbackResumeGeneration;
+                CpuQuota.NotifyResumed(true);
+                ExecuteCallback();
+            }
+            return;
+        }
         WakeupScheduled = false;
         ScheduleWakeup();
 
@@ -482,7 +543,7 @@ private:
     void ScheduleWakeup() {
         if (!WakeupScheduled) {
             WakeupScheduled = true;
-            Schedule(CHECK_HANGING_PERIOD, new TEvents::TEvWakeup());
+            Schedule(CHECK_HANGING_PERIOD, new TEvents::TEvWakeup(HealthCheckWakeupTag));
         }
     }
 
@@ -1176,6 +1237,10 @@ private:
 
 private:
     const TMessageStreamReadActorSettings Settings;
+    NInternal::TMessageStreamCpuQuota CpuQuota;
+    bool CpuQuotaRegistered = false;
+    ui64 CallbackResumeGeneration = 0;
+    std::queue<std::unique_ptr<TEvExecuteMessageStreamCallback>> PendingCallbacks;
     const std::unique_ptr<IMessageStreamReadActorState> State;
     THashMap<TPartitionKey, TPartitionProgress>& Partitions;
     TDqAsyncStats& IngressStats;

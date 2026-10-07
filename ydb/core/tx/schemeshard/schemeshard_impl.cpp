@@ -9280,6 +9280,9 @@ void TSchemeShard::ConfigureExternalSources(
             availableTypes.insert(NYql::EDatabaseType::Ydb);
         } else if (const auto databaseType = NYql::DatabaseTypeFromString(type)) {
             availableTypes.insert(*databaseType);
+        } else {
+            YDB_LOG_WARN_CTX(ctx, "Unknown external data source type, ignoring it",
+                {"sourceType", type});
         }
     }
     ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(

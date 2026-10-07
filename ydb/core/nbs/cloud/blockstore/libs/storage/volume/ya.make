@@ -3,6 +3,10 @@ LIBRARY()
 SRCS(
     volume.cpp
     volume_actor.cpp
+    volume_database.cpp
+    volume_initschema.cpp
+    volume_loadstate.cpp
+    volume_store_partition_tablet_id.cpp
 )
 
 PEERDIR(

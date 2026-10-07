@@ -5,19 +5,10 @@ ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapC
 ydb/core/driver_lib/run/ut unittest.[*/*] chunk
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.HoppingEvictedKeysBeforeAndAfterRestart-Watermarks
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.HoppingEvictedKeysInOrdinaryQuery-Enabled
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.RowDispatcherMemoryLimitOnParserCreation
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointOffsets-SharedReading+CommittedAhead
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets+SharedReading+FromCheckpoint
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading+FromCheckpoint
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading-FromCheckpoint
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerRewindDispositions+SharedReading
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryReadFromConsumerRewind+SharedReading+FromTimestamp
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryReadFromConsumerRewind-SharedReading+FromTimestamp
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryRestartsWhenUpsertTableDeletedWhileRunning
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithStreamLookupJoin+WithFeatureFlag+WithFullscanFlag
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithStreamLookupJoinShuffleMode-WithFeatureFlag
 ydb/core/kqp/ut/federated_query/datastreams StreamingHistoryReplay.ChangedWindowReplaysConsumedHistory-Force
 ydb/core/kqp/ut/federated_query/datastreams StreamingHistoryReplay.ConsumerAheadOfCheckpointIsRewoundOnTextChange+SharedReading
 ydb/core/kqp/ut/federated_query/datastreams StreamingHistoryReplay.ConsumerAheadOfCheckpointIsRewoundOnTextChange-SharedReading
@@ -50,6 +41,7 @@ ydb/core/persqueue/ut TPQTest.TestReadSessions
 ydb/core/persqueue/ut TPQTest.TestSetClientOffset
 ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.SkipMessagesWithObsoleteTimestampWithRetentionInNonEmptyDestinationTopicWithRestart
 ydb/core/statistics/aggregator/ut AnalyzeSampling.CollectAndPersistStatistics+ColumnShard-SmallHistogramBudget
+ydb/core/sys_view/ut SystemView.QuerySessionsRuntimeStats+Enabled
 ydb/core/sys_view/ut_large SystemViewLarge.AuthOwners_DropSubtreeDuringScan
 ydb/core/tablet/ut BootstrapperTest.MultipleBootstrappers
 ydb/core/tablet_flat/ut TFlatTableExecutor_CutTabletHistory.TestDoNotCutHistoryEnabledAfterBoot
@@ -149,6 +141,5 @@ ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
-ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[old_sdk]
 ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_settings_save_deploy_flags_from_checkboxes

@@ -26,6 +26,9 @@ from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.common.types import Erasure
 
 
+PRE_INSTALLED_ACCOUNTS = ("prod", "test")
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,11 +75,9 @@ def _exec_queries(pool, queries):
 
 
 class LogbrokerFederation(object):
-    def __init__(self, accounts, ydb_cluster_names=("cluster_a", "cluster_b"), MockFederationDiscovery: bool = False):
+    def __init__(self, ydb_cluster_names=("cluster_a", "cluster_b"), MockFederationDiscovery: bool = False):
         logger.info("Setup federation recipe")
         assert len(ydb_cluster_names) > 0
-        self.__accounts = tuple(accounts)
-        assert self.__accounts, "At least one account is required"
         self.__clusters = {}
         self.__cluster_ports = {}
         self.__port_allocators = {}
@@ -134,7 +135,7 @@ class LogbrokerFederation(object):
 
     def _start_mock_federation_discovery(self):
         federation = self
-        accounts = self.__accounts
+        accounts = PRE_INSTALLED_ACCOUNTS + ("admin",)
 
         class DiscoveryService(ydb_discovery_v1_pb2_grpc.DiscoveryServiceServicer):
             def ListEndpoints(self, request, context):
@@ -223,7 +224,8 @@ class LogbrokerFederation(object):
         return cluster, grpc_port
 
     def _setup_ydb_cluster(self, name, cluster, grpc_port):
-        for account in self.__accounts:
+        databases_to_create = list(PRE_INSTALLED_ACCOUNTS) + ["admin"]
+        for account in databases_to_create:
             logger.info("Setup cluster {}, create database: {}".format(name, account))
             cluster.create_database(
                 "/Root/logbroker-federation/{}".format(account),
@@ -237,6 +239,12 @@ class LogbrokerFederation(object):
             kafka_port = slots[0].kafka_api_port
             _setenv("{}_{}_kafka_dynamic_port".format(name, account), str(kafka_port))
             logger.info("YDB cluster {} {} slot started on kafka port {}".format(name, account, kafka_port))
+
+            if account in PRE_INSTALLED_ACCOUNTS:
+                kafka_port = slots[0].kafka_api_port
+                _setenv("{}_{}_kafka_dynamic_port".format(name, account), str(kafka_port))
+                logger.info("YDB cluster {} {} slot started on kafka port {}".format(name, account, kafka_port))
+
 
         driver_config = ydb.DriverConfig(
             endpoint="localhost:{}".format(grpc_port),
@@ -307,7 +315,7 @@ class LogbrokerFederation(object):
                     scheme_client.make_directory(part)
                 except ydb.SchemeError:
                     pass  # already exists
-            for account in self.__accounts:
+            for account in ('admin',) + PRE_INSTALLED_ACCOUNTS:
                 kesus_path = "/Root/PersQueue/System/Quoters/{}".format(account)
                 try:
                     driver.coordination_client.create_node(
@@ -338,7 +346,8 @@ class LogbrokerFederation(object):
                     prefetch_coefficient=-1.0,
                 )),
             ]
-            for account in self.__accounts:
+
+            for account in ('admin',) + PRE_INSTALLED_ACCOUNTS:
                 kesus_path = "/Root/PersQueue/System/Quoters/{}".format(account)
                 account_resources = list(_resources)
                 for resource_path, drr in account_resources:
@@ -428,7 +437,7 @@ class LogbrokerFederation(object):
                          {now_ms}, {now_ms}, 'admin', 'admin');
                 """.format(now_ms=now_ms))
 
-                for account_name in self.__accounts:
+                for account_name in ('admin',) + PRE_INSTALLED_ACCOUNTS:
                     pool.execute_with_retries("""
                         --!syntax_v1
                         UPSERT INTO `/Root/Accounts`
@@ -483,7 +492,7 @@ class LogbrokerFederation(object):
                     ))
 
                 all_quota_clusters = list(self.__cluster_ports.keys())
-                for account_name in self.__accounts:
+                for account_name in ('admin',) + PRE_INSTALLED_ACCOUNTS:
                     for quota_cluster in all_quota_clusters:
                         pool.execute_with_retries("""
                             --!syntax_v1
@@ -517,7 +526,7 @@ class LogbrokerFederation(object):
         logger.info("Waiting for CM at {}".format(cm_endpoint))
         driver_config = ydb.DriverConfig(
             endpoint=cm_endpoint,
-            database="/Root/logbroker-federation/{}".format(self.__accounts[0]),
+            database="/Root/logbroker-federation/{}".format(PRE_INSTALLED_ACCOUNTS[0]),
         )
 
         for cluster_name, cluster_port in cluster_ports.items():
@@ -535,7 +544,7 @@ class LogbrokerFederation(object):
         else:
             raise RuntimeError("CM did not become ready within 60s")
 
-        for account in self.__accounts:
+        for account in PRE_INSTALLED_ACCOUNTS:
             database = "/logbroker-federation/{}".format(account)
             driver_config = ydb.DriverConfig(endpoint=cm_endpoint, database=database)
             with ydb.Driver(driver_config) as driver:

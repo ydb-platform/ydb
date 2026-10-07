@@ -906,7 +906,7 @@ public:
                 if (nextGroup < numGroups) {
                     if (!columnIndices.empty()) {
                         CurrentRowGroupIndex = nextGroup;
-                        ThrowParquetNotOk(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(nextGroup) : static_cast<int>(nextGroup) }, columnIndices));
+                        ThrowParquetNotOk(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[nextGroup]) : static_cast<int>(nextGroup) }, columnIndices));
                         SourceContext->IncChunkCount();
                     }
                     RowGroupReaderIndex[nextGroup] = readyReaderIndex;

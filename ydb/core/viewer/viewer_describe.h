@@ -428,6 +428,9 @@ public:
             return;
         }
 
+        // Do not expose the packed protobuf payload if we cannot decode it.
+        json["PathDescription"]["ExternalTableDescription"].EraseValue("Content");
+
         NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, true, NYql::GetAllExternalDataSourceDatabaseTypes())};
         const auto& sourceType = describe->GetPathDescription().GetExternalTableDescription().GetSourceType();
         const auto databaseType = NYql::DatabaseTypeFromString(sourceType);
@@ -435,7 +438,6 @@ public:
             return;
         }
         try {
-            json["PathDescription"]["ExternalTableDescription"].EraseValue("Content");
             auto source = externalSourceFactory->GetOrCreate(*databaseType);
             auto parameters = source->GetParameters(content);
             for (const auto& [key, items]: parameters) {

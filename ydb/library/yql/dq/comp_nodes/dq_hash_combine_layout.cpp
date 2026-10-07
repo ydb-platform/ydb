@@ -8,6 +8,7 @@
 #include <util/system/yassert.h>
 
 #include <cstring>
+#include <type_traits>
 
 namespace NKikimr::NMiniKQL {
 namespace {
@@ -108,8 +109,26 @@ std::optional<size_t> TDqHashCombineTupleLayout::EstimateValueMemorySize(const T
     while (type->IsOptional() || type->IsTagged()) {
         type = type->IsOptional() ? AS_TYPE(TOptionalType, type)->GetItemType() : AS_TYPE(TTaggedType, type)->GetBaseType();
     }
+    if (!type->IsTuple() && !type->IsStruct()) {
+        return {};
+    }
+
+    const ui32 count = type->IsTuple() ? AS_TYPE(TTupleType, type)->GetElementsCount() :
+        AS_TYPE(TStructType, type)->GetMembersCount();
+    if (!count) {
+        return sizeof(TUnboxedValuePod) + sizeof(TDirectArrayHolderInplace);
+    }
+
+    static_assert(std::is_final_v<TDirectArrayHolderInplace>, "Memory estimation requires an exact holder type");
+    const auto* holder = dynamic_cast<const TDirectArrayHolderInplace*>(value.AsRawBoxed());
+    if (!holder) {
+        return {};
+    }
+    MKQL_ENSURE(holder->GetSize() >= count, "Composite holder has fewer elements than its type");
+
+    const auto* elements = holder->GetPtr();
     return EstimateCompositeSize(type, [&](ui32 index, TType* itemType) {
-        return EstimateValueMemorySize(value.GetElement(index), itemType);
+        return EstimateValueMemorySize(elements[index], itemType);
     });
 }
 

@@ -8,7 +8,7 @@ _recipe_instance = None
 
 def start(args):
     global _recipe_instance
-    _recipe_instance = LogbrokerFederation(accounts=["prod", "test", "admin"])
+    _recipe_instance = LogbrokerFederation()
     _recipe_instance.start(args)
 
 

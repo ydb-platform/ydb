@@ -12,6 +12,7 @@ PEERDIR(
     library/python/testing/yatest_common
     ydb/public/api/grpc
     ydb/public/api/protos
+    ydb/public/tools/lib/cmds
     ydb/tests/library
 )
 

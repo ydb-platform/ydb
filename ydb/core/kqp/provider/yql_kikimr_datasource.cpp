@@ -829,6 +829,11 @@ public:
                                         .Add(readArgs[1]->ChildrenList()[1])
                                     .Build()
                                     .Done().Ptr();
+                    if (dataSource.IsMessageStream() && dataSource.GetDatabaseType() == EDatabaseType::YT) {
+                        auto sourceArgs = readArgs[1]->ChildrenList();
+                        sourceArgs.push_back(ctx.NewAtom(node->Pos(), "message_stream"));
+                        readArgs[1] = ctx.ChangeChildren(*readArgs[1], std::move(sourceArgs));
+                    }
                     readArgs[2] = ctx.NewCallable(node->Pos(), "MrTableConcat", { readArgs[2] });
                     auto newRead = ctx.ChangeChildren(*read, std::move(readArgs));
                     auto retChildren = node->ChildrenList();

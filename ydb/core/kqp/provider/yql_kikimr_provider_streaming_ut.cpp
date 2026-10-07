@@ -2266,7 +2266,7 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
 
     Y_UNIT_TEST(TestLocalTopicDataSourceWithoutLocation) {
         const auto source = TExternalDataSource::CreateForLocalTopic("cluster", "database", "token");
-        UNIT_ASSERT(source.IsYdbTopics());
+        UNIT_ASSERT(source.IsMessageStream());
         UNIT_ASSERT_VALUES_EQUAL(source.GetDataSourcePath(), "cluster");
         const auto properties = source.BuildConnectorProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.at("database_name"), "database");

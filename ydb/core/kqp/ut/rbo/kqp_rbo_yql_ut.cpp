@@ -1,6 +1,19 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+<<<<<<< HEAD
+=======
+#include <ydb/core/kqp/opt/rbo/kqp_operator.h>
+#include <ydb/core/kqp/opt/rbo/kqp_plan_conversion_utils.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
+#include "kqp_rbo_test_helpers.h"
+#include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_trace_output.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+>>>>>>> 0911c4ac33a (fixed race (#55336))
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -17,6 +30,10 @@
 #include <ctime>
 #include <regex>
 #include <fstream>
+
+// These headers import NKikimr::NKqp into the global namespace, so include them last
+#include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_aggregation_builder.h>
+#include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_join_builder.h>
 
 namespace {
 

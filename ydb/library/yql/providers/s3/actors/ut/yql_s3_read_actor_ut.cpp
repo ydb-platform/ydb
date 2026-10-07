@@ -286,7 +286,9 @@ Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
 
     Y_UNIT_TEST(CompressedSizeSumOverflow) {
         for (ui64 parallel : {0, 1, 2}) {
-            AssertBadRequest(ReadFooter({Max<i64>() - 4, Max<i64>() - 4, Max<i64>() - 4}, parallel));
+            const auto result = ReadFooter({Max<i64>() - 4, Max<i64>() - 4, Max<i64>() - 4}, parallel);
+            AssertBadRequest(result);
+            UNIT_ASSERT_STRING_CONTAINS(result.Issues, "total_compressed_size sum overflow");
         }
     }
 

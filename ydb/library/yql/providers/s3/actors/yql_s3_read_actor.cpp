@@ -791,7 +791,12 @@ public:
                             throw parquet::ParquetException("Invalid parquet metadata: negative total_compressed_size ", chunkSize,
                                 " of column ", columnIndex, " in row group ", i);
                         }
-                        compressedSize += std::min(static_cast<ui64>(chunkSize), Max<ui64>() - compressedSize);
+                        const ui64 unsignedChunkSize = static_cast<ui64>(chunkSize);
+                        if (unsignedChunkSize > Max<ui64>() - compressedSize) {
+                            throw parquet::ParquetException("Invalid parquet metadata: total_compressed_size sum overflow",
+                                " at column ", columnIndex, " in row group ", i);
+                        }
+                        compressedSize += unsignedChunkSize;
                     }
                 }
                 if (ReadSpec->ParallelRowGroupCount) {

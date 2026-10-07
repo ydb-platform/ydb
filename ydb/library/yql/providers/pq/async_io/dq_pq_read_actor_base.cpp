@@ -9,6 +9,7 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/providers/pq/common/events.h>
+#include <ydb/library/yql/providers/pq/common/pq_partitions.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -364,6 +365,15 @@ void TPqReadState::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, TSourc
 }
 
 void TPqReadState::LoadState(const TSourceState& state) {
+    std::vector<TPartitionKey> clusters;
+    clusters.reserve(SourceParams.FederatedClustersSize());
+    for (const auto& cluster : SourceParams.GetFederatedClusters()) {
+        clusters.push_back({cluster.GetName(), cluster.GetPartitionsCount()});
+    }
+
+    const auto partitionKeys = GetPartitionsToRead(ReadParams, clusters);
+    const THashSet<TPartitionKey> partitionsToRead(partitionKeys.begin(), partitionKeys.end());
+
     TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
     ui64 ingressBytes = 0;
     for (const auto& data : state.Data) {
@@ -377,7 +387,12 @@ void TPqReadState::LoadState(const TSourceState& state) {
 
         Partitions.reserve(Partitions.size() + stateProto.PartitionsSize());
         for (const auto& partitionProto : stateProto.GetPartitions()) {
-            auto& offset = Partitions[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}].Offset;
+            const TPartitionKey key{partitionProto.GetCluster(), partitionProto.GetPartition()};
+            if (!partitionsToRead.contains(key)) {
+                continue;
+            }
+
+            auto& offset = Partitions[key].Offset;
             if (offset) {
                 offset = Min(*offset, partitionProto.GetOffset());
             } else {

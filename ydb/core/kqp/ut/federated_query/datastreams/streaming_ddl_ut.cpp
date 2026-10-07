@@ -1,6 +1,7 @@
 #include "common.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/localdb.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
@@ -204,12 +205,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         appConfig.MutableFeatureFlags()->SetEnableRowDispatcherMemoryLimiting(true);
         appConfig.MutableFeatureFlags()->SetEnableStreamingQueriesCounters(false);
         auto& resourceManager = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
-        resourceManager.SetQueryMemoryLimit(memoryLimit);
+        // The row dispatcher takes its memory from the resource manager, limited by the resource broker queue (the
+        // memory controller doesn't run in these tests). The memory of the query tasks is limited separately, by the
+        // compute scheduler - it doesn't matter here
         resourceManager.SetKqpLevelCacheMaxSizeBytes(0);
-        appConfig.MutableMemoryControllerConfig()->SetQueryExecutionLimitBytes(memoryLimit);
-        // the prepaid memory of the query tasks is charged to the same node total: units almost free and small MKQL
-        // limits keep that charge small next to the row dispatcher allocations
-        resourceManager.SetExecutionUnitMemory(100);
+        auto* queue = appConfig.MutableResourceBrokerConfig()->AddQueues();
+        queue->SetName(NLocalDb::KqpResourceManagerQueue);
+        queue->MutableLimit()->SetMemory(memoryLimit);
         resourceManager.SetMkqlLightProgramMemoryLimit(128_KB);
         resourceManager.SetMkqlHeavyProgramMemoryLimit(128_KB);
         resourceManager.SetChannelBufferSize(128_KB);
@@ -249,7 +251,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnParserCreation, TStreamingTestFixture) {
         CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
-        constexpr ui64 memoryLimit = 8_MB;
+        // the query tasks used to take about 1 MiB of the same limit, the parser still needs more than what is left
+        constexpr ui64 memoryLimit = 7_MB;
         ConfigureRowDispatcherMemoryLimit(*this, memoryLimit);
         const auto pqGateway = SetupMockPqGateway();
         CreateRowDispatcherMemoryLimitTopics(*this);

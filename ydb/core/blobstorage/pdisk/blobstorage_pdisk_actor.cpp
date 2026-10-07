@@ -344,7 +344,8 @@ public:
         RealtimeFlag.Render(realtimeFlagStr);
         TStringStream fairSchedulerStr;
         THolder<THttpInfo> req(PDisk->ReqCreator.CreateFromArgs<THttpInfo>(SelfId(), ev->Sender, outStr,
-                    deviceFlagStr.Str(), realtimeFlagStr.Str(), fairSchedulerStr.Str(), PDisk->ErrorStr, false));
+                    deviceFlagStr.Str(), realtimeFlagStr.Str(), fairSchedulerStr.Str(), PDisk->ErrorStr,
+                    false, false));
         if (!IsFormattingNow) {
             PDisk->InputRequest(req.Release());
         } else {
@@ -1505,6 +1506,7 @@ public:
         }
 
         bool doGetSchedule = false;
+        const bool resetSlowDisk = cgi.Has("resetSlowPDisk");
         const auto& httpRequest = ev->Get()->Request;
         if (httpRequest.GetMethod() == HTTP_METHOD_GET) {
             /*
@@ -1534,7 +1536,8 @@ public:
         outStr.Reserve(512 << 10);
 
         THolder<THttpInfo> req(PDisk->ReqCreator.CreateFromArgs<THttpInfo>(SelfId(), ev->Sender, outStr,
-                    deviceFlagStr.Str(), realtimeFlagStr.Str(), fairSchedulerStr.Str(), PDisk->ErrorStr, doGetSchedule));
+                    deviceFlagStr.Str(), realtimeFlagStr.Str(), fairSchedulerStr.Str(), PDisk->ErrorStr,
+                    doGetSchedule, resetSlowDisk));
         if (AtomicGet(PDisk->IsStarted)) {
             PDisk->InputRequest(req.Release());
         } else {

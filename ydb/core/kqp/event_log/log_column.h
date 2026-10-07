@@ -271,6 +271,11 @@ public:
         KeyName(keyName) {
     }
 
+    TDBLogMessageStringValueColumn(const TString& columnName, const TBase::TDatabaseSettings& settings = {}) :
+        TBase(columnName, settings),
+        KeyName({columnName}) {
+    }
+
     TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
         TStringValueExtractor extractor;
         auto value = extractor.ExtractValue(message.StructuredMessage, KeyName);
@@ -295,6 +300,11 @@ public:
     TDBLogMessageTypedValueColumn(const TString& columnName, const std::vector<TKeyName>& keyName, const TBase::TDatabaseSettings& settings = {}) :
         TBase(columnName, settings),
         KeyName(keyName) {
+    }
+
+    TDBLogMessageTypedValueColumn(const TString& columnName, const TBase::TDatabaseSettings& settings = {}) :
+       TBase(columnName, settings),
+        KeyName({columnName}) {
     }
 
     TBase::TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {

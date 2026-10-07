@@ -539,8 +539,8 @@ namespace NActors {
     constexpr size_t TimeBufSize = 512;
 
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
-        // @todo Более умное создание синков
-        if (!Settings->Sinks.empty()) {
+        auto sinks = Settings->Sinks;
+        if (sinks !=nullptr && !sinks->empty()) {
             NStructuredLog::TLogMessage message {
                 .Time = evLog->Stamp,
                 .Priority = evLog->Level.ToPrio(),
@@ -551,8 +551,7 @@ namespace NActors {
                 .TextMessage = evLog->Line,
                 .StructuredMessage = evLog->StructuredMessage.GetOrElse({})};
 
-            // @todo Может ли Settings удалиться в этот момент
-            for(auto& sink: Settings->Sinks) {
+            for(auto& sink: *sinks) {
                 sink.second->Write(message);
             }
         }

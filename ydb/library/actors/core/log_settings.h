@@ -184,7 +184,8 @@ namespace NActors {
             void SetEnableStructuredLogInJson(bool value);
 
             using TLogSinkMap = std::map<TString, NStructuredLog::ILogSinkSPtr>;
-            TLogSinkMap Sinks;
+            using TLogSinkMapSPtr = std::shared_ptr<TLogSinkMap>;
+            TLogSinkMapSPtr Sinks;
 
             ~TSettings();
 

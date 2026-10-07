@@ -1769,6 +1769,13 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 #endif
 }
 
+using namespace NKikimr::NKqp::NEventLog;
+
+TColumnShardLogWriter::TDatabaseSettings GetSettings(const TString& tableName) {
+    TColumnShardLogWriter::TDatabaseSettings settings{.Path = "/local/testdb", .StoreName = tableName, .TableName  = tableName};
+    return settings;
+}
+
 void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
 {
     auto logBackend = CreateLogBackendWithUnifiedAgent(runConfig, Counters);
@@ -1829,10 +1836,9 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         LogSettings->ShortHostName = fullHostName.substr(0, firstDot);
     }
 
-    /* NKikimr::NKqp::NEventLog::TKqpEventLogWriter::TDatabaseSettings settings;
-    settings.Path = "/local/testdb";
-    auto ptr = std::make_shared<NKikimr::NKqp::NEventLog::TKqpEventLogWriter>(settings);
-    LogSettings->Sinks.push_back(ptr); */
+    /* auto sinks = std::make_shared<NLog::TSettings::TLogSinkMap>();
+    (*sinks)["1"] = std::make_shared<TKqpEventLogWriter>(GetSettings("kqp_requests"));
+    LogSettings->Sinks = sinks; */
 }
 
 void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)

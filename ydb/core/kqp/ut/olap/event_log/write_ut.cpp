@@ -1,6 +1,8 @@
+#include <ydb/core/kqp/event_log/audit_event_log_writer.h>
 #include <ydb/core/kqp/event_log/column_shard_log_writer.h>
 #include <ydb/core/kqp/event_log/kqp_event_log_writer.h>
 #include <ydb/core/kqp/event_log/log_column.h>
+#include <ydb/core/kqp/event_log/tli_event_log_writer.h>
 
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 #include <ydb/core/kqp/ut/olap/helpers/get_value.h>
@@ -256,15 +258,16 @@ struct TEnvironment {
         for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
             auto settings = runtime->GetLogSettings(i);
             settings->DefPriority = NActors::NLog::PRI_TRACE;
-            settings->Sinks.clear();
-            settings->Sinks[""] = Writer;
+            auto sinks = std::make_shared<NLog::TSettings::TLogSinkMap>();
+            (*sinks)[""] = Writer;
 
             ui32 j = 0;
             for (auto& sink: AddSinks) {
                 TStringBuilder key;
                 key << j++;
-                settings->Sinks[key] = sink;
+                (*sinks)[key] = sink;
             }
+            settings->Sinks = sinks;
         }
         runtime->SetLogPriority(TEnvironment::Component, NActors::NLog::PRI_TRACE);
     }
@@ -308,10 +311,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:301")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:303")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:305")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:306")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:304")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:306")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:308")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:309")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {

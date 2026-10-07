@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 
 SRCS(
     kqp_hash_shuffle_ut.cpp
+    kqp_log_capture_ut.cpp
     kqp_re2_ut.cpp
     kqp_scan_spilling_ut.cpp
     kqp_scan_logging_ut.cpp

@@ -1023,6 +1023,7 @@ struct TPersistentBufferFormat {
         ui64 TabletsOffset = 0;
         // Zero preserves the unbounded response for existing callers.
         ui32 TabletsLimit = 0;
+        std::optional<ui64> TabletIdFilter;
         TEvGetPersistentBufferInfo(bool describeFreeSpace = false, bool describeTablets = false)
             : DescribeFreeSpace(describeFreeSpace)
             , DescribeTablets(describeTablets)

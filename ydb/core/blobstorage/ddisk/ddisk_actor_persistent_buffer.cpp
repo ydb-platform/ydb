@@ -2679,19 +2679,23 @@ namespace NKikimr::NDDisk {
 #undef DDISK_FILL_PB_OP_STATS
 
         if (ev->Get()->DescribeTablets) {
-            if (!ev->Get()->TabletsLimit) {
+            const auto tabletId = ev->Get()->TabletIdFilter;
+            if (!ev->Get()->TabletsLimit && !tabletId) {
                 reply->EraseBarriers = PersistentBufferBarriersManager.GetBarriers();
             }
-            reply->TabletsTotal = PersistentBuffers.size();
+            auto first = tabletId ? PersistentBuffers.lower_bound({*tabletId, 0, 0}) : PersistentBuffers.begin();
+            const auto last = tabletId ? PersistentBuffers.upper_bound({*tabletId, Max<ui32>(), Max<ui8>()})
+                : PersistentBuffers.end();
+            reply->TabletsTotal = tabletId ? std::distance(first, last) : PersistentBuffers.size();
             const ui64 limit = ev->Get()->TabletsLimit;
             ui64 offset = ev->Get()->TabletsOffset;
             if (limit && offset >= reply->TabletsTotal) {
                 offset = reply->TabletsTotal ? (reply->TabletsTotal - 1) / limit * limit : 0;
             }
             reply->TabletsOffset = offset;
-            auto it = PersistentBuffers.begin();
-            std::advance(it, Min<ui64>(offset, PersistentBuffers.size()));
-            for (; it != PersistentBuffers.end() && (!limit || reply->TabletInfos.size() < limit); ++it) {
+            auto it = first;
+            std::advance(it, Min<ui64>(offset, reply->TabletsTotal));
+            for (; it != last && (!limit || reply->TabletInfos.size() < limit); ++it) {
                 const auto& [k, v] = *it;
                 if (PersistentBufferBarriersManager.HasBarrier(k.TabletId, k.DirectBlockGroupIndex)) {
                     reply->EraseBarriers[{k.TabletId, k.DirectBlockGroupIndex}] =

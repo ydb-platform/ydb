@@ -5405,6 +5405,23 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletInfos.front().DirectBlockGroupIndex,
                 info->Get()->TabletInfos[expectedOffset].DirectBlockGroupIndex);
         }
+        auto otherCreds = Connect(ctx, disk.PBServiceId, 99, generation);
+        doWrite(otherCreds, 11, 'Z');
+        for (ui64 filter : std::array<ui64, 3>{tabletId, 99, 100}) {
+            auto request = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>(false, true);
+            request->TabletIdFilter = filter;
+            request->TabletsOffset = 100;
+            request->TabletsLimit = 1;
+            auto page = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(ctx, disk.PBServiceId, request.release());
+            const ui64 total = filter == tabletId ? 2 : filter == 99 ? 1 : 0;
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletsTotal, total);
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletsOffset, total ? total - 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletInfos.size(), total ? 1 : 0);
+            for (const auto& ti : page->Get()->TabletInfos) {
+                UNIT_ASSERT_VALUES_EQUAL(ti.TabletId, filter);
+                if (filter == tabletId) UNIT_ASSERT_VALUES_EQUAL(ti.DirectBlockGroupIndex, 2);
+            }
+        }
         auto stats = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(
             ctx, disk.PBServiceId, new NDDisk::TEvGetPersistentBufferInfo(false, false));
         UNIT_ASSERT(stats->Get()->TabletInfos.empty());

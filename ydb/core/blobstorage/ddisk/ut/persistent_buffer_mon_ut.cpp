@@ -185,11 +185,11 @@ Y_UNIT_TEST_SUITE(TPersistentBufferMonTest) {
         UNIT_ASSERT_VALUES_EQUAL(request->Recipient, test.PB);
         UNIT_ASSERT(request->Get()->DescribeTablets);
         UNIT_ASSERT(!request->Get()->DescribeFreeSpace);
-        UNIT_ASSERT_VALUES_EQUAL(request->Get()->TabletsLimit, 100);
-        UNIT_ASSERT_VALUES_EQUAL(request->Get()->TabletsOffset, 200);
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->TabletsLimit, 20);
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->TabletsOffset, 40);
         auto reply = std::make_unique<NDDisk::TEvPersistentBufferInfo>();
-        reply->TabletsTotal = 201;
-        reply->TabletsOffset = 200;
+        reply->TabletsTotal = 41;
+        reply->TabletsOffset = 40;
         reply->PerTabletStorageLimit = 4096;
         reply->TabletInfos.emplace_back(Max<ui64>(), 1, 3, 4, TInstant::Now(), TInstant::Now(), 2, 1024, 0, 0);
         reply->EraseBarriers[{Max<ui64>(), 0}] = 2;
@@ -199,18 +199,43 @@ Y_UNIT_TEST_SUITE(TPersistentBufferMonTest) {
         UNIT_ASSERT_STRING_CONTAINS(response, "Content-Type: application/json");
         NJson::TJsonValue json;
         UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response).SubStr(response.find("\r\n\r\n") + 4), &json));
+        UNIT_ASSERT_VALUES_EQUAL(json["pageSize"].GetUInteger(), 20);
         UNIT_ASSERT_VALUES_EQUAL(json["page"].GetUInteger(), 2);
         UNIT_ASSERT_VALUES_EQUAL(json["pages"].GetUInteger(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(json["total"].GetString(), "201");
+        UNIT_ASSERT_VALUES_EQUAL(json["total"].GetString(), "41");
         UNIT_ASSERT_VALUES_EQUAL(json["tablets"].GetArray().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(json["tablets"][0]["tabletId"].GetString(), ToString(Max<ui64>()));
         UNIT_ASSERT_VALUES_EQUAL(json["tablets"][0]["barrier"].GetString(), "2");
     }
 
+    Y_UNIT_TEST(TabletsApiCustomPageSizeAndFilter) {
+        TMonTest test;
+        test.Request("action=tablets&" + test.PBParam() + "&page=2&pageSize=7&tabletId=" + ToString(Max<ui64>()));
+        test.ListBuffers();
+        auto request = test.Runtime.GrabEdgeEventRethrow<NDDisk::TEvGetPersistentBufferInfo>(test.PBEdge);
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->TabletsLimit, 7);
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->TabletsOffset, 14);
+        UNIT_ASSERT(request->Get()->TabletIdFilter);
+        UNIT_ASSERT_VALUES_EQUAL(*request->Get()->TabletIdFilter, Max<ui64>());
+        auto reply = std::make_unique<NDDisk::TEvPersistentBufferInfo>();
+        reply->TabletsTotal = 15;
+        reply->TabletsOffset = 14;
+        test.Runtime.Send(new NActors::IEventHandle(test.Mon, test.PBEdge, reply.release(), 0, request->Cookie));
+        const auto response = test.Response();
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(response).SubStr(response.find("\r\n\r\n") + 4), &json));
+        UNIT_ASSERT_VALUES_EQUAL(json["pageSize"].GetUInteger(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(json["page"].GetUInteger(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(json["pages"].GetUInteger(), 3);
+    }
+
     Y_UNIT_TEST(TabletsApiRejectsInvalidRequests) {
         for (const TString& params : {TString("action=tablets"), TString("action=tablets&pb=one&pb=two"),
                 TString("action=tablets&pb=one&page=-1"), TString("action=tablets&pb=one&page=18446744073709551615"),
-                TString("action=tablets&pb=one&page=abc")}) {
+                TString("action=tablets&pb=one&page=abc"), TString("action=tablets&pb=one&pageSize=0"),
+                TString("action=tablets&pb=one&pageSize=1001"), TString("action=tablets&pb=one&pageSize=abc"),
+                TString("action=tablets&pb=one&tabletId=abc"), TString("action=tablets&pb=one&tabletId=-1"),
+                TString("action=tablets&pb=one&tabletId=18446744073709551616")}) {
             TMonTest test;
             test.Request(params);
             const auto response = test.Response();

@@ -36,7 +36,8 @@ namespace NKikimr {
     namespace {
 
         class TPersistentBufferMonActor : public TActorBootstrapped<TPersistentBufferMonActor> {
-            static constexpr ui32 TabletsPageSize = 100;
+            static constexpr ui32 DefaultTabletsPageSize = 20;
+            static constexpr ui32 MaxTabletsPageSize = 1000;
 
             struct TInflight {
                 TActorId Sender;
@@ -45,6 +46,8 @@ namespace NKikimr {
                 bool DescribeFreeSpace;
                 bool TabletsOnly;
                 ui64 TabletPage;
+                ui32 TabletsPageSize;
+                std::optional<ui64> TabletIdFilter;
                 bool AutoRefresh;
                 ui32 RefreshRate;
                 THashSet<TString> SelectedPBs; // empty == show all
@@ -206,10 +209,10 @@ namespace NKikimr {
                         result["error"] = timeout ? "Persistent buffer did not respond" : "Persistent buffer not found";
                     } else {
                         const auto* info = inflight.Responses.front().second->Get();
-                        result["page"] = info->TabletsOffset / TabletsPageSize;
-                        result["pages"] = info->TabletsTotal ? (info->TabletsTotal - 1) / TabletsPageSize + 1 : 1;
+                        result["page"] = info->TabletsOffset / inflight.TabletsPageSize;
+                        result["pages"] = info->TabletsTotal ? (info->TabletsTotal - 1) / inflight.TabletsPageSize + 1 : 1;
                         result["total"] = ToString(info->TabletsTotal);
-                        result["pageSize"] = TabletsPageSize;
+                        result["pageSize"] = inflight.TabletsPageSize;
                         auto& tablets = result["tablets"];
                         tablets.SetType(NJson::JSON_ARRAY);
                         for (const auto& ti : info->TabletInfos) {
@@ -284,7 +287,10 @@ var pending = false;
 function state(pb) {
     var p = new URLSearchParams(window.location.search);
     var page = Number(p.get('tabletPage.' + pb) || 0);
-    return {open: p.get('tabletOpen.' + pb) === '1', page: Number.isSafeInteger(page) && page >= 0 ? page : 0};
+    var pageSize = Number(p.get('tabletPageSize.' + pb) || 20);
+    return {open: p.get('tabletOpen.' + pb) === '1', page: Number.isSafeInteger(page) && page >= 0 ? page : 0,
+        pageSize: Number.isInteger(pageSize) && pageSize >= 1 && pageSize <= 1000 ? pageSize : 20,
+        tabletId: p.get('tabletId.' + pb) || ''};
 }
 function saveState(pb, open, page) {
     var url = new URL(window.location.href);
@@ -293,10 +299,15 @@ function saveState(pb, open, page) {
     url.searchParams.set('tabletPage.' + pb, page);
     history.replaceState(null, '', url);
 }
+function tabletStateParam(k) {
+    return ['tabletPage.', 'tabletOpen.', 'tabletPageSize.', 'tabletId.'].some(function(prefix) {
+        return k.indexOf(prefix) === 0;
+    });
+}
 function buildUrl() {
     var p = new URLSearchParams();
     new URLSearchParams(window.location.search).forEach(function(v, k) {
-        if (k.indexOf('tabletPage.') === 0 || k.indexOf('tabletOpen.') === 0) p.set(k, v);
+        if (tabletStateParam(k)) p.set(k, v);
     });
     p.set('formPresent', '1');
     if (document.getElementById('pb-mon-autoRefresh').checked) p.set('autoRefresh', '1');
@@ -318,6 +329,56 @@ function pageButton(pb, label, page, disabled) {
     button.textContent = label;
     return button;
 }
+function tabletsCacheKey(pb) {
+    return 'pb-mon-tablets:' + window.location.pathname + ':' + pb;
+}
+function renderTablets(panel, data) {
+    var pb = panel.dataset.pb;
+    var body = panel.querySelector('.pb-mon-tablets-body');
+    var status = panel.querySelector('.pb-mon-tablets-status');
+    // Preserve the table, controls and row nodes on background refresh.
+    if (!panel.table) {
+        panel.previous = body.appendChild(pageButton(pb, 'Previous', 0, true));
+        panel.pageLabel = body.appendChild(document.createTextNode(''));
+        panel.next = body.appendChild(pageButton(pb, 'Next', 0, true));
+        panel.table = document.createElement('table');
+        panel.table.className = 'table pb-mon-tablet-table';
+        var header = panel.table.createTHead().insertRow();
+        ['TabletId', 'Generation', 'Barrier', 'Fast erases', 'Lsns count', 'Total space',
+            'First lsn', 'Uptime', 'Last lsn', 'Uptime'].forEach(function(label, index) {
+            var th = document.createElement('th');
+            th.textContent = label;
+            th.style.width = [18, 6, 9, 7, 7, 16, 10, 8, 10, 9][index] + '%';
+            header.appendChild(th);
+        });
+        panel.rows = panel.table.createTBody();
+        body.appendChild(panel.table);
+    }
+    var previousHeight = panel.resetHeight ? 0 : body.getBoundingClientRect().height;
+    panel.resetHeight = false;
+    panel.previous.dataset.page = Math.max(0, data.page - 1);
+    panel.previous.disabled = data.page === 0;
+    panel.next.dataset.page = data.page + 1;
+    panel.next.disabled = data.page + 1 >= data.pages;
+    var label = ' Page ' + (data.page + 1) + ' of ' + data.pages +
+        ' (' + data.total + ' tablets, ' + data.pageSize + ' per page) ';
+    if (panel.pageLabel.textContent !== label) panel.pageLabel.textContent = label;
+    data.tablets.forEach(function(tablet, index) {
+        var row = panel.rows.rows[index] || panel.rows.insertRow();
+        ['tabletId', 'generation', 'barrier', 'fastErasesCount', 'lsnsCount', 'space',
+            'firstLsn', 'firstLsnUptime', 'lastLsn', 'lastLsnUptime'].forEach(function(key, column) {
+            var cell = row.cells[column] || row.insertCell();
+            if (cell.textContent !== tablet[key]) {
+                cell.textContent = tablet[key];
+                cell.title = tablet[key];
+            }
+        });
+    });
+    while (panel.rows.rows.length > data.tablets.length) panel.rows.deleteRow(-1);
+    // Avoid shifting later buffers when a background refresh temporarily has fewer rows.
+    body.style.minHeight = Math.max(previousHeight, body.getBoundingClientRect().height) + 'px';
+    status.textContent = '';
+}
 function loadTablets(panel) {
     var pb = panel.dataset.pb;
     var selected = state(pb);
@@ -331,6 +392,8 @@ function loadTablets(panel) {
     url.searchParams.set('action', 'tablets');
     url.searchParams.set('pb', pb);
     url.searchParams.set('page', selected.page);
+    url.searchParams.set('pageSize', selected.pageSize);
+    if (selected.tabletId) url.searchParams.set('tabletId', selected.tabletId);
     fetch(url, {cache: 'no-store', signal: controller.signal})
         .then(function(r) { return r.json().then(function(data) {
             if (!r.ok) throw new Error(data.error || 'Failed to load tablets');
@@ -339,30 +402,11 @@ function loadTablets(panel) {
         .then(function(data) {
             if (panel.request !== controller || !panel.isConnected || !state(pb).open) return;
             saveState(pb, true, data.page);
-            body.replaceChildren();
-            body.appendChild(pageButton(pb, 'Previous', Math.max(0, data.page - 1), data.page === 0));
-            body.appendChild(document.createTextNode(' Page ' + (data.page + 1) + ' of ' + data.pages +
-                ' (' + data.total + ' tablets, ' + data.pageSize + ' per page) '));
-            body.appendChild(pageButton(pb, 'Next', data.page + 1, data.page + 1 >= data.pages));
-            var table = document.createElement('table');
-            table.className = 'table';
-            var header = table.createTHead().insertRow();
-            ['TabletId', 'Generation', 'Barrier', 'Fast erases', 'Lsns count', 'Total space',
-                'First lsn', 'Uptime', 'Last lsn', 'Uptime'].forEach(function(label) {
-                var th = document.createElement('th');
-                th.textContent = label;
-                header.appendChild(th);
-            });
-            var rows = table.createTBody();
-            data.tablets.forEach(function(tablet) {
-                var row = rows.insertRow();
-                ['tabletId', 'generation', 'barrier', 'fastErasesCount', 'lsnsCount', 'space',
-                    'firstLsn', 'firstLsnUptime', 'lastLsn', 'lastLsnUptime'].forEach(function(key) {
-                    row.insertCell().textContent = tablet[key];
-                });
-            });
-            body.appendChild(table);
-            status.textContent = '';
+            renderTablets(panel, data);
+            try {
+                sessionStorage.setItem(tabletsCacheKey(pb), JSON.stringify({page: data.page,
+                    pageSize: data.pageSize, tabletId: selected.tabletId, data: data}));
+            } catch (error) {}
         })
         .catch(function(error) {
             if (panel.request === controller && panel.isConnected && error.name !== 'AbortError') {
@@ -372,12 +416,28 @@ function loadTablets(panel) {
         .finally(function() { if (panel.request === controller) panel.request = null; });
 }
 function restorePanel(panel) {
-    var open = state(panel.dataset.pb).open;
+    var selected = state(panel.dataset.pb);
+    var open = selected.open;
+    var pageSize = panel.querySelector('.pb-mon-tablets-page-size');
+    var search = panel.querySelector('.pb-mon-tablets-search');
+    // Preserve unfinished edits and keyboard focus while refreshing the summary.
+    if (document.activeElement !== pageSize) pageSize.value = selected.pageSize;
+    if (document.activeElement !== search) search.value = selected.tabletId;
     panel.querySelector('.pb-mon-tablets-content').hidden = !open;
     var toggle = panel.querySelector('.pb-mon-tablets-toggle');
     toggle.textContent = open ? 'Hide tablets' : 'Show tablets';
     toggle.setAttribute('aria-expanded', open);
-    if (open) loadTablets(panel);
+    if (open) {
+        // Show the last loaded page synchronously after a browser reload, then refresh it.
+        if (!panel.table) {
+            try {
+                var cached = JSON.parse(sessionStorage.getItem(tabletsCacheKey(panel.dataset.pb)));
+                if (cached && cached.page === selected.page && cached.pageSize === selected.pageSize
+                        && cached.tabletId === selected.tabletId) renderTablets(panel, cached.data);
+            } catch (error) {}
+        }
+        loadTablets(panel);
+    }
 }
 function restoreTablets() {
     document.querySelectorAll('.pb-mon-tablets').forEach(restorePanel);
@@ -385,7 +445,7 @@ function restoreTablets() {
 function summaryUrl() {
     var url = new URL(buildUrl(), window.location.origin);
     Array.from(url.searchParams.keys()).forEach(function(k) {
-        if (k.indexOf('tabletPage.') === 0 || k.indexOf('tabletOpen.') === 0) url.searchParams.delete(k);
+        if (tabletStateParam(k)) url.searchParams.delete(k);
     });
     return url.pathname + url.search;
 }
@@ -403,14 +463,27 @@ function refresh() {
             var fresh = doc.getElementById('pb-mon-content');
             var cur = document.getElementById('pb-mon-content');
             if (!fresh || !cur) return;
-            var panels = new Map();
-            cur.querySelectorAll('.pb-mon-tablets').forEach(function(panel) { panels.set(panel.dataset.pb, panel); });
-            fresh.querySelectorAll('.pb-mon-tablets').forEach(function(panel) {
-                var existing = panels.get(panel.dataset.pb);
-                if (existing) { panel.replaceWith(existing); panels.delete(panel.dataset.pb); }
+            // Keep existing buffer containers and their expanded lists attached to the live DOM.
+            var existing = new Map();
+            cur.querySelectorAll('.pb-mon-buffer').forEach(function(buffer) { existing.set(buffer.dataset.pb, buffer); });
+            fresh.querySelectorAll('.pb-mon-buffer').forEach(function(buffer) {
+                var current = existing.get(buffer.dataset.pb);
+                if (current) {
+                    current.querySelector('.pb-mon-summary').innerHTML = buffer.querySelector('.pb-mon-summary').innerHTML;
+                } else {
+                    cur.appendChild(buffer);
+                }
             });
-            panels.forEach(function(panel) { if (panel.request) panel.request.abort(); });
-            cur.replaceChildren.apply(cur, Array.from(fresh.childNodes));
+            var selectedPBs = new Set();
+            document.querySelectorAll('.pb-mon-pb').forEach(function(c) { if (c.checked) selectedPBs.add(c.value); });
+            existing.forEach(function(buffer, pb) {
+                if (!selectedPBs.has(pb)) {
+                    var panel = buffer.querySelector('.pb-mon-tablets');
+                    if (panel.request) panel.request.abort();
+                    buffer.remove();
+                }
+            });
+            cur.querySelector('.pb-mon-errors').innerHTML = fresh.querySelector('.pb-mon-errors').innerHTML;
             restoreTablets();
         })
         .catch(function() {})
@@ -453,17 +526,50 @@ document.addEventListener('click', function(e) {
     var page = button.classList.contains('pb-mon-tablet-page') ? Number(button.dataset.page) : selected.page;
     if (panel.request) { panel.request.abort(); panel.request = null; }
     saveState(panel.dataset.pb, open, page);
+    panel.querySelector('.pb-mon-tablets-body').style.minHeight = '';
+    panel.resetHeight = true;
     restorePanel(panel);
+});
+function applyTabletOptions(panel) {
+    if (panel.request) { panel.request.abort(); panel.request = null; }
+    var url = new URL(window.location.href);
+    url.searchParams.set('tabletPageSize.' + panel.dataset.pb, panel.querySelector('.pb-mon-tablets-page-size').value);
+    var tabletId = panel.querySelector('.pb-mon-tablets-search').value.trim();
+    if (tabletId) url.searchParams.set('tabletId.' + panel.dataset.pb, tabletId);
+    else url.searchParams.delete('tabletId.' + panel.dataset.pb);
+    url.searchParams.set('tabletPage.' + panel.dataset.pb, '0');
+    history.replaceState(null, '', url);
+    panel.querySelector('.pb-mon-tablets-body').style.minHeight = '';
+    panel.resetHeight = true;
+    restorePanel(panel);
+}
+document.addEventListener('change', function(e) {
+    if (e.target.matches('.pb-mon-tablets-page-size') && e.target.checkValidity()) {
+        applyTabletOptions(e.target.closest('.pb-mon-tablets'));
+    }
+});
+document.addEventListener('submit', function(e) {
+    if (e.target.matches('.pb-mon-tablets-options')) {
+        e.preventDefault();
+        applyTabletOptions(e.target.closest('.pb-mon-tablets'));
+    }
 });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', restoreTablets);
 else restoreTablets();
 reschedule();
 })();</script>)JS";
 
-                    str << "<div id=\"pb-mon-content\">";
+                    str << "<style>"
+                        << ".pb-mon-tablets-status{height:1.5em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}"
+                        << ".pb-mon-tablets-body{overflow-x:auto;}"
+                        << ".pb-mon-tablet-table{table-layout:fixed;width:100%;min-width:1100px;}"
+                        << ".pb-mon-tablet-table th,.pb-mon-tablet-table td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}"
+                        << "</style>";
+                    str << "<div id=\"pb-mon-content\"><div class=\"pb-mon-errors\">";
                     for (auto& [_, id] : inflight.Requests) {
                         str << "<h2 style=\"color:red;\">" << "No response from PB " << formatPBId(id) << " </h2>";
                     }
+                    str << "</div>";
                     std::sort(inflight.Responses.begin(), inflight.Responses.end(),
                         [](const auto& o1, const auto& o2) -> bool {
                             return o1.first < o2.first;
@@ -472,6 +578,8 @@ reschedule();
                         auto b = v->Get();
                         ui32 sectorsInChunk = b->ChunkSize / b->SectorSize;
                         TDuration uptime = TInstant::Now() - b->StartedAt;
+                        str << "<div class=\"pb-mon-buffer\" data-pb=\"" << htmlEscape(ToString(serviceId)) << "\">"
+                            << "<div class=\"pb-mon-summary\">";
                         str << "<h2>" << "PB " << formatPBId(serviceId) << "</h2>";
                         str << "Uptime: " << beautyDuration(uptime);
                         str << "<br> Allocated chunks: " << b->AllocatedChunks << " of " << b->MaxChunks << " by " << beautySize(b->ChunkSize);
@@ -518,11 +626,16 @@ reschedule();
                             str << "<br><br><b>Free space map (green = free, red = used):</b><br>";
                             str << GenerateFreeSpaceSvg(b->FreeSpace, sectorsPerChunk);
                         }
+                        str << "</div>";
                         str << "<div class=\"pb-mon-tablets\" data-pb=\"" << htmlEscape(ToString(serviceId)) << "\">"
                             << "<button type=\"button\" class=\"pb-mon-tablets-toggle\" aria-expanded=\"false\">Show tablets</button>"
                             << "<div class=\"pb-mon-tablets-content\" hidden>"
+                            << "<form class=\"pb-mon-tablets-options\" style=\"margin:8px 0;\">"
+                            << "<label>Per page: <input class=\"pb-mon-tablets-page-size\" type=\"number\" min=\"1\" max=\"1000\" value=\"20\" style=\"width:70px;\"></label> "
+                            << "<label>TabletId: <input class=\"pb-mon-tablets-search\" type=\"search\" inputmode=\"numeric\" pattern=\"[0-9]*\" placeholder=\"All tablets\"></label> "
+                            << "<button type=\"submit\">Find</button></form>"
                             << "<div class=\"pb-mon-tablets-status\" role=\"status\"></div>"
-                            << "<div class=\"pb-mon-tablets-body\"></div></div></div>";
+                            << "<div class=\"pb-mon-tablets-body\"></div></div></div></div>";
                     }
                     str << "</div>";
                 }
@@ -604,8 +717,9 @@ reschedule();
                     auto infoReq = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>();
                     infoReq->DescribeFreeSpace = inflight.DescribeFreeSpace;
                     infoReq->DescribeTablets = inflight.TabletsOnly;
-                    infoReq->TabletsLimit = TabletsPageSize;
-                    infoReq->TabletsOffset = inflight.TabletPage * TabletsPageSize;
+                    infoReq->TabletsLimit = inflight.TabletsPageSize;
+                    infoReq->TabletsOffset = inflight.TabletPage * inflight.TabletsPageSize;
+                    infoReq->TabletIdFilter = inflight.TabletIdFilter;
                     Send(r.PersistentBufferId, infoReq.release(), 0, reqCookie);
                     YDB_LOG_DEBUG("TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult) Send",
                         {"marker", "BSDD36"},
@@ -687,12 +801,25 @@ reschedule();
                     return generateError("Unknown action");
                 }
                 ui64 tabletPage = 0;
+                ui32 tabletsPageSize = DefaultTabletsPageSize;
+                std::optional<ui64> tabletIdFilter;
                 if (tabletsOnly) {
+                    if (params.Has("pageSize") && (!TryFromString(params.Get("pageSize"), tabletsPageSize)
+                            || !tabletsPageSize || tabletsPageSize > MaxTabletsPageSize)) {
+                        return generateError("pageSize must be an integer in range [1, 1000]");
+                    }
+                    if (params.Has("tabletId") && !params.Get("tabletId").empty()) {
+                        ui64 tabletId;
+                        if (!TryFromString(params.Get("tabletId"), tabletId)) {
+                            return generateError("tabletId must be an unsigned 64-bit integer");
+                        }
+                        tabletIdFilter = tabletId;
+                    }
                     if (selectedPBs.size() != 1 || params.NumOfValues("pb") != 1) {
                         return generateError("Tablets API requires exactly one pb parameter");
                     }
                     if (params.Has("page") && (!TryFromString(params.Get("page"), tabletPage)
-                            || tabletPage > Max<ui64>() / TabletsPageSize)) {
+                            || tabletPage > Max<ui64>() / tabletsPageSize)) {
                         return generateError("Failed to parse page -- must be a non-negative integer");
                     }
                 }
@@ -705,6 +832,8 @@ reschedule();
                     .DescribeFreeSpace = tabletsOnly ? false : describeFreeSpace,
                     .TabletsOnly = tabletsOnly,
                     .TabletPage = tabletPage,
+                    .TabletsPageSize = tabletsPageSize,
+                    .TabletIdFilter = tabletIdFilter,
                     .AutoRefresh = autoRefresh,
                     .RefreshRate = refreshRate,
                     .SelectedPBs = std::move(selectedPBs),

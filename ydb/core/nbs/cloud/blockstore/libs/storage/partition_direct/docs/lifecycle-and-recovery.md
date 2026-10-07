@@ -62,12 +62,12 @@ answered, `FinishPBufferRestore` discards a record that is still below three
 copies: the copies found are erased by address, and the restore barrier
 finishes the record.
 
-A host whose list returns an error makes the aggregated response partial.
-`TRestoreRequestExecutor` returns the copies already collected and sets
-`response.Error`. `TVChunk::UpdateDirtyMap` applies those copies and does
-not call `FinishPBufferRestore`. A host that did not answer may still hold
-a copy, so a write that reached quorum must not be discarded. Any record
-still below three copies stays in `PBufferIncompleteWrite`.
+A host whose list returns an error is asked again after 100 ms.
+`TRestoreRequestExecutor` publishes the list only when every host has
+answered, and `FinishPBufferRestore` runs on that complete list. If a
+partial response still arrives with `response.Error`, `UpdateDirtyMap`
+does not call `FinishPBufferRestore`: a host that did not answer may
+still hold a copy, so a write that reached quorum must not be discarded.
 
 The PB recovers its own on-disk records before it answers the list. That
 recovery is described on the shared

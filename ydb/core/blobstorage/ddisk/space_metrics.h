@@ -8,22 +8,22 @@ namespace NKikimr::NDDisk {
 struct TSpaceMetrics {
     struct TData {
         using TValueType = ui64;
-        static constexpr TStringBuf Name = "data_bytes";
+        static constexpr TStringBuf Name = "ddisk.space.data_bytes";
         static constexpr std::array<NActors::TLineLabelView, 0> Labels = {};
     };
     struct TChecksums {
         using TValueType = ui64;
-        static constexpr TStringBuf Name = "checksum_bytes";
+        static constexpr TStringBuf Name = "ddisk.space.checksum_bytes";
         static constexpr std::array<NActors::TLineLabelView, 0> Labels = {};
     };
     struct TPersistentBuffer {
         using TValueType = ui64;
-        static constexpr TStringBuf Name = "pb_bytes";
+        static constexpr TStringBuf Name = "ddisk.space.pb_bytes";
         static constexpr std::array<NActors::TLineLabelView, 0> Labels = {};
     };
     struct TReserve {
         using TValueType = ui64;
-        static constexpr TStringBuf Name = "reserve_bytes";
+        static constexpr TStringBuf Name = "ddisk.space.reserve_bytes";
         static constexpr std::array<NActors::TLineLabelView, 0> Labels = {};
     };
     using TFields = std::tuple<TData, TChecksums, TPersistentBuffer, TReserve>;
@@ -38,9 +38,9 @@ using TMemoryMetricsFrontend = NActors::TRawLineFrontend<ui64, TDDiskMetricStora
 // The five displayed operations share one sampling timestamp and clock.
 struct TOperationMetrics {
     inline static constexpr std::array<TStringBuf, 11> Names = {
-        "read_requests", "read_bytes", "write_requests", "write_bytes",
-        "sync_requests", "sync_bytes", "direct_read_requests", "direct_read_bytes",
-        "direct_write_requests", "direct_write_bytes", "monotonic_us"};
+        "ddisk.operations.read_requests", "ddisk.operations.read_bytes", "ddisk.operations.write_requests", "ddisk.operations.write_bytes",
+        "ddisk.operations.sync_requests", "ddisk.operations.sync_bytes", "ddisk.operations.direct_read_requests", "ddisk.operations.direct_read_bytes",
+        "ddisk.operations.direct_write_requests", "ddisk.operations.direct_write_bytes", "ddisk.operations.monotonic_us"};
     template<size_t I>
     struct TField {
         using TValueType = ui64;

@@ -10733,6 +10733,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
                 UNIT_ASSERT_VALUES_EQUAL(view.LinesSize(), 1);
                 const auto& line = view.GetLine(0);
                 UNIT_ASSERT_VALUES_EQUAL(line.Name, "ddisk.operations.counters");
+                for (const auto& field : line.Meta.Frontend->Fields) {
+                    UNIT_ASSERT_C(field.Name.StartsWith("ddisk.operations."), field.Name);
+                }
                 UNIT_ASSERT_VALUES_EQUAL(line.Closed, closed);
                 const auto values = NDDisk::TOperationMetricsFrontend::ReadValues(line);
                 UNIT_ASSERT(!values.empty());
@@ -10772,6 +10775,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
                             UNIT_ASSERT(!values.empty());
                             result = values.back().Get<NDDisk::TSpaceMetrics::TData>();
                             UNIT_ASSERT_VALUES_EQUAL(line.Meta.Frontend->Fields.size(), 4);
+                            for (const auto& field : line.Meta.Frontend->Fields) {
+                                UNIT_ASSERT_C(field.Name.StartsWith("ddisk.space."), field.Name);
+                            }
                             UNIT_ASSERT_VALUES_EQUAL(values.back().Get<NDDisk::TSpaceMetrics::TPersistentBuffer>(),
                                 PersistentBufferInitChunks * TTestContext::ChunkSize);
                         }

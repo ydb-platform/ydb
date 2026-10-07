@@ -1558,14 +1558,16 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
     const i64 baseSequence = static_cast<i64>(GetSeqNoImpl(block_.Offset));
     std::shared_ptr<TBlock> blockPtr(std::make_shared<TBlock>());
     blockPtr->Move(block_);
+    // Client owns CompressionExecutor. Capturing it here keeps that pool alive until this
+    // task finishes on a pool thread, and destroying the pool from its own thread leaves the
+    // sibling workers unjoined (YDBBUGS-957).
     auto lambda = [cbContext = SelfContext,
                    codec = Settings.Codec_,
                    batchInnerCodec = Settings.BatchInnerCodec_,
                    level = Settings.CompressionLevel_,
                    baseSequence,
                    isSyncCompression = !CompressionExecutor->IsAsync(),
-                   blockPtr,
-                   client = Client]() mutable {
+                   blockPtr]() mutable {
         Y_ABORT_UNLESS(!blockPtr->Compressed);
 
         const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(codec));

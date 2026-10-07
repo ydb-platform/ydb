@@ -1,14 +1,18 @@
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine_layout.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_rh_hash.h>
 
+#include <yql/essentials/minikql/mkql_mem_info.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_value_builder.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <bit>
 #include <cmath>
 #include <cstring>
+#include <initializer_list>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -19,11 +23,16 @@ namespace {
 using NUdf::TUnboxedValue;
 using NUdf::TUnboxedValuePod;
 
+constexpr size_t StringHeaderSize = sizeof(*TUnboxedValuePod{}.AsRawStringValue());
+
 class TLayoutTestEnv {
 public:
     TLayoutTestEnv()
         : Alloc(__LOCATION__)
         , Env(Alloc)
+        , MemInfo("DqHashCombineLayoutTest")
+        , HolderFactory(Alloc.Ref(), MemInfo)
+        , ValueBuilder(HolderFactory)
     {
     }
 
@@ -36,11 +45,25 @@ public:
         return TOptionalType::Create(item, Env);
     }
 
+    TUnboxedValue Array(std::initializer_list<TUnboxedValuePod> values) {
+        TUnboxedValue* items = nullptr;
+        TUnboxedValue result = ValueBuilder.NewArray(values.size(), items);
+        for (const auto& value : values) {
+            *items++ = value;
+        }
+        return result;
+    }
+
 private:
     TScopedAlloc Alloc;
 
 public:
     TTypeEnvironment Env;
+
+private:
+    TMemoryUsageInfo MemInfo;
+    THolderFactory HolderFactory;
+    TDefaultValueBuilder ValueBuilder;
 };
 
 class TStorage {
@@ -56,6 +79,60 @@ public:
 private:
     std::vector<std::max_align_t> Words;
 };
+
+class TIndirectComposite final: public NUdf::TBoxedValue {
+public:
+    explicit TIndirectComposite(std::vector<TUnboxedValue> values)
+        : Values(std::move(values))
+    {}
+
+    TUnboxedValue GetElement(ui32 index) const final {
+        ++AccessCount;
+        return Values.at(index);
+    }
+
+    const TUnboxedValue* GetElements() const final {
+        ++AccessCount;
+        return Values.data();
+    }
+
+    mutable size_t AccessCount = 0;
+
+private:
+    const std::vector<TUnboxedValue> Values;
+};
+
+template <size_t Alignment>
+void TestPackedMemoryEstimation() {
+    TLayoutTestEnv env;
+    std::vector<TType*> keys = {env.Optional(env.Data<ui16>())};
+    std::vector<TType*> states = {env.Data<ui64>(), env.Optional(env.Data<ui32>()), env.Data<ui16>()};
+    TDqHashCombineRecordLayout<Alignment> layout(keys, states);
+    const size_t recordSize = Alignment == 8 ? 32 : 48;
+    UNIT_ASSERT_VALUES_EQUAL(layout.GetRecordSize(), recordSize);
+    UNIT_ASSERT_VALUES_EQUAL(*layout.GetStaticMemorySize(), recordSize);
+    TStorage storage(recordSize);
+    std::vector<TUnboxedValue> key = {TUnboxedValuePod(ui16{7})};
+    std::vector<TUnboxedValue> state = {TUnboxedValuePod(ui64{11}), TUnboxedValuePod(ui32{13}), TUnboxedValuePod(ui16{17})};
+    layout.GetKeyLayout().PackMove(key, storage.Data());
+    layout.GetStateLayout().PackMove(state, static_cast<char*>(storage.Data()) + layout.GetStateOffset());
+    UNIT_ASSERT_VALUES_EQUAL(*layout.EstimateMemorySize(storage.Data()), recordSize);
+    layout.Clear(storage.Data());
+    UNIT_ASSERT_VALUES_EQUAL(*layout.EstimateMemorySize(storage.Data()), recordSize);
+
+    states.push_back(env.Data<char*>());
+    TDqHashCombineRecordLayout<Alignment> dynamicLayout(keys, states);
+    const size_t dynamicRecordSize = Alignment == 8 ? 48 : 64;
+    UNIT_ASSERT_VALUES_EQUAL(dynamicLayout.GetRecordSize(), dynamicRecordSize);
+    UNIT_ASSERT(!dynamicLayout.GetStaticMemorySize());
+    TStorage dynamicStorage(dynamicRecordSize);
+    dynamicLayout.Clear(dynamicStorage.Data());
+    const TString text("heap-backed state string for memory estimation");
+    state = {TUnboxedValuePod(ui64{11}), {}, TUnboxedValuePod(ui16{17}), TUnboxedValuePod(NUdf::TStringValue(text))};
+    dynamicLayout.GetStateLayout().PackMove(state, static_cast<char*>(dynamicStorage.Data()) + dynamicLayout.GetStateOffset());
+    UNIT_ASSERT_VALUES_EQUAL(*dynamicLayout.EstimateMemorySize(dynamicStorage.Data()), dynamicRecordSize + StringHeaderSize + text.size());
+    dynamicLayout.GetStateLayout().Destroy(static_cast<char*>(dynamicStorage.Data()) + dynamicLayout.GetStateOffset());
+}
 
 const TDqHashCombineTupleLayout::TItem& Item(const TDqHashCombineTupleLayout& layout, ui32 logicalIndex) {
     for (const auto& item : layout.GetItems()) {
@@ -127,6 +204,208 @@ void TestNativeSlot(typename NUdf::TDataType<T>::TLayout low, typename NUdf::TDa
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqHashCombineLayoutTest) {
+    Y_UNIT_TEST(PackedMemoryEstimation) {
+        TestPackedMemoryEstimation<8>();
+        TestPackedMemoryEstimation<16>();
+    }
+
+    Y_UNIT_TEST(TupleAndStructMemoryEstimation) {
+        TLayoutTestEnv env;
+        const size_t uvSize = sizeof(TUnboxedValuePod);
+        const size_t holderSize = sizeof(TDirectArrayHolderInplace);
+        for (const bool structure : {false, true}) {
+            for (const bool dynamic : {false, true}) {
+                auto* leafType = dynamic ? env.Data<char*>() : env.Data<ui64>();
+                std::vector<TType*> elementTypes = {env.Optional(env.Data<ui16>()), leafType};
+                std::vector<std::pair<TString, TType*>> members = {{"a", elementTypes[0]}, {"b", elementTypes[1]}};
+                TType* type = structure ? static_cast<TType*>(TStructType::Create(members.data(), members.size(), env.Env)) :
+                    TTupleType::Create(elementTypes.size(), elementTypes.data(), env.Env);
+                const TString text("heap-backed composite field for estimation");
+                TUnboxedValue leaf = dynamic ? TUnboxedValuePod(NUdf::TStringValue(text)) : TUnboxedValuePod(ui64{42});
+                TUnboxedValue value = env.Array({TUnboxedValuePod{}, leaf});
+                const size_t compositeSize = uvSize + holderSize + 2 * uvSize + (dynamic ? StringHeaderSize + text.size() : 0);
+                UNIT_ASSERT_VALUES_EQUAL(*TDqHashCombineTupleLayout::EstimateValueMemorySize(value, type), compositeSize);
+
+                std::vector<TType*> nestedTypes = {env.Optional(type)};
+                auto* nestedType = TTupleType::Create(nestedTypes.size(), nestedTypes.data(), env.Env);
+                TUnboxedValue nested = env.Array({value});
+                TDqHashCombineTupleLayout layout(std::vector<TType*>{nestedType});
+                TStorage storage(layout.GetSize());
+                std::vector<TUnboxedValuePod> borrowed = {nested};
+                layout.PackBorrowed(borrowed, storage.Data());
+                const size_t externalSize = holderSize + compositeSize;
+                UNIT_ASSERT_VALUES_EQUAL(*layout.EstimateExternalMemorySize(storage.Data()), externalSize);
+                const auto bound = layout.GetStaticExternalMemorySize();
+                UNIT_ASSERT_VALUES_EQUAL(bool(bound), !dynamic);
+                if (bound) {
+                    UNIT_ASSERT_VALUES_EQUAL(*bound, externalSize);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(*TDqHashCombineTupleLayout::EstimateValueMemorySize({}, env.Optional(type)), uvSize);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NonDirectCompositeMemoryEstimation) {
+        TLayoutTestEnv env;
+        auto* number = env.Data<ui64>();
+        const auto check = [&](const TUnboxedValuePod& value, TType* type, bool bounded) {
+            UNIT_ASSERT(!TDqHashCombineTupleLayout::EstimateValueMemorySize(value, type));
+            for (const bool key : {false, true}) {
+                const std::vector<TType*> keyTypes = {key ? type : number};
+                const std::vector<TType*> stateTypes = {key ? number : type};
+                TDqHashCombineLayout layout(keyTypes, stateTypes);
+                UNIT_ASSERT_VALUES_EQUAL(bool(layout.GetStaticMemorySize()), bounded);
+                TStorage storage(layout.GetRecordSize());
+                const std::vector<TUnboxedValuePod> keys = {key ? value : TUnboxedValuePod(ui64{1})};
+                const std::vector<TUnboxedValuePod> state = {key ? TUnboxedValuePod(ui64{1}) : value};
+                layout.GetKeyLayout().PackBorrowed(keys, storage.Data());
+                layout.GetStateLayout().PackBorrowed(state, static_cast<char*>(storage.Data()) + layout.GetStateOffset());
+                UNIT_ASSERT(!layout.EstimateMemorySize(storage.Data()));
+            }
+        };
+
+        for (const bool structure : {false, true}) {
+            for (const bool dynamic : {false, true}) {
+                auto* leafType = dynamic ? env.Data<char*>() : number;
+                std::pair<TString, TType*> member = {"a", leafType};
+                TType* type = structure ? static_cast<TType*>(TStructType::Create(&member, 1, env.Env)) :
+                    TTupleType::Create(1, &leafType, env.Env);
+                TUnboxedValue leaf = dynamic ? TUnboxedValuePod(NUdf::TStringValue("heap-backed indirect composite field")) :
+                    TUnboxedValuePod(ui64{42});
+                auto* holder = new TIndirectComposite({leaf});
+                TUnboxedValue value = TUnboxedValuePod(holder);
+                auto* tagged = TTaggedType::Create(type, "tag", env.Env);
+                const std::vector<TType*> wrappedTypes = {type, env.Optional(type), tagged, env.Optional(tagged)};
+                for (auto* wrapped : wrappedTypes) {
+                    check(value, wrapped, !dynamic);
+                    const std::vector<TType*> nestedTypes = {number, wrapped};
+                    auto* nestedType = TTupleType::Create(nestedTypes.size(), nestedTypes.data(), env.Env);
+                    TUnboxedValue nested = env.Array({TUnboxedValuePod(ui64{7}), value});
+                    check(nested, nestedType, !dynamic);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(holder->AccessCount, 0);
+                UNIT_ASSERT_VALUES_EQUAL(value.RefCount(), 1);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(EmptyCompositeMemoryEstimation) {
+        TLayoutTestEnv env;
+        const TUnboxedValue empty = env.Array({});
+        auto* holder = new TIndirectComposite({});
+        const TUnboxedValue indirect = TUnboxedValuePod(holder);
+        const TUnboxedValue string = TUnboxedValuePod(NUdf::TStringValue("heap-backed field beside an empty composite"));
+        const size_t emptySize = sizeof(TUnboxedValuePod) + sizeof(TDirectArrayHolderInplace);
+        const std::vector<TType*> types = {
+            TTupleType::Create(0, nullptr, env.Env), TStructType::Create(nullptr, 0, env.Env),
+        };
+        for (auto* type : types) {
+            TDqHashCombineTupleLayout layout(std::vector<TType*>{type});
+            UNIT_ASSERT_VALUES_EQUAL(*layout.GetStaticExternalMemorySize(), sizeof(TDirectArrayHolderInplace));
+            UNIT_ASSERT_VALUES_EQUAL(*TDqHashCombineTupleLayout::EstimateValueMemorySize({}, env.Optional(type)),
+                sizeof(TUnboxedValuePod));
+            for (const auto& value : {empty, indirect}) {
+                const std::vector<TType*> wrappedTypes = {type, env.Optional(type), TTaggedType::Create(type, "tag", env.Env)};
+                for (auto* wrapped : wrappedTypes) {
+                    UNIT_ASSERT_VALUES_EQUAL(*TDqHashCombineTupleLayout::EstimateValueMemorySize(value, wrapped), emptySize);
+                    const std::vector<TType*> nestedTypes = {wrapped, env.Data<char*>()};
+                    auto* nestedType = TTupleType::Create(nestedTypes.size(), nestedTypes.data(), env.Env);
+                    const auto nested = env.Array({value, string});
+                    UNIT_ASSERT_VALUES_EQUAL(*TDqHashCombineTupleLayout::EstimateValueMemorySize(nested, nestedType),
+                        2 * emptySize + sizeof(TUnboxedValuePod) + StringHeaderSize + string.AsStringRef().Size());
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(holder->AccessCount, 0);
+    }
+
+    Y_UNIT_TEST(TaggedMemoryEstimation) {
+        TLayoutTestEnv env;
+        const auto tagged = [&](TType* type) { return TTaggedType::Create(type, "tag", env.Env); };
+        const auto check = [&](TType* type, const TUnboxedValuePod& value, size_t externalSize, bool bounded) {
+            const std::vector<TType*> wrappedTypes = {
+                tagged(type), env.Optional(tagged(type)), tagged(env.Optional(type)),
+                tagged(env.Optional(tagged(env.Optional(type)))),
+            };
+            for (auto* wrapped : wrappedTypes) {
+                const std::vector<TType*> types = {wrapped};
+                TDqHashCombineLayout layout(types, types);
+                const auto bound = layout.GetStaticMemorySize();
+                UNIT_ASSERT_VALUES_EQUAL(bool(bound), bounded);
+                if (bound) {
+                    UNIT_ASSERT_VALUES_EQUAL(*bound, layout.GetRecordSize() + 2 * externalSize);
+                }
+                TStorage storage(layout.GetRecordSize());
+                const std::vector<TUnboxedValuePod> values = {value};
+                layout.GetKeyLayout().PackBorrowed(values, storage.Data());
+                layout.GetStateLayout().PackBorrowed(values, static_cast<char*>(storage.Data()) + layout.GetStateOffset());
+                const auto estimate = layout.EstimateMemorySize(storage.Data());
+                UNIT_ASSERT(estimate);
+                UNIT_ASSERT_VALUES_EQUAL(*estimate, layout.GetRecordSize() + 2 * externalSize);
+                UNIT_ASSERT_VALUES_EQUAL(*TDqHashCombineTupleLayout::EstimateValueMemorySize({}, env.Optional(wrapped)),
+                    sizeof(TUnboxedValuePod));
+            }
+        };
+
+        check(env.Data<ui64>(), TUnboxedValuePod(ui64{42}), 0, true);
+        TUnboxedValue uuid = TUnboxedValuePod(NUdf::TStringValue(TString(NUdf::UUID_SIZE, '\0')));
+        check(env.Data<NUdf::TUuid>(), uuid, StringHeaderSize + NUdf::UUID_SIZE, true);
+        const TString text("heap-backed tagged field for memory estimation");
+        TUnboxedValue string = TUnboxedValuePod(NUdf::TStringValue(text));
+        check(env.Data<char*>(), string, StringHeaderSize + text.size(), false);
+
+        for (const bool structure : {false, true}) {
+            for (const bool dynamic : {false, true}) {
+                std::vector<TType*> elements = {
+                    tagged(env.Optional(env.Data<ui16>())), tagged(dynamic ? env.Data<char*>() : env.Data<ui64>()),
+                };
+                std::vector<std::pair<TString, TType*>> members = {{"a", elements[0]}, {"b", elements[1]}};
+                TType* type = structure ? static_cast<TType*>(TStructType::Create(members.data(), members.size(), env.Env)) :
+                    TTupleType::Create(elements.size(), elements.data(), env.Env);
+                TUnboxedValue leaf = dynamic ? string : TUnboxedValue(TUnboxedValuePod(ui64{42}));
+                TUnboxedValue value = env.Array({TUnboxedValuePod{}, leaf});
+                const size_t externalSize = sizeof(TDirectArrayHolderInplace) + 2 * sizeof(TUnboxedValuePod) +
+                    (dynamic ? StringHeaderSize + text.size() : 0);
+                check(type, value, externalSize, !dynamic);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(UuidMemoryEstimation) {
+        TLayoutTestEnv env;
+        auto* uuidType = env.Data<NUdf::TUuid>();
+        std::vector<TType*> keys = {uuidType};
+        std::vector<TType*> states = {env.Optional(uuidType)};
+        TDqHashCombineRecordLayout<8> record(keys, states);
+        UNIT_ASSERT_VALUES_EQUAL(*record.GetStaticMemorySize(), 96);
+        TUnboxedValue uuid = TUnboxedValuePod(NUdf::TStringValue(TString(NUdf::UUID_SIZE, '\0')));
+        TUnboxedValue stateUuid = TUnboxedValuePod(NUdf::TStringValue(TString(NUdf::UUID_SIZE, '\1')));
+        UNIT_ASSERT(uuid.IsString());
+        TStorage storage(record.GetRecordSize());
+        std::vector<TUnboxedValuePod> values = {uuid};
+        auto* state = static_cast<char*>(storage.Data()) + record.GetStateOffset();
+        record.GetKeyLayout().PackBorrowed(values, storage.Data());
+        values[0] = stateUuid;
+        record.GetStateLayout().PackBorrowed(values, state);
+        UNIT_ASSERT_VALUES_EQUAL(*record.EstimateMemorySize(storage.Data()), 96);
+        values[0] = TUnboxedValuePod{};
+        record.GetStateLayout().PackBorrowed(values, state);
+        UNIT_ASSERT_VALUES_EQUAL(*record.EstimateMemorySize(storage.Data()), 64);
+        UNIT_ASSERT_VALUES_EQUAL(*record.GetStaticMemorySize(), 96);
+
+        std::vector<TType*> elements = {uuidType, env.Optional(uuidType)};
+        auto* tupleType = TTupleType::Create(elements.size(), elements.data(), env.Env);
+        std::pair<TString, TType*> member = {"uuids", tupleType};
+        auto* structType = TStructType::Create(&member, 1, env.Env);
+        TDqHashCombineTupleLayout nestedLayout(std::vector<TType*>{structType});
+        const size_t expected = 2 * sizeof(TDirectArrayHolderInplace) + 3 * sizeof(TUnboxedValuePod) + 2 * (StringHeaderSize + NUdf::UUID_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(*nestedLayout.GetStaticExternalMemorySize(), expected);
+        TUnboxedValue tuple = env.Array({uuid, stateUuid});
+        TUnboxedValue structure = env.Array({tuple});
+        UNIT_ASSERT_VALUES_EQUAL(*TDqHashCombineTupleLayout::EstimateValueMemorySize(structure, structType),
+            sizeof(TUnboxedValuePod) + expected);
+    }
+
     Y_UNIT_TEST(RequiredNativeRejectsEmptyValue) {
         TLayoutTestEnv env;
         TUnboxedValue first = TUnboxedValuePod(NUdf::TStringValue("first long borrowed string"));
@@ -645,7 +924,7 @@ Y_UNIT_TEST_SUITE(TDqHashCombineLayoutTest) {
 
         const auto memory = layout.EstimateExternalMemorySize(persistent.Data());
         UNIT_ASSERT(memory);
-        UNIT_ASSERT_VALUES_EQUAL(*memory, owner.AsStringRef().Size());
+        UNIT_ASSERT_VALUES_EQUAL(*memory, StringHeaderSize + owner.AsStringRef().Size());
 
         std::vector<TUnboxedValue> copied(types.size());
         layout.UnpackCopy(persistent.Data(), copied);
@@ -674,7 +953,7 @@ Y_UNIT_TEST_SUITE(TDqHashCombineLayoutTest) {
         recordLayout.GetKeyLayout().CopyWithRefs(scratch.Data(), record.Data());
         const auto recordMemory = recordLayout.EstimateMemorySize(record.Data());
         UNIT_ASSERT(recordMemory);
-        UNIT_ASSERT_VALUES_EQUAL(*recordMemory, recordLayout.GetRecordSize() + owner.AsStringRef().Size());
+        UNIT_ASSERT_VALUES_EQUAL(*recordMemory, recordLayout.GetRecordSize() + StringHeaderSize + owner.AsStringRef().Size());
         recordLayout.GetKeyLayout().Destroy(record.Data());
     }
 }

@@ -461,7 +461,7 @@ private:
             const auto& inputArg = stage.Program().Args().Arg(i);
 
             // Scan inputs that may contain TKqpTxResultBinding
-            if (input.Maybe<TDqSource>() || input.Maybe<TKqpCnStreamLookup>()) {
+            if (input.Maybe<TDqSource>() || input.Maybe<TKqpCnStreamLookup>() || input.Maybe<TKqpCnVectorSearch>()) {
                 collectBindings(input.Ptr());
             }
 
@@ -566,6 +566,8 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
             collectPrecomputes(maybeSource.Cast().Ptr(), /* checkConnections */ true);
         } else if (auto maybeStreamLookup = input.Maybe<TKqpCnStreamLookup>()) {
             collectPrecomputes(maybeStreamLookup.Cast().Settings().Ptr());
+        } else if (auto maybeVectorSearch = input.Maybe<TKqpCnVectorSearch>()) {
+            collectPrecomputes(maybeVectorSearch.Cast().TopK().Ptr());
         }
     }
 

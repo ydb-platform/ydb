@@ -234,7 +234,7 @@ message TFeatureFlags {
     optional bool EnableTableCacheModes = 204 [default = true];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = true];
     optional bool EnableStreamingQueries = 206 [default = true];
-    optional bool EnableTinyDisks = 207 [default = false];
+    optional bool EnableTinyDisks = 207 [default = true];
     optional bool EnableMetricsLevel = 208 [default = true];
     optional bool EnableCompileCacheView = 209 [default = true];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
@@ -443,4 +443,5 @@ message TFeatureFlags {
     optional bool EnableQYT = 359 [default = false]; //YT queues (QYT) in federated and streaming queries
     // Enables memory of table partitions split/merge demands
     optional bool EnableSplitMergeDemandTracking = 360 [default = false];
+    optional bool EnableStreamingQuerySchemeOperations = 361 [default = true];
 }

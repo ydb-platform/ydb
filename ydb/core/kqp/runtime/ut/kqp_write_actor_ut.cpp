@@ -8,6 +8,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -297,6 +298,30 @@ public:
             "Expected the query to fail once the retry budget is exhausted");
         UNIT_ASSERT_C(Runtime.CaptureMailboxEvents(PipeCache.Hint(), PipeCache.NodeId()).empty(),
             "Unexpected write: the failed writer must not resend anything");
+    }
+
+    void FailWriteSubscribed(const TWrite& write) {
+        const auto* sent = static_cast<NEvents::TDataEvents::TEvWrite*>(write->Get()->Ev.Get());
+        // Mimics a DataShard probability rejection that acknowledges the writer's
+        // overload subscription (TDataShard::SetOverloadSubscribed): the reply
+        // carries the request cookie and the subscribed seqNo (which is one less
+        // than the writer's next expected seqNo), so the sink must wait for
+        // TEvOverloadReady instead of retrying on its own.
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
+            write->Get()->TabletId, /*txId*/ 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED,
+            "Shard is overloaded");
+        result->Record.SetOverloadSubscribed(sent->Record.GetOverloadSubscribe());
+        Runtime.Send(new IEventHandle(write->Sender, PipeCache, result.release(), 0, write->Cookie));
+        Execute();
+    }
+
+    void ShardReady(const TWrite& write) {
+        const auto* sent = static_cast<NEvents::TDataEvents::TEvWrite*>(write->Get()->Ev.Get());
+        // Mimics the shard's NotifyOverloadSubscribers for the acknowledged
+        // subscription: TEvOverloadReady with the subscribed seqNo.
+        Runtime.Send(new IEventHandle(write->Sender, Edge,
+            new TEvDataShard::TEvOverloadReady(write->Get()->TabletId, sent->Record.GetOverloadSubscribe())));
+        Execute();
     }
 
     void Retry(const TWrite& write, TPartitions partitions = {}) {
@@ -661,6 +686,45 @@ Y_UNIT_TEST_SUITE(KqpDirectWriteActor) {
             const auto retried = fixture.GrabWrite();
             fixture.FailWriteTerminally(retried, status);
         }
+    }
+
+    // An acknowledged overload subscription (a probability rejection whose reply
+    // round-trips the request cookie) must only make the sink wait for
+    // TEvOverloadReady: the still-unacknowledged batch keeps its accumulated
+    // send attempts, so the bounded retry budget is not silently refilled and a
+    // later retry trigger re-resolves instead of resending at attempt zero.
+    Y_UNIT_TEST(SubscribedOverloadRejectionPreservesRetryBudget) {
+        TSinkFixture fixture; // MaxWriteAttempts = 1
+        fixture.Write(1, MakeCheckpoint(1));
+        const auto original = fixture.GrabWrite();
+
+        fixture.FailWriteSubscribed(original);
+        UNIT_ASSERT(fixture.Callbacks.Errors.Empty());
+        fixture.AssertNoWrites();
+
+        // The single attempt is still spent, so the retry trigger must take the
+        // budget-exhausted re-resolve path rather than resend immediately.
+        fixture.Retry(original);
+        const auto retried = fixture.GrabWrite();
+        fixture.Acknowledge(retried);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, TVector<ui64>{1});
+    }
+
+    // After an acknowledged overload subscription the sink must resend exactly
+    // once TEvOverloadReady arrives (and not before), so a stalled overloaded
+    // shard neither gets hammered nor stalls the writer forever.
+    Y_UNIT_TEST(SubscribedOverloadRejectionWaitsForShardReady) {
+        TSinkFixture fixture;
+        fixture.Write(1, MakeCheckpoint(1));
+        const auto original = fixture.GrabWrite();
+
+        fixture.FailWriteSubscribed(original);
+        fixture.AssertNoWrites();
+
+        fixture.ShardReady(original);
+        const auto retried = fixture.GrabWrite();
+        fixture.Acknowledge(retried);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Callbacks.SavedCheckpoints, TVector<ui64>{1});
     }
 
 }

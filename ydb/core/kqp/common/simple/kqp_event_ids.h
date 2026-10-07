@@ -105,6 +105,7 @@ struct TKqpComputeEvents {
         EvRemoteScanData,
         EvRemoteScanDataAck,
         EvScanPing,
+        EvScanWarning,
     };
 
     static_assert(Unused0 == EventSpaceBegin(TKikimrEvents::ES_KQP) + 200);

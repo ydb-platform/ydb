@@ -4,8 +4,8 @@
 
 namespace NKikimr::NInMemoryMetricsMonitoring {
 
-inline constexpr size_t MaxHistoryPoints = 1000;
-inline constexpr size_t MaxHistoryFields = 64;
+inline constexpr size_t MaxHistoryPoints = 64 * 1024;
+inline constexpr size_t MaxHistoryFields = 128;
 
 TString RenderPage();
 TString RenderOverviewPage();

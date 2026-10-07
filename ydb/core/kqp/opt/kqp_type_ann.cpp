@@ -3,6 +3,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
@@ -3449,6 +3450,7 @@ TStatus AnnotateOpWindow(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto opWindow = TKqpOpWindow(input);
     auto pos = input->Pos();
+    const bool frameNeverEmpty = WindowFrameFromNode(opWindow.Frame()).IsNeverEmpty();
 
     TVector<const TItemExprType*> newItemTypes(structType->GetItems().begin(), structType->GetItems().end());
 
@@ -3475,7 +3477,7 @@ TStatus AnnotateOpWindow(const TExprNode::TPtr& input, TExprContext& ctx) {
             } else {
                 resultType = argType;
             }
-            if (!resultType->IsOptionalOrNull()) {
+            if (!frameNeverEmpty && !resultType->IsOptionalOrNull()) {
                 resultType = ctx.MakeType<TOptionalExprType>(resultType);
             }
         }

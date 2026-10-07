@@ -84,6 +84,9 @@ class YtClient:
         no ``-p`` flag is given, so we do the same.  Falls back to the
         expected directory name if the variable is not set.
         """
+        project_name = os.environ.get("COMPOSE_PROJECT_NAME")
+        if project_name:
+            return project_name
         compose_file = os.environ.get("DOCKER_COMPOSE_FILE", "")
         if compose_file:
             return os.path.basename(os.path.dirname(compose_file))
@@ -310,7 +313,7 @@ class YtClient:
             params["recursive"] = "true"
         self._api_call("remove", params=params, http_method="POST")
 
-    def create_queue(self, path: str, data_column: str = "data", timeout: int = 60) -> None:
+    def create_queue(self, path: str, data_column: str = "data", timeout: int = 60, tablet_count: int = 1) -> None:
         """Create an ordered dynamic table at the given path and mount it as a queue.
 
         The schema includes the user-defined data column plus the two system
@@ -318,18 +321,20 @@ class YtClient:
         ``$cumulative_data_weight``).  The table is mounted synchronously so
         it is ready for queue operations immediately after this call returns.
         """
-        attrs = json.dumps({
-            "dynamic": True,
-            "schema": [
-                {"name": data_column, "type": "string"},
-                {"name": "$timestamp", "type": "uint64"},
-                {"name": "$cumulative_data_weight", "type": "int64"},
-            ],
-        })
+        # Use YSON format for attributes with quoted names for special characters
+        attrs = (
+            f'{{dynamic=%true;schema=['
+            f'{{name={data_column};type=string}};'
+            f'{{name="$timestamp";type=uint64}};'
+            f'{{name="$cumulative_data_weight";type=int64}}'
+            f']}}'
+        )
         self._run_yt_cli(
-            ["create", "table", path, "--attributes-format", "json", "--attributes", attrs],
+            ["create", "table", path, "--attributes", attrs],
             check=True, timeout=timeout,
         )
+        if tablet_count != 1:
+            self._run_yt_cli(["reshard-table", path, "--tablet-count", str(tablet_count)], check=True, timeout=timeout)
         self._run_yt_cli(
             ["mount-table", path, "--sync"],
             check=True, timeout=timeout,
@@ -339,7 +344,7 @@ class YtClient:
         """Insert rows into a mounted dynamic table via JSON newline-delimited format."""
         if not rows:
             return
-        data = "\n".join(json.dumps(row) for row in rows) + "\n"
+        data = "\n".join(json.dumps({("$" + key if key.startswith("$") else key): value for key, value in row.items()}) for row in rows) + "\n"
         self._run_yt_cli(
             ["insert-rows", "--format=json", path],
             input_data=data, check=True, timeout=timeout,
@@ -391,11 +396,11 @@ class YtClient:
         """Set an attribute value at the given path.
 
         If *as_json* is True, *value* will be serialized as JSON and passed
-        with --attributes-format=json to the yt CLI.
+        with --format=json to the yt CLI.
         """
         if as_json:
             self._run_yt_cli(
-                ["set", "--attributes-format", "json", path, json.dumps(value)],
+                ["set", "--format", "json", path, json.dumps(value)],
                 check=True, timeout=timeout,
             )
         else:
@@ -544,7 +549,10 @@ class YtClient:
         Otherwise *input_data* is used as-is (raw YSON or other format).
         """
         if rows is not None:
-            input_data = "\n".join(json.dumps(row) for row in rows) + "\n"
+            input_data = "\n".join(
+                json.dumps({("$" + key if key.startswith("$") else key): value for key, value in row.items()})
+                for row in rows
+            ) + "\n"
         self._run_yt_cli([
             "push-queue-producer", producer_path, queue_path,
             "--session-id", session_id,

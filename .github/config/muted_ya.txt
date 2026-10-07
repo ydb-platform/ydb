@@ -5,19 +5,10 @@ ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapC
 ydb/core/driver_lib/run/ut unittest.[*/*] chunk
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.HoppingEvictedKeysBeforeAndAfterRestart-Watermarks
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.HoppingEvictedKeysInOrdinaryQuery-Enabled
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.RowDispatcherMemoryLimitOnParserCreation
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointOffsets-SharedReading+CommittedAhead
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets+SharedReading+FromCheckpoint
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading+FromCheckpoint
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading-FromCheckpoint
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerRewindDispositions+SharedReading
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryReadFromConsumerRewind+SharedReading+FromTimestamp
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryReadFromConsumerRewind-SharedReading+FromTimestamp
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryRestartsWhenUpsertTableDeletedWhileRunning
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithStreamLookupJoin+WithFeatureFlag+WithFullscanFlag
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithStreamLookupJoinShuffleMode-WithFeatureFlag
 ydb/core/kqp/ut/federated_query/datastreams StreamingHistoryReplay.ChangedWindowReplaysConsumedHistory-Force
 ydb/core/kqp/ut/federated_query/datastreams StreamingHistoryReplay.ConsumerAheadOfCheckpointIsRewoundOnTextChange+SharedReading
 ydb/core/kqp/ut/federated_query/datastreams StreamingHistoryReplay.ConsumerAheadOfCheckpointIsRewoundOnTextChange-SharedReading
@@ -48,11 +39,14 @@ ydb/core/persqueue/ut TPQTest.TestPQPartialRead
 ydb/core/persqueue/ut TPQTest.TestPQReadWithoutReadToBlobEnd
 ydb/core/persqueue/ut TPQTest.TestReadSessions
 ydb/core/persqueue/ut TPQTest.TestSetClientOffset
+ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.SkipMessagesWithObsoleteTimestampWithRetentionInNonEmptyDestinationTopicWithRestart
 ydb/core/statistics/aggregator/ut AnalyzeSampling.CollectAndPersistStatistics+ColumnShard-SmallHistogramBudget
+ydb/core/sys_view/ut SystemView.QuerySessionsRuntimeStats+Enabled
 ydb/core/sys_view/ut_large SystemViewLarge.AuthOwners_DropSubtreeDuringScan
 ydb/core/tablet/ut BootstrapperTest.MultipleBootstrappers
 ydb/core/tablet_flat/ut TFlatTableExecutor_CutTabletHistory.TestDoNotCutHistoryEnabledAfterBoot
 ydb/core/tx/replication/controller/ut_schema_change AttachmentLifecycle.DropCascadeDuringAttachment
+ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithSchemaChangesEnabledAfterCreationReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithoutSchemaChangesReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropSyncIndexWithGlobalConsistency
 ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
@@ -81,13 +75,39 @@ ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedClusterTableFai
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedVersionsTableIsRecreated
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestTrackerRecreatesDroppedBalancerTable
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectReadRestartPQRB
+ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_exact_feature_config[rolling_stable-26-3-1_to_prestable-26-4-1]
+ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-3-1_to_prestable-26-4-1]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-1-lax]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-1-strict]
+ydb/tests/compatibility/indexes test_unique_index.py.TestUniqueIndex.test_unique_index[rolling_stable-26-3-1_to_prestable-26-4-1]
+ydb/tests/compatibility/indexes test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-3-1_to_prestable-26-4-1]
 ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_current_proxy_returns_overloaded[mixed_current_and_intermediate]
 ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_old_proxy_handles_limit_response_from_current_tablet[mixed_current_and_intermediate]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-4-1_and_stable-26-3-1-False]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_join[mixed_prestable-26-4-1_and_stable-26-3-1-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_join[mixed_prestable-26-4-1_and_stable-26-3-1-True]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster_multi_output[mixed_prestable-26-4-1_and_stable-26-3-1-False]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_join[rolling_stable-26-3-1_to_prestable-26-4-1-False]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_join[rolling_stable-26-3-1_to_prestable-26-4-1-True]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_multi_output[rolling_stable-26-3-1_to_prestable-26-4-1-True]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksMixedCluster.test_mixed_cluster[mixed_prestable-26-4-1_and_stable-26-3-1-False]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksMixedCluster.test_mixed_cluster[mixed_prestable-26-4-1_and_stable-26-3-1-True]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-1-False]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-1-True]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-4-1_and_stable-26-3-1]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_hopping_closed_window[restart]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_hopping_open_window[restart]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_insert_select[restart]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_insert_select[scale_up]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_increase[external]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_increase[local]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_predicate[restart]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_predicate[scale_up]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_skips_deferred_publication[kikimr0]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_twice
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_restart_preserves_max_tasks_per_stage[max_tasks_1]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_restart_preserves_max_tasks_per_stage[max_tasks_30]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_restart_preserves_max_tasks_per_stage[max_tasks_5]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[default-True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[max_tasks_per_stage_2-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[max_tasks_per_stage_2-True]
@@ -106,6 +126,7 @@ ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/config py3test.[test_distconf.py */*] chunk
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_replace_config_unknown_fields[host_config]
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/federation_test TFederationWriteReadTest.CreateRemoteMirrorRuleWithGaps
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
 ydb/tests/functional/federation_test unittest.[*/*] chunk
@@ -120,6 +141,5 @@ ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
-ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[old_sdk]
 ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_settings_save_deploy_flags_from_checkboxes

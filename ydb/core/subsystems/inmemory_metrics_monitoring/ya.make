@@ -12,3 +12,5 @@ RESOURCE(overview.js inmemory-metrics/overview.js)
 
 END()
 RECURSE_FOR_TESTS(ut)
+
+RECURSE(metric_chart)

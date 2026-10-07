@@ -208,7 +208,7 @@ TString RenderPage() {
 
 </div>
 <script type='module'>
-import {createMetricChart,seriesStats,defaultChartSettings,formatMetricValue,formatSeriesName} from '../static/metric-chart/chart.js';
+import {createMetricChart,createMetricChartCursorGroup,seriesStats,defaultChartSettings,formatMetricValue,formatSeriesName} from '../static/metric-chart/chart.js';
 import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metric-chart/client.js';
 (() => {
  const $=id=>document.getElementById('imm-'+id);
@@ -219,6 +219,7 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  const numeric=v=>v===null||v===undefined?null:Number.isFinite(Number(v))?Number(v):null;
  const visible=()=>series.map(s=>({...s,...lineSettings.get(s.key)})).map(s=>({...s,display:formatSeriesName(s,s.format??settingsFor(s.queryId).format)})).filter(s=>(s.display+' '+s.metric+' '+s.name+' '+s.labels).toLowerCase().includes($('filter').value.toLowerCase()));
  const client=createInMemoryMetricsClient({endpoint:location.pathname});
+ const cursorGroup=createMetricChartCursorGroup();
  let charts=[],chartSettings={...defaultChartSettings,legend:true};
  const querySettings=new Map(),lineSettings=new Map();
  const settingsFor=id=>$('separate').checked?{...chartSettings,...querySettings.get(id)}:chartSettings;
@@ -305,7 +306,7 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
   const list=visible().filter(s=>settingsFor(s.queryId).legend).map(s=>({...s,stat:stats(s)}));
   $('legend-panel').hidden=!list.length;$('toggle-legend').setAttribute('aria-pressed',String(list.length>0));
   list.sort((a,b)=>{if(sort==='name')return direction*a.display.localeCompare(b.display);const x=numeric(a.stat[sort]),y=numeric(b.stat[sort]);return x===null?y===null?0:1:y===null?-1:direction*(x-y);});
-  $('legend').replaceChildren();$('count').textContent=list.length+' / '+series.length+' series'+(limited?' (matching lines limited)':'');
+  $('legend').replaceChildren();$('count').textContent=list.length+' / '+series.length+' series'+(limited?' (matching series limited)':'');
   list.forEach((s,index)=>{const r=document.createElement('tr');if(hidden.has(s.key))r.className='imm-legend-hidden';const c=document.createElement('td'),check=document.createElement('input');check.type='checkbox';check.checked=!hidden.has(s.key);check.setAttribute('aria-label','Show '+(s.display));
    check.addEventListener('click',e=>{const anchor=list.findIndex(line=>line.key===lastToggle);if(e.shiftKey&&anchor!==-1){for(let i=Math.min(index,anchor);i<=Math.max(index,anchor);i++)check.checked?hidden.delete(list[i].key):hidden.add(list[i].key);}else check.checked?hidden.delete(s.key):hidden.add(s.key);lastToggle=s.key;draw();});c.append(check);r.append(c);
    const name=text('td',s.display,'imm-legend-name'),dot=text('span','','imm-dot');dot.style.background=s.color;name.prepend(dot);r.append(name);
@@ -317,8 +318,8 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
   if(fixed){[begin,end]=fixed;}else{end=series.length?Math.max(...series.map(s=>s.end)):Date.now();begin=end-Number($('period').value)*1000;}
 
   legend();for(const chart of charts)chart.destroy();charts=[];$('charts').replaceChildren();$('notes').replaceChildren();
-  if(series.some(s=>s.truncated))$('notes').append(text('p','History is truncated to the latest 1000 points per line.','imm-note'));
-  if(limited)$('notes').append(text('p','Comparison is limited to 16 matching lines per query and 64 series in total.','imm-note'));
+  if(series.some(s=>s.truncated))$('notes').append(text('p','History is truncated to the latest 65,536 points per line.','imm-note'));
+  if(limited)$('notes').append(text('p','Comparison is limited to 16 matching series per query and 64 series in total.','imm-note'));
   const separate=$('separate').checked;$('charts').classList.toggle('imm-separated',separate);$('charts').style.setProperty('--columns',$('columns').value);$('columns-label').hidden=!separate;updateSettingsTargets();
   const groups=separate&&appliedQueries.length?appliedQueries.map((q,index)=>({id:q.id,title:'Query '+String.fromCharCode(65+index)+' \u00b7 '+q.metric})): [{id:null,title:'All queries'}];
   for(const group of groups){const chart=text('div','','imm-chart');$('charts').append(chart);if(separate){const heading=text('div','','imm-chart-heading'),button=text('button','Settings');button.type='button';button.setAttribute('aria-label','Settings for '+group.title);button.addEventListener('click',()=>{$('settings-target').value=String(group.id);$('settings').open=true;loadSettings();});heading.append(text('div',group.title,'imm-chart-title'),button);chart.append(heading);}drawChart(chart,group);}
@@ -326,7 +327,7 @@ import {createInMemoryMetricsClient,parseQuery,formatQuery} from '../static/metr
  function drawChart(element,group){
   const active=visible().filter(s=>!hidden.has(s.key)&&(group.id===null||s.queryId===group.id));
   const host=document.createElement('div');element.append(host);
-  const chart=createMetricChart(host,{settings:settingsFor(group.id),onPin:()=>{$('auto').checked=false;clearTimeout(timer);},onRangeChange:({from,to})=>{fixed=[from,to];$('auto').checked=false;clearTimeout(timer);draw();}});charts.push(chart);
+  const chart=createMetricChart(host,{cursorGroup,settings:settingsFor(group.id),onPin:()=>{$('auto').checked=false;clearTimeout(timer);},onRangeChange:({from,to})=>{fixed=[from,to];$('auto').checked=false;clearTimeout(timer);draw();}});charts.push(chart);
   chart.setData({series:active,begin,end,title:group.title,emptyText:!appliedQueries.length?'No applied queries. Use Apply queries.':!series.length?'No lines match the applied query.':active.length?'No retained numeric samples in this interval':'No visible series. Select rows in the legend.'});
  }
  async function refresh(){
@@ -398,7 +399,7 @@ TString RenderOverviewPage() {
     return R"HTML(
 <link rel='stylesheet' href='../static/metric-chart/chart.css'>
 <style>
-.container.imo-page{width:100%;max-width:none;margin:0;padding:0 12px;box-sizing:border-box}.imo{font:13px/1.4 Arial,sans-serif;color:#30343b;margin:8px 0}.imo header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.imo header span{margin-left:auto;color:#707985}.imo a{color:#246da2}.imo button,.imo input,.imo select{font:inherit;padding:3px 7px;border:1px solid #cbd2dc;border-radius:4px;background:white}.imo h3{font-size:14px;margin:14px 0 6px}.imo table{width:100%;border-collapse:collapse}.imo th,.imo td{text-align:left;padding:5px 8px;border-bottom:1px solid #e4e8ee;vertical-align:top}.imo th{background:#f5f7fa}.imo-scroll{overflow:auto}.imo #imo-summary{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.imo-summary-item{padding:8px 12px;background:#f5f7fa;border:1px solid #e3e7ed;border-radius:5px}.imo dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:8px 0}.imo dd{margin:0;overflow-wrap:anywhere}.imo td a{display:block}.imo-error{color:#a32828!important}.imo-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.imo-details section{min-width:0}.imo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.imo-card{min-width:0;border:1px solid #e3e7ed;border-radius:8px;padding:8px;background:white}.imo-card h3{margin:0 0 6px}.imo-card nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.imo-card nav a{font-size:12px}@media(max-width:800px){.imo-grid{grid-template-columns:1fr}}@media(max-width:700px){.imo-details{grid-template-columns:1fr;gap:0}}
+.container.imo-page{width:100%;max-width:none;margin:0;padding:0 12px;box-sizing:border-box}.imo{font:13px/1.4 Arial,sans-serif;color:#30343b;margin:8px 0}.imo header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.imo header span{margin-left:auto;color:#707985}.imo a{color:#246da2}.imo button,.imo input,.imo select{font:inherit;padding:3px 7px;border:1px solid #cbd2dc;border-radius:4px;background:white}.imo h3{font-size:14px;margin:14px 0 6px}.imo table{width:100%;border-collapse:collapse}.imo th,.imo td{text-align:left;padding:5px 8px;border-bottom:1px solid #e4e8ee;vertical-align:top}.imo th{background:#f5f7fa}.imo-scroll{overflow:auto}.imo #imo-summary{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.imo-summary-item{padding:8px 12px;background:#f5f7fa;border:1px solid #e3e7ed;border-radius:5px}.imo dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:8px 0}.imo dd{margin:0;overflow-wrap:anywhere}.imo td a{display:block}.imo-error{color:#a32828!important}.imo-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.imo-details section{min-width:0}.imo-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.imo-card{min-width:0;border:1px solid #e3e7ed;border-radius:8px;padding:8px;background:white}.imo-card h3{margin:0 0 6px}.imo-card nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.imo-card nav a{font-size:12px}@media(max-width:1200px){.imo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:800px){.imo-grid{grid-template-columns:1fr}}@media(max-width:700px){.imo-details{grid-template-columns:1fr;gap:0}}
 </style>
 <div class='imo' id='imo-root'>
 <header><a href='metrics'>Metric viewer</a><label>History <select id='imo-period' aria-label='History range'><option value='60'>1 min</option><option value='300' selected>5 min</option><option value='900'>15 min</option><option value='3600'>1 hour</option></select></label><button id='imo-now' type='button'>Now</button><label><input id='imo-live' type='checkbox'> Live via JSON</label><button id='imo-refresh' type='button'>Refresh</button><span id='imo-status' role='status'>Loading registry...</span></header>
@@ -408,7 +409,7 @@ TString RenderOverviewPage() {
 <section><h3>Storage state</h3><dl id='imo-storage'></dl></section></div>
 <section><h3>Chunk allocation by storage line</h3><div id='imo-allocation'></div></section>
 <h3>Metric lines</h3><input id='imo-filter' type='search' aria-label='Filter metric lines' placeholder='Filter by metric or labels'>
-<div class='imo-scroll'><table><thead><tr><th>ID</th><th>Line</th><th>Metrics</th><th>Labels</th><th>Frontend</th><th>Chunks</th><th>State</th></tr></thead><tbody id='imo-lines'></tbody></table></div>
+<div class='imo-scroll'><table><thead><tr><th>ID</th><th>Line</th><th>Metrics</th><th>Series</th><th>Labels</th><th>Frontend</th><th>Chunks</th><th>State</th></tr></thead><tbody id='imo-lines'></tbody></table></div>
 </div>
 <script type='module' src='../static/inmemory-metrics/overview.js'></script>
 )HTML";

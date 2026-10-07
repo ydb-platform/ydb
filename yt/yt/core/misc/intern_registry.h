@@ -4,7 +4,7 @@
 
 #include <util/generic/hash_set.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT {
 
@@ -53,7 +53,7 @@ private:
         bool operator()(const TWeakPtr<TInternedObjectData<T>>& lhs, const T& rhs) const;
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
 
     using TProfilerSet = THashSet<TWeakPtr<TInternedObjectData<T>>, THash, TEqual>;
     TProfilerSet Registry_;

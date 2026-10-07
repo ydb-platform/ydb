@@ -951,6 +951,12 @@ public:
                 // A concurrent request must not replace the active query's stats.
                 // The session actor still decides whether to accept the request.
                 LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
+                // A forwarded request's sender is a remote proxy. Local WM
+                // events must never be sent over interconnect.
+                if (ev->Get()->Record.GetRequest().GetReportWmStateChanges() &&
+                    ev->Sender.NodeId() == SelfId().NodeId()) {
+                    sessionInfo->WmState->SetStateObserver(ev->Sender, ev->Cookie);
+                }
             }
             if (FeatureFlags.GetEnableKqpRuntimeStats()) {
                 ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval = CurrentQueryStatsReportInterval;

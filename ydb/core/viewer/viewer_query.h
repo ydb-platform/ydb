@@ -977,7 +977,10 @@ private:
             ev->Get()->PoolId, ev->Get()->ClassifiedBy);
     }
 
-    static void AddWmInfo(NJson::TJsonValue& json, const NKikimrKqp::TQueryResponse& response) {
+    static void AddWmInfo(NJson::TJsonValue& json, const NKikimrKqp::TQueryResponse& response, bool includeWmInfo) {
+        if (!includeWmInfo) {
+            return;
+        }
         if (response.HasWmState() && response.GetWmState() != NKikimrKqp::WM_STATE_NONE) {
             json["wm_state"] = NWorkloadManager::WmStateToStatus(response.GetWmState());
         }
@@ -1005,7 +1008,7 @@ private:
         if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             QueryResponse.Set(std::move(ev));
             MakeOkReply(jsonResponse, QueryResponse->Record);
-            AddWmInfo(jsonResponse, QueryResponse->Record.GetResponse());
+            AddWmInfo(jsonResponse, QueryResponse->Record.GetResponse(), IncludeWmInfo);
             if (Schema == ESchemaType::Classic && Stats.empty() && !IncludeWmInfo && (Action.empty() || Action == "execute")) {
                 jsonResponse = std::move(jsonResponse["result"]);
             }
@@ -1014,7 +1017,7 @@ private:
             NYql::TIssues issues;
             NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
             MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NAdapters::ToSdkIssues(std::move(issues))));
-            AddWmInfo(jsonResponse, ev->Get()->Record.GetResponse());
+            AddWmInfo(jsonResponse, ev->Get()->Record.GetResponse(), IncludeWmInfo);
         }
         if (wmResponse.HasWmState() && wmResponse.GetWmState() == NKikimrKqp::WM_STATE_EXECUTING) {
             StreamWmState("EXECUTING", wmResponse.GetEffectivePoolId(), wmResponse.GetWmClassifiedBy());
@@ -1600,8 +1603,8 @@ public:
               - name: include_wm_info
                 in: query
                 description: >
-                    Preserve the response envelope with result, wm_state,
-                    wm_classified_by and resource_pool for classic execute responses.
+                    Include wm_state, wm_classified_by and resource_pool in the response.
+                    For classic execute responses, preserve the envelope with result and WM fields.
                     Without this flag, classic execute without stats keeps its legacy array format.
                     Supported since /viewer/query capability version 13.
                 type: boolean

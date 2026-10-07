@@ -4675,7 +4675,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .Query = "SELECT 1;",
                 .Action = "execute",
                 .Schema = "modern",
-                .ResourcePool = "explicit_pool"
+                .ResourcePool = "explicit_pool",
+                .IncludeWmInfo = true
             });
             if (json.Has("wm_state") && json.Has("wm_classified_by")) {
                 break;
@@ -4719,6 +4720,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
             .Action = "execute-query"
         });
         UNIT_ASSERT_VALUES_EQUAL_C(poolDdl["status"].GetString(), "SUCCESS", "Pool DDL failed: " << NJson::WriteJson(poolDdl, false));
+
+        const auto withoutWmInfo = PostWmQuery(httpClient, {
+            .Query = "SELECT 42 AS value;",
+            .Action = "execute-query",
+            .Schema = "modern",
+            .ResourcePool = "explicit_pool"
+        });
+        UNIT_ASSERT_C(!withoutWmInfo.Has("wm_state"), NJson::WriteJson(withoutWmInfo, false));
+        UNIT_ASSERT_C(!withoutWmInfo.Has("wm_classified_by"), NJson::WriteJson(withoutWmInfo, false));
+        UNIT_ASSERT_C(!withoutWmInfo.Has("resource_pool"), NJson::WriteJson(withoutWmInfo, false));
 
         for (const auto& action : {TString(), TString("execute")}) {
             auto legacy = PostWmQuery(httpClient, {
@@ -4806,7 +4817,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
             .Query = "SELECT FROM;",
             .Action = "execute-query",
             .Schema = "modern",
-            .ResourcePool = "default"
+            .ResourcePool = "default",
+            .IncludeWmInfo = true
         });
         UNIT_ASSERT_VALUES_EQUAL_C(response["status"].GetString(), "GENERIC_ERROR", NJson::WriteJson(response, false));
         UNIT_ASSERT_VALUES_EQUAL_C(response["resource_pool"].GetString(), "default", NJson::WriteJson(response, false));
@@ -4859,7 +4871,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
             json = PostWmQuery(httpClient, {
                 .Query = "SELECT 1;",
                 .Action = "execute",
-                .Schema = "modern"
+                .Schema = "modern",
+                .IncludeWmInfo = true
             });
             if (json.Has("wm_classified_by") && json["wm_classified_by"].GetString() == "CLASSIFIER: catch_all_classifier") {
                 break;

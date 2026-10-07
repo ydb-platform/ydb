@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 #include <yql/essentials/core/extract_predicate/extract_predicate.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -29,6 +30,77 @@ bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
         return result;
     }
     return true;
+}
+
+bool IsLambdaOptionalType(TExprNode::TPtr node, const TTypeAnnotationNode* structType, TRBOContext& ctx) {
+    Y_ENSURE(node);
+    auto lambda = ctx.ExprCtx.DeepCopyLambda(*node);
+    if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
+        return false;
+    }
+
+    ctx.TypeAnnTransformer.Rewind();
+    IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+    do {
+        status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+    } while (status == IGraphTransformer::TStatus::Repeat);
+
+    const TTypeAnnotationNode* lambdaType = lambda->GetTypeAnn();
+    if (!lambdaType) {
+        return false;
+    }
+
+    return lambdaType->IsOptionalOrNull();
+}
+
+TExprNode::TPtr GetLambdaForRowRangeExtractor(TExprNode::TPtr node, const TStructExprType* structType, TRBOContext& rboCtx) {
+    auto& ctx = rboCtx.ExprCtx;
+    auto lambda = TCoLambda(node);
+    // The range extractor expects a non optional predicate.
+    TExprBase newBody = lambda.Body();
+    if (IsLambdaOptionalType(node, structType, rboCtx)) {
+        // clang-format off
+        newBody = Build<TCoCoalesce>(ctx, node->Pos())
+            .Predicate(lambda.Body())
+            .Value<TCoBool>()
+                .Literal().Build("false")
+            .Build()
+        .Done();
+        // clang-format on
+    }
+
+    // clang-format off
+    auto newLambda = Build<TCoLambda>(ctx, node->Pos())
+        .Args({"arg"})
+        .Body<TExprApplier>()
+            .Apply(newBody)
+            .With(lambda.Args().Arg(0), "arg")
+        .Build()
+    .Done();
+    // clang-format on
+
+    TVector<const TTypeAnnotationNode*> argTypes{structType};
+    // clang-format off
+    auto predicateClosure = Build<TKqpPredicateClosure>(ctx, node->Pos())
+        .Lambda(newLambda)
+        .ArgsType(ExpandType(node->Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
+    .Done();
+    // clang-format on
+
+    YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Range exctractor, before peephole: " << KqpExprToPrettyString(predicateClosure, ctx);
+
+    TExprNode::TPtr afterPeephole;
+    bool hasNonDeterministicFunctions;
+    if (const auto status = PeepHoleOptimizeNode(predicateClosure.Ptr(), afterPeephole, ctx, rboCtx.TypeCtx, nullptr,
+                                                 hasNonDeterministicFunctions);
+        status != IGraphTransformer::TStatus::Ok) {
+        YQL_CLOG(ERROR, ProviderKqp) << "[NEW RBO] Peephole failed with status: " << status << Endl;
+        afterPeephole = nullptr;
+    }
+    Y_ENSURE(afterPeephole);
+    YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Range exctractor, after peephole: " << KqpExprToPrettyString(TExprBase(afterPeephole), ctx);
+
+    return TExprBase(afterPeephole).Cast<TKqpPredicateClosure>().Lambda().Ptr();
 }
 
 TExprNode::TPtr TypeAnnotateLambda(TExprNode::TPtr lambda, const TStructExprType* structType, TRBOContext& ctx) {
@@ -60,14 +132,8 @@ TExprNode::TPtr FoldExistsOverNonOptional(TExprNode::TPtr lambda, const TStructE
 }
 
 // The range extractor expects a non optional predicate typed over the read row type.
-TExprNode::TPtr GetLambdaForRangeExtractor(TExprNode::TPtr node, const TTypeAnnotationNode* inputType, TRBOContext& rboCtx) {
-    if (!inputType) {
-        return node;
-    }
-
+TExprNode::TPtr GetLambdaForColumnRangeExtractor(TExprNode::TPtr node, const TStructExprType* structType, TRBOContext& rboCtx) {
     auto& ctx = rboCtx.ExprCtx;
-    auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-
     auto lambda = TypeAnnotateLambda(ctx.DeepCopyLambda(*node), structType, rboCtx);
     if (lambda) {
         lambda = FoldExistsOverNonOptional(lambda, structType, rboCtx);
@@ -87,6 +153,19 @@ TExprNode::TPtr GetLambdaForRangeExtractor(TExprNode::TPtr node, const TTypeAnno
     // clang-format on
 
     return TypeAnnotateLambda(ctx.NewLambda(node->Pos(), lambda->HeadPtr(), newBody.Ptr()), structType, rboCtx);
+}
+
+TExprNode::TPtr GetLambdaForRangeExtractor(TExprNode::TPtr node, const TTypeAnnotationNode* inputType, NYql::EStorageType storageType,
+                                           TRBOContext& rboCtx) {
+    if (!inputType) {
+        return node;
+    }
+
+    const auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    if (storageType == NYql::EStorageType::ColumnStorage) {
+        return GetLambdaForColumnRangeExtractor(node, structType, rboCtx);
+    }
+    return GetLambdaForRowRangeExtractor(node, structType, rboCtx);
 }
 
 bool IsSuitableToExtractAndPushRanges(IOperator* input, const NYql::EStorageType applicableTableType) {
@@ -459,7 +538,8 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         return input;
     }
 
-    const auto extractorLambda = GetLambdaForRangeExtractor(filter->GetFilterExpression().Node, read->Type, rboCtx);
+    const auto extractorLambda =
+        GetLambdaForRangeExtractor(filter->GetFilterExpression().Node, read->Type, read->GetTableStorageType(), rboCtx);
     if (!extractorLambda) {
         return input;
     }

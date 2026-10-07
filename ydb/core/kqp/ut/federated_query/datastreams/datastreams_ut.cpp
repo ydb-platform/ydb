@@ -987,14 +987,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_TWIN_F(ReplicatedFederativeWriting, UseColumnTable, TStreamingTestFixture) {
-<<<<<<< HEAD
         SetupAppConfig().MutableTableServiceConfig()->SetEnableHtapTx(true);
-        constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
-        constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
-=======
         const auto firstOutputTopic = MakeExternalName("replicatedWritingOutputTopicName1");
         const auto secondOutputTopic = MakeExternalName("replicatedWritingOutputTopicName2");
->>>>>>> 1a5e7587f48 (YQ fixed streaming C++ external names generation  (#55509))
         constexpr char pqSource[] = "pqSourceName";
         CreateScopedTopic(firstOutputTopic);
         CreateScopedTopic(secondOutputTopic);

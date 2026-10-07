@@ -33,6 +33,8 @@ chronyc sources -v
 
 Основное решение — синхронизировать часы.
 
+{% include [example_clock_skew_internal](_includes/example_clock_skew_internal.md) %}
+
 ## Смотрите также
 
 * [{#T}](performance/system/system-clock-drift.md)

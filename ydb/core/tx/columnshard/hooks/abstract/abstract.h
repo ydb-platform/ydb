@@ -12,7 +12,6 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
 
-#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
 #include <util/datetime/base.h>
 #include <util/generic/refcount.h>
 #include <util/generic/singleton.h>
@@ -460,14 +459,10 @@ public:
 
 class TControllers {
 private:
-    // Tablets read the controller from actor threads while tests replace it. A reader keeps the
-    // holder alive while it copies the pointer out.
-    TTrueAtomicSharedPtr<ICSController::TPtr> CSController = MakeTrueAtomicShared<ICSController::TPtr>(std::make_shared<ICSController>());
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
 
-    void ReplaceCSController(const ICSController::TPtr& newController) {
-        CSController.atomic_store(MakeTrueAtomicShared<ICSController::TPtr>(newController));
-    }
+    // The CS controller is kept in abstract.cpp, see there
+    static void ReplaceCSController(const ICSController::TPtr& newController);
 
 public:
     template <class TController>
@@ -499,8 +494,7 @@ public:
 
         ~TGuard() {
             if (Controller) {
-                auto* controllers = Singleton<TControllers>();
-                controllers->ReplaceCSController(std::make_shared<ICSController>());
+                ReplaceCSController(std::make_shared<ICSController>());
             }
         }
     };
@@ -508,15 +502,11 @@ public:
     template <class T, class... Types>
     static TGuard<T> RegisterCSControllerGuard(Types... args) {
         auto result = std::make_shared<T>(args...);
-        auto* controllers = Singleton<TControllers>();
-        controllers->ReplaceCSController(result);
+        ReplaceCSController(result);
         return result;
     }
 
-    static ICSController::TPtr GetColumnShardController() {
-        auto* controllers = Singleton<TControllers>();
-        return *controllers->CSController.atomic_load();
-    }
+    static ICSController::TPtr GetColumnShardController();
 
     template <class T>
     static T* GetControllerAs() {

@@ -4,6 +4,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
+#include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -29,9 +30,9 @@ constexpr ui32 MaxResolveAttempts = 8;
  *             independently of T_user and is not rolled back with it.
  *
  * Flow: allocate TxId -> resolve shards -> prepare on every shard -> plan via coordinator ->
- * collect completions. Everything before the coordinator plan can be aborted cleanly, which is
- * where a concurrent split/merge is absorbed by re-resolving. After the plan there is no rollback
- * and the only failure the client can see is UNDETERMINED.
+ * collect completions. A single shard executes immediately. Retries are safe only before sending
+ * a commit-capable request, or after a definitive refusal/non-delivery. Once an immediate write
+ * or coordinator proposal may have been accepted, a lost outcome is UNDETERMINED.
  */
 class TKqpUnsafeTruncateExecuter: public TActorBootstrapped<TKqpUnsafeTruncateExecuter> {
     struct TTableToTruncate {
@@ -42,6 +43,16 @@ class TKqpUnsafeTruncateExecuter: public TActorBootstrapped<TKqpUnsafeTruncateEx
         // Impl tables are only ever reached through the index of the table the statement names,
         // never named by the statement itself.
         bool IsIndexImplTable = false;
+    };
+
+    struct TEvReattach : TEventLocal<TEvReattach, EventSpaceBegin(TEvents::ES_PRIVATE)> {
+        const ui64 TxId;
+        const ui64 ShardId;
+        const ui64 Cookie;
+
+        TEvReattach(ui64 txId, ui64 shardId, ui64 cookie)
+            : TxId(txId), ShardId(shardId), Cookie(cookie)
+        {}
     };
 
 public:
@@ -77,6 +88,34 @@ public:
     }
 
 private:
+    void CancelPreparedShards() {
+        if (!WritesSent || Immediate || CommitSent) {
+            return;
+        }
+        // No coordinator can have accepted this attempt. Cancel even shards whose prepare
+        // reply has not arrived yet, and do not subscribe again while abandoning the attempt.
+        for (const auto& [shardId, _] : ShardTables) {
+            Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
+                new TEvDataShard::TEvCancelTransactionProposal(*TxId), shardId, false));
+        }
+        WritesSent = false;
+    }
+
+    void PassAway() override {
+        CancelPreparedShards();
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        TActorBootstrapped::PassAway();
+    }
+
+    bool IsCurrentAttempt(ui64 txId) const {
+        return !Restarting && TxId && *TxId == txId;
+    }
+
+    bool IsPendingShard(ui64 shardId) const {
+        return TxManager->HasShard(shardId)
+            && TxManager->GetState(shardId) != IKqpTransactionManager::FINISHED;
+    }
+
     void AllocateTxIdAndResolve() {
         ++ResolveAttempt;
         if (ResolveAttempt > MaxResolveAttempts) {
@@ -90,6 +129,11 @@ private:
         // be reused once we decided to abandon that attempt.
         TxManager = CreateKqpTransactionManager();
         Immediate = false;
+        CommitSent = false;
+        PlanConfirmed = false;
+        WritesSent = false;
+        ShardTables.clear();
+        RestartingShards.clear();
 
         // Start over from the main table so that a repartitioning or re-indexing between attempts
         // is picked up rather than carried over.
@@ -305,19 +349,12 @@ private:
             }
 
             for (const auto& partition : entry.KeyDescription->GetPartitions()) {
-                // Shards already confirmed truncated by an earlier attempt are skipped: the
-                // operation is idempotent, so re-truncating a descendant of one is harmless, but
-                // re-sending to an untouched survivor is pure waste.
-                if (TruncatedShards.contains(partition.ShardId)) {
-                    continue;
-                }
                 ShardTables[partition.ShardId].push_back(table.TableId);
                 TxManager->AddShard(partition.ShardId, /* isOlap */ false, table.Path);
             }
         }
 
         if (ShardTables.empty()) {
-            // Everything this statement had to wipe is already wiped.
             ReplySuccess();
             return;
         }
@@ -335,9 +372,14 @@ private:
         // (see the CanUseImmediateCommit assert in StartExecute).
         Immediate = (ShardTables.size() == 1);
 
-        if (!Immediate) {
+        if (Immediate) {
+            TxManager->StartExecute();
+            CommitSent = true;
+            Become(&TKqpUnsafeTruncateExecuter::ExecuteState);
+        } else {
             TxManager->StartPrepare();
         }
+        WritesSent = true;
 
         const auto mode = Immediate
             ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
@@ -357,7 +399,7 @@ private:
             }
 
             Send(MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true));
+                new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true, *TxId));
         }
     }
 
@@ -368,7 +410,7 @@ private:
         // While a restart is under way TxId still names the abandoned attempt, so its remaining
         // shards would pass the check below and reach a transaction manager that has already been
         // replaced by a fresh one.
-        if (Restarting || !TxId || record.GetTxId() != *TxId) {
+        if (!IsCurrentAttempt(record.GetTxId()) || !IsPendingShard(shardId)) {
             YDB_LOG_INFO("Ignoring a write result of an abandoned unsafe truncate attempt",
                 {"txId", TxId ? *TxId : 0}, {"resultTxId", record.GetTxId()},
                 {"shardId", shardId}, {"restarting", Restarting});
@@ -377,6 +419,9 @@ private:
 
         switch (record.GetStatus()) {
             case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED: {
+                if (TxManager->GetState(shardId) != IKqpTransactionManager::PREPARING) {
+                    return;
+                }
                 IKqpTransactionManager::TPrepareResult result{
                     .ShardId = shardId,
                     .MinStep = record.GetMinStep(),
@@ -400,8 +445,8 @@ private:
             }
 
             case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED: {
-                TruncatedShards.insert(shardId);
-                if (Immediate || TxManager->ConsumeCommitResult(shardId)) {
+                YQL_ENSURE(CommitSent);
+                if (TxManager->ConsumeCommitResult(shardId)) {
                     ReplySuccess();
                 }
                 return;
@@ -414,8 +459,11 @@ private:
             // to be retried through a fresh resolve too. Plain overload converges on the attempt
             // cap instead of the fresh shard set.
             case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
-                // The shard set or the schema moved under us. Nothing is applied yet, so the whole
-                // attempt is dropped and retried against a freshly resolved shard set.
+                // An immediate refusal is definitive. A distributed attempt may already have
+                // been proposed to the coordinator, in which case it must never be retried.
+                if (Immediate) {
+                    CommitSent = false;
+                }
                 RestartOrFail(record.GetStatus());
                 return;
             }
@@ -447,15 +495,15 @@ private:
             item.SetFlags(shardInfo.AffectedFlags);
         }
 
-        Planned = true;
+        CommitSent = true;
         Become(&TKqpUnsafeTruncateExecuter::ExecuteState);
         Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(ev.Release(), commitInfo.Coordinator, /* subscribe */ true));
+            new TEvPipeCache::TEvForward(ev.Release(), commitInfo.Coordinator, /* subscribe */ true, *TxId));
     }
 
     void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr& ev) {
         const ui64 resultTxId = ev->Get()->Record.GetTxId();
-        if (Restarting || !TxId || resultTxId != *TxId) {
+        if (!IsCurrentAttempt(resultTxId) || Immediate || !CommitSent) {
             YDB_LOG_INFO("Ignoring a coordinator status of an abandoned unsafe truncate attempt",
                 {"txId", TxId ? *TxId : 0}, {"resultTxId", resultTxId}, {"restarting", Restarting});
             return;
@@ -466,8 +514,11 @@ private:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusProcessed:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusConfirmed:
+                return;
+
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
-                // Progress on the way to the plan, not an outcome: the shards report that.
+                // From now on losing the coordinator pipe is harmless: the shards finish the plan.
+                PlanConfirmed = true;
                 return;
 
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclined:
@@ -476,7 +527,10 @@ private:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting:
                 // An explicit refusal is definitive: the transaction was never planned, so no shard
                 // applied anything and the attempt can be retried from scratch.
-                Planned = false;
+                if (PlanConfirmed) {
+                    return;
+                }
+                CommitSent = false;
                 RestartOrFail(NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
                 return;
 
@@ -488,21 +542,89 @@ private:
         }
     }
 
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        if (!Planned) {
-            // Pre-plan: nothing was applied anywhere, so a clean retry is safe.
+    void Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletId();
+        if (!IsCurrentAttempt(record.GetTxId()) || Immediate || !IsPendingShard(shardId)) {
+            return;
+        }
+        if (TxManager->GetState(shardId) == IKqpTransactionManager::PREPARING) {
             RestartOrFail(NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
             return;
         }
-        ReplyError(Ydb::StatusIds::UNDETERMINED, NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-            TStringBuilder() << "Lost contact with tablet " << ev->Get()->TabletId
-                             << " after the unsafe truncate was planned");
+        RestartingShards.insert(shardId);
+    }
+
+    void Handle(TEvReattach::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        if (!IsCurrentAttempt(msg.TxId) || !IsPendingShard(msg.ShardId)) {
+            return;
+        }
+        auto& state = TxManager->GetReattachState(msg.ShardId);
+        if (!state.ReattachInfo.Reattaching || state.Cookie != msg.Cookie) {
+            return;
+        }
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
+            new TEvDataShard::TEvProposeTransactionAttach(msg.ShardId, *TxId),
+            msg.ShardId, true, *TxId), 0, msg.Cookie);
+    }
+
+    void Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletId();
+        if (!IsCurrentAttempt(record.GetTxId()) || !IsPendingShard(shardId)) {
+            return;
+        }
+        auto& state = TxManager->GetReattachState(shardId);
+        if (!state.ReattachInfo.Reattaching || state.Cookie != ev->Cookie) {
+            return;
+        }
+        if (record.GetStatus() == NKikimrProto::OK) {
+            state.ReattachInfo.Reattaching = false;
+            return;
+        }
+        RestartOrFail(NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        // Pipe notifications carry the subscription cookie, not a transaction id in their body.
+        if (!IsCurrentAttempt(ev->Cookie)) {
+            return;
+        }
+        const ui64 tabletId = ev->Get()->TabletId;
+        if (CommitSent && !Immediate && tabletId == TxManager->GetCoordinator()) {
+            if (PlanConfirmed) {
+                return;
+            }
+            if (ev->Get()->NotDelivered) {
+                CommitSent = false;
+            }
+        } else {
+            if (!IsPendingShard(tabletId)) {
+                return;
+            }
+            if (Immediate) {
+                if (ev->Get()->NotDelivered) {
+                    CommitSent = false;
+                }
+            } else {
+                auto& state = TxManager->GetReattachState(tabletId);
+                if ((RestartingShards.erase(tabletId) || state.ReattachInfo.Reattaching)
+                    && ShouldReattach(TlsActivationContext->Now(), state.ReattachInfo))
+                {
+                    Schedule(state.ReattachInfo.Delay,
+                        new TEvReattach(*TxId, tabletId, ++state.Cookie));
+                    return;
+                }
+            }
+        }
+        RestartOrFail(NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
     }
 
     void RestartOrFail(NKikimrDataEvents::TEvWriteResult::EStatus status) {
-        if (Planned) {
+        if (CommitSent) {
             ReplyError(Ydb::StatusIds::UNDETERMINED, NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-                "Unsafe truncate lost a shard after it was planned");
+                "Unsafe truncate lost contact with a participant after sending a commit request; its outcome is unknown");
             return;
         }
         if (Restarting) {
@@ -511,6 +633,8 @@ private:
         // Stays set until a new TxId is assigned, so that the remaining shards of the abandoned
         // attempt reporting the same failure do not each start a restart of their own.
         Restarting = true;
+        CancelPreparedShards();
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         YDB_LOG_INFO("Restarting unsafe truncate after a shard set change",
             {"txId", TxId ? *TxId : 0}, {"status", (int)status}, {"attempt", ResolveAttempt});
 
@@ -552,6 +676,11 @@ private:
             return;
         }
         Replied = true;
+        // Even an internal error cannot promise a rollback after a commit-capable request was sent.
+        if (CommitSent) {
+            status = Ydb::StatusIds::UNDETERMINED;
+            issueCode = NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN;
+        }
         auto issue = NYql::TIssue(message);
         NYql::SetIssueCode(issueCode, issue);
         ResponseEv->BrokenLockShardId = 0;
@@ -566,20 +695,20 @@ private:
         const NYql::TIssues issues = ev->Get()->GetIssues();
 
         YDB_LOG_INFO("Got EvAbortExecution for unsafe truncate",
-            {"txId", TxId ? *TxId : 0}, {"planned", Planned},
+            {"txId", TxId ? *TxId : 0}, {"commitSent", CommitSent},
             {"status", NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())},
             {"issues", issues.ToOneLineString()});
 
-        if (Planned) {
-            // The coordinator already holds the transaction. It cannot be taken back, and unlike an
-            // ordinary write it is not rolled back with the user transaction either.
+        if (CommitSent) {
+            // An immediate write or a coordinator proposal may already have been accepted.
+            // Neither can be rolled back with the user transaction.
             ReplyError(Ydb::StatusIds::UNDETERMINED, NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-                "Unsafe truncate was aborted after it had been planned and is not rolled back");
+                "Unsafe truncate was aborted after sending a commit request and is not rolled back");
             return;
         }
 
         ReplyError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
-            TStringBuilder() << "Unsafe truncate aborted before it was planned: " << issues.ToOneLineString());
+            TStringBuilder() << "Unsafe truncate aborted before sending a commit request: " << issues.ToOneLineString());
     }
 
     void UnexpectedEvent(TStringBuf state, ui32 eventType) {
@@ -596,6 +725,9 @@ private:
                 hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+                hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
+                hFunc(TEvDataShard::TEvProposeTransactionAttachResult, Handle);
+                hFunc(TEvReattach, Handle);
                 hFunc(TEvents::TEvWakeup, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 default:
@@ -612,6 +744,9 @@ private:
                 hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+                hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
+                hFunc(TEvDataShard::TEvProposeTransactionAttachResult, Handle);
+                hFunc(TEvReattach, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
@@ -634,13 +769,15 @@ private:
     TVector<TTableToTruncate> Tables;
     TVector<size_t> PendingNavigate;
     THashMap<ui64, TVector<TTableId>> ShardTables;
-    THashSet<ui64> TruncatedShards;
+    THashSet<ui64> RestartingShards;
 
     IKqpTransactionManagerPtr TxManager;
     std::optional<ui64> TxId;
     ui32 ResolveAttempt = 0;
     TDuration ResolveRetryDelay = TDuration::MilliSeconds(20);
-    bool Planned = false;
+    bool CommitSent = false;
+    bool PlanConfirmed = false;
+    bool WritesSent = false;
     bool Restarting = false;
     bool Replied = false;
     bool Immediate = false;

@@ -9,6 +9,8 @@ SRCS(
     domain_info.cpp
     domain_info.h
     drain.cpp
+    event_history.cpp
+    event_history.h
     fill.cpp
     hive.cpp
     hive.h

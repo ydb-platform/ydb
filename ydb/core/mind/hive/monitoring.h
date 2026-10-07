@@ -16,6 +16,10 @@ protected:
     TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& evi, THive* self);
 
     void WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op);
+
+    TString GetUserForLog() const {
+        return User.empty() ? TString("anonymous") : User;
+    }
 };
 
 }

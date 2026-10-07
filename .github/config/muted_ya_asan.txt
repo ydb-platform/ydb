@@ -155,6 +155,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningBothGeneratedIndependentDe
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningBothGeneratedSharedDependency
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningDependenciesUpdatedAndNot
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningGeneratedNotUpdated
+ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningGeneratedUpdated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningNoGeneratedColumns
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningOneOfTwoGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateWhereGeneratedNoMatch
@@ -546,6 +547,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_balance
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_get_set
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_filter_healthy_groups_requires_bsc_ready
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_list_fallback_to_legacy_api
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_list_legacy_api
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots

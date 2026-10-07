@@ -2402,7 +2402,7 @@ public:
             txCtx->TxManager->AddTopicsToShards();
 
             auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
-                __LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+                __LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
 
             const auto& queryLimitsProto = Settings.TableService.GetQueryLimits();
             const auto& bufferLimitsProto = queryLimitsProto.GetBufferLimits();

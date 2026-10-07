@@ -250,8 +250,8 @@ In most cases, working with columnar tables {{ ydb-short-name }} is similar to w
 * Data is partitioned not by the primary key, but by the hash of the partitioning columns.
 * Columnar tables support a limited set of data types:
 
-  + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
-  + Available only in columns not included in the primary key: `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `JsonDocument`, `Json`, `Yson`.
+  + Available in both the primary key and other columns: `Bool`, `Int8`, `Int16`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Decimal`, `Date`, `Datetime`, `Timestamp`, `Interval`, `Date32`, `Datetime64`, `Timestamp64`, `Interval64`, `DyNumber`, `Uuid`, `Utf8`, `String`;
+  + Available only in columns not included in the primary key: `Double`, `Float`, `Json`, `JsonDocument`, `Yson`.
 
 * You can configure compression individually for each column when [creating](../../../yql/reference/syntax/create_table/index.md#compression) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md#compression) it later.
 * You can also configure encoding for each column when [creating](../../../yql/reference/syntax/create_table/index.md#encoding) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md#encoding) it later.

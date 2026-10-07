@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/test/testhull_index.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_ut.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #define STR     Cnull
 
@@ -19,6 +20,36 @@ namespace NKikimr {
         using TStrategy = ::NKikimr::NHullComp::TStrategy<TKeyLogoBlob, TMemRecLogoBlob>;
         using TTask = ::NKikimr::NHullComp::TTask<TKeyLogoBlob, TMemRecLogoBlob>;
 
+
+        void RunInActorContext(std::function<void()> callback) {
+            class TRunner : public TActor<TRunner> {
+                std::function<void()> Callback;
+
+                STFUNC(Execute) {
+                    Y_UNUSED(ev);
+                    Callback();
+                    PassAway();
+                }
+
+            public:
+                explicit TRunner(std::function<void()> callback)
+                    : TActor(&TRunner::Execute)
+                    , Callback(std::move(callback))
+                {}
+            };
+
+            TTestActorRuntimeBase runtime;
+            runtime.Initialize();
+            const auto actor = runtime.Register(new TRunner(std::move(callback)));
+            runtime.Send(new IEventHandle(actor, {}, new TEvents::TEvWakeup));
+        }
+
+        template<class TKey, class TMemRec>
+        NHullComp::EAction SelectInActorContext(NHullComp::TStrategy<TKey, TMemRec>& strategy) {
+            NHullComp::EAction action = NHullComp::ActNothing;
+            RunInActorContext([&] { action = strategy.Select(); });
+            return action;
+        }
 
         struct TPriorityTestEnv {
             TTestContexts Contexts;
@@ -93,7 +124,7 @@ namespace NKikimr {
                 }
                 TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
                     &task, false);
-                return strategy.Select();
+                return SelectInActorContext(strategy);
             }
         };
 
@@ -274,8 +305,10 @@ namespace NKikimr {
             // calculate storage ratio
             TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriersEssence =
                 snap.BarriersSnap.CreateEssence(snap.HullCtx);
-            NHullComp::TStrategyStorageRatio<TKeyLogoBlob, TMemRecLogoBlob>
-                (snap.HullCtx, snap.LogoBlobsSnap, std::move(barriersEssence), true).Work();
+            RunInActorContext([&] {
+                NHullComp::TStrategyStorageRatio<TKeyLogoBlob, TMemRecLogoBlob>
+                    (snap.HullCtx, snap.LogoBlobsSnap, std::move(barriersEssence), true).Work();
+            });
 
             snap.LogoBlobsSnap.Output(STR);
             STR << "\n";
@@ -290,7 +323,7 @@ namespace NKikimr {
             NHullComp::TSelectorParams params = {boundaries, 1.0, TInstant::Seconds(0), {}};
             TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap), std::move(snap.BarriersSnap),
                     &task, true);
-            auto action = strategy.Select();
+            auto action = SelectInActorContext(strategy);
             STR << "action = " << NHullComp::ActionToStr(action) << "\n";
         }
 

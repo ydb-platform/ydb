@@ -58,6 +58,11 @@ TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
         }
     }
     for (auto&& [_, i] : HeaderContext) {
+        // A header fetch uses the column id as its entity id, same as a data fetch of that column.
+        auto applied = source.ApplyPendingFetcher(context, i.GetColumnId());
+        if (applied.IsFail()) {
+            return applied;
+        }
         if (context.GetResources().GetAccessorOptional(i.GetColumnId())) {
             continue;
         }

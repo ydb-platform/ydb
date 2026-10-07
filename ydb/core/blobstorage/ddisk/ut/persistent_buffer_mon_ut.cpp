@@ -244,6 +244,15 @@ Y_UNIT_TEST_SUITE(TPersistentBufferMonTest) {
         }
     }
 
+    Y_UNIT_TEST(UnknownAction) {
+        TMonTest test;
+        test.Request("action=bogus");
+        const auto response = test.Response();
+        UNIT_ASSERT_STRING_CONTAINS(response, "400 Bad Request");
+        UNIT_ASSERT_STRING_CONTAINS(response, "text/plain");
+        UNIT_ASSERT_STRING_CONTAINS(response, "Unknown action");
+    }
+
     Y_UNIT_TEST(TabletsApiMissingBuffer) {
         TMonTest test;
         test.Request("action=tablets&pb=missing");

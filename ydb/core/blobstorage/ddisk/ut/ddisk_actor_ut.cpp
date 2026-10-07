@@ -5370,6 +5370,12 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         doWrite(credsDbg0, /*lsn=*/10, 'X');
         doWrite(credsDbg2, /*lsn=*/10, 'Y');
 
+        // Advance only DBG0's barrier, keeping its LSN 10 on the page.
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvErasePersistentBuffer(credsDbg0, 5));
+        auto eraseRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        ctx.SendPDiskResponse(disk, *eraseRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertStatus(WaitFromDDisk<NDDisk::TEvErasePersistentBufferResult>(ctx), TReplyStatus::OK);
+
         SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvGetPersistentBufferInfo(false, true));
         auto info = WaitFromDDisk<NDDisk::TEvPersistentBufferInfo>(ctx);
 
@@ -5404,6 +5410,22 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletInfos.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletInfos.front().DirectBlockGroupIndex,
                 info->Get()->TabletInfos[expectedOffset].DirectBlockGroupIndex);
+            const auto& barriers = page->Get()->EraseBarriers;
+            UNIT_ASSERT_VALUES_EQUAL(barriers.size(), 1);
+            if (expectedOffset == 0) {
+                UNIT_ASSERT_VALUES_EQUAL(barriers.at({tabletId, 0}), 5);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(barriers.at({tabletId, 2}), 0);
+            }
+        }
+        for (ui64 offset : std::array<ui64, 2>{1, Max<ui64>()}) {
+            auto request = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>(false, true);
+            request->TabletsOffset = offset;
+            auto all = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(ctx, disk.PBServiceId, request.release());
+            UNIT_ASSERT_VALUES_EQUAL(all->Get()->TabletsOffset, 0);
+            UNIT_ASSERT_VALUES_EQUAL(all->Get()->TabletInfos.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(all->Get()->EraseBarriers.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(all->Get()->EraseBarriers.at({tabletId, 0}), 5);
         }
         auto otherCreds = Connect(ctx, disk.PBServiceId, 99, generation);
         doWrite(otherCreds, 11, 'Z');

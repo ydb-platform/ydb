@@ -2688,7 +2688,7 @@ namespace NKikimr::NDDisk {
                 : PersistentBuffers.end();
             reply->TabletsTotal = tabletId ? std::distance(first, last) : PersistentBuffers.size();
             const ui64 limit = ev->Get()->TabletsLimit;
-            ui64 offset = ev->Get()->TabletsOffset;
+            ui64 offset = limit ? ev->Get()->TabletsOffset : 0;
             if (limit && offset >= reply->TabletsTotal) {
                 offset = reply->TabletsTotal ? (reply->TabletsTotal - 1) / limit * limit : 0;
             }

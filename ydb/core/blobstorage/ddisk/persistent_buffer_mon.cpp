@@ -469,7 +469,9 @@ function refresh() {
             fresh.querySelectorAll('.pb-mon-buffer').forEach(function(buffer) {
                 var current = existing.get(buffer.dataset.pb);
                 if (current) {
-                    current.querySelector('.pb-mon-summary').innerHTML = buffer.querySelector('.pb-mon-summary').innerHTML;
+                    var currentSummary = current.querySelector('.pb-mon-summary');
+                    var freshSummary = buffer.querySelector('.pb-mon-summary');
+                    if (currentSummary && freshSummary) currentSummary.innerHTML = freshSummary.innerHTML;
                 } else {
                     cur.appendChild(buffer);
                 }
@@ -483,7 +485,9 @@ function refresh() {
                     buffer.remove();
                 }
             });
-            cur.querySelector('.pb-mon-errors').innerHTML = fresh.querySelector('.pb-mon-errors').innerHTML;
+            var currentErrors = cur.querySelector('.pb-mon-errors');
+            var freshErrors = fresh.querySelector('.pb-mon-errors');
+            if (currentErrors && freshErrors) currentErrors.innerHTML = freshErrors.innerHTML;
             restoreTablets();
         })
         .catch(function() {})
@@ -820,7 +824,8 @@ reschedule();
                     }
                     if (params.Has("page") && (!TryFromString(params.Get("page"), tabletPage)
                             || tabletPage > Max<ui64>() / tabletsPageSize)) {
-                        return generateError("Failed to parse page -- must be a non-negative integer");
+                        return generateError(TStringBuilder() << "page must be an integer in range [0, "
+                            << Max<ui64>() / tabletsPageSize << "]");
                     }
                 }
 

@@ -367,11 +367,19 @@ public:
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError: {
+            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, "Unknown resource database");
+            return ReplyUnavailableAndDie(issue);
+        }
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+            // ResolveResourceDatabase sends no user token, so AccessDenied is unexpected.
+            // Treat it like other permanent resolution errors, not as a reason to retry.
+            [[fallthrough]];
         default:
             YDB_LOG_WARN_COMP(NKikimrServices::GRPC_SERVER, "Unexpected status",
                 {"entry", entry});
-            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, "Unknown resource database");
-            return ReplyUnavailableAndDie(issue);
+            return ReplyUnauthenticatedAndDie();
         }
 
         ResourceDatabaseName = CanonizePath(entry.Path);
@@ -675,6 +683,11 @@ private:
     void ReplyUnavailableAndDie(const NYql::TIssues& issue) {
         GrpcRequestBaseCtx_->RaiseIssues(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+        PassAway();
+    }
+
+    void ReplyUnauthenticatedAndDie() {
+        GrpcRequestBaseCtx_->ReplyUnauthenticated("Unknown resource database");
         PassAway();
     }
 

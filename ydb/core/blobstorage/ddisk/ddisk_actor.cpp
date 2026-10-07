@@ -352,6 +352,7 @@ namespace {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
             WritePersistentBuffersActor = Register(new TWritePersistentBuffersRequestActor(SelfId()));
+            InitMemoryMetrics();
             CollectPbStatsSnapshot();
             StartRestorePersistentBuffer();
         } else {
@@ -840,6 +841,7 @@ namespace {
                 reply->Rewrite(TEvInterconnect::EvForward, sync.InterconnectionSessionId);
             }
             Counters.Interface.Sync.Reply(false);
+            *Counters.Interface.Sync.BytesInFlight -= sync.RequestedBytes;
             sync.Span.End();
             TActivationContext::Send(reply.release());
         }
@@ -922,6 +924,8 @@ namespace {
         }
         Stopping = true;
         MemoryMetric.Close();
+        SpaceMetric.Close();
+        OperationMetric.Close();
         PersistentBufferRegistrationTokens.clear();
         Become(&TThis::StateFuncStopping);
         YDB_LOG_NOTICE("DDisk stopping", {"DDiskId", DDiskId}, {"reason", reason});

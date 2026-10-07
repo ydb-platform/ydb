@@ -104,14 +104,13 @@ You can analyze a transaction's execution time using a histogram counter. The in
 
 ## Topic metrics {#topics}
 
-<<<<<<< HEAD
 | Metric name<br/>Type<br/>units of measurement | Description<br/>Labels |
 | ----- | ----- |
 |`topic.producers_count`<br/>`GAUGE`, pieces | The number of unique topic [producers](../../../concepts/topic#producer-id).<br/>Labels:<br/>- _topic_ – the name of the topic. |
 | `topic.storage_bytes`<br/>`GAUGE`, bytes | The size of the topic in bytes. <br/>Labels:<br/>- _topic_ - the name of the topic. |
 | `topic.read.bytes`<br/>`RATE`, bytes | The number of bytes read by the consumer from the topic.<br/>Labels:<br/>- _topic_ – the name of the topic.<br/>- _consumer_ – the name of the consumer. |
 | `topic.read.messages`<br/>`RATE`, pieces | The number of messages read by the consumer from the topic. <br/>Labels:<br/>- _topic_ – the name of the topic.<br/>- _consumer_ – the name of the consumer. |
-| `topic.read.lag_messages`<br/>`RATE`, pieces | The number of unread messages by the consumer in the topic.<br/>Labels:<br/>- _topic_ – the name of the topic.<br/>- _consumer_ – the name of the consumer. |
+| `topic.read.lag_messages`<br/>`GAUGE`, pieces | The number of unread messages by the consumer in the topic. The metric serves as an indicator of reader lag. An increase in the value means the reader is falling behind the message flow — for example, due to a reader stop, partition rebalancing, or a write load spike.<br/>Labels:<br/>- _topic_ – the name of the topic.<br/>- _consumer_ – the name of the consumer. |
 | `topic.read.lag_milliseconds`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in milliseconds. It shows the number of messages where the difference between the reading time and the message creation time falls within the specified interval.<br/>Labels:<br/>- _topic_ – the name of the topic.<br/>- _consumer_ – the name of the consumer. |
 | `topic.write.bytes`<br/>`RATE`, bytes | The size of the written data.<br/>Labels:<br/>- _topic_ – the name of the topic. |
 | `topic.write.uncommited_bytes`<br/>`RATE`, bytes | The size of data written as part of ongoing transactions.<br/>Labels:<br/>- _topic_ — the name of the topic. |
@@ -120,21 +119,4 @@ You can analyze a transaction's execution time using a histogram counter. The in
 | `topic.write.uncommitted_messages`<br/>`RATE`, pieces | The number of messages written as part of ongoing transactions.<br/>Labels:<br/>- _topic_ — the name of the topic. |
 | `topic.write.message_size_bytes`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in bytes. It shows the number of messages which size falls within the boundaries of the interval.<br/>Labels:<br/>- _topic_ – the name of the topic. |
 | `topic.write.lag_milliseconds`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in milliseconds. It shows the number of messages where the difference between the write time and the message creation time falls within the specified interval.<br/>Labels:<br/>- _topic_ – the name of the topic. |
-=======
-| Metric name<br/>Type, units of measurement | Description<br/>Labels |
-| --- | --- |
-| `topic.producers_count`<br/>`GAUGE`, count | Number of unique topic [sources](../../../concepts/datamodel/topic#producer-id).<br/>Labels:<br/>- _topic_ – topic name. |
-| `topic.storage_bytes`<br/>`GAUGE`, bytes | Topic size in bytes.<br/>Labels:<br/>- _topic_ – topic name. |
-| `topic.read.bytes`<br/>`RATE`, bytes | Number of bytes read from the topic.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – reader name. |
-| `topic.read.messages`<br/>`RATE`, count | Number of messages read from the topic.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – reader name. |
-| `topic.read.lag_messages`<br/>`GAUGE`, count | Total number of messages not yet read by the given reader across the topic. The metric serves as an indicator of reader lag. An increase in the value means the reader is falling behind the message flow — for example, due to a reader stop, partition rebalancing, or a write load spike.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – reader name. |
-| `topic.read.lag_milliseconds`<br/>`HIST_RATE`, count | Histogram counter. Intervals are specified in milliseconds. Shows the number of messages for which the difference between the read time and the message creation time falls within a given interval.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – reader name. |
-| `topic.write.bytes`<br/>`RATE`, bytes | Size of written data.<br/>Labels:<br/>- _topic_ – topic name. |
-| `topic.write.uncommited_bytes`<br/>`RATE`, bytes | Size of data written as part of not yet completed transactions.<br/>Labels:<br/>- _topic_ – topic name. |
-| `topic.write.uncompressed_bytes`<br/>`RATE`, bytes | Size of decompressed written data.<br/>Labels:<br/>- _topic_ – topic name. |
-| `topic.write.messages`<br/>`RATE`, count | Number of written messages.<br/>Labels:<br/>- _topic_ – topic name. |
-| `topic.write.uncommitted_messages`<br/>`RATE`, count | Number of messages written as part of not yet completed transactions.<br/>Labels:<br/>- _topic_ – topic name. |
-| `topic.write.message_size_bytes`<br/>`HIST_RATE`, count | Histogram counter. Intervals are specified in bytes. Shows the number of messages whose size matches the interval boundaries.<br/>Labels:<br/>- _topic_ – topic name. |
-| `topic.write.lag_milliseconds`<br/>`HIST_RATE`, count | Histogram counter. Intervals are specified in milliseconds. Shows the number of messages for which the difference between the write time and the message creation time falls within a given interval.<br/>Labels:<br/>- _topic_ – topic name. |
->>>>>>> 8af4af1994b (Expand topic.read.lag_messages metric description (#52520))
 

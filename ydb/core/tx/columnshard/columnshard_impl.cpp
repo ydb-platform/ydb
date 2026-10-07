@@ -103,7 +103,6 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
-    // Literal like the other CS task types; registered in resource_broker.cpp.
     , MoveDataTaskSubscription("CS::MOVE_DATA", Counters.GetSubscribeCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
@@ -930,12 +929,7 @@ void TColumnShard::SetupMetadata() {
 }
 
 void TColumnShard::SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request) {
-    const ui64 memory = request.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
-    auto task = std::make_shared<TAccessorsMemorySubscriber>(memory, request.GetRequest()->GetTaskId(), TTLTaskSubscription,
-        std::shared_ptr<NOlap::TDataAccessorsRequest>(request.GetRequest()),
-        std::make_shared<TCSMetadataSubscriber>(SelfId(), request.GetProcessor(), Generation(), MetadataRequestsInFlight),
-        DataAccessorsManager.GetObjectPtrVerified(), nullptr);
-    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor, task);
+    StartMetadataRequests({ request }, TTLTaskSubscription, MetadataRequestsInFlight);
 }
 
 bool TColumnShard::SetupTtl() {

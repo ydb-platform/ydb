@@ -83,9 +83,8 @@ void TTester::Setup(TTestActorRuntime& runtime, TVector<TIntrusivePtr<NFake::TPr
     runtime.SetTxAllocatorTabletIds(ids);
 
     app.AddDomain(domain.Release());
-    // Explicit proxies replace the default group set, so the fake disk has to be mocked too.
     const bool mockDisk = !dsProxies.empty();
-    SetupTabletServices(runtime, &app, mockDisk, {}, nullptr, /*forceFollowers=*/false, std::move(dsProxies));
+    SetupTabletServices(runtime, &app, mockDisk, {}, nullptr, false, std::move(dsProxies));
 
     // No LongTxService actor is created in this basic test runtime, so install a stand-in registry with a
     // live OldestCollectionTime; otherwise TRegistryScanSnapshotGuard sees a frozen Zero freshness and

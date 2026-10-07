@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>

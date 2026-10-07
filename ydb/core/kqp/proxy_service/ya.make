@@ -16,7 +16,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/kqp/common
     ydb/core/kqp/common/events
     ydb/core/kqp/compile_service
@@ -26,7 +26,6 @@ PEERDIR(
     ydb/core/kqp/proxy_service/proto
     ydb/core/kqp/proxy_service/script_executions_utils
     ydb/core/kqp/run_script_actor
-    ydb/core/mind
     ydb/core/mon
     ydb/core/protos
     ydb/core/tx/scheme_cache

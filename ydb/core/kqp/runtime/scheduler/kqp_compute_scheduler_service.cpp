@@ -5,8 +5,8 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/common/simple/services.h>

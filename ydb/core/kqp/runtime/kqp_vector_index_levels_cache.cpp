@@ -9,8 +9,8 @@
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>

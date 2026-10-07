@@ -1,3 +1,5 @@
+* Fixed Topic and PersQueue write-session memory accounting to include queued data protobufs until transport completion.
+
 * Fixed table and query sessions being reused after commit or rollback errors that require closing the session.
 
 * Fixed async credentials acquisition for unary and streaming RPCs and Topic/PersQueue write sessions; the SDK now uses the token returned by `GetAuthInfoAsync()` without a second synchronous lookup.

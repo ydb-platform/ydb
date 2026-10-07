@@ -1,6 +1,7 @@
 #include "yql_arrow_column_converters.h"
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/exception.h>
 
@@ -279,7 +280,13 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlString(const std::shared_ptr<arrow::
         TString result = format ? TInstant::FromValue(v).FormatGmTime(format.c_str()) : TInstant::FromValue(v).ToString();
         builder.Add(NUdf::TBlockItem(NUdf::TStringRef(result.c_str(), result.size())));
     }
-    return builder.Build(true).make_array();
+    auto datum = builder.Build(true);
+    if (datum.is_array()) {
+        return datum.make_array();
+    }
+    auto result = arrow::Concatenate(datum.chunks(), arrow::system_memory_pool());
+    THROW_ARROW_NOT_OK(result.status());
+    return std::move(result).ValueOrDie();
 }
 
 template <bool isOptional>

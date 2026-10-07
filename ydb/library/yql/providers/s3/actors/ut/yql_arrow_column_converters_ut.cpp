@@ -4,6 +4,8 @@
 
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/public/udf/arrow/block_builder.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -57,9 +59,122 @@ std::shared_ptr<arrow::Array> MakeArray(const std::vector<TValue>& values) {
     return array;
 }
 
+template <bool Nullable, typename TArrowType>
+void CheckTemporalToString(const std::shared_ptr<arrow::DataType>& sourceType, bool utf8, size_t length,
+    const std::vector<typename arrow::TypeTraits<TArrowType>::BuilderType::value_type>& values,
+    const std::vector<TString>& strings, bool withNulls = false)
+{
+    TTestFixture f;
+    const auto typeId = utf8 ? NUdf::TDataType<NUdf::TUtf8>::Id : NUdf::TDataType<char*>::Id;
+    if constexpr (Nullable) {
+        f.AddOptionalColumn("ts", typeId);
+    } else {
+        f.AddColumn("ts", typeId);
+    }
+    const auto targetType = utf8 ? arrow::utf8() : arrow::binary();
+    typename arrow::TypeTraits<TArrowType>::BuilderType inputBuilder(sourceType, arrow::system_memory_pool());
+    TTypeInfoHelper typeInfo;
+    NUdf::TStringArrayBuilder<arrow::BinaryType, Nullable> chunkBuilder(typeInfo, targetType, *arrow::system_memory_pool(), length);
+    const size_t valuesPerChunk = typeInfo.GetMaxBlockBytes() / strings.front().size();
+    size_t nullCount = 0;
+    auto isNull = [&](size_t i) {
+        // Nulls immediately before and after the payload split, and in a later chunk.
+        return withNulls && (i == valuesPerChunk - 1 || i == valuesPerChunk || i == valuesPerChunk + 2 || i == valuesPerChunk + 4 || i == 2 * valuesPerChunk + 3);
+    };
+    for (size_t i = 0; i < length; ++i) {
+        if (isNull(i)) {
+            UNIT_ASSERT(inputBuilder.AppendNull().ok());
+            chunkBuilder.Add(NUdf::TBlockItem{});
+            ++nullCount;
+        } else {
+            UNIT_ASSERT(inputBuilder.Append(values[i % values.size()]).ok());
+            const auto& text = strings[i % strings.size()];
+            UNIT_ASSERT_VALUES_EQUAL(text.size(), strings.front().size());
+            chunkBuilder.Add(NUdf::TBlockItem(NUdf::TStringRef(text.data(), text.size())));
+        }
+    }
+    // Verify the fixture actually crosses the real string builder's payload limit.
+    const auto datum = chunkBuilder.Build(true);
+    const size_t chunkCount = Max<size_t>(1, (length - nullCount + valuesPerChunk - 1) / valuesPerChunk);
+    UNIT_ASSERT_VALUES_EQUAL(datum.is_array(), chunkCount == 1);
+    if (chunkCount > 1) {
+        UNIT_ASSERT_VALUES_EQUAL(datum.chunked_array()->num_chunks(), chunkCount);
+    }
+
+    std::shared_ptr<arrow::Array> input;
+    UNIT_ASSERT(inputBuilder.Finish(&input).ok());
+    auto converter = BuildColumnConverter("ts", sourceType, targetType, f.RowTypes.at("ts"), f.Settings);
+    const auto output = converter(input);
+    UNIT_ASSERT_C(output->ValidateFull().ok(), output->ValidateFull().ToString());
+    UNIT_ASSERT(output->type()->Equals(targetType));
+    UNIT_ASSERT_VALUES_EQUAL(output->length(), length);
+    UNIT_ASSERT_VALUES_EQUAL(output->null_count(), nullCount);
+    const auto& binary = static_cast<const arrow::BinaryArray&>(*output);
+    for (size_t i = 0; i < length; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(output->IsNull(i), isNull(i), i);
+        if (!isNull(i)) {
+            UNIT_ASSERT_VALUES_EQUAL_C(binary.GetString(i), strings[i % strings.size()], i);
+        }
+    }
+    // Consumers require one array per column in a RecordBatch.
+    const auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("ts", targetType, Nullable)}), length, {output});
+    UNIT_ASSERT(batch->ValidateFull().ok());
+}
+
+template <bool Nullable>
+void CheckTimestampToString(bool utf8, size_t length, bool withNulls = false) {
+    for (const auto unit : {arrow::TimeUnit::SECOND, arrow::TimeUnit::MILLI, arrow::TimeUnit::MICRO}) {
+        const i64 scale = unit == arrow::TimeUnit::SECOND ? 1 : unit == arrow::TimeUnit::MILLI ? 1000 : 1000000;
+        const i64 fraction = unit == arrow::TimeUnit::SECOND ? 0 : unit == arrow::TimeUnit::MILLI ? 123 : 123456;
+        const TString fractionalText = unit == arrow::TimeUnit::SECOND ? "000000" : unit == arrow::TimeUnit::MILLI ? "123000" : "123456";
+        CheckTemporalToString<Nullable, arrow::TimestampType>(arrow::timestamp(unit), utf8, length,
+            {1712059260 * scale, 1712059261 * scale + fraction, 1712059320 * scale},
+            {"2024-04-02T12:01:00.000000Z", "2024-04-02T12:01:01." + fractionalText + "Z", "2024-04-02T12:02:00.000000Z"}, withNulls);
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
+    Y_UNIT_TEST(TimestampToStringChunkBoundary) {
+        for (const size_t length : {1, 9102, 9103}) {
+            CheckTimestampToString<false>(false, length);
+            CheckTimestampToString<true>(false, length);
+        }
+    }
+
+    Y_UNIT_TEST(TimestampToUtf8ChunkBoundary) {
+        for (const size_t length : {1, 9102, 9103}) {
+            CheckTimestampToString<false>(true, length);
+            CheckTimestampToString<true>(true, length);
+        }
+    }
+
+    Y_UNIT_TEST(TimestampToStringMultipleChunks) {
+        CheckTimestampToString<false>(false, 30000);
+        CheckTimestampToString<true>(false, 30000);
+        CheckTimestampToString<true>(false, 30000, true);
+    }
+
+    Y_UNIT_TEST(TimestampToUtf8MultipleChunks) {
+        CheckTimestampToString<false>(true, 30000);
+        CheckTimestampToString<true>(true, 30000);
+        CheckTimestampToString<true>(true, 30000, true);
+    }
+
+    Y_UNIT_TEST(Date32ToStringChunkBoundary) {
+        for (const bool utf8 : {false, true}) {
+            for (const size_t length : {24576, 24577, 60000}) {
+                CheckTemporalToString<false, arrow::Date32Type>(arrow::date32(), utf8, length,
+                    {19815, 19816, 19817}, {"2024-04-02", "2024-04-03", "2024-04-04"});
+                CheckTemporalToString<true, arrow::Date32Type>(arrow::date32(), utf8, length,
+                    {19815, 19816, 19817}, {"2024-04-02", "2024-04-03", "2024-04-04"});
+            }
+            CheckTemporalToString<true, arrow::Date32Type>(arrow::date32(), utf8, 60000,
+                {19815, 19816, 19817}, {"2024-04-02", "2024-04-03", "2024-04-04"}, true);
+        }
+    }
+
     Y_UNIT_TEST(MissingOptionalColumnIsFilledWithNulls) {
         TTestFixture f;
         f.AddColumn("a", NUdf::TDataType<i32>::Id);

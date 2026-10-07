@@ -8,7 +8,7 @@ from typing import Callable
 
 import ydb
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, get_sensors, max_json_depth
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, counter_nodes, get_sensors, max_json_depth
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule, create_stream, delete_stream
@@ -1141,7 +1141,11 @@ FROM `{table_name}`"""
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
 
-    @pytest.mark.parametrize("local_topics", [True, False])
+    # SchemeShard counters cover the database, so each case needs a fresh cluster.
+    @pytest.mark.parametrize(
+        "local_topics,kikimr", [(True, {}), (False, {})],
+        indirect=["kikimr"], scope="function", ids=["True", "False"],
+    )
     def test_read_topic_restore_state(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         inp, out, endpoint = self.get_io_names(
             kikimr,
@@ -2650,6 +2654,10 @@ FROM `{table_name}`"""
             f"_{local_topics!s:.1}_{max_tasks_per_stage or 'default'}"
         )
 
+        # Wait for resource exchange before creating the query.
+        original_node_count = len(counter_nodes(kikimr.cluster))
+        kikimr.wait_kqp_node_count(original_node_count)
+
         kikimr.ydb_client.query(f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -2724,8 +2732,11 @@ FROM `{table_name}`"""
             # ), "Read tasks were not placed on every tenant slot"
 
         finally:
-            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
-            kikimr.cluster.unregister_and_stop_slots(added_slots)
-            # The next parameter case shares this cluster and must not plan
-            # its query on a stopped slot from a stale resource snapshot.
-            kikimr.wait_kqp_node_count(len(kikimr.cluster.slots))
+            try:
+                kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+            finally:
+                kikimr.cluster.unregister_and_stop_slots(added_slots)
+
+                # The fixture is shared: stopping processes does not immediately remove them
+                # from KQP placement snapshots. Wait before the next case creates a query.
+                kikimr.wait_kqp_node_count(original_node_count)

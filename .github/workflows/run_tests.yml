@@ -53,7 +53,7 @@ on:
         type: boolean
         default: true
       runner_suffix:
-        description: 'Optional runner label suffix, e.g. -large (label is build-preset-{preset}{suffix})'
+        description: 'Optional runner label suffix, e.g. -large (label is {preset}{suffix})'
         required: false
         type: string
         default: ''
@@ -106,7 +106,7 @@ on:
         required: false
         default: '52'
       runner_suffix:
-        description: 'Optional runner label suffix, e.g. -large (label is build-preset-{preset}{suffix})'
+        description: 'Optional runner label suffix, e.g. -large (label is {preset}{suffix})'
         required: false
         default: ''
       branches:
@@ -289,7 +289,7 @@ jobs:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
-    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}{1}', inputs.build_preset, inputs.runner_suffix) }}" ]
+    runs-on: [ self-hosted, auto-provisioned, "${{ format('{0}{1}', inputs.build_preset, inputs.runner_suffix) }}" ]
     strategy:
       fail-fast: false
       matrix:

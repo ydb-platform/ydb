@@ -1,4 +1,5 @@
 RECURSE_FOR_TESTS(
+    accessor/sub_columns/ut
     ut
 )
 

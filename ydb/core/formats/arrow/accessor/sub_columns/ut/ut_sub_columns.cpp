@@ -1,6 +1,5 @@
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
-#include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/data_extractor.h>
@@ -128,17 +127,24 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         }
     }
 
+    std::string ToBinaryJsonScalar(const TStringBuf& json) {
+        auto result = NBinaryJson::SerializeToBinaryJson(json);
+        auto* binaryJson = std::get_if<NBinaryJson::TBinaryJson>(&result);
+        UNIT_ASSERT(binaryJson);
+        return std::string(binaryJson->data(), binaryJson->size());
+    }
+
     void CheckCompositeValues(const std::shared_ptr<IChunkedArray>& first, const std::shared_ptr<IChunkedArray>& second,
                               const std::vector<std::pair<ui32, TStringBuf>>& expected) {
         using namespace NKikimr::NArrow::NAccessor::NSubColumns;
 
-        TCompositeChunkedArray::TBuilder builder(arrow::utf8());
+        TCompositeChunkedArray::TBuilder builder(arrow::binary());
         builder.AddChunk(first);
         builder.AddChunk(second);
         const ui32 recordsCount = first->GetRecordsCount() + second->GetRecordsCount();
 
         auto statsBuilder = TDictStats::MakeBuilder();
-        statsBuilder.Add(TString(R"("a")"), expected.size(), 0, first->GetType(), EValueType::String);
+        statsBuilder.Add(TString(R"("a")"), expected.size(), 0, first->GetType());
         auto stats = statsBuilder.Finish();
         auto records = std::make_shared<TGeneralContainer>(recordsCount);
         records->AddField(stats.GetField(0), builder.Finish()).Validate();
@@ -155,50 +161,31 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         UNIT_ASSERT(!iterator.IsValid());
     }
 
-    Y_UNIT_TEST(DictionaryThenPlainCompositeUsesGlobalChunkAddress) {
-        arrow::StringBuilder dictionaryBuilder;
-        AFL_VERIFY(dictionaryBuilder.Append("dict-a").ok());
-        AFL_VERIFY(dictionaryBuilder.Append("dict-b").ok());
-        std::shared_ptr<arrow::Array> dictionary;
-        AFL_VERIFY(dictionaryBuilder.Finish(&dictionary).ok());
-
-        arrow::UInt8Builder positionsBuilder;
-        AFL_VERIFY(positionsBuilder.Append(0).ok());
-        AFL_VERIFY(positionsBuilder.Append(1).ok());
-        std::shared_ptr<arrow::Array> positions;
-        AFL_VERIFY(positionsBuilder.Finish(&positions).ok());
-
-        TTrivialArray::TPlainBuilder<arrow::StringType> plainBuilder;
-        plainBuilder.AddRecord(0, "plain-a");
-        plainBuilder.AddRecord(1, "plain-b");
-        CheckCompositeValues(std::make_shared<TDictionaryArray>(dictionary, positions), plainBuilder.Finish(2),
-                             {{0, "dict-a"}, {1, "dict-b"}, {2, "plain-a"}, {3, "plain-b"}});
-    }
-
     Y_UNIT_TEST(PlainThenSparseCompositeUsesGlobalChunkAddress) {
-        TTrivialArray::TPlainBuilder<arrow::StringType> plainBuilder;
-        plainBuilder.AddRecord(0, "plain-a");
-        plainBuilder.AddRecord(1, "plain-b");
+        TTrivialArray::TPlainBuilder<arrow::BinaryType> plainBuilder;
+        plainBuilder.AddRecord(0, ToBinaryJsonScalar(R"("plain-a")"));
+        plainBuilder.AddRecord(1, ToBinaryJsonScalar(R"("plain-b")"));
 
-        TSparsedArray::TSparsedBuilder<arrow::StringType> sparseBuilder(nullptr, 1, 0);
-        sparseBuilder.AddRecord(1, "sparse");
+        TSparsedArray::TSparsedBuilder<arrow::BinaryType> sparseBuilder(nullptr, 1, 0);
+        sparseBuilder.AddRecord(1, ToBinaryJsonScalar(R"("sparse")"));
         CheckCompositeValues(plainBuilder.Finish(2), sparseBuilder.Finish(3),
                              {{0, "plain-a"}, {1, "plain-b"}, {3, "sparse"}});
     }
 
     Y_UNIT_TEST(OrderedIteratorSkipsNullValues) {
         auto statsBuilder = NSubColumns::TDictStats::MakeBuilder();
-        statsBuilder.Add(TString(R"("a")"), 1, 0, IChunkedArray::EType::SparsedArray, NSubColumns::EValueType::String);
+        statsBuilder.Add(TString(R"("a")"), 1, 0, IChunkedArray::EType::SparsedArray);
         auto stats = statsBuilder.Finish();
 
-        TSparsedArray::TSparsedBuilder<arrow::StringType> values(std::make_shared<arrow::StringScalar>("default"), 1, 0);
+        TSparsedArray::TSparsedBuilder<arrow::BinaryType> values(
+            std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(ToBinaryJsonScalar(R"("default")"))), 1, 0);
         values.AddNull(0);
         auto records = std::make_shared<TGeneralContainer>(1);
         records->AddField(stats.GetField(0), values.Finish(1)).Validate();
 
         NSubColumns::TReadIteratorOrderedKeys iterator(NSubColumns::TColumnsData(stats, records), NSubColumns::TOthersData::BuildEmpty());
         ui32 valuesCount = 0;
-        iterator.ReadRecord(0, [](ui32) {}, [&](ui32, const NSubColumns::TGeneralIterator&, bool) { ++valuesCount; }, [] {});
+        iterator.ReadRecord(0, [](ui32) {}, [&](ui32, std::string_view, bool) { ++valuesCount; }, [] {});
         UNIT_ASSERT_VALUES_EQUAL(valuesCount, 0);
     }
 
@@ -286,7 +273,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     Y_UNIT_TEST(JsonRestorer) {
         NKikimr::NArrow::NAccessor::TJsonRestorer restorer;
         restorer.SetValueByPath("a", "b");
-        restorer.SetValueByPath("b.c", "d");
+        restorer.SetValueByPath(R"("b".c)", "d");
         restorer.SetValueByPath(R"("d'".e)", "f");
         restorer.SetValueByPath(R"("g.h.".i)", "j");
         restorer.SetValueByPath(R"(".".k)", "l");

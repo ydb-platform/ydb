@@ -4661,9 +4661,14 @@ public:
                     <option>MoveTablet</option>
                     <option>StopTablet</option>
                     <option>ResumeTablet</option>
-                    <option>CreateTablet</option>
+        )";
+        if (Self->GetEnableDestroyOperations()) {
+            out << R"(
                     <option>ResetTablet</option>
                     <option>DeleteTablet</option>
+            )";
+        }
+        out << R"(
                     <option>UpdateResources</option>
                     <option>StorageRebalance</option>
                     <option>TabletAvailability</option>

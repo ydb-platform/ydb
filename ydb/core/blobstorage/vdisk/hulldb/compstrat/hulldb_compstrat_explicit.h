@@ -15,14 +15,17 @@ namespace NKikimr::NHullComp {
         const TSelectorParams& Params;
         TLevelIndexSnapshot& LevelSnap;
         TTask* const Task;
+        TCompactionYield* const Yield;
 
     public:
         TStrategyExplicit(TIntrusivePtr<THullCtx> hullCtx, const TSelectorParams& params, TLevelIndexSnapshot& levelSnap,
-                TTask *task)
+                TTask *task,
+                TCompactionYield* yield = nullptr)
             : HullCtx(std::move(hullCtx))
             , Params(params)
             , LevelSnap(levelSnap)
             , Task(task)
+            , Yield(yield)
         {}
 
         EAction Select() {
@@ -43,6 +46,7 @@ namespace NKikimr::NHullComp {
             auto& slice = LevelSnap.SliceSnap;
             typename TLevelSliceSnapshot<TKey, TMemRec>::TSstIterator iter(&slice);
             for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
+                CheckCompactionYield(Yield);
                 const ui32 level = iter.Get().Level;
 
                 if (levelOfInterest && *levelOfInterest != level) {
@@ -67,6 +71,7 @@ namespace NKikimr::NHullComp {
 
                     pending.push_back(iter.Get());
                     for (const auto& item : pending) {
+                        CheckCompactionYield(Yield);
                         compact.TablesToDelete.PushBack(item); // removing this one table
 
                         if (auto& chains = compact.CompactionChains; chains.empty() || !*levelOfInterest) {

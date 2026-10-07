@@ -27,10 +27,12 @@ namespace NKikimr {
             TStrategyFreeSpace(
                     TIntrusivePtr<THullCtx> hullCtx,
                     const TLevelIndexSnapshot &levelSnap,
-                    TTask *task)
+                    TTask *task,
+                    TCompactionYield* yield = nullptr)
                 : HullCtx(std::move(hullCtx))
                 , LevelSnap(levelSnap)
                 , Task(task)
+                , Yield(yield)
                 , Candidate(HullCtx->ChunkSize, HullCtx->HullCompFreeSpaceThreshold)
             {}
 
@@ -104,6 +106,7 @@ namespace NKikimr {
             TIntrusivePtr<THullCtx> HullCtx;
             const TLevelIndexSnapshot &LevelSnap;
             TTask *Task;
+            TCompactionYield* const Yield;
             TMostAbusingSst Candidate;
 
             EAction FreeSpace() {
@@ -114,6 +117,7 @@ namespace NKikimr {
                 TSstIterator it(&sliceSnap);
                 it.SeekToFirst();
                 while (it.Valid()) {
+                    CheckCompactionYield(Yield);
                     TLevelSstPtr p = it.Get();
                     if (p.Level > 0) {
                         // TODO: handle zero level segments also

@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/blobstorage
     ydb/core/blobstorage/crypto
+    ydb/core/blobstorage/dsproxy/mock
     ydb/core/blobstorage/nodewarden
     ydb/core/blobstorage/pdisk
     ydb/core/client/server

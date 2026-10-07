@@ -85,6 +85,7 @@ PEERDIR(
     ydb/core/mind
     ydb/core/mind/address_classification
     ydb/core/mind/bscontroller
+    ydb/core/mind/configured_tablet_bootstrapper
     ydb/core/mind/hive
     ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart
     ydb/core/subsystems/inmemory_metrics_monitoring

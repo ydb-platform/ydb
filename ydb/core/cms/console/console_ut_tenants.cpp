@@ -5,9 +5,8 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/mind/tenant_pool.h>
-#include <ydb/core/mind/tenant_slot_broker.h>
-#include <ydb/core/mind/tenant_slot_broker_impl.h>
+#include <ydb/core/mind/events/tenant_pool.h>
+#include <ydb/core/mind/events/tenant_slot_broker.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>

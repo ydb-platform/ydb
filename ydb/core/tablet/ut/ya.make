@@ -11,6 +11,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/testlib/default
+    ydb/core/mind/configured_tablet_bootstrapper
 )
 
 YQL_LAST_ABI_VERSION()

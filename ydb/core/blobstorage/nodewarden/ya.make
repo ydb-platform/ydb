@@ -63,11 +63,13 @@ PEERDIR(
     ydb/core/blobstorage/common
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/ddisk
+    ydb/core/blobstorage/dsproxy/mock
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk
     ydb/core/blobstorage/vdisk/localrecovery
     ydb/core/blobstorage/vdisk
     ydb/core/control/lib
+    ydb/core/mind/dynamic_nameserver
     ydb/library/actors/retro_tracing
     ydb/library/pdisk_io
     ydb/library/protobuf_printer

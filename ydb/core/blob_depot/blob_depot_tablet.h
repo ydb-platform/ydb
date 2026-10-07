@@ -380,6 +380,8 @@ namespace NKikimr::NBlobDepot {
             TSet<TBlobSeqId> ProtectedBlobSeqIds;
             bool ApplyingIndexUpdate = false;
 
+            ui64 RecordsScanned = 0;
+
             enum class ETrashStatus {
                 WaitingForGC,
                 Finished,

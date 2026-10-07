@@ -10,7 +10,7 @@
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 namespace NYT::NProfiling {
 
@@ -111,7 +111,7 @@ public:
     }
 
 private:
-    TEnumIndexedArray<EPerfEventType, NThreading::TAtomicObject<std::unique_ptr<IPerfEventCounter>>> TypeToCounter_;
+    TEnumIndexedArray<EPerfEventType, TAtomicObject<std::unique_ptr<IPerfEventCounter>>> TypeToCounter_;
 
     TAtomicIntrusivePtr<TPerfEventCounterConfig> Config_{New<TPerfEventCounterConfig>()};
 

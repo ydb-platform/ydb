@@ -96,6 +96,135 @@ Y_UNIT_TEST_SUITE(TCordSerialization) {
         }
     };
 
+    struct TFailingCordEvent: TCordEvent {
+        mutable bool Entered = false;
+        mutable bool Returned = false;
+        mutable bool WriteSucceeded = false;
+        bool FailAfterWrite = false;
+
+        bool SerializeToArcadiaStream(NActors::TChunkSerializer* chunker) const override {
+            Entered = true;
+            // A local owner must unwind on both Abort and serializer destruction.
+            const y_absl::Cord local = CordData;
+            WriteSucceeded = chunker->WriteCord(local);
+            Returned = true;
+            return WriteSucceeded && !FailAfterWrite;
+        }
+    };
+
+    y_absl::Cord TrackedCord(size_t& releases) {
+        auto* backing = new TString(1024, 'q');
+        return y_absl::MakeCordFromExternal(y_absl::string_view(backing->data(), backing->size()),
+            [backing, &releases] {
+                ++releases;
+                delete backing;
+            });
+    }
+
+    Y_UNIT_TEST(AbortSuspendedCordWrite) {
+        for (bool withCord : {false, true}) {
+            for (auto mode : {NActors::TCoroutineChunkSerializer::EAliasedMode::PassThrough,
+                    NActors::TCoroutineChunkSerializer::EAliasedMode::CopyToBuffer}) {
+                size_t releases = 0;
+                TFailingCordEvent event;
+                event.CordData = TrackedCord(releases);
+                NActors::TCoroutineChunkSerializer chunker;
+                chunker.SetSerializingEvent(&event, true, withCord);
+                char buffer[64];
+                auto chunks = chunker.FeedBuf(buffer, sizeof(buffer), mode);
+                UNIT_ASSERT(event.Entered);
+                UNIT_ASSERT(!event.Returned);
+                UNIT_ASSERT(!chunker.IsComplete());
+                UNIT_ASSERT_VALUES_EQUAL(chunker.ByteCount(), sizeof(buffer));
+                TString prefix;
+                for (const auto& chunk : chunks) {
+                    prefix.append(chunk.Buf, chunk.Size);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(prefix, TString(sizeof(buffer), 'q'));
+                UNIT_ASSERT(chunker.GetCords().empty());
+
+                chunker.Abort();
+                UNIT_ASSERT(event.Returned);
+                UNIT_ASSERT(!event.WriteSucceeded);
+                UNIT_ASSERT(chunker.IsComplete());
+                UNIT_ASSERT(!chunker.IsSuccessfull());
+                UNIT_ASSERT_VALUES_EQUAL(chunker.ByteCount(), sizeof(buffer));
+                // Abort neither invalidates the scratch buffer nor releases event-owned aliases.
+                TString afterAbort;
+                for (const auto& chunk : chunks) {
+                    afterAbort.append(chunk.Buf, chunk.Size);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(afterAbort, prefix);
+                UNIT_ASSERT_VALUES_EQUAL(releases, 0);
+                event.CordData.Clear();
+                UNIT_ASSERT_VALUES_EQUAL(releases, 1);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SerializerFailureAfterSuspendedCordWrite) {
+        for (bool withCord : {false, true}) {
+            size_t releases = 0;
+            TFailingCordEvent event;
+            event.CordData = TrackedCord(releases);
+            event.FailAfterWrite = true;
+            NActors::TCoroutineChunkSerializer chunker;
+            chunker.SetSerializingEvent(&event, true, withCord);
+            char buffer[64];
+            TString output;
+            std::vector<y_absl::Cord> retained;
+            size_t feeds = 0;
+            while (!chunker.IsComplete()) {
+                UNIT_ASSERT_LT(feeds, 17);
+                for (const auto& chunk : chunker.FeedBuf(buffer, sizeof(buffer))) {
+                    output.append(chunk.Buf, chunk.Size);
+                }
+                ++feeds;
+                if (feeds == 1) {
+                    UNIT_ASSERT(event.Entered);
+                    UNIT_ASSERT(!event.Returned);
+                    UNIT_ASSERT(!chunker.IsComplete());
+                }
+                auto& cords = chunker.GetCords();
+                retained.insert(retained.end(), cords.begin(), cords.end());
+                cords.clear();
+            }
+            UNIT_ASSERT_GT(feeds, 1);
+            UNIT_ASSERT(event.Returned);
+            UNIT_ASSERT(event.WriteSucceeded);
+            UNIT_ASSERT(!chunker.IsSuccessfull());
+            UNIT_ASSERT_VALUES_EQUAL(output, TString(1024, 'q'));
+            UNIT_ASSERT_VALUES_EQUAL(chunker.ByteCount(), 1024);
+            event.CordData.Clear();
+            UNIT_ASSERT_VALUES_EQUAL(releases, withCord ? 0 : 1);
+            if (withCord) {
+                UNIT_ASSERT_VALUES_EQUAL(retained.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(TString(retained.front()), output);
+            }
+            retained.clear();
+            UNIT_ASSERT_VALUES_EQUAL(releases, 1);
+        }
+    }
+
+    Y_UNIT_TEST(DestroySerializerDuringSuspendedCordWrite) {
+        size_t releases = 0;
+        TFailingCordEvent event;
+        event.CordData = TrackedCord(releases);
+        char buffer[64];
+        {
+            NActors::TCoroutineChunkSerializer chunker;
+            chunker.SetSerializingEvent(&event, true, true);
+            UNIT_ASSERT(!chunker.FeedBuf(buffer, sizeof(buffer)).empty());
+            UNIT_ASSERT(!event.Returned);
+            UNIT_ASSERT(!chunker.IsComplete());
+        }
+        UNIT_ASSERT(event.Returned);
+        UNIT_ASSERT(!event.WriteSucceeded);
+        UNIT_ASSERT_VALUES_EQUAL(releases, 0);
+        event.CordData.Clear();
+        UNIT_ASSERT_VALUES_EQUAL(releases, 1);
+    }
+
     TString SerializeCordEvent(const y_absl::Cord& cord, bool withCord, size_t feedBufSize,
             std::vector<y_absl::Cord>* retainedCords = nullptr)
     {

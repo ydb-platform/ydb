@@ -6,7 +6,7 @@
 
 #include <yt/yt/library/profiling/sensor.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/assert/assert.h>
 
@@ -126,11 +126,11 @@ private:
     std::atomic<size_t> UndumpableSize_ = 0;
     std::atomic<size_t> UndumpableFootprint_ = 0;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, MarkListsLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, MarkListsLock_);
     TUndumpableMark* AllMarksHead_ = nullptr;
     TUndumpableMark* FreeMarksHead_ = nullptr;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, MarkTableLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, MarkTableLock_);
     std::optional<THashMap<void*, TUndumpableMark*>> MarkTable_;
 
     TUndumpableMark* GetFreeMark()

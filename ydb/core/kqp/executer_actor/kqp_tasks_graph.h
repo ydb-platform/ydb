@@ -557,4 +557,5 @@ private:
     const bool UseKqpTasksGraphV2;
 };
 
+
 } // namespace NKikimr::NKqp

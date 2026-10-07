@@ -240,7 +240,9 @@ private:
                 }
             }
             for (int index = 0; index < width; ++index) {
-                *output[index] = Buffer_->Buffer[BufferPos_ + index];
+                if (auto* out = output[index]) {
+                    *out = Buffer_->Buffer[BufferPos_ + index];
+                }
             }
             BufferPos_ += width ? width : 1;
             if (!HasRow()) {

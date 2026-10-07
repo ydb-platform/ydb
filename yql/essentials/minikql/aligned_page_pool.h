@@ -2,6 +2,7 @@
 
 #include "page_pool_constants.h"
 #include "system_mmap.h"
+#include "tracked_mmap.h"
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -53,7 +54,7 @@ public:
     virtual ~TMemoryLimitExceededException() = default;
 };
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 class TAlignedPagePoolImpl {
 public:
     static constexpr ui64 POOL_PAGE_SIZE = PoolPageSize;
@@ -298,21 +299,21 @@ protected:
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 void* GetAlignedPage(ui64 size);
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 void* GetAlignedPage();
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 void ReleaseAlignedPage(void* mem, ui64 size);
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 void ReleaseAlignedPage(void* mem);
 
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 i64 GetTotalMmapedBytes();
-template <typename TMmap = TSystemMmap>
+template <typename TMmap = TTrackedMmap<TSystemMmap>>
 i64 GetTotalFreeListBytes();
 
 } // namespace NKikimr

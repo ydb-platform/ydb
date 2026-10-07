@@ -265,6 +265,7 @@ private:
                 skipIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
             }
         }
+        skipIssue.SetCode(skipIssue.GetCode(), NYql::TSeverityIds::S_WARNING);
         PartialIssues.AddIssue(std::move(skipIssue));
 
         CancelNodeRequestTimeout();
@@ -281,14 +282,11 @@ private:
         }
     }
 
-    void SendScanWarning(const NYql::TIssues& issues) {
+    void SendScanWarning(NYql::TIssues issues) {
         if (issues.Empty()) {
             return;
         }
-        auto warn = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>();
-        warn->Record.SetStatus(Ydb::StatusIds::SUCCESS);
-        NYql::IssuesToMessage(issues, warn->Record.MutableIssues());
-        Send(OwnerActorId, warn.Release());
+        Send(OwnerActorId, new NKqp::TEvKqpCompute::TEvScanWarning(std::move(issues)));
     }
 
     void MaybeSendPartialScanWarning() {
@@ -307,9 +305,10 @@ private:
         for (const auto& issue : PartialIssues) {
             summary.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
         }
+        summary.SetCode(summary.GetCode(), NYql::TSeverityIds::S_WARNING);
         NYql::TIssues toSend;
         toSend.AddIssue(std::move(summary));
-        SendScanWarning(toSend);
+        SendScanWarning(std::move(toSend));
     }
 
     void FinishScanOrReplyEmpty() {

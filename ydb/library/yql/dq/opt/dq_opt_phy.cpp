@@ -3265,7 +3265,8 @@ TExprBase DqBuildJoin(
     bool shuffleEliminationWithMap,
     bool buildCollectStage,
     bool blockHashJoinBuildSideLeft,
-    bool enableBlockHashJoinEqualNulls
+    bool enableBlockHashJoinEqualNulls,
+    bool useScalarHashJoinForMap
 ) {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -3279,6 +3280,7 @@ TExprBase DqBuildJoin(
 
     if (streaming) {
         useGraceCoreForMap = false;
+        useScalarHashJoinForMap = false;
     }
 
     auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
@@ -3335,7 +3337,8 @@ TExprBase DqBuildJoin(
     // separate stage to receive data from both sides of join.
     // TODO: We can push MapJoin to existing stage for data query, if it doesn't have table reads. This
     //       requires some additional knowledge, probably with use of constraints.
-    return DqBuildPhyJoin(join, pushLeftStage, ctx, optCtx, useGraceCoreForMap, buildCollectStage);
+    useScalarHashJoinForMap = useScalarHashJoinForMap && DqCanUseScalarHashJoinForMap(join, ctx);
+    return DqBuildPhyJoin(join, pushLeftStage, ctx, optCtx, useGraceCoreForMap, buildCollectStage, useScalarHashJoinForMap);
 }
 
 TExprBase DqPrecomputeToInput(const TExprBase& node, TExprContext& ctx) {

@@ -2748,7 +2748,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 bsControllerTablet = MakeBSControllerID();
         const ui64 testerTablet = MakeTabletID(false, 1);
 
-        THiveInitialEventsFilter initialEventsFilter;
+        THiveEveryEventFilter initialEventsFilter;
 
         TVector<ui64> tabletIds;
         tabletIds.push_back(hiveTablet);
@@ -2783,6 +2783,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 createTabletReply->Record.GetOwner() << " != " << testerTablet);
             tabletId = createTabletReply->Record.GetTabletID();
 
+            // Creation has already completed: a filter waiting for EvCreateTablet
+            // would suppress every event in this active zone.
             activeZone = true;
             {
                 bool allowIncompleteResult = (dispatchName != INITIAL_TEST_DISPATCH_NAME);

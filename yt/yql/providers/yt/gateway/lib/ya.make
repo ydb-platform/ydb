@@ -1,6 +1,8 @@
 YQL_LIBRARY()
 
 SRCS(
+    client_config.cpp
+    client_config.h
     downloader.cpp
     downloader.h
     exec_ctx.h

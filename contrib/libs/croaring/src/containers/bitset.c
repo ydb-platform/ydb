@@ -525,36 +525,36 @@ CROARING_UNTARGET_AVX512
          i < BITSET_CONTAINER_SIZE_IN_WORDS / (CROARING_WORDS_IN_AVX2_REG);             \
          i += innerloop) {                                                     \
       __m256i A1, A2, AO;                                                      \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1));                     \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2));                     \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1));                     \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2));                     \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)out, AO);                                 \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 32));                \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 32));                \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 32));                \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 32));                \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 32), AO);                          \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 64));                \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 64));                \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 64));                \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 64));                \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 64), AO);                          \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 96));                \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 96));                \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 96));                \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 96));                \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 96), AO);                          \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 128));               \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 128));               \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 128));               \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 128));               \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 128), AO);                         \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 160));               \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 160));               \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 160));               \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 160));               \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 160), AO);                         \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 192));               \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 192));               \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 192));               \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 192));               \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 192), AO);                         \
-      A1 = _mm256_lddqu_si256((const __m256i *)(words_1 + 224));               \
-      A2 = _mm256_lddqu_si256((const __m256i *)(words_2 + 224));               \
+      A1 = _mm256_loadu_si256((const __m256i *)(words_1 + 224));               \
+      A2 = _mm256_loadu_si256((const __m256i *)(words_2 + 224));               \
       AO = avx_intrinsic(A2, A1);                                              \
       _mm256_storeu_si256((__m256i *)(out + 224), AO);                         \
       out += 256;                                                              \

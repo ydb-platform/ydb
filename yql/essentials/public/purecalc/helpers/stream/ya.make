@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     stream_from_vector.cpp
@@ -7,7 +7,5 @@ SRCS(
 PEERDIR(
     yql/essentials/public/purecalc/common
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

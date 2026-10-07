@@ -13,6 +13,7 @@
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
+#include <ydb/library/yql/providers/yt/provider/yql_yt_message_stream.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_settings.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
@@ -1265,6 +1266,18 @@ public:
         if (FederatedQuerySetup) {
             const auto& hostnamePatterns = QueryServiceConfig.GetHostnamePatterns();
             const auto& availableExternalDataSources = QueryServiceConfig.GetAvailableExternalDataSources();
+            std::set<NYql::EDatabaseType> availableTypes;
+            for (const auto& type : availableExternalDataSources) {
+                // YdbTopics is a legacy configuration alias, not a valid EDS type.
+                if (type == "YdbTopics") {
+                    availableTypes.insert(NYql::EDatabaseType::Ydb);
+                } else if (const auto databaseType = NYql::DatabaseTypeFromString(type)) {
+                    availableTypes.insert(*databaseType);
+                } else {
+                    YDB_LOG_WARN_COMP(NKikimrServices::KQP_GATEWAY, "Unknown external data source type, ignoring it",
+                        {"sourceType", type});
+                }
+            }
             ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
                                                                                  ActorSystem,
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit(),
@@ -1272,7 +1285,7 @@ public:
                                                                                  Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles(),
                                                                                  QueryServiceConfig.GetAllExternalDataSourcesAreAvailable(),
-                                                                                 std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()));
+                                                                                 availableTypes);
         }
     }
 
@@ -2045,7 +2058,12 @@ private:
                 .CreateOperationTracker(false)
         );
 
-        TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
+        auto ytSource = CreateYtDataSource(ytState);
+        if (Config->FeatureFlags.GetEnableQYT()) {
+            ytSource = NYql::WrapYtDataSourceWithMessageStreams(std::move(ytSource),
+                NYql::CreateYtMessageStreamIntegration(FederatedQuerySetup->CredentialsFactory));
+        }
+        TypesCtx->AddDataSource(YtProviderName, std::move(ytSource));
         TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
 
         finalizers.emplace_back([ytGateway = FederatedQuerySetup->YtGateway, sessionId]() {

@@ -1046,6 +1046,50 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
     }
 
+    Y_UNIT_TEST(ZeroByteHolderDoesNotBlockDeadlockRecovery) {
+        auto limiter = MakeBandLimiter(100, 1000, 0.5);
+        limiter.Manager->RegisterProcess(0, {});
+        limiter.Manager->RegisterProcessScope(0, 0);
+        limiter.Manager->RegisterGroup(0, 0, 1);
+        limiter.Manager->RegisterGroup(0, 0, 2);
+
+        // G2 keeps an empty guard. It contributes no usage and has nothing to release.
+        auto empty = std::make_shared<TAllocation>(0);
+        limiter.Manager->RegisterAllocation(0, 0, 2, empty, {});
+        UNIT_ASSERT(empty->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 0u);
+
+        auto g1 = std::make_shared<TAllocation>(300);
+        limiter.Manager->RegisterAllocation(0, 0, 1, g1, {});
+        UNIT_ASSERT(g1->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 300u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 1u);
+
+        // 300 + 300 exceeds the band and stays under the hard limit. The empty guard must not block the force.
+        auto g1Next = std::make_shared<TAllocation>(300);
+        limiter.Manager->RegisterAllocation(0, 0, 1, g1Next, {});
+        UNIT_ASSERT(g1Next->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 600u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedBytes->Val(), 600u);
+
+        empty->Guard.reset();
+        g1->Guard.reset();
+        g1Next->Guard.reset();
+        limiter.Manager->UnregisterAllocation(0, 0, empty->GetIdentifier());
+        limiter.Manager->UnregisterAllocation(0, 0, g1->GetIdentifier());
+        limiter.Manager->UnregisterAllocation(0, 0, g1Next->GetIdentifier());
+        limiter.Manager->UnregisterGroup(0, 0, 1);
+        limiter.Manager->UnregisterGroup(0, 0, 2);
+        limiter.Manager->UnregisterProcessScope(0, 0);
+        limiter.Manager->UnregisterProcess(0);
+        empty.reset();
+        g1.reset();
+        g1Next.reset();
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 0);
+        UNIT_ASSERT(limiter.Manager->IsEmpty());
+        UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
+    }
+
     Y_UNIT_TEST(StuckAdmissionYieldsToLaterGroup) {
         auto limiter = MakeBandLimiter(100, 1000, 0.5);
         UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUnrestrictedSoft().value_or(0), 500u);

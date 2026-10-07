@@ -1419,7 +1419,7 @@ void TPQTabletFixture::WaitForPQWriteState()
 
 void TPQTabletFixture::SendCancelTransactionProposal(const TCancelTransactionProposalParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvCancelTransactionProposal>(params.TxId);
+    auto event = MakeHolder<TEvDataShard::TEvCancelTransactionProposal>(params.TxId);
 
     SendToPipe(Ctx->Edge,
                event.Release());

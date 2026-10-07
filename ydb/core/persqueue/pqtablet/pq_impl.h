@@ -530,7 +530,7 @@ private:
     void DeleteExpiredTransactions(const TActorContext& ctx);
     void ScheduleDeleteExpiredKafkaTransactions();
     void TryContinueKafkaWrites(const TMaybe<TWriteId> writeId, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
     void SetTxCounters();
     void SetTxCompleteLagCounter();

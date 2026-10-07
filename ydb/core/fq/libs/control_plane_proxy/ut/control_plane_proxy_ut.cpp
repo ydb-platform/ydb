@@ -536,7 +536,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyStreamingQueryAccess) {
                 const auto response = bootstrap.Runtime->GrabEdgeEventRethrow<TEvControlPlaneProxy::TEvCreateQueryResponse>(sender);
                 UNIT_ASSERT_VALUES_EQUAL(response->Cookie, cookie);
                 UNIT_ASSERT(response->Get()->Issues);
-                UNIT_ASSERT_VALUES_EQUAL(response->Get()->Issues.back().IssueCode, TIssuesIds::ACCESS_DENIED);
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->Issues.back().IssueCode, static_cast<ui32>(TIssuesIds::ACCESS_DENIED));
                 UNIT_ASSERT_STRING_CONTAINS(response->Get()->Issues.ToString(),
                     "Creating streaming queries is disabled for this folder");
                 UNIT_ASSERT_VALUES_EQUAL(storageRequests, 0);
@@ -547,8 +547,12 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyStreamingQueryAccess) {
                 const auto* event = forwarded->Get<TEvControlPlaneStorage::TEvCreateQueryRequest>();
                 UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
                 UNIT_ASSERT_VALUES_EQUAL(event->Request.content().text(), "SELECT 42");
-                UNIT_ASSERT_VALUES_EQUAL(event->Request.content().type(), queryType);
-                UNIT_ASSERT_VALUES_EQUAL(event->Request.execute_mode(), mode);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    static_cast<int>(event->Request.content().type()),
+                    static_cast<int>(queryType));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    static_cast<int>(event->Request.execute_mode()),
+                    static_cast<int>(mode));
                 UNIT_ASSERT_VALUES_EQUAL(storageRequests, 1);
             }
             bootstrap.Runtime->SetObserverFunc([](TAutoPtr<IEventHandle>&) {

@@ -47,7 +47,7 @@ public:
                     if (!node->Down && Settings.DownPolicy == NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART) {
                         node->BecomeUpOnRestart = true;
                     }
-                    node->SetDown(true);
+                    node->SetDown(true, EHiveEventReason::DrainDownPolicy, NKikimrHive::EDrainDownPolicy_Name(Settings.DownPolicy));
                     if (Settings.Persist) {
                         db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::BecomeUpOnRestart>(node->BecomeUpOnRestart);
                         if (Settings.DownPolicy == NKikimrHive::DRAIN_POLICY_KEEP_DOWN) {
@@ -56,6 +56,12 @@ public:
                     }
                 }
                 if (StartingDrain) {
+                    Self->RecordNodeEvent(*node, EHiveEventType::DrainStarted, EHiveEventReason::DrainRequested,
+                        TStringBuilder() << "initiator=" << Initiator
+                            << " persist=" << Settings.Persist
+                            << " downPolicy=" << NKikimrHive::EDrainDownPolicy_Name(Settings.DownPolicy)
+                            << " seqNo=" << SeqNo
+                            << " tabletsRunning=" << node->GetTabletsRunning());
                     Self->StartHiveDrain(NodeId, std::move(Settings));
                 }
             }
@@ -97,6 +103,10 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
+            Self->RecordNodeEvent(*node, EHiveEventType::DrainFinished, EHiveEventReason::DrainSwitchedOff,
+                    TStringBuilder() << "status=" << NKikimrProto::EReplyStatus_Name(Status)
+                        << " movements=" << Movements
+                        << " tabletsRunning=" << node->GetTabletsRunning());
             Initiators = std::move(node->DrainInitiators);
             node->Drain = false;
             node->DrainInitiators.clear();
@@ -130,5 +140,3 @@ ITransaction* THive::CreateSwitchDrainOff(NHive::TNodeId nodeId, TDrainSettings 
 
 } // NHive
 } // NKikimr
-
-

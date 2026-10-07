@@ -39,6 +39,7 @@ public:
         Self->Domains.clear();
         Self->BlockedOwners.clear();
         Self->BridgePiles.clear();
+        Self->RecentNodeEvents.Clear();
 
         Self->ResetTotalResourceValues();
 

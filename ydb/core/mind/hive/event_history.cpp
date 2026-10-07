@@ -26,6 +26,7 @@ TStringBuf EHiveEventReasonName(EHiveEventReason value) {
     case EHiveEventReason::DrainRequested: return "drain requested";
     case EHiveEventReason::DrainSwitchedOff: return "drain switched off";
     case EHiveEventReason::DrainStarted: return "drain started";
+    case EHiveEventReason::DrainResumed: return "persisted drain resumed on node connect";
     case EHiveEventReason::DrainFinished: return "drain finished";
     case EHiveEventReason::SetDownRequest: return "TEvSetDown";
     case EHiveEventReason::MonitoringRequest: return "monitoring request";

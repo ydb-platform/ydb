@@ -62,6 +62,9 @@ public:
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", nodeId});
                 Y_DEBUG_ABORT_UNLESS(node.DrainActor == nullptr);
+                // the drain was persisted before a Hive or node restart and continues here
+                Self->RecordNodeEvent(node, EHiveEventType::DrainStarted, EHiveEventReason::DrainResumed,
+                    TStringBuilder() << "seqNo=" << node.DrainSeqNo << " tabletsRunning=" << node.GetTabletsRunning());
                 node.DrainActor = Self->StartHiveDrain(nodeId, {.Persist = true, .DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN});
             }
             Self->ObjectDistributions.AddNode(node);

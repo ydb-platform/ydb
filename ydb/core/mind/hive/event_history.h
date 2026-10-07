@@ -52,6 +52,7 @@ enum class EHiveEventReason : ui8 {
     DrainRequested,
     DrainSwitchedOff,
     DrainStarted,
+    DrainResumed,
     DrainFinished,
     SetDownRequest,
     MonitoringRequest,

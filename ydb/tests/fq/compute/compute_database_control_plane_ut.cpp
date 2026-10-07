@@ -49,6 +49,19 @@ void CheckDatabaseCreation(bool disableSlsCreating, bool hasRecord, bool databas
     record.mutable_connection()->set_endpoint("localhost:2135");
     record.mutable_connection()->set_database(databasePath);
 
+    // Count storage requests on send: GrabEdgeEvent may consume them before the observer runs.
+    runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+        switch (event->GetTypeRewrite()) {
+            case TEvControlPlaneStorage::TEvCreateDatabaseRequest::EventType:
+                ++createStorageRequests;
+                break;
+            case TEvControlPlaneStorage::TEvModifyDatabaseRequest::EventType:
+                ++modifyStorageRequests;
+                break;
+        }
+        return false;
+    });
+
     // Mock the external CMS; storage responses are supplied explicitly below.
     runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
         switch (event->GetTypeRewrite()) {
@@ -77,12 +90,6 @@ void CheckDatabaseCreation(bool disableSlsCreating, bool hasRecord, bool databas
                 if (event->Sender == requestActor) {
                     ++invalidateSynchronizationRequests;
                 }
-                break;
-            case TEvControlPlaneStorage::TEvCreateDatabaseRequest::EventType:
-                ++createStorageRequests;
-                break;
-            case TEvControlPlaneStorage::TEvModifyDatabaseRequest::EventType:
-                ++modifyStorageRequests;
                 break;
         }
         return TTestActorRuntime::EEventAction::PROCESS;

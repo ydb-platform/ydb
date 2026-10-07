@@ -426,8 +426,10 @@ class TDataShard
         };
 
         struct TEvRebuildHnswIndex : public TEventLocal<TEvRebuildHnswIndex, EvRebuildHnswIndex> {
-            explicit TEvRebuildHnswIndex(ui32 localTid) : LocalTid(localTid) {}
+            explicit TEvRebuildHnswIndex(ui32 localTid, bool initialBuild = false)
+                : LocalTid(localTid), InitialBuild(initialBuild) {}
             ui32 LocalTid;
+            bool InitialBuild;
         };
 
         struct TEvHnswIndexBuildResult : public TEventLocal<TEvHnswIndexBuildResult, EvHnswIndexBuildResult> {
@@ -1910,6 +1912,7 @@ public:
     void InvalidateHnswIndexes();
     void PruneHnswIndexes();
     void ScheduleHnswRebuild(ui32 localTid);
+    void ScheduleHnswInitialBuilds();
     void TrackHnswOpenTransactions(ui32 localTid, const NTable::TDatabase& db);
     TRowVersion GetHnswBuildVersion() const;
     void StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table, TRowVersion base, TTransactionContext& txc);
@@ -1977,9 +1980,12 @@ public:
         const ui64 previousLimit = HnswCacheMemoryTracker->GetLimit();
         HnswCacheMemoryTracker->SetLimit(limit);
         if (limit > previousLimit) {
-            for (auto& [_, entry] : HnswIndexCache) {
+            for (auto& [localTid, entry] : HnswIndexCache) {
                 if (entry.NextScanAttemptAt != TInstant::Max()) {
                     entry.NextScanAttemptAt = TInstant::Zero();
+                    if (entry.InitialBuildAttemptsLeft) {
+                        ScheduleHnswRebuild(localTid);
+                    }
                 }
             }
         }
@@ -3152,6 +3158,7 @@ private:
         THashSet<ui64> UntrackedTransactions;
         TRowVersion BuildVersion = TRowVersion::Min();
         ui64 BuildToken = 0;
+        ui32 InitialBuildAttemptsLeft = 0;
         bool RebuildScheduled = false;
         bool Building = false;
         bool BuildObsolete = false;

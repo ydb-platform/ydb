@@ -28,6 +28,9 @@ public:
 };
 
 class TWorkloadCommandBuildIndex final : public TWorkloadCommandIndexBase {
+private:
+    TString ReadReplicasSettings;
+
 public:
     TWorkloadCommandBuildIndex(NYdbWorkload::TVectorWorkloadParams& params);
 

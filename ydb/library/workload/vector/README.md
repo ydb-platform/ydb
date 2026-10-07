@@ -76,3 +76,29 @@ ORDER BY Knn::InnerProductSimilarity(embedding, $query) DESC LIMIT 10;
 1..1000. Search breadth is not stored on the index, and changing it reuses the
 same cached graph. Concurrent queries can use different values safely.
 The former index setting `hnsw_search_candidates` is no longer accepted.
+
+## Read replicas after index construction
+
+`build-index --read-replicas-settings PER_AZ:3` builds the index and then sets
+`READ_REPLICAS_SETTINGS` on both `indexImplLevelTable` and
+`indexImplPostingTable`. It works with `hnsw` and `vector_kmeans_tree`:
+
+```sh
+ydb -e "$YDB_ENDPOINT" -d "$YDB_DATABASE" workload vector build-index \
+    --table wikipedia --index idx_vector_cover --index-type hnsw \
+    --vector-type float --vector-dimension 200 --distance inner_product \
+    --kmeans-tree-levels 1 --kmeans-tree-clusters 10 \
+    --read-replicas-settings PER_AZ:3
+```
+
+Supported formats are `PER_AZ:N` (N replicas per availability zone) and `ANY_AZ:N`
+(N replicas across availability zones); zero disables replicas. Without the
+option, no replica settings are changed. `--dry-run` prints the index creation
+DDL followed by both ALTER statements. Invalid settings are rejected before
+index creation, including use with `--index-type None`.
+
+The server must allow alterations of index implementation tables. Index creation
+and the two ALTER statements are separate operations: an ALTER failure returns
+an error but does not roll back the index or a preceding successful ALTER.
+The main table is not altered. Use `run select --stale-ro` to request stale reads
+that can use replicas; provisioning replicas may take time after ALTER succeeds.

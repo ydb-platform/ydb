@@ -2187,6 +2187,31 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         const TString posting = "/Root/HnswFullRange/index/indexImplPostingTable";
         const auto sender = runtime->AllocateEdgeActor();
         auto shards = GetTableShards(&kikimr.GetTestServer(), sender, posting);
+        ui32 backgroundBuilds = 0;
+        bool holdMemoryGrants = !Followers;
+        THashSet<TActorId> backgroundConsumers;
+        THashMap<TActorId, std::pair<TActorId, ui64>> memoryGrants;
+        // Keep in sync with TDataShard::TEvPrivate::EvHnswIndexBuildResult.
+        constexpr ui32 hnswBuildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+        const auto previousObserver = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (holdMemoryGrants && ev->GetTypeRewrite() == NMemory::TEvConsumerRegister::EventType
+                    && ev->Get<NMemory::TEvConsumerRegister>()->Kind == NMemory::EMemoryConsumerKind::SharedCache) {
+                backgroundConsumers.insert(ev->Sender);
+            }
+            if (holdMemoryGrants && ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType
+                    && backgroundConsumers.contains(ev->Recipient)) {
+                auto* limit = ev->Get<NMemory::TEvConsumerLimit>();
+                if (limit->LimitBytes) {
+                    memoryGrants[ev->Recipient] = {ev->Sender, limit->LimitBytes};
+                }
+                limit->LimitBytes = 0;
+            }
+            if (ev->GetTypeRewrite() == hnswBuildResultEvent) {
+                ++backgroundBuilds;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(previousObserver); };
         if (Split) {
             // SchemeShard learns that the finalized tablet is ready through
             // periodic statistics before it can accept a split request.
@@ -2210,10 +2235,26 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
         if (Followers) {
             scheme("ALTER TABLE `" + posting + "` SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\");");
-        } else {
+        } else if (!Split) {
             for (const auto shard : shards) {
                 RebootTablet(*runtime, shard, sender);
             }
+        }
+
+        if (!Followers) {
+            runtime->WaitFor("background HNSW memory registration", [&] { return memoryGrants.size() >= shards.size(); },
+                TDuration::Seconds(30));
+            runtime->SimulateSleep(TDuration::Seconds(2));
+            UNIT_ASSERT_VALUES_EQUAL(backgroundBuilds, 0u);
+            holdMemoryGrants = false;
+            for (const auto& [recipient, grant] : memoryGrants) {
+                runtime->Send(new IEventHandle(recipient, grant.first, new NMemory::TEvConsumerLimit(grant.second)));
+            }
+            // Neither split children nor restarted leaders should need a search
+            // query to trigger construction of their replacement graphs.
+            runtime->WaitFor("background HNSW construction", [&] { return backgroundBuilds >= shards.size(); },
+                TDuration::Seconds(30));
+            runtime->SimulateSleep(TDuration::MilliSeconds(100));
         }
 
         // VIEW must search every posting partition, ignoring k-means pruning,
@@ -2246,6 +2287,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 for (const auto& access : phase.table_access()) {
                     rows += access.reads().rows();
                 }
+            }
+            if (!Followers && attempt == 0) {
+                UNIT_ASSERT_VALUES_EQUAL_C(rows, shards.size(), "First search did not use the background-built HNSW cache");
             }
             if (rows == shards.size()) {
                 accelerated = true;

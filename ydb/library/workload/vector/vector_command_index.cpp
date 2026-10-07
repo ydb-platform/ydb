@@ -1,4 +1,5 @@
 #include "vector_command_index.h"
+#include "vector_sql.h"
 
 namespace NYdbWorkload {
 
@@ -45,14 +46,26 @@ TWorkloadCommandBuildIndex::TWorkloadCommandBuildIndex(NYdbWorkload::TVectorWork
 void TWorkloadCommandBuildIndex::DoConfig(TConfig& config) {
     Params.ConfigureCommonOpts(config.Opts->GetOpts());
     Params.ConfigureIndexOpts(config.Opts->GetOpts());
+    config.Opts->AddLongOption("read-replicas-settings",
+            "Configure both index implementation tables after building the index: PER_AZ:N or ANY_AZ:N. "
+            "N is the replica count; 0 disables replicas. Omitted: keep server defaults.")
+        .Optional().RequiredArgument("SETTINGS")
+        .Handler([this](const TString& value) {
+            Y_ENSURE(!value.empty(), "--read-replicas-settings must not be empty");
+            ReadReplicasSettings = value;
+        });
 }
 
 int TWorkloadCommandBuildIndex::DoRun() {
     const auto indexType = Params.GetIndexTypeDDL();
     const auto hnswSettings = Params.GetHnswSettingsDDL();
     if (indexType.empty()) {
+        Y_ENSURE(ReadReplicasSettings.empty(), "--read-replicas-settings requires an index type other than None");
         return EXIT_SUCCESS;
     }
+    // Validate before creating an index: a malformed replica setting must not
+    // leave a successfully built index behind.
+    const auto replicaQueries = MakeIndexReadReplicasQueries(Params, ReadReplicasSettings);
 
     TStringBuilder ddlQuery;
     ddlQuery << "ALTER TABLE `" << Params.DbPath << "/" << Params.TableOpts.Name << "`\n";
@@ -81,6 +94,13 @@ int TWorkloadCommandBuildIndex::DoRun() {
         Cout << "Build vector index ..."  << Endl;
         HandleQuery(ddlQuery);
         Cout << "Build vector index ...Ok"  << Endl;
+    }
+    if (!replicaQueries.empty()) {
+        Cout << "Configure index read replicas ..." << Endl;
+        for (const auto& query : replicaQueries) {
+            HandleQuery(query);
+        }
+        Cout << "Configure index read replicas ...Ok" << Endl;
     }
 
     return EXIT_SUCCESS;

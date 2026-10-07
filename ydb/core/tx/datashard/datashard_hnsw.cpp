@@ -164,34 +164,75 @@ void TDataShard::StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table,
 
 class TDataShard::TTxRebuildHnswIndex : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxRebuildHnswIndex(TDataShard* self, ui32 tid) : TBase(self), LocalTid(tid) {}
+    TTxRebuildHnswIndex(TDataShard* self, ui32 tid, bool initialBuild)
+        : TBase(self), LocalTid(tid), InitialBuild(initialBuild) {}
     TTxType GetTxType() const override { return TXTYPE_READ; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        if (Self->IsFollower() || Self->IsStopping() || Self->State != TShardState::Ready) {
+            return true;
+        }
+        if (auto it = Self->HnswIndexCache.find(LocalTid); it != Self->HnswIndexCache.end()) {
+            it->second.RebuildScheduled = false;
+        }
+        TUserTable::TCPtr table;
+        for (const auto& [_, candidate] : Self->TableInfos) {
+            if (candidate->LocalTid == LocalTid) {
+                table = candidate;
+                break;
+            }
+        }
+        if (!table) {
+            return true;
+        }
+        if (InitialBuild) {
+            if (!table->HnswSettings || !table->HnswVectorColumnTag
+                    || !table->Columns.contains(table->HnswVectorColumnTag)
+                    || table->HnswSettings->vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT) {
+                return true;
+            }
+            if (!Self->GetHnswCacheMemoryLimit()) {
+                // Registration is asynchronous. An explicit zero grant disables caching.
+                Retry = !Self->IsHnswCacheMemoryLimitKnown();
+                return true;
+            }
+            Self->HnswIndexCache.try_emplace(LocalTid);
+        }
         auto it = Self->HnswIndexCache.find(LocalTid);
-        if (it == Self->HnswIndexCache.end() || Self->IsFollower() || Self->IsStopping()) {
+        if (it == Self->HnswIndexCache.end()) {
             return true;
         }
         auto& entry = it->second;
         entry.RebuildScheduled = false;
-        if (entry.Building || !entry.Index || !entry.Changes->Valid
-                || !entry.Index->NeedsRebuild(GetHnswDeltaRows(entry.Settings))) {
+        if (entry.Building || (InitialBuild && !entry.InitialBuildAttemptsLeft)
+                || entry.NextScanAttemptAt == TInstant::Max()) {
+            return true;
+        }
+        if (InitialBuild ? bool(entry.Index) : (!entry.Index || !entry.Changes->Valid
+                || !entry.Index->NeedsRebuild(GetHnswDeltaRows(entry.Settings)))) {
             return true;
         }
         const auto base = Self->GetHnswBuildVersion();
-        if (base <= entry.Index->GetBaseVersion() || base < Self->SnapshotManager.GetLowWatermark()
+        if ((entry.Index && base <= entry.Index->GetBaseVersion()) || base < Self->SnapshotManager.GetLowWatermark()
                 || base >= Self->Pipeline.GetUnreadableEdge()
                 || Self->VolatileTxManager.HasVolatileTxsAtSnapshot(base)
                 || AppData()->TimeProvider->Now() < entry.NextScanAttemptAt) {
             Retry = true;
             return true;
         }
-        for (const auto& [_, table] : Self->TableInfos) {
-            if (table->LocalTid == LocalTid
-                    && Self->TryStartHnswIndexBuild(LocalTid, entry.VectorColumnTag, entry.Settings, base)) {
-                Self->TrackHnswOpenTransactions(LocalTid, txc.DB);
+        const auto& settings = InitialBuild ? *table->HnswSettings : entry.Settings;
+        const auto tag = InitialBuild ? table->HnswVectorColumnTag : entry.VectorColumnTag;
+        if (Self->TryStartHnswIndexBuild(LocalTid, tag, settings, base)) {
+            if (InitialBuild) {
+                --entry.InitialBuildAttemptsLeft;
+            }
+            Self->TrackHnswOpenTransactions(LocalTid, txc.DB);
+            if (Self->IsHnswBuildCurrent(LocalTid, Self->GetHnswBuildToken(LocalTid))) {
                 Self->StartHnswSnapshotScan(LocalTid, table, base, txc);
-                break;
+            } else {
+                // Tracking open transactions also needs a memory reservation.
+                // No scan/result will be created when that reservation fails.
+                Retry = true;
             }
         }
         return true;
@@ -202,17 +243,18 @@ public:
             auto it = Self->HnswIndexCache.find(LocalTid);
             if (it != Self->HnswIndexCache.end()) {
                 it->second.RebuildScheduled = true;
-                ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRebuildHnswIndex(LocalTid));
             }
+            ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRebuildHnswIndex(LocalTid, InitialBuild));
         }
     }
 private:
     ui32 LocalTid;
+    bool InitialBuild;
     bool Retry = false;
 };
 
 void TDataShard::Handle(TEvPrivate::TEvRebuildHnswIndex::TPtr& ev, const TActorContext& ctx) {
-    Execute(new TTxRebuildHnswIndex(this, ev->Get()->LocalTid), ctx);
+    Execute(new TTxRebuildHnswIndex(this, ev->Get()->LocalTid, ev->Get()->InitialBuild), ctx);
 }
 
 std::shared_ptr<THnswIndex> TDataShard::GetHnswIndex(ui32 localTid, ui32 vectorColumnTag,
@@ -375,6 +417,7 @@ void TDataShard::SetHnswIndex(ui32 localTid, std::shared_ptr<THnswIndex> index,
     Sort(entry.Retained, [](const auto& a, const auto& b) {
         return a->GetBaseVersion() < b->GetBaseVersion();
     });
+    entry.InitialBuildAttemptsLeft = 0;
     entry.RowCountAtBuild = rowCountAtBuild;
     entry.VectorColumnTag = vectorColumnTag;
     entry.Settings = settings;
@@ -543,16 +586,35 @@ void TDataShard::AbortHnswIndexChanges(ui32 localTid, ui64 txId, NTable::TDataba
     });
 }
 
+void TDataShard::ScheduleHnswInitialBuilds() {
+    if (IsFollower() || State != TShardState::Ready) {
+        return;
+    }
+    // Graphs are local to a tablet incarnation: snapshots transfer rows and
+    // schema, but not the in-memory graph. Reconstruct it without a first read.
+    for (const auto& [_, table] : TableInfos) {
+        if (table->HnswSettings && table->HnswVectorColumnTag) {
+            auto& entry = HnswIndexCache[table->LocalTid];
+            // As with eager finalization, give the controller time to respond
+            // to scan demand, but do not loop forever on an insufficient budget.
+            entry.InitialBuildAttemptsLeft = 30;
+            entry.RebuildScheduled = true;
+            Send(SelfId(), new TEvPrivate::TEvRebuildHnswIndex(table->LocalTid, true));
+        }
+    }
+}
+
 void TDataShard::ScheduleHnswRebuild(ui32 localTid) {
     if (IsFollower()) {
         return;
     }
     auto& entry = HnswIndexCache.at(localTid);
-    if (!entry.Building && !entry.RebuildScheduled && entry.Index
-            && entry.Changes->Valid
-            && entry.Index->NeedsRebuild(GetHnswDeltaRows(entry.Settings))) {
+    const bool initialBuild = !entry.Index && entry.InitialBuildAttemptsLeft;
+    if (!entry.Building && !entry.RebuildScheduled
+            && (initialBuild || (entry.Index && entry.Changes->Valid
+                && entry.Index->NeedsRebuild(GetHnswDeltaRows(entry.Settings))))) {
         entry.RebuildScheduled = true;
-        Send(SelfId(), new TEvPrivate::TEvRebuildHnswIndex(localTid));
+        Send(SelfId(), new TEvPrivate::TEvRebuildHnswIndex(localTid, initialBuild));
     }
 }
 

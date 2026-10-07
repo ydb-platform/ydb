@@ -3,6 +3,33 @@
 
 namespace NYdbWorkload {
 Y_UNIT_TEST_SUITE(VectorWorkloadSql) {
+    Y_UNIT_TEST(IndexReadReplicaSettings) {
+        TVectorWorkloadParams params;
+        params.DbPath = "/Root/testdb";
+        params.TableOpts.Name = "wikipedia";
+        params.IndexName = "idx_vector_cover";
+        UNIT_ASSERT(MakeIndexReadReplicasQueries(params, "").empty());
+        for (const TString& type : {"hnsw", "vector_kmeans_tree"}) {
+            params.IndexType = type;
+            const auto queries = MakeIndexReadReplicasQueries(params, "PER_AZ:3");
+            UNIT_ASSERT_VALUES_EQUAL(queries.size(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(queries[0],
+                "ALTER TABLE `/Root/testdb/wikipedia/idx_vector_cover/indexImplLevelTable` SET (\n"
+                "    READ_REPLICAS_SETTINGS = 'PER_AZ:3'\n);");
+            UNIT_ASSERT_VALUES_EQUAL(queries[1],
+                "ALTER TABLE `/Root/testdb/wikipedia/idx_vector_cover/indexImplPostingTable` SET (\n"
+                "    READ_REPLICAS_SETTINGS = 'PER_AZ:3'\n);");
+        }
+        const auto disabled = MakeIndexReadReplicasQueries(params, "any_az:0");
+        UNIT_ASSERT_STRING_CONTAINS(disabled[0], "'ANY_AZ:0'");
+        params.TableOpts.Name = "nested/wiki`name";
+        UNIT_ASSERT_STRING_CONTAINS(MakeIndexReadReplicasQueries(params, "ANY_AZ:2")[0], "nested/wiki\\`name/");
+        for (const TString& invalid : {"PER_AZ", "PER_AZ:", ":3", "PER_AZ:-1", "PER_AZ:+1", "PER_AZ:1.5",
+                "PER_AZ:3:4", "PER_AZ:3,ANY_AZ:1", "OTHER:3", "PER_AZ:18446744073709551616", "PER_AZ:3'; SELECT 1;"}) {
+            UNIT_ASSERT_EXCEPTION(MakeIndexReadReplicasQueries(params, invalid), yexception);
+        }
+    }
+
     Y_UNIT_TEST(HnswOptionsGenerateDdlAndQueryPragma) {
         TVectorWorkloadParams params;
         NLastGetopt::TOpts opts;

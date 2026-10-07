@@ -480,6 +480,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     }
 
     SignalTabletActive(ctx);
+    ScheduleHnswInitialBuilds();
     DoPeriodicTasks(ctx);
 
     NotifySchemeshard(ctx);

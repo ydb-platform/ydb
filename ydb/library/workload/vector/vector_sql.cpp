@@ -2,6 +2,10 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
+#include <util/string/ascii.h>
+#include <util/string/cast.h>
+#include <util/string/escape.h>
+#include <util/string/subst.h>
 
 #include <format>
 #include <string>
@@ -9,6 +13,32 @@
 #include <algorithm>
 
 namespace NYdbWorkload {
+
+TVector<TString> MakeIndexReadReplicasQueries(const TVectorWorkloadParams& params, const TString& settings) {
+    if (settings.empty()) {
+        return {};
+    }
+    const auto colon = settings.find(':');
+    const TString mode = to_upper(settings.substr(0, colon));
+    const TString countText = colon == TString::npos ? TString() : settings.substr(colon + 1);
+    ui64 count = 0;
+    Y_ENSURE((mode == "PER_AZ" || mode == "ANY_AZ") && !countText.empty()
+        && std::all_of(countText.begin(), countText.end(), [](char c) { return c >= '0' && c <= '9'; })
+        && TryFromString<ui64>(countText, count),
+        "Invalid --read-replicas-settings: expected PER_AZ:N or ANY_AZ:N with an unsigned integer count");
+
+    TVector<TString> queries;
+    for (const TStringBuf implTable : {"indexImplLevelTable", "indexImplPostingTable"}) {
+        const TString path = TStringBuilder() << params.DbPath << "/" << params.TableOpts.Name
+            << "/" << params.IndexName << "/" << implTable;
+        TString escapedPath = EscapeC(path);
+        SubstGlobal(escapedPath, "`", "\\`");
+        queries.push_back(TStringBuilder() << "ALTER TABLE `" << escapedPath << "` SET (\n"
+            << "    READ_REPLICAS_SETTINGS = '" << mode << ":" << count << "'\n);");
+    }
+    return queries;
+}
+
 
 // Utility function to get metric info for SQL query
 // Returns a tuple of (function_name, is_ascending)

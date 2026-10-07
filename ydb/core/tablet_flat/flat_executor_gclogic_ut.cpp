@@ -474,6 +474,61 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         env.CheckCut();
     }
 
+    Y_UNIT_TEST(DeferredHistoryCutResumesAfterFeatureFlagIsEnabled) {
+        THistoryCutEnv env;
+        env.RestoreBarrier();
+        env.Step = 1;
+        auto addBlob = [&] {
+            TGCBlobDelta delta;
+            delta.Created.emplace_back(THistoryCutEnv::TabletId,
+                THistoryCutEnv::Generation, env.Step, THistoryCutEnv::Channel,
+                HistoryCutterUtBlobSize, 0);
+            TGCLogEntry entry(TGCTime(THistoryCutEnv::Generation, env.Step), delta);
+            env.Logic->ApplyLogEntry(entry);
+        };
+        auto maintenance = [&] {
+            env.Execute([&](const TActorContext& ctx) {
+                env.Logic->RetryPendingHistoryCuts(ctx);
+            });
+        };
+
+        addBlob();
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 1);
+        UNIT_ASSERT(!env.Collects[0].Hard);
+        env.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(false);
+        env.Reply(0);
+        maintenance();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 1);
+        UNIT_ASSERT(env.Cuts.empty());
+
+        // Pausing history cuts must not put ordinary soft GC into backoff.
+        addBlob();
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+        UNIT_ASSERT(!env.Collects[1].Hard);
+        env.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(true);
+        maintenance();
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Collects.size(), 2,
+            "maintenance must wait for the outstanding soft GC batch");
+        env.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(false);
+        env.Reply(1);
+        maintenance();
+        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+        UNIT_ASSERT(env.Cuts.empty());
+
+        env.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(true);
+        maintenance();
+        env.CheckHardBarrier(2);
+        maintenance();
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Collects.size(), 3,
+            "maintenance must not duplicate hard barriers already in flight");
+        env.Reply(2);
+        env.CheckCut();
+        maintenance();
+        env.CheckCut();
+    }
+
     Y_UNIT_TEST(SoftGcCompletionDoesNotConfirmSnapshotNomination) {
         THistoryCutEnv env;
         env.RestoreBarrier();

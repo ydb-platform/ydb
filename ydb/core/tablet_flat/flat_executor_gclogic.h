@@ -58,6 +58,7 @@ public:
     void SendCollectGarbage(const TActorContext& executor);
     bool HasGarbageBefore(TGCTime snapshotTime);
     void RetryGcRequests(ui32 channel, const TActorContext& ctx);
+    void RetryPendingHistoryCuts(const TActorContext& ctx);
     void Confirm(const TActorContext &ctx, TActorId launcher);
 
     THistoryCutter HistoryCutter;

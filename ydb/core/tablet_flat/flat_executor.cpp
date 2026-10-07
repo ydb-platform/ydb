@@ -4177,6 +4177,10 @@ void TExecutor::UpdateUsedTabletMemory() {
 }
 
 void TExecutor::UpdateCounters(const TActorContext &ctx) {
+    if (GcLogic) {
+        // Resume confirmed cuts paused by the live feature flag even on idle tablets.
+        GcLogic->RetryPendingHistoryCuts(SelfCtx());
+    }
     if (GcLogic && Counters) {
         if (const ui64 dropped = GcLogic->TakeSentinelDroppedMarks()) {
             Counters->Cumulative()[TExecutorCounters::GC_SENTINEL_DROPPED_MARKS].Increment(dropped);

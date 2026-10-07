@@ -326,6 +326,12 @@ void TExecutorGCLogic::RetryGcRequests(ui32 channel, const TActorContext& ctx) {
     }
 }
 
+void TExecutorGCLogic::RetryPendingHistoryCuts(const TActorContext& ctx) {
+    for (const auto& [channelId, _] : ChannelInfo) {
+        TrySendHistoryBarriers(channelId, ctx);
+    }
+}
+
 void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
     if (!AllowGarbageCollection)
         return;

@@ -128,6 +128,7 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
     if (!MoveDataState.Active) {
         return;
     }
+    Counters.GetCSCounters().OnMoveDataGateChecked();
     if (MoveDataState.TargetsChanged) {
         Counters.GetCSCounters().OnMoveDataGateBlockedByReseed();
         return;
@@ -137,7 +138,7 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
     if (HasIndex()) {
         queues = GetIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataQueueSizes();
     }
-    Counters.GetCSCounters().OnMoveDataQueues(queues.Pending, queues.ConfirmedToMove, queues.InFlight);
+    Counters.GetCSCounters().OnMoveDataQueues(queues.Pending, queues.ConfirmedToMove, queues.InFlight, queues.Uncommitted, queues.Retired);
     if (queues.Rejected > MoveDataState.ReportedRejections) {
         Counters.GetCSCounters().OnMoveDataPortionsRejected(queues.Rejected - MoveDataState.ReportedRejections);
         MoveDataState.ReportedRejections = queues.Rejected;
@@ -159,14 +160,22 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
         YDB_LOG_INFO("MoveData gate waits for cleanup", {"tabletId", TabletID()}, {"retired", queues.Retired});
         return;
     }
-    if (!GetStoragesManager()->GetDefaultOperator()->HasCollectedBeforeCurrentGeneration()) {
+    const auto& defaultOperator = GetStoragesManager()->GetDefaultOperator();
+    if (!defaultOperator->HasCollectedBeforeCurrentGeneration()) {
         Counters.GetCSCounters().OnMoveDataGateBlockedByFirstGCRound();
         YDB_LOG_INFO("MoveData gate waits for the first GC round", {"tabletId", TabletID()});
         return;
     }
-    if (GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups)) {
-        Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
-        YDB_LOG_INFO("MoveData gate waits for pending GC", {"tabletId", TabletID()});
+    if (defaultOperator->HasBlobsForGroups(MoveDataState.TargetGroups)) {
+        // Same wait either way, but a shared or borrowed link is not ours to collect, so it gets its own sensor.
+        const auto& sharedBlobs = defaultOperator->GetSharedBlobs();
+        if (sharedBlobs && sharedBlobs->HasBlobsForGroups(MoveDataState.TargetGroups)) {
+            Counters.GetCSCounters().OnMoveDataGateBlockedByShared();
+            YDB_LOG_INFO("MoveData gate waits for shared blobs", {"tabletId", TabletID()});
+        } else {
+            Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
+            YDB_LOG_INFO("MoveData gate waits for pending GC", {"tabletId", TabletID()});
+        }
         return;
     }
     YDB_LOG_INFO("MoveData gate passed", {"tabletId", TabletID()});

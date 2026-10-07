@@ -115,12 +115,18 @@ private:
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsPending;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsConfirmedToMove;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsInFlight;
+    // Both also count towards GetTotal(), so without them a gate held by either shows every other gauge at zero.
+    std::shared_ptr<TValueAggregationClient> MoveDataPortionsUncommitted;
+    std::shared_ptr<TValueAggregationClient> MoveDataPortionsRetired;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataFinishedCount;
+    // The denominator for every GateBlocked counter below.
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateCheckedCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByReseedCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByVacuumCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByPortionsCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByCleanupCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByGCCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedBySharedCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByFirstGCRoundCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataPortionsRejectedCount;
 
@@ -234,10 +240,17 @@ public:
     }
 
     // Scalars, not TMoveDataQueueSizes: keeps this library off the actualizer headers.
-    void OnMoveDataQueues(const ui64 pending, const ui64 confirmedToMove, const ui64 inFlight) const {
+    void OnMoveDataQueues(
+        const ui64 pending, const ui64 confirmedToMove, const ui64 inFlight, const ui64 uncommitted, const ui64 retired) const {
         MoveDataPortionsPending->SetValue(pending);
         MoveDataPortionsConfirmedToMove->SetValue(confirmedToMove);
         MoveDataPortionsInFlight->SetValue(inFlight);
+        MoveDataPortionsUncommitted->SetValue(uncommitted);
+        MoveDataPortionsRetired->SetValue(retired);
+    }
+
+    void OnMoveDataGateChecked() const {
+        MoveDataGateCheckedCount->Add(1);
     }
 
     void OnMoveDataGateBlockedByReseed() const {
@@ -265,6 +278,11 @@ public:
         MoveDataGateBlockedByGCCount->Add(1);
     }
 
+    // Shared and borrowed links are not ours to collect, so they are not a GC wait.
+    void OnMoveDataGateBlockedByShared() const {
+        MoveDataGateBlockedBySharedCount->Add(1);
+    }
+
     void OnMoveDataGateBlockedByFirstGCRound() const {
         MoveDataGateBlockedByFirstGCRoundCount->Add(1);
     }
@@ -275,6 +293,8 @@ public:
         MoveDataPortionsPending->SetValue(0);
         MoveDataPortionsConfirmedToMove->SetValue(0);
         MoveDataPortionsInFlight->SetValue(0);
+        MoveDataPortionsUncommitted->SetValue(0);
+        MoveDataPortionsRetired->SetValue(0);
     }
 
     void OnWriteOverloadMetadata(const ui64 size) const {

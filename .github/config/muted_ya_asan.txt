@@ -37,6 +37,7 @@ ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
 ydb/core/kqp/ut/batch_operations KqpBatchUpdate.SimplePartitions
 ydb/core/kqp/ut/data_integrity unittest.[*/*] chunk
 ydb/core/kqp/ut/indexes KqpIndexes.DirectAccessToIndexImplTable+UserIsClusterAdmin+HasUsePermission
+ydb/core/kqp/ut/indexes KqpStreamIndexes.SecondaryNullDelete
 ydb/core/kqp/ut/opt KqpConcurrentResults.ConcurrentStreamNamedExprRandomConsistency+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt KqpConcurrentResults.ConcurrentStreamNamedExprRandomConsistency-EnableIndexStreamWrite
 ydb/core/kqp/ut/opt KqpConcurrentResults.ConcurrentStreamNamedExprSharedByWriteAndSelect+EnableIndexStreamWrite
@@ -173,6 +174,7 @@ ydb/core/kqp/ut/scheme GeneratedVirtual.AlterAddGeneratedColumnIsRejected
 ydb/core/kqp/ut/scheme GeneratedVirtual.AsyncIndexWritesIgnoreVirtualColumn
 ydb/core/kqp/ut/scheme GeneratedVirtual.DmlAndSchemaChangesIgnoreVirtualColumn
 ydb/core/kqp/ut/scheme GeneratedVirtual.ExplainVirtualReadExpansionAndIndexSelection
+ydb/core/kqp/ut/scheme GeneratedVirtual.IndexStreamWriteDisabled
 ydb/core/kqp/ut/scheme GeneratedVirtual.MetadataPersistsAcrossSchemeShardRestart
 ydb/core/kqp/ut/scheme GeneratedVirtual.NotNullPgVirtualDoesNotBecomeWriteConstraint
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadDependencyFreeVirtualColumn

@@ -550,6 +550,8 @@ ru:
     to: /devops/deployment-options/ansible/initial-deployment/index
   - from: /devops/deployment-options/ansible/initial-deployment(?:[.]html|[.]md)?/?$
     to: /devops/deployment-options/ansible/initial-deployment/index
+  - from: /reference/observability/tracing/query-spans.md
+    to: /reference/observability/tracing/query-tracing.md
   - from: /db/terraform.md
     to: /dev/terraform.md
   - from: /maintenance/manual/replacing_nodes.md

@@ -638,7 +638,6 @@ ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[first_query
 ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[second_query_set.join.sql]
 ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsv.test
 ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsvArrow.test
-ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW10T4SdkCompaction.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[18]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[19]
@@ -848,7 +847,6 @@ ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_worklo
 ydb/tests/stress/result_set_format/tests py3test.sole chunk
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
 ydb/tests/stress/result_set_format/tests test_value_workload.py.TestResultSetValueWorkload.test
-ydb/tests/stress/show_create/table/tests test_workload.py.TestYdbWorkload.test_show_create_table_workload[30-test_sct]
 ydb/tests/stress/simple_queue/tests py3test.sole chunk
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[heavy-column]
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[light-column]

@@ -703,9 +703,9 @@ class Kikimr:
             logger.info("KQP resource snapshot node counts: %s (expected %s)", node_counts, expected_count)
             return bool(node_counts) and all(count == expected_count for count in node_counts.values())
 
-        assert wait_for(resources_updated, timeout_seconds=timeout_seconds, step_seconds=0.5, multiply=1), (
-            f"Expected {expected_count} nodes in every KQP resource snapshot, got {node_counts}"
-        )
+        assert wait_for(
+            resources_updated, timeout_seconds=timeout_seconds, step_seconds=0.5, multiply=1
+        ), f"Expected {expected_count} nodes in every KQP resource snapshot, got {node_counts}"
 
 
 class StreamingTestBase(TestYdsBase):

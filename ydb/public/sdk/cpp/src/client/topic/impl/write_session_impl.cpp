@@ -1523,8 +1523,6 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
         SentOriginalMessages.pop();
     }
 
-    (*Counters->BytesInflightTotal) = MemoryUsage;
-
     return result;
 }
 
@@ -1548,6 +1546,10 @@ void TWriteSessionImpl::AbortFlushPromisesImpl() {
 TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
+    if (diff != 0) {
+        UpdateTimedCountersImpl();
+    }
+
     bool wasOk = MemoryUsage <= Settings.MaxMemoryUsage_;
     //if (diff < 0) {
     //    Y_ABORT_UNLESS(MemoryUsage >= static_cast<size_t>(std::abs(diff)));
@@ -1559,6 +1561,7 @@ TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
         Y_ABORT_UNLESS(MemoryUsage >= dec);
         MemoryUsage -= dec;
     }
+    (*Counters->BytesInflightTotal) = MemoryUsage;
     
     bool nowOk = MemoryUsage <= Settings.MaxMemoryUsage_;
     if (wasOk != nowOk) {
@@ -1646,7 +1649,16 @@ void TWriteSessionImpl::OnCompressed(TBlock&& block, bool isSyncCompression) {
         OnCompressedImpl(std::move(block));
         readyToAccept = TryIssueContinuationTokenImpl();
     }
-    if (readyToAccept) {
+    if (readyToAccept && isSyncCompression) {
+        // The caller still holds Lock; a synchronous handler may call Write again.
+        Connections->ScheduleCallback(TDuration::Zero(), [cbContext = SelfContext](bool ok) {
+            if (ok) {
+                if (auto self = cbContext->LockShared()) {
+                    self->EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{self->IssueContinuationToken()});
+                }
+            }
+        });
+    } else if (readyToAccept) {
         EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
 }
@@ -1666,7 +1678,9 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
 
     PackedMessagesToSend.emplace(std::move(block));
 
-    if (!SendImplScheduled.exchange(true)) {
+    if (!CompressionExecutor->IsAsync()) {
+        SendImpl();
+    } else if (!SendImplScheduled.exchange(true)) {
         CompressionExecutor->Post([cbContext = SelfContext]() {
             if (auto self = cbContext->LockShared()) {
                 self->SendImplScheduled.store(false);

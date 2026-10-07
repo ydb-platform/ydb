@@ -17,6 +17,7 @@
 #include <ydb/library/actors/util/queue_oneone_inplace.h>
 
 #include <util/generic/maybe.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
 #include <util/random/mersenne.h>
 #include <util/string/printf.h>
@@ -1734,6 +1735,10 @@ namespace NActors {
     }
 
     IActor* TTestActorRuntimeBase::FindActor(const TActorId& actorId, TNodeDataBase* node) const {
+        if (actorId.IsService()) {
+            const auto it = node->LocalServicesActors.find(actorId);
+            return it != node->LocalServicesActors.end() ? it->second : nullptr;
+        }
         ui32 mailboxHint = actorId.Hint();
         ui64 localId = actorId.LocalId();
         TMailbox* mailbox = node->MailboxTable->Get(mailboxHint);
@@ -1798,7 +1803,15 @@ namespace NActors {
 
         const auto& interconnectCounters = GetCountersForComponent(node->DynamicCounters, "interconnect");
 
+        THashSet<TActorId> setupServiceIds;
+        for (const auto& service : setup->LocalServices) {
+            if (service.first) {
+                setupServiceIds.insert(service.first);
+            }
+        }
         for (const auto& cmd : node->LocalServices) {
+            Y_ABORT_UNLESS(!cmd.first || !setupServiceIds.contains(cmd.first),
+                "setup service conflicts with a runtime local service");
             setup->LocalServices.emplace_back(cmd.first, TActorSetupCmd(cmd.second.Actor, cmd.second.MailboxType, cmd.second.PoolId));
         }
         setup->Interconnect.ProxyActors.resize(FirstNodeId + NodeCount);
@@ -1856,6 +1869,12 @@ namespace NActors {
             setup->LocalServices.push_back(std::move(loggerActorPair));
         }
 
+        for (const auto& service : setup->LocalServices) {
+            if (service.first) {
+                node->LocalServicesActors[service.first] = service.second.Actor.get();
+            }
+        }
+
         auto actorSystem = THolder<TActorSystem>(new TActorSystem(setup, node->GetAppData(), node->LogSettings));
 
         if (node->ExecutorPools.empty()) {
@@ -1876,7 +1895,7 @@ namespace NActors {
         node->ActorSystem->Start();
 
         if (!UseRealThreads) {
-            for (const auto& cmd : node->LocalServices) {
+            for (const auto& cmd : node->LocalServicesActors) {
                 auto it = ScheduleWhiteList.find(cmd.first);
                 if (it != ScheduleWhiteList.end()) {
                     if (TActorId actorId = node->ActorSystem->LookupLocalService(cmd.first)) {

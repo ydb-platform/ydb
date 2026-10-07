@@ -17,7 +17,6 @@ SRCS(
     kqp_timeouts.h
     kqp_tx_manager.cpp
     kqp_tx.cpp
-    kqp_types.cpp
     kqp_types.h
     kqp_user_request_context.cpp
     kqp_user_request_context.h
@@ -39,6 +38,7 @@ PEERDIR(
     ydb/core/kqp/common/events
     ydb/core/kqp/common/shutdown
     ydb/core/kqp/common/simple
+    ydb/core/kqp/common/types
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/provider
     ydb/core/protos
@@ -71,5 +71,6 @@ RECURSE(
     events
     simple
     result_set_format
+    types
     ut
 )

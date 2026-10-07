@@ -2,11 +2,14 @@
 #include "keyvalue.h"
 #include "keyvalue_flat_impl.h"
 #include "keyvalue_state.h"
-#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/tablet_helpers/runtime.h>
+#include <ydb/core/testlib/basics/core/setup.h>
+#include <ydb/core/blobstorage/subsystem/mock/mock.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/tablet/tablet_setup.h>
 
 namespace NKikimr {
 namespace {
@@ -83,7 +86,7 @@ struct TTestContext {
     }
 
     void Prepare(std::function<void(TTestActorRuntime&)> setup) {
-        Runtime.Reset(new TTestBasicRuntime);
+        Runtime.Reset(new TTestTabletRuntime);
         Runtime->SetScheduledLimit(10'000);
         Runtime->SetDispatchedEventsLimit(25'000'000);
         SetupLogging(*Runtime);
@@ -94,14 +97,14 @@ struct TTestContext {
         DsProxies.emplace_back(new NFake::TProxyDS(TGroupId::FromValue(2181038081)));
         DsProxies.emplace_back(new NFake::TProxyDS(TGroupId::FromValue(4294967295)));
 
-        SetupTabletServices(
-            *Runtime,
-            /*app*/ nullptr,
-            /*mockDisk*/ true,
-            /*storage*/ {},
-            /*sharedCacheConfig*/ {},
-            /*forceFollowers*/ false,
-            DsProxies);
+        ConfigureBlobStorage(*Runtime, [groups = DsProxies](ui32) {
+            auto models = groups;
+            if (models.empty()) {
+                models.emplace_back(new NFake::TProxyDS(TGroupId::FromValue(0)));
+            }
+            return CreateMockBlobStorageSubsystem(std::move(models));
+        });
+        SetupTabletServicesWithBlobStorage(*Runtime);
 
         setup(*Runtime);
 

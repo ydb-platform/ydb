@@ -1,5 +1,5 @@
 #include "defs.h"
-#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/basics/core/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/keyvalue/keyvalue_collect_operation.h>
 #include <ydb/core/keyvalue/keyvalue_collector.h>
@@ -32,9 +32,9 @@ public:
     }
 
     void Setup() {
-        Runtime.Reset(new TTestBasicRuntime(1, false));
+        Runtime.Reset(new TTestActorRuntime(1, false));
         //Runtime->SetLogPriority(NKikimrServices::BS_QUEUE, NLog::PRI_CRIT);
-        Runtime->Initialize(TAppPrepare().Unwrap());
+        Runtime->Initialize(TAppPrepare(TAppPrepare::TLightweightTag{}).Unwrap());
         TabletInfo.Reset(MakeTabletInfo());
 
         Sender = Runtime->AllocateEdgeActor(NodeIndex);

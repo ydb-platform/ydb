@@ -1,10 +1,13 @@
 #include "defs.h"
+#include <util/generic/scope.h>
 #include "keyvalue.h"
 #include "keyvalue_flat_impl.h"
 #include "keyvalue_intermediate.h"
 #include "keyvalue_state.h"
 #include <ydb/public/lib/base/msgbus.h>
-#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/tablet_helpers/runtime.h>
+#include <ydb/core/testlib/basics/core/setup.h>
+#include <ydb/core/blobstorage/subsystem/mock/mock.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/fast.h>
@@ -94,7 +97,7 @@ struct TTestContext {
     void Prepare(const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &outActiveZone, bool mockGroup = false) {
         Y_UNUSED(dispatchName);
         outActiveZone = false;
-        Runtime.Reset(new TTestBasicRuntime);
+        Runtime.Reset(new TTestTabletRuntime);
         Runtime->SetScheduledLimit(200);
         Runtime->SetDispatchedEventsLimit(25'000'000);
         SetupLogging(*Runtime);
@@ -104,14 +107,14 @@ struct TTestContext {
             DsProxies.emplace_back(new NFake::TProxyDS(TGroupId::FromValue(2181038080)));
             DsProxies.emplace_back(new NFake::TProxyDS(TGroupId::FromValue(4294967295)));
         }
-        SetupTabletServices(
-            *Runtime,
-            /*app*/ nullptr,
-            /*mockDisk*/ true,
-            /*storage*/ {},
-            /*sharedCacheConfig*/ {},
-            /*forceFollowers*/ false,
-            DsProxies);
+        ConfigureBlobStorage(*Runtime, [groups = DsProxies](ui32) {
+            auto models = groups;
+            if (models.empty()) {
+                models.emplace_back(new NFake::TProxyDS(TGroupId::FromValue(0)));
+            }
+            return CreateMockBlobStorageSubsystem(std::move(models));
+        });
+        SetupTabletServicesWithBlobStorage(*Runtime);
         setup(*Runtime);
         CreateTestBootstrapper(*Runtime,
             CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
@@ -175,6 +178,7 @@ void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
+    const auto edge = tc.Runtime->AllocateEdgeActor();
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
@@ -188,8 +192,9 @@ void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
                 write->SetCreationUnixTime(creationUnixTimes[idx]);
             }
         }
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+        tc.Runtime->SendToPipe(tc.TabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+        handle = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(edge).Release();
+        result = handle->Get<TEvKeyValue::TEvResponse>();
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
         UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
@@ -228,6 +233,7 @@ void CmdPatch(const TString &originalKey, const TString &patchedKey, const TVect
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
+    const auto edge = tc.Runtime->AllocateEdgeActor();
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
@@ -240,8 +246,9 @@ void CmdPatch(const TString &originalKey, const TString &patchedKey, const TVect
             diff->SetOffset(diffs[idx].Offset);
             diff->SetValue(diffs[idx].Buffer);
         }
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+        tc.Runtime->SendToPipe(tc.TabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+        handle = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(edge).Release();
+        result = handle->Get<TEvKeyValue::TEvResponse>();
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
         UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
@@ -288,6 +295,7 @@ void CmdRead(const TDeque<TString> &keys,
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
 
+    const auto edge = tc.Runtime->AllocateEdgeActor();
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
@@ -297,8 +305,9 @@ void CmdRead(const TDeque<TString> &keys,
             read->SetPriority(priority);
         }
 
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+        tc.Runtime->SendToPipe(tc.TabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+        handle = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(edge).Release();
+        result = handle->Get<TEvKeyValue::TEvResponse>();
 
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
@@ -339,6 +348,7 @@ void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, c
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
 
+    const auto edge = tc.Runtime->AllocateEdgeActor();
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
@@ -350,8 +360,9 @@ void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, c
                 cmd->SetCreationUnixTime(renameUnixTimes[idx]);
             }
         }
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+        tc.Runtime->SendToPipe(tc.TabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+        handle = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(edge).Release();
+        result = handle->Get<TEvKeyValue::TEvResponse>();
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
         if (expectOk) {
@@ -394,6 +405,7 @@ void CmdConcat(const TDeque<TString> &inputKeys, const TString &outputKey, const
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
 
+    const auto edge = tc.Runtime->AllocateEdgeActor();
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
@@ -403,8 +415,9 @@ void CmdConcat(const TDeque<TString> &inputKeys, const TString &outputKey, const
         }
         cmd->SetOutputKey(outputKey);
         cmd->SetKeepInputs(keepInputs);
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+        tc.Runtime->SendToPipe(tc.TabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+        handle = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(edge).Release();
+        result = handle->Get<TEvKeyValue::TEvResponse>();
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
         UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
@@ -422,6 +435,7 @@ void CmdDeleteRange(const TString &from, const bool includeFrom, const TString &
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
 
+    const auto edge = tc.Runtime->AllocateEdgeActor();
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
@@ -430,8 +444,9 @@ void CmdDeleteRange(const TString &from, const bool includeFrom, const TString &
         deleteRange->MutableRange()->SetIncludeFrom(includeFrom);
         deleteRange->MutableRange()->SetTo(to);
         deleteRange->MutableRange()->SetIncludeTo(includeTo);
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+        tc.Runtime->SendToPipe(tc.TabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+        handle = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(edge).Release();
+        result = handle->Get<TEvKeyValue::TEvResponse>();
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
         if (expectedStatus == NMsgBusProxy::MSTATUS_OK) {
@@ -456,6 +471,7 @@ void CmdCopyRange(const TString &from, const bool includeFrom, const TString &to
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
 
+    const auto edge = tc.Runtime->AllocateEdgeActor();
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
@@ -466,8 +482,9 @@ void CmdCopyRange(const TString &from, const bool includeFrom, const TString &to
         copyRange->MutableRange()->SetIncludeTo(includeTo);
         copyRange->SetPrefixToAdd(prefixToAdd);
         copyRange->SetPrefixToRemove(prefixToRemove);
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+        tc.Runtime->SendToPipe(tc.TabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+        handle = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(edge).Release();
+        result = handle->Get<TEvKeyValue::TEvResponse>();
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
         UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
@@ -530,13 +547,15 @@ void RunRequest(TDesiredPair<TEvKeyValue::TEvRequest> &dp, TTestContext &tc, ui6
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
 
+    const auto edge = tc.Runtime->AllocateEdgeActor();
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
         request->Record = dp.Request;
 
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+        tc.Runtime->SendToPipe(tc.TabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+        handle = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(edge).Release();
+        result = handle->Get<TEvKeyValue::TEvResponse>();
 
         UNIT_ASSERT_C(result, "Line# " << line);
         UNIT_ASSERT_C(result->Record.HasStatus(), "Line# " << line);
@@ -609,13 +628,15 @@ void CmdGetStatus(const NKikimrClient::TKeyValueRequest::EStorageChannel storage
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
 
+    const auto edge = tc.Runtime->AllocateEdgeActor();
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
         auto getStatus = request->Record.AddCmdGetStatus();
         getStatus->SetStorageChannel(storageChannel);
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+        tc.Runtime->SendToPipe(tc.TabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+        handle = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(edge).Release();
+        result = handle->Get<TEvKeyValue::TEvResponse>();
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
         UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
@@ -634,13 +655,15 @@ void CmdSetExecutorFastLogPolicy(bool isAllowed, TTestContext &tc) {
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
 
+    const auto edge = tc.Runtime->AllocateEdgeActor();
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         request.Reset(new TEvKeyValue::TEvRequest);
         auto cmd = request->Record.MutableCmdSetExecutorFastLogPolicy();
         cmd->SetIsAllowed(isAllowed);
-        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-        result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+        tc.Runtime->SendToPipe(tc.TabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+        handle = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(edge).Release();
+        result = handle->Get<TEvKeyValue::TEvResponse>();
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
         UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
@@ -689,7 +712,8 @@ template <typename TResponseEvent>
 auto ReceiveResponse(TTestContext &tc) -> decltype(std::declval<TResponseEvent>().Record) {
     TestLog("Grab event# ", TypeName<TResponseEvent>());
     TAutoPtr<IEventHandle> handle;
-    TResponseEvent *response = tc.Runtime->GrabEdgeEvent<TResponseEvent>(handle);
+    handle = tc.Runtime->GrabEdgeEvent<TResponseEvent>(tc.Edge).Release();
+    TResponseEvent *response = handle->Get<TResponseEvent>();
     TestLog("Received event# ", TypeName(*response));
     return response->Record;
 }
@@ -853,6 +877,10 @@ private:
 
 template <typename TRequestEvent>
 void ExecuteEvent(TDesiredPair<TRequestEvent> &dp, TTestContext &tc) {
+    // A reboot can leave a late reply from a previous request in the edge queue.
+    const auto previousEdge = tc.Edge;
+    tc.Edge = tc.Runtime->AllocateEdgeActor();
+    Y_DEFER { tc.Edge = previousEdge; };
     DoWithRetry([&] {
         tc.Runtime->ResetScheduledCount();
         SendRequest<TRequestEvent>(dp.Request, tc);

@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/random_provider
     library/cpp/time_provider
     ydb/core/base
+    ydb/core/kqp/common/types
     ydb/core/scheme
     ydb/core/tablet
     ydb/library/mkql_proto

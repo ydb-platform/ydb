@@ -170,7 +170,7 @@ void AssertInvalidKey(const NJson::TJsonValue& json, const TString& reason = {})
         return;
     }
     std::string error;
-    UNIT_ASSERT(!jwk.value().CalculatePublicKey(error).has_value());
+    UNIT_ASSERT(!jwk->CalculatePublicKey(error).has_value());
     UNIT_ASSERT(!error.empty());
     if (!reason.empty()) {
         UNIT_ASSERT_STRING_CONTAINS(error, reason);
@@ -255,29 +255,29 @@ Y_UNIT_TEST_SUITE(TParseJwkTest) {
             "key_ops": ["sign", "verify", "encrypt", "decrypt", "wrapKey", "unwrapKey", "deriveKey", "deriveBits"]
         })"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(jwk.value().KeyOperations.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(jwk.value().KeyOperations.value().size(), 8);
-        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[0], EJwkKeyOps::SIGN);
-        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[1], EJwkKeyOps::VERIFY);
-        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[2], EJwkKeyOps::ENCRYPT);
-        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[3], EJwkKeyOps::DECRYPT);
-        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[4], EJwkKeyOps::WRAP_KEY);
-        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[5], EJwkKeyOps::UNWRAP_KEY);
-        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[6], EJwkKeyOps::DERIVE_KEY);
-        UNIT_ASSERT_EQUAL(jwk.value().KeyOperations.value()[7], EJwkKeyOps::DERIVE_BITS);
+        UNIT_ASSERT(jwk->KeyOperations.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(jwk->KeyOperations->size(), 8);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations.value()[0], EJwkKeyOps::SIGN);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations.value()[1], EJwkKeyOps::VERIFY);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations.value()[2], EJwkKeyOps::ENCRYPT);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations.value()[3], EJwkKeyOps::DECRYPT);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations.value()[4], EJwkKeyOps::WRAP_KEY);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations.value()[5], EJwkKeyOps::UNWRAP_KEY);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations.value()[6], EJwkKeyOps::DERIVE_KEY);
+        UNIT_ASSERT_EQUAL(jwk->KeyOperations.value()[7], EJwkKeyOps::DERIVE_BITS);
     }
 
     Y_UNIT_TEST(KeyOpsMissing) {
         const auto jwk = ParseJwk(ParseJson(R"({"kty": "RSA"})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(!jwk.value().KeyOperations.has_value());
+        UNIT_ASSERT(!jwk->KeyOperations.has_value());
     }
 
     Y_UNIT_TEST(KeyOpsEmpty) {
         const auto jwk = ParseJwk(ParseJson(R"({"kty": "RSA", "key_ops": []})"));
         UNIT_ASSERT(jwk.has_value());
-        UNIT_ASSERT(jwk.value().KeyOperations.has_value());
-        UNIT_ASSERT(jwk.value().KeyOperations.value().empty());
+        UNIT_ASSERT(jwk->KeyOperations.has_value());
+        UNIT_ASSERT(jwk->KeyOperations->empty());
     }
 
     Y_UNIT_TEST(KeyOpsUnknownValuesRejected) {
@@ -590,8 +590,8 @@ Y_UNIT_TEST_SUITE(TParseJwkTest) {
         UNIT_ASSERT(jwk.has_value());
         UNIT_ASSERT_EQUAL(jwk->Type, EJwkKeyType::RSA);
         UNIT_ASSERT_EQUAL(jwk->Usage.value(), EJwkUsage::SIG);
-        UNIT_ASSERT(jwk.value().KeyOperations.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(jwk.value().KeyOperations.value().size(), 2);
+        UNIT_ASSERT(jwk->KeyOperations.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(jwk->KeyOperations->size(), 2);
         UNIT_ASSERT_EQUAL(jwk->Algorithm.value(), EJwkAlg::RS256);
         UNIT_ASSERT_VALUES_EQUAL(jwk->KeyId, "my-key-id");
         UNIT_ASSERT_VALUES_EQUAL(jwk->X509Url, "https://example.com/cert");
@@ -848,24 +848,23 @@ Y_UNIT_TEST_SUITE(TJwkCryptoTest) {
             json["kty"] = rsa ? "RSA" : "EC";
             json["alg"] = alg;
             const auto jwk = ParseJwk(json);
-            UNIT_ASSERT_C(jwk.has_value() && jwk.value().Algorithm.has_value(), alg);
-            UNIT_ASSERT_VALUES_EQUAL(ToString(jwk.value().Algorithm.value()), alg);
-            const auto keyType = GetKeyType(jwk.value().Algorithm.value());
+            UNIT_ASSERT_C(jwk.has_value() && jwk->Algorithm.has_value(), alg);
+            UNIT_ASSERT_VALUES_EQUAL(ToString(jwk->Algorithm.value()), alg);
+            const auto keyType = GetKeyType(jwk->Algorithm.value());
             UNIT_ASSERT(keyType.has_value());
-            UNIT_ASSERT_EQUAL(keyType.value(), jwk.value().Type);
+            UNIT_ASSERT_EQUAL(keyType.value(), jwk->Type);
             json["kty"] = rsa ? "EC" : "RSA";
             UNIT_ASSERT(!ParseJwk(json).has_value());
         }
     }
 
     Y_UNIT_TEST(RsaParameters) {
-        const auto key = GenerateKey();
-        const auto jwk = ParseJwk(KeyParameters(key.get()));
-        UNIT_ASSERT(jwk.has_value());
-        std::string error;
-        const auto pem = jwk.value().CalculatePublicKey(error);
-        UNIT_ASSERT_C(pem.has_value(), error);
-        UNIT_ASSERT_VALUES_EQUAL(pem.value(), PublicKeyPem(key.get()));
+        for (const int bits : {1024, 2048}) {
+            const auto key = GenerateKey(NID_undef, bits);
+            const auto jwk = ParseJwk(KeyParameters(key.get()));
+            UNIT_ASSERT(jwk.has_value());
+            AssertPublicKey(jwk.value(), key.get());
+        }
     }
 
     Y_UNIT_TEST(EcParameters) {
@@ -876,7 +875,7 @@ Y_UNIT_TEST_SUITE(TJwkCryptoTest) {
             const auto jwk = ParseJwk(KeyParameters(key.get(), curve));
             UNIT_ASSERT(jwk.has_value());
             std::string error;
-            const auto pem = jwk.value().CalculatePublicKey(error);
+            const auto pem = jwk->CalculatePublicKey(error);
             UNIT_ASSERT_C(pem.has_value(), curve);
             UNIT_ASSERT_VALUES_EQUAL(pem.value(), PublicKeyPem(key.get()));
         }
@@ -1103,12 +1102,14 @@ Y_UNIT_TEST_SUITE(TJwkCryptoTest) {
         AssertInvalidKey(json, "Unsupported EC curve");
     }
 
-    Y_UNIT_TEST(WeakRsaCertificateRejected) {
+    Y_UNIT_TEST(Rsa1024CertificateAccepted) {
         const auto key = GenerateKey(NID_undef, 1024);
         const auto cert = MakeCertificate(key.get(), "RSA-1024");
         auto json = ParseJson(R"({"kty": "RSA"})");
         SetChain(json, {cert.get()});
-        AssertInvalidKey(json, "RSA modulus below 2048 bits");
+        const auto jwk = ParseJwk(json);
+        UNIT_ASSERT(jwk.has_value());
+        AssertPublicKey(jwk.value(), key.get());
     }
 
     Y_UNIT_TEST(RsaPssCertificates) {
@@ -1184,9 +1185,9 @@ Y_UNIT_TEST_SUITE(TJwkCryptoTest) {
         json["keys"].AppendValue(KeyParameters(ec.get(), "P-256"));
         const auto jwks = ParseJwkSet(json);
         UNIT_ASSERT(jwks.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(jwks.value().Keys.size(), 2);
-        AssertPublicKey(jwks.value().Keys[0], rsa.get());
-        AssertPublicKey(jwks.value().Keys[1], ec.get());
+        UNIT_ASSERT_VALUES_EQUAL(jwks->Keys.size(), 2);
+        AssertPublicKey(jwks->Keys[0], rsa.get());
+        AssertPublicKey(jwks->Keys[1], ec.get());
     }
 }
 

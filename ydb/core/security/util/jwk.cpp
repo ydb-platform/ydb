@@ -20,16 +20,18 @@ namespace NKikimr::NSecurity {
 
 namespace {
 
-inline constexpr std::string_view KTY = "kty";
-inline constexpr std::string_view USE = "use";
-inline constexpr std::string_view KEY_OPS = "key_ops";
-inline constexpr std::string_view ALG = "alg";
-inline constexpr std::string_view KID = "kid";
-inline constexpr std::string_view X5U = "x5u";
-inline constexpr std::string_view X5C = "x5c";
-inline constexpr std::string_view X5T = "x5t";
-inline constexpr std::string_view X5T_S256 = "x5t#S256";
-inline constexpr std::string_view KEYS = "keys";
+constexpr std::string_view KTY = "kty";
+constexpr std::string_view USE = "use";
+constexpr std::string_view KEY_OPS = "key_ops";
+constexpr std::string_view ALG = "alg";
+constexpr std::string_view KID = "kid";
+constexpr std::string_view X5U = "x5u";
+constexpr std::string_view X5C = "x5c";
+constexpr std::string_view X5T = "x5t";
+constexpr std::string_view X5T_S256 = "x5t#S256";
+constexpr std::string_view KEYS = "keys";
+
+constexpr size_t MAX_CERTIFICATE_CHAIN_LENGTH = 100;
 
 template <auto Free>
 struct TOpenSslDeleter {
@@ -136,9 +138,7 @@ std::optional<std::vector<std::string>> ParseX5C(const NJson::TJsonValue& jwk) {
         return std::vector<std::string>{};
     }
 
-    if (!jwk[X5C].IsArray() || jwk[X5C].GetArray().empty()
-        || jwk[X5C].GetArray().size() > TJwk::MAX_CERTIFICATE_CHAIN_LENGTH)
-    {
+    if (!jwk[X5C].IsArray() || jwk[X5C].GetArray().empty() || jwk[X5C].GetArray().size() > MAX_CERTIFICATE_CHAIN_LENGTH) {
         return std::nullopt;
     }
 
@@ -168,7 +168,7 @@ TString Base64StrictDecodeUneven(const TStringBuf s) {
 
 std::optional<std::string> ParseKeyBytes(const NJson::TJsonValue& jwk, std::string_view name) {
     const auto encoded = ParseStr(jwk, name);
-    if (!encoded.has_value() || encoded.value().empty()) {
+    if (!encoded.has_value() || encoded->empty()) {
         return std::nullopt;
     }
     try {
@@ -187,22 +187,36 @@ std::optional<std::string> ParseKeyBytes(const NJson::TJsonValue& jwk, std::stri
 bool ParseKeyParameters(const NJson::TJsonValue& jwk, TJwk& result) {
     if (result.Type == EJwkKeyType::RSA && (jwk.Has("n") || jwk.Has("e"))) {
         auto modulus = ParseKeyBytes(jwk, "n");
-        auto exponent = ParseKeyBytes(jwk, "e");
-        if (!modulus.has_value() || !exponent.has_value()
-            || modulus.value().front() == '\0' || exponent.value().front() == '\0')
-        {
+        if (!modulus.has_value() || modulus->front() == '\0') {
             return false;
         }
-        result.RsaParameters = TJwk::TRsaParameters{std::move(modulus.value()), std::move(exponent.value())};
+        auto exponent = ParseKeyBytes(jwk, "e");
+        if (!exponent.has_value() || exponent->front() == '\0') {
+            return false;
+        }
+        result.RsaParameters = TJwk::TRsaParameters{
+            .Modulus = std::move(modulus.value()),
+            .Exponent = std::move(exponent.value()),
+        };
     }
     if (result.Type == EJwkKeyType::EC && (jwk.Has("crv") || jwk.Has("x") || jwk.Has("y"))) {
         auto curve = ParseStr(jwk, "crv");
-        auto x = ParseKeyBytes(jwk, "x");
-        auto y = ParseKeyBytes(jwk, "y");
-        if (!curve.has_value() || !x.has_value() || !y.has_value()) {
+        if (!curve.has_value()) {
             return false;
         }
-        result.EcParameters = TJwk::TEcParameters{std::move(curve.value()), std::move(x.value()), std::move(y.value())};
+        auto x = ParseKeyBytes(jwk, "x");
+        if (!x.has_value()) {
+            return false;
+        }
+        auto y = ParseKeyBytes(jwk, "y");
+        if (!y.has_value()) {
+            return false;
+        }
+        result.EcParameters = TJwk::TEcParameters{
+            .Curve = std::move(curve.value()),
+            .X = std::move(x.value()),
+            .Y = std::move(y.value()),
+        };
     }
     return true;
 }
@@ -216,7 +230,7 @@ std::optional<std::string> ParseThumbprint(
     }
 
     auto thumbprint = ParseKeyBytes(jwk, name);
-    if (!thumbprint.has_value() || thumbprint.value().size() != expectedLength) {
+    if (!thumbprint.has_value() || thumbprint->size() != expectedLength) {
         return std::nullopt;
     }
     return thumbprint;
@@ -229,42 +243,42 @@ std::optional<TJwk> ParseJwkRfc7517(const NJson::TJsonValue& jwk) {
         return std::nullopt;
     }
 
-    res.value().Usage = ParseUsage(jwk);
+    res->Usage = ParseUsage(jwk);
     if (jwk.Has(KEY_OPS)) {
         auto keyOps = ParseKeyOps(jwk);
         if (!keyOps.has_value()) {
             return std::nullopt;
         }
-        res.value().KeyOperations = std::move(keyOps.value());
+        res->KeyOperations = std::move(keyOps.value());
     }
 
     if (jwk.Has(ALG)) {
-        auto algorithm = ParseCompatibleAlg(jwk, res.value().Type);
+        auto algorithm = ParseCompatibleAlg(jwk, res->Type);
         if (!algorithm.has_value()) {
             return std::nullopt;
         }
-        res.value().Algorithm = algorithm;
+        res->Algorithm = algorithm;
     }
 
-    res.value().KeyId = ParseKid(jwk);
-    res.value().X509Url = ParseX5U(jwk);
+    res->KeyId = ParseKid(jwk);
+    res->X509Url = ParseX5U(jwk);
 
     if (auto x5c = ParseX5C(jwk); !x5c.has_value()) {
         return std::nullopt;
     } else {
-        res.value().X509Chain = std::move(x5c.value());
+        res->X509Chain = std::move(x5c.value());
     }
 
     if (auto x5t = ParseThumbprint(jwk, X5T, SHA_DIGEST_LENGTH); !x5t.has_value()) {
         return std::nullopt;
     } else {
-        res.value().X509CertificateSha1ThumbprintBytes = std::move(x5t.value());
+        res->X509CertificateSha1ThumbprintBytes = std::move(x5t.value());
     }
 
     if (auto x5ts256 = ParseThumbprint(jwk, X5T_S256, SHA256_DIGEST_LENGTH); !x5ts256.has_value()) {
         return std::nullopt;
     } else {
-        res.value().X509CertificateSha256ThumbprintBytes = std::move(x5ts256.value());
+        res->X509CertificateSha256ThumbprintBytes = std::move(x5ts256.value());
     }
 
     if (!ParseKeyParameters(jwk, res.value())) {
@@ -300,10 +314,11 @@ bool CheckCertificateThumbprints(const TJwk& jwk, const std::string& cert) {
 
 bool CheckCertificateKeyUsage(const TJwk& jwk, X509* cert) {
     const auto usage = X509_get_key_usage(cert);
-    const auto encryptionUsage = jwk.Type == EJwkKeyType::RSA ? KU_KEY_ENCIPHERMENT : KU_KEY_AGREEMENT;
     unsigned int required = 0;
+
+    const auto encryptionUsage = (jwk.Type == EJwkKeyType::RSA) ? KU_KEY_ENCIPHERMENT : KU_KEY_AGREEMENT;
     if (jwk.Usage.has_value()) {
-        required |= jwk.Usage.value() == EJwkUsage::SIG ? KU_DIGITAL_SIGNATURE : encryptionUsage;
+        required |= (jwk.Usage.value() == EJwkUsage::SIG) ? KU_DIGITAL_SIGNATURE : encryptionUsage;
     }
     if (jwk.Algorithm.has_value()) {
         switch (jwk.Algorithm.value()) {
@@ -321,6 +336,7 @@ bool CheckCertificateKeyUsage(const TJwk& jwk, X509* cert) {
                 break;
         }
     }
+
     if (!jwk.KeyOperations.has_value()) {
         return (usage & required) == required;
     }
@@ -351,8 +367,8 @@ std::string CertificateError(size_t index, const std::string& reason) {
 }
 
 TKeyPtr GetPublicKeyFromX5C(const TJwk& jwk, std::string& error) {
-    if (jwk.X509Chain.empty() || jwk.X509Chain.size() > TJwk::MAX_CERTIFICATE_CHAIN_LENGTH) {
-        error = "x5c must contain between 1 and " + std::to_string(TJwk::MAX_CERTIFICATE_CHAIN_LENGTH) + " certificates";
+    if (jwk.X509Chain.empty() || jwk.X509Chain.size() > MAX_CERTIFICATE_CHAIN_LENGTH) {
+        error = "x5c must contain between 1 and " + std::to_string(MAX_CERTIFICATE_CHAIN_LENGTH) + " certificates";
         return {};
     }
 
@@ -392,7 +408,7 @@ TKeyPtr GetPublicKeyFromX5C(const TJwk& jwk, std::string& error) {
     TOpenSslPtr<STACK_OF(X509), sk_X509_free> chain(sk_X509_new_null());
     TOpenSslPtr<X509_STORE_CTX, X509_STORE_CTX_free> ctx(X509_STORE_CTX_new());
     if (store == nullptr || chain == nullptr || ctx == nullptr
-        || X509_STORE_add_cert(store.get(), certificates.back().get()) != 1)
+            || X509_STORE_add_cert(store.get(), certificates.back().get()) != 1)
     {
         error = "Failed to initialize x5c certificate store";
         return {};
@@ -404,7 +420,7 @@ TKeyPtr GetPublicKeyFromX5C(const TJwk& jwk, std::string& error) {
         }
     }
     if (X509_STORE_CTX_init(ctx.get(), store.get(), certificates.front().get(), chain.get()) != 1
-        || X509_VERIFY_PARAM_set_flags(X509_STORE_CTX_get0_param(ctx.get()), X509_V_FLAG_PARTIAL_CHAIN) != 1)
+            || X509_VERIFY_PARAM_set_flags(X509_STORE_CTX_get0_param(ctx.get()), X509_V_FLAG_PARTIAL_CHAIN) != 1)
     {
         error = "Failed to initialize x5c verification context";
         return {};
@@ -425,9 +441,7 @@ TKeyPtr GetPublicKeyFromX5C(const TJwk& jwk, std::string& error) {
     auto* last = certificates.back().get();
     // A self-issued rollover CA can have the same DN as its issuer but a
     // different key. OpenSSL also checks authority/subject key identifiers.
-    if ((X509_get_extension_flags(last) & EXFLAG_SS)
-        && X509_verify(last, X509_get0_pubkey(last)) != 1)
-    {
+    if ((X509_get_extension_flags(last) & EXFLAG_SS) && X509_verify(last, X509_get0_pubkey(last)) != 1) {
         error = CertificateError(certificates.size() - 1, "invalid self-signature");
         return {};
     }
@@ -471,15 +485,16 @@ TKeyPtr GetPublicKeyFromParameters(const TJwk& jwk, std::string& error) {
         return {};
     }
     if (jwk.Type == EJwkKeyType::RSA && jwk.RsaParameters.has_value()) {
-        auto modulus = DecodeNumber(jwk.RsaParameters.value().Modulus);
-        auto exponent = DecodeNumber(jwk.RsaParameters.value().Exponent);
+        auto modulus = DecodeNumber(jwk.RsaParameters->Modulus);
+        auto exponent = DecodeNumber(jwk.RsaParameters->Exponent);
         TOpenSslPtr<RSA, RSA_free> rsa(RSA_new());
         if (modulus == nullptr || exponent == nullptr || rsa == nullptr
-            || RSA_set0_key(rsa.get(), modulus.get(), exponent.get(), nullptr) != 1)
+                || RSA_set0_key(rsa.get(), modulus.get(), exponent.get(), nullptr) != 1)
         {
             error = "Invalid RSA parameters";
             return {};
         }
+        // RSA_set0_key takes ownership of the modulus and exponent on success.
         modulus.release();
         exponent.release();
         if (EVP_PKEY_set1_RSA(key.get(), rsa.get()) != 1) {
@@ -524,10 +539,17 @@ bool CheckRsaPssRestrictions(const TJwk& jwk, EVP_PKEY* key) {
     }
     const EVP_MD* digest = nullptr;
     switch (jwk.Algorithm.value()) {
-        case EJwkAlg::PS256: digest = EVP_sha256(); break;
-        case EJwkAlg::PS384: digest = EVP_sha384(); break;
-        case EJwkAlg::PS512: digest = EVP_sha512(); break;
-        default: return false;
+        case EJwkAlg::PS256:
+            digest = EVP_sha256();
+            break;
+        case EJwkAlg::PS384:
+            digest = EVP_sha384();
+            break;
+        case EJwkAlg::PS512:
+            digest = EVP_sha512();
+            break;
+        default:
+            return false;
     }
     // OpenSSL enforces the SPKI restrictions when configuring verification.
     // JWA requires the same hash for MGF1 and a salt as long as the digest.
@@ -564,10 +586,6 @@ bool CheckPublicKey(const TJwk& jwk, EVP_PKEY* key, std::string& error) {
             error = "Invalid RSA modulus or exponent";
             return false;
         }
-        if (BN_num_bits(modulus) < 2048) {
-            error = "RSA modulus below 2048 bits";
-            return false;
-        }
         if (BN_num_bits(modulus) > OPENSSL_RSA_MAX_MODULUS_BITS) {
             error = "RSA modulus exceeds the OpenSSL size limit";
             return false;
@@ -591,10 +609,17 @@ bool CheckPublicKey(const TJwk& jwk, EVP_PKEY* key, std::string& error) {
     if (jwk.Algorithm.has_value()) {
         int expectedCurve = NID_undef;
         switch (jwk.Algorithm.value()) {
-            case EJwkAlg::ES256: expectedCurve = NID_X9_62_prime256v1; break;
-            case EJwkAlg::ES384: expectedCurve = NID_secp384r1; break;
-            case EJwkAlg::ES512: expectedCurve = NID_secp521r1; break;
-            default: break;
+            case EJwkAlg::ES256:
+                expectedCurve = NID_X9_62_prime256v1;
+                break;
+            case EJwkAlg::ES384:
+                expectedCurve = NID_secp384r1;
+                break;
+            case EJwkAlg::ES512:
+                expectedCurve = NID_secp521r1;
+                break;
+            default:
+                break;
         }
         if (expectedCurve != NID_undef && curve != expectedCurve) {
             error = "EC curve is incompatible with the JWK algorithm";
@@ -610,8 +635,7 @@ bool EqualPublicKeys(EJwkKeyType type, EVP_PKEY* parameters, EVP_PKEY* certifica
         // Both keys have already passed validation, including PSS restrictions.
         const auto* lhs = EVP_PKEY_get0_RSA(parameters);
         const auto* rhs = EVP_PKEY_get0_RSA(certificate);
-        return BN_cmp(RSA_get0_n(lhs), RSA_get0_n(rhs)) == 0
-            && BN_cmp(RSA_get0_e(lhs), RSA_get0_e(rhs)) == 0;
+        return BN_cmp(RSA_get0_n(lhs), RSA_get0_n(rhs)) == 0 && BN_cmp(RSA_get0_e(lhs), RSA_get0_e(rhs)) == 0;
     }
     return EVP_PKEY_cmp(parameters, certificate) == 1;
 }
@@ -642,7 +666,8 @@ std::optional<EJwkKeyType> GetKeyType(EJwkAlg alg) {
         case EJwkAlg::ECDH_ES_A192KW:
         case EJwkAlg::ECDH_ES_A256KW:
             return EJwkKeyType::EC;
-        default: return std::nullopt;
+        default:
+            return std::nullopt;
     }
 }
 

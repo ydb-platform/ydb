@@ -5464,6 +5464,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryDdlRetriesUnderSchemeShardRestarts, TStreamingWithSchemaSecretsTestFixture) {
         NodeCount = 5;
         LogSettings.Freeze = true;
+        SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQuerySchemeOperations(true);
 
         constexpr char inputTopicName[] = "streamingQueryDdlRetriesInputTopic";
         constexpr char outputTopicName[] = "streamingQueryDdlRetriesOutputTopic";

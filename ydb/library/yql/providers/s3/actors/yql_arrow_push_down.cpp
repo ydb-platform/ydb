@@ -110,6 +110,7 @@ bool MatchRowGroup(std::unique_ptr<parquet::RowGroupMetaData> rowGroupMetadata, 
                 columnStatistics.UuidStats.ConstructInPlace();
                 columnStatistics.UuidStats->lowValue = TString(reinterpret_cast<const char*>(typedStatistics->min().ptr), 16);
                 columnStatistics.UuidStats->highValue = TString(reinterpret_cast<const char*>(typedStatistics->max().ptr), 16);
+                columnStatistics.UuidStats->IsRfc4122 = true;
                 columns[columnName] = columnStatistics;
             }
             break;

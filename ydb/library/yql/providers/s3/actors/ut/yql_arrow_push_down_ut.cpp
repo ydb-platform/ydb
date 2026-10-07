@@ -289,6 +289,34 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
         UNIT_ASSERT_VALUES_EQUAL(kept[0], 0);
     }
 
+    Y_UNIT_TEST(UuidLogicalTypeUsesRfc4122Statistics) {
+        // Parquet UUID logical types store RFC 4122 bytes. YQL literals use the
+        // internal UUID byte order, so the pushdown matcher must convert them.
+        TString rfcUuid("\x00\x11\x22\x33\x44\x55\x46\x77\x88\x99\xaa\xbb\xcc\xdd\xee\xff", 16);
+        TString yqlUuid = rfcUuid;
+        std::swap(yqlUuid.begin()[0], yqlUuid.begin()[3]);
+        std::swap(yqlUuid.begin()[1], yqlUuid.begin()[2]);
+        std::swap(yqlUuid.begin()[4], yqlUuid.begin()[5]);
+        std::swap(yqlUuid.begin()[6], yqlUuid.begin()[7]);
+
+        TFileMetaDataBuilder builder{MakeLogicalUuidSchema("id")};
+        auto metadata = builder.AddRowGroup()
+                               .AddColumnFlbaStatistics(0, rfcUuid, rfcUuid)
+                               .Build()
+                        .Build();
+        auto predicate = BuildPredicate(
+            TStringBuilder() << R"proto(comparison {
+                operation: EQ
+                left_value { column: "id" }
+                right_value { typed_value { type { type_id: UUID } value { )proto"
+                             << UuidValueField(yqlUuid) << R"proto( } } }
+            })proto");
+
+        auto groups = NDq::MatchedRowGroups(metadata, predicate);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(groups[0], 0);
+    }
+
     Y_UNIT_TEST(UuidMatchSecondGroup) {
         const TString firstLo(16, '\x10');
         const TString firstHi(16, '\x11');

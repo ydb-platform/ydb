@@ -1353,7 +1353,7 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         Stream << del << "BARRIERS_INTERVAL = INTERVAL(";
 
         Y_ENSURE(resolvedTimestampsIntervalMs <= static_cast<ui64>(std::numeric_limits<i64>::max()) / 1000,
-        "Resolved timestamps interval is too large");
+            "Resolved timestamps interval is too large");
 
         TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
 

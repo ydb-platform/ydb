@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -6,6 +7,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
@@ -27,6 +29,16 @@ TKikimrRunner MakeRunner(bool enableUnsafeTruncate) {
     settings.FeatureFlags.SetEnableUnsafeTruncateTable(enableUnsafeTruncate);
     return TKikimrRunner(settings);
 }
+
+struct TKqpActorCrash final : TActorRunnableItem::TImpl<TKqpActorCrash> {
+    void DoRun(IActor* actor) noexcept {
+        if (actor) {
+            auto& context = *TlsActivationContext;
+            context.ExecutorThread.UnregisterActor(&context.Mailbox, actor->SelfId());
+        }
+        delete this;
+    }
+};
 
 template <bool UseQueryService>
 using TTxControlFor = std::conditional_t<UseQueryService, NYdb::NQuery::TTxControl, NYdb::NTable::TTxControl>;
@@ -1201,10 +1213,7 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             "all restarted shards must accept new reads and writes");
     }
 
-    // Losing the client after the coordinator has planned the transaction is the one case the
-    // client cannot be told anything definite: the shards apply the truncate regardless, so the
-    // answer is UNDETERMINED and the rows stay gone.
-    Y_UNIT_TEST_TWIN(CancelledAfterPlanIsNotRolledBack, UseQueryService) {
+    Y_UNIT_TEST_QUAD(KqpLostDuringCommit, UseQueryService, CrashActors) {
         using TTxControl = TTxControlFor<UseQueryService>;
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
         settings.FeatureFlags.SetEnableUnsafeTruncateTable(true);
@@ -1212,73 +1221,135 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
 
         auto client = GetClient<UseQueryService>(kikimr);
         auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
-
-        auto exec = [&](const TString& sql, bool inTx, const TExecuteQuerySettingsFor<UseQueryService>& s = {}) {
-            return kikimr.RunCall([&] {
-                return ExecuteQuery(session, sql,
-                    inTx ? TTxControl::BeginTx().CommitTx() : AutoCommit<UseQueryService>(), s).ExtractValueSync();
-            });
-        };
-
-        {
-            auto create = kikimr.RunCall([&] {
-                return ExecuteSchemeQuery(session, Sprintf(R"(
-                    CREATE TABLE `%s` (
-                        Key Uint64,
-                        Value String,
-                        PRIMARY KEY (Key)
-                    ) WITH (
-                        UNIFORM_PARTITIONS = 4
-                    );
-                )", TablePath)).ExtractValueSync();
-            });
-            UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
-        }
-
-        {
-            TStringBuilder values;
-            for (size_t i = 0; i < Y_ARRAY_SIZE(ShardKeys); ++i) {
-                values << (i ? ", " : "") << "(" << ShardKeys[i] << "ul, \"v" << i << "\")";
-            }
-            auto fill = exec(Sprintf("UPSERT INTO `%s` (Key, Value) VALUES %s;",
-                TablePath, values.c_str()), /* inTx */ true);
-            UNIT_ASSERT_VALUES_EQUAL_C(fill.GetStatus(), EStatus::SUCCESS, fill.GetIssues().ToString());
-        }
+        kikimr.RunCall([&] { CreateAndFillSharded(session); });
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        std::atomic<int> swallowed{0};
+        const auto shards = GetTableShards(&kikimr.GetTestServer(), runtime.AllocateEdgeActor(), TablePath);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 4u);
+        const THashSet<ui64> tableShards(shards.begin(), shards.end());
+        const THashSet<ui64> delayedShards{shards[2], shards[3]};
 
-        // The shards do apply the truncate; only the executer never hears about it.
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWriteResult::EventType) {
-                auto* msg = ev->Get<NKikimr::NEvents::TDataEvents::TEvWriteResult>();
-                if (msg && msg->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
-                    swallowed.fetch_add(1);
-                    return TTestActorRuntime::EEventAction::DROP;
+        THashMap<TActorId, TActorId> actorParents;
+        TTestActorRuntime::TRegistrationObserver previousRegistration;
+        previousRegistration = runtime.SetRegistrationObserverFunc(
+            [&](TTestActorRuntimeBase& rt, const TActorId& parent, const TActorId& actor) {
+                previousRegistration(rt, parent, actor);
+                actorParents[actor] = parent;
+            });
+        Y_DEFER { runtime.SetRegistrationObserverFunc(previousRegistration); };
+
+        ui64 truncateTxId = 0;
+        TActorId executer;
+        size_t proposals = 0;
+        auto observeProposals = runtime.AddObserver<TEvTxProxy::TEvProposeTransaction>(
+            [&](TEvTxProxy::TEvProposeTransaction::TPtr& ev) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTransaction().GetTxId(), truncateTxId);
+                executer = ev->Sender;
+                ++proposals;
+            });
+        THashSet<ui64> preparedShards;
+        THashSet<ui64> completedShards;
+        auto observeResults = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>(
+            [&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+                const auto& record = ev->Get()->Record;
+                if (!tableShards.contains(record.GetOrigin())) {
+                    return;
+                }
+                if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
+                    if (!truncateTxId) {
+                        truncateTxId = record.GetTxId();
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetTxId(), truncateTxId);
+                    preparedShards.insert(record.GetOrigin());
+                } else if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED
+                    && record.GetTxId() == truncateTxId)
+                {
+                    completedShards.insert(record.GetOrigin());
+                }
+            });
+
+        // KQP sends one proposal for all participants. The mediator delivers the
+        // commit decision to each shard; hold that decision at half of them.
+        THashSet<ui64> blockedShards;
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlans(runtime, [&](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (delayedShards.contains(record.GetTabletID())) {
+                for (const auto& tx : record.GetTransactions()) {
+                    if (truncateTxId && tx.GetTxId() == truncateTxId) {
+                        blockedShards.insert(record.GetTabletID());
+                        return true;
+                    }
                 }
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
+            return false;
         });
 
         TExecuteQuerySettingsFor<UseQueryService> querySettings;
-        querySettings.ClientTimeout(TDuration::Seconds(5));
-
-        auto result = exec(UnsafeTruncateQuery(), /* inTx */ false, querySettings);
-        runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
-
-        UNIT_ASSERT_C(swallowed.load() > 0, "the truncate never reached the shards");
-        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS,
-            "the executer was never told the truncate finished");
-
-        // The abandoned query still occupies its session, so read the outcome from another one -
-        // which is also how anybody else would observe it.
-        auto observer = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
-        auto count = kikimr.RunCall([&] {
-            return ExecuteQuery(observer, CountQuery(), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        querySettings.ClientTimeout(TDuration::Seconds(30));
+        auto truncateFuture = kikimr.RunInThreadPool([&] {
+            return ExecuteQuery(session, UnsafeTruncateQuery(), AutoCommit<UseQueryService>(), querySettings)
+                .ExtractValueSync();
         });
-        UNIT_ASSERT_VALUES_EQUAL_C(count.GetStatus(), EStatus::SUCCESS, count.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(ReadCount(count), 0u,
-            "a planned truncate is not rolled back just because the client gave up on it");
+        runtime.WaitFor("half of the shards committed unsafe truncate", [&] {
+            return completedShards.size() == 2 && blockedShards.size() == 2;
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(preparedShards.size(), shards.size());
+        UNIT_ASSERT_VALUES_EQUAL(proposals, 1u);
+        UNIT_ASSERT(!truncateFuture.HasValue());
+        UNIT_ASSERT(runtime.FindActor(executer));
+        const auto sessionActor = actorParents.at(executer);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.FindActorName(sessionActor), "KQP_SESSION_ACTOR");
+
+        if constexpr (CrashActors) {
+            // Remove both KQP actors without invoking their cancellation or cleanup
+            // handlers, as when the process hosting this query disappears.
+            for (const auto& actor : {executer, sessionActor}) {
+                const auto node = actor.NodeId() - runtime.GetFirstNodeId();
+                runtime.Send(new IEventHandle(actor, {}, new TEvents::TEvResumeRunnable(new TKqpActorCrash()),
+                    TEvents::TEvResumeRunnable::EventFlags), node, true);
+            }
+            runtime.WaitFor("KQP session and executer destroyed", [&] {
+                return !runtime.FindActor(executer) && !runtime.FindActor(sessionActor);
+            }, TDuration::Seconds(10));
+        } else {
+            runtime.Send(new IEventHandle(sessionActor, {}, new TEvKqp::TEvAbortExecution(
+                NYql::NDqProto::StatusIds::CANCELLED, "Abort unsafe truncate during commit")),
+                sessionActor.NodeId() - runtime.GetFirstNodeId(), true);
+            auto result = runtime.WaitFuture(truncateFuture, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNDETERMINED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "after it had been planned");
+            UNIT_ASSERT(!runtime.FindActor(executer));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(completedShards.size(), 2u);
+        blockedPlans.Stop().Unblock();
+        runtime.WaitFor("original truncate completed without its KQP executer", [&] {
+            return completedShards.size() == shards.size();
+        }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(proposals, 1u);
+        observeProposals.Remove();
+        observeResults.Remove();
+
+        auto observer = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+        UNIT_ASSERT_VALUES_EQUAL_C(kikimr.RunCall([&] { return CountRows(observer); }), 0u,
+            "losing KQP must not leave only part of the table truncated");
+        TStringBuilder values;
+        for (size_t i = 0; i < Y_ARRAY_SIZE(ShardKeys); ++i) {
+            values << (i ? ", " : "") << "(" << ShardKeys[i] << "ul, \"after KQP loss\")";
+        }
+        auto refill = kikimr.RunCall([&] {
+            return ExecuteQuery(observer, Sprintf("UPSERT INTO `%s` (Key, Value) VALUES %s;",
+                TablePath, values.c_str()), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(refill.GetStatus(), EStatus::SUCCESS, refill.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(kikimr.RunCall([&] { return CountRows(observer); }), 4u);
+        if constexpr (CrashActors) {
+            // The lost actors cannot reply. Close the client transport after checking
+            // the data, without waiting for a wall-clock deadline in simulated time.
+            kikimr.RunCall([&] { kikimr.GetDriverMut()->Stop(true); });
+            auto result = runtime.WaitFuture(truncateFuture, TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST_TWIN(TruncateAfterMerge, UseQueryService) {

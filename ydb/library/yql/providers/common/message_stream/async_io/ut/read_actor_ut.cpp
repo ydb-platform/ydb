@@ -2,6 +2,38 @@
 #include <ydb/library/yql/providers/common/message_stream/async_io/testlib/read_actor_fixture.h>
 
 namespace NFq::NMessageStream::NTest {
+namespace {
+class TCallbackQuotaFactory final : public IDqSchedulableWorkFactory {
+    class TWork final : public IDqSchedulableWork {
+    public:
+        explicit TWork(TCallbackQuotaFactory& owner) : Owner(owner) {}
+        std::optional<TDuration> TryStartExecution(TMonotonic) override {
+            ++Owner.Attempts;
+            if (Owner.Permits) {
+                --Owner.Permits;
+                return std::nullopt;
+            }
+            return TDuration::Hours(1);
+        }
+        void StopExecution() override { ++Owner.Stops; }
+        void NotifyResumed(bool scheduler) override { Owner.Resumes.push_back(scheduler); }
+        void RegisterForResume(const NActors::TActorId&) override {}
+        TWorkScope GetWorkScope() const override { return {}; }
+    private:
+        TCallbackQuotaFactory& Owner;
+    };
+public:
+    ui32 Permits = 0;
+    ui32 Attempts = 0;
+    ui32 Stops = 0;
+    TVector<bool> Resumes;
+    std::unique_ptr<IDqSchedulableWork> CreateSchedulableWork() override {
+        return std::make_unique<TWork>(*this);
+    }
+    TWorkScope GetWorkScope() const override { return {}; }
+};
+} // namespace
+
 Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
     Y_UNIT_TEST(AllocatorIsRequired) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(
@@ -9,6 +41,71 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
             yexception,
             "Message stream read actor requires an allocator");
     }
+
+    Y_UNIT_TEST(StaleQuotaTimerAfterSchedulerResume) {
+        using namespace NActors;
+        auto factory = std::make_shared<TCallbackQuotaFactory>();
+        TVector<ui32> callbacks;
+        TVector<TAutoPtr<IEventHandle>> timers;
+        TTestActorRuntimeBase runtime(1, false);
+        runtime.SetScheduledEventFilter([&](auto&, TAutoPtr<IEventHandle>& event, TDuration, TInstant&) {
+            timers.emplace_back(event.Release());
+            return true;
+        });
+        runtime.Initialize();
+        TMessageStreamReadActorSettings settings;
+        settings.WorkFactory = factory;
+        settings.Alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__);
+        auto [input, actor] = CreateMessageStreamReadActor(std::move(settings), std::make_unique<TState>());
+        Y_UNUSED(input);
+        const auto actorId = runtime.Register(actor);
+        const auto dispatchUntil = [&](auto condition) {
+            TDispatchOptions options;
+            options.CustomFinalCondition = condition;
+            if (!condition()) {
+                runtime.DispatchEvents(options);
+            }
+            UNIT_ASSERT(condition());
+        };
+        runtime.Send(new IEventHandle(actorId, TActorId(), new TEvExecuteMessageStreamCallback([&] {
+            callbacks.push_back(1);
+        })));
+        runtime.Send(new IEventHandle(actorId, TActorId(), new TEvExecuteMessageStreamCallback([&] {
+            callbacks.push_back(2);
+        })));
+        dispatchUntil([&] { return timers.size() == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(factory->Attempts, 1);
+        UNIT_ASSERT(callbacks.empty());
+
+        // Resume the first callback, then block on the second one with a new timer.
+        factory->Permits = 1;
+        runtime.Send(new IEventHandle(actorId, TActorId(), new TEvents::TEvWakeup(201)));
+        dispatchUntil([&] { return timers.size() == 2; });
+        UNIT_ASSERT_VALUES_EQUAL(callbacks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(callbacks[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(factory->Attempts, 3);
+        UNIT_ASSERT_VALUES_EQUAL(factory->Stops, 1);
+        UNIT_ASSERT_VALUES_EQUAL(factory->Resumes.size(), 1);
+        UNIT_ASSERT(factory->Resumes[0]);
+
+        // The old timer must not attempt to acquire the newly available quota.
+        factory->Permits = 1;
+        // Send delivers synchronously in this runtime.
+        runtime.Send(timers[0].Release());
+        UNIT_ASSERT_VALUES_EQUAL(factory->Attempts, 3);
+        UNIT_ASSERT_VALUES_EQUAL(factory->Resumes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(callbacks.size(), 1);
+
+        runtime.Send(timers[1].Release());
+        dispatchUntil([&] { return callbacks.size() == 2; });
+        UNIT_ASSERT_VALUES_EQUAL(callbacks[1], 2);
+        UNIT_ASSERT_VALUES_EQUAL(factory->Attempts, 4);
+        UNIT_ASSERT_VALUES_EQUAL(factory->Stops, 2);
+        UNIT_ASSERT_VALUES_EQUAL(factory->Resumes.size(), 2);
+        UNIT_ASSERT(!factory->Resumes[1]);
+    }
+
+
     Y_UNIT_TEST(StreamingDoesNotRequireWriteTimeOrEndOffset) {
         TFixture f;
         f.Client->SupportsWriteTime = false;

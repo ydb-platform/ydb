@@ -473,3 +473,9 @@
 - source_filter: "^contrib/restricted/fftw3|^contrib/libs/audiowmark"
   includes:
   - fftw3.h: contrib/restricted/fftw3/api/fftw3.h
+
+# allow openssl3-specific includes to be resolved into nothing
+- includes:
+  - openssl/core_names.h
+- includes:
+  - openssl/core_names.h: contrib/libs/openssl-3/include/openssl/core_names.h

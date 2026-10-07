@@ -26,7 +26,7 @@ private:
     TConclusion<std::optional<bool>> GetMonoInput(const std::shared_ptr<IChunkedArray>& inputArray) const;
     TConclusion<bool> GetMonoInput(const std::shared_ptr<arrow::Scalar>& scalar) const;
 
-    bool IsFinishDatum(const arrow::Datum& datum) const;
+    bool IsFinishAccessor(const std::shared_ptr<IChunkedArray>& accessor) const;
     virtual ui64 DoGetWeight() const override;
 
 public:

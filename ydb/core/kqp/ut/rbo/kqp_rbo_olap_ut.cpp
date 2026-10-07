@@ -9,6 +9,7 @@
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/plan2svg/plan2svg.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -39,6 +40,49 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpRboOlap) {
+
+    Y_UNIT_TEST_TWIN(ExplainSharedStageOnce, Analyze) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        NYdb::NQuery::TExecuteQuerySettings querySettings;
+        if (Analyze) {
+            querySettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+        } else {
+            querySettings.ExecMode(NYdb::NQuery::EExecMode::Explain);
+        }
+        auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
+            SELECT COUNT(DISTINCT resource_id), COUNT(*)
+            FROM `/Root/olapStore/olapTable`;
+        )", NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetStats());
+        UNIT_ASSERT(result.GetStats()->GetPlan());
+
+        NJson::TJsonValue planJson;
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &planJson, true);
+        const auto& plan = planJson.GetMapSafe().at("Plan");
+        UNIT_ASSERT_C(ValidatePlanNodeIds(plan), plan);
+
+        THashSet<TString> stageGuids;
+        for (const auto& guid : FindPlanNodes(plan, "StageGuid")) {
+            UNIT_ASSERT_C(stageGuids.insert(guid.GetStringSafe()).second, plan);
+        }
+
+        const auto cteReferences = FindPlanNodes(plan, "CTE Name");
+        UNIT_ASSERT_C(!cteReferences.empty(), plan);
+        for (const auto& cte : cteReferences) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                CountPlanNodesByKv(plan, "Subplan Name", "CTE " + cte.GetStringSafe()), 1, plan);
+        }
+
+        NPlan2Svg::TPlanVisualizer visualizer;
+        visualizer.LoadPlans(plan);
+        UNIT_ASSERT(visualizer.PrintSvg().StartsWith("<svg"));
+    }
 
     void CreateTableOfAllTypes(TKikimrRunner& kikimr) {
         auto& legacyClient = kikimr.GetTestClient();

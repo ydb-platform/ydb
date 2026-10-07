@@ -646,12 +646,15 @@ class TestViewer(object):
                                     })
 
         # groups
+        # Fresh reservations make usage depend on asynchronous writes and compaction, including zero values.
+        replace_with_types.update({'Used',
+                                   'MaxVDiskSlotUsage',
+                                   'MaxVDiskRawUsage',
+                                   })
         replace_with_values.update({'Available',
                                     'Limit',
                                     'MaxPDiskUsage',
-                                    'MaxVDiskSlotUsage',
                                     'MaxNormalizedOccupancy',
-                                    'MaxVDiskRawUsage',
                                     })
 
         # pdisks
@@ -662,23 +665,25 @@ class TestViewer(object):
                                     'SlotSize',
                                     'SlotCount',
                                     'EnforcedDynamicSlotSize',
+                                    'UserChunkPoolSize',
                                     'PDiskUsage',
                                     })
 
         result = cls.replace_values_by_key_and_value(result, {'Status'}, {'ACTIVE', 'INACTIVE'})
 
         # vdisks
+        replace_with_types.update({'AllocatedSize',
+                                   'VDiskSlotUsage',
+                                   'VDiskRawUsage',
+                                   })
         replace_with_values.update({'AvailableSize',
-                                    'AllocatedSize',
                                     'IncarnationGuid',
                                     'InstanceGuid',
                                     'WriteThroughput',
                                     'ReadThroughput',
                                     'StorageSize',
                                     'StorageCount',
-                                    'VDiskSlotUsage',
                                     'NormalizedOccupancy',
-                                    'VDiskRawUsage',
                                     })
 
         # cluster
@@ -1113,6 +1118,25 @@ class TestViewer(object):
     def test_viewer_sysinfo(cls):
         result = cls.get_viewer_normalized("/viewer/sysinfo")
         return result
+
+    @pytest.mark.parametrize('node_ids', ['1,1', '1,2,1', '0,1,.'])
+    # Node 2 is absent in this cluster; 0 and '.' refer to the HTTP server's node 1.
+    def test_viewer_sysinfo_duplicate_node_ids(self, node_ids):
+        url = 'http://localhost:%s/viewer/sysinfo' % self.cluster.nodes[1].mon_port
+
+        # Viewer returns HTTP 200 even on its timeout, so the client must time out first.
+        try:
+            response = self._make_request(requests.get, url, params={
+                'node_id': node_ids,
+                'timeout': 10000,  # Viewer timeout in milliseconds.
+            }, timeout=5)  # HTTP client timeout in seconds.
+        except requests.exceptions.Timeout:
+            pytest.fail('Viewer did not respond within 5 seconds for node_id=%s' % node_ids)
+
+        response.raise_for_status()
+        result = response.json()
+
+        assert sorted(node['NodeId'] for node in result['SystemStateInfo']) == [1], result
 
     @classmethod
     def test_viewer_vdiskinfo(cls):
@@ -2078,9 +2102,10 @@ class TestViewer(object):
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })
 
-        result['administration_bscontrollerinfo_root'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        result['administration_bscontrollerinfo_root'] = cls.replace_types_by_key(
+            cls.get_viewer("/viewer/bscontrollerinfo", headers={
+                'Cookie': 'ydb_session_id=' + cls.root_session_id,
+            }), {'DataSize'})
         result['administration_bscontrollerinfo_monitoring'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
         })
@@ -2296,6 +2321,179 @@ class TestViewer(object):
             'filter_peer_role': 'database',
         })
         return result
+
+    @classmethod
+    def test_viewer_nodes_strict_database_url_params_access(cls):
+        database_headers = cls.make_cookie_headers(cls.database_session_id)
+        database_nodes = {
+            node['Id'] for node in cls.get_viewer("/viewer/nodelist", {
+                'database': cls.dedicated_db,
+            }, headers=database_headers)
+        }
+        assert database_nodes, 'The fixture must have database nodes'
+        for role in ('any', 'static', 'other', 'unknown'):
+            denied = cls.get_viewer("/viewer/nodes", {
+                'database': cls.dedicated_db,
+                'filter_peer_role': role,
+            }, headers=database_headers)
+            assert denied.get('status_code') == 403, denied
+
+        # ENodeFields bit index -> JSON key in Nodes[] (None: bit cleared in FieldsAvailable only).
+        # Keep in sync with FieldsHiddenFromStrictDatabaseUsers in viewer_nodes.h.
+        strict_database_hidden_node_fields = {
+            3: 'PDisks',
+            4: 'VDisks',
+            6: 'Peers',
+            7: 'ReversePeers',
+            18: None,  # Missing — fields_required API name only, not emitted on Nodes[]
+            19: 'DiskSpaceUsage',
+            32: 'MaxPDiskUsage',
+            33: 'MaxVDiskSlotUsage',
+            34: 'MaxVDiskRawUsage',
+            35: 'MaxNormalizedOccupancy',
+            36: 'CapacityAlert',
+        }
+        for extra in (
+            {'fields_required': 'Peers,NodeId'},
+            {'fields_required': 'PDisks,MaxPDiskUsage,DiskSpaceUsage,NodeId'},
+            {'fields_required': 'all'},
+            {'fields_required': 'all', 'include_ddisks': 'true', 'offload_merge': 'true'},
+            {'fields_required': 'all', 'include_ddisks': 'true', 'offload_merge': 'false'},
+            {'fields_required': 'VDisks,NodeId', 'include_ddisks': 'true'},
+            {'storage': 'true', 'include_ddisks': 'true', 'fields_required': 'NodeId'},
+            {'fields_required': 'all', 'all_whiteboard_fields': 'true',
+             'offload_merge': 'false', 'dump_original_node_batches': 'true'},
+            {'fields_required': 'all', 'all_whiteboard_fields': 'true',
+             'offload_merge': 'true', 'dump_original_node_batches': 'true'},
+            {'filter_peer_role': 'database'},
+            {'filter_peer_role': ''},
+            {'storage': 'true', 'fields_required': 'NodeId'},
+            {},
+        ):
+            response = cls.get_viewer("/viewer/nodes", {
+                'database': cls.dedicated_db,
+                **extra,
+            }, headers=database_headers)
+            assert 'status_code' not in response, response
+            returned_ids = {node['NodeId'] for node in response.get('Nodes', [])}
+            assert returned_ids == database_nodes, (extra, returned_ids, database_nodes)
+            for batch in response.get('OriginalNodeBatches', []):
+                for key in ('NodesToAskFor', 'NodesToAskAbout'):
+                    assert set(batch.get(key, [])) <= database_nodes, (extra, batch, database_nodes)
+            assert int(response.get('TotalNodes', 0)) <= len(database_nodes), (extra, response.get('TotalNodes'))
+            assert int(response.get('FoundNodes', 0)) <= len(database_nodes), (extra, response.get('FoundNodes'))
+            fields_available = response.get('FieldsAvailable')
+            assert fields_available, (extra, 'FieldsAvailable missing or empty', response)
+            max_hidden_bit = max(strict_database_hidden_node_fields)
+            assert len(fields_available) > max_hidden_bit, (
+                extra, 'FieldsAvailable too short', len(fields_available), max_hidden_bit, fields_available)
+            for field_bit in strict_database_hidden_node_fields:
+                assert fields_available[-(field_bit + 1)] == '0', (extra, fields_available, field_bit)
+                fields_required = response['FieldsRequired']
+                assert fields_required[-(field_bit + 1)] == '0', (extra, fields_required, field_bit)
+            for node in response.get('Nodes', []):
+                # DDisks share the VDisks permission gate and have no separate field bit.
+                assert 'DDisks' not in node, (extra, node)
+                assert 'MaxClockSkewPeerId' not in node.get('SystemState', {}), (extra, node)
+                for json_key in strict_database_hidden_node_fields.values():
+                    if json_key is not None:
+                        assert json_key not in node, (extra, json_key, node)
+            # Default UI-like requests do not pull BSC; cluster-wide max disk/slot counts stay out.
+            if extra in ({}, {'filter_peer_role': 'database'}):
+                assert 'MaximumDisksPerNode' not in response, (extra, response)
+                assert 'MaximumSlotsPerDisk' not in response, (extra, response)
+
+        response = cls.get_viewer("/viewer/nodes", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers=database_headers)
+        assert 'status_code' not in response, response
+
+        for extra in (
+            {'pool': 'static', 'fields_required': 'NodeId'},
+            {'pool': '', 'fields_required': 'NodeId'},
+            {'storage_pool': 'static', 'fields_required': 'NodeId'},
+            {'storage_pool': '', 'fields_required': 'NodeId'},
+            {'group_id': '1', 'fields_required': 'NodeId'},
+            {'group_id': '', 'fields_required': 'NodeId'},
+            {'node_id': '1', 'fields_required': 'NodeId'},
+            {'node_id': '', 'fields_required': 'NodeId'},
+            {'group': 'Missing', 'fields_required': 'NodeId'},
+            {'group': 'DiskSpaceUsage', 'fields_required': 'NodeId'},
+            {'filter_group_by': 'Missing', 'filter_group': '0', 'fields_required': 'NodeId'},
+            {'filter_group_by': 'Missing', 'fields_required': 'NodeId'},
+            {'sort': 'Missing', 'fields_required': 'NodeId'},
+            {'sort': '-MaxPDiskUsage', 'fields_required': 'NodeId'},
+            {'with': 'missing', 'fields_required': 'NodeId'},
+            {'with': 'space', 'fields_required': 'NodeId'},
+            {'with': 'unknown', 'fields_required': 'NodeId'},
+            {'with': '', 'fields_required': 'NodeId'},
+        ):
+            denied = cls.get_viewer("/viewer/nodes", {
+                'database': cls.dedicated_db,
+                **extra,
+            }, headers=database_headers)
+            assert denied.get('status_code') == 403, (extra, denied)
+
+        for node_type in ('any', 'static', 'storage'):
+            for timeout in (1, 10, 100):
+                extra = {
+                    'database': cls.dedicated_db,
+                    'direct': 'true',
+                    'fields_required': 'all',
+                    'type': node_type,
+                    'timeout': timeout,
+                }
+                response = cls.get_viewer("/viewer/nodes", extra, headers=database_headers)
+                if 'status_code' in response:
+                    assert response['status_code'] in (503, 504), (extra, response)
+                    continue
+                returned_ids = {node['NodeId'] for node in response.get('Nodes', [])}
+                assert returned_ids <= database_nodes, (extra, returned_ids, database_nodes)
+                assert int(response.get('TotalNodes', 0)) <= len(database_nodes), (extra, response)
+                assert int(response.get('FoundNodes', 0)) <= len(database_nodes), (extra, response)
+
+        missing_database = cls.get_viewer("/viewer/nodes", {
+            'fields_required': 'NodeId',
+        }, headers=database_headers)
+        assert missing_database.get('status_code') == 400, missing_database
+
+        group_only = cls.get_viewer("/viewer/nodes", {
+            'database': cls.dedicated_db,
+            'group': 'DC',
+            'fields_required': 'NodeId',
+        }, headers=database_headers)
+        assert 'status_code' not in group_only, group_only
+        assert group_only.get('NodeGroups'), group_only
+
+        # group= disables sort=; cluster-level sort must not affect fields or response.
+        group_and_sort = cls.get_viewer("/viewer/nodes", {
+            'database': cls.dedicated_db,
+            'group': 'DC',
+            'sort': 'Missing',
+            'fields_required': 'NodeId',
+        }, headers=database_headers)
+        assert 'status_code' not in group_and_sort, group_and_sort
+        assert group_and_sort.get('NodeGroups'), group_and_sort
+        assert group_and_sort['NodeGroups'] == group_only['NodeGroups'], (group_only, group_and_sort)
+        assert group_and_sort['FieldsRequired'] == group_only['FieldsRequired'], (group_only, group_and_sort)
+
+        # Check that users with viewer+ access level can get nodes with all fields_required and filter_peer_role
+        viewer_headers = cls.make_cookie_headers(cls.viewer_session_id)
+        for role in ('any', 'static', 'other', 'database'):
+            response = cls.get_viewer("/viewer/nodes", {
+                'database': cls.dedicated_db,
+                'fields_required': 'NodeId',
+                'filter_peer_role': role,
+            }, headers=viewer_headers)
+            assert 'status_code' not in response, (role, response)
+
+        response = cls.get_viewer("/viewer/nodes", {
+            'filter_peer_role': 'any',
+            'fields_required': 'NodeId',
+        }, headers=viewer_headers)
+        assert 'status_code' not in response, response
 
     @classmethod
     def test_viewer_nodes_deleted_tablets(cls):

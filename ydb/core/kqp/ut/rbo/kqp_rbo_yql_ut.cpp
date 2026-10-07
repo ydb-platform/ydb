@@ -551,6 +551,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnMultipleStatements(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -623,6 +624,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -674,12 +676,89 @@ FROM (
 
     }
 
-    
+    Y_UNIT_TEST_TWIN(InsertSelectColumnOrder, Distinct) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        for (const TString table : {"src", "dst"}) {
+            auto result = tableSession.ExecuteSchemeQuery(TStringBuilder() << "CREATE TABLE " << table << R"( (
+                _q_001_f_001_type String,
+                _q_001_f_001_rrref String,
+                _ydb_pk Utf8,
+                PRIMARY KEY (_ydb_pk)
+            );)").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto rows = NYdb::TValueBuilder()
+            .BeginList()
+                .AddListItem().BeginStruct()
+                    .AddMember("_q_001_f_001_type").String("TYPE")
+                    .AddMember("_q_001_f_001_rrref").String("REF")
+                    .AddMember("_ydb_pk").Utf8("source")
+                .EndStruct()
+            .EndList().Build();
+        auto seed = kikimr.GetTableClient().BulkUpsert("/Root/src", std::move(rows)).GetValueSync();
+        UNIT_ASSERT_C(seed.IsSuccess(), seed.GetIssues().ToString());
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        const TString select = Distinct ? "SELECT DISTINCT " : "SELECT ";
+        const TVector<TString> queries = {
+            TStringBuilder() << R"(
+                INSERT INTO dst (_q_001_f_001_type, _q_001_f_001_rrref, _ydb_pk)
+            )" << select << R"(
+                _q_001_f_001_type, _q_001_f_001_rrref, CAST("target" AS Utf8)
+                FROM src;
+            )",
+            TStringBuilder() << R"(
+                INSERT INTO dst (_ydb_pk, _q_001_f_001_type, _q_001_f_001_rrref)
+            )" << select << R"(
+                CAST("aliased" AS Utf8) AS z, _q_001_f_001_type AS y, _q_001_f_001_rrref AS a
+                FROM src;
+            )",
+            TStringBuilder() << R"(
+                INSERT INTO dst (_q_001_f_001_type, _q_001_f_001_rrref, _ydb_pk)
+            )" << select << R"(
+                _q_001_f_001_type, _q_001_f_001_rrref, CAST("limited" AS Utf8)
+                FROM src ORDER BY _q_001_f_001_type LIMIT 1;
+            )",
+            TStringBuilder() << R"(
+                INSERT INTO dst (_ydb_pk, _q_001_f_001_type, _q_001_f_001_rrref)
+            )" << select << R"(
+                Unwrap(CAST("union" AS Utf8)) AS _ydb_pk, _q_001_f_001_type, _q_001_f_001_rrref
+                FROM src
+                UNION
+            )" << select << R"(
+                CAST("union" AS Utf8) AS _ydb_pk, _q_001_f_001_type, _q_001_f_001_rrref
+                FROM src ORDER BY _ydb_pk LIMIT 1;
+            )",
+        };
+        const auto before = GetNewRBOCompileCounters(kikimr);
+        for (const auto& query : queries) {
+            auto insert = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+        }
+        const auto after = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_C(after.first > before.first, "INSERT must use the new RBO");
+        UNIT_ASSERT_VALUES_EQUAL(after.second, before.second);
+
+        auto result = session.ExecuteQuery(R"(
+            SELECT _q_001_f_001_type, _q_001_f_001_rrref, _ydb_pk FROM dst ORDER BY _ydb_pk;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)),
+            R"([[["TYPE"];["REF"];["aliased"]];[["TYPE"];["REF"];["limited"]];[["TYPE"];["REF"];["target"]];[["TYPE"];["REF"];["union"]]])");
+    }
 
     Y_UNIT_TEST(InsertUpdate) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -777,10 +856,12 @@ FROM (
 
     }
 
-    NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig(bool inlineJoinFiltersAfterCBO = true) {
+    NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig(bool inlineJoinFiltersAfterCBO = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnDML(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnMultipleStatements(false);
         appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(inlineJoinFiltersAfterCBO);
         return appConfig;
     }
@@ -860,7 +941,7 @@ FROM (
 
     class TExplainPlanTestContext {
     public:
-        explicit TExplainPlanTestContext(bool inlineJoinFiltersAfterCBO = true)
+        explicit TExplainPlanTestContext(bool inlineJoinFiltersAfterCBO = false)
             : AppConfig(CreateExplainPlanTestAppConfig(inlineJoinFiltersAfterCBO))
             , Kikimr(NKqp::TKikimrSettings(AppConfig).SetWithSampleTables(false))
             , Session(CreateSession())
@@ -2919,6 +3000,9 @@ FROM (
             R"([[2;2];[3;3];[4;4];[5;5];[6;6];[7;7];[8;8]])",
             R"([[1;1]])",
             R"([[1;1]])",
+            R"([[1;1];[3;3];[5;5];[7;7];[9;9]])",
+            R"([[3;3];[5;5];[7;7];[9;9]])",
+            R"([[8;8];[9;9]])",
         };
 
         std::vector<std::string> queries = {
@@ -2941,6 +3025,17 @@ FROM (
             R"(
                 SELECT t1.a, t2.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a WHERE t1.a = 1 and t2.b = 1 order by t1.a;
             )",
+            // IN lists longer than 5 items are not expanded into an Or chain by peephole.
+            R"(
+                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a IN (1, 3, 5, 7, 9, 11) order by t1.a;
+            )",
+            R"(
+                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a IN (1, 3, 5, 7, 9, 11) and t1.c > 1 order by t1.a;
+            )",
+            // IS NOT NULL over a non optional key column.
+            R"(
+                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a IS NOT NULL and t1.a > 7 order by t1.a;
+            )",
         };
 
         auto queryClient = kikimr.GetQueryClient();
@@ -2953,7 +3048,7 @@ FROM (
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             auto ast = *result.GetStats()->GetAst();
-            UNIT_ASSERT_C(ast.find("RangeFinalize") != TString::npos, "Ranges not pushed");
+            UNIT_ASSERT_C(ast.find("RangeFinalize") != TString::npos, "Ranges not pushed for query: " << query);
 
             result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
                          .ExtractValueSync();
@@ -3481,6 +3576,20 @@ FROM (
                 PRAGMA YqlSelect = 'force';
                 select count(distinct t1.a) as r0, count(distinct t1.c) as r1, count(t1.d) as r2 from `/Root/t1` as t1 group by t1.b order by r0, r1, r2;
             )",
+            // GROUP BY without aggregation functions must still emit one row per distinct key.
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t1.b from `/Root/t1` as t1 group by t1.b order by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                PRAGMA AnsiImplicitCrossJoin;
+                select t1.b, t2.c from `/Root/t1` as t1, `/Root/t2` as t2 where t1.b = t2.b group by t1.b, t2.c order by t1.b limit 100;
+            )",
+            R"(
+                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
+                select t1.d + 1 as k from `/Root/t1` as t1 group by t1.d + 1 order by k;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -3538,7 +3647,10 @@ FROM (
                                             R"([[2.;[2.]];[2.;[2.]]])",
                                             R"([[0;2;2];[1;1;2];[2;2;2];[3;1;2];[4;2;2]])",
                                             R"([[5u;5u;5u]])",
-                                            R"([[2u;1u;2u];[3u;1u;3u]])"
+                                            R"([[2u;1u;2u];[3u;1u;3u]])",
+                                            R"([[[1]];[[2]]])",
+                                            R"([[[1];[2]];[[2];[2]]])",
+                                            R"([[[1]];[[2]];[[3]]])"
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -3774,6 +3886,7 @@ FROM (
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(UseBlockHashJoin);
         appConfig.MutableTableServiceConfig()->SetUseBlockHashJoinForCross(UseBlockHashJoinForCross);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
@@ -5170,7 +5283,6 @@ FROM (
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(true);
         appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
 
@@ -5293,7 +5405,6 @@ FROM (
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(true);
         appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
 
@@ -5386,9 +5497,9 @@ FROM (
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(true);
         appConfig.MutableTableServiceConfig()->SetUseBlockHashJoin(true);
         appConfig.MutableTableServiceConfig()->SetUseBlockHashJoinForCross(true);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -5775,9 +5886,9 @@ FROM (
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnMultipleStatements(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
-        appConfig.MutableTableServiceConfig()->SetEnablePruneKeyColumns(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
 
@@ -5838,8 +5949,8 @@ FROM (
         }
     }
 
-    void RunWindowFunctionsTest(const bool newRbo, const bool columnStore, TVector<TString>& names, TVector<TString>& results,
-                                TVector<TString>& issues) {
+    void RunWindowFunctionsTest(const bool newRbo, const bool columnStore, const bool aggregates, TVector<TString>& names,
+                                TVector<TString>& results, TVector<TString>& issues) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -6779,9 +6890,134 @@ FROM (
                 FROM `/Root/t1`
                 ORDER BY a;
             )"},
+            {"rank over group by without aggregates", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, Rank() OVER (PARTITION BY b ORDER BY c) AS rnk
+                FROM `/Root/t1`
+                GROUP BY b, c
+                ORDER BY b, c;
+            )"},
         };
 
-        for (const auto& [name, query] : queries) {
+        const TVector<std::pair<TString, TString>> aggregateQueries = {
+            {"whole partition aggregates", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b,
+                    Sum(e) OVER w AS total,
+                    Min(e) OVER w AS min_e,
+                    Max(e) OVER w AS max_e,
+                    Avg(e) OVER w AS avg_e,
+                    Count(e) OVER w AS cnt
+                FROM `/Root/t1`
+                WINDOW w AS (PARTITION BY b)
+                ORDER BY a;
+            )"},
+            {"whole partition aggregates over a not null measure", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b,
+                    Sum(a) OVER w AS total,
+                    Min(a) OVER w AS min_a,
+                    Max(a) OVER w AS max_a,
+                    Avg(a) OVER w AS avg_a,
+                    Count(a) OVER w AS cnt
+                FROM `/Root/t1`
+                WINDOW w AS (PARTITION BY b)
+                ORDER BY a;
+            )"},
+            {"whole partition aggregates over a not null measure without a partition", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a,
+                    Sum(a) OVER () AS total,
+                    Max(a) OVER () AS max_a,
+                    Avg(a) OVER () AS avg_a
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"interval sum without a partition", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a,
+                    Sum(Interval("PT1S")) OVER () AS total
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"running aggregates over a not null measure", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b,
+                    Sum(a) OVER w AS total,
+                    Min(a) OVER w AS min_a,
+                    Avg(a) OVER w AS avg_a
+                FROM `/Root/t1`
+                WINDOW w AS (PARTITION BY b ORDER BY a ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                ORDER BY a;
+            )"},
+            {"range running aggregates over a not null measure", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c,
+                    Sum(a) OVER w AS total,
+                    Max(a) OVER w AS max_a
+                FROM `/Root/t1`
+                WINDOW w AS (PARTITION BY b ORDER BY c)
+                ORDER BY a;
+            )"},
+            {"sliding frame over a not null measure", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b,
+                    Sum(a) OVER w AS total,
+                    Max(a) OVER w AS max_a
+                FROM `/Root/t1`
+                WINDOW w AS (PARTITION BY b ORDER BY a ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+                ORDER BY a;
+            )"},
+            {"whole partition aggregates without a partition", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a,
+                    Sum(e) OVER () AS total,
+                    Max(c) OVER () AS max_c,
+                    Count(*) OVER () AS cnt
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"whole partition range frame over two partition keys", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, d, e,
+                    Sum(e) OVER w AS total,
+                    Avg(f) OVER w AS avg_f
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b, d
+                    ORDER BY c
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"ranking and whole partition aggregates in one window", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c,
+                    Rank() OVER w AS rank_in_group,
+                    Sum(e) OVER w AS total,
+                    Count(e) OVER w AS cnt
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+        };
+
+        for (const auto& [name, query] : aggregates ? aggregateQueries : queries) {
             auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
             auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             names.push_back(name);
@@ -6797,17 +7033,17 @@ FROM (
     const THashSet<TString> WindowQueriesNotLoweredYet{
     };
 
-    Y_UNIT_TEST_TWIN(WindowFunctions, ColumnStore) {
+    void CompareWindowFunctionsWithOldOptimizer(const bool columnStore, const bool aggregates) {
         TVector<TString> oldNames, oldResults, oldIssues;
-        RunWindowFunctionsTest(/*newRbo=*/false, ColumnStore, oldNames, oldResults, oldIssues);
+        RunWindowFunctionsTest(/*newRbo=*/false, columnStore, aggregates, oldNames, oldResults, oldIssues);
         UNIT_ASSERT_VALUES_EQUAL_C(oldIssues.size(), 0, "The old optimizer must run every window query: "
                                                             << JoinSeq("; ", oldIssues));
 
         TVector<TString> newNames, newResults, newIssues;
-        RunWindowFunctionsTest(/*newRbo=*/true, ColumnStore, newNames, newResults, newIssues);
+        RunWindowFunctionsTest(/*newRbo=*/true, columnStore, aggregates, newNames, newResults, newIssues);
         UNIT_ASSERT_VALUES_EQUAL(oldNames.size(), newNames.size());
 
-        const TString table = ColumnStore ? "column" : "row";
+        const TString table = columnStore ? "column" : "row";
         for (ui32 i = 0; i < oldNames.size(); ++i) {
             const auto& name = oldNames[i];
             const bool lowered = !newResults[i].empty();
@@ -6821,6 +7057,14 @@ FROM (
             UNIT_ASSERT_VALUES_EQUAL_C(newResults[i], oldResults[i],
                                        "New RBO returned different rows for '" << name << "' on a " << table << " table");
         }
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctions, ColumnStore) {
+        CompareWindowFunctionsWithOldOptimizer(ColumnStore, /*aggregates=*/false);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowAggregates, ColumnStore) {
+        CompareWindowFunctionsWithOldOptimizer(ColumnStore, /*aggregates=*/true);
     }
 
     Y_UNIT_TEST_TWIN(WindowSortWithoutBlocksUnderWindowFunctionsV2, WindowFunctionsV2) {
@@ -6867,6 +7111,95 @@ FROM (
         }
     }
 
+    Y_UNIT_TEST_TWIN(WholePartitionWindowAsAggregateJoin, WindowFunctionsV2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                c Int64,
+                PRIMARY KEY (a)
+            ) WITH (Store = Column);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        {
+            using TCell = std::optional<i64>;
+            const TVector<std::tuple<i64, TCell, TCell>> rowData = {
+                {1, 1, 10},
+                {2, 1, 20},
+                {3, 2, 5},
+                {4, std::nullopt, 7},
+                {5, std::nullopt, std::nullopt},
+            };
+
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [a, b, c] : rowData) {
+                rows.AddListItem().BeginStruct();
+                rows.AddMember("a").Int64(a);
+                for (const auto& [name, cell] : {std::pair{"b", b}, std::pair{"c", c}}) {
+                    rows.AddMember(name);
+                    if (cell) {
+                        rows.BeginOptional().Int64(*cell).EndOptional();
+                    } else {
+                        rows.EmptyOptional(NYdb::EPrimitiveType::Int64);
+                    }
+                }
+                rows.EndStruct();
+            }
+            rows.EndList();
+
+            auto seedResult = kikimr.GetTableClient().BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(seedResult.IsSuccess(), seedResult.GetIssues().ToString());
+        }
+
+        auto client = kikimr.GetQueryClient();
+        const TString query = TStringBuilder() << R"(
+            PRAGMA YqlSelect = "force";
+            PRAGMA ydb.WindowFunctionsV2 = ")" << (WindowFunctionsV2 ? "true" : "false") << R"(";
+
+            SELECT a,
+                Sum(c) OVER (PARTITION BY b) AS s,
+                Count(a) OVER (PARTITION BY b) AS cnt,
+                Max(a) OVER (PARTITION BY b) AS max_a
+            FROM `/Root/t1`
+            ORDER BY a;
+        )";
+
+        auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
+        auto explain = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+        UNIT_ASSERT_C(explain.GetStats() && explain.GetStats()->GetAst(), "AST is not available");
+        const TString ast(*explain.GetStats()->GetAst());
+
+        if (WindowFunctionsV2) {
+            UNIT_ASSERT_C(!ast.Contains("WideChopper"), ast);
+            UNIT_ASSERT_C(!ast.Contains("Fold1"), ast);
+        } else {
+            UNIT_ASSERT_C(ast.Contains("WideChopper"), ast);
+            UNIT_ASSERT_C(ast.Contains("Fold1"), ast);
+        }
+
+        auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([
+            [1;[30];2u;2];
+            [2;[30];2u;2];
+            [3;[5];1u;3];
+            [4;[7];2u;5];
+            [5;[7];2u;5]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     std::set<ui32> MakePerf_YqlSingleQuerySkipList(const EBenchType type, const ui32 queryId) {
         std::set<ui32> skipList;
         for (ui32 qId = 1, e = BenchmarkQueryCount[type]; qId <= e; ++qId) {
@@ -6898,6 +7231,8 @@ FROM (
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackOnMultipleStatements(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
@@ -6990,6 +7325,10 @@ FROM (
             elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;
             Cout << testName << "," << queryId << "," << newRbo << "," << elapsed_time / nIterations << "\n";
         }
+    }
+
+    Y_UNIT_TEST(TPCDS_14) {
+        RunPerf_YqlTest(EBenchType::TPCDS, 14, true, true);
     }
 
     Y_UNIT_TEST(CompilationTimeBench_TPCH) {
@@ -7984,7 +8323,7 @@ FROM (
                         /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                         // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
                         // in the query or until the known gaps are fixed.
-                        /*queriesWithoutCboCheck=*/{4, 15, 31, 58, 64, 66, 72, 78, 85});
+                        /*queriesWithoutCboCheck=*/{});
     }
 
     Y_UNIT_TEST(ClickBench_YQL) {
@@ -8647,6 +8986,72 @@ FROM (
                 ORDER BY t1.a;
              )",
              R"([[2];[3];[5];[6];[7];[8];[10];[11];[12]])"},
+
+            // ORDER BY without LIMIT does not change the subquery result.
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.b IN (SELECT t2.b FROM `/Root/t2` as t2 WHERE t2.a < t1.a ORDER BY t2.a DESC)
+                ORDER BY t1.a;
+             )",
+             R"([[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` as t2 WHERE t2.b == t1.b ORDER BY t2.c)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.c > (SELECT t2.c FROM `/Root/t2` as t2 WHERE t2.a == t1.a ORDER BY t2.c)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[3];[4];[5];[6];[7];[8];[9]])"},
+
+            // ORDER BY ... LIMIT applies per outer row.
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` as t2 WHERE t2.b == t1.b LIMIT 1)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            // Without the limit 12 qualifies too: t2.b == 0 for t2.a == 9.
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.b IN (SELECT t2.b FROM `/Root/t2` as t2 WHERE t2.a < t1.a ORDER BY t2.a DESC LIMIT 2)
+                ORDER BY t1.a;
+             )",
+             R"([[4];[5];[6];[8];[9];[10]])"},
+
+            // The second largest t2.c per t2.b: 81, 49, 64.
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.c > (SELECT t2.c FROM `/Root/t2` as t2 WHERE t2.b == t1.b ORDER BY t2.c DESC LIMIT 1 OFFSET 1)
+                ORDER BY t1.a;
+             )",
+             R"([[5];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a, (SELECT t2.a FROM `/Root/t2` as t2 WHERE t2.b == t1.b AND t2.a > t1.a ORDER BY t2.a LIMIT 1) AS next
+                FROM `/Root/t1` as t1
+                ORDER BY t1.a;
+             )",
+             R"([[1;[4]];[2;[5]];[3;#];[4;[6]];[5;[7]];[6;[8]];[7;#];[8;[9]];[9;[10]];[10;[11]];[11;#];[12;#]])"},
+
+            // Not shared, so not copied: the aggregate some of the inner scalar subquery is decorrelated in place.
+            // The inner subquery keeps t2.a <= 6.
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.b IN (
+                    SELECT t2.b FROM `/Root/t2` as t2
+                    WHERE t2.a < t1.a AND t2.c >= (SELECT t3.c FROM `/Root/t3` as t3 WHERE t3.a == t2.a)
+                    GROUP BY t2.b, t2.d
+                )
+                ORDER BY t1.a;
+             )",
+             R"([[4];[5];[6];[8];[9];[10];[12]])"},
         };
 
         for (ui32 i = 0; i < cases.size(); ++i) {
@@ -8667,6 +9072,11 @@ FROM (
             R"(SELECT t1.a FROM `/Root/t1` as t1
                WHERE t1.c > (SELECT t2.c FROM `/Root/t2` as t2 WHERE t2.b == t1.b GROUP BY t2.c)
                ORDER BY t1.a;)",
+
+            // Dropping the sort keeps the check.
+            R"(SELECT t1.a FROM `/Root/t1` as t1
+               WHERE t1.c > (SELECT t2.c FROM `/Root/t2` as t2 WHERE t2.b == t1.b ORDER BY t2.c)
+               ORDER BY t1.a;)",
         };
 
         for (ui32 i = 0; i < multiRowQueries.size(); ++i) {
@@ -8676,6 +9086,36 @@ FROM (
             UNIT_ASSERT_C(!result.IsSuccess(), "multi row query " << i << " unexpectedly succeeded");
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Scalar subquery returned more than one row",
                                           "multi row query " << i);
+        }
+
+        // The grouping set branches share the correlated filter through a Replicate. Decorrelation copies a shared
+        // correlated operator for each branch, but a copy is evaluated again, so with a nondeterministic expression
+        // the branches could see other rows. Every predicate below keeps every row: once such a filter is supported,
+        // the expected result is [[4];[5];[6];[8];[9];[10];[12]].
+        const std::vector<std::string> nondeterministicPredicates = {
+            // Random returns a value below 1.
+            "Random(t2.a) < 2.0",
+            // Only the peephole path turns a call without arguments into a parameter.
+            R"(CurrentUtcTimestamp() > Timestamp("2000-01-01T00:00:00Z"))",
+            R"(CurrentUtcDate(t2.a) > Date("2000-01-01"))",
+            // This UDF is deterministic, but nothing says so for UDFs in general.
+            "Digest::IntHash64(CAST(t2.a AS Uint64)) >= 0",
+        };
+
+        for (const auto& predicate : nondeterministicPredicates) {
+            const TString query = TStringBuilder() << R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.b IN (
+                    SELECT t2.b FROM `/Root/t2` as t2 WHERE t2.a < t1.a AND )" << predicate << R"(
+                    GROUP BY ROLLUP(t2.b, t2.d)
+                )
+                ORDER BY t1.a;
+            )";
+            const auto status = queryClient.RetryQuerySync([&](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+                return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(!status.IsSuccess(), predicate << " unexpectedly succeeded");
+            UNIT_ASSERT_STRING_CONTAINS_C(status.GetIssues().ToString(), "correlation cannot be pushed through Replicate", predicate);
         }
     }
 
@@ -12282,6 +12722,11 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
                 group by rollup(t1.b)
                 order by b;
             )",
+            R"(
+                SELECT t1.b as b, t1.c as c FROM `/Root/t1` as t1
+                group by rollup(t1.b, t1.c)
+                order by b, c;
+            )",
         };
 
         const std::vector<std::string> results = {
@@ -12293,6 +12738,7 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
             R"([[[10];[1];[4];[2.5];#;#];[[1];[1];[1];[1.];[0];#];[[1];[1];[1];[1.];[0];[2]];[[2];[2];[2];[2.];[1];#];[[2];[2];[2];[2.];[1];[3]];[[3];[3];[3];[3.];[2];#];[[3];[3];[3];[3.];[2];[4]];[[4];[4];[4];[4.];[3];#];[[4];[4];[4];[4.];[3];[5]]])",
             R"([[6u;#];[3u;[1]];[3u;[2]];[3u;[3]];[3u;[4]]])",
             R"([[4u;#];[1u;[1]];[1u;[2]];[1u;[3]];[1u;[4]]])",
+            R"([[#;#];[[1];#];[[1];[2]];[[2];#];[[2];[3]];[[3];#];[[3];[4]];[[4];#];[[4];[5]]])",
         };
 
         auto queryClient = kikimr.GetQueryClient();
@@ -12370,6 +12816,11 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
                 group by rollup(t1.b, t1.c)
                 order by gc, rnk;
             )",
+            R"(
+                SELECT t1.b as b, grouping(t1.b) as g FROM `/Root/t1` as t1
+                group by rollup(t1.b)
+                order by b;
+            )",
         };
 
         const std::vector<std::string> results = {
@@ -12381,6 +12832,7 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
             R"([[0];[1];[2];0u];[[1];[2];[3];0u];[[2];[3];[4];0u];[[3];[4];[5];0u]])",
             R"([[[4];[5];0u;1u];[[3];[4];0u;2u];[[2];[3];0u;3u];[[1];[2];0u;4u];)"
             R"([#;#;1u;1u];[[4];#;1u;2u];[[3];#;1u;3u];[[2];#;1u;4u];[[1];#;1u;5u]])",
+            R"([[#;1u];[[1];0u];[[2];0u];[[3];0u];[[4];0u]])",
         };
 
         auto queryClient = kikimr.GetQueryClient();

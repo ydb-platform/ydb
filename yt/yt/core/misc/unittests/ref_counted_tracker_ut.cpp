@@ -304,7 +304,7 @@ TEST(TRefCountedTrackerTest, RefTracked)
 TEST(TForkAwareSpinLockTest, ForkSafetyWithAllocations)
 {
     std::atomic<bool> stopped = {false};
-    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, lock);
+    YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, lock);
 
     auto acquireTask = [&lock, &stopped] {
         while (!stopped.load()) {

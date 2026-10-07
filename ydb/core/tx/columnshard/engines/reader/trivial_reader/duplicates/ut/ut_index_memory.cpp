@@ -23,7 +23,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -103,14 +103,15 @@ ui64 ReservedMemory(NTrivial::TPortionDataSource& source, const THashMap<ui32, N
 
 NArrow::NSSA::IDataSource::TFetchIndexContext IndexFetch(const NArrow::NSSA::TIndexCheckOperation::EOperation operation) {
     NArrow::NSSA::IDataSource::TFetchIndexContext::TOperationsBySubColumn operations;
-    operations.Add("", NArrow::NSSA::TIndexCheckOperation(operation, true));
+    operations.Add({}, NArrow::NSSA::TIndexCheckOperation(operation, true));
     return NArrow::NSSA::IDataSource::TFetchIndexContext(PkColumnId, operations);
 }
 
 NArrow::NSSA::IDataSource::TFetchIndexContext IndexFetchPaths(const std::vector<TString>& paths) {
     NArrow::NSSA::IDataSource::TFetchIndexContext::TOperationsBySubColumn operations;
     for (const auto& path : paths) {
-        operations.Add(path, NArrow::NSSA::TIndexCheckOperation(NArrow::NSSA::TIndexCheckOperation::EOperation::Equals, true));
+        operations.Add(NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName::Parse(path),
+            NArrow::NSSA::TIndexCheckOperation(NArrow::NSSA::TIndexCheckOperation::EOperation::Equals, true));
     }
     return NArrow::NSSA::IDataSource::TFetchIndexContext(PkColumnId, operations);
 }

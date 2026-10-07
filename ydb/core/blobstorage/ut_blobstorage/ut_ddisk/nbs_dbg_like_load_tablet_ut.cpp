@@ -16,6 +16,9 @@
 #include <ydb/core/protos/tablet.pb.h>
 #include <library/cpp/monlib/service/mon_service_http_request.h>
 
+#include <algorithm>
+#include <optional>
+
 namespace {
 struct TResultsHttpRequest : NMonitoring::IHttpRequest {
     TCgiParameters Params;
@@ -180,7 +183,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         }
 
         ENbsLoadTabletStatus TabletCreate(
-            TActorId pipe, ui32 numDirectBlockGroups, ui64 bscTabletId = 1)
+            TActorId pipe, ui32 numDirectBlockGroups, ui64 bscTabletId = 1, ui32 numVChunks = 1)
         {
             Env.Runtime->WrapInActorContext(Edge, [&] {
                 auto ev = std::make_unique<TEvLoad::TEvNbsLoadTabletAllocateGroups>();
@@ -189,7 +192,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                 cfg.SetDDiskPoolName("ddisk_pool");
                 cfg.SetPersistentBufferDDiskPoolName("ddisk_pool");
                 cfg.SetNumDirectBlockGroups(numDirectBlockGroups);
-                cfg.SetTargetNumVChunks(1);
+                cfg.SetTargetNumVChunks(numVChunks);
                 cfg.SetVChunkSizeBytes(128_MB);
                 NTabletPipe::SendData(Edge, pipe, ev.release());
             });
@@ -372,9 +375,11 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
 
         constexpr ui32 blockSize = 4096;
         constexpr ui64 requestCookie = 0x1234;
+        constexpr ui64 configurationId = 1;
         f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
             auto ev = std::make_unique<TEvLoad::TEvConfigureTablet>();
             auto& cfg = ev->Record;
+            cfg.SetConfigurationId(configurationId);
             cfg.SetMaxInflightLsns(4);
             cfg.SetFlushBatchSize(1);
             cfg.SetEraseBatchSize(1);
@@ -384,9 +389,15 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             cfg.SetIoSizeBytes(blockSize);
             NTabletPipe::SendData(f.Edge, pipe, ev.release());
         });
+        auto configured = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvConfigureTabletResult>(
+            f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(configured);
+        UNIT_ASSERT_VALUES_EQUAL(configured->Get()->Record.GetConfigurationId(), configurationId);
+        UNIT_ASSERT_C(configured->Get()->Record.GetSuccess(), configured->Get()->Record.GetError());
 
         TString firstPeer;
         ui32 injectedReplies = 0;
+        std::unique_ptr<IEventHandle> lateReply;
         auto previousFilter = std::move(f.Env.Runtime->FilterFunction);
         f.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NDDisk::TEvWritePersistentBuffersResult::EventType) {
@@ -395,6 +406,11 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                 for (const auto& sub : record.GetResult()) {
                     UNIT_ASSERT_C(sub.GetResult().GetStatus() == TStatus::OK, sub.DebugString());
                 }
+
+                auto original = std::make_unique<NDDisk::TEvWritePersistentBuffersResult>();
+                original->Record = record;
+                lateReply.reset(new IEventHandle(event->GetRecipientRewrite(), event->Sender,
+                    original.release(), 0, event->Cookie));
 
                 // Mutate the aggregate in place to preserve its LSN cookie and
                 // the peer identities used by the tablet's quorum calculation.
@@ -440,6 +456,9 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         UNIT_ASSERT_C(!reason.Contains("OVERFILL"), reason);
         UNIT_ASSERT_C(!reason.Contains("later PB failure"), reason);
 
+        UNIT_ASSERT(lateReply);
+        const ui32 replyNode = lateReply->Sender.NodeId();
+        f.Env.Runtime->Send(lateReply.release(), replyNode);
         UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
         f.ClosePipe(pipe);
     }
@@ -450,6 +469,1316 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
 
     Y_UNIT_TEST(PbWriteQuorumLossWithoutErrorReason) {
         CheckPbWriteQuorumLoss("");
+    }
+
+    struct TIoFixture : TFixture {
+        ui64 TabletId;
+        TActorId Pipe;
+        ui32 NumDbgs;
+        ui32 IoSize = 4096;
+        std::set<TActorId> Workers;
+        std::function<bool(ui32, std::unique_ptr<IEventHandle>&)> PreviousFilter;
+        std::function<bool(IEventHandle&)> Hold;
+        std::function<void(IEventHandle&)> Observe;
+        std::vector<std::unique_ptr<IEventHandle>> Held;
+        std::map<const IEventHandle*, ui32> HeldNodes;
+
+        explicit TIoFixture(ui32 numDbgs = 1, ui32 numVChunks = 1)
+            : TFixture(numDbgs > 1 ? 1 : 4)
+            , TabletId(CreateNbsLoadTabletViaHive(1))
+            , Pipe(OpenTabletPipe(TabletId))
+            , NumDbgs(numDbgs)
+        {
+            UNIT_ASSERT_VALUES_EQUAL(TabletCreate(Pipe, numDbgs, 1, numVChunks), NBSLT_OK);
+            Env.Sim(TDuration::Seconds(5));
+            Configure();
+            PreviousFilter = std::move(Env.Runtime->FilterFunction);
+            Env.Runtime->FilterFunction = [this](ui32 node, std::unique_ptr<IEventHandle>& event) {
+                if (event->GetTypeRewrite() == NDDisk::TEvWritePersistentBuffers::EventType) {
+                    Workers.insert(event->Sender);
+                }
+                if (Observe) {
+                    Observe(*event);
+                }
+                if (Hold && Hold(*event)) {
+                    HeldNodes.emplace(event.get(), node);
+                    Held.push_back(std::move(event));
+                    return false;
+                }
+                return PreviousFilter ? PreviousFilter(node, event) : true;
+            };
+        }
+
+        ~TIoFixture() {
+            Env.Runtime->FilterFunction = std::move(PreviousFilter);
+        }
+
+        void SendConfiguration(ui64 id = 1, ui32 gate = 1, ui32 ioSize = 4096,
+            ui32 flushBatch = 16, ui32 eraseBatch = 16, ui32 cap = 2000, bool disableReplication = false)
+        {
+            IoSize = ioSize;
+            Env.Runtime->WrapInActorContext(Edge, [&] {
+                auto event = std::make_unique<TEvLoad::TEvConfigureTablet>();
+                auto& cfg = event->Record;
+                cfg.SetConfigurationId(id);
+                cfg.SetMaxInflightLsns(cap);
+                cfg.SetDisableReplication(disableReplication);
+                cfg.SetFlushBatchSize(flushBatch);
+                cfg.SetEraseBatchSize(eraseBatch);
+                cfg.SetSyncRequestsBatchSize(gate);
+                cfg.SetPBufferReplyTimeoutMicroseconds(500000);
+                cfg.SetNumDirectBlockGroupsToUse(NumDbgs);
+                cfg.SetIoSizeBytes(ioSize);
+                NTabletPipe::SendData(Edge, Pipe, event.release(), id);
+            });
+        }
+
+        void WaitConfigured(ui64 id) {
+            auto reply = Env.WaitForEdgeActorEvent<TEvLoad::TEvConfigureTabletResult>(
+                Edge, false, Deadline(TDuration::Seconds(30)));
+            UNIT_ASSERT(reply);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetConfigurationId(), id);
+            UNIT_ASSERT_C(reply->Get()->Record.GetSuccess(), reply->Get()->Record.GetError());
+        }
+
+        void Configure(ui64 id = 1, ui32 gate = 1, ui32 ioSize = 4096,
+            ui32 flushBatch = 16, ui32 eraseBatch = 16, ui32 cap = 2000, bool disableReplication = false)
+        {
+            SendConfiguration(id, gate, ioSize, flushBatch, eraseBatch, cap, disableReplication);
+            WaitConfigured(id);
+        }
+
+        void SendWrite(ui64 address, char value, ui64 cookie = 1) {
+            Env.Runtime->WrapInActorContext(Edge, [&] {
+                auto event = std::make_unique<TEvLoad::TEvNbsWrite>(address, IoSize);
+                AddWritePayload(*event, TRope(TString(IoSize, value)));
+                NTabletPipe::SendData(Edge, Pipe, event.release(), cookie);
+            });
+        }
+
+        void WaitWrite(ui64 cookie = 1, ENbsIoResultStatus status = NBSIO_OK) {
+            auto reply = Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsWriteResult>(
+                Edge, false, Deadline(TDuration::Seconds(30)));
+            UNIT_ASSERT(reply);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, cookie);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(reply->Get()->Record.GetStatus()), static_cast<int>(status));
+        }
+
+        void Write(ui64 address, char value, ui64 cookie = 1) {
+            SendWrite(address, value, cookie);
+            WaitWrite(cookie);
+        }
+
+        void SendRead(ui64 address, ui64 cookie = 1) {
+            Env.Runtime->WrapInActorContext(Edge, [&] {
+                NTabletPipe::SendData(Edge, Pipe, new TEvLoad::TEvNbsRead(address, IoSize), cookie);
+            });
+        }
+
+        void WaitRead(char value, ui64 cookie = 1) {
+            auto reply = Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsReadResult>(
+                Edge, false, Deadline(TDuration::Seconds(30)));
+            UNIT_ASSERT(reply);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, cookie);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(reply->Get()->Record.GetStatus()), static_cast<int>(NBSIO_OK));
+            const auto& record = reply->Get()->Record;
+            UNIT_ASSERT(record.HasPayloadId());
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->GetPayload(record.GetPayloadId()).ConvertToString(),
+                TString(IoSize, value));
+        }
+
+        void SendDelete() {
+            Env.Runtime->WrapInActorContext(Edge, [&] {
+                NTabletPipe::SendData(Edge, Pipe, new TEvLoad::TEvNbsLoadTabletDelete());
+            });
+        }
+
+        void WaitDeleted() {
+            auto reply = Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsLoadTabletDeleteResult>(
+                Edge, false, Deadline(TDuration::Seconds(30)));
+            UNIT_ASSERT(reply);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), NBSLT_OK);
+        }
+
+        ui64 GateBlocked(const TString& name) {
+            UNIT_ASSERT(!Workers.empty());
+            auto counters = Env.Runtime->GetNode(Workers.begin()->NodeId())->AppData->Counters;
+            return GetServiceCounters(counters, "load_actor")->GetSubgroup("load", "tablet")
+                ->GetSubgroup("subsystem", "lsns")->GetCounter(name, true)->Val();
+        }
+
+        void Resume(std::unique_ptr<IEventHandle> event) {
+            const auto node = HeldNodes.at(event.get());
+            HeldNodes.erase(event.get());
+            Env.Runtime->Schedule(Env.Runtime->GetClock(), event.release(), nullptr, node);
+        }
+
+        void ReleaseHeld() {
+            auto held = std::move(Held);
+            Held.clear();
+            for (auto& event : held) {
+                Resume(std::move(event));
+            }
+        }
+
+        template <typename TPred>
+        size_t ReleaseWhere(TPred predicate) {
+            std::vector<std::unique_ptr<IEventHandle>> keep;
+            std::vector<std::unique_ptr<IEventHandle>> chosen;
+            keep.reserve(Held.size());
+            for (auto& event : Held) {
+                if (event && predicate(*event)) {
+                    chosen.push_back(std::move(event));
+                } else {
+                    keep.push_back(std::move(event));
+                }
+            }
+            Held.swap(keep);
+            for (auto& event : chosen) {
+                Resume(std::move(event));
+            }
+            return chosen.size();
+        }
+    };
+
+    Y_UNIT_TEST(HeldSyncAllowsPBWritesAndReadsAndOrdersSuccessors) {
+        TIoFixture f;
+        std::vector<ui64> synced;
+        f.Observe = [&](IEventHandle& event) {
+            if (event.GetTypeRewrite() == NDDisk::TEvSync::EventType) {
+                for (const auto& source : event.Get<NDDisk::TEvSync>()->Record.GetSources()) {
+                    for (const auto& segment : source.GetSegments()) {
+                        synced.push_back(segment.GetPersistentBufferSegment().GetLsn());
+                    }
+                }
+            }
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType;
+        };
+        f.Write(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 3);
+        f.Write(0, 'b', 2);
+        f.SendRead(0);
+        f.WaitRead('b');
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 3);
+        f.Write(4096, 'c', 3);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 6);
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(synced.back(), 2);
+        f.SendRead(0);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(PBReadPinsEraseWhileNextSyncContinues) {
+        TIoFixture f;
+        ui32 syncs = 0;
+        ui32 erases = 0;
+        f.Observe = [&](IEventHandle& event) {
+            syncs += event.GetTypeRewrite() == NDDisk::TEvSync::EventType;
+            erases += event.GetTypeRewrite() == NDDisk::TEvBatchErasePersistentBuffer::EventType;
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType;
+        };
+        f.Write(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        const TActorId worker = f.Held.front()->GetRecipientRewrite();
+        f.Hold = [worker](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvReadPersistentBuffer::EventType
+                && event.Sender == worker;
+        };
+        f.SendRead(0);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 4);
+        auto pbRead = std::move(f.Held.back());
+        f.Held.pop_back();
+        f.ReleaseHeld();
+        f.Write(0, 'b', 2);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 6);
+        UNIT_ASSERT_VALUES_EQUAL(erases, 0);
+        // A wrong sender with the right cookie must not unpin the old version.
+        f.Env.Runtime->Send(new IEventHandle(pbRead->Sender, f.Edge,
+            new NDDisk::TEvReadPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR),
+            0, pbRead->Cookie), f.Edge.NodeId());
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(erases, 0);
+        f.Hold = {};
+        f.Resume(std::move(pbRead));
+        f.WaitRead('a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(erases, 6);
+        f.SendRead(0);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(DDiskReadPinsNextSyncWithoutBlockingPBWrite) {
+        TIoFixture f;
+        f.Write(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        ui32 syncs = 0;
+        f.Observe = [&](IEventHandle& event) {
+            syncs += event.GetTypeRewrite() == NDDisk::TEvSync::EventType;
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvReadResult::EventType;
+        };
+        f.SendRead(0);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 1);
+        f.Write(0, 'b', 2);
+        f.SendRead(0, 2);
+        f.WaitRead('b', 2);
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 0);
+        const auto& held = f.Held.front();
+        f.Env.Runtime->Send(new IEventHandle(held->GetRecipientRewrite(), held->Sender,
+            new NDDisk::TEvReadPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR),
+            0, held->Cookie), held->Sender.NodeId());
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 0);
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.WaitRead('a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 3);
+        f.SendRead(0);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(ReorderedPBRepliesPreserveVisibilityAndFlushOrder) {
+        TIoFixture f;
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvWritePersistentBuffersResult::EventType
+                && event.Cookie == 1;
+        };
+        f.SendWrite(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        f.Write(0, 'b', 2);
+        f.SendRead(0);
+        f.WaitRead('b');
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.WaitWrite();
+        f.SendRead(0);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(PendingOverwriteReadsPreviousAcknowledgedPBVersion) {
+        TIoFixture f;
+        f.Configure(2, 100);
+        f.Write(0, 'a');
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvWritePersistentBuffersResult::EventType;
+        };
+        f.SendWrite(0, 'b', 2);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        f.SendRead(0);
+        f.WaitRead('a');
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.WaitWrite(2);
+        f.SendRead(0);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(SharedDDiskVChunksKeepDifferentDBGData) {
+        TIoFixture f(2, 2);
+        constexpr ui64 chunk = 128_MB;
+        for (ui32 dbg = 0; dbg != 2; ++dbg) {
+            for (ui32 v = 0; v != 2; ++v) {
+                f.Write(dbg * (2 * chunk) + v * chunk, 'a' + dbg * 2 + v);
+            }
+        }
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        ui32 pbReads = 0;
+        f.Observe = [&](IEventHandle& event) {
+            pbReads += event.GetTypeRewrite() == NDDisk::TEvReadPersistentBuffer::EventType;
+        };
+        for (ui32 dbg = 0; dbg != 2; ++dbg) {
+            for (ui32 v = 0; v != 2; ++v) {
+                f.SendRead(dbg * (2 * chunk) + v * chunk);
+                f.WaitRead('a' + dbg * 2 + v);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pbReads, 0);
+    }
+
+    Y_UNIT_TEST(MalformedAndWrongSenderSyncRepliesKeepReservations) {
+        TIoFixture f;
+        ui32 syncs = 0;
+        ui32 erases = 0;
+        f.Observe = [&](IEventHandle& event) {
+            syncs += event.GetTypeRewrite() == NDDisk::TEvSync::EventType;
+            erases += event.GetTypeRewrite() == NDDisk::TEvBatchErasePersistentBuffer::EventType;
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType;
+        };
+        f.Write(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 3);
+        f.Write(0, 'b', 2);
+        const auto& held = f.Held.front();
+        auto malformed = std::make_unique<NDDisk::TEvSyncResult>();
+        malformed->Record.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        f.Env.Runtime->Send(new IEventHandle(held->GetRecipientRewrite(), held->Sender,
+            malformed.release(), 0, held->Cookie), held->Sender.NodeId());
+        auto stray = std::make_unique<NDDisk::TEvSyncResult>();
+        stray->Record = held->Get<NDDisk::TEvSyncResult>()->Record;
+        f.Env.Runtime->Send(new IEventHandle(held->GetRecipientRewrite(), f.Edge,
+            stray.release(), 0, held->Cookie), f.Edge.NodeId());
+        // Hold only the genuine saved replies, allowing the injected replies
+        // to reach the handler and exercise its validation.
+        f.Hold = {};
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 3);
+        UNIT_ASSERT_VALUES_EQUAL(erases, 0);
+        f.ReleaseHeld();
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 6);
+        f.SendRead(0);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(SyncFailureRetainsAllDestinationsUntilRetryCompletes) {
+        TIoFixture f;
+        std::vector<ui64> synced;
+        f.Observe = [&](IEventHandle& event) {
+            if (event.GetTypeRewrite() == NDDisk::TEvSync::EventType) {
+                synced.push_back(event.Get<NDDisk::TEvSync>()->Record.GetSources(0)
+                    .GetSegments(0).GetPersistentBufferSegment().GetLsn());
+            }
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType;
+        };
+        f.Write(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        f.Write(0, 'b', 2);
+        auto failed = std::move(f.Held.back());
+        f.Held.pop_back();
+        auto& record = failed->Get<NDDisk::TEvSyncResult>()->Record;
+        record.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        record.MutableSegmentResults(0)->SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED);
+        const ui64 failedCookie = failed->Cookie;
+        f.Hold = [failedCookie](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType
+                && event.Cookie != failedCookie;
+        };
+        f.Resume(std::move(failed));
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(synced.back(), 1);
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(synced.back(), 2);
+        f.SendRead(0);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(OlderEraseFailureBlocksNewerEraseButAllowsSync) {
+        TIoFixture f;
+        ui32 erases = 0;
+        f.Observe = [&](IEventHandle& event) {
+            erases += event.GetTypeRewrite() == NDDisk::TEvBatchErasePersistentBuffer::EventType;
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvErasePersistentBufferResult::EventType;
+        };
+        f.Write(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 3);
+        f.Write(0, 'b', 2);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(erases, 3);
+        auto failed = std::move(f.Held.back());
+        f.Held.pop_back();
+        failed->Get<NDDisk::TEvErasePersistentBufferResult>()->Record.SetStatus(
+            NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED);
+        const ui64 failedCookie = failed->Cookie;
+        f.Hold = [failedCookie](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvErasePersistentBufferResult::EventType
+                && event.Cookie != failedCookie;
+        };
+        f.Resume(std::move(failed));
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(erases, 4);
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(erases, 7);
+        f.SendRead(0);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(PartialDuplicateAndLatePBRepliesCleanFailedWriteOnce) {
+        TIoFixture f;
+        ui32 erases = 0;
+        f.Observe = [&](IEventHandle& event) {
+            erases += event.GetTypeRewrite() == NDDisk::TEvBatchErasePersistentBuffer::EventType;
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvWritePersistentBuffersResult::EventType;
+        };
+        f.SendWrite(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 1);
+        const auto& held = f.Held.front();
+        const auto original = held->Get<NDDisk::TEvWritePersistentBuffersResult>()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(original.ResultSize(), 3);
+        f.Hold = {};
+        auto replyPart = [&](ui32 index, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) {
+            auto reply = std::make_unique<NDDisk::TEvWritePersistentBuffersResult>();
+            *reply->Record.AddResult() = original.GetResult(index);
+            reply->Record.MutableResult(0)->MutableResult()->SetStatus(status);
+            f.Env.Runtime->Send(new IEventHandle(held->GetRecipientRewrite(), held->Sender,
+                reply.release(), 0, held->Cookie), held->Sender.NodeId());
+        };
+        replyPart(0, NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        replyPart(0, NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(erases, 0);
+        replyPart(1, NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL);
+        f.WaitWrite(1, NBSIO_QUORUM_LOST);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(erases, 0);
+        replyPart(2, NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(erases, 2);
+        // The held aggregate is now stale and must neither acknowledge the
+        // client again nor recreate the erased LSN.
+        f.ReleaseHeld();
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(erases, 2);
+    }
+
+    Y_UNIT_TEST(ReconfigureFlushesBelowGatesBeforeChangingIoGeometry) {
+        TIoFixture f;
+        f.Configure(2, 100);
+        ui32 syncs = 0;
+        f.Observe = [&](IEventHandle& event) {
+            syncs += event.GetTypeRewrite() == NDDisk::TEvSync::EventType;
+        };
+        f.Write(0, 'a');
+        f.Write(4096, 'b', 2);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 0);
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType;
+        };
+        f.SendConfiguration(3, 100, 8192);
+        f.Env.Sim(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 3);
+        f.SendWrite(0, 'c', 3);
+        f.WaitWrite(3, NBSIO_TABLET_NOT_READY);
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.WaitConfigured(3);
+        f.SendRead(0);
+        auto reply = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsReadResult>(
+            f.Edge, false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(reply);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(reply->Get()->Record.GetStatus()), static_cast<int>(NBSIO_OK));
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->GetPayload(reply->Get()->Record.GetPayloadId()).ConvertToString(),
+            TString(4096, 'a') + TString(4096, 'b'));
+    }
+
+    Y_UNIT_TEST(ReconfigureWaitsForAcceptedPBReadAndErase) {
+        TIoFixture f;
+        f.Configure(2, 100);
+        f.Write(0, 'a');
+        // Only the client PB read is pinned; Sync's own source reads proceed.
+        f.Hold = [&](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvReadPersistentBuffer::EventType
+                && f.Workers.contains(event.Sender);
+        };
+        f.SendRead(0);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 1);
+        ui32 erases = 0;
+        f.Observe = [&](IEventHandle& event) {
+            erases += event.GetTypeRewrite() == NDDisk::TEvBatchErasePersistentBuffer::EventType;
+        };
+        f.SendConfiguration(3);
+        f.Env.Sim(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_VALUES_EQUAL(erases, 0);
+        f.SendWrite(4096, 'b', 2);
+        f.WaitWrite(2, NBSIO_TABLET_NOT_READY);
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.WaitRead('a');
+        f.WaitConfigured(3);
+        UNIT_ASSERT_VALUES_EQUAL(erases, 3);
+        f.SendRead(0);
+        f.WaitRead('a');
+    }
+
+    Y_UNIT_TEST(ConfigurationSupersessionRejectsStaleAndWrongSenderAcks) {
+        TIoFixture f;
+        f.Hold = [&](IEventHandle& event) {
+            return event.GetTypeRewrite() == TEvLoad::TEvConfigureTabletResult::EventType
+                && event.GetRecipientRewrite() != f.Edge;
+        };
+        f.SendConfiguration(2);
+        f.Env.Sim(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 1);
+        f.SendConfiguration(3);
+        auto superseded = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvConfigureTabletResult>(
+            f.Edge, false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(superseded);
+        UNIT_ASSERT_VALUES_EQUAL(superseded->Get()->Record.GetConfigurationId(), 2);
+        UNIT_ASSERT(!superseded->Get()->Record.GetSuccess());
+        f.Env.Sim(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 2);
+        auto oldAck = std::move(f.Held.front());
+        f.Held.erase(f.Held.begin());
+        f.Resume(std::move(oldAck));
+        const auto& latest = f.Held.front();
+        auto stray = std::make_unique<TEvLoad::TEvConfigureTabletResult>();
+        stray->Record = latest->Get<TEvLoad::TEvConfigureTabletResult>()->Record;
+        f.Env.Runtime->Send(new IEventHandle(latest->GetRecipientRewrite(), f.Edge,
+            stray.release(), 0, latest->Cookie), f.Edge.NodeId());
+        f.Hold = {};
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        f.SendWrite(0, 'a');
+        f.WaitWrite(1, NBSIO_TABLET_NOT_READY);
+        f.ReleaseHeld();
+        f.WaitConfigured(3);
+        f.Write(0, 'a');
+    }
+
+    Y_UNIT_TEST(DeleteWaitsForFlushEraseAndDisconnectAcknowledgements) {
+        TIoFixture f;
+        f.Configure(2, 100);
+        f.Write(0, 'a');
+        ui32 disconnects = 0;
+        ui32 deallocs = 0;
+        TActorId tabletActor;
+        f.Observe = [&](IEventHandle& event) {
+            if (event.GetTypeRewrite() == TEvLoad::TEvNbsLoadTabletDelete::EventType) {
+                tabletActor = event.GetRecipientRewrite();
+            }
+            disconnects += event.GetTypeRewrite() == NDDisk::TEvDisconnect::EventType;
+            if (event.GetTypeRewrite() == TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType) {
+                const auto& record = event.Get<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>()->Record;
+                if (record.QueriesSize() && !record.GetQueries(0).GetTargetNumVChunks()) {
+                    ++deallocs;
+                }
+            }
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType;
+        };
+        f.SendDelete();
+        f.Env.Sim(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(disconnects, 0);
+        UNIT_ASSERT_VALUES_EQUAL(deallocs, 0);
+        UNIT_ASSERT(tabletActor);
+        auto stale = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>();
+        stale->Record.SetStatus(NKikimrProto::OK);
+        f.Env.Runtime->Send(new IEventHandle(tabletActor, f.Edge, stale.release(), 0, 0), f.Edge.NodeId());
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(deallocs, 0);
+        f.SendConfiguration(3);
+        auto rejected = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvConfigureTabletResult>(
+            f.Edge, false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(rejected);
+        UNIT_ASSERT(!rejected->Get()->Record.GetSuccess());
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvDisconnectResult::EventType;
+        };
+        f.ReleaseHeld();
+        f.Env.Sim(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_VALUES_EQUAL(disconnects, 10);
+        UNIT_ASSERT_VALUES_EQUAL(deallocs, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 10);
+        const auto& held = f.Held.front();
+        auto stray = std::make_unique<NDDisk::TEvDisconnectResult>();
+        stray->Record.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        f.Env.Runtime->Send(new IEventHandle(held->GetRecipientRewrite(), f.Edge,
+            stray.release(), 0, held->Cookie), f.Edge.NodeId());
+        f.Hold = {};
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(deallocs, 0);
+        f.ReleaseHeld();
+        f.WaitDeleted();
+        UNIT_ASSERT_VALUES_EQUAL(deallocs, 1);
+    }
+
+    Y_UNIT_TEST(RepeatedPoisonDrainsAndWaitsForFinalDisconnect) {
+        TIoFixture f;
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType;
+        };
+        f.Write(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(f.Workers.size(), 1);
+        const auto worker = *f.Workers.begin();
+        f.Env.Runtime->Send(new IEventHandle(worker, f.Edge, new TEvents::TEvPoison()), f.Edge.NodeId());
+        f.Env.Runtime->Send(new IEventHandle(worker, f.Edge, new TEvents::TEvPoison()), f.Edge.NodeId());
+        f.Env.Sim(TDuration::MilliSeconds(100));
+        UNIT_ASSERT(f.Env.Runtime->GetActor(worker));
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvDisconnectResult::EventType;
+        };
+        f.ReleaseHeld();
+        f.Env.Sim(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 10);
+        UNIT_ASSERT(f.Env.Runtime->GetActor(worker));
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.Env.Sim(TDuration::MilliSeconds(100));
+        UNIT_ASSERT(!f.Env.Runtime->GetActor(worker));
+    }
+
+    Y_UNIT_TEST(AmbiguousPBFailureCannotAuthorizeDeleteUntilLateResults) {
+        TIoFixture f;
+        ui32 erases = 0;
+        ui32 disconnects = 0;
+        f.Observe = [&](IEventHandle& event) {
+            erases += event.GetTypeRewrite() == NDDisk::TEvBatchErasePersistentBuffer::EventType;
+            disconnects += event.GetTypeRewrite() == NDDisk::TEvDisconnect::EventType;
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvWritePersistentBuffersResult::EventType;
+        };
+        f.SendWrite(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 1);
+        const auto& held = f.Held.front();
+        auto ambiguous = std::make_unique<NDDisk::TEvWritePersistentBuffersResult>();
+        ambiguous->Record = held->Get<NDDisk::TEvWritePersistentBuffersResult>()->Record;
+        ambiguous->Record.MutableResult(0)->MutableResult()->SetStatus(
+            NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH);
+        f.Hold = {};
+        f.Env.Runtime->Send(new IEventHandle(held->GetRecipientRewrite(), held->Sender,
+            ambiguous.release(), 0, held->Cookie), held->Sender.NodeId());
+        f.WaitWrite(1, NBSIO_QUORUM_LOST);
+        f.SendDelete();
+        f.Env.Sim(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_VALUES_EQUAL(erases, 0);
+        UNIT_ASSERT_VALUES_EQUAL(disconnects, 0);
+        f.ReleaseHeld();
+        f.WaitDeleted();
+        UNIT_ASSERT_VALUES_EQUAL(erases, 3);
+        UNIT_ASSERT_VALUES_EQUAL(disconnects, 10);
+    }
+
+    Y_UNIT_TEST(SupersessionDuringDrainInstallsOnlyLatestConfiguration) {
+        TIoFixture f;
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType;
+        };
+        f.Write(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        f.SendConfiguration(2, 100);
+        f.Env.Sim(TDuration::MilliSeconds(100));
+        f.SendConfiguration(3, 1, 8192);
+        auto superseded = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvConfigureTabletResult>(
+            f.Edge, false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(superseded);
+        UNIT_ASSERT_VALUES_EQUAL(superseded->Get()->Record.GetConfigurationId(), 2);
+        UNIT_ASSERT(!superseded->Get()->Record.GetSuccess());
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.WaitConfigured(3);
+        f.Write(0, 'b');
+        f.SendRead(0);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(LegacyConfigurationIdZeroStillDrainsAndReopensAdmission) {
+        TIoFixture f;
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType;
+        };
+        f.Write(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        f.SendConfiguration(0);
+        f.Env.Sim(TDuration::MilliSeconds(100));
+        f.SendWrite(0, 'b', 2);
+        f.WaitWrite(2, NBSIO_TABLET_NOT_READY);
+        f.Hold = {};
+        f.ReleaseHeld();
+        // Legacy callers receive no public configuration acknowledgement.
+        f.Env.Sim(TDuration::MilliSeconds(200));
+        f.Write(0, 'b', 3);
+        f.SendRead(0);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(RejectsAddressesOutsideConfiguredIoSlots) {
+        TIoFixture f;
+        f.Configure(2, 1, 8192);
+        f.SendWrite(4096, 'a');
+        f.WaitWrite(1, NBSIO_INVALID_ADDRESS);
+        f.SendRead(4096);
+        auto read = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsReadResult>(
+            f.Edge, false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(read);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(read->Get()->Record.GetStatus()),
+            static_cast<int>(NBSIO_INVALID_ADDRESS));
+    }
+
+    Y_UNIT_TEST(IdleCleanupUnblocksReorderedHeadAtLsnCap) {
+        TIoFixture f;
+        f.Configure(2, 2, 4096, 16, 16, /*cap=*/5);
+        std::vector<ui64> synced;
+        ui32 erases = 0;
+        f.Observe = [&](IEventHandle& event) {
+            if (event.GetTypeRewrite() == NDDisk::TEvSync::EventType) {
+                synced.push_back(event.Get<NDDisk::TEvSync>()->Record.GetSources(0)
+                    .GetSegments(0).GetPersistentBufferSegment().GetLsn());
+            }
+            erases += event.GetTypeRewrite() == NDDisk::TEvBatchErasePersistentBuffer::EventType;
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvWritePersistentBuffersResult::EventType;
+        };
+        for (ui64 lsn = 1; lsn <= 5; ++lsn) {
+            f.SendWrite(0, 'a' + lsn, lsn);
+        }
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 5);
+        f.Hold = {};
+        for (ui64 lsn : {2, 3, 4, 5, 1}) {
+            UNIT_ASSERT_VALUES_EQUAL(f.ReleaseWhere([&](const IEventHandle& event) {
+                return event.Cookie == lsn;
+            }), 1);
+            f.WaitWrite(lsn);
+        }
+        f.SendWrite(0, 'z', 6);
+        f.WaitWrite(6, NBSIO_BACKPRESSURE);
+        UNIT_ASSERT(synced.empty());
+        f.Env.Sim(TDuration::Seconds(3));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 15);
+        for (ui32 i = 0; i < synced.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(synced[i], i / 3 + 1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(erases, 15);
+        f.SendRead(0);
+        f.WaitRead('f');
+        f.Write(0, 'z', 7);
+    }
+
+    Y_UNIT_TEST(IdleCleanupErasesWithoutReplication) {
+        TIoFixture f;
+        f.Configure(2, 100, 4096, 16, 16, 1, /*disableReplication=*/true);
+        ui32 syncs = 0;
+        ui32 erases = 0;
+        f.Observe = [&](IEventHandle& event) {
+            syncs += event.GetTypeRewrite() == NDDisk::TEvSync::EventType;
+            erases += event.GetTypeRewrite() == NDDisk::TEvBatchErasePersistentBuffer::EventType;
+        };
+        f.Write(0, 'a');
+        UNIT_ASSERT_VALUES_EQUAL(erases, 0);
+        f.Env.Sim(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 0);
+        UNIT_ASSERT_VALUES_EQUAL(erases, 1);
+        f.Write(0, 'b', 2);
+    }
+
+    Y_UNIT_TEST(IdleCleanupSkipsVChunkWithIncompletePBWrite) {
+        TIoFixture f(1, 2);
+        f.Configure(2, 100);
+        std::vector<ui64> synced;
+        f.Observe = [&](IEventHandle& event) {
+            if (event.GetTypeRewrite() == NDDisk::TEvSync::EventType) {
+                synced.push_back(event.Get<NDDisk::TEvSync>()->Record.GetSources(0)
+                    .GetSegments(0).GetPersistentBufferSegment().GetLsn());
+            }
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvWritePersistentBuffersResult::EventType
+                && event.Cookie == 2;
+        };
+        f.Write(0, 'a');
+        f.SendWrite(4096, 'b', 2);
+        f.Write(128_MB, 'c', 3);
+        f.Env.Sim(TDuration::Seconds(3));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 3);
+        for (ui64 lsn : synced) {
+            UNIT_ASSERT_VALUES_EQUAL(lsn, 3);
+        }
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.WaitWrite(2);
+        f.Env.Sim(TDuration::Seconds(3));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 6); // three two-segment batches
+        f.SendRead(0);
+        f.WaitRead('a');
+        f.SendRead(4096);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(MultiVChunkBatchesCompleteAndDelete) {
+        for (ui32 flushBatch : {2, 16}) {
+            TIoFixture f(1, 3);
+            f.Configure(2, 6, 4096, flushBatch, 16, /*cap=*/6);
+            std::map<ui64, ui32> syncSizes;
+            f.Observe = [&](IEventHandle& event) {
+                if (event.GetTypeRewrite() != NDDisk::TEvSync::EventType) {
+                    return;
+                }
+                const auto& record = event.Get<NDDisk::TEvSync>()->Record;
+                std::optional<ui64> vChunk;
+                ui32 segments = 0;
+                for (const auto& source : record.GetSources()) {
+                    for (const auto& segment : source.GetSegments()) {
+                        const ui64 current = segment.GetSelector().GetVChunkIndex();
+                        if (vChunk) {
+                            UNIT_ASSERT_VALUES_EQUAL(current, *vChunk);
+                        } else {
+                            vChunk = current;
+                        }
+                        ++segments;
+                    }
+                }
+                UNIT_ASSERT(segments > 0 && segments <= flushBatch);
+                syncSizes[event.Cookie] = segments;
+            };
+            f.Hold = [](IEventHandle& event) {
+                return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType;
+            };
+            for (ui32 i = 0; i < 6; ++i) {
+                // Interleaving must not turn the large-batch case into six
+                // separate per-LSN requests to each destination.
+                const ui64 address = (i % 3) * 128_MB + (i / 3) * 4096;
+                f.Write(address, 'a' + i, i + 1);
+            }
+            f.Env.Sim(TDuration::MilliSeconds(50));
+            UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), syncSizes.size());
+            ui32 segments = 0;
+            for (const auto& event : f.Held) {
+                const auto& record = event->Get<NDDisk::TEvSyncResult>()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(record.GetStatus()),
+                    static_cast<int>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
+                UNIT_ASSERT_VALUES_EQUAL(record.SegmentResultsSize(), syncSizes.at(event->Cookie));
+                for (const auto& result : record.GetSegmentResults()) {
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result.GetStatus()),
+                        static_cast<int>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
+                }
+                segments += record.SegmentResultsSize();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(segments, 18);
+            if (flushBatch == 16) {
+                UNIT_ASSERT_VALUES_EQUAL(syncSizes.size(), 9);
+                for (const auto& [cookie, size] : syncSizes) {
+                    UNIT_ASSERT_VALUES_EQUAL(size, 2);
+                }
+            }
+            auto counters = f.Env.Runtime->GetNode(f.Workers.begin()->NodeId())->AppData->Counters;
+            auto allocated = GetServiceCounters(counters, "load_actor")->GetSubgroup("load", "tablet")
+                ->GetSubgroup("subsystem", "lifecycle_worker")->GetCounter("DbgsAllocated", false);
+            UNIT_ASSERT_VALUES_EQUAL(allocated->Val(), 1);
+            f.SendWrite(0, 'z', 7);
+            f.WaitWrite(7, NBSIO_BACKPRESSURE);
+            f.Hold = {};
+            f.ReleaseHeld();
+            f.Env.Sim(TDuration::MilliSeconds(100));
+            for (ui32 i = 0; i < 6; ++i) {
+                f.SendRead((i % 3) * 128_MB + (i / 3) * 4096);
+                f.WaitRead('a' + i);
+            }
+            // Reclaimed capacity accepts a final below-gate write; deletion
+            // must complete normally through its remaining maintenance.
+            f.Write(0, 'z', 8);
+            f.SendDelete();
+            f.WaitDeleted();
+            UNIT_ASSERT_VALUES_EQUAL(allocated->Val(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(IdleCleanupAccountsVChunkSyncBatchesRetriesAndDuplicates) {
+        TIoFixture f(1, 3);
+        f.Configure(2, 3);
+        std::vector<ui64> synced;
+        std::vector<ui64> erased;
+        std::map<ui64, ui64> syncLsnByCookie;
+        f.Observe = [&](IEventHandle& event) {
+            if (event.GetTypeRewrite() == NDDisk::TEvSync::EventType) {
+                const auto& record = event.Get<NDDisk::TEvSync>()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.SourcesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetSources(0).SegmentsSize(), 1);
+                const ui64 lsn = record.GetSources(0).GetSegments(0).GetPersistentBufferSegment().GetLsn();
+                synced.push_back(lsn);
+                syncLsnByCookie[event.Cookie] = lsn;
+            } else if (event.GetTypeRewrite() == NDDisk::TEvBatchErasePersistentBuffer::EventType) {
+                for (const auto& erase : event.Get<NDDisk::TEvBatchErasePersistentBuffer>()->Record.GetErases()) {
+                    erased.push_back(erase.GetLsn());
+                }
+            }
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType;
+        };
+        f.Write(0, 'a');
+        f.Write(128_MB, 'b', 2);
+        f.Write(256_MB, 'c', 3);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 9);
+        for (const auto& event : f.Held) {
+            const auto& record = event->Get<NDDisk::TEvSyncResult>()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(record.GetStatus()),
+                static_cast<int>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
+            UNIT_ASSERT_VALUES_EQUAL(record.SegmentResultsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(record.GetSegmentResults(0).GetStatus()),
+                static_cast<int>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
+        }
+        const auto failed = std::find_if(f.Held.begin(), f.Held.end(), [&](const auto& event) {
+            return syncLsnByCookie.at(event->Cookie) == 1;
+        });
+        UNIT_ASSERT(failed != f.Held.end());
+        const auto original = (*failed)->Get<NDDisk::TEvSyncResult>()->Record;
+        const auto recipient = (*failed)->GetRecipientRewrite();
+        const auto sender = (*failed)->Sender;
+        const ui64 cookie = (*failed)->Cookie;
+        f.Hold = {};
+        auto inject = [&](const auto& record) {
+            auto result = std::make_unique<NDDisk::TEvSyncResult>();
+            result->Record = record;
+            f.Env.Runtime->Send(new IEventHandle(recipient, sender, result.release(), 0, cookie), sender.NodeId());
+        };
+        auto invalid = original;
+        invalid.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN);
+        inject(invalid);
+        invalid.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        invalid.ClearSegmentResults();
+        inject(invalid);
+        f.Write(4096, 'd', 4);
+        f.Write(128_MB + 4096, 'e', 5);
+        f.Env.Sim(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 9);
+        UNIT_ASSERT(erased.empty());
+
+        // Consume the per-vChunk batches, with only vChunk 0 failing at one sink.
+        // The fresh retry remains outstanding; duplicate old cookies cannot
+        // release it or accidentally keep vChunks 1/2 busy.
+        (*failed)->Get<NDDisk::TEvSyncResult>()->Record.MutableSegmentResults(0)->SetStatus(
+            NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED);
+        std::set<ui64> originals;
+        for (const auto& event : f.Held) {
+            originals.insert(event->Cookie);
+        }
+        f.Hold = [&](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType
+                && !originals.contains(event.Cookie);
+        };
+        f.ReleaseHeld();
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(synced.back(), 1);
+        inject(original);
+        f.Env.Sim(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 13);
+        for (ui32 i = 10; i < synced.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(synced[i], 5);
+        }
+        // Erase admission must precede pumping the new vChunk-1 flush.
+        // Its held Sync does not undo erase admission from the same snapshot.
+        UNIT_ASSERT_VALUES_EQUAL(erased.size(), 6);
+        for (ui64 lsn : erased) {
+            UNIT_ASSERT(lsn == 2 || lsn == 3);
+        }
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.Env.Sim(TDuration::Seconds(3));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(erased.size(), 15);
+        f.SendRead(0);
+        f.WaitRead('a');
+        f.SendRead(128_MB);
+        f.WaitRead('b');
+        f.SendRead(256_MB);
+        f.WaitRead('c');
+        f.SendRead(4096);
+        f.WaitRead('d');
+        f.SendRead(128_MB + 4096);
+        f.WaitRead('e');
+    }
+
+    Y_UNIT_TEST(IdleCleanupPreservesDDiskAndPBReadPins) {
+        TIoFixture f;
+        f.Configure(2, 100);
+        ui32 syncs = 0;
+        ui32 erases = 0;
+        f.Observe = [&](IEventHandle& event) {
+            syncs += event.GetTypeRewrite() == NDDisk::TEvSync::EventType;
+            erases += event.GetTypeRewrite() == NDDisk::TEvBatchErasePersistentBuffer::EventType;
+        };
+        f.Hold = [&](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvReadResult::EventType
+                || (event.GetTypeRewrite() == NDDisk::TEvReadPersistentBufferResult::EventType
+                    && f.Workers.contains(event.GetRecipientRewrite()));
+        };
+        f.SendRead(0);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        f.Write(0, 'a');
+        f.SendRead(0, 2);
+        f.Env.Sim(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReleaseWhere([](const IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvReadResult::EventType;
+        }), 1);
+        // Allow resumed DDisk reads through the filter.
+        f.Hold = [&](IEventHandle& event) {
+            return (event.GetTypeRewrite() == NDDisk::TEvReadPersistentBufferResult::EventType
+                    && f.Workers.contains(event.GetRecipientRewrite()));
+        };
+        auto read = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsReadResult>(
+            f.Edge, false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(read);
+        f.Env.Sim(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 3);
+        UNIT_ASSERT_VALUES_EQUAL(erases, 0);
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.WaitRead('a', 2);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(erases, 3);
+    }
+
+    Y_UNIT_TEST(ForcedCleanupDoesNotCountGateBlocks) {
+        TIoFixture f;
+        f.Configure(2, 100);
+        f.Write(0, 'a');
+        const ui64 flushBlocked = f.GateBlocked("SyncGateFlushBlocked");
+        UNIT_ASSERT(flushBlocked > 0);
+        f.Env.Sim(TDuration::MilliSeconds(1100));
+        // A normal Sync completion can count the below-gate erase tail.
+        UNIT_ASSERT_VALUES_EQUAL(f.GateBlocked("SyncGateFlushBlocked"), flushBlocked);
+        const ui64 eraseBlocked = f.GateBlocked("SyncGateEraseBlocked");
+        f.Env.Sim(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(f.GateBlocked("SyncGateFlushBlocked"), flushBlocked);
+        UNIT_ASSERT_VALUES_EQUAL(f.GateBlocked("SyncGateEraseBlocked"), eraseBlocked);
+        f.Write(4096, 'b', 2);
+        const ui64 beforeDrain = f.GateBlocked("SyncGateFlushBlocked");
+        f.Configure(3, 100);
+        UNIT_ASSERT_VALUES_EQUAL(f.GateBlocked("SyncGateFlushBlocked"), beforeDrain);
+        UNIT_ASSERT_VALUES_EQUAL(f.GateBlocked("SyncGateEraseBlocked"), eraseBlocked);
+    }
+
+    Y_UNIT_TEST(StaleIdleCleanupCannotAdmitOrClearNewTimer) {
+        TIoFixture f;
+        f.SendConfiguration(0, 100);
+        f.Env.Sim(TDuration::MilliSeconds(100));
+        ui32 syncs = 0;
+        f.Observe = [&](IEventHandle& event) {
+            syncs += event.GetTypeRewrite() == NDDisk::TEvSync::EventType;
+        };
+        f.Write(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(500));
+        f.SendConfiguration(0, 100); // drain immediately; legacy ID is deliberately reused
+        f.Env.Sim(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 3);
+        f.Write(4096, 'b', 2);
+        f.Env.Sim(TDuration::MilliSeconds(600)); // old timer fires here
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 3);
+        f.Env.Sim(TDuration::MilliSeconds(500)); // new timer still fires
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 6);
+        f.Env.Sim(TDuration::Seconds(2));
+        f.SendRead(4096);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(AdmittedFlushAndEraseCohortsSurviveFallingBelowGate) {
+        TIoFixture f;
+        f.Configure(2, 2);
+        ui32 syncs = 0;
+        ui32 erases = 0;
+        f.Observe = [&](IEventHandle& event) {
+            syncs += event.GetTypeRewrite() == NDDisk::TEvSync::EventType;
+            erases += event.GetTypeRewrite() == NDDisk::TEvBatchErasePersistentBuffer::EventType;
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType;
+        };
+        f.Write(0, 'a');
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 0);
+        f.Write(0, 'b', 2);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 3);
+        UNIT_ASSERT_VALUES_EQUAL(erases, 0);
+        f.Hold = {};
+        f.ReleaseHeld();
+        f.Env.Sim(TDuration::MilliSeconds(100));
+        // The second version remains admitted when the first leaves Written,
+        // and its erase remains admitted when the first leaves Flushed.
+        UNIT_ASSERT_VALUES_EQUAL(syncs, 6);
+        UNIT_ASSERT_VALUES_EQUAL(erases, 6);
+        f.SendRead(0);
+        f.WaitRead('b');
+    }
+
+    Y_UNIT_TEST(LaterCompletionsWaitForTheNextFlushCohort) {
+        TIoFixture f;
+        f.Configure(2, 3);
+        std::vector<ui32> syncSegments;
+        f.Observe = [&](IEventHandle& event) {
+            if (event.GetTypeRewrite() != NDDisk::TEvSync::EventType) {
+                return;
+            }
+            ui32 segments = 0;
+            const auto& record = event.Get<NDDisk::TEvSync>()->Record;
+            for (ui32 source = 0; source < record.SourcesSize(); ++source) {
+                segments += record.GetSources(source).SegmentsSize();
+            }
+            syncSegments.push_back(segments);
+        };
+        std::set<ui64> passLsns;
+        f.Hold = [&](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvWritePersistentBuffersResult::EventType
+                && !passLsns.contains(event.Cookie);
+        };
+        for (ui32 index = 0; index < 6; ++index) {
+            f.SendWrite(index * 4096, 'a', index + 1);
+        }
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 6);
+        UNIT_ASSERT(syncSegments.empty());
+
+        auto releaseWrite = [&](ui64 lsn) {
+            passLsns.insert(lsn);
+            const size_t released = f.ReleaseWhere([&](const IEventHandle& event) {
+                return event.GetTypeRewrite() == NDDisk::TEvWritePersistentBuffersResult::EventType
+                    && event.Cookie == lsn;
+            });
+            UNIT_ASSERT_VALUES_EQUAL(released, 1);
+            f.WaitWrite(lsn);
+            f.Env.Sim(TDuration::MilliSeconds(50));
+        };
+        releaseWrite(4);
+        releaseWrite(5);
+        UNIT_ASSERT(syncSegments.empty());
+        releaseWrite(6);
+        UNIT_ASSERT_VALUES_EQUAL(syncSegments.size(), 3);
+        for (ui32 segments : syncSegments) {
+            UNIT_ASSERT_VALUES_EQUAL(segments, 3);
+        }
+        releaseWrite(1);
+        releaseWrite(2);
+        UNIT_ASSERT_VALUES_EQUAL(syncSegments.size(), 3);
+        releaseWrite(3);
+        UNIT_ASSERT_VALUES_EQUAL(syncSegments.size(), 6);
+        for (ui32 index = 3; index < 6; ++index) {
+            UNIT_ASSERT_VALUES_EQUAL(syncSegments[index], 3);
+        }
+    }
+
+    Y_UNIT_TEST(EraseCohortsBatchOnlyAfterSyncCompletions) {
+        TIoFixture f;
+        f.Configure(2, 3, 4096, /*flushBatch=*/1, /*eraseBatch=*/16);
+        std::map<ui64, ui64> syncLsnByCookie;
+        std::vector<ui32> eraseSizes;
+        f.Observe = [&](IEventHandle& event) {
+            if (event.GetTypeRewrite() == NDDisk::TEvSync::EventType) {
+                const auto& record = event.Get<NDDisk::TEvSync>()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.SourcesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetSources(0).SegmentsSize(), 1);
+                syncLsnByCookie[event.Cookie] =
+                    record.GetSources(0).GetSegments(0).GetPersistentBufferSegment().GetLsn();
+            } else if (event.GetTypeRewrite() == NDDisk::TEvBatchErasePersistentBuffer::EventType) {
+                eraseSizes.push_back(event.Get<NDDisk::TEvBatchErasePersistentBuffer>()->Record.ErasesSize());
+            }
+        };
+        std::set<ui64> passSyncCookies;
+        f.Hold = [&](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType
+                && !passSyncCookies.contains(event.Cookie);
+        };
+        auto runCohort = [&](ui32 addressBase) {
+            const ui32 erasesBefore = eraseSizes.size();
+            syncLsnByCookie.clear();
+            for (ui32 index = 0; index < 3; ++index) {
+                f.Write((addressBase + index) * 4096, 'a', addressBase + index + 1);
+            }
+            f.Env.Sim(TDuration::MilliSeconds(50));
+            UNIT_ASSERT_VALUES_EQUAL(syncLsnByCookie.size(), 9);
+            std::map<ui64, ui32> resultsByLsn;
+            for (const auto& [cookie, lsn] : syncLsnByCookie) {
+                ++resultsByLsn[lsn];
+            }
+            UNIT_ASSERT_VALUES_EQUAL(resultsByLsn.size(), 3);
+            ui32 releasedCohort = 0;
+            for (const auto& [lsn, count] : resultsByLsn) {
+                UNIT_ASSERT_VALUES_EQUAL(count, 3);
+                for (const auto& [cookie, mappedLsn] : syncLsnByCookie) {
+                    if (mappedLsn == lsn) {
+                        passSyncCookies.insert(cookie);
+                    }
+                }
+                const size_t released = f.ReleaseWhere([&](const IEventHandle& event) {
+                    const auto found = syncLsnByCookie.find(event.Cookie);
+                    return event.GetTypeRewrite() == NDDisk::TEvSyncResult::EventType
+                        && found != syncLsnByCookie.end() && found->second == lsn;
+                });
+                UNIT_ASSERT_VALUES_EQUAL(released, 3);
+                f.Env.Sim(TDuration::MilliSeconds(20));
+                ++releasedCohort;
+                if (releasedCohort < 3) {
+                    UNIT_ASSERT_VALUES_EQUAL(eraseSizes.size(), erasesBefore);
+                }
+            }
+            f.Env.Sim(TDuration::MilliSeconds(50));
+            UNIT_ASSERT_VALUES_EQUAL(eraseSizes.size(), erasesBefore + 3);
+            for (ui32 index = erasesBefore; index < eraseSizes.size(); ++index) {
+                UNIT_ASSERT_VALUES_EQUAL(eraseSizes[index], 3);
+            }
+        };
+        runCohort(0);
+        runCohort(3);
+        UNIT_ASSERT_VALUES_EQUAL(eraseSizes.size(), 6);
+    }
+
+    Y_UNIT_TEST(DDiskReadPinDefersOnlyItsAdmittedSlot) {
+        TIoFixture f;
+        f.Configure(2, 2);
+        std::vector<ui64> synced;
+        f.Observe = [&](IEventHandle& event) {
+            if (event.GetTypeRewrite() != NDDisk::TEvSync::EventType) {
+                return;
+            }
+            const auto& record = event.Get<NDDisk::TEvSync>()->Record;
+            for (ui32 source = 0; source < record.SourcesSize(); ++source) {
+                for (ui32 segment = 0; segment < record.GetSources(source).SegmentsSize(); ++segment) {
+                    synced.push_back(record.GetSources(source).GetSegments(segment)
+                        .GetPersistentBufferSegment().GetLsn());
+                }
+            }
+        };
+        f.Hold = [](IEventHandle& event) {
+            return event.GetTypeRewrite() == NDDisk::TEvReadResult::EventType;
+        };
+        f.SendRead(0);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(f.Held.size(), 1);
+        f.Write(0, 'a');
+        f.Write(4096, 'b', 2);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 3);
+        for (ui64 lsn : synced) {
+            UNIT_ASSERT_VALUES_EQUAL(lsn, 2);
+        }
+        f.Hold = {};
+        f.ReleaseHeld();
+        auto read = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsReadResult>(
+            f.Edge, false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(read);
+        f.Env.Sim(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(synced.size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(synced.back(), 1);
     }
 
     // Create + Run + Delete with a single DBG. Verifies the full lifecycle:
@@ -934,6 +2263,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
             auto ev = std::make_unique<TEvLoad::TEvConfigureTablet>();
             auto& cfg = ev->Record;
+            cfg.SetConfigurationId(1);
             cfg.SetMaxInflightLsns(2000);
             cfg.SetFlushBatchSize(16);
             cfg.SetEraseBatchSize(32);
@@ -943,6 +2273,9 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             cfg.SetIoSizeBytes(kBlockSize);
             NTabletPipe::SendData(f.Edge, pipe, ev.release());
         });
+        auto configured = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvConfigureTabletResult>(
+            f.Edge, false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(configured && configured->Get()->Record.GetSuccess());
 
         // Submit 1000 writes; payload[0..7] = block index.
         f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
@@ -1035,6 +2368,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
             auto ev = std::make_unique<TEvLoad::TEvConfigureTablet>();
             auto& cfg = ev->Record;
+            cfg.SetConfigurationId(1);
             cfg.SetMaxInflightLsns(2000);
             cfg.SetFlushBatchSize(16);
             cfg.SetEraseBatchSize(32);
@@ -1044,6 +2378,9 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             cfg.SetIoSizeBytes(kBlockSize);
             NTabletPipe::SendData(f.Edge, pipe, ev.release());
         });
+        auto configured = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvConfigureTabletResult>(
+            f.Edge, false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(configured && configured->Get()->Record.GetSuccess());
 
         auto addressOf = [&](ui32 dbg, ui32 i) -> ui64 {
             return dbg * bytesPerDbg + static_cast<ui64>(i) * kBlockSize;
@@ -1152,6 +2489,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
             auto ev = std::make_unique<TEvLoad::TEvConfigureTablet>();
             auto& cfg = ev->Record;
+            cfg.SetConfigurationId(1);
             cfg.SetMaxInflightLsns(2000); // keep all writes live so LSN ranges overlap
             cfg.SetFlushBatchSize(16);
             cfg.SetEraseBatchSize(32);
@@ -1161,6 +2499,9 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             cfg.SetIoSizeBytes(kBlockSize);
             NTabletPipe::SendData(f.Edge, pipe, ev.release());
         });
+        auto configured = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvConfigureTabletResult>(
+            f.Edge, false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(configured && configured->Get()->Record.GetSuccess());
 
         // Distinct intra-DBG offsets per DBG: DBG0 uses blocks [0, kBlocksPerDbg)
         // and DBG1 uses [kBlocksPerDbg, 2*kBlocksPerDbg), all inside the DBG's

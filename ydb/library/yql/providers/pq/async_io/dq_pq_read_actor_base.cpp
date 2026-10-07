@@ -12,6 +12,7 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
@@ -59,17 +60,17 @@ class TControlPlaneInteractor final : public NActors::TActorBootstrapped<TContro
     using TComplete = std::function<void(TIssues)>;
 
     struct TEvRewindFinished : NActors::TEventLocal<TEvRewindFinished, TPqControlPlaneEvents::EvEnd> {
-        TEvRewindFinished(ui64 partitionId, NYdb::TAsyncStatus result)
+        TEvRewindFinished(ui64 partitionId, NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> result)
             : PartitionId(partitionId)
             , Result(std::move(result))
         {}
 
         const ui64 PartitionId;
-        const NYdb::TAsyncStatus Result;
+        const NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> Result;
     };
 
 public:
-    TControlPlaneInteractor(NActors::TActorId readerId, NActors::TActorId controlPlaneActorId, TConnection connection, ITopicClient::TPtr topicClient,
+    TControlPlaneInteractor(NActors::TActorId readerId, NActors::TActorId controlPlaneActorId, TConnection connection, std::shared_ptr<NFq::IMessageStreamClient> topicClient,
         THashSet<ui64> partitions, TString logPrefix, TComplete complete)
         : ReaderId(readerId)
         , ControlPlaneActorId(controlPlaneActorId)
@@ -163,7 +164,7 @@ private:
             SRC_LOG_I("Rewind consumer \"" << Connection.GetConsumerName() << "\", topic \"" << Connection.GetTopicPath() << "\", partition " << partition.GetPartitionId() << " from " << partition.GetCommittedOffset() << " to " << offset);
             ++PendingRequests;
 
-            TopicClient->CommitOffset(Connection.GetTopicPath(), partition.GetPartitionId(), Connection.GetConsumerName(), offset)
+            TopicClient->CommitPosition(NFq::TMessageStreamPartitionId{partition.GetPartitionId()}, Connection.GetConsumerName(), offset)
                 .Subscribe([partitionId = partition.GetPartitionId(), actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId()](const auto& future) {
                     actorSystem->Send(selfId, new TEvRewindFinished(partitionId, future));
                 });
@@ -175,7 +176,8 @@ private:
 
     void Handle(TEvRewindFinished::TPtr& ev) {
         if (const auto& result = ev->Get()->Result.GetValue(); !result.IsSuccess()) {
-            Fail(TStringBuilder() << "Failed to rewind consumer \"" << Connection.GetConsumerName() << "\" for topic \"" << Connection.GetTopicPath() << "\", partition " << ev->Get()->PartitionId, result);
+            Fail(TStringBuilder() << "Failed to rewind consumer \"" << Connection.GetConsumerName() << "\" for topic \"" << Connection.GetTopicPath() << "\", partition " << ev->Get()->PartitionId,
+                ToSdkStatus(result.Status, result.Issues));
             return;
         }
 
@@ -222,7 +224,7 @@ private:
     const NActors::TActorId ReaderId;
     const NActors::TActorId ControlPlaneActorId;
     const TConnection Connection;
-    const ITopicClient::TPtr TopicClient;
+    const std::shared_ptr<NFq::IMessageStreamClient> TopicClient;
     THashSet<ui64> PartitionsToRead;
     const TString LogPrefix;
     TComplete Complete;
@@ -234,7 +236,7 @@ constexpr ui32 STATE_VERSION = 1;
 
 } // anonymous namespace
 
-TDqPqReadActorBase::TDqPqReadActorBase(
+TPqReadState::TPqReadState(
     ui64 inputIndex,
     ui64 taskId,
     NActors::TActorId selfId,
@@ -246,18 +248,17 @@ TDqPqReadActorBase::TDqPqReadActorBase(
     : InputIndex(inputIndex)
     , TxId(txId)
     , SourceParams(std::move(sourceParams))
-    , StartingMessageTimestamp(InitStartingMessageTimestamp(SourceParams))
     , LogPrefix(TStringBuilder() << "SelfId: " << selfId << ", TxId: " << txId << ", task: " << taskId << ". PQ source. ")
     , ReadParams(std::move(readParams))
     , ComputeActorId(computeActorId)
     , TaskId(taskId)
     , ControlPlaneActorId(controlPlaneActorId)
-{}
+{ StartingMessageTimestamp = InitStartingMessageTimestamp(SourceParams); }
 
-void TDqPqReadActorBase::InitConsumerOffsets(
+void TPqReadState::InitConsumerOffsets(
     const NActors::TActorId& selfId,
     const NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo& cluster,
-    ITopicClient::TPtr topicClient,
+    std::shared_ptr<NFq::IMessageStreamClient> topicClient,
     ui32 partitionsCount)
 {
     if (!TControlPlaneInteractor::NeedsRewind(SourceParams, StartingMessageTimestamp)) {
@@ -297,7 +298,7 @@ void TDqPqReadActorBase::InitConsumerOffsets(
     auto complete = [this](TIssues issues) {
         if (!issues.Empty()) {
             ConsumerOffsetsRewindFailed = true;
-            NActors::TActivationContext::Send(new NActors::IEventHandle(ComputeActorId, NActors::TActivationContext::AsActorContext().SelfID, new TEvAsyncInputError(InputIndex, std::move(issues), NDqProto::StatusIds::EXTERNAL_ERROR)));
+            NActors::TActivationContext::Send(new NActors::IEventHandle(ComputeActorId, NActors::TActivationContext::AsActorContext().SelfID, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), NDqProto::StatusIds::EXTERNAL_ERROR)));
             StopConsumerOffsetInitialization();
             return;
         }
@@ -313,24 +314,24 @@ void TDqPqReadActorBase::InitConsumerOffsets(
     )));
 }
 
-void TDqPqReadActorBase::HandleConsumerOffsets(NActors::TEvents::TEvInvokeResult::TPtr& ev) {
+void TPqReadState::HandleConsumerOffsets(NActors::TEvents::TEvInvokeResult::TPtr& ev) {
     if (ControlPlaneInteractors.erase(ev->Sender) && !ConsumerOffsetsRewindFailed) {
         ev->Get()->Process(NActors::TActivationContext::AsActorContext());
     }
 }
 
-void TDqPqReadActorBase::StopConsumerOffsetInitialization() {
+void TPqReadState::StopConsumerOffsetInitialization() {
     for (const auto& actorId : ControlPlaneInteractors) {
         NActors::TActivationContext::Send(new NActors::IEventHandle(actorId, NActors::TActivationContext::AsActorContext().SelfID, new NActors::TEvents::TEvPoison()));
     }
     ControlPlaneInteractors.clear();
 }
 
-bool TDqPqReadActorBase::ConsumerOffsetsInitialized() const {
+bool TPqReadState::ConsumerOffsetsInitialized() const {
     return ControlPlaneInteractors.empty() && !ConsumerOffsetsRewindFailed;
 }
 
-void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, TSourceState& state) {
+void TPqReadState::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, TSourceState& state) {
     NPq::NProto::TDqPqTopicSourceState stateProto;
 
     NPq::NProto::TDqPqTopicSourceState::TTopicDescription* topic = stateProto.AddTopics();
@@ -362,9 +363,7 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
     state.Data.emplace_back(stateBlob, STATE_VERSION);
 }
 
-void TDqPqReadActorBase::LoadState(const TSourceState& state) {
-    InitWatermarkTracker();
-
+void TPqReadState::LoadState(const TSourceState& state) {
     TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
     ui64 ingressBytes = 0;
     for (const auto& data : state.Data) {
@@ -397,49 +396,19 @@ void TDqPqReadActorBase::LoadState(const TSourceState& state) {
     IngressStats.Chunks++;
 }
 
-ui64 TDqPqReadActorBase::GetInputIndex() const {
+ui64 TPqReadState::GetInputIndex() const {
     return InputIndex;
 }
 
-const NYql::NDq::TDqAsyncStats& TDqPqReadActorBase::GetIngressStats() const {
+const NYql::NDq::TDqAsyncStats& TPqReadState::GetIngressStats() const {
     return IngressStats;
 }
 
-TString TDqPqReadActorBase::GetSessionId() const {
+TString TPqReadState::GetSessionId() const {
     return "empty";
 }
 
-void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDuration idleTimeout, const ::NMonitoring::TDynamicCounterPtr& counters) {
-    const auto granularity = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs());
-    SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: " << granularity
-        << " late arrival delay: " << lateArrivalDelay
-        << " idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
-        << " idle timeout: " << idleTimeout
-    );
-
-    if (!SourceParams.GetWatermarks().GetEnabled()) {
-        return;
-    }
-
-    WatermarkTracker.ConstructInPlace(
-        granularity,
-        SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
-        lateArrivalDelay,
-        idleTimeout,
-        LogPrefix,
-        counters
-    );
-}
-
-void TDqPqReadActorBase::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime) {
-    Y_DEBUG_ABORT_UNLESS(WatermarkTracker);
-    if (const auto nextIdleCheckAt = WatermarkTracker->PrepareIdlenessCheck(systemTime)) {
-        SRC_LOG_T("Next idleness check scheduled at " << *nextIdleCheckAt);
-        SchedulePartitionIdlenessCheck(*nextIdleCheckAt);
-    }
-}
-
-TString TDqPqReadActorBase::LogPartitionToOffset() const {
+TString TPqReadState::LogPartitionToOffset() const {
     TStringBuilder str;
     for (const auto& [clusterAndPartition, info] : Partitions) {
         str << "{" << clusterAndPartition.Cluster << ":" << clusterAndPartition.PartitionId << "," << info.Offset << "},";

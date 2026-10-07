@@ -13,6 +13,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
+#include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
 
@@ -86,10 +87,18 @@ public:
     std::set<TActorId> PDiskServiceIds;
     std::unique_ptr<TEventHandle<NPDisk::TEvChunkReserve>> HeldBootstrapRefill;
 
-    TTestContext()
+    explicit TTestContext(bool memoryMetrics = false)
         : Runtime(1)
         , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
     {
+        if (memoryMetrics) {
+            Runtime.SetupNodeSubSystems = [](ui32, TActorSystemSetup* setup) {
+                setup->RegisterSubSystem(MakeInMemoryMetricsRegistry({
+                    .MemoryBytes = 128ull << 10, .MaxLines = 8,
+                    .AllowedMetricPrefixes = {"ddisk."},
+                }));
+            };
+        }
         Runtime.Start();
         Edge = Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
     }
@@ -1184,9 +1193,208 @@ void AssertActorDies(TTestContext& ctx, const TActorId& actorId) {
 }
 #endif
 
+void AdvanceDDiskTestTime(TTestContext& ctx, TDuration duration) {
+    ctx.Runtime.Schedule(duration, new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
+    WaitFromDDisk<TEvents::TEvWakeup>(ctx);
+}
+
+void AssertTabletSyncStats(TTestContext& ctx, const TDiskHandle& disk, ui64 tabletId, ui64 bytes) {
+    auto request = std::make_unique<NDDisk::TEvGetTabletStats>();
+    request->TabletId = tabletId;
+    const auto stats = SendToDDiskAndWait<NDDisk::TEvTabletStats>(ctx, disk.ServiceId, request.release());
+    UNIT_ASSERT_VALUES_EQUAL(stats->Get()->Tablets.size(), 1);
+    const auto& row = stats->Get()->Tablets.front();
+    const double seconds = row.Interval.MicroSeconds() / 1e6;
+    UNIT_ASSERT_VALUES_EQUAL(row.DataMappedChunks, 1);
+    UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[2].Iops * seconds, 1, 1e-6);
+    UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[2].BytesPerSecond * seconds, bytes, bytes * 1e-6);
+    UNIT_ASSERT_VALUES_EQUAL(row.Rates[1].Iops, 0); // Internal Sync writes are not logical Write requests.
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDDiskActorTest) {
+    Y_UNIT_TEST(TabletStatsShutdownWithPendingBatch) {
+        TTestContext ctx;
+        const auto disk = ctx.CreateDDisk(125, 1);
+        Connect(ctx, disk.ServiceId, 42, 1);
+        std::unique_ptr<IEventHandle> heldBatch;
+        TActorId statsActor;
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NDDisk::TEvTabletStatsBatch::EventType) {
+                statsActor = ev->Recipient;
+                heldBatch = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+        AdvanceDDiskTestTime(ctx, TDuration::MilliSeconds(1100));
+        UNIT_ASSERT(heldBatch);
+        TShutdownObserver shutdown(ctx, disk);
+        shutdown.HoldChildGone = true;
+        shutdown.AcknowledgeForget = true;
+        shutdown.Poison();
+        const auto reply = SendToDDiskAndWait<NDDisk::TEvTabletStats>(ctx, disk.ServiceId,
+            new NDDisk::TEvGetTabletStats());
+        UNIT_ASSERT(!reply->Get()->Available);
+        ui32 processed = 0;
+        ctx.Runtime.Sim([&] { return !shutdown.ChildGone && ++processed <= 200; });
+        UNIT_ASSERT(shutdown.ChildGone);
+        shutdown.HoldChildGone = false;
+        ctx.Runtime.Send(std::move(shutdown.ChildGone), NodeId);
+        shutdown.WaitGone();
+        AdvanceDDiskTestTime(ctx, TDuration::MilliSeconds(1));
+        UNIT_ASSERT(!ctx.Runtime.WrapInActorContext(statsActor, [](IActor*) {}));
+    }
+
+    Y_UNIT_TEST(TabletStatsRecoveryMappedChunks) {
+        using TChunkMapLogRecord = NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord;
+        TTestContext ctx;
+        NDDisk::TDDiskConfig config;
+        config.EnableChecksums = false;
+        const auto disk = ctx.RegisterDDisk(123, 1, std::nullopt, config);
+        TChunkMapLogRecord snapshot;
+        snapshot.SetChecksumsDisabled(true);
+        auto* tablet = snapshot.MutableSnapshot()->AddTabletRecords();
+        tablet->SetTabletId(42);
+        for (ui32 i = 0; i < 2; ++i) {
+            auto* chunk = tablet->AddChunkRefs();
+            chunk->SetVChunkIndex(i);
+            chunk->SetChunkIdx(700 + i);
+        }
+        TChunkMapLogRecord increment;
+        increment.SetChecksumsDisabled(true);
+        auto* data = increment.MutableIncrement()->MutableDataChunk();
+        data->SetTabletId(42);
+        data->SetVChunkIndex(2);
+        data->SetChunkIdx(702);
+        ctx.BootstrapDDisk(disk, 4u << 20, MinChunksReserved, &snapshot, 10, {{increment, 11}});
+        AdvanceDDiskTestTime(ctx, TDuration::MilliSeconds(1100));
+        auto request = std::make_unique<NDDisk::TEvGetTabletStats>();
+        request->TabletId = 42;
+        const auto reply = SendToDDiskAndWait<NDDisk::TEvTabletStats>(ctx, disk.ServiceId, request.release());
+        UNIT_ASSERT(reply->Get()->Available);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Tablets.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Tablets.front().DataMappedChunks, 3);
+        for (const auto& rate : reply->Get()->Tablets.front().Rates) {
+            UNIT_ASSERT_VALUES_EQUAL(rate.Iops, 0);
+            UNIT_ASSERT_VALUES_EQUAL(rate.BytesPerSecond, 0);
+        }
+    }
+
+    Y_UNIT_TEST(TabletStatsBatchBackpressureAndWakeup) {
+        TTestContext ctx;
+        const auto disk = ctx.CreateDDisk(124, 1);
+        size_t batches = 0;
+        std::unique_ptr<IEventHandle> heldBatch;
+        bool hold = true;
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NDDisk::TEvTabletStatsBatch::EventType) {
+                UNIT_ASSERT(ev->Get<NDDisk::TEvTabletStatsBatch>()->Samples.size() <= 100);
+                ++batches;
+                if (hold) {
+                    UNIT_ASSERT(!heldBatch);
+                    heldBatch = std::move(ev);
+                    return false;
+                }
+            }
+            return true;
+        };
+        for (ui64 id = 1; id <= 251; ++id) {
+            Connect(ctx, disk.ServiceId, id, 1);
+        }
+        const auto advance = [&](TDuration duration) { AdvanceDDiskTestTime(ctx, duration); };
+        advance(TDuration::MilliSeconds(1100));
+        UNIT_ASSERT(heldBatch);
+        UNIT_ASSERT_VALUES_EQUAL(batches, 1);
+        Connect(ctx, disk.ServiceId, 999, 1); // Mutation while the collector awaits its batch.
+        advance(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(batches, 1);
+        hold = false;
+        ctx.Runtime.Send(heldBatch.release(), NodeId);
+        advance(TDuration::MilliSeconds(100));
+        UNIT_ASSERT(batches >= 3);
+        auto request = std::make_unique<NDDisk::TEvGetTabletStats>();
+        request->TabletId = 999;
+        UNIT_ASSERT_VALUES_EQUAL(SendToDDiskAndWait<NDDisk::TEvTabletStats>(ctx, disk.ServiceId,
+            request.release())->Get()->Tablets.size(), 1);
+        advance(TDuration::Seconds(5));
+        const auto sleepingBatches = batches;
+        advance(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(batches, sleepingBatches);
+        ctx.Runtime.FilterFunction = {};
+    }
+
+    Y_UNIT_TEST(TabletStatsLogicalIoIdleWakeAndDeletion) {
+        TTestContext ctx;
+        const auto disk = ctx.CreateDDisk(122, 1);
+        const auto creds = Connect(ctx, disk.ServiceId, 42, 1);
+        const auto advance = [&](TDuration duration) { AdvanceDDiskTestTime(ctx, duration); };
+        const auto query = [&] {
+            auto request = std::make_unique<NDDisk::TEvGetTabletStats>();
+            request->TabletId = 42;
+            return SendToDDiskAndWait<NDDisk::TEvTabletStats>(ctx, disk.ServiceId, request.release(), 73);
+        };
+        const TString payload = MakeData('S', BlockSize);
+        const auto initial = DoWriteWithChunkAllocation(ctx, disk, MakeWrite(creds, 0, 0, payload),
+            disk.FirstChunkId + PersistentBufferInitChunks, 0, payload, true, true);
+        AssertStatus(initial.WriteResult, TReplyStatus::OK);
+        // A read from an unmapped vchunk still counts as admitted logical I/O.
+        AssertStatus(SendToDDiskAndWait<NDDisk::TEvReadResult>(ctx, disk.ServiceId,
+            new NDDisk::TEvRead(creds, {1, 0, BlockSize}, NDDisk::TReadInstruction(true))), TReplyStatus::OK);
+        advance(TDuration::MilliSeconds(1100));
+        auto reply = query();
+        UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, 73);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Tablets.size(), 1);
+        const auto row = reply->Get()->Tablets.front();
+        UNIT_ASSERT_VALUES_EQUAL(row.DataMappedChunks, 1); // Excludes PB and integrity chunks.
+        const double seconds = row.Interval.MicroSeconds() / 1e6;
+        UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[0].Iops * seconds, 1, 1e-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[1].Iops * seconds, 1, 1e-6); // Parked allocation was replayed once.
+        UNIT_ASSERT_DOUBLES_EQUAL(row.Rates[1].BytesPerSecond * seconds, BlockSize, BlockSize * 1e-6);
+        advance(TDuration::Seconds(4));
+        reply = query();
+        for (const auto& rate : reply->Get()->Tablets.front().Rates) {
+            UNIT_ASSERT_VALUES_EQUAL(rate.Iops, 0);
+            UNIT_ASSERT_VALUES_EQUAL(rate.BytesPerSecond, 0);
+        }
+        const auto sleptAt = reply->Get()->Tablets.front().SampledAt;
+        advance(TDuration::Minutes(1));
+        UNIT_ASSERT_VALUES_EQUAL(query()->Get()->Tablets.front().SampledAt, sleptAt);
+        AssertStatus(SendToDDiskAndWait<NDDisk::TEvReadResult>(ctx, disk.ServiceId,
+            new NDDisk::TEvRead(creds, {1, 0, BlockSize}, NDDisk::TReadInstruction(true))), TReplyStatus::OK);
+        advance(TDuration::MilliSeconds(1100));
+        reply = query();
+        UNIT_ASSERT(reply->Get()->Tablets.front().Interval < TDuration::Seconds(2));
+        UNIT_ASSERT(reply->Get()->Tablets.front().Rates[0].Iops > 0.5);
+
+        SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvDeleteTabletChunks(creds));
+        auto snapshot = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+        ctx.ReplyLog(disk, *snapshot);
+        // Integrity retirement may require a second snapshot; fixture handles it
+        // in the same way as the existing deletion tests.
+        for (;;) {
+            auto event = ctx.Runtime.WaitForEdgeActorEvent(ctx.ClientWaitEdges());
+            if (event->GetTypeRewrite() == NPDisk::TEvLog::EventType) {
+                auto log = std::unique_ptr<TEventHandle<NPDisk::TEvLog>>(
+                    reinterpret_cast<TEventHandle<NPDisk::TEvLog>*>(event.release()));
+                ctx.ReplyLog(disk, *log);
+            } else if (event->GetTypeRewrite() == NDDisk::TEvDeleteTabletChunksResult::EventType) {
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(event->Get<NDDisk::TEvDeleteTabletChunksResult>()->Record.GetStatus()),
+                    static_cast<int>(TReplyStatus::OK));
+                break;
+            } else {
+                UNIT_ASSERT(ctx.ConsumeUnsolicitedPDiskEvent(event));
+            }
+        }
+        auto disconnect = std::make_unique<NDDisk::TEvDisconnect>();
+        creds.SerializeForRequest(disconnect->Record.MutableCredentials());
+        AssertStatus(SendToDDiskAndWait<NDDisk::TEvDisconnectResult>(ctx, disk.ServiceId,
+            disconnect.release()), TReplyStatus::OK);
+        advance(TDuration::Seconds(4));
+        UNIT_ASSERT(query()->Get()->Tablets.empty());
+    }
+
     Y_UNIT_TEST(PublishesSpaceToWhiteboard) {
         TTestContext ctx;
         const auto disk = ctx.CreateDDisk(121, 1, NDDisk::TPersistentBufferFormat{256, 4, BlockSize * 128, 8, 30000, 512 * 1024});
@@ -4100,6 +4308,96 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
     }
 
+    Y_UNIT_TEST(ChecksumCacheMemoryHistory) {
+        for (bool checksums : {false, true}) {
+            TTestContext ctx(true);
+            ctx.Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), ctx.Edge);
+            const auto disk = ctx.CreateDDisk(6, 1, std::nullopt, {.EnableChecksums = checksums});
+            const auto creds = Connect(ctx, disk.ServiceId, 229, 1);
+            auto* registry = GetInMemoryMetrics(*ctx.Runtime.GetNode(NodeId)->ActorSystem);
+            const auto snapshot = [&] {
+                UNIT_ASSERT(registry->RequestSnapshot(ctx.Edge));
+                return WaitFromDDisk<TEvInMemoryMetricsSnapshot>(ctx);
+            };
+            const auto tick = [&] {
+                ctx.Runtime.Schedule(TDuration::MilliSeconds(1100),
+                    new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
+                WaitFromDDisk<TEvents::TEvWakeup>(ctx);
+            };
+            // Flush registration; use the actual periodic timer rather than injecting samples.
+            snapshot();
+            tick();
+            size_t initialSamples = 0;
+            ui32 lineId = 0;
+            snapshot()->Get()->Snapshot.Read([&](const TSnapshotView& view) {
+                UNIT_ASSERT_VALUES_EQUAL(view.LinesSize(), 1);
+                const auto& line = view.GetLine(0);
+                UNIT_ASSERT_VALUES_EQUAL(line.Name, "ddisk.memory.checksum_cache_estimated_bytes");
+                UNIT_ASSERT(!line.Closed);
+                lineId = line.LineId;
+                const auto values = line.ReadValuesAs<ui64>();
+                initialSamples = values.size();
+                UNIT_ASSERT(initialSamples);
+                UNIT_ASSERT_VALUES_EQUAL(values.back(), 0);
+            });
+            auto write = DoWriteWithChunkAllocation(ctx, disk,
+                MakeWrite(creds, 0, 0, MakeData('A', BlockSize)),
+                disk.FirstChunkId + PersistentBufferInitChunks, 0, MakeData('A', BlockSize), true, true);
+            AssertStatus(write.WriteResult, TReplyStatus::OK);
+            tick();
+            size_t samples = 0;
+            const ui64 expected = checksums ? NDDisk::TIntegrityManager::BlockStateApproxBytes : 0;
+            snapshot()->Get()->Snapshot.Read([&](const TSnapshotView& view) {
+                UNIT_ASSERT_VALUES_EQUAL(view.LinesSize(), 1);
+                const auto& line = view.GetLine(0);
+                UNIT_ASSERT_VALUES_EQUAL(line.LineId, lineId);
+                const auto values = line.ReadValuesAs<ui64>();
+                samples = values.size();
+                UNIT_ASSERT_VALUES_EQUAL(samples, initialSamples + 1);
+                UNIT_ASSERT_VALUES_EQUAL(values.front(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(values.back(), expected);
+            });
+            SendToDDisk(ctx, disk.ServiceId, new TEvents::TEvPoison());
+            WaitFromDDisk<TEvents::TEvGone>(ctx);
+            tick();
+            snapshot()->Get()->Snapshot.Read([&](const TSnapshotView& view) {
+                UNIT_ASSERT_VALUES_EQUAL(view.LinesSize(), 1);
+                const auto& line = view.GetLine(0);
+                UNIT_ASSERT_VALUES_EQUAL(line.LineId, lineId);
+                UNIT_ASSERT(line.Closed);
+                const auto values = line.ReadValuesAs<ui64>();
+                UNIT_ASSERT_VALUES_EQUAL(values.size(), samples);
+                UNIT_ASSERT_VALUES_EQUAL(values.back(), expected);
+            });
+        }
+    }
+
+    Y_UNIT_TEST(ChecksumCacheMemoryHistoryDuringInitialization) {
+        for (bool checksums : {false, true}) {
+            TTestContext ctx(true);
+            const auto disk = ctx.RegisterDDisk(6, 1, std::nullopt, {.EnableChecksums = checksums});
+            // Hold PDisk initialization: no IntegrityManager exists yet.
+            ctx.WaitPDiskRequest<NPDisk::TEvYardInit>(disk);
+            auto* registry = GetInMemoryMetrics(*ctx.Runtime.GetNode(NodeId)->ActorSystem);
+            UNIT_ASSERT(registry->RequestSnapshot(ctx.Edge));
+            WaitFromDDisk<TEvInMemoryMetricsSnapshot>(ctx);
+            ctx.Runtime.Schedule(TDuration::MilliSeconds(1100),
+                new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
+            WaitFromDDisk<TEvents::TEvWakeup>(ctx);
+            UNIT_ASSERT(registry->RequestSnapshot(ctx.Edge));
+            const auto snapshot = WaitFromDDisk<TEvInMemoryMetricsSnapshot>(ctx);
+            snapshot->Get()->Snapshot.Read([&](const TSnapshotView& view) {
+                // Empty lines are omitted by the registry's snapshot API.
+                UNIT_ASSERT_VALUES_EQUAL(view.LinesSize(), checksums ? 0 : 1);
+                if (!checksums) {
+                    const auto values = view.GetLine(0).ReadValuesAs<ui64>();
+                    UNIT_ASSERT(!values.empty());
+                    UNIT_ASSERT_VALUES_EQUAL(values.back(), 0);
+                }
+            });
+        }
+    }
+
     Y_UNIT_TEST(WriteAndRead) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(5, 1);
@@ -5618,6 +5916,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(
                 readResult->Get()->Record.GetChecksums(i), expectedChecksums[i]);
         }
+        AdvanceDDiskTestTime(ctx, TDuration::MilliSeconds(1100));
+        AssertTabletSyncStats(ctx, destination, 250, payload.size());
     }
 
     Y_UNIT_TEST(PersistentBufferToDDiskSyncPreservesPureChecksums) {
@@ -5675,6 +5975,12 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(
                 readResult->Get()->Record.GetChecksums(i), expectedChecksums[i]);
         }
+        AdvanceDDiskTestTime(ctx, TDuration::MilliSeconds(1100));
+        AssertTabletSyncStats(ctx, destination, 251, payload.size());
+        auto request = std::make_unique<NDDisk::TEvGetTabletStats>();
+        request->TabletId = 251;
+        UNIT_ASSERT(SendToDDiskAndWait<NDDisk::TEvTabletStats>(ctx, source.ServiceId,
+            request.release())->Get()->Tablets.empty()); // PB activity is excluded from DDisk stats.
     }
 
     Y_UNIT_TEST(SyncSlicesChecksumsAcrossSegmentsAndIntegrityPair) {
@@ -5751,6 +6057,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(
                 readResult->Get()->Record.GetChecksums(i), expectedChecksums[i]);
         }
+        AdvanceDDiskTestTime(ctx, TDuration::MilliSeconds(1100));
+        AssertTabletSyncStats(ctx, disk, 252, allPayload.size());
     }
 
     Y_UNIT_TEST(SyncReplyWaitsForDestinationDataAndIntegrity) {

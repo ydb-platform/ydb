@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/fq/libs/checkpointing/checkpoint_provider_integration.h>
 #include <ydb/core/local_proxy/local_pq_client/local_topic_client_settings.h>
 #include <ydb/library/logger/actor.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
@@ -70,6 +71,7 @@ namespace NKikimr::NKqp {
         NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         TScriptExecutionSettings ScriptExecutionSettings = {};
+        NFq::TCheckpointProviderIntegrations CheckpointProviderIntegrations = {};
     };
 
     struct IKqpFederatedQuerySetupFactory {
@@ -222,6 +224,17 @@ namespace NKikimr::NKqp {
         const TString& endpoint,
         const TString& database,
         bool useTls,
+        const TString& structuredTokenJson,
+        const TString& path);
+
+    struct TYtEntityTypeResult {
+        bool IsQueue = false;
+        NYql::TIssues Issues;
+    };
+
+    NThreading::TFuture<TYtEntityTypeResult> GetYtEntityType(
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const TString& endpoint,
         const TString& structuredTokenJson,
         const TString& path);
 

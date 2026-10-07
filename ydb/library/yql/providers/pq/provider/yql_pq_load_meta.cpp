@@ -2,6 +2,8 @@
 #include "yql_pq_settings.h"
 #include "yql_pq_topic_key_parser.h"
 
+#include <ydb/library/yql/providers/common/message_stream/provider.h>
+
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
 #include <yql/essentials/ast/yql_expr.h>
@@ -93,11 +95,7 @@ public:
                 // Use a completion promise that always resolves with a value (never exceptional),
                 // so WaitAll does not see exceptions and DoApplyAsyncChanges is always invoked.
                 // Per-topic errors are handled in DoApplyAsyncChanges via pending.Future.GetValue().
-                auto completionPromise = NThreading::NewPromise();
-                pending.Future.NoexceptSubscribe([p = completionPromise](const auto&) mutable {
-                    p.TrySetValue();
-                });
-                handles.push_back(completionPromise.GetFuture());
+                handles.push_back(NFq::NMessageStream::CompletionFuture(pending.Future));
             }
         };
 
@@ -126,23 +124,6 @@ public:
     }
 
 private:
-    static const TStructExprType* CreateDefaultItemType(TExprContext& ctx) {
-        // Schema for topic:
-        // {
-        //     Data:String
-        // }
-        TVector<const TItemExprType*> items;
-        items.reserve(1);
-
-        // Data column.
-        {
-            const TTypeAnnotationNode* typeNode = ctx.MakeType<TDataExprType>(NYql::NUdf::EDataSlot::String);
-            items.push_back(ctx.MakeType<TItemExprType>(ctx.AppendString("Data"), typeNode));
-        }
-
-        return ctx.MakeType<TStructExprType>(items);
-    }
-
     TStatus FillState(TTopics& pendingTopics, TExprContext& ctx, bool isWrite) {
         for (auto& [key, pending] : pendingTopics) {
             try {
@@ -155,7 +136,7 @@ private:
                     return TStatus::Error;
                 }
             }
-            const TStructExprType* itemType = CreateDefaultItemType(ctx);
+            const TStructExprType* itemType = NFq::NMessageStream::MakeRawRowType(ctx);
 
             if (!pending.Meta.RowSpec) {
                 pending.Meta.RowSpec = ExpandType(pending.Meta.Pos, *itemType, ctx);

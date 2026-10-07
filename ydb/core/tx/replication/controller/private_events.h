@@ -42,6 +42,8 @@ struct TEvPrivate {
         EvAllowCreateStream,
         EvRequestDropStream,
         EvAllowDropStream,
+        EvPrepareAttachDst,
+        EvPrepareAttachDstResult,
 
         EvEnd,
     };
@@ -114,6 +116,7 @@ struct TEvPrivate {
 
     struct TEvCreateStreamResult: public TGenericYdbProxyResult<TEvCreateStreamResult, EvCreateStreamResult> {
         using TBase::TBase;
+        bool SchemaChanges = false;
     };
 
     struct TEvDropStreamResult: public TGenericYdbProxyResult<TEvDropStreamResult, EvDropStreamResult> {
@@ -155,6 +158,20 @@ struct TEvPrivate {
 
         explicit TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId);
         explicit TEvCreateDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error);
+        TString ToString() const override;
+    };
+
+    struct TEvPrepareAttachDst: public TEventLocal<TEvPrepareAttachDst, EvPrepareAttachDst> {
+        const ui64 ReplicationId;
+        const ui64 TargetId;
+        const TPathId DstPathId;
+
+        explicit TEvPrepareAttachDst(ui64 rid, ui64 tid, const TPathId& dstPathId);
+        TString ToString() const override;
+    };
+
+    struct TEvPrepareAttachDstResult: public TEventLocal<TEvPrepareAttachDstResult, EvPrepareAttachDstResult> {
+        TEvPrepareAttachDstResult() = default;
         TString ToString() const override;
     };
 
@@ -232,6 +249,7 @@ struct TEvPrivate {
         : public TGenericSchemeResult<TEvSchemaChangeDstAlterResult, EvSchemaChangeDstAlterResult>
     {
         const ui64 DstAlterTxId;
+        bool RequiresTargetFlush = false;
 
         explicit TEvSchemaChangeDstAlterResult(ui64 rid, ui64 tid, ui64 dstAlterTxId,
             NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});

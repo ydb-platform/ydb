@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_lookup_join_builder.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 #include <ydb/core/kqp/opt/rbo/kqp_plan_conversion_utils.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_transformer.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -15,6 +16,46 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
+    Y_UNIT_TEST(UpsertKeepsDefaultColumnsThroughLowering) {
+        NTests::TIdTestContext f;
+        // Exercise RBO lowering regardless of the DML fallback default.
+        f.Config->SetEnableFallbackOnDML(false);
+        auto& ctx = f.ExprCtx;
+        const auto pos = f.Pos;
+        auto empty = ctx.NewCallable(pos, "KqpOpEmptySource", {});
+        auto constant = MakeConstant("Uint64", "1", pos, &ctx).Node;
+        const auto* type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+        constant->TailPtr()->SetTypeAnn(type);
+        auto columns = ctx.NewList(pos, {ctx.NewAtom(pos, "value")});
+        auto input = ctx.NewCallable(pos, "KqpOpMap", {empty, ctx.NewList(pos, {
+            ctx.NewCallable(pos, "KqpOpMapElementLambda",
+                {empty, ctx.NewAtom(pos, "value"), constant, ctx.NewAtom(pos, "false")})
+        })});
+        input->SetTypeAnn(ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(
+            TVector<const TItemExprType*>{ctx.MakeType<TItemExprType>("value", type)})));
+        auto root = ctx.NewCallable(pos, "KqpOpRoot", {input, columns});
+        const auto table = NNodes::Build<NNodes::TKqpTable>(ctx, pos)
+            .Path().Build("/Root/table").PathId().Build("1:1")
+            .SysView().Build("").Version().Build("1").Done();
+        const auto upsert = NNodes::Build<NNodes::TKqlUpsertRows>(ctx, pos)
+            .Table(table)
+            .Input(root)
+            .Columns(columns)
+            .ReturningColumns().Build()
+            .IsBatch().Build("false")
+            .DefaultColumns(columns)
+            .Settings().Build()
+            .Done();
+
+        const auto rewritten = RewriteTableEffect(upsert.Ptr(), ctx, f.KqpCtx);
+        auto plan = PlanConverter(f.TypeCtx, ctx).ConvertRoot(rewritten, nullptr);
+        auto& effect = CastOperator<TOpTableEffect>(*plan->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(effect.GetExplainName(), "UpsertRows");
+        const NNodes::TKqpTableSinkSettings settings(effect.BuildSettings(ctx));
+        UNIT_ASSERT_VALUES_EQUAL(settings.DefaultColumns().Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(settings.DefaultColumns().Item(0).StringValue(), "value");
+    }
+
     Y_UNIT_TEST(TypeAnnotationAllowsSharingOnlyThroughDistinctReplicatePorts) {
         // Extra local references are harmless. Reusing an ordinary subtree or
         // one output port in two plan slots violates the binding invariant.
@@ -242,6 +283,67 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         UNIT_ASSERT(right.GetOutputIUs().Contains(inputs[1]));
         UNIT_ASSERT(output != inputs[0] && output != inputs[1]);
         UNIT_ASSERT(left.GetReplicate().GetInput()->GetChild(0)->Kind == EOperator::EmptySource);
+    }
+
+    Y_UNIT_TEST(PositionalRenamePreservesProjectionAcrossSharedInputs) {
+        for (const TString kind : {"union_all", "union"}) {
+            TExprContext ctx;
+            TTypeAnnotationContext typeCtx;
+            const TPositionHandle pos;
+            const auto* type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+            const auto rowType = [&](const TString& prefix) {
+                return ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(
+                    TVector<const TItemExprType*>{ctx.MakeType<TItemExprType>(prefix + "a", type),
+                        ctx.MakeType<TItemExprType>(prefix + "z", type)}));
+            };
+            auto empty = ctx.NewCallable(pos, "KqpOpEmptySource", {});
+            TExprNode::TListType elements;
+            for (const TString name : {"z", "a"}) {
+                auto constant = MakeConstant("Uint64", name == "z" ? "1" : "2", pos, &ctx).Node;
+                constant->TailPtr()->SetTypeAnn(type);
+                elements.push_back(ctx.NewCallable(pos, "KqpOpMapElementLambda",
+                    {empty, ctx.NewAtom(pos, name), constant, ctx.NewAtom(pos, "false")}));
+            }
+            auto map = ctx.NewCallable(pos, "KqpOpMap",
+                {empty, ctx.NewList(pos, std::move(elements)), ctx.NewAtom(pos, "true")});
+            map->SetTypeAnn(rowType(""));
+            auto alias = ctx.NewCallable(pos, "KqpOpReplaceAlias", {map, ctx.NewAtom(pos, "s")});
+            alias->SetTypeAnn(rowType("s."));
+            const auto rename = [&]() {
+                auto result = ctx.NewCallable(pos, "KqpOpReplaceColumns", {alias,
+                    ctx.NewList(pos, {ctx.NewAtom(pos, "z"), ctx.NewAtom(pos, "a")})});
+                result->SetTypeAnn(rowType(""));
+                return result;
+            };
+            auto setOp = ctx.NewCallable(pos, "KqpOpSetOp", {rename(), rename(), ctx.NewAtom(pos, kind)});
+            setOp->SetTypeAnn(rowType(""));
+            auto root = ctx.NewCallable(pos, "KqpOpReplaceColumns", {setOp,
+                ctx.NewList(pos, {ctx.NewAtom(pos, "first"), ctx.NewAtom(pos, "second")})});
+
+            PlanConverter converter(typeCtx, ctx);
+            auto plan = converter.ExprNodeToOperator(root);
+            const auto& registry = converter.PlanProps.InfoUnitRegistry;
+            const auto checkRename = [&](const TOpMap& op, const TString& prefix, bool outer) {
+                for (const auto& [id, element] : op.GetMapElements().Items()) {
+                    const auto input = element.GetColumnAccess();
+                    const auto& name = registry.Get(id).GetColumnName();
+                    const auto expected = outer ? (name == "first" ? "z" : "a") : name;
+                    UNIT_ASSERT_VALUES_EQUAL(registry.Get(input).GetFullName(), prefix + expected);
+                    UNIT_ASSERT(op.GetChild(0)->GetOutputIUs().Contains(input));
+                }
+            };
+            checkRename(CastOperator<TOpMap>(*plan), "", true);
+            auto* merge = plan->GetChild(0).Get();
+            if (kind == "union") {
+                merge = merge->GetChild(0).Get();
+            }
+            UNIT_ASSERT(merge->Kind == EOperator::UnionAll);
+            for (ui32 i = 0; i < 2; ++i) {
+                checkRename(CastOperator<TOpMap>(*merge->GetChild(i)), "s.", false);
+            }
+            UNIT_ASSERT(!merge->GetChild(0)->GetChild(0)->GetOutputIUs().HasAny(
+                merge->GetChild(1)->GetChild(0)->GetOutputIUs()));
+        }
     }
 
     Y_UNIT_TEST(RootKeepsOptionalQueryHintsSeparateFromOutputNames) {
@@ -550,6 +652,9 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
 
     Y_UNIT_TEST(StageAssignmentAndLivenessDistinguishReplicateEdgesToOneJoin) {
         NTests::TIdTestContext f;
+        f.Config->SetEnableQueryServiceSpilling(true);
+        f.Config->_KqpEnableSpilling = true;
+        f.QueryCtx->Type = EKikimrQueryType::Query;
         const auto a = f.Id("left"), b = f.Id("right");
         auto hub = TReplicate::Create(f.Read({a, b}), f.Pos, f.Props.InfoUnitRegistry);
         auto discarded = hub->AddOutput();

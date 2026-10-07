@@ -252,6 +252,16 @@ struct TEvKqpCompute {
         }
     };
 
+    // System view scanners and their owners live on the same node.
+    // A warning does not finish the scan; TEvScanData::Finished still does.
+    struct TEvScanWarning : public NActors::TEventLocal<TEvScanWarning, TKqpComputeEvents::EvScanWarning> {
+        explicit TEvScanWarning(NYql::TIssues issues)
+            : Issues(std::move(issues))
+        {}
+
+        const NYql::TIssues Issues;
+    };
+
     struct TEvScanPing : public NActors::TEventPB<TEvScanPing, NKikimrKqp::TEvScanPing,
         TKqpComputeEvents::EvScanPing>
     {

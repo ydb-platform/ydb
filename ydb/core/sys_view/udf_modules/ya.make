@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     udf_modules.cpp
@@ -10,7 +10,5 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/query_actor
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

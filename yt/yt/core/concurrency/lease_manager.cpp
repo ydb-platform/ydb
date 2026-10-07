@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/actions/bind.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NConcurrency {
 
@@ -21,7 +21,7 @@ struct TLeaseEntry
     TDuration Timeout;
     TClosure OnExpired;
     NConcurrency::TDelayedExecutorCookie Cookie;
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock);
 
     TLeaseEntry(TDuration timeout, TClosure onExpired)
         : Timeout(timeout)

@@ -108,6 +108,7 @@ private:
     // Heplers.
     TExprNode::TPtr GetNth(TExprNode::TPtr input, TString&& offset);
     TExprNode::TPtr GetDataTypeForSumAggregation(const TTypeAnnotationNode* itemType) const;
+    TExprNode::TPtr CastToSumType(TExprNode::TPtr value, const TTypeAnnotationNode* itemType) const;
     TVector<TString> GetInputColumns() const;
     void BuildPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TString>& keyFields, TVector<TString>& inputFields,
                                         TVector<TPhysicalAggregationTraits>& phyAggTraitsList, THashMap<TString, TString>& projectionMap);

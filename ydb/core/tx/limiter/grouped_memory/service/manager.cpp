@@ -38,15 +38,18 @@ void TManager::UnregisterGroup(const ui64 externalProcessId, const ui64 external
         auto g = BuildProcessOrderGuard(*process);
         process->UnregisterGroup(externalScopeId, externalGroupId);
     }
+    if (Config.IsUnrestrictedEnabled()) {
+        TryAllocateWaiting();
+    }
     RefreshSignals();
 }
 
-void TManager::AllocationUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId) {
+void TManager::AllocationUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume) {
     TProcessMemory& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
     bool updated = false;
     {
         auto g = BuildProcessOrderGuard(process);
-        updated = process.AllocationUpdated(externalScopeId, allocationId);
+        updated = process.AllocationUpdated(externalScopeId, allocationId, volume);
         if (!updated) {
             g.Release();
         }
@@ -59,8 +62,58 @@ void TManager::AllocationUpdated(const ui64 externalProcessId, const ui64 extern
     RefreshSignals();
 }
 
+void TManager::RelinkProcess(TProcessMemory& process, const TProcessMemoryUsage& oldAddress) {
+    AFL_VERIFY(ProcessesOrdered.erase(oldAddress));
+    AFL_VERIFY(ProcessesOrdered.emplace(process.BuildUsageAddress(), &process).second);
+    WaitingProcesses.erase(oldAddress);
+    if (process.HasWaitingAllocations()) {
+        WaitingProcesses.emplace(process.BuildUsageAddress());
+    }
+}
+
+bool TManager::ScheduleOneUnrestricted() {
+    struct TCandidate {
+        bool HasAdmission = false;
+        ui64 InternalId = 0;
+        ui64 ScopeId = 0;
+        TProcessMemory* Process = nullptr;
+    };
+
+    auto isBetter = [](const TCandidate& left, const TCandidate& right) {
+        if (left.HasAdmission != right.HasAdmission) {
+            return !left.HasAdmission;
+        }
+        if (left.InternalId != right.InternalId) {
+            return left.InternalId < right.InternalId;
+        }
+        return left.ScopeId < right.ScopeId;
+    };
+
+    std::optional<TCandidate> best;
+    for (auto& [internalId, process] : Processes) {
+        for (const ui64 scopeId : process.GetWaitingScopeIds()) {
+            TProcessMemoryScope& scope = process.MutableScope(scopeId);
+            if (!scope.CanScheduleUnrestricted()) {
+                continue;
+            }
+            TCandidate candidate{scope.HasAdmission(), internalId, scopeId, &process};
+            if (!best || isBetter(candidate, *best)) {
+                best = candidate;
+            }
+        }
+    }
+    if (!best) {
+        return false;
+    }
+
+    const auto oldAddress = best->Process->BuildUsageAddress();
+    const auto step = best->Process->ScheduleOneUnrestricted(best->ScopeId);
+    RelinkProcess(*best->Process, oldAddress);
+    return step != EUnrestrictedScheduleResult::Idle;
+}
+
 void TManager::TryAllocateWaiting() {
-    if (Processes.size()) {
+    if (!Config.IsUnrestrictedEnabled() && Processes.size()) {
         auto it = Processes.find(ProcessIds.GetMinInternalIdVerified());
         AFL_VERIFY(it != Processes.end());
         TProcessMemory& process = it->second;
@@ -98,7 +151,41 @@ void TManager::TryAllocateWaiting() {
         }
     }
 
+    if (Config.IsUnrestrictedEnabled()) {
+        while (ScheduleOneUnrestricted()) {
+        }
+        // Keep forcing until some holder has all its requests served (it will release memory) or nothing is left to force.
+        // Each step takes one waiting request, so the loop is finite.
+        while (ForceOneOnDeadlock()) {
+        }
+    }
+
     RefreshSignals();
+}
+
+bool TManager::ForceOneOnDeadlock() {
+    if (!Config.IsUnrestrictedEnabled() || WaitingProcesses.empty() || !DefaultStage->GetUnrestrictedSoft()) {
+        return false;
+    }
+    // Memory must be the blocker: every holder waits and no waiting request fits the band.
+    // A request that fits but is held back by a slot waits for that slot instead.
+    for (const auto& [_, process] : Processes) {
+        if (!process.AllHoldersWait() || process.HasWaitingThatFits()) {
+            return false;
+        }
+    }
+    for (const auto& address : WaitingProcesses) {
+        auto it = ProcessesOrdered.find(address);
+        AFL_VERIFY(it != ProcessesOrdered.end());
+        TProcessMemory* process = it->second;
+        const auto step = process->ForceOneUnrestricted();
+        if (step == EUnrestrictedScheduleResult::Idle) {
+            continue;
+        }
+        RelinkProcess(*process, address);
+        return true;
+    }
+    return false;
 }
 
 void TManager::UnregisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId) {
@@ -123,6 +210,9 @@ void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 exter
     if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
         process->RegisterAllocation(externalScopeId, externalGroupId, allocation, stageIdx);
         UpdateWaitingProcesses(process);
+        if (Config.IsUnrestrictedEnabled()) {
+            TryAllocateWaiting();
+        }
     } else {
         LWPROBE(Allocated, "on_register", allocation->GetIdentifier(), "", std::numeric_limits<ui64>::max(), std::numeric_limits<ui64>::max(), 0, 0, TDuration::Zero(), false, false);
         AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation))(
@@ -137,7 +227,8 @@ void TManager::RegisterProcess(const ui64 externalProcessId, const std::vector<s
     if (!internalId) {
         const ui64 internalProcessId = ProcessIds.RegisterExternalIdOrGet(externalProcessId);
         auto info = Processes.emplace(
-            internalProcessId, TProcessMemory(externalProcessId, internalProcessId, OwnerActorId, Processes.empty(), stages, DefaultStage));
+            internalProcessId, TProcessMemory(externalProcessId, internalProcessId, OwnerActorId, Processes.empty(), stages, DefaultStage,
+                Config.IsUnrestrictedEnabled(), Config.GetMaxUnrestrictedGroupsPerScope()));
         AFL_VERIFY(info.second);
         ProcessesOrdered.emplace(info.first->second.BuildUsageAddress(), &info.first->second);
         UpdateWaitingProcesses(&info.first->second);
@@ -192,13 +283,20 @@ void TManager::SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func
     DefaultStage->SetMemoryConsumptionUpdateFunction(std::move(func));
 }
 
-void TManager::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit) {
+void TManager::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, const std::optional<ui64>& unrestrictedSoft) {
     AFL_ENSURE(DefaultStage);
     bool isLimitIncreased = false;
-    DefaultStage->UpdateMemoryLimits(limit, hardLimit, isLimitIncreased);
+    DefaultStage->UpdateMemoryLimits(limit, hardLimit, isLimitIncreased, unrestrictedSoft);
+    if (Config.IsUnrestrictedEnabled()) {
+        for (auto& [_, process] : Processes) {
+            auto g = BuildProcessOrderGuard(process);
+            process.FailNeverFittingWaiting();
+        }
+    }
     if (isLimitIncreased) {
         TryAllocateWaiting();
     }
+    RefreshSignals();
 }
 
 void TManager::UpdateWaitingProcesses(TProcessMemory* process) {

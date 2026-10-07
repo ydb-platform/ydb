@@ -7,7 +7,7 @@
 
 #include <yt/yt/core/actions/cancelable_context.h>
 
-#include <library/cpp/yt/threading/event_count.h>
+#include <library/cpp/yt/system/event_count.h>
 
 namespace NYT::NConcurrency {
 namespace {
@@ -63,7 +63,7 @@ TEST(TAsyncLooperTest, CancelAsyncStep)
 {
     auto queue = New<TActionQueue>();
 
-    NThreading::TEvent started;
+    TEvent started;
     auto promise = NewPromise<void>();
     bool callbackFinished = false;
 
@@ -103,7 +103,7 @@ TEST(TAsyncLooperTest, CancelSyncStep)
 {
     auto queue = New<TActionQueue>();
 
-    NThreading::TEvent started;
+    TEvent started;
     auto promise = NewPromise<void>();
 
     auto asyncStart = BIND([invoker = queue->GetInvoker()] {
@@ -139,8 +139,8 @@ TEST(TAsyncLooperTest, StopDuringAsyncStep)
 
     // We use event and not future to
     // ignore cancelation in this test.
-    NThreading::TEvent releaseAsync;
-    NThreading::TEvent started;
+    TEvent releaseAsync;
+    TEvent started;
 
     auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started] {
         return BIND([&releaseAsync, &started] {
@@ -182,7 +182,7 @@ TEST(TAsyncLooperTest, StopDuringAsyncStepWaitFor)
     auto queue = New<TActionQueue>();
 
     auto releaseAsync = NewPromise<void>();
-    NThreading::TEvent started;
+    TEvent started;
 
     auto asyncStart = BIND([invoker = queue->GetInvoker(), &started, releaseAsync] {
         return BIND([releaseAsync, &started] {
@@ -226,7 +226,7 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStep)
 
     // We use event and not future to
     // ignore cancelation in this test.
-    NThreading::TEvent releaseAsync;
+    TEvent releaseAsync;
 
     auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
 
@@ -317,8 +317,8 @@ TEST(TAsyncLooperTest, StopDuringAsyncStepPreparation)
 
     // We use event and not future to
     // ignore cancelation in this test.
-    NThreading::TEvent releaseAsync;
-    NThreading::TEvent started;
+    TEvent releaseAsync;
+    TEvent started;
 
     auto mustBeFalse = std::make_shared<std::atomic<bool>>(false);
     auto asyncStart = BIND([invoker = queue->GetInvoker(), &releaseAsync, &started, mustBeFalse] {
@@ -368,8 +368,8 @@ TEST(TAsyncLooperTest, RestartDuringAsyncStepPreparation1)
 
     // We use event and not future to
     // ignore cancelation in this test.
-    NThreading::TEvent releaseAsync;
-    NThreading::TEvent started;
+    TEvent releaseAsync;
+    TEvent started;
 
     auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
 
@@ -412,8 +412,8 @@ TEST(TAsyncLooperTest, StopDuringSyncStep)
 
     // We use event and not future to
     // ignore cancelation in this test.
-    NThreading::TEvent releaseAsync;
-    NThreading::TEvent started;
+    TEvent releaseAsync;
+    TEvent started;
 
     auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
     auto asyncStart = BIND([invoker = queue->GetInvoker(), asyncRunCount] {
@@ -457,7 +457,7 @@ TEST(TAsyncLooperTest, StopDuringSyncStepWaitFor)
     // We use event and not future to
     // ignore cancelation in this test.
     auto releaseAsync = NewPromise<void>();
-    NThreading::TEvent started;
+    TEvent started;
 
     auto asyncRunCount = std::make_shared<std::atomic<int>>(0);
     auto asyncStart = BIND([invoker = queue->GetInvoker(), asyncRunCount] {
@@ -501,7 +501,7 @@ TEST(TAsyncLooperTest, RestartDuringSyncStep)
 
     // We use event and not future to
     // ignore cancelation in this test.
-    NThreading::TEvent releaseAsync;
+    TEvent releaseAsync;
 
     auto syncRunCount = std::make_shared<std::atomic<int>>(0);
 
@@ -591,7 +591,7 @@ TEST(TAsyncLooperTest, NullFuture)
     auto queue = New<TActionQueue>();
 
     auto switcher = std::make_shared<std::atomic<bool>>(false);
-    NThreading::TEvent loopBroken;
+    TEvent loopBroken;
 
     auto asyncStart = BIND([invoker = queue->GetInvoker(), switcher, &loopBroken] {
         if (!switcher->load()) {
@@ -680,7 +680,7 @@ TEST(TAsyncLooperTest, NullFutureStopsLooper)
 {
     auto queue = New<TActionQueue>();
 
-    NThreading::TEvent asyncStartCalled;
+    TEvent asyncStartCalled;
     std::atomic<int> asyncRunCount = 0;
     std::atomic<int> syncRunCount = 0;
 

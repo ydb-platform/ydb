@@ -18,6 +18,7 @@ PEERDIR(
 )
 
 SRCS(
+    allocation_cache_ut.cpp
     actor_basic_ut.cpp
     actor_coroutine_ut.cpp
     actor_exception_ut.cpp
@@ -39,7 +40,9 @@ SRCS(
     metric_system_ut.cpp
     log_ut.cpp
     mon_ut.cpp
+    node_location_ut.cpp
     scheduler_actor_ut.cpp
+    scheduler_cookie_ut.cpp
     subsystem_ut.cpp
     mailbox_lockfree_ut.cpp
     servicemap_ut.cpp

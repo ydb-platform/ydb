@@ -18,7 +18,7 @@ private:
     std::vector<std::string> GetRegistryFunctionNames() const override {
         return { GetFunctionName(AggregationType), GetHouseFunctionName(AggregationType) };
     }
-    virtual TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
+    virtual TConclusion<TFunctionResult> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
 
     TConclusion<arrow::Datum> PrepareResult(arrow::Datum&& datum) const override {
         if (!datum.is_scalar()) {

@@ -21,11 +21,11 @@ THashSet<ui32> RequestedGroups(const NKikimrTabletBase::TEvMoveData& record) {
 }
 
 // Same contract as keyvalue and blob_depot: a group that is still the latest entry keeps taking writes, so the move could never converge.
-std::optional<ui32> FindLiveGroup(const TTabletStorageInfo* info, const THashSet<ui32>& groups) {
-    if (groups.empty() || !info) {
+std::optional<ui32> FindLiveGroup(const TTabletStorageInfo& info, const THashSet<ui32>& groups) {
+    if (groups.empty()) {
         return std::nullopt;
     }
-    for (const auto& channel : info->Channels) {
+    for (const auto& channel : info.Channels) {
         const auto* latest = channel.LatestEntry();
         if (latest && groups.contains(latest->GroupID)) {
             return latest->GroupID;
@@ -40,11 +40,8 @@ void RefuseMoveData(const TActorId& sender, const ui64 tabletId, const ui32 live
     ctx.Send(sender, new TEvTablet::TEvMoveDataResponse(tabletId, NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch, reason));
 }
 
-// A request outside a session starts from the empty set; returns whether the target set changed.
+// Outside a session the set is already empty, so a first request is always a change; returns whether the target set changed.
 bool MergeTargetGroups(TMoveDataState& state, const THashSet<ui32>& requested) {
-    if (!state.Active) {
-        state.TargetGroups.clear();
-    }
     bool changed = !state.Active;
     for (const auto groupId : requested) {
         changed |= state.TargetGroups.emplace(groupId).second;
@@ -60,15 +57,16 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         return;
     }
     const THashSet<ui32> requested = RequestedGroups(ev->Get()->Record);
-    if (const auto liveGroup = FindLiveGroup(Info(), requested)) {
+    if (const auto liveGroup = FindLiveGroup(*Info(), requested)) {
         RefuseMoveData(ev->Sender, TabletID(), *liveGroup, ctx);
         return;
     }
     MoveDataState.HiveSender = ev->Sender;
     const bool changed = MergeTargetGroups(MoveDataState, requested);
+    // Before Active is set, so an active session always has a driver to hand the gate to.
+    StartMoveDataDriver(ctx);
     if (!MoveDataState.Active) {
         MoveDataState.Active = true;
-        MoveDataState.VacuumCompleted = false;
         Counters.GetCSCounters().OnMoveDataStarted();
         // The vacuum leg belongs to the executor; everything else to the driver.
         Executor()->StartMoveDataVacuumFromOwner();
@@ -76,7 +74,6 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
     YDB_LOG_INFO("MoveData requested", {"tabletId", TabletID()}, {"groups", MoveDataState.TargetGroups.size()}, {"changed", changed});
     // Marked synchronously: a gate check already queued must not answer for a stale target set.
     MoveDataState.TargetsChanged |= changed;
-    StartMoveDataDriver(ctx);
     ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
 }
 
@@ -117,11 +114,7 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
     }
     MoveDataState.VacuumCompleted = true;
     // The driver owns the gate; hand it the news rather than deciding here.
-    if (!!MoveDataDriverId) {
-        ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
-    } else {
-        CheckMoveDataGate(ctx);
-    }
+    ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
 }
 
 void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {

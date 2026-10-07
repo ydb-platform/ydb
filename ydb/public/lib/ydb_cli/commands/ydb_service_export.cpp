@@ -5,9 +5,9 @@
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_objects.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
-#include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
 #include <library/cpp/getopt/small/completer.h>
 #include <util/string/builder.h>
@@ -29,36 +29,6 @@ namespace {
         return entry.Type == NScheme::ESchemeEntryType::Table;
     }
 
-    bool FilterAllSupportedSchemeObjects(const NScheme::TSchemeEntry& entry) {
-        return IsIn({
-            NScheme::ESchemeEntryType::Table,
-            NScheme::ESchemeEntryType::ColumnTable,
-            NScheme::ESchemeEntryType::View,
-            NScheme::ESchemeEntryType::Topic,
-        }, entry.Type);
-    }
-
-    TStatus FilterAsyncReplicaTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
-        auto isAsyncReplicaTable = [&session](const NScheme::TSchemeEntry& entry) {
-            if (entry.Type != NScheme::ESchemeEntryType::Table) {
-                return false;
-            }
-            auto describeResult = session.DescribeTable(entry.Name).ExtractValueSync();
-            NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
-
-            const auto& attributes = describeResult.GetTableDescription().GetAttributes();
-            auto it = attributes.find("__async_replica");
-            return it != attributes.end() && it->second == "true";
-        };
-
-        try {
-            std::erase_if(entries, isAsyncReplicaTable);
-        } catch (NStatusHelpers::TYdbErrorException& e) {
-            return e.ExtractStatus();
-        }
-        return TStatus(EStatus::SUCCESS, {});
-    }
-
     TVector<std::pair<TString, TString>> ExpandItem(
         NScheme::TSchemeClient& schemeClient,
         NTable::TTableClient tableClient,
@@ -74,7 +44,7 @@ namespace {
         NStatusHelpers::ThrowOnErrorOrPrintIssues(ret.Status);
 
         tableClient.RetryOperationSync([&ret](NTable::TSession session) {
-            return FilterAsyncReplicaTables(session, ret.Entries);
+            return RemoveAsyncReplicaTables(session, ret.Entries);
         });
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {
@@ -448,7 +418,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
 
     auto originalItems = settings.Item_;
     if (expandItems) {
-        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
+        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, IsExportableSchemeObject);
         if (settings.Item_.empty()) {
             if (!ExclusionPatterns.empty()) {
                 Cerr << "No items to export after applying exclude filters" << Endl;

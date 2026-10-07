@@ -6,6 +6,7 @@ PEERDIR(
 
 SRCS(
     completion_ut.cpp
+    list_objects_ut.cpp
 )
 
 END()

@@ -5,5 +5,6 @@ RECURSE(
     dump
     import
     topic
+    validate
 )
 

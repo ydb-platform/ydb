@@ -1150,6 +1150,73 @@ using namespace NTabletFlatExecutor;
 struct TSchemeShard::TIndexBuilder::TTxProgress: public TSchemeShard::TIndexBuilder::TTxBase {
 private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
+    bool ScheduleHnswProgress = false;
+    bool CloseHnswPipes = false;
+
+    bool WaitForHnswBuilds(TIndexBuildInfo& buildInfo, const TActorContext& ctx) {
+        if (buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+            return false;
+        }
+        // The apply transaction has released the impl-table schema operation,
+        // so its size splits may proceed. Keep the main-table build lock until
+        // the current posting partitions have finished their graph work.
+        const auto posting = TPath::Init(buildInfo.TablePathId, Self)
+            .Child(buildInfo.IndexName).Child(NTableIndex::NKMeans::PostingTable);
+        Y_ENSURE(posting.IsResolved() && !posting.IsDeleted());
+        const auto table = Self->Tables.at(posting->PathId);
+        THashSet<ui64> tablets;
+        for (const auto* partition : table->GetPartitions()) {
+            tablets.insert(ui64(Self->ShardInfos.at(partition->ShardIdx).TabletID));
+        }
+        const bool samePartitions = buildInfo.HnswPostingPathId == posting->PathId
+            && buildInfo.HnswProbeTablets == tablets;
+        bool allReplied = samePartitions && !tablets.empty()
+            && buildInfo.HnswBuildStatuses.size() == tablets.size();
+        for (const auto& [_, status] : buildInfo.HnswBuildStatuses) {
+            allReplied &= status.HasAllReplies();
+        }
+        bool ready = allReplied && table->GetSplitOpsInFlight().empty() && !posting.IsUnderOperation();
+        const auto domain = posting.DomainInfo();
+        const auto& limits = domain->GetSchemeLimits();
+        const bool splitFitsQuota = posting->GetShardsInside() + 2 <= limits.MaxShardsInPath
+            && domain->GetShardsInside() - domain->GetBackupShards() + 2 <= limits.MaxShards;
+        for (const auto& [_, status] : buildInfo.HnswBuildStatuses) {
+            TString reason;
+            if (!status.StatisticsReady || status.HasActiveBuilds() || status.ShardState != NKikimrTxDataShard::Ready
+                    || (!status.StatisticsDisabled && splitFitsQuota && status.CanSplit && table->ShouldSplitBySize(status.DataSize,
+                        Self->SplitSettings.GetForceShardSplitSettings(), reason))) {
+                ready = false;
+            }
+        }
+        if (ready) {
+            CloseHnswPipes = true;
+            return false;
+        }
+
+        // Re-probe after every partitioning change, and retry missing replies.
+        // Rounds prevent a delayed response from a preceding probe from making
+        // a replacement shard look ready. None of this cache is persisted.
+        if (!samePartitions || allReplied || !buildInfo.HnswProbeRound
+                || ctx.Now() >= buildInfo.HnswProbeSentAt + TDuration::Seconds(10)) {
+            CloseHnswPipes = !samePartitions;
+            buildInfo.HnswPostingPathId = posting->PathId;
+            buildInfo.HnswProbeTablets = std::move(tablets);
+            buildInfo.HnswBuildStatuses.clear();
+            ++buildInfo.HnswProbeRound;
+            buildInfo.HnswProbeSentAt = ctx.Now();
+            for (ui64 tabletId : buildInfo.HnswProbeTablets) {
+                auto request = MakeHolder<TEvDataShard::TEvGetTableStats>(ui64(posting->PathId.LocalPathId));
+                request->Record.SetHnswIndexBuildId(ui64(BuildId));
+                request->Record.SetHnswProbeRound(buildInfo.HnswProbeRound);
+                ToTabletSend.emplace(TTabletId(tabletId), std::move(request));
+            }
+        }
+        if (!buildInfo.HnswProgressScheduled) {
+            buildInfo.HnswProgressScheduled = true;
+            ScheduleHnswProgress = true;
+        }
+        return true;
+    }
 
     template <bool WithSnapshot = true, typename TRequest>
     TTabletId FillScanRequestCommon(TRequest& request, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -3684,6 +3751,9 @@ public:
                     Self->PersistBuildIndexState(db, buildInfo);
                     Self->PersistBuildIndexApplyTx(db, buildInfo);
                 } else {
+                    if (WaitForHnswBuilds(buildInfo, ctx)) {
+                        break;
+                    }
                     ChangeState(BuildId, TIndexBuildInfo::EState::Unlocking);
                 }
                 Progress(BuildId);
@@ -3901,6 +3971,12 @@ public:
     }
 
     void DoComplete(const TActorContext& ctx) override {
+        if (CloseHnswPipes) {
+            Self->IndexBuildPipes.CloseAll(BuildId, ctx);
+        }
+        if (ScheduleHnswProgress) {
+            ctx.Schedule(TDuration::Seconds(5), new TEvPrivate::TEvProgressHnswIndexBuild(ui64(BuildId)));
+        }
         for (auto& [shardId, ev]: ToTabletSend) {
             Self->IndexBuildPipes.Send(BuildId, shardId, std::move(ev), ctx);
         }

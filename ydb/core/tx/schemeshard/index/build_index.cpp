@@ -79,6 +79,19 @@ void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const
     Execute(CreateTxBilling(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvPrivate::TEvProgressHnswIndexBuild::TPtr& ev, const TActorContext& ctx) {
+    const auto id = TIndexBuildId(ev->Get()->BuildId);
+    const auto it = IndexBuilds.find(id);
+    if (it == IndexBuilds.end()) {
+        return;
+    }
+    auto& buildInfo = *it->second;
+    buildInfo.HnswProgressScheduled = false;
+    if (buildInfo.State == TIndexBuildInfo::EState::Applying && buildInfo.ApplyTxDone) {
+        Execute(CreateTxProgress(id), ctx);
+    }
+}
+
 void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
     Y_ENSURE(info.BuildKind != TIndexBuildInfo::EBuildKind::BuildKindUnspecified);
     auto persistedBuildIndex = db.Table<Schema::IndexBuild>().Key(info.Id);

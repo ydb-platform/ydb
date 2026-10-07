@@ -1917,6 +1917,7 @@ public:
     TRowVersion GetHnswBuildVersion() const;
     void StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table, TRowVersion base, TTransactionContext& txc);
     void Handle(TEvPrivate::TEvRebuildHnswIndex::TPtr& ev, const TActorContext& ctx);
+    void OnLeaderUserAuxUpdate(TString update) override;
     class TTxRebuildHnswIndex;
 
     void DeferHnswIndexBuild(ui32 localTid, TDuration delay) {

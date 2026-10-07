@@ -909,13 +909,11 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 R"(
                     CREATE TABLE `/Root/left_table` (
                         id Int32 NOT NULL,
-                        items List<Int32>,
                         PRIMARY KEY (id)
                     );
 
                     CREATE TABLE `/Root/right_table` (
                         id Int32 NOT NULL,
-                        data String NOT NULL,
                         PRIMARY KEY (id)
                     );
                 )",  NYdb::NQuery::TTxControl::NoTx()
@@ -926,28 +924,24 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
         {
             auto status = queryClient.ExecuteQuery(
                 R"(
-                    INSERT INTO `/Root/left_table` (id, items) VALUES
-                        (1, AsList(1)),
-                        (2, AsList(2, 20));
-
-                    INSERT INTO `/Root/right_table` (id, data) VALUES
-                        (2, "x"),
-                        (3, "y");
+                    INSERT INTO `/Root/left_table` (id) VALUES (1), (2);
+                    INSERT INTO `/Root/right_table` (id) VALUES (2), (3);
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
             ).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         }
 
+        // AsList stays under the join: ON uses it, and a table column cannot be List
         const TString joinQuery = R"(
             PRAGMA TablePathPrefix='/Root';
             PRAGMA ydb.UseBlockHashJoin = 'true';
             PRAGMA ydb.HashJoinMode = 'grace';
             PRAGMA ydb.CostBasedOptimizationLevel = '0';
 
-            SELECT L.id AS left_id, L.items, R.id AS right_id
-            FROM `left_table` AS L
-            INNER JOIN `right_table` AS R
-            ON L.id = R.id
+            SELECT L.id AS left_id, R.id AS right_id
+            FROM (SELECT id, AsList(id) AS items FROM `left_table`) AS L
+            INNER JOIN (SELECT id, AsList(id) AS items FROM `right_table`) AS R
+            ON L.id = R.id AND L.items = R.items
             ORDER BY left_id;
         )";
 

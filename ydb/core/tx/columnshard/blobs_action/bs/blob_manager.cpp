@@ -558,12 +558,13 @@ bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
             return true;
         }
     }
+    // GroupFor can answer Max<ui32>, which no target set holds.
     const auto keptBlobInGroups = [&](const TLogoBlobID& blob) {
-        const ui32 groupId = TabletInfo->GroupFor(blob.Channel(), blob.Generation());
-        return groupId != Max<ui32>() && groups.contains(groupId);
+        return groups.contains(TabletInfo->GroupFor(blob.Channel(), blob.Generation()));
     };
-    const auto deletedBlobInGroups = [&groups](const auto& blob) {
-        return groups.contains(blob.first.GetDsGroup());
+    // Another tablet's borrowed blob is queued here for unlink, not for our collection, so it must not hold our gate.
+    const auto deletedBlobInGroups = [&](const auto& blob) {
+        return blob.second.contains(SelfTabletId) && groups.contains(blob.first.GetDsGroup());
     };
     return AnyOf(BlobsToKeep, keptBlobInGroups) || AnyOf(BlobsToDelete, deletedBlobInGroups) || AnyOf(BlobsToDeleteDelayed, deletedBlobInGroups);
 }

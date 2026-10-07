@@ -145,6 +145,9 @@ protected:
     }
 
     bool IsRelevant(TActiveTransaction* tx) const override {
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
+            return false;
+        }
         const auto& schemeTx = tx->GetSchemeTx();
         if (!schemeTx.HasAlterTable()) {
             return false;
@@ -171,6 +174,9 @@ protected:
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         PageFault = false;
         RetryScheduled = false;
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
+            return false;
+        }
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
@@ -292,7 +298,10 @@ protected:
 
         auto* result = CheckedCast<THnswIndexBuildProduct*>(op->AsyncJobResult().Get());
         bool retry = false;
-        if (result->Index) {
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
+            DataShard.InvalidateHnswIndex(LocalTid);
+            DataShard.DeferHnswIndexBuild(LocalTid, TDuration::Zero());
+        } else if (result->Index) {
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
                 << " HNSW: eager build completed for localTid=" << LocalTid
                 << " size=" << result->Index->Size());

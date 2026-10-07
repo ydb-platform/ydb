@@ -442,6 +442,7 @@ public:
     bool EnableInitialUniqueIndex = false;
     bool EnableAddUniqueIndex = false;
     bool EnableOnlineAddUniqueIndex = false;
+    bool EnableHnswIndex = false;
     bool EnableFulltextIndex = false;
     bool EnableCompactFulltextIndex = false;
     bool EnableJsonIndex = false;

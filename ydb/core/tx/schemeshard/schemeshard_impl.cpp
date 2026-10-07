@@ -5908,6 +5908,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
     EnableOnlineAddUniqueIndex = appData->FeatureFlags.GetEnableOnlineAddUniqueIndex();
+    EnableHnswIndex = appData->FeatureFlags.GetEnableHnswIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
     EnableCompactFulltextIndex = appData->FeatureFlags.GetEnableCompactFulltextIndex();
     EnableJsonIndex = appData->FeatureFlags.GetEnableJsonIndex();
@@ -9059,6 +9060,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
     EnableInitialUniqueIndex = featureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = featureFlags.GetEnableAddUniqueIndex();
+    EnableHnswIndex = featureFlags.GetEnableHnswIndex();
     EnableFulltextIndex = featureFlags.GetEnableFulltextIndex();
     EnableCompactFulltextIndex = featureFlags.GetEnableCompactFulltextIndex();
     EnableJsonIndex = featureFlags.GetEnableJsonIndex();

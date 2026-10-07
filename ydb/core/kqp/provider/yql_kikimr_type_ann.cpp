@@ -1647,6 +1647,10 @@ private:
             } else if (type == "globalVectorKmeansTree") {
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
             } else if (type == "globalHnsw") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableHnswIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "HNSW index support is disabled (EnableHnswIndex)"));
+                    return TStatus::Error;
+                }
                 indexType = TIndexDescription::EType::GlobalSyncHnsw;
             } else if (type == "globalFulltextPlain") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {

@@ -3041,6 +3041,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             appConfig.MutableFeatureFlags()->SetEnableCompactFulltextIndex(true);
         }
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
+        appConfig.MutableFeatureFlags()->SetEnableHnswIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);
@@ -4246,6 +4247,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             : Server([&] {
                     NKikimrConfig::TAppConfig appConfig;
                     appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
+                    appConfig.MutableFeatureFlags()->SetEnableHnswIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);

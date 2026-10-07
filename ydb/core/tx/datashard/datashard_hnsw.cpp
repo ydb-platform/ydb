@@ -144,6 +144,11 @@ void TDataShard::StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table,
         if (!IsHnswBuildCurrent(localTid, token)) {
             return;
         }
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
+            InvalidateHnswIndex(localTid);
+            DeferHnswIndexBuild(localTid, TDuration::Zero());
+            return;
+        }
         const auto& entry = HnswIndexCache.at(localTid);
         auto* scan = new THnswSnapshotScan(*table, entry.VectorColumnTag, entry.Settings,
             HnswCacheMemoryTracker, bool(entry.Index),
@@ -174,6 +179,9 @@ public:
         }
         if (auto it = Self->HnswIndexCache.find(LocalTid); it != Self->HnswIndexCache.end()) {
             it->second.RebuildScheduled = false;
+        }
+        if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
+            return true;
         }
         TUserTable::TCPtr table;
         for (const auto& [_, candidate] : Self->TableInfos) {
@@ -285,6 +293,9 @@ std::shared_ptr<THnswIndex> TDataShard::GetHnswIndex(ui32 localTid, ui32 vectorC
 
 bool TDataShard::TryStartHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
         const Ydb::Table::VectorIndexSettings& settings, TRowVersion baseVersion) {
+    if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
+        return false;
+    }
     auto& entry = HnswIndexCache[localTid];
     if (entry.Building) {
         return false;
@@ -308,7 +319,8 @@ bool TDataShard::TryStartHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
 }
 
 ui64 TDataShard::GetHnswBuildToken(ui32 localTid) const {
-    return HnswIndexCache.at(localTid).BuildToken;
+    const auto it = HnswIndexCache.find(localTid);
+    return it == HnswIndexCache.end() ? 0 : it->second.BuildToken;
 }
 
 bool TDataShard::IsHnswBuildCurrent(ui32 localTid, ui64 token) const {
@@ -382,6 +394,11 @@ void TDataShard::SetHnswIndex(ui32 localTid, std::shared_ptr<THnswIndex> index,
     if (buildToken && !IsHnswBuildCurrent(localTid, buildToken)) {
         return;
     }
+    if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
+        InvalidateHnswIndex(localTid);
+        DeferHnswIndexBuild(localTid, TDuration::Zero());
+        return;
+    }
     auto& entry = HnswIndexCache[localTid];
     if (index && HnswCacheMemoryTracker->GetUsed() > GetHnswCacheMemoryLimit()) {
         DeferHnswIndexBuild(localTid, TDuration::Seconds(5));
@@ -430,6 +447,14 @@ void TDataShard::SetHnswIndex(ui32 localTid, std::shared_ptr<THnswIndex> index,
 }
 
 void TDataShard::PruneHnswIndexes() {
+    if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
+        InvalidateHnswIndexes();
+        for (auto& [_, entry] : HnswIndexCache) {
+            entry.InitialBuildAttemptsLeft = 0;
+            entry.RebuildScheduled = false;
+        }
+        return;
+    }
     const auto low = SnapshotManager.GetLowWatermark();
     for (auto& [tid, entry] : HnswIndexCache) {
         TRowVersion nextBase = entry.Index ? entry.Index->GetBaseVersion() : TRowVersion::Max();
@@ -587,7 +612,7 @@ void TDataShard::AbortHnswIndexChanges(ui32 localTid, ui64 txId, NTable::TDataba
 }
 
 void TDataShard::ScheduleHnswInitialBuilds() {
-    if (IsFollower() || State != TShardState::Ready) {
+    if (!AppData()->FeatureFlags.GetEnableHnswIndex() || IsFollower() || State != TShardState::Ready) {
         return;
     }
     // Graphs are local to a tablet incarnation: snapshots transfer rows and
@@ -605,7 +630,7 @@ void TDataShard::ScheduleHnswInitialBuilds() {
 }
 
 void TDataShard::ScheduleHnswRebuild(ui32 localTid) {
-    if (IsFollower()) {
+    if (!AppData()->FeatureFlags.GetEnableHnswIndex() || IsFollower()) {
         return;
     }
     auto& entry = HnswIndexCache.at(localTid);

@@ -1154,7 +1154,7 @@ private:
     bool CloseHnswPipes = false;
 
     bool WaitForHnswBuilds(TIndexBuildInfo& buildInfo, const TActorContext& ctx) {
-        if (buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+        if (!Self->EnableHnswIndex || buildInfo.IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
             return false;
         }
         // The apply transaction has released the impl-table schema operation,

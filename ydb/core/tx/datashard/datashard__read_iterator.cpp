@@ -35,6 +35,9 @@ using namespace NTabletFlatExecutor;
 namespace {
 
 bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state) {
+    if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
+        return false;
+    }
     // ANN candidate reads cannot observe conflicts on rows they did not visit.
     if (!shard.IsUserTable(state.PathId) || state.LockId || shard.GetVolatileTxManager().GetTxInFlight()) {
         return false;
@@ -3140,7 +3143,7 @@ public:
                 hnswSettings = *TableInfo.HnswSettings;
             }
             const bool canUseHnsw = CanUseHnsw(*Self, state);
-            if (!canUseHnsw) {
+            if (!canUseHnsw && AppData()->FeatureFlags.GetEnableHnswIndex()) {
                 Self->RegisterHnswFallback(localTid, TDataShard::EHnswFallback::UnsupportedRead);
             }
             if (canUseHnsw && Self->IsFollower()) {

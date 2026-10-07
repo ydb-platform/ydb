@@ -249,6 +249,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw && !context.SS->EnableHnswIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
+                        "HNSW index support is disabled (EnableHnswIndex)")};
+                }
                 TString msg;
                 if (!NKikimr::NKMeans::ValidateSettingsPartial(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};

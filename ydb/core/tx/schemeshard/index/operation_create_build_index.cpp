@@ -72,6 +72,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
         case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+            if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalHnsw && !context.SS->EnableHnswIndex) {
+                return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                    "HNSW index support is disabled (EnableHnswIndex)")};
+            }
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:

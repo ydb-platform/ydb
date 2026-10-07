@@ -616,6 +616,7 @@ class StaticConfigGenerator(object):
                 audit_txt_enabled=self.audit_txt_enabled,
                 fq_txt_enabled=self.fq_txt_enabled,
                 use_auth_token_file=self._use_auth_token_file,
+                grpc_port=self.__grpc_port,
             )
 
         if self.__cluster_details.use_new_style_kikimr_cfg:

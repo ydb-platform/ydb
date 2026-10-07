@@ -171,7 +171,7 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
     const TDBGReadBlocksResponse& response)
 {
     if (!HasError(response.Error)) {
-        Reply(response.Error);
+        Reply(response.Error, response.Checksums);
         return;
     }
     Failed.Set(host);
@@ -192,7 +192,9 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
     StartReading();
 }
 
-void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
+void TReadSingleLocationRequestExecutor::Reply(
+    NProto::TError error,
+    TBlockChecksums checksums)
 {
     if (Promise.IsReady()) {
         return;
@@ -228,7 +230,12 @@ void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
     ReadHint.Lock.Disarm();
     SgList.Close();
 
-    Promise.TrySetValue(TResponse{.Error = std::move(error)});
+    // An error reply carries no checksums.
+    Y_DEBUG_ABORT_UNLESS(!HasError(error) || checksums.empty());
+
+    Promise.TrySetValue(TResponse{
+        .Error = std::move(error),
+        .Checksums = std::move(checksums)});
 }
 
 void TReadSingleLocationRequestExecutor::ScheduleHedging(TDuration hedgingDelay)

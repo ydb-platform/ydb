@@ -4,6 +4,7 @@
 
 #include "restore_request.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_checksums.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -29,6 +30,14 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 struct TDBGReadBlocksResponse
 {
     NProto::TError Error;
+
+    // One raw XXH3-64 per ChecksumUnitSize bytes of the range that was read,
+    // in order. Empty on error, and empty when checksums are disabled. When
+    // checksums are enabled, a success always has exactly
+    // rangeBytes / ChecksumUnitSize values: a different count from DDisk or
+    // PBuffer fails this read. The count is checked against the range; the
+    // values are not checked against the bytes.
+    TBlockChecksums Checksums;
 };
 
 struct TDBGWriteBlocksResponse

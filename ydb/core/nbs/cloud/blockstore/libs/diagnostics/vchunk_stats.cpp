@@ -99,8 +99,6 @@ const char* VChunkOperationName(EVChunkOperation operation)
             return "Flush";
         case EVChunkOperation::Erase:
             return "Erase";
-        case EVChunkOperation::EraseBelated:
-            return "EraseBelated";
         case EVChunkOperation::MAX:
             Y_ABORT("Invalid operation");
     }

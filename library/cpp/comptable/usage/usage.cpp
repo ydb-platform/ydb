@@ -59,7 +59,7 @@ int main(int argc, const char* argv[]) {
         }
         lines.push_back(res);
     }
-    THolder<TDataSampler> sampler(new TDataSampler);
+    std::unique_ptr<TDataSampler> sampler = std::make_unique<TDataSampler>();
     for (size_t i = 0; i < lines.size(); ++i) {
         sampler->AddStat(lines[i]);
     }

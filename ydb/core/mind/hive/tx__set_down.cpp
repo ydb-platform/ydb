@@ -10,6 +10,9 @@ public:
     bool Forward;
     const TActorId Source;
     const ui64 Cookie;
+    // go to the node event log, derived classes may override them
+    EHiveEventReason Reason = EHiveEventReason::SetDownRequest;
+    TString ReasonDetails;
 
     TTxSetDown(TNodeId nodeId, bool down, TSelf* hive, TActorId source, ui64 cookie = 0, bool forward = false)
         : TBase(hive)
@@ -18,6 +21,7 @@ public:
         , Forward(forward)
         , Source(source)
         , Cookie(cookie)
+        , ReasonDetails(TStringBuilder() << "from=" << source)
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOWN; }
@@ -25,7 +29,7 @@ public:
     bool SetDown(NIceDb::TNiceDb& db) {
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
-            node->SetDown(Down);
+            node->SetDown(Down, Reason, ReasonDetails);
             db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(Down, false);
             if (Forward) {
                 auto tenantHive = Self->GetPipeToTenantHive(node);

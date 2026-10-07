@@ -1,7 +1,9 @@
 RECURSE(
+    actor_system_config
     cli_base
     cli_config_base
     cli_utils
     run
+    run_config
     version
 )

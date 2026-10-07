@@ -52,6 +52,7 @@ PEERDIR(
     ydb/core/config/init
     ydb/core/config/validation
     ydb/core/driver_lib/cli_base
+    ydb/core/driver_lib/run_config
     ydb/core/engine
     ydb/core/erasure
     ydb/core/mind/bscontroller

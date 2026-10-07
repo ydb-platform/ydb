@@ -3000,8 +3000,6 @@ FROM (
             R"([[2;2];[3;3];[4;4];[5;5];[6;6];[7;7];[8;8]])",
             R"([[1;1]])",
             R"([[1;1]])",
-            R"([[1;1];[3;3];[5;5];[7;7];[9;9]])",
-            R"([[3;3];[5;5];[7;7];[9;9]])",
             R"([[8;8];[9;9]])",
         };
 
@@ -3025,18 +3023,24 @@ FROM (
             R"(
                 SELECT t1.a, t2.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a WHERE t1.a = 1 and t2.b = 1 order by t1.a;
             )",
-            // IN lists longer than 5 items are not expanded into an Or chain by peephole.
-            R"(
-                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a IN (1, 3, 5, 7, 9, 11) order by t1.a;
-            )",
-            R"(
-                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a IN (1, 3, 5, 7, 9, 11) and t1.c > 1 order by t1.a;
-            )",
             // IS NOT NULL over a non optional key column.
             R"(
                 SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a IS NOT NULL and t1.a > 7 order by t1.a;
             )",
         };
+
+        // Row tables apply peephole before the range extractor, it expands IN lists longer than 5 items into Contains.
+        if (columnTables) {
+            queries.push_back(R"(
+                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a IN (1, 3, 5, 7, 9, 11) order by t1.a;
+            )");
+            results.push_back(R"([[1;1];[3;3];[5;5];[7;7];[9;9]])");
+
+            queries.push_back(R"(
+                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a IN (1, 3, 5, 7, 9, 11) and t1.c > 1 order by t1.a;
+            )");
+            results.push_back(R"([[3;3];[5;5];[7;7];[9;9]])");
+        }
 
         auto queryClient = kikimr.GetQueryClient();
         for (ui32 i = 0; i < queries.size(); ++i) {

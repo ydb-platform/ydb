@@ -3,6 +3,8 @@
 #include "appdata.h"
 #include "runtime.h"
 
+#include <ydb/core/testlib/basics/runtime/tablet_helpers.h>
+
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/util/defs.h>
 #include <ydb/core/base/blobstorage.h>
@@ -31,16 +33,7 @@ namespace NFake {
     };
 }
 
-    const TBlobStorageGroupType::EErasureSpecies BootGroupErasure = TBlobStorageGroupType::ErasureNone;
     using TStateStorageSetupper = std::function<void(TTestActorRuntime&, ui32)>;
-
-    TTabletStorageInfo* CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType,
-        TBlobStorageGroupType::EErasureSpecies erasure = BootGroupErasure, ui32 groupId = 0);
-    TActorId CreateTestBootstrapper(TTestActorRuntime &runtime, TTabletStorageInfo *info,
-        std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex = 0);
-    TActorId StartTestTablet(TTestActorRuntime &runtime, TTabletStorageInfo *info,
-        std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op, ui32 nodeIndex = 0);
-    NTabletPipe::TClientConfig GetPipeConfigWithRetries();
 
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
                            bool replicasOnFirstNode = false);

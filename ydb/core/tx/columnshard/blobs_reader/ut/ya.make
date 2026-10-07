@@ -10,12 +10,13 @@ SRCS(
 PEERDIR(
     library/cpp/testing/unittest
     ydb/library/actors/testlib
+    ydb/library/services
     ydb/library/signals
-    ydb/core/testlib/default
     ydb/core/tx/columnshard/blobs_action/counters
     ydb/core/tx/columnshard/blobs_action/abstract
     ydb/core/tx/columnshard/common
     ydb/core/tx/columnshard/resource_subscriber
+    yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 )
 

@@ -2267,31 +2267,6 @@ Y_UNIT_TEST(TableChangefeedStringKeyPartitionSettingsRoundTrip) {
     )", false);
 }
 
-Y_UNIT_TEST(TableChangefeedUnlimitedMaxPartitionsRoundTrip) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
-    TShowCreateChecker checker(env);
-
-    checker.CheckChangefeedRoundTrip(R"(
-        CREATE TABLE show_create_unlimited_max_settings (
-            Key Uint64,
-            Value String,
-            PRIMARY KEY (Key)
-        );
-        ALTER TABLE show_create_unlimited_max_settings
-            ADD CHANGEFEED `feed` WITH (
-                MODE = 'UPDATES',
-                FORMAT = 'JSON',
-                TOPIC_AUTO_PARTITIONING = 'ENABLED',
-                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
-                TOPIC_MAX_ACTIVE_PARTITIONS = 4
-            );
-    )", "show_create_unlimited_max_settings", "feed", R"(
-        ALTER TOPIC `/Root/show_create_unlimited_max_settings/feed` SET (
-            max_active_partitions = 0
-        );
-    )");
-}
-
 Y_UNIT_TEST(TableChangefeedSettingsWithAdditionalDdlRoundTrip) {
     TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
     TShowCreateChecker checker(env);

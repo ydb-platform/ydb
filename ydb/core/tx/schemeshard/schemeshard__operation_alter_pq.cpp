@@ -224,7 +224,7 @@ public:
         }
         if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy() && NPQ::SplitMergeEnabled(alter.GetPQTabletConfig())) {
             const auto strategy = alter.GetPQTabletConfig().GetPartitionStrategy();
-            if (strategy.GetMaxPartitionCount() != 0 && strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
+            if (strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
                 errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
                 return nullptr;
             }

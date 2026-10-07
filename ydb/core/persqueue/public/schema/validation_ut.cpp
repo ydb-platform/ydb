@@ -359,8 +359,10 @@ Y_UNIT_TEST(ValidatePartitionStrategyThresholdPercents) {
     }
     {
         auto config = makeOkBase();
-        config.MutablePartitionStrategy()->SetMaxPartitionCount(0); // unlimited
-        UNIT_ASSERT(ValidatePartitionStrategy(config));
+        config.MutablePartitionStrategy()->SetMaxPartitionCount(0);
+        auto r = ValidatePartitionStrategy(config);
+        UNIT_ASSERT(!r);
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Max active partitions");
     }
 }
 

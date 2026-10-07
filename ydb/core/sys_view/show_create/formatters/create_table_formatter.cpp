@@ -25,7 +25,6 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
-#include <algorithm>
 #include <limits>
 
 namespace NKikimr {
@@ -1423,12 +1422,8 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
     }
 
     if (autoPartitioning) {
-        const ui32 effectiveMaxPartitionCount = partitionStrategy.GetMaxPartitionCount();
-        const ui32 creationMaxPartitionCount = effectiveMaxPartitionCount
-            ? effectiveMaxPartitionCount
-            : std::max<ui32>(1, partitionStrategy.GetMinPartitionCount());
         Stream << del << "TOPIC_MAX_ACTIVE_PARTITIONS = ";
-        Stream << creationMaxPartitionCount;
+        Stream << partitionStrategy.GetMaxPartitionCount();
         del = ", ";
     }
 

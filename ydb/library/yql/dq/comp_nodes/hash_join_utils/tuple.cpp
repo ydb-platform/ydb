@@ -1,7 +1,9 @@
 #include "tuple.h"
 
 #include <algorithm>
+#include <bit>
 #include <cstring>
+#include <limits>
 #include <vector>
 #include <queue>
 
@@ -91,6 +93,21 @@ Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
         *dst[ind] = x;
         x >>= 8;
     }
+}
+
+// Branchless on purpose: zero keys are common enough to make a branch mispredict.
+template <typename TFloat, typename TBits>
+Y_FORCE_INLINE void CanonicalizeFloatKey(ui8* data) {
+    static_assert(sizeof(TFloat) == sizeof(TBits));
+    constexpr TBits signMask = TBits(1) << (sizeof(TBits) * 8 - 1);
+    constexpr TBits infBits = std::bit_cast<TBits>(std::numeric_limits<TFloat>::infinity());
+    constexpr TBits nanBits = std::bit_cast<TBits>(std::numeric_limits<TFloat>::quiet_NaN());
+
+    const TBits bits = ReadUnaligned<TBits>(data);
+    const TBits magnitude = bits & ~signMask;
+    TBits canonical = magnitude == 0 ? TBits(0) : bits;
+    canonical = magnitude > infBits ? nanBits : canonical;
+    WriteUnaligned<TBits>(data, canonical);
 }
 
 } // namespace
@@ -241,6 +258,20 @@ bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
     return false;
 }
 
+void TTupleLayout::CanonicalizeFloatKeysImpl(ui8* rows, ui32 count) const {
+    const ui32 rowSize = TotalRowSize;
+    for (const ui32 offset : FloatKeyOffsets) {
+        for (ui32 i = 0; i < count; ++i) {
+            CanonicalizeFloatKey<float, ui32>(rows + i * rowSize + offset);
+        }
+    }
+    for (const ui32 offset : DoubleKeyOffsets) {
+        for (ui32 i = 0; i < count; ++i) {
+            CanonicalizeFloatKey<double, ui64>(rows + i * rowSize + offset);
+        }
+    }
+}
+
 void TTupleLayout::NormalizeEqualNullsFixedKeys(ui8* res) const {
     if (Y_LIKELY(!HasEqualNullsKeys)) {
         return;
@@ -360,7 +391,16 @@ TTupleLayoutFallback::TTupleLayoutFallback(
         col.Offset = currOffset;
         Columns.push_back(col);
         currOffset += col.DataSize;
+
+        if (col.FloatingPoint) {
+            Y_ENSURE(col.SizeType == EColumnSizeType::Fixed &&
+                         (col.DataSize == sizeof(float) || col.DataSize == sizeof(double)),
+                     "floating point key column must be a fixed Float or Double");
+            auto& offsets = col.DataSize == sizeof(float) ? FloatKeyOffsets : DoubleKeyOffsets;
+            offsets.push_back(col.Offset);
+        }
     }
+    HasFloatingPointKeys = !FloatKeyOffsets.empty() || !DoubleKeyOffsets.empty();
 
     KeyColumnsEnd = currOffset;
 
@@ -713,6 +753,7 @@ void TTupleLayoutFallback::Pack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
+        CanonicalizeFloatKeys(res, 1);
         NormalizeEqualNullsFixedKeys(res);
 
         ui32 hash = CalculateCRC32<TTraits>(
@@ -996,6 +1037,7 @@ void TTupleLayoutFallback::BucketPack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
+        CanonicalizeFloatKeys(res, 1);
         NormalizeEqualNullsFixedKeys(res);
 
         ui32 hash = CalculateCRC32<TTraits>(
@@ -1185,6 +1227,8 @@ void TTupleLayoutSIMD<TTraits>::Pack(
 
             edge_mask_transpose(cur_block_size);
         }
+
+        CanonicalizeFloatKeys(res, cur_block_size);
 
         for (size_t block_row_ind = 0; block_row_ind != cur_block_size;
              ++block_row_ind) {
@@ -1570,6 +1614,8 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
 
             edge_mask_transpose(cur_block_size);
         }
+
+        CanonicalizeFloatKeys(res, cur_block_size);
 
         for (size_t block_row_ind = 0; block_row_ind != cur_block_size;
             ++block_row_ind) {

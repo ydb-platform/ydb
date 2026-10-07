@@ -141,6 +141,8 @@ struct TColumnDesc {
                        // Must be same for matching key columns
     ui32 Offset =
         0; // Offset in bytes for column value from the beginning of tuple
+    bool FloatingPoint = false; // Float/Double value; as a key it is canonicalized
+                                // so that equal floats have equal bytes
 };
 
 // Defines in memory layout of tuple.
@@ -177,6 +179,12 @@ struct TTupleLayout {
     TDynBitMap EqualNullsKeyMask;
     bool HasEqualNullsKeys = false;
 
+    // Keys are hashed and compared bytewise, so Float/Double keys get -0.0 and
+    // every NaN rewritten to a single representation, matching EquateFloats.
+    std::vector<ui32> FloatKeyOffsets;
+    std::vector<ui32> DoubleKeyOffsets;
+    bool HasFloatingPointKeys = false;
+
     // Input-column indexes (OriginalColumnIndex) that use IS NOT DISTINCT FROM.
     // Join-key slots from settings must be remapped to these indexes first.
     void ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColumns);
@@ -188,6 +196,14 @@ struct TTupleLayout {
     }
 
     void NormalizeEqualNullsFixedKeys(ui8* res) const;
+
+    // Must run on freshly packed rows before their key bytes are hashed
+    Y_FORCE_INLINE void CanonicalizeFloatKeys(ui8* rows, ui32 count) const {
+        if (Y_UNLIKELY(HasFloatingPointKeys)) {
+            CanonicalizeFloatKeysImpl(rows, count);
+        }
+    }
+    void CanonicalizeFloatKeysImpl(ui8* rows, ui32 count) const;
     bool HashVariableKey(const ui8* res, ui32 keyColIdx) const;
 
     // Creates new tuple layout based on provided columns description.

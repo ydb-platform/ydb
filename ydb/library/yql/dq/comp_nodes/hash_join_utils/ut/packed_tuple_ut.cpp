@@ -1,7 +1,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <array>
+#include <bit>
 #include <chrono>
+#include <limits>
 #include <string>
 #include <vector>
 #include <random>
@@ -1208,6 +1210,82 @@ Y_UNIT_TEST(EqualNullsSupportsVariableKeyAfter64FixedKeys) {
     UNIT_ASSERT_VALUES_UNEQUAL(lhs[variableKey.Offset], rhs[variableKey.Offset]);
     UNIT_ASSERT(tl->KeysEqual(lhs, overflow.data(), rhs, overflow.data()));
     UNIT_ASSERT_VALUES_EQUAL(Hash(lhs), Hash(rhs));
+}
+
+namespace {
+
+void CheckFloatKeysCanonicalized(const TTupleLayout& tl) {
+    constexpr ui32 floatNaN = std::bit_cast<ui32>(std::numeric_limits<float>::quiet_NaN());
+    constexpr ui64 doubleNaN = std::bit_cast<ui64>(std::numeric_limits<double>::quiet_NaN());
+    // -0, +0, quiet NaN with payload, negative NaN, signaling NaN, 1.5, -inf, +inf
+    const std::vector<ui32> floats = {
+        0x80000000u, 0x00000000u, 0x7fc00001u, 0xffc01234u, 0x7f800001u, 0x3fc00000u, 0xff800000u, 0x7f800000u};
+    const std::vector<ui64> doubles = {
+        0x8000000000000000ull, 0x0000000000000000ull, 0x7ff8000000000001ull, 0xfff8000000001234ull,
+        0x7ff0000000000001ull, 0x3ff8000000000000ull, 0xfff0000000000000ull, 0x7ff0000000000000ull};
+    const std::vector<ui32> expectedFloats = {
+        0u, 0u, floatNaN, floatNaN, floatNaN, 0x3fc00000u, 0xff800000u, 0x7f800000u};
+    const std::vector<ui64> expectedDoubles = {
+        0ull, 0ull, doubleNaN, doubleNaN, doubleNaN, 0x3ff8000000000000ull, 0xfff0000000000000ull,
+        0x7ff0000000000000ull};
+    const std::vector<ui64> payload(doubles.size(), 0x8000000000000000ull);
+    const ui32 rows = floats.size();
+
+    const ui8* cols[] = {reinterpret_cast<const ui8*>(floats.data()), reinterpret_cast<const ui8*>(doubles.data()),
+                         reinterpret_cast<const ui8*>(payload.data())};
+    const ui8* validBits[] = {nullptr, nullptr, nullptr};
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> packed(tl.TotalRowSize * rows, 0);
+    tl.Pack(cols, validBits, packed.data(), overflow, 0, rows);
+
+    auto row = [&](ui32 i) { return packed.data() + i * tl.TotalRowSize; };
+    auto keyOffset = [&](ui32 size) {
+        for (const auto& col : tl.KeyColumns) {
+            if (col.DataSize == size) {
+                return col.Offset;
+            }
+        }
+        UNIT_FAIL("no key column of size " << size);
+        return 0u;
+    };
+    const ui32 floatOffset = keyOffset(sizeof(float));
+    const ui32 doubleOffset = keyOffset(sizeof(double));
+    const ui32 payloadOffset = tl.PayloadColumns.front().Offset;
+
+    for (ui32 i = 0; i < rows; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui32>(row(i) + floatOffset), expectedFloats[i], "row " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui64>(row(i) + doubleOffset), expectedDoubles[i], "row " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui64>(row(i) + payloadOffset), payload[i], "row " << i);
+    }
+
+    auto assertSameKey = [&](ui32 lhs, ui32 rhs) {
+        UNIT_ASSERT_C(tl.KeysEqual(row(lhs), overflow.data(), row(rhs), overflow.data()), lhs << " vs " << rhs);
+        UNIT_ASSERT_VALUES_EQUAL_C(Hash(row(lhs)), Hash(row(rhs)), lhs << " vs " << rhs);
+    };
+    assertSameKey(0, 1);
+    assertSameKey(2, 3);
+    assertSameKey(2, 4);
+    UNIT_ASSERT(!tl.KeysEqual(row(6), overflow.data(), row(7), overflow.data()));
+    UNIT_ASSERT(!tl.KeysEqual(row(1), overflow.data(), row(2), overflow.data()));
+}
+
+} // namespace
+
+Y_UNIT_TEST(FloatKeysAreCanonicalized) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc floatKey;
+    floatKey.Role = EColumnRole::Key;
+    floatKey.DataSize = sizeof(float);
+    floatKey.FloatingPoint = true;
+    TColumnDesc doubleKey = floatKey;
+    doubleKey.DataSize = sizeof(double);
+    TColumnDesc doublePayload = doubleKey;
+    doublePayload.Role = EColumnRole::Payload;
+    const std::vector<TColumnDesc> columns = {floatKey, doubleKey, doublePayload};
+
+    CheckFloatKeysCanonicalized(TTupleLayoutFallback(columns));
+    CheckFloatKeysCanonicalized(*TTupleLayout::Create(columns));
 }
 
 }

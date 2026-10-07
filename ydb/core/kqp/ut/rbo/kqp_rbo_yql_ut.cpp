@@ -8131,8 +8131,6 @@ FROM (
         const auto producerStage = graph.AddStage(), unionStage = graph.AddStage();
         hub->GetInput()->Props.StageId = producerStage;
         leftPtr->Props.StageId = rightPtr->Props.StageId = producerStage;
-        leftPtr->Props.StageOutputIndex = 0;
-        rightPtr->Props.StageOutputIndex = 1;
         mergePtr->Props.StageId = unionStage;
         graph.Connect(producerStage, unionStage, MakeIntrusive<TMergeConnection>(TSortIUs{{b, {true, true}}}, 0));
         graph.Connect(producerStage, unionStage, MakeIntrusive<TShuffleConnection>(TOrderedIUs<>{rightC}, 1));

@@ -620,12 +620,10 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         removed.Reset(); // Logical ordinals are now 1 and 2, physical outputs 0 and 1.
         const auto firstId = *first->GetOutputIUs().begin();
         const auto secondId = *second->GetOutputIUs().begin();
-        first->Props.StageOutputIndex = 0;
-        second->Props.StageOutputIndex = 1;
         first->Props.Analysis.LiveOut = TUnorderedIUs{firstId};
         second->Props.Analysis.LiveOut = TUnorderedIUs{secondId};
-        // Visit the secondary ordinal first; lowering still orders by the
-        // assigned physical indices, not traversal order or reference counts.
+        // Visit the secondary ordinal first; lowering still follows logical
+        // port order, not traversal order or reference counts.
         TOpRoot root(MakeIntrusive<TOpJoin>(second, first, pos, "Cross", TJoinIUs{}), pos, {});
         root.ComputeParents();
         const TPhysicalNames names(registry);
@@ -648,6 +646,38 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         UNIT_ASSERT(keys.InputStage->ChildPtr(3) == fanout->ChildPtr(3));
         UNIT_ASSERT(keys.InputStage->ChildPtr(5) != fanout->ChildPtr(5));
         UNIT_ASSERT_VALUES_EQUAL(keys.InputStage->Child(5)->Tail().Tail().Tail().Head().Head().Content(), "storage_key");
+    }
+
+    Y_UNIT_TEST(ReplicateOutputIndexFollowsReachabilityAndStageBoundaries) {
+        NTests::TIdTestContext f;
+        auto read = f.Read({f.Id()});
+        auto hub = TReplicate::Create(read, f.Pos, f.Props.InfoUnitRegistry);
+        auto discarded = hub->AddOutput();
+        auto left = hub->AddOutput(), right = hub->AddOutput();
+        discarded.Reset();
+        auto map = f.Copies(right, {});
+        auto tail = f.Copies(map, {});
+        auto root = f.Root(MakeIntrusive<TOpJoin>(tail, left, f.Pos, "Cross", TJoinIUs{}), {});
+        UNIT_ASSERT(!GetReplicateOutputIndex(*tail)); // Stages are not assigned yet.
+        read->Props.StageId = left->Props.StageId = right->Props.StageId = 0;
+        map->Props.StageId = tail->Props.StageId = 0;
+        root->GetInput()->Props.StageId = 1;
+        UNIT_ASSERT_VALUES_EQUAL(GetReplicateOutputIndex(*left).value(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetReplicateOutputIndex(*tail).value(), 1);
+        UNIT_ASSERT(!GetReplicateOutputIndex(*read));
+        UNIT_ASSERT(!GetReplicateOutputIndex(*root->GetInput()));
+
+        map->Props.StageId = 1;
+        UNIT_ASSERT(!GetReplicateOutputIndex(*tail)); // Do not cross a stage boundary.
+        map->Props.StageId = 0;
+
+        // Reachability changes the physical number without changing the
+        // logical port identity or updating any output properties.
+        root->GetInput() = tail;
+        root->ComputeParents();
+        UNIT_ASSERT_VALUES_EQUAL(right->GetIndex(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetReplicateOutputIndex(*right).value(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetReplicateOutputIndex(*tail).value(), 0);
     }
 
     Y_UNIT_TEST(ReplicatePushesPartialAggregationIntoOnlyItsOwnBranch) {
@@ -703,10 +733,11 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 UNIT_ASSERT(partial.GetInput() == aggregated);
                 UNIT_ASSERT(partial.GetAggregationPhase() == EOpPhase::Intermediate);
                 UNIT_ASSERT_VALUES_EQUAL(*partial.Props.StageId, producerStage);
-                UNIT_ASSERT_VALUES_EQUAL(*partial.Props.StageOutputIndex, outputIndex);
-                UNIT_ASSERT_VALUES_EQUAL(*aggregated->Props.StageOutputIndex, outputIndex);
+                UNIT_ASSERT_VALUES_EQUAL(GetReplicateOutputIndex(partial).value(), outputIndex);
+                UNIT_ASSERT_VALUES_EQUAL(GetReplicateOutputIndex(*aggregated).value(), outputIndex);
                 UNIT_ASSERT_VALUES_EQUAL(*final.Props.StageId, finalStage);
-                UNIT_ASSERT(!final.Props.StageOutputIndex);
+                UNIT_ASSERT(!GetReplicateOutputIndex(final));
+                UNIT_ASSERT(!GetReplicateOutputIndex(*read));
                 UNIT_ASSERT(hub->GetInput() == read);
                 UNIT_ASSERT(aggregated->GetOutputIUs() == (TUnorderedIUs{aggregateKey, aggregateValue}));
                 UNIT_ASSERT(raw->GetInput() == read);
@@ -745,7 +776,7 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 stage = NPhysicalConvertionUtils::TransformStageOutput(stage, [&](TExprNode::TPtr body) {
                     return TPhysicalAggregationBuilder(partial, f.ExprCtx, f.Pos, names)
                         .BuildPhysicalOp(body, std::nullopt);
-                }, partial.Props.StageOutputIndex, f.ExprCtx);
+                }, GetReplicateOutputIndex(partial), f.ExprCtx);
                 const auto body = storage == NYql::EStorageType::RowStorage
                     ? TDqPhyStage(stage).Program().Body().Ptr() : stage;
                 UNIT_ASSERT_VALUES_EQUAL(body->IsCallable("Switch"), !testCase.SinglePort);
@@ -837,8 +868,8 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         root->GetInput()->Props.JoinAlgo = EJoinAlgoType::GraceJoin;
         root->GetInput()->Props.UseBlockHashJoin = false;
         TAssignStagesStage().RunStage(*root, f.RboCtx);
-        UNIT_ASSERT_VALUES_EQUAL(*leftPort->Props.StageOutputIndex, 0);
-        UNIT_ASSERT_VALUES_EQUAL(*rightPort->Props.StageOutputIndex, 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetReplicateOutputIndex(*leftPort).value(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetReplicateOutputIndex(*rightPort).value(), 1);
         UNIT_ASSERT_VALUES_EQUAL(root->PlanProps.StageGraph.StageIds.size(), 2);
         ComputePlanLiveness(*root);
         UNIT_ASSERT(GetLiveOut(leftPort) == TUnorderedIUs{leftKey});

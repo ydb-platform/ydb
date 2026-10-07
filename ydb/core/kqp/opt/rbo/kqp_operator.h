@@ -115,9 +115,6 @@ struct TPhysicalOpProps {
     }
 
     std::optional<int> StageId;
-    // Dense output branch of a Replicate port and operators fused above it in
-    // the same stage. Independent of the port's stable logical ordinal.
-    std::optional<ui32> StageOutputIndex;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
 
@@ -144,7 +141,6 @@ struct TPhysicalOpProps {
 private:
     void CopyPhysicalFrom(const TPhysicalOpProps& other) {
         StageId = other.StageId;
-        StageOutputIndex = other.StageOutputIndex;
         Algorithm = other.Algorithm;
         OrderEnforcer = other.OrderEnforcer;
         Metadata = other.Metadata;
@@ -564,6 +560,10 @@ private:
     TMappedIUs<TInfoUnitId> Rebindings_;
     TUnorderedIUs InputIUs_;
 };
+
+// Follow same-stage unary inputs to a Replicate port, or return nullopt.
+// Its physical index is its rank among the hub's reachable logical port ordinals.
+std::optional<ui32> GetReplicateOutputIndex(const IOperator& op);
 
 class TOpEmptySource: public IOperator {
 public:

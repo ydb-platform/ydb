@@ -111,7 +111,6 @@ TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndAppl
         const auto outputIndex = connections.front()->GetOutputIndex();
         auto opProps = aggregate->Props;
         opProps.StageId = inputStageId;
-        opProps.StageOutputIndex = aggInput->Props.StageOutputIndex;
 
         TIntrusivePtr<TConnection> connection;
         if (CanEliminateAggregateShuffle(*aggregate, ctx)) {

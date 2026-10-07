@@ -53,7 +53,7 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
         }
         auto stage = NPhysicalConvertionUtils::TransformStageOutput(inputStage, [&](TExprNode::TPtr body) {
             return NPhysicalConvertionUtils::BuildRenameMap(body, columns, ctx);
-        }, input.Props.StageOutputIndex, ctx);
+        }, GetReplicateOutputIndex(input), ctx);
         auto type = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(types));
         return {std::move(stage), NYql::ExpandType(pos, *type, ctx)};
     }
@@ -203,7 +203,7 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
         // clang-format on
     };
 
-    const auto newInputStage = NPhysicalConvertionUtils::TransformStageOutput(inputStage, buildKeys, input.Props.StageOutputIndex, ctx);
+    const auto newInputStage = NPhysicalConvertionUtils::TransformStageOutput(inputStage, buildKeys, GetReplicateOutputIndex(input), ctx);
 
     // Tuple: (left row, lookup key).
     const TTypeAnnotationNode::TListType tupleItems{

@@ -283,7 +283,7 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
                 currentStageBody = NPhysicalConvertionUtils::TransformStageOutput(currentStageBody, [&](TExprNode::TPtr body) {
                     return TPhysicalAggregationBuilder(aggregate, ctx, op->Pos, names, pruneUnusedOutputs,
                         rboCtx.KqpCtx.Config->GetDqHashOperatorsUseBlocks()).BuildPhysicalOp(body, memLimit);
-                }, aggregate.Props.StageOutputIndex, ctx);
+                }, GetReplicateOutputIndex(aggregate), ctx);
 
                 stages[opStageId] = currentStageBody;
                 stagePos[opStageId] = op->Pos;

@@ -42,13 +42,13 @@ namespace NPage {
             }
         } Y_PACKED;
 
-        // Version 1: follows removed items when the page has rolled back savepoint seq nums
-        struct TRolledBackHeader {
-            ui64 RolledBackCount;
+        // Version 1: follows removed items when the page has removed operations (savepoint seq nums)
+        struct TRemovedOpsHeader {
+            ui64 RemovedOpsCount;
         } Y_PACKED;
 
-        // A rolled back closed range [From, To] of savepoint seq nums of a transaction
-        struct TRolledBackItem {
+        // A removed closed range [From, To] of savepoint seq nums of a transaction
+        struct TRemovedOpsItem {
             ui64 TxId_;
             ui32 From_;
             ui32 To_;
@@ -69,8 +69,8 @@ namespace NPage {
         static_assert(sizeof(THeader) == 16, "Invalid THeader size");
         static_assert(sizeof(TCommittedItem) == 24, "Invalid TCommittedItem size");
         static_assert(sizeof(TRemovedItem) == 8, "Invalid TRemovedItem size");
-        static_assert(sizeof(TRolledBackHeader) == 8, "Invalid TRolledBackHeader size");
-        static_assert(sizeof(TRolledBackItem) == 16, "Invalid TRolledBackItem size");
+        static_assert(sizeof(TRemovedOpsHeader) == 8, "Invalid TRemovedOpsHeader size");
+        static_assert(sizeof(TRemovedOpsItem) == 16, "Invalid TRemovedOpsItem size");
 
     public:
         TTxStatusPage(TSharedData page)
@@ -103,19 +103,19 @@ namespace NPage {
             RemovedItems = {ptrRemoved, ptrRemoved + header->RemovedCount };
 
             if (got.Version >= 1) {
-                Y_ENSURE(expectedSize + sizeof(TRolledBackHeader) <= got.Page.size(),
-                        "NPage::TTxStatusPage rolled back header is out of page bounds");
+                Y_ENSURE(expectedSize + sizeof(TRemovedOpsHeader) <= got.Page.size(),
+                        "NPage::TTxStatusPage removed ops header is out of page bounds");
 
-                const TRolledBackHeader* rolledBackHeader = TDeref<TRolledBackHeader>::At(ptrRemoved + header->RemovedCount, 0);
+                const TRemovedOpsHeader* removedOpsHeader = TDeref<TRemovedOpsHeader>::At(ptrRemoved + header->RemovedCount, 0);
 
-                expectedSize += sizeof(TRolledBackHeader) + sizeof(TRolledBackItem) * rolledBackHeader->RolledBackCount;
+                expectedSize += sizeof(TRemovedOpsHeader) + sizeof(TRemovedOpsItem) * removedOpsHeader->RemovedOpsCount;
 
                 Y_ENSURE(expectedSize <= got.Page.size(),
-                        "NPage::TTxStatusPage rolled back items are out of page bounds");
+                        "NPage::TTxStatusPage removed ops items are out of page bounds");
 
-                const TRolledBackItem* ptrRolledBack = TDeref<TRolledBackItem>::At(rolledBackHeader + 1, 0);
+                const TRemovedOpsItem* ptrRemovedOps = TDeref<TRemovedOpsItem>::At(removedOpsHeader + 1, 0);
 
-                RolledBackItems = { ptrRolledBack, ptrRolledBack + rolledBackHeader->RolledBackCount };
+                RemovedOpsItems = { ptrRemovedOps, ptrRemovedOps + removedOpsHeader->RemovedOpsCount };
             }
         }
 
@@ -127,8 +127,8 @@ namespace NPage {
             return RemovedItems;
         }
 
-        TArrayRef<const TRolledBackItem> GetRolledBackItems() const {
-            return RolledBackItems;
+        TArrayRef<const TRemovedOpsItem> GetRemovedOpsItems() const {
+            return RemovedOpsItems;
         }
 
         const TSharedData& GetRaw() const {
@@ -139,21 +139,21 @@ namespace NPage {
         TSharedData Raw;
         TArrayRef<const TCommittedItem> CommittedItems;
         TArrayRef<const TRemovedItem> RemovedItems;
-        TArrayRef<const TRolledBackItem> RolledBackItems;
+        TArrayRef<const TRemovedOpsItem> RemovedOpsItems;
     };
 
     class TTxStatusBuilder {
         using THeader = TTxStatusPage::THeader;
         using TCommittedItem = TTxStatusPage::TCommittedItem;
         using TRemovedItem = TTxStatusPage::TRemovedItem;
-        using TRolledBackHeader = TTxStatusPage::TRolledBackHeader;
-        using TRolledBackItem = TTxStatusPage::TRolledBackItem;
+        using TRemovedOpsHeader = TTxStatusPage::TRemovedOpsHeader;
+        using TRemovedOpsItem = TTxStatusPage::TRemovedOpsItem;
 
     public:
         TTxStatusBuilder() = default;
 
         explicit operator bool() const {
-            return !CommittedItems.empty() || !RemovedItems.empty() || !RolledBackItems.empty();
+            return !CommittedItems.empty() || !RemovedItems.empty() || !RemovedOpsItems.empty();
         }
 
         void AddCommitted(ui64 txId, TRowVersion rowVersion) {
@@ -184,9 +184,9 @@ namespace NPage {
             }
         }
 
-        void AddRolledBack(ui64 txId, const TSavepointSeqNumRanges& ranges) {
+        void AddRemovedOps(ui64 txId, const TSavepointSeqNumRanges& ranges) {
             for (const auto& range : ranges.GetRanges()) {
-                auto& item = RolledBackItems.emplace_back();
+                auto& item = RemovedOpsItems.emplace_back();
                 item.TxId_ = txId;
                 item.From_ = range.From;
                 item.To_ = range.To;
@@ -194,7 +194,7 @@ namespace NPage {
         }
 
         TSharedData Finish() {
-            if (CommittedItems.empty() && RemovedItems.empty() && RolledBackItems.empty()) {
+            if (CommittedItems.empty() && RemovedItems.empty() && RemovedOpsItems.empty()) {
                 return { };
             }
 
@@ -206,28 +206,28 @@ namespace NPage {
                 [](const TRemovedItem& a, const TRemovedItem& b) -> bool {
                     return a.GetTxId() < b.GetTxId();
                 });
-            std::sort(RolledBackItems.begin(), RolledBackItems.end(),
-                [](const TRolledBackItem& a, const TRolledBackItem& b) -> bool {
+            std::sort(RemovedOpsItems.begin(), RemovedOpsItems.end(),
+                [](const TRemovedOpsItem& a, const TRemovedOpsItem& b) -> bool {
                     return std::make_pair(a.GetTxId(), a.GetFrom()) < std::make_pair(b.GetTxId(), b.GetFrom());
                 });
 
-            // Version 1 is only written when there are rolled back savepoint seq nums
-            const bool hasRolledBack = !RolledBackItems.empty();
+            // Version 1 is only written when there are removed operations
+            const bool hasRemovedOps = !RemovedOpsItems.empty();
 
             size_t pageSize = (
                     sizeof(TLabel) +
                     sizeof(THeader) +
                     NUtil::NBin::SizeOf(CommittedItems) +
                     NUtil::NBin::SizeOf(RemovedItems));
-            if (hasRolledBack) {
-                pageSize += sizeof(TRolledBackHeader) + NUtil::NBin::SizeOf(RolledBackItems);
+            if (hasRemovedOps) {
+                pageSize += sizeof(TRemovedOpsHeader) + NUtil::NBin::SizeOf(RemovedOpsItems);
             }
 
             TSharedData buf = TSharedData::Uninitialized(pageSize);
 
             NUtil::NBin::TPut out(buf.mutable_begin());
 
-            WriteUnaligned<TLabel>(out.Skip<TLabel>(), TLabel::Encode(EPage::TxStatus, hasRolledBack ? 1 : 0, pageSize));
+            WriteUnaligned<TLabel>(out.Skip<TLabel>(), TLabel::Encode(EPage::TxStatus, hasRemovedOps ? 1 : 0, pageSize));
 
             if (auto* header = out.Skip<THeader>()) {
                 header->CommittedCount = CommittedItems.size();
@@ -237,12 +237,12 @@ namespace NPage {
             out.Put(CommittedItems);
             out.Put(RemovedItems);
 
-            if (hasRolledBack) {
-                if (auto* header = out.Skip<TRolledBackHeader>()) {
-                    header->RolledBackCount = RolledBackItems.size();
+            if (hasRemovedOps) {
+                if (auto* header = out.Skip<TRemovedOpsHeader>()) {
+                    header->RemovedOpsCount = RemovedOpsItems.size();
                 }
 
-                out.Put(RolledBackItems);
+                out.Put(RemovedOpsItems);
             }
 
             Y_ENSURE(*out == buf.mutable_end());
@@ -250,7 +250,7 @@ namespace NPage {
 
             CommittedItems.clear();
             RemovedItems.clear();
-            RolledBackItems.clear();
+            RemovedOpsItems.clear();
             CommittedMap.clear();
             RemovedMap.clear();
             return buf;
@@ -259,7 +259,7 @@ namespace NPage {
     private:
         TVector<TCommittedItem> CommittedItems;
         TVector<TRemovedItem> RemovedItems;
-        TVector<TRolledBackItem> RolledBackItems;
+        TVector<TRemovedOpsItem> RemovedOpsItems;
         THashMap<ui64, size_t> CommittedMap;
         THashMap<ui64, size_t> RemovedMap;
     };

@@ -201,7 +201,7 @@ namespace NRedo {
             return Flush(size);
         }
 
-        TWriter& EvRemoveTxOps(ui32 table, ui64 txId, ui32 from, ui32 to)
+        TWriter& EvRemoveTxOps(ui32 table, ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum)
         {
             // Older versions cannot read this event, label its redo chunk like UpdateTxSavepointSeqNum
             RequiredEvolution_ = Max(RequiredEvolution_, SavepointSeqNumEvolution);
@@ -209,7 +209,7 @@ namespace NRedo {
             const ui32 size = sizeof(TEvRemoveTxOps);
 
             TEvRemoveTxOps ev{ { ERedo::RemoveTxOps, 0, 0x8000, size },
-                               table, 0, txId, from, to };
+                               table, 0, txId, fromSavepointSeqNum, toSavepointSeqNum };
 
             auto out = Begin(size);
 

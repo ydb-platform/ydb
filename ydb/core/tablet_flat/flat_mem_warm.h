@@ -585,25 +585,25 @@ namespace NMem {
         }
 
         /**
-         * Marks savepoint seq nums [from, to] of txId as rolled back,
-         * returns true when txId had no rolled back seq nums in this mem table
+         * Marks operations of txId with savepoint seq nums [fromSavepointSeqNum, toSavepointSeqNum] as removed,
+         * returns true when txId had no removed operations in this mem table
          */
-        bool RemoveTxOps(ui64 txId, ui32 from, ui32 to) {
-            auto it = RolledBack.find(txId);
-            const bool newRef = (it == RolledBack.end());
+        bool RemoveTxOps(ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum) {
+            auto it = RemovedOps.find(txId);
+            const bool newRef = (it == RemovedOps.end());
             if (RollbackState) {
                 if (newRef) {
-                    UndoBuffer.push_back(TUndoOpEraseRolledBack{ txId });
+                    UndoBuffer.push_back(TUndoOpEraseRemovedOps{ txId });
                 } else {
-                    UndoBuffer.push_back(TUndoOpUpdateRolledBack{ txId, it->second });
+                    UndoBuffer.push_back(TUndoOpUpdateRemovedOps{ txId, it->second });
                 }
             }
-            RolledBack[txId].Add(from, to);
+            RemovedOps[txId].Add(fromSavepointSeqNum, toSavepointSeqNum);
             return newRef;
         }
 
-        const TRolledBackTxOps& GetRolledBackTxOps() const {
-            return RolledBack;
+        const TRemovedTxOps& GetRemovedTxOps() const {
+            return RemovedOps;
         }
 
     private:
@@ -655,7 +655,7 @@ namespace NMem {
         TTxIdStats TxIdStats;
         absl::flat_hash_map<ui64, TRowVersion> Committed;
         absl::flat_hash_set<ui64> Removed;
-        TRolledBackTxOps RolledBack;
+        TRemovedTxOps RemovedOps;
 
     private:
         struct TRollbackState {
@@ -690,11 +690,11 @@ namespace NMem {
         struct TUndoOpEraseTxIdStats {
             ui64 TxId;
         };
-        struct TUndoOpUpdateRolledBack {
+        struct TUndoOpUpdateRemovedOps {
             ui64 TxId;
             TSavepointSeqNumRanges Value;
         };
-        struct TUndoOpEraseRolledBack {
+        struct TUndoOpEraseRemovedOps {
             ui64 TxId;
         };
 
@@ -705,8 +705,8 @@ namespace NMem {
             TUndoOpEraseRemoved,
             TUndoOpUpdateTxIdStats,
             TUndoOpEraseTxIdStats,
-            TUndoOpUpdateRolledBack,
-            TUndoOpEraseRolledBack>;
+            TUndoOpUpdateRemovedOps,
+            TUndoOpEraseRemovedOps>;
 
         // This buffer is applied in reverse on rollback
         // Memory is reused to avoid hot path allocations

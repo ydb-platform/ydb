@@ -100,9 +100,9 @@ namespace NTable {
     };
 
     /**
-     * Rolled back savepoint seq num ranges by TxId
+     * Removed operations (savepoint seq num ranges) by TxId, see TDatabase::RemoveTxOps
      */
-    using TRolledBackTxOps = absl::flat_hash_map<ui64, TSavepointSeqNumRanges>;
+    using TRemovedTxOps = absl::flat_hash_map<ui64, TSavepointSeqNumRanges>;
 
 }
 }

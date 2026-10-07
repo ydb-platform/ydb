@@ -241,7 +241,7 @@ namespace NRedo {
             auto *ev = reinterpret_cast<const TEvRemoveTxOps*>(chunk.data());
 
             if (Base.NeedIn(ev->Table)) {
-                Base.DoRemoveTxOps(ev->Table, ev->TxId, ev->From, ev->To);
+                Base.DoRemoveTxOps(ev->Table, ev->TxId, ev->FromSavepointSeqNum, ev->ToSavepointSeqNum);
             }
         }
 

@@ -780,9 +780,9 @@ namespace NTable {
             Stats.MemTableBytes += wrap->GetMemSize();
         }
 
-        void DoRemoveTxOps(ui32 tid, ui64 txId, ui32 from, ui32 to)
+        void DoRemoveTxOps(ui32 tid, ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum)
         {
-            Touch(tid)->RemoveTxOps(txId, from, to);
+            Touch(tid)->RemoveTxOps(txId, fromSavepointSeqNum, toSavepointSeqNum);
         }
 
         void DoLockRowTx(ui32 tid, ELockMode mode, TKeys key, ui64 txId)

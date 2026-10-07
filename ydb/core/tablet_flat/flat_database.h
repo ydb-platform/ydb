@@ -163,9 +163,11 @@ public:
     void CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion = TRowVersion::Min());
 
     /**
-     * Marks operations of txId with savepoint seq nums in [from, to] as rolled back
+     * Removes operations of txId with savepoint seq nums in [fromSavepointSeqNum, toSavepointSeqNum], a partial
+     * counterpart of RemoveTx used for ROLLBACK TO SAVEPOINT. Like with RemoveTx
+     * the data stays in place and is dropped later, the transaction stays open.
      */
-    void RemoveTxOps(ui32 table, ui64 txId, ui32 from, ui32 to);
+    void RemoveTxOps(ui32 table, ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum);
 
     /**
      * Returns true when table has an open transaction that is not committed or removed yet
@@ -176,9 +178,9 @@ public:
     bool HasRemovedTx(ui32 table, ui64 txId) const;
 
     /**
-     * Returns rolled back savepoint seq nums of txId, nullptr when there are none
+     * Returns removed operations (savepoint seq nums) of txId, nullptr when there are none
      */
-    const TSavepointSeqNumRanges* FindRolledBackTxOps(ui32 table, ui64 txId) const;
+    const TSavepointSeqNumRanges* FindRemovedTxOps(ui32 table, ui64 txId) const;
 
     /**
      * Returns a set of open transactions in the provided table. This only
@@ -199,7 +201,7 @@ public:
     size_t GetTxsWithStatusCount(ui32 table) const;
     size_t GetCommittedTxCount(ui32 table) const;
     size_t GetRemovedTxCount(ui32 table) const;
-    size_t GetRolledBackTxCount(ui32 table) const;
+    size_t GetRemovedTxOpsCount(ui32 table) const;
 
     /**
      * Remove row versions [lower, upper) from the given table

@@ -20,9 +20,9 @@ namespace NTable {
 
 namespace {
 
-    // Calls callback once per TxId with all rolled back ranges of that TxId in the page
+    // Calls callback once per TxId with all removed operation ranges of that TxId in the page
     template<class TCallback>
-    void EnumerateRolledBackTxOps(TArrayRef<const NPage::TTxStatusPage::TRolledBackItem> items, TCallback&& callback)
+    void EnumerateRemovedTxOps(TArrayRef<const NPage::TTxStatusPage::TRemovedOpsItem> items, TCallback&& callback)
     {
         for (size_t index = 0; index < items.size();) {
             const ui64 txId = items[index].GetTxId();
@@ -100,15 +100,15 @@ void TTable::RollbackChanges()
                 Self->RemovedTransactions.Remove(op.TxId);
             }
 
-            void operator()(const TRollbackRemoveRolledBackTxOpsRef& op) const {
-                Self->RemoveRolledBackTxOpsRef(op.TxId);
+            void operator()(const TRollbackRemoveRemovedTxOpsRef& op) const {
+                Self->RemoveRemovedTxOpsRef(op.TxId);
             }
 
-            void operator()(const TRollbackRestoreRolledBackTxOps& op) const {
+            void operator()(const TRollbackRestoreRemovedTxOps& op) const {
                 if (op.Value) {
-                    Self->RolledBackTxOps[op.TxId] = *op.Value;
+                    Self->RemovedTxOps[op.TxId] = *op.Value;
                 } else {
-                    Self->RolledBackTxOps.erase(op.TxId);
+                    Self->RemovedTxOps.erase(op.TxId);
                 }
             }
         };
@@ -278,7 +278,7 @@ TAutoPtr<TSubset> TTable::CompactionSubset(TEpoch head, TArrayRef<const TLogoBlo
     subset->RemovedTransactions = RemovedTransactions;
     if (!ColdParts) {
         subset->GarbageTransactions = GarbageTransactions;
-        subset->GarbageRolledBackTxOps = GetGarbageRolledBackTxOps();
+        subset->GarbageRemovedTxOps = GetGarbageRemovedTxOps();
     }
 
     return subset;
@@ -323,7 +323,7 @@ TAutoPtr<TSubset> TTable::PartSwitchSubset(TEpoch head, TArrayRef<const TLogoBlo
     subset->RemovedTransactions = RemovedTransactions;
     if (!ColdParts) {
         subset->GarbageTransactions = GarbageTransactions;
-        subset->GarbageRolledBackTxOps = GetGarbageRolledBackTxOps();
+        subset->GarbageRemovedTxOps = GetGarbageRemovedTxOps();
     }
 
     return subset;
@@ -363,7 +363,7 @@ TAutoPtr<TSubset> TTable::Subset(TEpoch head) const
     subset->RemovedTransactions = RemovedTransactions;
     if (!ColdParts) {
         subset->GarbageTransactions = GarbageTransactions;
-        subset->GarbageRolledBackTxOps = GetGarbageRolledBackTxOps();
+        subset->GarbageRemovedTxOps = GetGarbageRemovedTxOps();
     }
 
     return subset;
@@ -494,7 +494,7 @@ void TTable::Replace(
     // Refcount cannot become zero more than once so vectors are unique
     std::vector<ui64> checkTxDataRefs;
     std::vector<ui64> checkTxStatusRefs;
-    std::vector<ui64> checkRolledBackTxOpsRefs;
+    std::vector<ui64> checkRemovedTxOpsRefs;
 
     for (auto& memTable : subset.Frozen) {
         removingOld = true;
@@ -533,12 +533,12 @@ void TTable::Replace(
             }
         }
 
-        for (const auto& pr : memTable.MemTable->GetRolledBackTxOps()) {
+        for (const auto& pr : memTable.MemTable->GetRemovedTxOps()) {
             const ui64 txId = pr.first;
-            auto& count = RolledBackTxOpsRefs.at(txId);
+            auto& count = RemovedTxOpsRefs.at(txId);
             Y_ENSURE(count > 0);
             if (0 == --count) {
-                checkRolledBackTxOpsRefs.push_back(txId);
+                checkRemovedTxOpsRefs.push_back(txId);
             }
         }
     }
@@ -623,11 +623,11 @@ void TTable::Replace(
                 checkTxStatusRefs.push_back(txId);
             }
         }
-        EnumerateRolledBackTxOps(part->TxStatusPage->GetRolledBackItems(), [&](ui64 txId, const TSavepointSeqNumRanges&) {
-            auto& count = RolledBackTxOpsRefs.at(txId);
+        EnumerateRemovedTxOps(part->TxStatusPage->GetRemovedOpsItems(), [&](ui64 txId, const TSavepointSeqNumRanges&) {
+            auto& count = RemovedTxOpsRefs.at(txId);
             Y_ENSURE(count > 0);
             if (0 == --count) {
-                checkRolledBackTxOpsRefs.push_back(txId);
+                checkRemovedTxOpsRefs.push_back(txId);
             }
         });
     }
@@ -669,9 +669,9 @@ void TTable::Replace(
             const ui64 txId = item.GetTxId();
             AddTxStatusRef(txId);
         }
-        EnumerateRolledBackTxOps(txStatus->TxStatusPage->GetRolledBackItems(), [&](ui64 txId, const TSavepointSeqNumRanges& ranges) {
-            AddRolledBackTxOpsRef(txId);
-            RolledBackTxOps[txId].Add(ranges);
+        EnumerateRemovedTxOps(txStatus->TxStatusPage->GetRemovedOpsItems(), [&](ui64 txId, const TSavepointSeqNumRanges& ranges) {
+            AddRemovedTxOpsRef(txId);
+            RemovedTxOps[txId].Add(ranges);
         });
     }
 
@@ -706,13 +706,13 @@ void TTable::Replace(
         }
     }
 
-    for (ui64 txId : checkRolledBackTxOpsRefs) {
-        auto it = RolledBackTxOpsRefs.find(txId);
-        Y_ENSURE(it != RolledBackTxOpsRefs.end());
+    for (ui64 txId : checkRemovedTxOpsRefs) {
+        auto it = RemovedTxOpsRefs.find(txId);
+        Y_ENSURE(it != RemovedTxOpsRefs.end());
         if (it->second == 0) {
-            // No entity has rolled back savepoint seq nums of this transaction anymore
-            RolledBackTxOpsRefs.erase(it);
-            RolledBackTxOps.erase(txId);
+            // No entity has removed operations of this transaction anymore
+            RemovedTxOpsRefs.erase(it);
+            RemovedTxOps.erase(txId);
         }
     }
 
@@ -824,9 +824,9 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus)
             RemovedCommittedTxs++;
         }
     }
-    EnumerateRolledBackTxOps(txStatus->TxStatusPage->GetRolledBackItems(), [&](ui64 txId, const TSavepointSeqNumRanges& ranges) {
-        AddRolledBackTxOpsRef(txId);
-        RolledBackTxOps[txId].Add(ranges);
+    EnumerateRemovedTxOps(txStatus->TxStatusPage->GetRemovedOpsItems(), [&](ui64 txId, const TSavepointSeqNumRanges& ranges) {
+        AddRemovedTxOpsRef(txId);
+        RemovedTxOps[txId].Add(ranges);
     });
 
     if (Mutable && txStatus->Epoch >= Mutable->Epoch) {
@@ -1131,30 +1131,30 @@ void TTable::RemoveTxStatusRef(ui64 txId)
     }
 }
 
-void TTable::AddRolledBackTxOpsRef(ui64 txId)
+void TTable::AddRemovedTxOpsRef(ui64 txId)
 {
-    ++RolledBackTxOpsRefs[txId];
+    ++RemovedTxOpsRefs[txId];
     if (RollbackState) {
-        RollbackOps.emplace_back(TRollbackRemoveRolledBackTxOpsRef{ txId });
+        RollbackOps.emplace_back(TRollbackRemoveRemovedTxOpsRef{ txId });
     }
 }
 
-void TTable::RemoveRolledBackTxOpsRef(ui64 txId)
+void TTable::RemoveRemovedTxOpsRef(ui64 txId)
 {
-    auto it = RolledBackTxOpsRefs.find(txId);
-    Y_ENSURE(it != RolledBackTxOpsRefs.end());
+    auto it = RemovedTxOpsRefs.find(txId);
+    Y_ENSURE(it != RemovedTxOpsRefs.end());
     Y_ENSURE(it->second > 0);
     if (0 == --it->second) {
         // This was the last reference
-        RolledBackTxOpsRefs.erase(it);
-        RolledBackTxOps.erase(txId);
+        RemovedTxOpsRefs.erase(it);
+        RemovedTxOps.erase(txId);
     }
 }
 
-TTransactionSet TTable::GetGarbageRolledBackTxOps() const
+TTransactionSet TTable::GetGarbageRemovedTxOps() const
 {
     TTransactionSet garbage;
-    for (const auto& pr : RolledBackTxOpsRefs) {
+    for (const auto& pr : RemovedTxOpsRefs) {
         if (!TxDataRefs.contains(pr.first)) {
             // Rolled back seq nums are only needed while transaction has rows
             garbage.Add(pr.first);
@@ -1274,23 +1274,23 @@ void TTable::RemoveTx(ui64 txId)
     }
 }
 
-void TTable::RemoveTxOps(ui64 txId, ui32 from, ui32 to)
+void TTable::RemoveTxOps(ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum)
 {
-    if (MemTable().RemoveTxOps(txId, from, to)) {
-        AddRolledBackTxOpsRef(txId);
+    if (MemTable().RemoveTxOps(txId, fromSavepointSeqNum, toSavepointSeqNum)) {
+        AddRemovedTxOpsRef(txId);
     }
 
-    auto it = RolledBackTxOps.find(txId);
+    auto it = RemovedTxOps.find(txId);
     if (RollbackState) {
-        if (it != RolledBackTxOps.end()) {
-            RollbackOps.emplace_back(TRollbackRestoreRolledBackTxOps{ txId, it->second });
+        if (it != RemovedTxOps.end()) {
+            RollbackOps.emplace_back(TRollbackRestoreRemovedTxOps{ txId, it->second });
         } else {
-            RollbackOps.emplace_back(TRollbackRestoreRolledBackTxOps{ txId, std::nullopt });
+            RollbackOps.emplace_back(TRollbackRestoreRemovedTxOps{ txId, std::nullopt });
         }
     }
-    RolledBackTxOps[txId].Add(from, to);
+    RemovedTxOps[txId].Add(fromSavepointSeqNum, toSavepointSeqNum);
 
-    // Note: rolled back seq nums don't affect reads yet, no need to invalidate erase cache
+    // Note: removed operations don't affect reads yet, no need to invalidate erase cache
 }
 
 bool TTable::HasOpenTx(ui64 txId) const
@@ -1343,15 +1343,15 @@ size_t TTable::GetRemovedTxCount() const
     return RemovedTransactions.Size();
 }
 
-const TSavepointSeqNumRanges* TTable::FindRolledBackTxOps(ui64 txId) const
+const TSavepointSeqNumRanges* TTable::FindRemovedTxOps(ui64 txId) const
 {
-    auto it = RolledBackTxOps.find(txId);
-    return it != RolledBackTxOps.end() ? &it->second : nullptr;
+    auto it = RemovedTxOps.find(txId);
+    return it != RemovedTxOps.end() ? &it->second : nullptr;
 }
 
-size_t TTable::GetRolledBackTxCount() const
+size_t TTable::GetRemovedTxOpsCount() const
 {
-    return RolledBackTxOps.size();
+    return RemovedTxOps.size();
 }
 
 TTableRuntimeStats TTable::RuntimeStats() const noexcept

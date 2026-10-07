@@ -1172,8 +1172,8 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(41).ReadTx(123).Select(table1).HasN(1_u64, 21_u64, 22_u64).HasN(2_u64, 23_u64, 10005_u64);
     }
 
-    TString DumpRolledBackTxOps(TDbExec& me, ui32 table, ui64 txId) {
-        const auto* ranges = me->FindRolledBackTxOps(table, txId);
+    TString DumpRemovedTxOps(TDbExec& me, ui32 table, ui64 txId) {
+        const auto* ranges = me->FindRemovedTxOps(table, txId);
         return ranges ? ToString(*ranges) : TString("none");
     }
 
@@ -1194,16 +1194,16 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(21).WriteTx(123, 5).PutN(table1, 1_u64, 21_u64);
         me.To(22).WriteTx(123, 7).PutN(table1, 2_u64, 22_u64);
         me.To(23).Commit();
-        UNIT_ASSERT_VALUES_EQUAL(DumpRolledBackTxOps(me, table1, 123), "none");
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "none");
 
         // Adjacent and overlapping ranges are merged, rejected changes are undone
         me.To(30).Begin();
         me.To(31).RemoveTxOps(table1, 123, 5, 6);
         me.To(32).RemoveTxOps(table1, 123, 7, 7);
-        UNIT_ASSERT_VALUES_EQUAL(DumpRolledBackTxOps(me, table1, 123), "{ [5, 7] }");
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 7] }");
         me.To(33).Reject();
-        UNIT_ASSERT_VALUES_EQUAL(DumpRolledBackTxOps(me, table1, 123), "none");
-        UNIT_ASSERT_VALUES_EQUAL(me->GetRolledBackTxCount(table1), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "none");
+        UNIT_ASSERT_VALUES_EQUAL(me->GetRemovedTxOpsCount(table1), 0u);
 
         // Seq num 0 means no savepoint seq num and cannot be rolled back
         me.To(40).Begin();
@@ -1217,18 +1217,18 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT_VALUES_EQUAL(CountRedoEvents(me.BackLog().Redo, NRedo::ERedo::RemoveTxOps), 2u);
         // Older versions fail on such a redo chunk with an explicit ABI incompatibility
         UNIT_ASSERT_VALUES_EQUAL(GetRedoRequiredEvolution(me.BackLog().Redo), SavepointSeqNumEvolution);
-        UNIT_ASSERT_VALUES_EQUAL(DumpRolledBackTxOps(me, table1, 123), "{ [5, 6], [9, 10] }");
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 6], [9, 10] }");
 
         me.To(50).Begin();
         me.To(51).RemoveTxOps(table1, 123, 6, 9);
         me.To(52).Commit();
-        UNIT_ASSERT_VALUES_EQUAL(DumpRolledBackTxOps(me, table1, 123), "{ [5, 10] }");
-        UNIT_ASSERT_VALUES_EQUAL(me->GetRolledBackTxCount(table1), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
+        UNIT_ASSERT_VALUES_EQUAL(me->GetRemovedTxOpsCount(table1), 1u);
 
         me.To(60).Replay(EPlay::Boot);
-        UNIT_ASSERT_VALUES_EQUAL(DumpRolledBackTxOps(me, table1, 123), "{ [5, 10] }");
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
         me.To(61).Replay(EPlay::Redo);
-        UNIT_ASSERT_VALUES_EQUAL(DumpRolledBackTxOps(me, table1, 123), "{ [5, 10] }");
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
 
         // Rolled back seq nums don't affect transaction status or visibility yet
         UNIT_ASSERT(me->HasOpenTx(table1, 123));

@@ -88,12 +88,12 @@ void TMemTable::RollbackChanges() {
             Self->TxIdStats.erase(op.TxId);
         }
 
-        void operator()(const TUndoOpUpdateRolledBack& op) const {
-            Self->RolledBack[op.TxId] = op.Value;
+        void operator()(const TUndoOpUpdateRemovedOps& op) const {
+            Self->RemovedOps[op.TxId] = op.Value;
         }
 
-        void operator()(const TUndoOpEraseRolledBack& op) const {
-            Self->RolledBack.erase(op.TxId);
+        void operator()(const TUndoOpEraseRemovedOps& op) const {
+            Self->RemovedOps.erase(op.TxId);
         }
     };
 

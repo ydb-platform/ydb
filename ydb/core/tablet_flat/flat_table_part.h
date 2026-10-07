@@ -263,8 +263,8 @@ namespace NTable {
                 << "TxStatus{" << Label << " epoch " << Epoch << ", "
                 << TxStatusPage->GetCommittedItems().size() << " committed,"
                 << TxStatusPage->GetRemovedItems().size() << " removed";
-            if (const auto rolledBack = TxStatusPage->GetRolledBackItems().size()) {
-                out << ", " << rolledBack << " rolled back";
+            if (const auto removedOps = TxStatusPage->GetRemovedOpsItems().size()) {
+                out << ", " << removedOps << " removed ops";
             }
             out << "}";
         }

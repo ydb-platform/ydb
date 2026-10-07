@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TSavepointSeqNumRanges) {
 
 Y_UNIT_TEST_SUITE(TTxStatusPageSavepoints) {
 
-    Y_UNIT_TEST(NoRolledBackKeepsVersion0) {
+    Y_UNIT_TEST(NoRemovedOpsKeepsVersion0) {
         NPage::TTxStatusBuilder builder;
         builder.AddCommitted(123, TRowVersion(1, 2));
         builder.AddRemoved(234);
@@ -78,10 +78,10 @@ Y_UNIT_TEST_SUITE(TTxStatusPageSavepoints) {
         NPage::TTxStatusPage page(data);
         UNIT_ASSERT_VALUES_EQUAL(page.GetCommittedItems().size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(page.GetRemovedItems().size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(page.GetRolledBackItems().size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(page.GetRemovedOpsItems().size(), 0u);
     }
 
-    Y_UNIT_TEST(RolledBackRoundTrip) {
+    Y_UNIT_TEST(RemovedOpsRoundTrip) {
         TSavepointSeqNumRanges ranges123;
         ranges123.Add(9, 10);
         ranges123.Add(5, 6);
@@ -91,8 +91,8 @@ Y_UNIT_TEST_SUITE(TTxStatusPageSavepoints) {
         NPage::TTxStatusBuilder builder;
         builder.AddCommitted(123, TRowVersion(1, 2));
         builder.AddRemoved(234);
-        builder.AddRolledBack(345, ranges345);
-        builder.AddRolledBack(123, ranges123);
+        builder.AddRemovedOps(345, ranges345);
+        builder.AddRemovedOps(123, ranges123);
         auto data = builder.Finish();
 
         auto label = NPage::TLabelWrapper().Read(data, NPage::EPage::TxStatus);
@@ -106,19 +106,19 @@ Y_UNIT_TEST_SUITE(TTxStatusPageSavepoints) {
 
         // Items are sorted by (TxId, From)
         TStringBuilder items;
-        for (const auto& item : page.GetRolledBackItems()) {
+        for (const auto& item : page.GetRemovedOpsItems()) {
             items << item.GetTxId() << ":[" << item.GetFrom() << ", " << item.GetTo() << "] ";
         }
         UNIT_ASSERT_VALUES_EQUAL(TString(items), "123:[5, 6] 123:[9, 10] 345:[1, 1] ");
     }
 
-    Y_UNIT_TEST(OnlyRolledBack) {
+    Y_UNIT_TEST(OnlyRemovedOps) {
         TSavepointSeqNumRanges ranges;
         ranges.Add(3, 4);
 
         NPage::TTxStatusBuilder builder;
         UNIT_ASSERT(!builder);
-        builder.AddRolledBack(123, ranges);
+        builder.AddRemovedOps(123, ranges);
         UNIT_ASSERT(builder);
         auto data = builder.Finish();
         UNIT_ASSERT(data);
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(TTxStatusPageSavepoints) {
         NPage::TTxStatusPage page(data);
         UNIT_ASSERT_VALUES_EQUAL(page.GetCommittedItems().size(), 0u);
         UNIT_ASSERT_VALUES_EQUAL(page.GetRemovedItems().size(), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(page.GetRolledBackItems().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(page.GetRemovedOpsItems().size(), 1u);
     }
 
 }

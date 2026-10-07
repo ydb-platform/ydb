@@ -5300,17 +5300,17 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
 
     struct TTxRemoveTxOps : public ITransaction {
         const ui64 TxId;
-        const ui32 From;
-        const ui32 To;
+        const ui32 FromSavepointSeqNum;
+        const ui32 ToSavepointSeqNum;
 
-        TTxRemoveTxOps(ui64 txId, ui32 from, ui32 to)
+        TTxRemoveTxOps(ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum)
             : TxId(txId)
-            , From(from)
-            , To(to)
+            , FromSavepointSeqNum(fromSavepointSeqNum)
+            , ToSavepointSeqNum(toSavepointSeqNum)
         { }
 
         bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-            txc.DB.RemoveTxOps(TableId, TxId, From, To);
+            txc.DB.RemoveTxOps(TableId, TxId, FromSavepointSeqNum, ToSavepointSeqNum);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
             return true;
         }
@@ -5320,21 +5320,21 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         }
     };
 
-    struct TTxCheckRolledBack : public ITransaction {
+    struct TTxCheckRemovedTxOps : public ITransaction {
         TString& Data;
         const TVector<ui64> TxIds;
 
-        TTxCheckRolledBack(TString& data, TVector<ui64> txIds)
+        TTxCheckRemovedTxOps(TString& data, TVector<ui64> txIds)
             : Data(data)
             , TxIds(std::move(txIds))
         { }
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             TStringBuilder builder;
-            builder << "count " << txc.DB.GetRolledBackTxCount(TableId);
+            builder << "count " << txc.DB.GetRemovedTxOpsCount(TableId);
             for (ui64 txId : TxIds) {
                 builder << ", " << txId << " = ";
-                if (const auto* ranges = txc.DB.FindRolledBackTxOps(TableId, txId)) {
+                if (const auto* ranges = txc.DB.FindRemovedTxOps(TableId, txId)) {
                     builder << *ranges;
                 } else {
                     builder << "none";
@@ -5365,9 +5365,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             env.WaitForWakeUp();
         };
 
-        auto checkRolledBack = [&](const TString& expected) {
+        auto checkRemovedTxOps = [&](const TString& expected) {
             TString data;
-            env.SendSync(new NFake::TEvExecute{ new TTxCheckRolledBack(data, { 123, 234 }) }, /* retry */ true);
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRemovedTxOps(data, { 123, 234 }) }, /* retry */ true);
             UNIT_ASSERT_VALUES_EQUAL(data, expected);
         };
 
@@ -5383,24 +5383,24 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 7, 8) });
         env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(234, 3, 3) });
 
-        checkRolledBack("count 2, 123 = { [7, 8] }, 234 = { [3, 3] }");
+        checkRemovedTxOps("count 2, 123 = { [7, 8] }, 234 = { [3, 3] }");
 
         // Rolled back seq nums are moved from the mem table to tx status
         Cerr << "...compacting mem table" << Endl;
         env.SendSync(new NFake::TEvCompact(TableId, true));
         env.WaitFor<NFake::TEvCompacted>();
 
-        checkRolledBack("count 2, 123 = { [7, 8] }, 234 = { [3, 3] }");
+        checkRemovedTxOps("count 2, 123 = { [7, 8] }, 234 = { [3, 3] }");
 
         restartTablet();
-        checkRolledBack("count 2, 123 = { [7, 8] }, 234 = { [3, 3] }");
+        checkRemovedTxOps("count 2, 123 = { [7, 8] }, 234 = { [3, 3] }");
 
         // Ranges in the mem table are merged with ranges in tx status
         env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 10, 10) });
-        checkRolledBack("count 2, 123 = { [7, 8], [10, 10] }, 234 = { [3, 3] }");
+        checkRemovedTxOps("count 2, 123 = { [7, 8], [10, 10] }, 234 = { [3, 3] }");
 
         // After commit and compaction transaction 234 has no rows left,
-        // so its rolled back seq nums become garbage and are dropped
+        // so its removed operations become garbage and are dropped
         env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(234) });
 
         Cerr << "...compacting table" << Endl;
@@ -5411,10 +5411,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         env.SendSync(new NFake::TEvCompact(TableId));
         env.WaitFor<NFake::TEvCompacted>();
 
-        checkRolledBack("count 1, 123 = { [7, 8], [10, 10] }, 234 = none");
+        checkRemovedTxOps("count 1, 123 = { [7, 8], [10, 10] }, 234 = none");
 
         restartTablet();
-        checkRolledBack("count 1, 123 = { [7, 8], [10, 10] }, 234 = none");
+        checkRemovedTxOps("count 1, 123 = { [7, 8], [10, 10] }, 234 = none");
 
         // Rolled back seq nums don't affect visibility yet
         env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });

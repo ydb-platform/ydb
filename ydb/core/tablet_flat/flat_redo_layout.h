@@ -132,15 +132,15 @@ namespace NRedo {
         ui64 RowVersionTxId;
     } Y_PACKED;
 
-    // Operations of TxId with savepoint seq nums in [From, To] are rolled back
+    // Operations of TxId with savepoint seq nums in [FromSavepointSeqNum, ToSavepointSeqNum] are removed
     struct TEvRemoveTxOps {
         TChunk Label;
 
         ui32 Table;
         ui32 Pad0_;
         ui64 TxId;
-        ui32 From;
-        ui32 To;
+        ui32 FromSavepointSeqNum;
+        ui32 ToSavepointSeqNum;
     } Y_PACKED;
 
     struct TEvLockRowTx {

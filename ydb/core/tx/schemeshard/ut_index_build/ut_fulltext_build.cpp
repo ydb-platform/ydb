@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
@@ -776,6 +777,101 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             ));
         }
         seqBlocker.Stop();
+
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+    }
+
+    Y_UNIT_TEST(RowIdBuild_RetrySequenceDuringUpload) {
+        // A sequence UNAVAILABLE arriving while a row upload is already in flight must not make the
+        // scan register a second uploader: the late reply from the first uploader would trip the
+        // sender check in TBuildScanUpload::Handle and abort the build with BUILD_ERROR "Mismatch
+        // Uploader". The scan must keep a single uploader alive at a time.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "pk" Type: "Utf8" NotNull: true }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: ["pk"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto tableDesc = DescribePath(runtime, "/MyRoot/texts", /*returnPartitioning*/ true, /*returnBoundaries*/ true);
+            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT(tablePartitions.size() == 1);
+            const ui64 textsTabletId = tablePartitions[0].GetDatashardId();
+
+            auto fnWriteRow = [&] (TString pk, TString text, TString data) {
+                TString writeQuery = Sprintf(R"(
+                    (
+                        (let key '( '('pk   (Utf8   '"%s") ) ) )
+                        (let row '( '('text (String '"%s") )
+                                    '('data (String '"%s") ) ) )
+                        (return (AsList (UpdateRow '__user__texts key row) ))
+                    )
+                )", pk.c_str(), text.c_str(), data.c_str());
+                NKikimrMiniKQL::TResult result;
+                TString err;
+                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, textsTabletId, writeQuery, result, err);
+                UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+            };
+
+            fnWriteRow("pone", "green apple", "one");
+            fnWriteRow("ptwo", "red apple and blue apple", "two");
+            fnWriteRow("pthree", "yellow apple", "three");
+            fnWriteRow("pfour", "red car", "four");
+        }
+
+        // Observe (do not block) a sequence reply to learn the scan actor id and cookie.
+        TActorId dsId;
+        ui64 cookie = 0;
+        bool captured = false;
+        TBlockEvents<NSequenceProxy::TEvSequenceProxy::TEvNextValResult> seqObs(runtime, [&](const auto& ev) {
+            if (!captured) {
+                captured = true;
+                dsId = ev->GetRecipientRewrite();
+                cookie = ev->Cookie;
+            }
+            return false;
+        });
+
+        // Block the scan's row upload reply so the upload stays "in flight".
+        TBlockEvents<TEvTxUserProxy::TEvUploadRowsResponse> uploadBlocker(runtime);
+
+        ui64 buildIndexTx = ++txId;
+        AsyncBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", FulltextIndexConfig(/*relevance=*/ false));
+        runtime.WaitFor("sequence reply", [&]{ return captured; });
+        runtime.WaitFor("row upload reply", [&]{ return uploadBlocker.size() > 0; });
+        UNIT_ASSERT(dsId);
+
+        // Report a sequence UNAVAILABLE while the upload is in flight. The retry wakeup must not
+        // start a competing row upload alongside the one already waiting for its reply.
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            NYql::TIssueManager issueManager;
+            issueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, "Sequence shard is unavailable"));
+            runtime.Send(new IEventHandle(
+                dsId,
+                sender,
+                new NSequenceProxy::TEvSequenceProxy::TEvNextValResult(Ydb::StatusIds::UNAVAILABLE, issueManager.GetIssues()),
+                0,
+                cookie
+            ));
+        }
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2)); // fire the sequence retry wakeup
+
+        // Let the in-flight upload reply through and finish the build.
+        uploadBlocker.Unblock();
+        uploadBlocker.Stop();
 
         env.TestWaitNotification(runtime, buildIndexTx);
 

@@ -24,6 +24,13 @@ registry, not dynamic counters exported to Solomon or Prometheus.
 | JSON history serialization | `ydb/core/subsystems/inmemory_metrics_monitoring/viewer.cpp` |
 | Shared chart and client API | `ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart/README.md` |
 
+## Optimize storage
+
+Before selecting or changing storage, follow [references/storage-cost.md](references/storage-cost.md).
+Compare the current line variants, estimate payload and physical allocation,
+measure representative deltas/change rates, and report precision, retention,
+and CPU tradeoffs. Do not claim savings from steady-state bytes alone.
+
 ## Add a producer
 
 1. Read the component's nearest `AGENTS.md`, then the ownership and storage

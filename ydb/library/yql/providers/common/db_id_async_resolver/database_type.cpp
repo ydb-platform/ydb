@@ -1,31 +1,19 @@
 #include "db_async_resolver.h"
 
-#include <util/generic/map.h>
+#include <util/generic/serialized_enum.h>
 #include <util/string/cast.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 namespace NYql {
 
 std::set<TString> GetAllExternalDataSourceTypes() {
-    static std::set<TString> allTypes = {
-        ToString(NYql::EDatabaseType::ObjectStorage),
-        ToString(NYql::EDatabaseType::ClickHouse),
-        ToString(NYql::EDatabaseType::PostgreSQL),
-        ToString(NYql::EDatabaseType::MySQL),
-        ToString(NYql::EDatabaseType::Ydb),
-        ToString(NYql::EDatabaseType::YT),
-        ToString(NYql::EDatabaseType::Greenplum),
-        ToString(NYql::EDatabaseType::MsSQLServer),
-        ToString(NYql::EDatabaseType::Oracle),
-        ToString(NYql::EDatabaseType::Logging),
-        ToString(NYql::EDatabaseType::Solomon),
-        ToString(NYql::EDatabaseType::MoniumMetrics),
-        ToString(NYql::EDatabaseType::Iceberg),
-        ToString(NYql::EDatabaseType::Redis),
-        ToString(NYql::EDatabaseType::Prometheus),
-        ToString(NYql::EDatabaseType::OpenSearch),
-        ToString(NYql::EDatabaseType::DataStreams),
-    };
+    static const std::set<TString> allTypes = [] {
+        std::set<TString> types;
+        for (const auto type : GetEnumAllValues<EDatabaseType>()) {
+            types.insert(ToString(type));
+        }
+        return types;
+    }();
     return allTypes;
 }
 
@@ -35,25 +23,10 @@ bool IsValidAvailableExternalDataSourceType(const TString& type) {
 }
 
 std::set<EDatabaseType> GetAllExternalDataSourceDatabaseTypes() {
-    static std::set<EDatabaseType> allTypes = {
-        EDatabaseType::ObjectStorage,
-        EDatabaseType::ClickHouse,
-        EDatabaseType::PostgreSQL,
-        EDatabaseType::MySQL,
-        EDatabaseType::Ydb,
-        EDatabaseType::YT,
-        EDatabaseType::Greenplum,
-        EDatabaseType::MsSQLServer,
-        EDatabaseType::Oracle,
-        EDatabaseType::Logging,
-        EDatabaseType::Solomon,
-        EDatabaseType::MoniumMetrics,
-        EDatabaseType::Iceberg,
-        EDatabaseType::Redis,
-        EDatabaseType::Prometheus,
-        EDatabaseType::OpenSearch,
-        EDatabaseType::DataStreams,
-    };
+    static const std::set<EDatabaseType> allTypes = [] {
+        const auto values = GetEnumAllValues<EDatabaseType>();
+        return std::set<EDatabaseType>(values.begin(), values.end());
+    }();
     return allTypes;
 }
 
@@ -135,31 +108,11 @@ TString DatabaseTypeToMdbUrlPath(EDatabaseType databaseType) {
 }
 
 std::optional<EDatabaseType> DatabaseTypeFromString(const TString& type) {
-    static const TMap<TString, EDatabaseType> typeMap = {
-        {ToString(EDatabaseType::Ydb), EDatabaseType::Ydb},
-        {ToString(EDatabaseType::ClickHouse), EDatabaseType::ClickHouse},
-        {ToString(EDatabaseType::DataStreams), EDatabaseType::DataStreams},
-        {ToString(EDatabaseType::ObjectStorage), EDatabaseType::ObjectStorage},
-        {ToString(EDatabaseType::PostgreSQL), EDatabaseType::PostgreSQL},
-        {ToString(EDatabaseType::YT), EDatabaseType::YT},
-        {ToString(EDatabaseType::MySQL), EDatabaseType::MySQL},
-        {ToString(EDatabaseType::Greenplum), EDatabaseType::Greenplum},
-        {ToString(EDatabaseType::MsSQLServer), EDatabaseType::MsSQLServer},
-        {ToString(EDatabaseType::Oracle), EDatabaseType::Oracle},
-        {ToString(EDatabaseType::Logging), EDatabaseType::Logging},
-        {ToString(EDatabaseType::Solomon), EDatabaseType::Solomon},
-        {ToString(EDatabaseType::MoniumMetrics), EDatabaseType::MoniumMetrics},
-        {ToString(EDatabaseType::Iceberg), EDatabaseType::Iceberg},
-        {ToString(EDatabaseType::Redis), EDatabaseType::Redis},
-        {ToString(EDatabaseType::Prometheus), EDatabaseType::Prometheus},
-        {ToString(EDatabaseType::MongoDB), EDatabaseType::MongoDB},
-        {ToString(EDatabaseType::OpenSearch), EDatabaseType::OpenSearch},
-    };
-    auto it = typeMap.find(type);
-    if (it == typeMap.end()) {
+    EDatabaseType databaseType;
+    if (!TryFromString<EDatabaseType>(type, databaseType)) {
         return std::nullopt;
     }
-    return it->second;
+    return databaseType;
 }
 
 } // NYql
